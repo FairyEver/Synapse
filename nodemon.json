@@ -1,0 +1,6 @@
+{
+  "watch": ["dist-electron"],
+  "ext": "js",
+  "exec": "electron .",
+  "signal": "SIGTERM"
+}
