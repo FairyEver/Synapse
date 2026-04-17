@@ -29,50 +29,61 @@
 }
 
 :root {
-  --radius: 1rem;
-  --font-sans: "Avenir Next", "Segoe UI Variable", "SF Pro Display", "Helvetica Neue", ui-sans-serif, sans-serif;
-  --font-serif: Georgia, "Times New Roman", serif;
-  --background: #f5f4ed;
-  --foreground: #141413;
-  --card: #faf9f5;
-  --card-foreground: #141413;
-  --popover: #faf9f5;
-  --popover-foreground: #141413;
-  --primary: #c96442;
-  --primary-foreground: #faf9f5;
-  --secondary: #e8e6dc;
-  --secondary-foreground: #4d4c48;
-  --muted: #f0eee6;
-  --muted-foreground: #5e5d59;
-  --accent: #e8e6dc;
-  --accent-foreground: #3d3d3a;
-  --destructive: #b53333;
-  --destructive-foreground: #faf9f5;
-  --border: #e8e6dc;
-  --input: #e8e6dc;
-  --ring: #d1cfc5;
+  --radius: 0.5rem;
+  --font-sans: "Geist", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  --font-serif: "Geist", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  --font-mono:
+    "Geist Mono",
+    ui-monospace,
+    "SFMono-Regular",
+    "Roboto Mono",
+    Menlo,
+    Monaco,
+    "Liberation Mono",
+    "DejaVu Sans Mono",
+    "Courier New",
+    monospace;
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #171717;
+  --primary-foreground: #ffffff;
+  --secondary: #fafafa;
+  --secondary-foreground: #171717;
+  --muted: #fafafa;
+  --muted-foreground: #666666;
+  --accent: #fafafa;
+  --accent-foreground: #171717;
+  --destructive: #ff5b4f;
+  --destructive-foreground: #ffffff;
+  --border: #ebebeb;
+  --input: #ebebeb;
+  --ring: hsla(212, 100%, 48%, 1);
 }
 
 .dark {
-  --background: #141413;
-  --foreground: #faf9f5;
-  --card: #30302e;
-  --card-foreground: #faf9f5;
-  --popover: #30302e;
-  --popover-foreground: #faf9f5;
-  --primary: #d97757;
-  --primary-foreground: #141413;
-  --secondary: #3d3d3a;
-  --secondary-foreground: #faf9f5;
-  --muted: #30302e;
-  --muted-foreground: #b0aea5;
-  --accent: #3d3d3a;
-  --accent-foreground: #faf9f5;
-  --destructive: #b53333;
-  --destructive-foreground: #faf9f5;
-  --border: #30302e;
-  --input: #3d3d3a;
-  --ring: #5e5d59;
+  --background: #171717;
+  --foreground: #ffffff;
+  --card: #1f1f1f;
+  --card-foreground: #ffffff;
+  --popover: #1f1f1f;
+  --popover-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #171717;
+  --secondary: #262626;
+  --secondary-foreground: #ffffff;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --accent: #262626;
+  --accent-foreground: #ffffff;
+  --destructive: #ff5b4f;
+  --destructive-foreground: #ffffff;
+  --border: #303030;
+  --input: #303030;
+  --ring: hsla(212, 100%, 48%, 1);
 }
 
 @layer base {
@@ -85,7 +96,8 @@
     margin: 0;
     min-height: 100vh;
     font-family: var(--font-sans);
-    line-height: 1.6;
+    font-feature-settings: "liga" 1, "calt" 1;
+    line-height: 1.5;
   }
 
   html {
@@ -93,25 +105,51 @@
   }
 
   ::selection {
-    background: rgb(201 100 66 / 0.18);
+    background: rgb(0 112 243 / 0.18);
   }
 
   #root {
     min-height: 100vh;
   }
+
+  code,
+  pre {
+    font-family: var(--font-mono);
+    font-feature-settings: "liga" 1, "tnum" 1;
+  }
 }
 
 @layer components {
-  .font-editorial {
-    font-family: var(--font-serif);
-    font-weight: 500;
+  .font-display {
+    font-family: var(--font-sans);
+    font-feature-settings: "liga" 1;
+    font-weight: 600;
+    letter-spacing: -0.06em;
   }
 
   .surface-shell {
-    background: color-mix(in srgb, var(--card) 96%, white 4%);
-    border: 1px solid var(--border);
-    border-radius: 1.75rem;
-    box-shadow: rgba(20, 20, 19, 0.05) 0 4px 24px;
+    background: var(--card);
+    box-shadow: rgba(0, 0, 0, 0.08) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 2px, #fafafa 0 0 0 1px;
+  }
+
+  .surface-border {
+    box-shadow: rgba(0, 0, 0, 0.08) 0 0 0 1px;
+  }
+
+  .surface-border-light {
+    box-shadow: rgb(235, 235, 235) 0 0 0 1px;
+  }
+
+  .surface-card {
+    box-shadow: rgba(0, 0, 0, 0.08) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 2px, #fafafa 0 0 0 1px;
+  }
+
+  .surface-card-strong {
+    box-shadow:
+      rgba(0, 0, 0, 0.08) 0 0 0 1px,
+      rgba(0, 0, 0, 0.04) 0 2px 2px,
+      rgba(0, 0, 0, 0.04) 0 8px 8px -8px,
+      #fafafa 0 0 0 1px;
   }
 }
 

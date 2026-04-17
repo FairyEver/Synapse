@@ -37,25 +37,25 @@ function App() {
     <AppShellLayout
       brand={
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-[18px] bg-primary text-base text-primary-foreground shadow-[0_0_0_1px_#c96442]">
-            <span className="font-editorial leading-none">S</span>
+          <div className="flex size-9 items-center justify-center rounded-lg bg-foreground text-[13px] font-medium leading-none text-background shadow-[rgba(0,0,0,0.08)_0px_0px_0px_1px]">
+            <span className="font-mono tracking-[-0.02em]">S</span>
           </div>
           <div className="min-w-0">
-            <p className="font-editorial text-[1.75rem] leading-none text-foreground">Synapse</p>
+            <p className="font-display text-[1.5rem] leading-none text-foreground">Synapse</p>
           </div>
         </div>
       }
       navigation={
         <nav className="flex justify-center">
-          <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-border bg-background/70 p-1">
+          <div className="surface-border-light inline-flex flex-wrap items-center gap-1 rounded-full bg-card p-1">
             {shellTabs.map((tab) => (
               <button
                 key={tab.label}
                 type="button"
                 className={cn(
-                  "rounded-xl px-4 py-1.5 text-sm font-medium transition-colors",
+                  "rounded-full px-4 py-1.5 text-sm font-medium leading-[1.5] transition-colors",
                   tab.active
-                    ? "bg-card text-foreground shadow-[0_1px_2px_rgba(20,20,19,0.08)]"
+                    ? "bg-foreground text-background"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -66,7 +66,7 @@ function App() {
         </nav>
       }
       actions={
-        <Button variant="secondary" size="icon" className="size-9 rounded-xl">
+        <Button variant="secondary" size="icon" className="size-9 rounded-[6px]">
           <RefreshCw className="size-4" />
           <span className="sr-only">刷新布局</span>
         </Button>
@@ -74,28 +74,30 @@ function App() {
       sidebar={
         <div className="flex h-full flex-col gap-5 p-4">
           <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-background/80 px-3 py-2 text-sm text-muted-foreground">
+            <div className="surface-border-light flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-card px-3 py-2 text-sm text-muted-foreground">
               <Search className="size-4 shrink-0" />
               <span className="truncate">搜索分区...</span>
             </div>
-            <Button variant="outline" size="icon" className="size-9 rounded-xl">
+            <Button variant="outline" size="icon" className="size-9 rounded-lg">
               <Plus className="size-4" />
               <span className="sr-only">创建分区</span>
             </Button>
           </div>
 
           <div className="space-y-2">
-            <p className="px-2 text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">分类</p>
+            <p className="px-2 font-mono text-[12px] font-medium leading-none tracking-[0.08em] text-muted-foreground uppercase">
+              分类
+            </p>
             <div className="space-y-1">
               {sidebarGroups.map((group, index) => (
                 <button
                   key={group}
                   type="button"
                   className={cn(
-                    "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-sm transition-colors",
+                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm leading-[1.5] transition-colors",
                     index === 0
-                      ? "border-border bg-secondary/70 text-foreground"
-                      : "border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-card/80 hover:text-foreground",
+                      ? "surface-border bg-card text-foreground"
+                      : "text-muted-foreground hover:bg-card hover:text-foreground",
                   )}
                 >
                   <span>{group}</span>
@@ -132,16 +134,16 @@ type ShellPlaceholderCardProps = {
 
 function ShellPlaceholderCard({ title, description }: ShellPlaceholderCardProps) {
   return (
-    <article className="rounded-2xl border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgba(20,20,19,0.04)]">
+    <article className="surface-card rounded-xl bg-card px-4 py-4">
       <div className="flex items-start gap-3">
-        <div className="mt-1 size-5 shrink-0 rounded-full border border-border bg-background/90" />
+        <div className="surface-border-light mt-1 size-5 shrink-0 rounded-full bg-background" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <h2 className="text-sm font-medium text-foreground">{title}</h2>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+              <h2 className="text-[15px] font-medium leading-[1.43] text-foreground">{title}</h2>
+              <p className="mt-1 text-sm leading-[1.56] text-muted-foreground">{description}</p>
             </div>
-            <Button variant="outline" size="sm" className="shrink-0 rounded-xl">
+            <Button variant="outline" size="sm" className="shrink-0 rounded-[6px]">
               查看
             </Button>
           </div>
