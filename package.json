@@ -9,10 +9,10 @@
   "main": "dist-electron/main.js",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "concurrently -k --names renderer,electron:build,electron:app --prefix-colors cyan,magenta,yellow \"pnpm dev:renderer\" \"pnpm dev:electron:build\" \"pnpm dev:electron:app\"",
-    "dev:renderer": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev": "node scripts/dev.mjs",
+    "dev:renderer": "node scripts/dev-renderer.mjs",
     "dev:electron:build": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
-    "dev:electron:app": "wait-on tcp:127.0.0.1:5173 file:dist-electron/main.js file:dist-electron/preload.js && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 nodemon",
+    "dev:electron:app": "node scripts/dev-electron-app.mjs",
     "build": "pnpm build:renderer && pnpm build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
