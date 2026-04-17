@@ -5,11 +5,16 @@ function createMainWindow() {
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    minWidth: 1100,
-    minHeight: 720,
-    backgroundColor: "#09090b",
+    minWidth: 960,
+    minHeight: 680,
+    backgroundColor: "#edf2ea",
     show: false,
     title: "Synapse",
+    ...(process.platform === "darwin"
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
