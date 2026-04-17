@@ -1,15 +1,17 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AppBrand } from "@/app-shell/components/app-brand"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { SkillsModule } from "@/modules/skills"
 import { RulesModule } from "@/modules/rules"
 import { SettingsModule } from "@/modules/settings"
 
 type AppTabId = "rules" | "skills" | "settings"
+const logger = createRendererLogger("app")
 
 function App() {
   const { activeRepository, isReady } = useAppConfig()
@@ -42,10 +44,27 @@ function App() {
     [],
   )
 
+  useEffect(() => {
+    logger.info("App mounted.", {
+      activeTab,
+    })
+  }, [])
+
   return (
     <AppShellLayout
       brand={<AppBrand />}
-      navigation={<AppShellNavigation tabs={tabs} value={activeTab} onValueChange={(value) => setActiveTab(value as AppTabId)} />}
+      navigation={
+        <AppShellNavigation
+          tabs={tabs}
+          value={activeTab}
+          onValueChange={(value) => {
+            logger.info("Top-level tab changed.", {
+              nextTab: value,
+            })
+            setActiveTab(value as AppTabId)
+          }}
+        />
+      }
       actions={
         <AppShellActions
           busy={Boolean(activeRepositoryOperation?.isRunning)}
@@ -55,7 +74,11 @@ function App() {
               return
             }
 
+            logger.info("Manual repository sync requested from app shell.", {
+              repositoryUuid: activeRepository.uuid,
+            })
             void syncRepository(activeRepository.uuid).catch((error) => {
+              logger.error("Manual repository sync failed from app shell.", error)
               const message = error instanceof Error ? error.message : "仓库同步失败。"
               window.alert(message)
             })

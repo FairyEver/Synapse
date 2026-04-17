@@ -8,6 +8,7 @@ import {
   useState,
 } from "react"
 import { useAppConfig } from "@/app-shell/config"
+import { createRendererLogger } from "@/app-shell/logging"
 import type {
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationKind,
@@ -32,6 +33,7 @@ type RepositoryManagerContextValue = {
 }
 
 const RepositoryManagerContext = createContext<RepositoryManagerContextValue | null>(null)
+const logger = createRendererLogger("app.repository")
 
 function createFallbackRepositoryState(repositoryUuid: string): SynapseRepositoryLocalState {
   return {
@@ -80,6 +82,7 @@ async function readRepositoryStates(
   const bridge = window.synapse?.repository
 
   if (!bridge) {
+    logger.warn("Repository bridge is unavailable while reading states.")
     return repositoryUuids.map(createFallbackRepositoryState)
   }
 
@@ -98,9 +101,15 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   )
 
   const refreshRepositoryStates = useCallback(async () => {
+    logger.debug("Refreshing repository states.", {
+      repositoryCount: repositoryIds.length,
+    })
     const nextStates = await readRepositoryStates(repositoryIds)
 
     setStates(toStateMap(nextStates))
+    logger.debug("Repository states refreshed.", {
+      repositoryCount: nextStates.length,
+    })
   }, [repositoryIds])
 
   useEffect(() => {
@@ -111,7 +120,14 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   }, [repositoryIds])
 
   useEffect(() => {
+    logger.info("Repository bridge status resolved.", {
+      hasRepositoryBridge,
+    })
+  }, [hasRepositoryBridge])
+
+  useEffect(() => {
     void refreshRepositoryStates().catch((error) => {
+      logger.error("Failed to refresh repository states.", error)
       console.error("[repository] Failed to refresh repository states.", error)
     })
   }, [refreshRepositoryStates])
@@ -138,6 +154,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = window.synapse?.repository?.onUpdated((updatedEvent) => {
+      logger.info("Received repository updated event.", updatedEvent)
       setOperations((currentOperations) => ({
         ...currentOperations,
         [updatedEvent.repositoryUuid]: createOperationState({
@@ -152,6 +169,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       }))
 
       void refreshRepositoryStates().catch((error) => {
+        logger.error("Failed to refresh repository states after repository update.", error)
         console.error("[repository] Failed to refresh repository states after update.", error)
       })
     })
@@ -167,6 +185,10 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
 
       if (!bridge) {
         const errorMessage = "当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。"
+        logger.error("Repository operation requested without repository bridge.", {
+          repositoryUuid,
+          operation,
+        })
 
         setOperations((currentOperations) => ({
           ...currentOperations,
@@ -196,6 +218,10 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       }))
 
       try {
+        logger.info("Starting repository operation.", {
+          repositoryUuid,
+          operation,
+        })
         const result = await bridge.sync(repositoryUuid)
 
         setStates((currentStates) => ({
@@ -216,9 +242,19 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           }),
         }))
 
+        logger.info("Repository operation completed.", {
+          repositoryUuid,
+          operation: result.operation,
+          completedAt: result.completedAt,
+        })
         return result
       } catch (error) {
         const message = error instanceof Error ? error.message : "Git 仓库操作失败。"
+        logger.error("Repository operation failed.", {
+          repositoryUuid,
+          operation,
+          error,
+        })
 
         setOperations((currentOperations) => ({
           ...currentOperations,

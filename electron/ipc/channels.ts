@@ -3,6 +3,13 @@ export const SYNAPSE_IPC_CHANNELS = {
     get: "synapse:config:get",
     update: "synapse:config:update",
   },
+  log: {
+    appended: "synapse:log:appended",
+    export: "synapse:log:export",
+    list: "synapse:log:list",
+    summary: "synapse:log:summary",
+    write: "synapse:log:write",
+  },
   repository: {
     chooseDirectory: "synapse:repository:choose-directory",
     getStates: "synapse:repository:get-states",

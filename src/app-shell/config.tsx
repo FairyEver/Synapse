@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseConfig, SynapseConfigPatch, SynapseRepositoryConfig } from "@/types/config"
 import { applySynapseConfigPatch, createDefaultConfig, getActiveRepositoryConfig } from "@/lib/config"
 
@@ -21,11 +22,13 @@ type AppConfigContextValue = {
 }
 
 const AppConfigContext = createContext<AppConfigContextValue | null>(null)
+const logger = createRendererLogger("app.config")
 
 async function readConfigFromBridge(): Promise<SynapseConfig> {
   const bridge = window.synapse?.config
 
   if (!bridge) {
+    logger.warn("Config bridge is unavailable. Falling back to in-memory defaults.")
     return createDefaultConfig()
   }
 
@@ -39,6 +42,7 @@ async function updateConfigThroughBridge(
   const bridge = window.synapse?.config
 
   if (!bridge) {
+    logger.warn("Config bridge is unavailable during update. Applying patch in renderer only.", patch)
     return applySynapseConfigPatch(config, patch)
   }
 
@@ -57,22 +61,34 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   }, [config])
 
   const refreshConfig = useCallback(async () => {
+    logger.info("Refreshing app config.")
     const nextConfig = await readConfigFromBridge()
 
     setConfig(nextConfig)
     setError(null)
     setIsReady(true)
 
+    logger.info("App config loaded.", {
+      activeRepoUuid: nextConfig.activeRepoUuid,
+      repositoryCount: nextConfig.repositories.length,
+    })
+
     return nextConfig
   }, [])
 
   const updateConfig = useCallback(
     async (patch: SynapseConfigPatch) => {
+      logger.info("Updating app config from renderer.", patch)
       const nextConfig = await updateConfigThroughBridge(configRef.current, patch)
 
       setConfig(nextConfig)
       setError(null)
       setIsReady(true)
+
+      logger.info("App config update applied in renderer.", {
+        activeRepoUuid: nextConfig.activeRepoUuid,
+        repositoryCount: nextConfig.repositories.length,
+      })
 
       return nextConfig
     },
@@ -87,6 +103,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
     hasLoadedRef.current = true
 
     void refreshConfig().catch((loadError: unknown) => {
+      logger.error("Failed to refresh app config.", loadError)
       setError(loadError instanceof Error ? loadError.message : "加载本地配置失败")
       setIsReady(true)
     })

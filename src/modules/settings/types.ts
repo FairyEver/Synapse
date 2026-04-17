@@ -5,7 +5,7 @@ import type {
   SynapseRepositoryConfig,
 } from "@/types/config"
 
-type SettingsCategoryId = "general" | "repositories" | "content" | "projects" | "about"
+type SettingsCategoryId = "general" | "repositories" | "content" | "projects" | "logs" | "about"
 
 type SettingsItemType = "text" | "select" | "toggle" | "number" | "path" | "list"
 

@@ -2,6 +2,9 @@ import { spawn } from "node:child_process"
 import { access } from "node:fs/promises"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseRepositoryLocalState } from "../../src/types/repository"
+import { createMainLogger } from "./log-store"
+
+const logger = createMainLogger("service.repository-store")
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -60,9 +63,17 @@ async function resolveGitRootPath(localPath: string): Promise<string | null> {
 class RepositoryStore {
   async getRepositoryState(repository: SynapseRepositoryConfig): Promise<SynapseRepositoryLocalState> {
     const localPath = repository.localPath
+    logger.debug("Checking repository state.", {
+      repositoryUuid: repository.uuid,
+      localPath,
+    })
     const repositoryExists = await pathExists(localPath)
 
     if (!repositoryExists) {
+      logger.warn("Repository path does not exist.", {
+        repositoryUuid: repository.uuid,
+        localPath,
+      })
       return {
         repositoryUuid: repository.uuid,
         localPath,
@@ -73,6 +84,11 @@ class RepositoryStore {
     }
 
     const gitRootPath = await resolveGitRootPath(localPath)
+    logger.debug("Repository state resolved.", {
+      repositoryUuid: repository.uuid,
+      gitRootPath,
+      isGitRepository: gitRootPath !== null,
+    })
 
     return {
       repositoryUuid: repository.uuid,

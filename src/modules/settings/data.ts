@@ -29,7 +29,7 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "repositories",
     label: "仓库",
-    description: "选择、切换和删除本地仓库目录。",
+    description: "管理本地仓库目录。",
   },
   {
     id: "content",
@@ -40,6 +40,11 @@ const settingsCategories: SettingsCategory[] = [
     id: "projects",
     label: "项目",
     description: "维护本地项目路径，为后续安装流程预留入口。",
+  },
+  {
+    id: "logs",
+    label: "日志",
+    description: "查看当前运行日志并导出文本文件。",
   },
   {
     id: "about",
@@ -74,7 +79,7 @@ const settingsItems: SettingItem[] = [
   {
     key: "repositories",
     label: "本地仓库目录",
-    description: "维护目录清单、当前激活目录，以及 Git 状态与手动同步。",
+    description: "管理目录和当前激活项。",
     category: "repositories",
     type: "list",
     defaultValue: [],

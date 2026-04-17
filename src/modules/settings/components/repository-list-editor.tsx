@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { Button } from "@/components/ui/button"
 import {
@@ -8,11 +9,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import type { SettingItem } from "@/modules/settings/types"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type { SynapseRepositoryLocalState } from "@/types/repository"
+
+const logger = createRendererLogger("settings.repositories")
 
 type RepositoryListEditorProps = {
   item: SettingItem
@@ -52,30 +56,25 @@ function RepositoryListEditor({
 }: RepositoryListEditorProps) {
   const { hasRepositoryBridge, operations, states, syncRepository } = useRepositoryManager()
   const [formError, setFormError] = useState<string | null>(null)
+  const [manualPath, setManualPath] = useState("")
 
-  const handleAddRepository = async () => {
-    const bridge = window.synapse?.repository
+  const saveRepository = async (localPath: string) => {
+    const nextLocalPath = localPath.trim()
 
-    if (!bridge) {
-      setFormError("当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。")
+    if (!nextLocalPath) {
+      setFormError("先输入本地目录路径。")
       return
     }
 
-    const localPath = await bridge.chooseDirectory()
-
-    if (!localPath) {
-      return
-    }
-
-    if (repositories.some((repository) => repository.localPath === localPath)) {
+    if (repositories.some((repository) => repository.localPath === nextLocalPath)) {
       setFormError("这个本地目录已经存在了。")
       return
     }
 
     const nextRepository: SynapseRepositoryConfig = {
       uuid: crypto.randomUUID(),
-      name: getRepositoryNameFromPath(localPath),
-      localPath,
+      name: getRepositoryNameFromPath(nextLocalPath),
+      localPath: nextLocalPath,
       rulesDir: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir,
       skillsDir: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir,
     }
@@ -83,7 +82,35 @@ function RepositoryListEditor({
     const nextActiveRepoUuid = activeRepoUuid ?? nextRepository.uuid
 
     setFormError(null)
-    await onSave(nextRepositories, nextActiveRepoUuid, false)
+    logger.info("Saving new repository from settings.", {
+      localPath: nextLocalPath,
+      repositoryUuid: nextRepository.uuid,
+    })
+    const saved = await onSave(nextRepositories, nextActiveRepoUuid, false)
+
+    if (saved) {
+      setManualPath("")
+    }
+  }
+
+  const handleAddRepository = async () => {
+    const bridge = window.synapse?.repository
+
+    if (!bridge) {
+      logger.warn("Repository bridge unavailable while adding repository.")
+      await saveRepository(manualPath)
+      return
+    }
+
+    logger.info("Opening native directory picker from repository settings.")
+    const localPath = await bridge.chooseDirectory()
+
+    if (!localPath) {
+      logger.info("Native directory picker was dismissed without selecting a directory.")
+      return
+    }
+
+    await saveRepository(localPath)
   }
 
   const handleRemoveRepository = async (repositoryUuid: string) => {
@@ -103,6 +130,10 @@ function RepositoryListEditor({
     const removedActiveRepository = repositoryUuid === activeRepoUuid
     const nextActiveRepoUuid = removedActiveRepository ? nextRepositories[0]?.uuid ?? null : activeRepoUuid
 
+    logger.info("Removing repository from settings.", {
+      repositoryUuid,
+      removedActiveRepository,
+    })
     await onSave(nextRepositories, nextActiveRepoUuid, removedActiveRepository)
   }
 
@@ -111,17 +142,10 @@ function RepositoryListEditor({
       <CardHeader>
         <CardTitle>{item.label}</CardTitle>
         {item.description ? <CardDescription>{item.description}</CardDescription> : null}
-        {!hasRepositoryBridge ? (
-          <p className="text-sm text-destructive">
-            当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。
-          </p>
-        ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {repositories.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            还没有配置本地目录。选择后会写入本地配置，并立即检查当前目录是否具备 Git 能力。
-          </p>
+          <p className="text-sm text-muted-foreground">还没添加本地目录。</p>
         ) : (
           <div className="flex flex-col gap-3">
             {repositories.map((repository) => {
@@ -144,9 +168,13 @@ function RepositoryListEditor({
                     <p className="text-xs text-muted-foreground">
                       Rules: {repository.rulesDir} · Skills: {repository.skillsDir}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {getRepositoryStatusLabel(repositoryState)}
-                    </p>
+                    {hasRepositoryBridge ? (
+                      <p className="text-xs text-muted-foreground">
+                        {getRepositoryStatusLabel(repositoryState)}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">目录状态和同步暂不可用</p>
+                    )}
                     {repositoryState?.gitRootPath && repositoryState.gitRootPath !== repository.localPath ? (
                       <p className="break-all text-xs text-muted-foreground">
                         Git 根目录：{repositoryState.gitRootPath}
@@ -176,17 +204,19 @@ function RepositoryListEditor({
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      disabled={isBusy || !hasRepositoryBridge || !canSync}
-                      onClick={() => {
-                        void syncRepository(repository.uuid).catch((error) => {
-                          setFormError(error instanceof Error ? error.message : "Git 仓库操作失败。")
-                        })
-                      }}
-                    >
-                      {isBusy ? "同步中..." : "同步仓库"}
-                    </Button>
+                    {hasRepositoryBridge ? (
+                      <Button
+                        size="sm"
+                        disabled={isBusy || !canSync}
+                        onClick={() => {
+                          void syncRepository(repository.uuid).catch((error) => {
+                            setFormError(error instanceof Error ? error.message : "Git 仓库操作失败。")
+                          })
+                        }}
+                      >
+                        {isBusy ? "同步中..." : "同步仓库"}
+                      </Button>
+                    ) : null}
                     <Button
                       variant={isActive ? "secondary" : "outline"}
                       size="sm"
@@ -222,13 +252,25 @@ function RepositoryListEditor({
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">添加本地目录</p>
             <p className="text-sm text-muted-foreground">
-              Synapse 只记录你选择的本地路径，不负责下载仓库。Git 拉取、认证和初始化默认交给你常用的 Git 工具。
+              {hasRepositoryBridge ? "只记录本地路径。" : "目录选择器不可用时，直接粘贴本地路径。"}
             </p>
           </div>
+          {!hasRepositoryBridge ? (
+            <Input
+              value={manualPath}
+              onChange={(event) => setManualPath(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void handleAddRepository()
+                }
+              }}
+              placeholder="/path/to/project"
+            />
+          ) : null}
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
           <div>
-            <Button onClick={() => void handleAddRepository()} disabled={!hasRepositoryBridge}>
-              选择文件夹
+            <Button onClick={() => void handleAddRepository()}>
+              {hasRepositoryBridge ? "选择文件夹" : "添加目录"}
             </Button>
           </div>
         </div>

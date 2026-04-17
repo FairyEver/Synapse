@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { LogsModule } from "@/modules/logs"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
@@ -10,6 +12,8 @@ import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
+
+const logger = createRendererLogger("settings")
 
 function SettingsModule() {
   const { activeRepository, config, error, isReady, updateConfig } = useAppConfig()
@@ -42,15 +46,21 @@ function SettingsModule() {
   const applyPatch = useCallback(
     async (patch: Parameters<typeof updateConfig>[0], reloadAfterUpdate = false) => {
       try {
+        logger.info("Applying settings patch.", {
+          patch,
+          reloadAfterUpdate,
+        })
         setSaveError(null)
         await updateConfig(patch)
 
         if (reloadAfterUpdate && window.synapse?.config) {
+          logger.info("Reloading window after settings patch.")
           window.location.reload()
         }
 
         return true
       } catch (updateError) {
+        logger.error("Failed to apply settings patch.", updateError)
         setSaveError(updateError instanceof Error ? updateError.message : "保存设置失败。")
         return false
       }
@@ -66,6 +76,9 @@ function SettingsModule() {
         return
       }
 
+      logger.info("Saving settings item.", {
+        itemKey: item.key,
+      })
       await applyPatch(patch)
     },
     [applyPatch, context],
@@ -73,6 +86,11 @@ function SettingsModule() {
 
   const handleSaveRepositories = useCallback(
     async (repositories: typeof config.repositories, activeRepoUuid: string | null, reloadAfterUpdate: boolean) => {
+      logger.info("Saving repository list from settings.", {
+        activeRepoUuid,
+        reloadAfterUpdate,
+        repositoryCount: repositories.length,
+      })
       return applyPatch(
         {
           repositories,
@@ -86,6 +104,9 @@ function SettingsModule() {
 
   const handleSaveProjects = useCallback(
     async (projects: typeof config.global.projects) => {
+      logger.info("Saving project list from settings.", {
+        projectCount: projects.length,
+      })
       await applyPatch({
         global: {
           projects,
@@ -104,7 +125,12 @@ function SettingsModule() {
       <SettingsCategorySidebar
         categories={settingsCategories}
         activeCategory={activeCategory}
-        onCategoryChange={setActiveCategory}
+        onCategoryChange={(nextCategory) => {
+          logger.info("Settings category changed.", {
+            nextCategory,
+          })
+          setActiveCategory(nextCategory)
+        }}
       />
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
@@ -175,6 +201,8 @@ function SettingsModule() {
               onSave={handleSaveProjects}
             />
           ) : null}
+
+          {isReady && activeCategory === "logs" ? <LogsModule /> : null}
 
           {isReady && activeCategory === "about" ? <AboutPanel version={aboutVersion} /> : null}
         </div>

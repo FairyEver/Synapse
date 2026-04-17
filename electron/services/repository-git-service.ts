@@ -5,9 +5,11 @@ import type {
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
 } from "../../src/types/repository"
+import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
 type ProgressListener = (event: SynapseRepositoryProgressEvent) => void
+const logger = createMainLogger("service.repository-git")
 
 function extractPercent(line: string): number | null {
   const match = line.match(/(\d+)%/)
@@ -287,13 +289,25 @@ class RepositoryGitService {
     repository: SynapseRepositoryConfig,
     onProgress: ProgressListener,
   ): Promise<SynapseRepositoryOperationResult> {
+    logger.info("Starting repository sync.", {
+      repositoryUuid: repository.uuid,
+      localPath: repository.localPath,
+    })
     const currentState = await repositoryStore.getRepositoryState(repository)
 
     if (currentState.status !== "ready") {
+      logger.warn("Repository sync aborted because local path is missing.", {
+        repositoryUuid: repository.uuid,
+        localPath: repository.localPath,
+      })
       throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
     }
 
     if (!currentState.isGitRepository) {
+      logger.warn("Repository sync aborted because directory is not a Git repository.", {
+        repositoryUuid: repository.uuid,
+        localPath: repository.localPath,
+      })
       throw new Error("当前目录不是 Git 仓库，无法执行同步。")
     }
 
@@ -325,10 +339,23 @@ class RepositoryGitService {
       })
 
       return {
-        operation: "sync",
+        operation: "sync" as const,
         repository: nextState,
         completedAt,
       }
+    }).then((result) => {
+      logger.info("Repository sync completed.", {
+        repositoryUuid: repository.uuid,
+        completedAt: result.completedAt,
+      })
+
+      return result
+    }).catch((error) => {
+      logger.error("Repository sync failed.", {
+        repositoryUuid: repository.uuid,
+        error,
+      })
+      throw error
     })
   }
 

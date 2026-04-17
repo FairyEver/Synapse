@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { SynapseConfig, SynapseConfigPatch } from "../src/types/config"
 import type {
+  SynapseLogAppendedEvent,
+  SynapseLogExportResult,
+  SynapseLogListQuery,
+  SynapseLogListResult,
+  SynapseLogSummary,
+  SynapseRendererLogPayload,
+} from "../src/types/log"
+import type {
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
@@ -31,6 +39,16 @@ contextBridge.exposeInMainWorld("synapse", {
     get: () => ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.config.get) as Promise<SynapseConfig>,
     update: (patch: SynapseConfigPatch) =>
       ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.config.update, patch) as Promise<SynapseConfig>,
+  },
+  log: {
+    export: () => ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.log.export) as Promise<SynapseLogExportResult>,
+    list: (query: SynapseLogListQuery) =>
+      ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.log.list, query) as Promise<SynapseLogListResult>,
+    onAppended: (listener: (payload: SynapseLogAppendedEvent) => void) =>
+      subscribeToChannel(SYNAPSE_IPC_CHANNELS.log.appended, listener),
+    summary: () => ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.log.summary) as Promise<SynapseLogSummary>,
+    write: (payload: SynapseRendererLogPayload) =>
+      ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.log.write, payload) as Promise<void>,
   },
   repository: {
     chooseDirectory: () =>
