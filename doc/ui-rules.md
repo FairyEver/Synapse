@@ -35,6 +35,8 @@ Synapse 的 UI 代码默认追求：
 当前仓库应统一落在同一套 shadcn 基线上：
 
 - 以 `components.json` 中声明的 style preset 为准
+- 当前 style preset 是 `radix-nova`
+- 当前 primitive base 是 Radix，不是 Base UI
 - 以 `src/styles/globals.css` 中的 token 与字体导入为准
 - app shell 与业务模块使用同一套颜色、边框、圆角、阴影与 focus 规则
 - 不再维护独立的壳层品牌样式
@@ -45,12 +47,14 @@ Synapse 的 UI 代码默认追求：
 
 优先级从高到低应为：
 
-1. 现有共享组件
+1. 已存在且确实匹配需求的业务组合组件
 2. `src/components/ui/` 中的 shadcn/ui 组件
-3. 通过组合已有组件得到的新业务组件
-4. 最后才是必要的轻量自定义结构
+3. 新增到 `src/components/ui/` 的官方 shadcn 组件
+4. 通过 shadcn 组件组合得到的模块内薄业务组件
+5. 最后才是必要的轻量自定义结构或 primitive
 
 能用现有组件完成，就不要手搓一套平行 UI。
+如果本质上只是缺少一个基础组件，不要先在 `src/components/` 造自定义通用组件。
 
 ## 4. Tailwind 使用边界
 
@@ -83,6 +87,12 @@ Tailwind 主要用于：
 - 装饰性动画
 - 装饰性 absolute/fixed 定位
 - 很长的 `className` 串
+- 用 Tailwind 大面积重写组件库已有的表面视觉
+
+补充要求：
+
+- Tailwind 在本仓库中优先承担边距、间距、布局、尺寸和响应式职责
+- 颜色、边框、圆角、阴影、focus ring 和交互状态优先沿用 shadcn 默认样式与 token
 
 ## 5. shadcn/ui 使用规则
 
@@ -108,7 +118,10 @@ Tailwind 主要用于：
 - 先组合，再定制
 - 不为了“更好看”随意改内部源码
 - 需要新增组件时，优先通过 shadcn CLI 生成或严格对齐 CLI 输出
+- 保持当前 Radix 基线，不要重新引入 `@base-ui/react` 或切回 Base UI
 - 需要定制时，优先调整主题 token 或共享组件层，而不是在页面里零散覆盖
+- 新建共享 UI 前，先确认现有 `src/components/ui/` 是否可直接使用或是否应先补一个 shadcn 组件
+- 不要为了单个页面或单个模块，在 `src/components/` 新建与 shadcn 等价的按钮、输入框、卡片、弹窗、标签等基础组件
 
 ## 6. 页面结构顺序
 

@@ -22,16 +22,24 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority for the repo
 - shadcn/ui
 - TypeScript
 
+## Current UI foundation
+
+- The active shadcn preset is `radix-nova` in `components.json`.
+- The current primitive base is Radix, not Base UI.
+- `src/components/ui/` must stay aligned with the current shadcn + Radix setup.
+- Do not add or reintroduce `@base-ui/react` unless the task is an explicit migration approved by the user.
+- When adding or reinstalling shadcn components, preserve the current Radix base. If a task requires shadcn re-initialization or reinstall, use the Radix path rather than switching to `base`.
+
 ## Current repository structure
 
 - Privileged Electron code lives in `electron/`.
 - Renderer code lives in `src/`.
-- The current business-module directory is `src/modules/`, not `src/features/`.
 - Shared shell state and orchestration live in `src/app-shell/`.
 - Shared UI components live in `src/components/` and `src/components/ui/`.
 - Shared pure utilities live in `src/lib/`.
 - Shared renderer-wide types live in `src/types/`.
-- Existing first-class modules are `rules`, `skills`, and `settings`.
+- New business modules should live in `src/modules/`, not `src/features/`.
+- Planned first-class modules include `rules`, `skills`, and `settings`; do not assume those directories already exist unless the task creates them.
 
 ## Core rules
 
@@ -51,6 +59,9 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority for the repo
 - Preserve the existing interaction patterns unless the task explicitly changes them.
 - For feature UI, prefer shadcn/ui composition and the default preset styles documented in `doc/DESIGN.md`.
 - When a task changes UI or styling, use existing shadcn components and theme tokens before adding custom visual treatment.
+- Treat the current renderer UI stack as `shadcn/ui + Radix`; do not silently swap the primitive library or preset.
+- Prefer `src/components/ui/` shadcn primitives over creating new general-purpose components in `src/components/`.
+- If a needed UI primitive is missing, add the official shadcn component to `src/components/ui/` or match CLI output closely before hand-rolling a custom primitive.
 - If `doc/DESIGN.md` specifies the active shadcn preset, font imports, tokens, or component usage rules, follow those over ad hoc page-level overrides.
 - Keep the app shell and feature modules on the same shared shadcn baseline instead of maintaining parallel visual systems.
 - If a component, hook, or service grows too large, split it into smaller, well-named units.
@@ -132,7 +143,10 @@ For any UI or styling task, treat these as default requirements unless the user 
 - Prefer neutral palette tokens such as `bg-background`, `text-foreground`, `bg-card`, `border-border`, and `bg-muted`.
 - Use the preset's default font imports and tokenized font roles instead of adding separate brand display styles.
 - Prefer stock shadcn radius, border, shadow, and focus-ring treatment over custom arbitrary values.
+- Use this UI decision order: existing business composition that already fits -> existing `src/components/ui/` component -> new shadcn component added under `src/components/ui/` -> thin module-local composition -> last-resort custom primitive.
 - Compose from shadcn components before hand-rolling parallel UI primitives.
+- Let Tailwind primarily handle layout, spacing, sizing, responsive behavior, overflow, and simple typography; do not use it as the main way to restyle buttons, inputs, cards, dialogs, or tabs.
+- Do not create a new shared presentational primitive in `src/components/` when a shadcn equivalent exists or can be added.
 - Avoid hard-coded brand colors, custom shadow systems, decorative gradients, and page-specific visual languages unless the task explicitly asks for them.
 
 ## Placement rules

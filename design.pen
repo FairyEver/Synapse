@@ -4747,22 +4747,6 @@
                   "gap": 10,
                   "children": [
                     {
-                      "id": "1I5ak",
-                      "type": "ref",
-                      "ref": "LbW2I",
-                      "width": "fill_container",
-                      "height": "fit_content",
-                      "name": "h3",
-                      "descendants": {
-                        "PHY12": {
-                          "content": "前端性能基线"
-                        },
-                        "NwfCF": {
-                          "content": "关键页面首屏渲染需在目标阈值内。"
-                        }
-                      }
-                    },
-                    {
                       "id": "r6btU",
                       "type": "ref",
                       "ref": "LbW2I",
@@ -4818,7 +4802,25 @@
                       "height": "fit_content",
                       "name": "h3",
                       "x": 0,
-                      "y": 292
+                      "y": 219
+                    },
+                    {
+                      "id": "laYiK",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h4",
+                      "x": 0,
+                      "y": 292,
+                      "descendants": {
+                        "PHY12": {
+                          "content": "日志与可观测性"
+                        },
+                        "NwfCF": {
+                          "content": "统一结构化日志字段并接入追踪。"
+                        }
+                      }
                     }
                   ]
                 },
@@ -5246,14 +5248,83 @@
           "width": 760,
           "name": "itemModalCopy",
           "descendants": {
-            "EOpIo": {
-              "content": "AI 提示词规则",
-              "textAlign": "left"
-            },
-            "bVY1H": {
-              "content": "用于查看和理解提示词编写规范",
-              "enabled": true,
-              "textAlign": "left"
+            "CgJv7": {
+              "type": "frame",
+              "id": "px5cs",
+              "name": "Card Header",
+              "width": "fill_container",
+              "stroke": {
+                "align": "inside",
+                "thickness": 1
+              },
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "853p1",
+                  "name": "Header Top",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "jQ1UB",
+                      "name": "Modal Title",
+                      "fill": "$--foreground",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "AI 提示词规则",
+                      "lineHeight": 1.4,
+                      "fontFamily": "Inter",
+                      "fontSize": 20,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ZDA3i",
+                      "name": "Header Close",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$--secondary",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$--border"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "vqBIR",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "x",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--muted-foreground"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "8LLR9",
+                  "name": "Modal Subtitle",
+                  "fill": "$--muted-foreground",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "用于查看和理解提示词编写规范",
+                  "lineHeight": 1.4285714285714286,
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
             },
             "frWPV": {
               "type": "frame",
@@ -5337,79 +5408,6 @@
                           ]
                         }
                       ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "cklvx",
-                      "name": "itemBadges",
-                      "gap": 6,
-                      "children": [
-                        {
-                          "id": "C7dAs",
-                          "type": "ref",
-                          "ref": "UjXug",
-                          "name": "statusBadge",
-                          "descendants": {
-                            "zHpCv": {
-                              "content": "生效中"
-                            }
-                          }
-                        },
-                        {
-                          "id": "v9hOa",
-                          "type": "ref",
-                          "ref": "WuUMk",
-                          "name": "ownerBadge",
-                          "descendants": {
-                            "zHpCv": {
-                              "content": "Prompt"
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "lpiVf",
-                  "name": "tabsRow",
-                  "width": "fill_container",
-                  "gap": 6,
-                  "justifyContent": "center",
-                  "children": [
-                    {
-                      "id": "iML11",
-                      "type": "ref",
-                      "ref": "coMmv",
-                      "name": "tabA",
-                      "descendants": {
-                        "qYQHc": {
-                          "content": "基础原则"
-                        }
-                      }
-                    },
-                    {
-                      "id": "kj8DM",
-                      "type": "ref",
-                      "ref": "QY0Ka",
-                      "name": "tabB",
-                      "descendants": {
-                        "qYQHc": {
-                          "content": "结构模板"
-                        }
-                      }
-                    },
-                    {
-                      "id": "1lhH1",
-                      "type": "ref",
-                      "ref": "QY0Ka",
-                      "name": "tabC",
-                      "descendants": {
-                        "qYQHc": {
-                          "content": "示例与禁忌"
-                        }
-                      }
                     }
                   ]
                 },
@@ -6754,6 +6752,354 @@
               "content": "设置"
             }
           }
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "9j02L",
+      "x": 9344,
+      "y": -10,
+      "name": "Synapse / Rules Copy",
+      "width": 1440,
+      "height": 920,
+      "fill": "$--background",
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "$--border"
+      },
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "Sl14x",
+          "type": "ref",
+          "ref": "TQYZI",
+          "width": "fill_container",
+          "name": "rulesNav",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "type": "frame",
+          "id": "wVkdQ",
+          "name": "main",
+          "width": "fill_container",
+          "height": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "9R8xC",
+              "name": "side",
+              "width": 290,
+              "height": "fill_container",
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "right": 1
+                },
+                "fill": "$--border"
+              },
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "JEPwW",
+                  "name": "searchRow",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "BgTuh",
+                      "type": "ref",
+                      "ref": "O0rdg",
+                      "width": "fill_container",
+                      "name": "search",
+                      "descendants": {
+                        "tAA5L": {
+                          "content": "搜索规则..."
+                        }
+                      }
+                    },
+                    {
+                      "id": "fE3Zy",
+                      "type": "ref",
+                      "ref": "hXOUF",
+                      "padding": 6,
+                      "name": "create",
+                      "descendants": {
+                        "HDFDp": {
+                          "iconFontName": "plus"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "GtiWi",
+                  "type": "ref",
+                  "ref": "24cM4",
+                  "width": "fill_container",
+                  "name": "secTitle",
+                  "descendants": {
+                    "pWGDv": {
+                      "content": "分类"
+                    }
+                  }
+                },
+                {
+                  "id": "erqGN",
+                  "type": "ref",
+                  "ref": "qCCo8",
+                  "width": "fill_container",
+                  "name": "cat1",
+                  "descendants": {
+                    "r6B2W": {
+                      "iconFontName": "list-filter"
+                    },
+                    "0Ru22": {
+                      "content": "全部规则"
+                    }
+                  }
+                },
+                {
+                  "id": "L6Qwg",
+                  "type": "ref",
+                  "ref": "jBcUh",
+                  "width": "fill_container",
+                  "name": "cat2",
+                  "descendants": {
+                    "r6B2W": {
+                      "iconFontName": "code"
+                    },
+                    "0Ru22": {
+                      "content": "代码质量"
+                    }
+                  }
+                },
+                {
+                  "id": "nFqHk",
+                  "type": "ref",
+                  "ref": "jBcUh",
+                  "width": "fill_container",
+                  "name": "cat3",
+                  "descendants": {
+                    "r6B2W": {
+                      "iconFontName": "shield"
+                    },
+                    "0Ru22": {
+                      "content": "安全"
+                    }
+                  }
+                },
+                {
+                  "id": "SkKYM",
+                  "type": "ref",
+                  "ref": "jBcUh",
+                  "width": "fill_container",
+                  "name": "cat4",
+                  "descendants": {
+                    "r6B2W": {
+                      "iconFontName": "gauge"
+                    },
+                    "0Ru22": {
+                      "content": "性能"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ek18D",
+              "name": "Module/Rules Two-Column List",
+              "width": "fill_container",
+              "height": "fill_container",
+              "gap": 12,
+              "padding": 20,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "XrpSN",
+                  "name": "leftCol",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "id": "bDKNk",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h3",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "前端性能基线"
+                        },
+                        "NwfCF": {
+                          "content": "关键页面首屏渲染需在目标阈值内。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "XnE11",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h4",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "日志与可观测性"
+                        },
+                        "NwfCF": {
+                          "content": "统一结构化日志字段并接入追踪。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "FaYDx",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h5",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "错误处理规范"
+                        },
+                        "NwfCF": {
+                          "content": "禁止吞错，所有异常必须可追溯。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "M0as7",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h6",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "依赖安全检查"
+                        },
+                        "NwfCF": {
+                          "content": "新增依赖需通过漏洞扫描与许可审查。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "E0LdF",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h3",
+                      "x": 0,
+                      "y": 292
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "c7eKL",
+                  "name": "rightCol",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "id": "jWXpA",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h7",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "代码评审清单"
+                        },
+                        "NwfCF": {
+                          "content": "合并前完成清单项并记录关键决策。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "BI9FY",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h8",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "接口兼容策略"
+                        },
+                        "NwfCF": {
+                          "content": "变更需保持向后兼容或提供迁移方案。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "XCg1V",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h9",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "测试覆盖要求"
+                        },
+                        "NwfCF": {
+                          "content": "核心路径必须有自动化测试与回归用例。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "O9392",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h10",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "发布回滚预案"
+                        },
+                        "NwfCF": {
+                          "content": "每次发布需具备可执行回滚步骤。"
+                        }
+                      }
+                    },
+                    {
+                      "id": "t3kZx",
+                      "type": "ref",
+                      "ref": "LbW2I",
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "name": "h11",
+                      "descendants": {
+                        "PHY12": {
+                          "content": "配置管理规范"
+                        },
+                        "NwfCF": {
+                          "content": "环境变量统一托管并定期轮转密钥。"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     }

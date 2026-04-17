@@ -12,11 +12,18 @@ type AppShellLayoutProps = {
 
 function AppShellLayout({ brand, navigation, sidebar, children, actions }: AppShellLayoutProps) {
   const isMacOS = getSynapseRuntime().platform === "darwin"
+  const headerInsetClass = isMacOS ? "pt-24" : "pt-[68px]"
+  const contentUnderHeaderClass = isMacOS ? "-mt-24 pt-24" : "-mt-[68px] pt-[68px]"
 
   return (
-    <main className="min-h-screen">
-      <div className="flex min-h-screen flex-col">
-        <header className={cn("app-drag border-b", isMacOS && "pt-7")}>
+    <main className="relative h-screen overflow-hidden bg-background">
+      <div className="flex h-full flex-col">
+        <header
+          className={cn(
+            "app-drag shrink-0 border-b absolute inset-x-0 top-0 z-20 border-border/80 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60",
+            isMacOS && "pt-7",
+          )}
+        >
           <div className="flex min-h-[68px] items-center gap-4 px-4">
             <div className="app-no-drag shrink-0">{brand}</div>
             <div className="app-no-drag min-w-0 flex-1">{navigation}</div>
@@ -24,11 +31,13 @@ function AppShellLayout({ brand, navigation, sidebar, children, actions }: AppSh
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <aside className="border-b lg:w-[290px] lg:shrink-0 lg:border-r lg:border-b-0">
+        <div className={cn("flex min-h-0 flex-1 overflow-hidden flex-row", headerInsetClass)}>
+          <aside className="w-[220px] shrink-0 overflow-y-auto border-r">
             {sidebar}
           </aside>
-          <section className="min-w-0 flex-1">{children}</section>
+          <section className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", contentUnderHeaderClass)}>
+            {children}
+          </section>
         </div>
       </div>
     </main>

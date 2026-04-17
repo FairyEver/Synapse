@@ -3,10 +3,10 @@ import path from "node:path"
 
 function createMainWindow() {
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 840,
-    minWidth: 960,
-    minHeight: 680,
+    width: 1000,
+    height: 600,
+    minWidth: 1000,
+    minHeight: 600,
     backgroundColor: "#edf2ea",
     show: false,
     title: "Synapse",

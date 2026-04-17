@@ -6,23 +6,12 @@ type AppShellContentProps = {
 }
 
 function AppShellContent({ cards }: AppShellContentProps) {
-  const middleIndex = Math.ceil(cards.length / 2)
-  const leftColumnCards = cards.slice(0, middleIndex)
-  const rightColumnCards = cards.slice(middleIndex)
-
   return (
-    <div className="h-full p-4">
-      <div className="grid h-full gap-4 xl:grid-cols-2">
-        <div className="space-y-4">
-          {leftColumnCards.map((card) => (
-            <AppShellCard key={card.title} title={card.title} description={card.description} />
-          ))}
-        </div>
-        <div className="space-y-4">
-          {rightColumnCards.map((card) => (
-            <AppShellCard key={card.title} title={card.title} description={card.description} />
-          ))}
-        </div>
+    <div className="min-h-full p-4">
+      <div className="grid grid-cols-2 gap-4 min-[1600px]:grid-cols-3 min-[2000px]:grid-cols-4">
+        {cards.map((card) => (
+          <AppShellCard key={card.title} title={card.title} description={card.description} />
+        ))}
       </div>
     </div>
   )

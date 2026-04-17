@@ -14,15 +14,13 @@ src/
   components/
     ui/
   lib/
-  modules/
-    rules/
-    skills/
-    settings/
   styles/
   types/
+  modules/              (业务模块落地时新增)
+    <module>/
 ```
 
-这份结构是当前 Synapse 的真实基础，后续新增代码应优先贴合这套目录，而不是引入新的平行架构。
+这份结构是当前 Synapse 的真实基础。当前代码已经有 `src/app-shell/`，后续业务模块落地时应放进 `src/modules/`，而不是引入新的平行架构。
 
 ## 2. 各目录职责
 
@@ -78,6 +76,7 @@ src/
 - 优先复用
 - 不随意分叉或深度魔改
 - 若确需调整，优先通过组合而不是直接改内部实现
+- 缺少的基础组件优先通过 shadcn CLI 新增到这里，而不是在 `src/components/` 里自定义平行 primitive
 
 ### `src/lib/`
 
@@ -106,13 +105,9 @@ src/
 
 ### `src/modules/`
 
-这是当前 Synapse 的业务模块根目录。
+这是 Synapse 未来业务模块的标准根目录。
 
-现有模块：
-
-- `rules`
-- `skills`
-- `settings`
+当前仓库里该目录尚未落地时，不要因为文档里提到它就虚构一个别的平行目录；真正需要新增业务域时，再按这里的结构创建。
 
 重要约束：
 
@@ -167,6 +162,7 @@ src/modules/<module>/
    放到对应的 `src/modules/<module>/`。
 4. 是多个模块都复用的纯展示组件吗？
    放到 `src/components/`。
+   如果它本质上是按钮、输入框、弹窗、标签、滚动区等基础 primitive，优先检查 `src/components/ui/` 或先新增 shadcn 组件，而不是直接新建共享自定义组件。
 5. 是纯工具函数或共享类型吗？
    分别放到 `src/lib/` 或 `src/types/`。
 

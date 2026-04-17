@@ -16,7 +16,8 @@ Synapse 当前的视觉基线来自 shadcn/ui 的 preset 配置，而不是独�
 
 当前仓库默认应采用：
 
-- style: `base-nova`
+- style: `radix-nova`
+- primitive base: `radix`
 - base color: `neutral`
 - CSS variables: 开启
 - icon library: `lucide`
@@ -95,6 +96,9 @@ Synapse 当前的视觉基线来自 shadcn/ui 的 preset 配置，而不是独�
 - 优先保留组件默认的边框、圆角、阴影与 focus ring
 - 不为了局部页面视觉手工复制一套按钮、卡片、输入框
 - 新增组件时优先通过 shadcn CLI 生成
+- 保持当前 Radix 基线，不要重新引入 `@base-ui/react` 或切回 Base UI
+- 默认决策顺序是：现有业务组合组件 -> `src/components/ui/` 现有组件 -> 新增 shadcn 组件 -> 模块内薄包装组件 -> 最后才允许自定义 primitive
+- 如果只是缺一个 shadcn 基础组件，不要先在 `src/components/` 写自定义版本
 
 ## 6. Tailwind 使用方式
 
@@ -126,6 +130,13 @@ Tailwind 主要用于：
 - 大量任意圆角
 - 渐变与装饰性背景
 - 页面级品牌包装
+- 用长串 Tailwind 类去重写 shadcn 组件原本的表面视觉
+
+补充规则：
+
+- Tailwind 在本仓库里默认是布局和节奏工具，不是主要视觉系统
+- 按钮、输入框、卡片、弹窗、标签页等表面视觉应优先交给 shadcn 组件自身和主题 token
+- 若一个 `className` 主要在描述颜色、阴影、圆角、边框和 hover 装饰，而不是布局与间距，应先回退检查是否过度定制
 
 ## 7. App Shell
 

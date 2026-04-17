@@ -16,7 +16,7 @@
 - Electron
 - React
 - Tailwind CSS
-- shadcn/ui
+- shadcn/ui（Radix base）
 - TypeScript
 
 ## 2. 当前仓库上下文
@@ -265,8 +265,13 @@ Tailwind 主要用于：
 
 - 优先复用现有 shadcn/ui 组件
 - 默认保留 shadcn/ui 的基础视觉风格
+- 当前项目的组件底座是 Radix，当前 style preset 是 `radix-nova`
 - 业务 UI 优先通过组合已有组件完成
 - 不要为了“更好看”随意改组件内部实现
+- 需要新 UI 原子组件时，优先新增到 `src/components/ui/`，不要先在 `src/components/` 手搓一个平行版本
+- 不要重新引入 `@base-ui/react` 或把项目切回 Base UI 路线，除非任务是用户明确要求的迁移
+- 新增或重装 shadcn 组件时，必须保留当前 Radix 基线；如果需要重新初始化或批量重装，显式使用 `--base radix`
+- 默认决策顺序应为：现有业务组合组件 -> `src/components/ui/` 现有组件 -> 新增 shadcn 组件 -> 模块内薄组合组件 -> 最后才是自定义 primitive
 
 优先使用的组件包括：
 
@@ -289,6 +294,7 @@ Tailwind 主要用于：
 - 当前应用壳层应与共享 shadcn 基线保持一致，不要在业务模块里扩散额外装饰性样式
 - 功能页面默认追求简洁、清晰、易维护，而不是“重新设计一遍”
 - 如果一个 UI 需求可以通过 shadcn/ui 组件完成，就不要用多层裸 `div` 手搓平行实现
+- Tailwind 默认主要承担布局、间距、尺寸、响应式和轻量排版，不应成为按钮、输入框、卡片等表面视觉的主要实现方式
 
 ## 9. TypeScript 与类型规范
 
