@@ -8,11 +8,12 @@ import {
   useRef,
   useState,
 } from "react"
-import type { SynapseConfig, SynapseConfigPatch } from "@/types/config"
-import { createDefaultConfig, applySynapseConfigPatch } from "@/lib/config"
+import type { SynapseConfig, SynapseConfigPatch, SynapseRepositoryConfig } from "@/types/config"
+import { applySynapseConfigPatch, createDefaultConfig, getActiveRepositoryConfig } from "@/lib/config"
 
 type AppConfigContextValue = {
   config: SynapseConfig
+  activeRepository: SynapseRepositoryConfig | null
   error: string | null
   isReady: boolean
   refreshConfig: () => Promise<SynapseConfig>
@@ -49,6 +50,11 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hasLoadedRef = useRef(false)
+  const configRef = useRef(config)
+
+  useEffect(() => {
+    configRef.current = config
+  }, [config])
 
   const refreshConfig = useCallback(async () => {
     const nextConfig = await readConfigFromBridge()
@@ -62,7 +68,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = useCallback(
     async (patch: SynapseConfigPatch) => {
-      const nextConfig = await updateConfigThroughBridge(config, patch)
+      const nextConfig = await updateConfigThroughBridge(configRef.current, patch)
 
       setConfig(nextConfig)
       setError(null)
@@ -70,7 +76,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
 
       return nextConfig
     },
-    [config],
+    [],
   )
 
   useEffect(() => {
@@ -89,6 +95,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppConfigContextValue>(
     () => ({
       config,
+      activeRepository: getActiveRepositoryConfig(config),
       error,
       isReady,
       refreshConfig,

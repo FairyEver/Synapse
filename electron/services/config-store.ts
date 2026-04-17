@@ -1,7 +1,12 @@
 import { app } from "electron"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { applySynapseConfigPatch, createDefaultConfig, sanitizeSynapseConfig } from "../../src/lib/config"
+import {
+  applySynapseConfigPatch,
+  createDefaultConfig,
+  hasRecoverableSynapseConfigFormatError,
+  sanitizeSynapseConfig,
+} from "../../src/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "../../src/types/config"
 
 const CONFIG_FILE_NAME = "config.json"
@@ -65,6 +70,12 @@ class ConfigStore {
     try {
       const fileContent = await readFile(filePath, "utf8")
       const parsedConfig = JSON.parse(fileContent) as unknown
+      const shouldBackupConfig = hasRecoverableSynapseConfigFormatError(parsedConfig)
+
+      if (shouldBackupConfig) {
+        await this.backupInvalidConfig(filePath)
+      }
+
       const normalizedConfig = sanitizeSynapseConfig(parsedConfig)
 
       await this.persist(normalizedConfig)
