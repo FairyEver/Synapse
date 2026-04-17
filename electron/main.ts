@@ -1,14 +1,18 @@
 import { app, BrowserWindow } from "electron"
 import path from "node:path"
+import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
+import { registerConfigHandlers } from "./ipc/config-handlers"
+import { configStore } from "./services/config-store"
 
 let mainWindow: BrowserWindow | null = null
 
 function createMainWindow() {
+  const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
   const window = new BrowserWindow({
-    width: 1000,
-    height: 600,
-    minWidth: 1000,
-    minHeight: 600,
+    width,
+    height,
+    minWidth,
+    minHeight,
     backgroundColor: "#edf2ea",
     show: false,
     title: "Synapse",
@@ -39,7 +43,7 @@ function createMainWindow() {
   if (devServerUrl) {
     void window.loadURL(devServerUrl)
   } else {
-    void window.loadFile(path.join(__dirname, "../dist/index.html"))
+    void window.loadFile(path.join(__dirname, "../../dist/index.html"))
   }
 }
 
@@ -60,7 +64,10 @@ if (!gotSingleInstanceLock) {
     mainWindow.focus()
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    registerConfigHandlers()
+    await configStore.load()
+
     createMainWindow()
 
     app.on("activate", () => {
@@ -68,6 +75,9 @@ if (!gotSingleInstanceLock) {
         createMainWindow()
       }
     })
+  }).catch((error) => {
+    console.error("[main] Failed to initialize app services.", error)
+    app.quit()
   })
 }
 

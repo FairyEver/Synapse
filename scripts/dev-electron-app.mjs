@@ -6,7 +6,12 @@ const port = process.env.SYNAPSE_DEV_PORT ?? "5173"
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? `http://127.0.0.1:${port}`
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 const electronBuildDir = path.resolve("dist-electron")
-const electronEntryFiles = ["main.js", "preload.js"]
+const electronEntryFiles = [
+  "main.js",
+  "preload.js",
+  "electron/main.js",
+  "electron/preload.js",
+]
 
 let activeChild = null
 let isStopping = false
@@ -57,8 +62,8 @@ const waitCode = await runPnpm([
   "exec",
   "wait-on",
   `tcp:127.0.0.1:${port}`,
-  "file:dist-electron/main.js",
-  "file:dist-electron/preload.js",
+  "file:dist-electron/electron/main.js",
+  "file:dist-electron/electron/preload.js",
 ])
 
 if (isStopping) {
