@@ -5,17 +5,16 @@ These rules apply to all renderer-side work under `src/`.
 ## Design authority
 
 - For any UI, styling, layout, typography, color, spacing, surface, card, button, form, or interaction appearance change, follow `/Users/liyang/Documents/code/github/Synapse/doc/DESIGN.md` strictly.
-- `doc/DESIGN.md` overrides generic defaults from shadcn/ui when visual treatment differs.
+- `doc/DESIGN.md` defines the repository's current shadcn preset baseline and overrides ad hoc page-level styling.
 - Do not introduce a competing design language inside renderer code.
 
 ## Required visual defaults
 
-- Use the Claude-inspired warm palette from `doc/DESIGN.md`.
-- Keep neutrals warm-toned and avoid cool blue-grays.
-- Use serif headings and sans-serif UI/body hierarchy per `doc/DESIGN.md`.
-- Prefer warm ring shadows, subtle borders, and soft rounded corners.
-- Prefer parchment, ivory, warm sand, charcoal, and terracotta roles from `doc/DESIGN.md`.
-- Keep the interface editorial, calm, and high-whitespace rather than dense or dashboard-like.
+- Use the active shadcn preset tokens from `components.json` and `src/styles/globals.css`.
+- Prefer shared shadcn components from `src/components/ui/` over custom renderer-side primitives.
+- Keep colors, radius, borders, shadows, and focus states on stock shadcn defaults unless the task explicitly changes the preset.
+- Prefer tokenized utilities such as `bg-background`, `text-foreground`, `border-border`, `bg-muted`, and `text-muted-foreground`.
+- Keep renderer styling simple and consistent rather than introducing a separate shell-specific brand layer.
 
 ## Renderer boundaries
 

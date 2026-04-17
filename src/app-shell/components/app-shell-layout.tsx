@@ -14,10 +14,10 @@ function AppShellLayout({ brand, navigation, sidebar, children, actions }: AppSh
   const isMacOS = getSynapseRuntime().platform === "darwin"
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen flex-col">
-        <header className={cn("app-drag border-b border-border bg-card", isMacOS && "pt-7")}>
-          <div className="flex min-h-[68px] items-center gap-4 px-5">
+        <header className={cn("app-drag border-b bg-background", isMacOS && "pt-7")}>
+          <div className="flex min-h-[68px] items-center gap-4 px-4">
             <div className="app-no-drag shrink-0">{brand}</div>
             <div className="app-no-drag min-w-0 flex-1">{navigation}</div>
             {actions ? <div className="app-no-drag shrink-0">{actions}</div> : null}
@@ -25,7 +25,7 @@ function AppShellLayout({ brand, navigation, sidebar, children, actions }: AppSh
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <aside className="border-b border-border bg-muted lg:w-[290px] lg:shrink-0 lg:border-r lg:border-b-0">
+          <aside className="border-b bg-muted/30 lg:w-[290px] lg:shrink-0 lg:border-r lg:border-b-0">
             {sidebar}
           </aside>
           <section className="min-w-0 flex-1 bg-background">{children}</section>

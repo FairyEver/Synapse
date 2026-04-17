@@ -14,7 +14,7 @@
 - 阴影
 - 圆角
 - 组件外观
-- 页面气质
+- 页面结构
 - 深浅主题切换
 
 如果本文件与 `doc/DESIGN.md` 有冲突，以 `doc/DESIGN.md` 为准。
@@ -28,18 +28,16 @@ Synapse 的 UI 代码默认追求：
 - 易扩展
 - 易维护
 
-UI 的首要任务是承载产品流程，而不是展示复杂视觉技巧。
+默认基线是 shadcn/ui 当前 preset，而不是额外的品牌化视觉系统。
 
 ## 2. 当前视觉基线
 
-当前应用壳层已经存在一定的品牌化样式，后续新增视觉应与 `doc/DESIGN.md` 保持一致。
+当前仓库应统一落在同一套 shadcn 基线上：
 
-后续新增或修改模块 UI 时应遵守：
-
-- 保留现有壳层风格
-- 让新增模块与 `doc/DESIGN.md` 的暖色、编辑感、柔和圆角、温和层次语言保持一致
-- 不在 `doc/DESIGN.md` 之外另起一套视觉风格
-- 默认让业务页面落在简洁的卡片、表单、列表与分区结构内
+- 以 `components.json` 中声明的 style preset 为准
+- 以 `src/styles/globals.css` 中的 token 与字体导入为准
+- app shell 与业务模块使用同一套颜色、边框、圆角、阴影与 focus 规则
+- 不再维护独立的壳层品牌样式
 
 如果任务没有明确要求重新设计，就不要主动添加新的视觉风格。
 
@@ -74,15 +72,15 @@ Tailwind 主要用于：
 - `overflow-*`
 - `rounded-*`
 - `text-sm` `text-base` `text-lg` `font-medium` `font-semibold`
+- `bg-background` `text-foreground` `bg-card` `border-border` `bg-muted` `text-muted-foreground`
 - `sm:` `md:` `lg:` `xl:`
 
 默认避免：
 
-- 与 `doc/DESIGN.md` 不一致的渐变
-- 与 `doc/DESIGN.md` 不一致的动画
-- 重阴影
-- 冷色调灰色
-- 无依据的大量颜色修饰
+- 与 shadcn preset 无关的硬编码颜色
+- 大量任意阴影与圆角
+- 渐变类
+- 装饰性动画
 - 装饰性 absolute/fixed 定位
 - 很长的 `className` 串
 
@@ -106,10 +104,11 @@ Tailwind 主要用于：
 
 规则：
 
-- 默认保留组件结构能力，但视觉应向 `doc/DESIGN.md` 对齐
+- 默认保留组件基础视觉风格
 - 先组合，再定制
 - 不为了“更好看”随意改内部源码
-- 需要定制时，优先做设计系统层面的有限改造，而不是页面里零散覆盖
+- 需要新增组件时，优先通过 shadcn CLI 生成或严格对齐 CLI 输出
+- 需要定制时，优先调整主题 token 或共享组件层，而不是在页面里零散覆盖
 
 ## 6. 页面结构顺序
 
@@ -129,7 +128,7 @@ Tailwind 主要用于：
 - 短
 - 稳定
 - 可读
-- 以布局类为主
+- 以布局类和 token 类为主
 
 如果一个组件的 `className` 变得很长、重复、充满装饰性细节，优先考虑：
 
@@ -146,12 +145,12 @@ Tailwind 主要用于：
 - 简洁表单
 - 列表与空状态
 - 明确的主次操作按钮
-- `doc/DESIGN.md` 中定义的暖色纸张背景、柔和边框、ring shadow 与 serif/sans 层级
+- 与共享 preset 一致的中性色表面、边框、阴影和 focus ring
 
 默认不应偏向：
 
 - 海报式页面
-- 与 `doc/DESIGN.md` 无关的强视觉装饰
+- 页面级品牌包装
 - 大量悬浮元素
 - 复杂动效
 - 纯展示型排版
@@ -161,7 +160,7 @@ Tailwind 主要用于：
 仅在以下情况下，可以适度加入额外视觉处理：
 
 - 用户明确要求重新设计
-- 现有页面已经建立了同类视觉模式
+- 需要统一切换 preset 或主题
 - 该样式直接服务于功能理解，而不是纯装饰
 
-即使需要突破，也应保持克制，并优先与 `doc/DESIGN.md` 和现有风格一致。
+即使需要突破，也应保持克制，并优先复用已有 shadcn 基线。

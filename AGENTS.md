@@ -12,7 +12,7 @@ If a task touches UI behavior, styling, visual design, typography, color, spacin
 - `doc/DESIGN.md`
 - `doc/ui-rules.md`
 
-For any visual decision, `doc/DESIGN.md` is the canonical authority and overrides older or more generic UI guidance.
+For any visual decision, `doc/DESIGN.md` is the canonical authority for the repository's current shadcn-based visual baseline.
 
 ## Stack
 
@@ -48,11 +48,11 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority and override
 - Renderer code may only access privileged capabilities through narrow, typed preload APIs.
 - Never expose raw `ipcRenderer`, `window.require`, or broad Electron APIs to the renderer.
 - Handle async errors explicitly. Do not silently swallow failures.
-- Preserve the existing visual language and interaction patterns.
-- For feature UI, prefer shadcn/ui composition and Tailwind utilities that support the design system in `doc/DESIGN.md`.
-- When a task changes UI or styling, do not invent a new visual direction. Match `doc/DESIGN.md` strictly.
-- If `doc/DESIGN.md` specifies typography, palette, radius, spacing, shadows, or component treatment, follow it even when a default shadcn/ui style would be simpler.
-- The app shell already contains branded styling. Preserve it and evolve feature modules toward the same `doc/DESIGN.md` language instead of introducing a competing style.
+- Preserve the existing interaction patterns unless the task explicitly changes them.
+- For feature UI, prefer shadcn/ui composition and the default preset styles documented in `doc/DESIGN.md`.
+- When a task changes UI or styling, use existing shadcn components and theme tokens before adding custom visual treatment.
+- If `doc/DESIGN.md` specifies the active shadcn preset, font imports, tokens, or component usage rules, follow those over ad hoc page-level overrides.
+- Keep the app shell and feature modules on the same shared shadcn baseline instead of maintaining parallel visual systems.
 - If a component, hook, or service grows too large, split it into smaller, well-named units.
 
 ## Karpathy-inspired execution rules
@@ -128,16 +128,12 @@ These guidelines are working if: fewer unnecessary changes in diffs, fewer rewri
 
 For any UI or styling task, treat these as default requirements unless the user explicitly asks for an exception:
 
-- Use the warm parchment-based Claude-inspired palette defined in `doc/DESIGN.md`.
-- Keep neutrals warm-toned. Do not introduce cool blue-grays.
-- Use serif headings and sans-serif UI/body text according to `doc/DESIGN.md`.
-- Keep serif heading weight at 500 or below.
-- Use terracotta as the primary chromatic accent, not a broad rainbow palette.
-- Prefer gradient-free surfaces. Depth should come from warm surfaces, borders, and ring shadows.
-- Prefer warm ring shadows and subtle borders over heavy drop shadows.
-- Keep corners soft and rounded. Do not use sharp card or button corners.
-- Preserve the editorial, calm, high-whitespace rhythm from `doc/DESIGN.md`.
-- Do not add techy/glossy styling that conflicts with the Claude-inspired art direction.
+- Use the active shadcn preset and CSS variable tokens defined by `components.json` and `src/styles/globals.css`.
+- Prefer neutral palette tokens such as `bg-background`, `text-foreground`, `bg-card`, `border-border`, and `bg-muted`.
+- Use the preset's default font imports and tokenized font roles instead of adding separate brand display styles.
+- Prefer stock shadcn radius, border, shadow, and focus-ring treatment over custom arbitrary values.
+- Compose from shadcn components before hand-rolling parallel UI primitives.
+- Avoid hard-coded brand colors, custom shadow systems, decorative gradients, and page-specific visual languages unless the task explicitly asks for them.
 
 ## Placement rules
 
