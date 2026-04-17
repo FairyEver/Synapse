@@ -4,6 +4,7 @@ import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
+import { useRepositoryManager } from "@/app-shell/repository"
 import { SkillsModule } from "@/modules/skills"
 import { RulesModule } from "@/modules/rules"
 import { SettingsModule } from "@/modules/settings"
@@ -12,7 +13,9 @@ type AppTabId = "rules" | "skills" | "settings"
 
 function App() {
   const { activeRepository, isReady } = useAppConfig()
+  const { operations, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
+  const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
 
   const tabs = useMemo(
     () => [
@@ -29,10 +32,19 @@ function App() {
       navigation={<AppShellNavigation tabs={tabs} value={activeTab} onValueChange={(value) => setActiveTab(value as AppTabId)} />}
       actions={
         <AppShellActions
-          disabled={!isReady || activeRepository === null}
+          busy={Boolean(activeRepositoryOperation?.isRunning)}
+          disabled={!isReady || activeRepository === null || Boolean(activeRepositoryOperation?.isRunning)}
           onRefresh={() => {
-            console.info("[synapse] Repository refresh will be implemented in step 6.")
+            if (!activeRepository) {
+              return
+            }
+
+            void syncRepository(activeRepository.uuid).catch((error) => {
+              const message = error instanceof Error ? error.message : "仓库同步失败。"
+              window.alert(message)
+            })
           }}
+          title={activeRepositoryOperation?.isRunning ? activeRepositoryOperation.statusText ?? "正在同步仓库..." : "刷新仓库"}
         />
       }
     >

@@ -2,6 +2,7 @@ import { app, BrowserWindow } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
 import { registerConfigHandlers } from "./ipc/config-handlers"
+import { registerRepositoryHandlers } from "./ipc/repository-handlers"
 import { configStore } from "./services/config-store"
 
 let mainWindow: BrowserWindow | null = null
@@ -66,6 +67,7 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     registerConfigHandlers()
+    registerRepositoryHandlers()
     await configStore.load()
 
     createMainWindow()

@@ -74,7 +74,7 @@ const settingsItems: SettingItem[] = [
   {
     key: "repositories",
     label: "Git 仓库",
-    description: "这里先维护仓库清单和当前激活仓库；首次克隆与同步会在步骤 6 接入。",
+    description: "维护仓库清单、当前激活仓库，以及首次浅克隆和手动同步。",
     category: "repositories",
     type: "list",
     defaultValue: [],
