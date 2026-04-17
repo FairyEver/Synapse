@@ -1,6 +1,6 @@
 declare global {
   interface Window {
-    synapse: {
+    synapse?: {
       platform: string
       versions: {
         chrome: string

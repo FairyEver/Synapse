@@ -2,6 +2,7 @@ import { useState } from "react"
 import { RefreshCw } from "lucide-react"
 import { AppShellProvider, type AppTabId } from "@/app-shell/context"
 import { Button } from "@/components/ui/button"
+import { getSynapseRuntime } from "@/lib/runtime"
 import { cn } from "@/lib/utils"
 import { RulesModule } from "@/modules/rules"
 import { SettingsModule } from "@/modules/settings"
@@ -14,37 +15,31 @@ const tabItems: Array<{
 }> = [
   {
     id: "rules",
-    label: "Rules",
-    description: "团队共享规则列表与创建入口",
+    label: "规则",
+    description: "团队规则与协作约定",
   },
   {
     id: "skills",
-    label: "Skills",
-    description: "技能包浏览、安装与下载入口",
+    label: "技能",
+    description: "技能包目录与安装上下文",
   },
   {
     id: "settings",
-    label: "Settings",
-    description: "仓库上下文与全局偏好配置",
+    label: "设置",
+    description: "仓库信息与全局偏好",
   },
 ]
 
 function SynapseMark() {
   return (
-    <div className="relative size-12 overflow-hidden rounded-[18px] border border-white/80 bg-[linear-gradient(145deg,#0f766e_0%,#34d399_55%,#facc15_100%)] shadow-[0_16px_40px_-20px_rgba(15,23,42,0.55)]">
-      <span className="absolute left-2.5 top-2.5 size-3 rounded-full bg-white/95 shadow-sm" />
-      <span className="absolute right-2.5 top-3.5 size-2.5 rounded-full bg-white/90" />
-      <span className="absolute bottom-2.5 left-3.5 size-2.5 rounded-full bg-[#0f172a]" />
-      <span className="absolute bottom-3.5 right-3.5 size-3 rounded-full bg-[#0f172a]" />
-      <span className="absolute left-[15px] top-[17px] h-px w-4 rotate-[14deg] bg-white/80" />
-      <span className="absolute left-[18px] top-[19px] h-px w-4 rotate-[118deg] bg-white/70" />
-      <span className="absolute left-[21px] top-[27px] h-px w-3 rotate-[6deg] bg-[#0f172a]/70" />
+    <div className="flex size-12 items-center justify-center rounded-[18px] bg-primary text-lg text-primary-foreground shadow-[0_0_0_1px_#c96442]">
+      <span className="font-editorial leading-none">S</span>
     </div>
   )
 }
 
 function App() {
-  const runtime = window.synapse
+  const runtime = getSynapseRuntime()
   const isMacOS = runtime.platform === "darwin"
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
   const [refreshBlockers, setRefreshBlockers] = useState<string[]>([])
@@ -57,7 +52,6 @@ function App() {
     ? new Date(lastRefreshRequestedAt).toLocaleTimeString("zh-CN", {
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
       })
     : null
 
@@ -92,116 +86,79 @@ function App() {
         setRefreshBlock,
       }}
     >
-      <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.9),rgba(238,243,236,0.98)_42%,rgba(228,235,229,1)_100%)] text-foreground">
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.4),transparent_30%,rgba(15,118,110,0.05)_65%,rgba(250,204,21,0.08)_100%)]" />
-
-        <div className="relative flex min-h-screen flex-col p-3 sm:p-4">
-          <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-hidden rounded-[32px] border border-white/80 bg-[rgba(248,250,246,0.78)] shadow-[0_32px_120px_-54px_rgba(15,23,42,0.55)] backdrop-blur-xl">
-            <header className={cn("app-drag border-b border-border/60 bg-white/58", isMacOS ? "pt-7" : "pt-4")}>
-              <div className="flex flex-col gap-4 px-4 pb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-4 lg:w-[310px]">
+      <main className="min-h-screen bg-background px-3 py-3 sm:px-4 sm:py-4">
+        <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1280px] flex-col overflow-hidden surface-shell sm:min-h-[calc(100vh-2rem)]">
+          <header className={cn("app-drag border-b border-border bg-card/80", isMacOS ? "pt-7" : "pt-4")}>
+            <div className="flex flex-col gap-6 px-4 pb-5 sm:px-6">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex items-start gap-4">
                   <SynapseMark />
 
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.26em] text-muted-foreground">
-                      Artificial Intelligence x Connection x Sharing
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-2xl font-semibold tracking-tight text-foreground">Synapse</span>
-                      <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
-                        Shell
-                      </span>
+                  <div className="space-y-2">
+                    <div className="eyebrow">Knowledge Workspace</div>
+                    <div className="space-y-2">
+                      <h1 className="font-editorial text-[2rem] leading-none text-foreground">Synapse</h1>
+                      <p className="max-w-xl text-sm leading-7 text-muted-foreground sm:text-base">
+                        用统一的暖色工作台整理规则、技能和仓库设置，让信息更安静，也更容易维护。
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <nav aria-label="Primary" className="app-no-drag flex flex-1 justify-center">
-                  <div className="inline-flex w-full max-w-[460px] items-center gap-1 rounded-full border border-border/70 bg-white/86 p-1 shadow-sm">
-                    {tabItems.map((tab) => {
-                      const isActive = tab.id === activeTab
-
-                      return (
-                        <button
-                          key={tab.id}
-                          className={cn(
-                            "flex-1 rounded-full px-4 py-2.5 text-sm font-medium transition",
-                            isActive
-                              ? "bg-primary text-primary-foreground shadow-sm"
-                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                          )}
-                          type="button"
-                          onClick={() => setActiveTab(tab.id)}
-                        >
-                          {tab.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </nav>
-
-                <div className="flex items-center gap-3 lg:w-[310px] lg:justify-end">
-                  <div className="hidden rounded-full border border-border/70 bg-white/86 px-3 py-2 text-xs text-muted-foreground xl:flex">
-                    {refreshLabel ? (
-                      <>
-                        最近一次占位刷新
-                        <span className="ml-1 font-medium text-foreground">{refreshLabel}</span>
-                      </>
-                    ) : (
-                      "仓库同步会在步骤 6 接入"
-                    )}
+                <div className="app-no-drag flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="min-w-[180px] text-left sm:text-right">
+                    <div className="eyebrow">Current Section</div>
+                    <div className="mt-2 text-sm text-foreground">{activeTabMeta.description}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {refreshLabel ? `上次刷新 ${refreshLabel}` : "尚未触发刷新"}
+                    </div>
                   </div>
 
-                  <Button
-                    className="app-no-drag h-10 rounded-full px-4"
-                    disabled={isRefreshBlocked}
-                    onClick={requestRefresh}
-                    variant="outline"
-                  >
+                  <Button className="h-10 px-4" disabled={isRefreshBlocked} onClick={requestRefresh} variant="secondary">
                     <RefreshCw className={cn("size-4", refreshRequestCount > 0 && "text-primary")} />
-                    刷新
+                    刷新界面
                   </Button>
                 </div>
               </div>
-            </header>
 
-            <div className="border-b border-border/60 bg-white/46 px-4 py-3 sm:px-6">
-              <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
-                    {activeTabMeta.label}
-                  </span>
-                  <span>{activeTabMeta.description}</span>
+              <nav aria-label="Primary" className="app-no-drag">
+                <div className="inline-flex flex-wrap items-center gap-2 rounded-[18px] border border-border bg-secondary p-1.5">
+                  {tabItems.map((tab) => {
+                    const isActive = tab.id === activeTab
+
+                    return (
+                      <Button
+                        key={tab.id}
+                        className={cn(
+                          "rounded-[14px] px-4",
+                          !isActive && "bg-transparent text-muted-foreground shadow-none hover:bg-card hover:text-foreground",
+                        )}
+                        size="sm"
+                        type="button"
+                        variant={isActive ? "default" : "ghost"}
+                        onClick={() => setActiveTab(tab.id)}
+                      >
+                        {tab.label}
+                      </Button>
+                    )
+                  })}
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {isRefreshBlocked
-                    ? "存在打开中的模态框，刷新已锁定"
-                    : refreshLabel
-                      ? `占位刷新事件已触发：${refreshLabel}`
-                      : "刷新按钮已绑定占位事件，后续将接入仓库同步"}
-                </span>
-              </div>
+              </nav>
             </div>
+          </header>
 
-            <div className="relative min-h-0 flex-1 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),transparent_24%)]">
-              {tabItems.map((tab) => {
-                const isActive = tab.id === activeTab
+          <div className="min-h-0 flex-1 overflow-hidden bg-background/65 px-4 py-4 sm:px-6 sm:py-6">
+            {tabItems.map((tab) => {
+              const isActive = tab.id === activeTab
 
-                return (
-                  <section
-                    key={tab.id}
-                    aria-hidden={!isActive}
-                    className={cn(
-                      "absolute inset-0 overflow-auto p-4 transition-opacity duration-200 sm:p-6",
-                      isActive ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-                    )}
-                  >
-                    {tab.id === "rules" && <RulesModule />}
-                    {tab.id === "skills" && <SkillsModule />}
-                    {tab.id === "settings" && <SettingsModule />}
-                  </section>
-                )
-              })}
-            </div>
+              return (
+                <section key={tab.id} aria-hidden={!isActive} className={cn("h-full overflow-auto", !isActive && "hidden")}>
+                  {tab.id === "rules" && <RulesModule />}
+                  {tab.id === "skills" && <SkillsModule />}
+                  {tab.id === "settings" && <SettingsModule />}
+                </section>
+              )
+            })}
           </div>
         </div>
       </main>
