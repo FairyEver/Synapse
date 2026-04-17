@@ -20,8 +20,8 @@ declare global {
         update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
       }
       repository?: {
+        chooseDirectory: () => Promise<string | null>
         getStates: () => Promise<SynapseRepositoryLocalState[]>
-        clone: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
         sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
         onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
         onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void

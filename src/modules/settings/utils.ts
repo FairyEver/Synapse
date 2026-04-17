@@ -42,8 +42,6 @@ function getRepositorySettingValue(key: string, context: SettingsContext, fallba
       return context.activeRepository.rulesDir
     case "skillsDir":
       return context.activeRepository.skillsDir
-    case "credentialContext":
-      return context.activeRepository.credentialContext ?? ""
     default:
       return fallback
   }
@@ -76,14 +74,6 @@ function createRepositorySettingPatch(key: string, value: unknown, context: Sett
       const repositories = updateActiveRepository(context, (repository) => ({
         ...repository,
         skillsDir: String(value ?? ""),
-      }))
-
-      return repositories ? { repositories } : null
-    }
-    case "credentialContext": {
-      const repositories = updateActiveRepository(context, (repository) => ({
-        ...repository,
-        credentialContext: String(value ?? "").trim() || null,
       }))
 
       return repositories ? { repositories } : null

@@ -7,10 +7,12 @@ function RulesModule() {
   const { states } = useRepositoryManager()
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
   const description = activeRepository
-    ? activeRepositoryState?.status === "ready"
-      ? `当前激活仓库：${activeRepository.name}`
-      : `当前激活仓库：${activeRepository.name}。本地缓存还没准备好，先到 Settings 完成浅克隆，或直接点击右上角刷新。`
-    : "还没有激活仓库。先在 Settings 里添加一个 Git 仓库。"
+    ? activeRepositoryState?.status !== "ready"
+      ? `当前激活目录：${activeRepository.name}。本地目录不存在，请到 Settings 里重新选择。`
+      : activeRepositoryState.isGitRepository
+        ? `当前激活目录：${activeRepository.name}`
+        : `当前激活目录：${activeRepository.name}。当前目录不是 Git 仓库，可以浏览本地内容，但刷新和新建会禁用。`
+    : "还没有激活目录。先在 Settings 里选择一个本地目录。"
 
   return (
     <div className="h-full overflow-y-auto">

@@ -29,12 +29,12 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "repositories",
     label: "仓库",
-    description: "添加、切换和删除 Git 仓库配置。",
+    description: "选择、切换和删除本地仓库目录。",
   },
   {
     id: "content",
     label: "内容",
-    description: "配置当前仓库里的 Rules / Skills 主目录。",
+    description: "配置当前目录里的 Rules / Skills 主目录。",
   },
   {
     id: "projects",
@@ -73,8 +73,8 @@ const settingsItems: SettingItem[] = [
   },
   {
     key: "repositories",
-    label: "Git 仓库",
-    description: "维护仓库清单、当前激活仓库，以及首次浅克隆和手动同步。",
+    label: "本地仓库目录",
+    description: "维护目录清单、当前激活目录，以及 Git 状态与手动同步。",
     category: "repositories",
     type: "list",
     defaultValue: [],
@@ -83,7 +83,7 @@ const settingsItems: SettingItem[] = [
   {
     key: "activeRepository.rulesDir",
     label: "Rules 主目录名",
-    description: "当前仓库下 Rules 的顶层目录。切换仓库时这项配置会一起切换。",
+    description: "当前目录下 Rules 的顶层目录。切换目录时这项配置会一起切换。",
     category: "content",
     type: "text",
     defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir,
@@ -94,7 +94,7 @@ const settingsItems: SettingItem[] = [
   {
     key: "activeRepository.skillsDir",
     label: "Skills 主目录名",
-    description: "当前仓库下 Skills 的顶层目录。切换仓库时这项配置会一起切换。",
+    description: "当前目录下 Skills 的顶层目录。切换目录时这项配置会一起切换。",
     category: "content",
     type: "text",
     defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir,

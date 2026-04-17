@@ -12,7 +12,7 @@ function AppShellActions({
   busy = false,
   disabled = false,
   onRefresh,
-  title = "刷新仓库",
+  title = "同步仓库",
 }: AppShellActionsProps) {
   return (
     <Button variant="secondary" size="icon" disabled={disabled} onClick={onRefresh} title={title}>

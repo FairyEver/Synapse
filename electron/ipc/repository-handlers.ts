@@ -1,4 +1,4 @@
-import { ipcMain, type WebContents } from "electron"
+import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from "electron"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { configStore } from "../services/config-store"
@@ -33,25 +33,22 @@ function registerRepositoryHandlers() {
     const config = await configStore.load()
 
     return Promise.all(
-      config.repositories.map((repository) => repositoryStore.getRepositoryState(repository.uuid)),
+      config.repositories.map((repository) => repositoryStore.getRepositoryState(repository)),
     )
   })
 
   ipcMain.handle(
-    SYNAPSE_IPC_CHANNELS.repository.clone,
-    async (event, repositoryUuid: string) => {
-      const repository = await resolveRepositoryConfig(repositoryUuid)
-      const result = await repositoryGitService.cloneRepository(repository, (progressEvent) => {
-        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.progress, progressEvent)
-      })
+    SYNAPSE_IPC_CHANNELS.repository.chooseDirectory,
+    async (event) => {
+      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+      const options: OpenDialogOptions = {
+        properties: ["openDirectory"],
+      }
+      const result = ownerWindow
+        ? await dialog.showOpenDialog(ownerWindow, options)
+        : await dialog.showOpenDialog(options)
 
-      sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.updated, {
-        repositoryUuid,
-        operation: result.operation,
-        completedAt: result.completedAt,
-      })
-
-      return result
+      return result.canceled ? null : result.filePaths[0] ?? null
     },
   )
 

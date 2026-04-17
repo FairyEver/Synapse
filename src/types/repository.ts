@@ -1,12 +1,13 @@
-export type SynapseRepositoryOperationKind = "clone" | "sync"
+export type SynapseRepositoryOperationKind = "sync"
 
-export type SynapseRepositoryLocalStatus = "missing" | "ready" | "invalid"
+export type SynapseRepositoryLocalStatus = "missing" | "ready"
 
 export type SynapseRepositoryLocalState = {
   repositoryUuid: string
   localPath: string
   status: SynapseRepositoryLocalStatus
-  isShallow: boolean
+  isGitRepository: boolean
+  gitRootPath: string | null
 }
 
 export type SynapseRepositoryProgressEvent = {

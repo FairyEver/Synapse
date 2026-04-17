@@ -34,12 +34,21 @@ function parseGitProgressLine(
 
   const percent = extractPercent(trimmedLine)
 
-  if (trimmedLine.startsWith("Cloning into ")) {
+  if (trimmedLine.startsWith("From ")) {
     return {
       repositoryUuid,
       operation,
-      statusText: "正在连接远程仓库...",
-      percent: 0,
+      statusText: "正在获取远程更新...",
+      percent,
+    }
+  }
+
+  if (trimmedLine === "Already up to date.") {
+    return {
+      repositoryUuid,
+      operation,
+      statusText: "仓库已经是最新状态。",
+      percent: 100,
     }
   }
 
@@ -91,33 +100,6 @@ function parseGitProgressLine(
     }
   }
 
-  if (trimmedLine.startsWith("Updating files")) {
-    return {
-      repositoryUuid,
-      operation,
-      statusText: "正在更新文件...",
-      percent,
-    }
-  }
-
-  if (trimmedLine.startsWith("From ")) {
-    return {
-      repositoryUuid,
-      operation,
-      statusText: "正在获取远程更新...",
-      percent,
-    }
-  }
-
-  if (trimmedLine === "Already up to date.") {
-    return {
-      repositoryUuid,
-      operation,
-      statusText: "仓库已经是最新状态。",
-      percent: 100,
-    }
-  }
-
   if (trimmedLine.startsWith("Updating ")) {
     return {
       repositoryUuid,
@@ -144,10 +126,7 @@ function parseGitProgressLine(
   }
 }
 
-function formatGitFailureMessage(
-  operation: SynapseRepositoryOperationKind,
-  output: string,
-): string {
+function formatGitFailureMessage(output: string): string {
   const normalizedOutput = output.trim()
   const firstLine = normalizedOutput
     .split(/\r?\n/)
@@ -168,9 +147,17 @@ function formatGitFailureMessage(
   if (
     loweredOutput.includes("repository not found")
     || loweredOutput.includes("not found")
-    || loweredOutput.includes("does not appear to be a git repository")
+    || loweredOutput.includes("no such remote")
   ) {
-    return "仓库地址不可用，或当前账号没有访问这个仓库的权限。"
+    return "当前仓库没有可用的远程配置，或当前账号没有访问权限。"
+  }
+
+  if (
+    loweredOutput.includes("there is no tracking information for the current branch")
+    || loweredOutput.includes("no upstream configured for branch")
+    || loweredOutput.includes("has no upstream branch")
+  ) {
+    return "当前分支还没有配置上游分支，暂时无法在 Synapse 中执行同步。"
   }
 
   if (
@@ -184,17 +171,14 @@ function formatGitFailureMessage(
   }
 
   if (loweredOutput.includes("not possible to fast-forward")) {
-    return "本地仓库无法快进同步，建议重新执行一次浅克隆。"
+    return "当前仓库无法快进同步，请先在你常用的 Git 工具里处理分支分叉。"
   }
 
   if (loweredOutput.includes("not a git repository")) {
-    return "本地仓库目录不完整，建议重新执行一次浅克隆。"
+    return "当前目录不是 Git 仓库，无法执行同步。"
   }
 
-  const fallbackMessage =
-    operation === "clone"
-      ? "仓库克隆失败。请检查仓库地址、网络和访问权限后重试。"
-      : "仓库同步失败。请检查网络、访问权限或本地缓存状态后重试。"
+  const fallbackMessage = "仓库同步失败。请检查网络、访问权限、远程配置或当前分支状态后重试。"
 
   return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
 }
@@ -237,7 +221,7 @@ async function runGitCommand(
   operation: SynapseRepositoryOperationKind,
   args: string[],
   options: {
-    cwd?: string
+    cwd: string
     onProgress: ProgressListener
   },
 ): Promise<void> {
@@ -291,7 +275,7 @@ async function runGitCommand(
         return
       }
 
-      reject(new Error(formatGitFailureMessage(operation, combinedOutput)))
+      reject(new Error(formatGitFailureMessage(combinedOutput)))
     })
   })
 }
@@ -299,57 +283,18 @@ async function runGitCommand(
 class RepositoryGitService {
   private activeOperations = new Map<string, SynapseRepositoryOperationKind>()
 
-  async cloneRepository(
-    repository: SynapseRepositoryConfig,
-    onProgress: ProgressListener,
-  ): Promise<SynapseRepositoryOperationResult> {
-    return this.runExclusive(repository.uuid, "clone", async () => {
-      onProgress({
-        repositoryUuid: repository.uuid,
-        operation: "clone",
-        statusText: "正在准备本地仓库目录...",
-        percent: 0,
-      })
-
-      await repositoryStore.ensureRepositoriesRootPath()
-      await repositoryStore.removeLocalRepository(repository.uuid)
-
-      await runGitCommand(repository.uuid, "clone", [
-        "clone",
-        "--depth=1",
-        "--progress",
-        repository.url,
-        repositoryStore.getRepositoryPath(repository.uuid),
-      ], {
-        onProgress,
-      })
-
-      const nextState = await repositoryStore.getRepositoryState(repository.uuid)
-      const completedAt = new Date().toISOString()
-
-      onProgress({
-        repositoryUuid: repository.uuid,
-        operation: "clone",
-        statusText: "仓库克隆完成。",
-        percent: 100,
-      })
-
-      return {
-        operation: "clone",
-        repository: nextState,
-        completedAt,
-      }
-    })
-  }
-
   async syncRepository(
     repository: SynapseRepositoryConfig,
     onProgress: ProgressListener,
   ): Promise<SynapseRepositoryOperationResult> {
-    const currentState = await repositoryStore.getRepositoryState(repository.uuid)
+    const currentState = await repositoryStore.getRepositoryState(repository)
 
     if (currentState.status !== "ready") {
-      return this.cloneRepository(repository, onProgress)
+      throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
+    }
+
+    if (!currentState.isGitRepository) {
+      throw new Error("当前目录不是 Git 仓库，无法执行同步。")
     }
 
     return this.runExclusive(repository.uuid, "sync", async () => {
@@ -363,14 +308,13 @@ class RepositoryGitService {
       await runGitCommand(repository.uuid, "sync", [
         "pull",
         "--ff-only",
-        "--depth=1",
         "--progress",
       ], {
-        cwd: repositoryStore.getRepositoryPath(repository.uuid),
+        cwd: repository.localPath,
         onProgress,
       })
 
-      const nextState = await repositoryStore.getRepositoryState(repository.uuid)
+      const nextState = await repositoryStore.getRepositoryState(repository)
       const completedAt = new Date().toISOString()
 
       onProgress({

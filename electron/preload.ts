@@ -33,13 +33,10 @@ contextBridge.exposeInMainWorld("synapse", {
       ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.config.update, patch) as Promise<SynapseConfig>,
   },
   repository: {
+    chooseDirectory: () =>
+      ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.repository.chooseDirectory) as Promise<string | null>,
     getStates: () =>
       ipcRenderer.invoke(SYNAPSE_IPC_CHANNELS.repository.getStates) as Promise<SynapseRepositoryLocalState[]>,
-    clone: (repositoryUuid: string) =>
-      ipcRenderer.invoke(
-        SYNAPSE_IPC_CHANNELS.repository.clone,
-        repositoryUuid,
-      ) as Promise<SynapseRepositoryOperationResult>,
     sync: (repositoryUuid: string) =>
       ipcRenderer.invoke(
         SYNAPSE_IPC_CHANNELS.repository.sync,

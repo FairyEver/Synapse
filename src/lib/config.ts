@@ -38,16 +38,6 @@ function asTrimmedString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback
 }
 
-function asNullableTrimmedString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null
-  }
-
-  const trimmedValue = value.trim()
-
-  return trimmedValue.length > 0 ? trimmedValue : null
-}
-
 function normalizeDirectoryName(value: unknown, fallback: string): string {
   const nextValue = asTrimmedString(value, fallback)
 
@@ -72,6 +62,13 @@ function dedupeByKey<T>(items: T[], getKey: (item: T) => string): T[] {
 
     return true
   })
+}
+
+function getPathDisplayName(localPath: string): string {
+  const normalizedPath = localPath.replace(/[\\/]+$/, "")
+  const segments = normalizedPath.split(/[\\/]/).filter((segment) => segment.length > 0)
+
+  return segments.at(-1) ?? localPath
 }
 
 function hasProjectConfigFormatError(value: unknown): boolean {
@@ -107,15 +104,7 @@ function hasRepositoryConfigFormatError(value: unknown): boolean {
     return true
   }
 
-  if (hasOwnKey(value, "url") && typeof value.url !== "string") {
-    return true
-  }
-
-  if (
-    hasOwnKey(value, "credentialContext")
-    && value.credentialContext !== null
-    && typeof value.credentialContext !== "string"
-  ) {
+  if (hasOwnKey(value, "localPath") && typeof value.localPath !== "string") {
     return true
   }
 
@@ -210,18 +199,17 @@ function normalizeRepositoryConfig(value: unknown): SynapseRepositoryConfig | nu
   }
 
   const uuid = asTrimmedString(value.uuid)
-  const name = asTrimmedString(value.name)
-  const url = asTrimmedString(value.url)
+  const localPath = asTrimmedString(value.localPath)
+  const name = asTrimmedString(value.name, getPathDisplayName(localPath))
 
-  if (!uuid || !name || !url) {
+  if (!uuid || !name || !localPath) {
     return null
   }
 
   return {
     uuid,
     name,
-    url,
-    credentialContext: asNullableTrimmedString(value.credentialContext),
+    localPath,
     rulesDir: normalizeDirectoryName(value.rulesDir, DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir),
     skillsDir: normalizeDirectoryName(value.skillsDir, DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir),
   }

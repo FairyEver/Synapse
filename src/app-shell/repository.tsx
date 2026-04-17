@@ -24,9 +24,9 @@ type RepositoryOperationState = {
 }
 
 type RepositoryManagerContextValue = {
+  hasRepositoryBridge: boolean
   operations: Record<string, RepositoryOperationState>
   states: Record<string, SynapseRepositoryLocalState>
-  cloneRepository: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   syncRepository: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   refreshRepositoryStates: () => Promise<void>
 }
@@ -38,7 +38,8 @@ function createFallbackRepositoryState(repositoryUuid: string): SynapseRepositor
     repositoryUuid,
     localPath: "",
     status: "missing",
-    isShallow: false,
+    isGitRepository: false,
+    gitRootPath: null,
   }
 }
 
@@ -89,6 +90,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const { config } = useAppConfig()
   const [states, setStates] = useState<Record<string, SynapseRepositoryLocalState>>({})
   const [operations, setOperations] = useState<Record<string, RepositoryOperationState>>({})
+  const hasRepositoryBridge = Boolean(window.synapse?.repository)
 
   const repositoryIds = useMemo(
     () => config.repositories.map((repository) => repository.uuid),
@@ -142,7 +144,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           ...currentOperations[updatedEvent.repositoryUuid],
           operation: updatedEvent.operation,
           isRunning: false,
-          statusText: updatedEvent.operation === "clone" ? "仓库克隆完成。" : "仓库同步完成。",
+          statusText: "仓库同步完成。",
           percent: 100,
           error: null,
           completedAt: updatedEvent.completedAt,
@@ -164,7 +166,21 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       const bridge = window.synapse?.repository
 
       if (!bridge) {
-        throw new Error("当前环境不支持 Git 仓库操作。")
+        const errorMessage = "当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。"
+
+        setOperations((currentOperations) => ({
+          ...currentOperations,
+          [repositoryUuid]: createOperationState({
+            ...currentOperations[repositoryUuid],
+            operation,
+            isRunning: false,
+            statusText: null,
+            percent: null,
+            error: errorMessage,
+          }),
+        }))
+
+        throw new Error(errorMessage)
       }
 
       setOperations((currentOperations) => ({
@@ -173,17 +189,14 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           ...currentOperations[repositoryUuid],
           operation,
           isRunning: true,
-          statusText: operation === "clone" ? "正在准备浅克隆..." : "正在准备同步...",
+          statusText: "正在准备同步...",
           percent: 0,
           error: null,
         }),
       }))
 
       try {
-        const result =
-          operation === "clone"
-            ? await bridge.clone(repositoryUuid)
-            : await bridge.sync(repositoryUuid)
+        const result = await bridge.sync(repositoryUuid)
 
         setStates((currentStates) => ({
           ...currentStates,
@@ -196,7 +209,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
             ...currentOperations[repositoryUuid],
             operation: result.operation,
             isRunning: false,
-            statusText: result.operation === "clone" ? "仓库克隆完成。" : "仓库同步完成。",
+            statusText: "仓库同步完成。",
             percent: 100,
             error: null,
             completedAt: result.completedAt,
@@ -227,13 +240,13 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<RepositoryManagerContextValue>(
     () => ({
+      hasRepositoryBridge,
       operations,
       states,
-      cloneRepository: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "clone"),
       syncRepository: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "sync"),
       refreshRepositoryStates,
     }),
-    [operations, refreshRepositoryStates, runRepositoryOperation, states],
+    [hasRepositoryBridge, operations, refreshRepositoryStates, runRepositoryOperation, states],
   )
 
   return (

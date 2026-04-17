@@ -11,8 +11,7 @@ export type SynapseProjectConfig = {
 export type SynapseRepositoryConfig = {
   uuid: string
   name: string
-  url: string
-  credentialContext: string | null
+  localPath: string
   rulesDir: string
   skillsDir: string
 }

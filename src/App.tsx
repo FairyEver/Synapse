@@ -13,9 +13,25 @@ type AppTabId = "rules" | "skills" | "settings"
 
 function App() {
   const { activeRepository, isReady } = useAppConfig()
-  const { operations, syncRepository } = useRepositoryManager()
+  const { operations, states, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
+  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
+  const canSyncActiveRepository =
+    activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
+  const refreshTitle = activeRepositoryOperation?.isRunning
+    ? activeRepositoryOperation.statusText ?? "正在同步仓库..."
+    : !isReady
+      ? "正在加载设置..."
+      : activeRepository === null
+        ? "还没有选择本地目录"
+        : !activeRepositoryState
+          ? "正在检查目录状态..."
+        : activeRepositoryState?.status !== "ready"
+          ? "当前目录不存在，无法同步"
+          : !activeRepositoryState.isGitRepository
+            ? "当前目录不是 Git 仓库，无法同步"
+            : "同步仓库"
 
   const tabs = useMemo(
     () => [
@@ -33,7 +49,7 @@ function App() {
       actions={
         <AppShellActions
           busy={Boolean(activeRepositoryOperation?.isRunning)}
-          disabled={!isReady || activeRepository === null || Boolean(activeRepositoryOperation?.isRunning)}
+          disabled={!isReady || !canSyncActiveRepository || Boolean(activeRepositoryOperation?.isRunning)}
           onRefresh={() => {
             if (!activeRepository) {
               return
@@ -44,7 +60,7 @@ function App() {
               window.alert(message)
             })
           }}
-          title={activeRepositoryOperation?.isRunning ? activeRepositoryOperation.statusText ?? "正在同步仓库..." : "刷新仓库"}
+          title={refreshTitle}
         />
       }
     >

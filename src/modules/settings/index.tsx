@@ -45,11 +45,14 @@ function SettingsModule() {
         setSaveError(null)
         await updateConfig(patch)
 
-        if (reloadAfterUpdate) {
+        if (reloadAfterUpdate && window.synapse?.config) {
           window.location.reload()
         }
+
+        return true
       } catch (updateError) {
         setSaveError(updateError instanceof Error ? updateError.message : "保存设置失败。")
+        return false
       }
     },
     [updateConfig],
@@ -70,7 +73,7 @@ function SettingsModule() {
 
   const handleSaveRepositories = useCallback(
     async (repositories: typeof config.repositories, activeRepoUuid: string | null, reloadAfterUpdate: boolean) => {
-      await applyPatch(
+      return applyPatch(
         {
           repositories,
           activeRepoUuid,
@@ -111,7 +114,7 @@ function SettingsModule() {
             <p className="text-sm text-muted-foreground">{category.description}</p>
             {activeCategory === "content" && activeRepository ? (
               <p className="text-sm text-muted-foreground">
-                当前仓库：{activeRepository.name}
+                当前目录：{activeRepository.name}
               </p>
             ) : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -130,9 +133,9 @@ function SettingsModule() {
           {isReady && activeCategory === "content" && activeRepository === null ? (
             <Card>
               <CardHeader>
-                <CardTitle>还没有激活仓库</CardTitle>
+                <CardTitle>还没有激活目录</CardTitle>
                 <CardDescription>
-                  先到“仓库”分类添加并切换一个 Git 仓库，内容设置才会显示出来。
+                  先到“仓库”分类选择并切换一个本地目录，内容设置才会显示出来。
                 </CardDescription>
               </CardHeader>
             </Card>

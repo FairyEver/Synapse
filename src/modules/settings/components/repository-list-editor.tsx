@@ -8,12 +8,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import {
-  DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
-} from "@/constants/defaults"
+import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import type { SettingItem } from "@/modules/settings/types"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type { SynapseRepositoryLocalState } from "@/types/repository"
@@ -26,35 +22,26 @@ type RepositoryListEditorProps = {
     repositories: SynapseRepositoryConfig[],
     activeRepoUuid: string | null,
     reloadAfterUpdate: boolean,
-  ) => Promise<void>
+  ) => Promise<boolean>
 }
 
 function getRepositoryStatusLabel(repositoryState?: SynapseRepositoryLocalState): string {
   if (!repositoryState) {
-    return "正在检查本地状态..."
+    return "正在检查目录状态..."
   }
 
-  switch (repositoryState.status) {
-    case "ready":
-      return repositoryState.isShallow ? "本地缓存已就绪（浅克隆）" : "本地缓存已就绪"
-    case "invalid":
-      return "本地目录不完整，可重新克隆"
-    case "missing":
-    default:
-      return "还没有执行首次克隆"
+  if (repositoryState.status !== "ready") {
+    return "本地目录不存在"
   }
+
+  return repositoryState.isGitRepository ? "Git 仓库已连接" : "本地目录已连接（非 Git 仓库）"
 }
 
-function getRepositoryActionLabel(repositoryState?: SynapseRepositoryLocalState): string {
-  if (!repositoryState || repositoryState.status === "missing") {
-    return "首次克隆"
-  }
+function getRepositoryNameFromPath(localPath: string): string {
+  const normalizedPath = localPath.replace(/[\\/]+$/, "")
+  const segments = normalizedPath.split(/[\\/]/).filter((segment) => segment.length > 0)
 
-  if (repositoryState.status === "invalid") {
-    return "重新克隆"
-  }
-
-  return "同步仓库"
+  return segments.at(-1) ?? localPath
 }
 
 function RepositoryListEditor({
@@ -63,30 +50,32 @@ function RepositoryListEditor({
   activeRepoUuid,
   onSave,
 }: RepositoryListEditorProps) {
-  const { cloneRepository, operations, states, syncRepository } = useRepositoryManager()
-  const [draftName, setDraftName] = useState("")
-  const [draftUrl, setDraftUrl] = useState("")
+  const { hasRepositoryBridge, operations, states, syncRepository } = useRepositoryManager()
   const [formError, setFormError] = useState<string | null>(null)
 
   const handleAddRepository = async () => {
-    const nextName = draftName.trim()
-    const nextUrl = draftUrl.trim()
+    const bridge = window.synapse?.repository
 
-    if (!nextName || !nextUrl) {
-      setFormError("仓库名称和仓库地址都不能为空。")
+    if (!bridge) {
+      setFormError("当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。")
       return
     }
 
-    if (repositories.some((repository) => repository.url === nextUrl)) {
-      setFormError("这个仓库地址已经存在了。")
+    const localPath = await bridge.chooseDirectory()
+
+    if (!localPath) {
+      return
+    }
+
+    if (repositories.some((repository) => repository.localPath === localPath)) {
+      setFormError("这个本地目录已经存在了。")
       return
     }
 
     const nextRepository: SynapseRepositoryConfig = {
       uuid: crypto.randomUUID(),
-      name: nextName,
-      url: nextUrl,
-      credentialContext: null,
+      name: getRepositoryNameFromPath(localPath),
+      localPath,
       rulesDir: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir,
       skillsDir: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir,
     }
@@ -94,9 +83,7 @@ function RepositoryListEditor({
     const nextActiveRepoUuid = activeRepoUuid ?? nextRepository.uuid
 
     setFormError(null)
-    await onSave(nextRepositories, nextActiveRepoUuid, activeRepoUuid === null)
-    setDraftName("")
-    setDraftUrl("")
+    await onSave(nextRepositories, nextActiveRepoUuid, false)
   }
 
   const handleRemoveRepository = async (repositoryUuid: string) => {
@@ -106,7 +93,7 @@ function RepositoryListEditor({
       return
     }
 
-    const shouldDelete = window.confirm(`确认删除仓库“${repository.name}”的本地配置吗？`)
+    const shouldDelete = window.confirm(`确认删除仓库“${repository.name}”的本地配置吗？这不会删除你的本地目录。`)
 
     if (!shouldDelete) {
       return
@@ -124,11 +111,16 @@ function RepositoryListEditor({
       <CardHeader>
         <CardTitle>{item.label}</CardTitle>
         {item.description ? <CardDescription>{item.description}</CardDescription> : null}
+        {!hasRepositoryBridge ? (
+          <p className="text-sm text-destructive">
+            当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {repositories.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            还没有配置仓库。添加后会写入本地配置，并可以立即执行首次浅克隆。
+            还没有配置本地目录。选择后会写入本地配置，并立即检查当前目录是否具备 Git 能力。
           </p>
         ) : (
           <div className="flex flex-col gap-3">
@@ -136,8 +128,8 @@ function RepositoryListEditor({
               const isActive = repository.uuid === activeRepoUuid
               const operation = operations[repository.uuid]
               const repositoryState = states[repository.uuid]
-              const actionLabel = getRepositoryActionLabel(repositoryState)
               const isBusy = Boolean(operation?.isRunning)
+              const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
 
               return (
                 <div key={repository.uuid} className="flex flex-col gap-3 rounded-lg border p-3">
@@ -145,19 +137,19 @@ function RepositoryListEditor({
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-medium">{repository.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {isActive ? "当前激活仓库" : "已保存"}
+                        {isActive ? "当前激活目录" : "已保存"}
                       </p>
                     </div>
-                    <p className="break-all text-sm text-muted-foreground">{repository.url}</p>
+                    <p className="break-all text-sm text-muted-foreground">{repository.localPath}</p>
                     <p className="text-xs text-muted-foreground">
                       Rules: {repository.rulesDir} · Skills: {repository.skillsDir}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {getRepositoryStatusLabel(repositoryState)}
                     </p>
-                    {repositoryState?.localPath ? (
+                    {repositoryState?.gitRootPath && repositoryState.gitRootPath !== repository.localPath ? (
                       <p className="break-all text-xs text-muted-foreground">
-                        本地目录：{repositoryState.localPath}
+                        Git 根目录：{repositoryState.gitRootPath}
                       </p>
                     ) : null}
                     {operation?.isRunning ? (
@@ -177,25 +169,23 @@ function RepositoryListEditor({
                     {operation?.error ? (
                       <p className="text-sm text-destructive">{operation.error}</p>
                     ) : null}
+                    {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
+                      <p className="text-xs text-muted-foreground">
+                        当前目录可以作为本地内容源使用，但刷新和后续新建会保持禁用。
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
-                      disabled={isBusy}
+                      disabled={isBusy || !hasRepositoryBridge || !canSync}
                       onClick={() => {
-                        const operationPromise =
-                          repositoryState?.status === "ready"
-                            ? syncRepository(repository.uuid)
-                            : cloneRepository(repository.uuid)
-
-                        void operationPromise.catch(() => {})
+                        void syncRepository(repository.uuid).catch((error) => {
+                          setFormError(error instanceof Error ? error.message : "Git 仓库操作失败。")
+                        })
                       }}
                     >
-                      {isBusy
-                        ? operation?.operation === "clone"
-                          ? "克隆中..."
-                          : "同步中..."
-                        : actionLabel}
+                      {isBusy ? "同步中..." : "同步仓库"}
                     </Button>
                     <Button
                       variant={isActive ? "secondary" : "outline"}
@@ -207,7 +197,7 @@ function RepositoryListEditor({
                         }
                       }}
                     >
-                      {isActive ? "当前仓库" : "切换为当前仓库"}
+                      {isActive ? "当前目录" : "切换为当前目录"}
                     </Button>
                     <Button
                       variant="ghost"
@@ -230,32 +220,16 @@ function RepositoryListEditor({
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">添加仓库</p>
+            <p className="text-sm font-medium">添加本地目录</p>
             <p className="text-sm text-muted-foreground">
-              新仓库会自动生成 UUID 作为本地缓存目录名，首次克隆固定使用 `--depth=1`。
+              Synapse 只记录你选择的本地路径，不负责下载仓库。Git 拉取、认证和初始化默认交给你常用的 Git 工具。
             </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="settings-repository-name">仓库名称</Label>
-              <Input
-                id="settings-repository-name"
-                value={draftName}
-                onChange={(event) => setDraftName(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="settings-repository-url">仓库地址</Label>
-              <Input
-                id="settings-repository-url"
-                value={draftUrl}
-                onChange={(event) => setDraftUrl(event.target.value)}
-              />
-            </div>
           </div>
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
           <div>
-            <Button onClick={() => void handleAddRepository()}>添加仓库</Button>
+            <Button onClick={() => void handleAddRepository()} disabled={!hasRepositoryBridge}>
+              选择文件夹
+            </Button>
           </div>
         </div>
       </CardContent>
