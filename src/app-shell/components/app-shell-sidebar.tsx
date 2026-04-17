@@ -1,4 +1,4 @@
-import { ChevronRight, Plus, Search } from "lucide-react"
+import { ChevronRight, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -10,10 +10,7 @@ function AppShellSidebar({ groups }: AppShellSidebarProps) {
   return (
     <div className="flex h-full flex-col gap-5 p-4">
       <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="搜索分区..." className="pl-8" />
-        </div>
+        <Input placeholder="搜索分区..." className="min-w-0 flex-1" />
         <Button variant="outline" size="icon">
           <Plus className="size-4" />
           <span className="sr-only">创建分区</span>
