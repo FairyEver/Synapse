@@ -1,6 +1,6 @@
-import { ipcMain } from "electron"
 import type { SynapseConfigPatch } from "../../src/types/config"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
+import { handleValidatedIpc } from "./validated-ipc"
 import { configStore } from "../services/config-store"
 import { createMainLogger } from "../services/log-store"
 
@@ -12,7 +12,7 @@ function registerConfigHandlers() {
     return
   }
 
-  ipcMain.handle(SYNAPSE_IPC_CHANNELS.config.get, async () => {
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.config.get, async () => {
     logger.debug("Handling config.get request.")
     const config = await configStore.load()
 
@@ -23,7 +23,7 @@ function registerConfigHandlers() {
 
     return config
   })
-  ipcMain.handle(
+  handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.config.update,
     async (_event, patch: SynapseConfigPatch) => {
       logger.info("Handling config.update request.", patch)

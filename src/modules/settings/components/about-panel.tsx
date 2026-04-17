@@ -1,11 +1,5 @@
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { SettingsGroup } from "@/modules/settings/components/settings-group"
 
 type AboutPanelProps = {
   version: string
@@ -13,25 +7,24 @@ type AboutPanelProps = {
 
 function AboutPanel({ version }: AboutPanelProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>软件更新</CardTitle>
-        <CardDescription>
-          这里只先搭好关于页骨架。真正的更新检查、下载进度和重启安装会在步骤 18 接入。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <SettingsGroup>
+      <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium">已安装版本</p>
+          <p className="text-sm font-medium">当前版本</p>
           <p className="text-sm text-muted-foreground">v{version}</p>
         </div>
-        <div>
-          <Button variant="outline" disabled>
-            检查更新
-          </Button>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">软件更新</p>
+          <p className="text-sm text-muted-foreground">暂不可用</p>
         </div>
-      </CardContent>
-    </Card>
+        <Button variant="outline" disabled>
+          检查更新
+        </Button>
+      </div>
+    </SettingsGroup>
   )
 }
 

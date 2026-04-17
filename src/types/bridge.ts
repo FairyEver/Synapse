@@ -1,0 +1,42 @@
+import type { SynapseConfig, SynapseConfigPatch } from "./config"
+import type {
+  SynapseLogAppendedEvent,
+  SynapseLogExportResult,
+  SynapseLogListQuery,
+  SynapseLogListResult,
+  SynapseLogSummary,
+  SynapseRendererLogPayload,
+} from "./log"
+import type {
+  SynapseRepositoryLocalState,
+  SynapseRepositoryOperationResult,
+  SynapseRepositoryProgressEvent,
+  SynapseRepositoryUpdatedEvent,
+} from "./repository"
+
+export type SynapseBridge = {
+  platform: string
+  versions: {
+    chrome: string
+    electron: string
+    node: string
+  }
+  config: {
+    get: () => Promise<SynapseConfig>
+    update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
+  }
+  log: {
+    export: () => Promise<SynapseLogExportResult>
+    list: (query: SynapseLogListQuery) => Promise<SynapseLogListResult>
+    onAppended: (listener: (payload: SynapseLogAppendedEvent) => void) => () => void
+    summary: () => Promise<SynapseLogSummary>
+    write: (payload: SynapseRendererLogPayload) => void
+  }
+  repository: {
+    chooseDirectory: () => Promise<string | null>
+    getStates: () => Promise<SynapseRepositoryLocalState[]>
+    sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+    onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
+    onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void
+  }
+}

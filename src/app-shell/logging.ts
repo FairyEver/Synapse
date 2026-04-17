@@ -6,6 +6,7 @@ import type {
   SynapseLogListResult,
   SynapseLogSummary,
 } from "@/types/log"
+import { createMissingBridgeError, getSynapseBridge } from "@/lib/electron-bridge"
 
 type RendererLogger = {
   debug: (message: string, details?: unknown) => void
@@ -14,10 +15,14 @@ type RendererLogger = {
   error: (message: string, details?: unknown) => void
 }
 
-type RendererLogBridge = NonNullable<NonNullable<Window["synapse"]>["log"]>
+type RendererLogBridge = NonNullable<Window["synapse"]>["log"]
 
 function getLogBridge(): RendererLogBridge | undefined {
-  return window.synapse?.log
+  return getSynapseBridge()?.log
+}
+
+function hasLogBridge(): boolean {
+  return Boolean(getLogBridge())
 }
 
 async function writeRendererLog(
@@ -32,7 +37,7 @@ async function writeRendererLog(
     return
   }
 
-  await bridge.write({
+  bridge.write({
     level,
     category,
     message,
@@ -87,7 +92,7 @@ function exportLogs(): Promise<SynapseLogExportResult> {
   const bridge = getLogBridge()
 
   if (!bridge) {
-    return Promise.reject(new Error("当前运行实例没有日志导出能力。"))
+    return Promise.reject(createMissingBridgeError())
   }
 
   return bridge.export()
@@ -127,6 +132,7 @@ function installRendererLogForwarding(): () => void {
 export {
   createRendererLogger,
   exportLogs,
+  hasLogBridge,
   installRendererLogForwarding,
   readLogList,
   readLogSummary,

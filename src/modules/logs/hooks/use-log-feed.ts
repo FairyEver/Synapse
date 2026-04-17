@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { createRendererLogger, exportLogs, readLogList, readLogSummary, subscribeToLogAppends } from "@/app-shell/logging"
+import {
+  createRendererLogger,
+  exportLogs,
+  hasLogBridge,
+  readLogList,
+  readLogSummary,
+  subscribeToLogAppends,
+} from "@/app-shell/logging"
 import type { SynapseLogEntry } from "@/types/log"
 
 const LOG_PAGE_SIZE = 200
@@ -92,6 +99,11 @@ function useLogFeed() {
 
     void (async () => {
       try {
+        if (!hasLogBridge()) {
+          setError("当前页面没有 Electron 日志桥接。请确认你操作的是 Synapse 窗口，而不是浏览器预览页。")
+          return
+        }
+
         const summary = await readLogSummary()
 
         if (cancelled) {

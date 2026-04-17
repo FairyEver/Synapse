@@ -149,6 +149,14 @@ For any UI or styling task, treat these as default requirements unless the user 
 - Do not create a new shared presentational primitive in `src/components/` when a shadcn equivalent exists or can be added.
 - Avoid hard-coded brand colors, custom shadow systems, decorative gradients, and page-specific visual languages unless the task explicitly asks for them.
 
+## Product copy guardrails
+
+- Treat all UI copy as product copy for end users, not implementation notes for developers.
+- Never put roadmap notes, future-phase plans, architectural rationale, state-boundary explanations, technical caveats, or design self-justification into the interface unless the user explicitly needs that information to complete the current task.
+- Empty, loading, disabled, and error states should be brief and action-oriented. Tell the user what they can do now or what just happened, in plain language.
+- Prefer one clear next step over multi-sentence explanation.
+- Before keeping any UI sentence, ask: "Would a normal user need this to use the feature right now?" If not, remove it.
+
 ## Placement rules
 
 - New renderer business logic should usually live inside the relevant module under `src/modules/<module>/`.

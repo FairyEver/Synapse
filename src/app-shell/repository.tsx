@@ -9,6 +9,7 @@ import {
 } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationKind,
@@ -79,21 +80,21 @@ function filterRecordByRepositoryIds<T>(
 async function readRepositoryStates(
   repositoryUuids: string[],
 ): Promise<SynapseRepositoryLocalState[]> {
-  const bridge = window.synapse?.repository
+  const bridge = getSynapseBridge()
 
   if (!bridge) {
     logger.warn("Repository bridge is unavailable while reading states.")
     return repositoryUuids.map(createFallbackRepositoryState)
   }
 
-  return bridge.getStates()
+  return bridge.repository.getStates()
 }
 
 function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const { config } = useAppConfig()
   const [states, setStates] = useState<Record<string, SynapseRepositoryLocalState>>({})
   const [operations, setOperations] = useState<Record<string, RepositoryOperationState>>({})
-  const hasRepositoryBridge = Boolean(window.synapse?.repository)
+  const hasRepositoryBridge = Boolean(getSynapseBridge())
 
   const repositoryIds = useMemo(
     () => config.repositories.map((repository) => repository.uuid),
@@ -133,7 +134,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   }, [refreshRepositoryStates])
 
   useEffect(() => {
-    const unsubscribe = window.synapse?.repository?.onProgress((progressEvent) => {
+    const unsubscribe = getSynapseBridge()?.repository.onProgress((progressEvent) => {
       setOperations((currentOperations) => ({
         ...currentOperations,
         [progressEvent.repositoryUuid]: createOperationState({
@@ -153,7 +154,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = window.synapse?.repository?.onUpdated((updatedEvent) => {
+    const unsubscribe = getSynapseBridge()?.repository.onUpdated((updatedEvent) => {
       logger.info("Received repository updated event.", updatedEvent)
       setOperations((currentOperations) => ({
         ...currentOperations,
@@ -181,7 +182,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
 
   const runRepositoryOperation = useCallback(
     async (repositoryUuid: string, operation: SynapseRepositoryOperationKind) => {
-      const bridge = window.synapse?.repository
+      const bridge = getSynapseBridge()
 
       if (!bridge) {
         const errorMessage = "当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。"
@@ -222,7 +223,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           repositoryUuid,
           operation,
         })
-        const result = await bridge.sync(repositoryUuid)
+        const result = await bridge.repository.sync(repositoryUuid)
 
         setStates((currentStates) => ({
           ...currentStates,

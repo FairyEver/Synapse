@@ -106,7 +106,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
   }, [candidateValue, currentInputValue, draftValue, item, item.readOnly, onSave, supportsDraftInput, validationMessage])
 
   return (
-    <div className="flex flex-col gap-3 py-4 md:flex-row md:items-start md:justify-between">
+    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="flex max-w-2xl flex-col gap-1">
         <p className="text-sm font-medium">{item.label}</p>
         {item.description ? (

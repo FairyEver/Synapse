@@ -21,6 +21,13 @@ These rules apply to all renderer-side work under `src/`.
 - Do not import renderer primitives from `@base-ui/react` or introduce another primitive layer when `src/components/ui/` already covers the need.
 - When a primitive is missing, add it through the existing shadcn setup and keep the project on the Radix base.
 
+## User-facing copy
+
+- Renderer copy is product copy for users, not developer notes.
+- Do not surface roadmap items, implementation status, architecture explanations, state-boundary reasoning, or style rationale in the UI.
+- Keep empty, loading, disabled, helper, and error text short and action-oriented.
+- If a sentence does not help the user complete the current task, remove it.
+
 ## Renderer boundaries
 
 - Keep privileged logic out of renderer code.

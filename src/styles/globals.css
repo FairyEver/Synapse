@@ -134,13 +134,3 @@
     min-height: 100vh;
   }
 }
-
-@layer utilities {
-  .app-drag {
-    -webkit-app-region: drag;
-  }
-
-  .app-no-drag {
-    -webkit-app-region: no-drag;
-  }
-}

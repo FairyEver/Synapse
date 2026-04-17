@@ -1,6 +1,7 @@
-import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from "electron"
+import { BrowserWindow, dialog, type OpenDialogOptions, type WebContents } from "electron"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
+import { handleValidatedIpc } from "./validated-ipc"
 import { configStore } from "../services/config-store"
 import { repositoryGitService } from "../services/repository-git-service"
 import { createMainLogger } from "../services/log-store"
@@ -32,7 +33,7 @@ function registerRepositoryHandlers() {
     return
   }
 
-  ipcMain.handle(SYNAPSE_IPC_CHANNELS.repository.getStates, async () => {
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.repository.getStates, async () => {
     logger.debug("Handling repository.getStates request.")
     const config = await configStore.load()
     const states = await Promise.all(
@@ -46,7 +47,7 @@ function registerRepositoryHandlers() {
     return states
   })
 
-  ipcMain.handle(
+  handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.repository.chooseDirectory,
     async (event) => {
       logger.info("Opening native directory picker.")
@@ -69,7 +70,7 @@ function registerRepositoryHandlers() {
     },
   )
 
-  ipcMain.handle(
+  handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.repository.sync,
     async (event, repositoryUuid: string) => {
       logger.info("Handling repository.sync request.", { repositoryUuid })

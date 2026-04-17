@@ -20,19 +20,23 @@ function createMainWindow() {
     backgroundColor: "#edf2ea",
     show: false,
     title: "Synapse",
-    ...(process.platform === "darwin"
-      ? {
-          titleBarStyle: "hiddenInset" as const,
-        }
-      : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   })
 
   mainWindow = window
+
+  window.webContents.on("preload-error", (_event, preloadPath, error) => {
+    logger.error("Preload script failed.", {
+      error,
+      preloadPath,
+    })
+    console.error("[preload error]", preloadPath, error)
+  })
 
   window.once("ready-to-show", () => {
     logger.info("Main window is ready to show.")

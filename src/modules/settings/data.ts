@@ -24,32 +24,32 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "general",
     label: "通用",
-    description: "维护全局昵称和界面语言。",
+    description: "昵称和界面语言。",
   },
   {
     id: "repositories",
     label: "仓库",
-    description: "管理本地仓库目录。",
+    description: "本地目录。",
   },
   {
     id: "content",
     label: "内容",
-    description: "配置当前目录里的 Rules / Skills 主目录。",
+    description: "Rules 和 Skills 目录。",
   },
   {
     id: "projects",
     label: "项目",
-    description: "维护本地项目路径，为后续安装流程预留入口。",
+    description: "项目路径。",
   },
   {
     id: "logs",
     label: "日志",
-    description: "查看当前运行日志并导出文本文件。",
+    description: "运行日志。",
   },
   {
     id: "about",
     label: "关于",
-    description: "查看版本信息并预留更新入口。",
+    description: "版本与更新。",
   },
 ]
 
@@ -57,7 +57,6 @@ const settingsItems: SettingItem[] = [
   {
     key: "global.displayName",
     label: "显示昵称",
-    description: "用于后续生成 Rule / Skill 的 author 字段，也会参与 PR 分支命名。",
     category: "general",
     type: "text",
     defaultValue: DEFAULT_GLOBAL_CONFIG.displayName,
@@ -66,7 +65,6 @@ const settingsItems: SettingItem[] = [
   {
     key: "global.language",
     label: "界面语言",
-    description: "当前先提供界面层配置项，语言资源会在后续迭代中逐步补齐。",
     category: "general",
     type: "select",
     defaultValue: DEFAULT_GLOBAL_CONFIG.language,
@@ -79,7 +77,6 @@ const settingsItems: SettingItem[] = [
   {
     key: "repositories",
     label: "本地仓库目录",
-    description: "管理目录和当前激活项。",
     category: "repositories",
     type: "list",
     defaultValue: [],
@@ -88,7 +85,6 @@ const settingsItems: SettingItem[] = [
   {
     key: "activeRepository.rulesDir",
     label: "Rules 主目录名",
-    description: "当前目录下 Rules 的顶层目录。切换目录时这项配置会一起切换。",
     category: "content",
     type: "text",
     defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir,
@@ -99,7 +95,6 @@ const settingsItems: SettingItem[] = [
   {
     key: "activeRepository.skillsDir",
     label: "Skills 主目录名",
-    description: "当前目录下 Skills 的顶层目录。切换目录时这项配置会一起切换。",
     category: "content",
     type: "text",
     defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir,
@@ -110,7 +105,6 @@ const settingsItems: SettingItem[] = [
   {
     key: "global.projects",
     label: "本地项目",
-    description: "项目列表属于全局配置，不随仓库切换。后续安装流程会直接复用这里的路径。",
     category: "projects",
     type: "list",
     defaultValue: DEFAULT_GLOBAL_CONFIG.projects,
@@ -119,7 +113,6 @@ const settingsItems: SettingItem[] = [
   {
     key: "app.version",
     label: "当前版本",
-    description: "版本号直接来自应用构建信息。",
     category: "about",
     type: "text",
     defaultValue: packageJson.version,
