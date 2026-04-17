@@ -1,8 +1,10 @@
 import { app, BrowserWindow } from "electron"
 import path from "node:path"
 
+let mainWindow: BrowserWindow | null = null
+
 function createMainWindow() {
-  const mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1000,
     height: 600,
     minWidth: 1000,
@@ -22,28 +24,52 @@ function createMainWindow() {
     },
   })
 
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show()
+  mainWindow = window
+
+  window.once("ready-to-show", () => {
+    window.show()
+  })
+
+  window.on("closed", () => {
+    mainWindow = null
   })
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL
 
   if (devServerUrl) {
-    void mainWindow.loadURL(devServerUrl)
+    void window.loadURL(devServerUrl)
   } else {
-    void mainWindow.loadFile(path.join(__dirname, "../dist/index.html"))
+    void window.loadFile(path.join(__dirname, "../dist/index.html"))
   }
 }
 
-app.whenReady().then(() => {
-  createMainWindow()
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow) {
+      return
     }
+
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+
+    mainWindow.focus()
   })
-})
+
+  app.whenReady().then(() => {
+    createMainWindow()
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createMainWindow()
+      }
+    })
+  })
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

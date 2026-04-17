@@ -6,7 +6,7 @@ type AppShellCardProps = AppShellCardItem
 
 function AppShellCard({ title, description }: AppShellCardProps) {
   return (
-    <Card className="h-full">
+    <Card className="h-full bg-gray-50 ring-0">
       <CardHeader className="grid-cols-[minmax(0,1fr)_auto]">
         <CardTitle>{title}</CardTitle>
         <CardAction>

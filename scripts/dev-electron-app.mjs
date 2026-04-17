@@ -1,8 +1,12 @@
 import { spawn } from "node:child_process"
+import { rm } from "node:fs/promises"
+import path from "node:path"
 
 const port = process.env.SYNAPSE_DEV_PORT ?? "5173"
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? `http://127.0.0.1:${port}`
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
+const electronBuildDir = path.resolve("dist-electron")
+const electronEntryFiles = ["main.js", "preload.js"]
 
 let activeChild = null
 let isStopping = false
@@ -42,6 +46,12 @@ function runPnpm(args, env = process.env) {
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => stopChild(signal))
 }
+
+await Promise.all(
+  electronEntryFiles.map((file) =>
+    rm(path.join(electronBuildDir, file), { force: true }),
+  ),
+)
 
 const waitCode = await runPnpm([
   "exec",
