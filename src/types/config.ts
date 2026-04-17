@@ -1,3 +1,7 @@
+export const SYNAPSE_LANGUAGE_OPTIONS = ["zh-CN", "en-US"] as const
+
+export type SynapseLanguage = (typeof SYNAPSE_LANGUAGE_OPTIONS)[number]
+
 export type SynapseProjectConfig = {
   id: string
   name: string
@@ -15,6 +19,7 @@ export type SynapseRepositoryConfig = {
 
 export type SynapseGlobalConfig = {
   displayName: string
+  language: SynapseLanguage
   projects: SynapseProjectConfig[]
 }
 

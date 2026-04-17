@@ -1,8 +1,15 @@
-import { DEFAULT_CONFIG, DEFAULT_GLOBAL_CONFIG, DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "../constants/defaults"
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_GLOBAL_CONFIG,
+  DEFAULT_INTERFACE_LANGUAGE,
+  DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
+} from "../constants/defaults"
+import { SYNAPSE_LANGUAGE_OPTIONS } from "../types/config"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
   SynapseGlobalConfig,
+  SynapseLanguage,
   SynapseProjectConfig,
   SynapseRepositoryConfig,
 } from "../types/config"
@@ -23,6 +30,10 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
 }
 
+function isSynapseLanguage(value: unknown): value is SynapseLanguage {
+  return typeof value === "string" && SYNAPSE_LANGUAGE_OPTIONS.includes(value as SynapseLanguage)
+}
+
 function asTrimmedString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback
 }
@@ -41,6 +52,10 @@ function normalizeDirectoryName(value: unknown, fallback: string): string {
   const nextValue = asTrimmedString(value, fallback)
 
   return nextValue.length > 0 ? nextValue : fallback
+}
+
+function normalizeLanguage(value: unknown, fallback: SynapseLanguage): SynapseLanguage {
+  return isSynapseLanguage(value) ? value : fallback
 }
 
 function dedupeByKey<T>(items: T[], getKey: (item: T) => string): T[] {
@@ -121,6 +136,10 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "displayName") && typeof value.displayName !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "language") && typeof value.language !== "string") {
     return true
   }
 
@@ -237,6 +256,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
 
   return {
     displayName: asTrimmedString(value.displayName, DEFAULT_GLOBAL_CONFIG.displayName),
+    language: normalizeLanguage(value.language, DEFAULT_INTERFACE_LANGUAGE),
     projects: normalizeProjects(value.projects),
   }
 }

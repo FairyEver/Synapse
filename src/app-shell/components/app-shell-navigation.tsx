@@ -1,19 +1,23 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { AppShellTab } from "@/app-shell/data"
 
-type AppShellNavigationProps = {
-  tabs: AppShellTab[]
+type AppShellNavigationTab = {
+  id: string
+  label: string
 }
 
-function AppShellNavigation({ tabs }: AppShellNavigationProps) {
-  const activeTab = tabs.find((tab) => tab.active)?.label ?? tabs[0]?.label
+type AppShellNavigationProps = {
+  tabs: AppShellNavigationTab[]
+  value: string
+  onValueChange: (value: string) => void
+}
 
+function AppShellNavigation({ tabs, value, onValueChange }: AppShellNavigationProps) {
   return (
     <nav className="flex justify-center">
-      <Tabs defaultValue={activeTab}>
+      <Tabs value={value} onValueChange={onValueChange}>
         <TabsList>
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.label} value={tab.label}>
+            <TabsTrigger key={tab.id} value={tab.id}>
               {tab.label}
             </TabsTrigger>
           ))}
@@ -23,4 +27,4 @@ function AppShellNavigation({ tabs }: AppShellNavigationProps) {
   )
 }
 
-export { AppShellNavigation }
+export { AppShellNavigation, type AppShellNavigationTab }

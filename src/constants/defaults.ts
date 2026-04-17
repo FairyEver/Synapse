@@ -1,4 +1,9 @@
-import type { SynapseConfig, SynapseGlobalConfig, SynapseRepositoryConfig } from "../types/config"
+import type {
+  SynapseConfig,
+  SynapseGlobalConfig,
+  SynapseLanguage,
+  SynapseRepositoryConfig,
+} from "../types/config"
 
 export const DEFAULT_RULES_DIRECTORY_NAME = "rules"
 export const DEFAULT_SKILLS_DIRECTORY_NAME = "skills"
@@ -18,8 +23,11 @@ export const DEFAULT_WINDOW_BOUNDS = {
   minHeight: 600,
 }
 
+export const DEFAULT_INTERFACE_LANGUAGE: SynapseLanguage = "zh-CN"
+
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   displayName: "",
+  language: DEFAULT_INTERFACE_LANGUAGE,
   projects: [],
 }
 

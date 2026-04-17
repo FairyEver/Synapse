@@ -5,15 +5,13 @@ import { cn } from "@/lib/utils"
 type AppShellLayoutProps = {
   brand: ReactNode
   navigation: ReactNode
-  sidebar: ReactNode
   children: ReactNode
   actions?: ReactNode
 }
 
-function AppShellLayout({ brand, navigation, sidebar, children, actions }: AppShellLayoutProps) {
+function AppShellLayout({ brand, navigation, children, actions }: AppShellLayoutProps) {
   const isMacOS = getSynapseRuntime().platform === "darwin"
   const headerInsetClass = isMacOS ? "pt-24" : "pt-[68px]"
-  const contentUnderHeaderClass = isMacOS ? "-mt-24 pt-24" : "-mt-[68px] pt-[68px]"
 
   return (
     <main className="relative h-screen overflow-hidden bg-background">
@@ -31,11 +29,8 @@ function AppShellLayout({ brand, navigation, sidebar, children, actions }: AppSh
           </div>
         </header>
 
-        <div className={cn("flex min-h-0 flex-1 overflow-hidden flex-row", headerInsetClass)}>
-          <aside className="w-[220px] shrink-0 overflow-y-auto border-r">
-            {sidebar}
-          </aside>
-          <section className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", contentUnderHeaderClass)}>
+        <div className={cn("min-h-0 flex-1 overflow-hidden", headerInsetClass)}>
+          <section className="min-h-0 h-full min-w-0 overflow-hidden">
             {children}
           </section>
         </div>
