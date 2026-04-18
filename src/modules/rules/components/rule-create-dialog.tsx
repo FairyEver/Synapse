@@ -165,7 +165,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
             <DialogHeader className="px-5 pt-5">
               <DialogTitle>新建 Rule</DialogTitle>
               <DialogDescription>
-                提交后会自动创建分支并进入审核流程。
+                填好内容后提交审核。
               </DialogDescription>
             </DialogHeader>
 
@@ -192,7 +192,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
                       aria-invalid={errors.description ? "true" : undefined}
                       className="min-h-24"
                       onChange={(event) => updateField("description", event.target.value)}
-                      placeholder="用一句话说明这个 Rule 适合什么场景。"
+                      placeholder="例如：适用于 PR 评审的提交要求。"
                     />
                     <FieldError message={errors.description} />
                   </div>
@@ -279,7 +279,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
                       aria-invalid={errors.content ? "true" : undefined}
                       className="min-h-56"
                       onChange={(event) => updateField("content", event.target.value)}
-                      placeholder="在这里输入 Rule 正文，支持直接粘贴已有文本。"
+                      placeholder="输入或粘贴 Rule 正文。"
                     />
                     <FieldError message={errors.content} />
                   </div>
@@ -302,7 +302,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
                           {form.title.trim() || "Rule 标题"}
                         </p>
                         <p className="line-clamp-2 text-sm text-muted-foreground">
-                          {form.description.trim() || "简介会显示在这里。"}
+                          {form.description.trim() || "简要说明"}
                         </p>
                       </div>
                     </div>

@@ -44,6 +44,7 @@ import {
   getContentIconOption,
 } from "@/lib/content-appearance"
 import { getCategoryDefinitions } from "@/lib/content-categories"
+import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
 import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import type {
@@ -178,6 +179,7 @@ async function collectCreateSkillFilesFromDataTransfer(
 }
 
 function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogProps) {
+  const logger = useMemo(() => createRendererLogger("skills.create"), [])
   const categoryOptions = useMemo(() => getCategoryDefinitions("skill"), [])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
@@ -308,7 +310,8 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
       }
 
       addFiles(droppedFiles)
-    } catch {
+    } catch (error) {
+      logger.error("Failed to collect dropped skill attachments.", error)
       setAttachmentMessage("整理附件失败，请改用选择文件或文件夹。")
     } finally {
       setIsCollectingFiles(false)
@@ -368,7 +371,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
             <DialogHeader className="px-5 pt-5">
               <DialogTitle>新建 Skill</DialogTitle>
               <DialogDescription>
-                提交后会自动创建分支，主说明和附件一起进入审核流程。
+                填好主说明和附件后提交审核。
               </DialogDescription>
             </DialogHeader>
 
@@ -395,7 +398,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
                       aria-invalid={errors.description ? "true" : undefined}
                       className="min-h-24"
                       onChange={(event) => updateField("description", event.target.value)}
-                      placeholder="用一句话说明这个 Skill 能帮你完成什么。"
+                      placeholder="例如：自动整理 API 文档。"
                     />
                     <FieldError message={errors.description} />
                   </div>
@@ -482,7 +485,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
                       aria-invalid={errors.content ? "true" : undefined}
                       className="min-h-56"
                       onChange={(event) => updateField("content", event.target.value)}
-                      placeholder="在这里输入 Skill 的主说明，后续会生成 main.md。"
+                      placeholder="输入 Skill 的主说明。"
                     />
                     <FieldError message={errors.content} />
                   </div>
@@ -647,7 +650,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        还没有添加附件。只写主说明也可以创建 Skill。
+                        还没有附件。
                       </p>
                     )}
                   </div>
@@ -676,7 +679,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
                           {form.title.trim() || "Skill 标题"}
                         </p>
                         <p className="line-clamp-2 text-sm text-muted-foreground">
-                          {form.description.trim() || "简介会显示在这里。"}
+                          {form.description.trim() || "简要说明"}
                         </p>
                       </div>
                     </div>

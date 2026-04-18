@@ -26,8 +26,12 @@ function useLogFeed() {
   const [isLoading, setIsLoading] = useState(true)
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
   const pagesRef = useRef<Record<number, SynapseLogEntry[]>>({})
   const loadingPagesRef = useRef(new Set<number>())
+  const clearExportError = useCallback(() => {
+    setExportError(null)
+  }, [])
 
   const storePage = useCallback((pageIndex: number, entries: SynapseLogEntry[]) => {
     setPages((currentPages) => {
@@ -163,6 +167,7 @@ function useLogFeed() {
 
   const exportLogFile = useCallback(async () => {
     setIsExporting(true)
+    setExportError(null)
 
     try {
       const result = await exportLogs()
@@ -170,7 +175,7 @@ function useLogFeed() {
       return result
     } catch (exportError) {
       logger.error("Failed to export log file.", exportError)
-      setError(exportError instanceof Error ? exportError.message : "导出日志失败。")
+      setExportError(exportError instanceof Error ? exportError.message : "导出日志失败。")
       return null
     } finally {
       setIsExporting(false)
@@ -178,8 +183,10 @@ function useLogFeed() {
   }, [logger])
 
   return {
+    clearExportError,
     ensureRangeLoaded,
     error,
+    exportError,
     exportLogFile,
     getEntryAtIndex,
     isExporting,

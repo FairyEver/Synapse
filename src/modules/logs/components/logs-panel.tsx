@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { InlineNotice } from "@/components/inline-notice"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { SynapseLogEntry } from "@/types/log"
@@ -52,8 +53,10 @@ function getLevelLabel(entry: SynapseLogEntry | null): string {
 
 function LogsPanel() {
   const {
+    clearExportError,
     ensureRangeLoaded,
     error,
+    exportError,
     exportLogFile,
     getEntryAtIndex,
     isExporting,
@@ -64,6 +67,7 @@ function LogsPanel() {
   const pinnedToBottomRef = useRef(true)
   const [scrollTop, setScrollTop] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
+  const [exportNotice, setExportNotice] = useState<string | null>(null)
   const [viewportHeight, setViewportHeight] = useState(LOG_LIST_FALLBACK_HEIGHT)
   const [viewportWidth, setViewportWidth] = useState(0)
 
@@ -155,13 +159,39 @@ function LogsPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
+      {exportError ? (
+        <div className="border-b px-3 py-3">
+          <InlineNotice
+            message={exportError}
+            tone="destructive"
+            onDismiss={clearExportError}
+          />
+        </div>
+      ) : null}
+
+      {exportNotice ? (
+        <div className="border-b px-3 py-3">
+          <InlineNotice
+            message={exportNotice}
+            onDismiss={() => setExportNotice(null)}
+          />
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-4 border-b bg-muted/20 px-3 py-2">
         <p className="font-mono text-xs text-muted-foreground">共 {total} 条</p>
         <Button
           size="sm"
           disabled={isExporting}
-          onClick={() => {
-            void exportLogFile()
+          onClick={async () => {
+            const result = await exportLogFile()
+
+            if (!result) {
+              setExportNotice(null)
+              return
+            }
+
+            setExportNotice(`已保存到 ${result.filePath}`)
           }}
         >
           {isExporting ? "导出中..." : "下载日志"}

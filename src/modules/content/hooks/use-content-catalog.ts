@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { hasContentBridge, readRules, readSkills } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -42,19 +42,28 @@ function useContentCatalog<T extends SynapseContentType>(
   const [items, setItems] = useState<SynapseContentItemsByType[T]>(() => createEmptyItems<T>())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const latestRefreshIdRef = useRef(0)
 
   const refresh = useCallback(async () => {
+    const refreshId = latestRefreshIdRef.current + 1
+
+    latestRefreshIdRef.current = refreshId
+
     if (!activeRepository) {
-      setItems(createEmptyItems<T>())
-      setError(null)
-      setIsLoading(false)
+      if (latestRefreshIdRef.current === refreshId) {
+        setItems(createEmptyItems<T>())
+        setError(null)
+        setIsLoading(false)
+      }
       return
     }
 
     if (!hasContentBridge()) {
-      setItems(createEmptyItems<T>())
-      setError("当前页面没有加载内容桥接，无法读取当前目录。")
-      setIsLoading(false)
+      if (latestRefreshIdRef.current === refreshId) {
+        setItems(createEmptyItems<T>())
+        setError("当前页面没有加载内容桥接，无法读取当前目录。")
+        setIsLoading(false)
+      }
       return
     }
 
@@ -65,6 +74,10 @@ function useContentCatalog<T extends SynapseContentType>(
         contentType === "rule" ? await readRules() : await readSkills()
       ) as SynapseContentItemsByType[T]
       const nextStats = buildCategoryStats(contentType, nextItems as SynapseContentMeta[])
+
+      if (latestRefreshIdRef.current !== refreshId) {
+        return
+      }
 
       setItems(nextItems)
       setError(null)
@@ -77,11 +90,17 @@ function useContentCatalog<T extends SynapseContentType>(
         })
       }
     } catch (loadError) {
+      if (latestRefreshIdRef.current !== refreshId) {
+        return
+      }
+
       logger.error("Failed to load content catalog.", loadError)
       setItems(createEmptyItems<T>())
       setError(loadError instanceof Error ? loadError.message : "读取内容失败。")
     } finally {
-      setIsLoading(false)
+      if (latestRefreshIdRef.current === refreshId) {
+        setIsLoading(false)
+      }
     }
   }, [activeRepository, contentType, logger])
 

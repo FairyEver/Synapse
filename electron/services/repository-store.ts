@@ -6,12 +6,36 @@ import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.repository-store")
 
+function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === "ENOENT"
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await access(targetPath)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return false
+    }
+
+    throw error
+  }
+}
+
+function isNotGitRepositoryError(error: unknown): boolean {
+  return error instanceof Error && /not a git repository/i.test(error.message)
+}
+
+async function resolveGitRootPath(localPath: string): Promise<string | null> {
+  try {
+    return await runGitProbe(localPath, ["rev-parse", "--show-toplevel"])
+  } catch (error) {
+    if (isNotGitRepositoryError(error)) {
+      return null
+    }
+
+    throw error
   }
 }
 
@@ -50,14 +74,6 @@ function runGitProbe(cwd: string, args: string[]): Promise<string | null> {
       reject(new Error(message || "Git 探测失败。"))
     })
   })
-}
-
-async function resolveGitRootPath(localPath: string): Promise<string | null> {
-  try {
-    return await runGitProbe(localPath, ["rev-parse", "--show-toplevel"])
-  } catch {
-    return null
-  }
 }
 
 class RepositoryStore {
