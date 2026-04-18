@@ -4,6 +4,13 @@ import type { SynapseBridge } from "../src/types/bridge"
 // Sandbox preload cannot require arbitrary local modules, so the IPC channel
 // names used here must stay inline instead of importing ./ipc/channels.
 const SYNAPSE_PRELOAD_CHANNELS = {
+  content: {
+    getRuleContent: "synapse:content:get-rule-content",
+    getRules: "synapse:content:get-rules",
+    getSkillContent: "synapse:content:get-skill-content",
+    getSkillFiles: "synapse:content:get-skill-files",
+    getSkills: "synapse:content:get-skills",
+  },
   config: {
     get: "synapse:config:get",
     update: "synapse:config:update",
@@ -42,6 +49,14 @@ const synapseBridge: SynapseBridge = {
     chrome: process.versions.chrome,
     electron: process.versions.electron,
     node: process.versions.node,
+  },
+  content: {
+    getRuleContent: (ruleId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRuleContent, ruleId),
+    getRules: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRules),
+    getSkillContent: (skillId) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getSkillContent, skillId),
+    getSkillFiles: (skillId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getSkillFiles, skillId),
+    getSkills: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getSkills),
   },
   config: {
     get: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.get),

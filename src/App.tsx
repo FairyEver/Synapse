@@ -17,12 +17,17 @@ function App() {
   const { activeRepository, isReady } = useAppConfig()
   const { operations, states, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
+  const [isRulesDetailOpen, setIsRulesDetailOpen] = useState(false)
+  const [isSkillsDetailOpen, setIsSkillsDetailOpen] = useState(false)
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
+  const hasBlockingModalOpen = isRulesDetailOpen || isSkillsDetailOpen
   const canSyncActiveRepository =
     activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
   const refreshTitle = activeRepositoryOperation?.isRunning
     ? activeRepositoryOperation.statusText ?? "正在同步仓库..."
+    : hasBlockingModalOpen
+      ? "请先关闭当前弹窗"
     : !isReady
       ? "正在加载设置..."
       : activeRepository === null
@@ -68,7 +73,12 @@ function App() {
       actions={
         <AppShellActions
           busy={Boolean(activeRepositoryOperation?.isRunning)}
-          disabled={!isReady || !canSyncActiveRepository || Boolean(activeRepositoryOperation?.isRunning)}
+          disabled={
+            !isReady
+            || !canSyncActiveRepository
+            || Boolean(activeRepositoryOperation?.isRunning)
+            || hasBlockingModalOpen
+          }
           onRefresh={() => {
             if (!activeRepository) {
               return
@@ -89,10 +99,10 @@ function App() {
     >
       <div className="h-full min-h-0">
         <div className={activeTab === "rules" ? "h-full" : "hidden h-full"}>
-          <RulesModule />
+          <RulesModule onDetailDialogOpenChange={setIsRulesDetailOpen} />
         </div>
         <div className={activeTab === "skills" ? "h-full" : "hidden h-full"}>
-          <SkillsModule />
+          <SkillsModule onDetailDialogOpenChange={setIsSkillsDetailOpen} />
         </div>
         <div className={activeTab === "settings" ? "h-full" : "hidden h-full"}>
           <SettingsModule />

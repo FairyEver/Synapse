@@ -1,5 +1,11 @@
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
+  SynapseContentFile,
+  SynapseRuleMeta,
+  SynapseSkillMeta,
+  SynapseTextContentFile,
+} from "./content"
+import type {
   SynapseLogAppendedEvent,
   SynapseLogExportResult,
   SynapseLogListQuery,
@@ -20,6 +26,13 @@ export type SynapseBridge = {
     chrome: string
     electron: string
     node: string
+  }
+  content: {
+    getRuleContent: (ruleId: string) => Promise<SynapseTextContentFile>
+    getRules: () => Promise<SynapseRuleMeta[]>
+    getSkillContent: (skillId: string) => Promise<SynapseTextContentFile>
+    getSkillFiles: (skillId: string) => Promise<SynapseContentFile[]>
+    getSkills: () => Promise<SynapseSkillMeta[]>
   }
   config: {
     get: () => Promise<SynapseConfig>

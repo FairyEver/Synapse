@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
+import { registerContentHandlers } from "./ipc/content-handlers"
 import { registerConfigHandlers } from "./ipc/config-handlers"
 import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
@@ -88,6 +89,7 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     logger.info("Electron app is ready. Registering services.")
+    registerContentHandlers()
     registerLogHandlers()
     registerConfigHandlers()
     registerRepositoryHandlers()

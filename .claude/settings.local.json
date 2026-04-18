@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/liyang/.codex/**)",
+      "Read(//Users/liyang/.config/**)",
+      "Read(//Users/liyang/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('top-level mcpServers:', list\\(d.get\\('mcpServers',{}\\).keys\\(\\)\\)\\); print\\('projects:'\\); [print\\(' ', p, '->', list\\(v.get\\('mcpServers',{}\\).keys\\(\\)\\)\\) for p,v in d.get\\('projects',{}\\).items\\(\\) if v.get\\('mcpServers'\\)]\")",
+      "Bash(claude mcp *)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "WebFetch(domain:skills.sh)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.windsurf.com)",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:cursor.com)",
+      "WebFetch(domain:docs.cursor.com)",
+      "WebFetch(domain:code.visualstudio.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:codelabs.developers.google.com)",
+      "WebSearch",
+      "WebFetch(domain:antigravity.google)"
+    ]
+  }
+}
