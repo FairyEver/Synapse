@@ -32,11 +32,16 @@ import { cn } from "@/lib/utils"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentDetailDialog } from "@/modules/content/components/content-detail-dialog"
+import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentBrowserPageProps = {
   contentType: SynapseContentType
+  notice?: {
+    message: string
+    onDismiss?: () => void
+  }
   onCreateClick?: () => void
   onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
@@ -230,17 +235,13 @@ function ContentListCard({
       tabIndex={0}
     >
       <CardContent className="flex items-center gap-4">
-        <div
-          className="flex size-12 shrink-0 items-center justify-center rounded-lg text-lg font-medium text-white ring-1 ring-black/5"
-          style={{ backgroundColor: item.iconBg }}
-          title={item.title}
-        >
+        <ContentIconBadge size="md" tone={item.iconBg} title={item.title}>
           {iconOption ? (
             <iconOption.icon className="size-5" />
           ) : (
             <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
           )}
-        </div>
+        </ContentIconBadge>
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-col gap-1">
@@ -276,6 +277,7 @@ function ContentListCard({
 
 function ContentBrowserPage({
   contentType,
+  notice,
   onCreateClick,
   onDetailDialogOpenChange,
   onInstallDialogOpenChange,
@@ -417,7 +419,10 @@ function ContentBrowserPage({
                       return
                     }
 
-                    window.alert(`现在还不能在这里新建 ${getSingularLabel(contentType)}。`)
+                    logger.warn("Create entry requested without a registered handler.", {
+                      contentType,
+                      repositoryUuid: activeRepository.uuid,
+                    })
                   }}
                   title={createButtonTitle}
                 >
@@ -451,6 +456,17 @@ function ContentBrowserPage({
 
           <section className="min-h-0 overflow-y-auto">
             <div className="flex min-h-full flex-col gap-4">
+              {notice ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                  <p className="text-sm text-foreground">{notice.message}</p>
+                  {notice.onDismiss ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={notice.onDismiss}>
+                      关闭
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-base font-medium text-foreground">{title}</h2>

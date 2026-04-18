@@ -129,7 +129,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshRepositoryStates().catch((error) => {
       logger.error("Failed to refresh repository states.", error)
-      console.error("[repository] Failed to refresh repository states.", error)
     })
   }, [refreshRepositoryStates])
 
@@ -171,7 +170,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
 
       void refreshRepositoryStates().catch((error) => {
         logger.error("Failed to refresh repository states after repository update.", error)
-        console.error("[repository] Failed to refresh repository states after update.", error)
       })
     })
 

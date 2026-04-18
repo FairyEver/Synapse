@@ -24,6 +24,7 @@ import { getContentIconOption } from "@/lib/content-appearance"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { useContentDetail } from "@/modules/content/hooks/use-content-detail"
+import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import type {
   SynapseContentFile,
   SynapseContentMeta,
@@ -77,7 +78,6 @@ function FilePreview({ file }: { file: SynapseContentFile }) {
             <p className="text-sm text-muted-foreground">
               二进制文件不支持预览。
             </p>
-            <p className="text-xs text-muted-foreground">状态：已读取</p>
             <p className="text-xs text-muted-foreground">大小：{formatFileSize(file.size)}</p>
           </div>
         </div>
@@ -206,17 +206,13 @@ function ContentDetailDialog({
         <DialogHeader className="px-5 pt-5">
           <div className="flex items-start justify-between gap-4 pr-8">
             <div className="flex min-w-0 items-start gap-4">
-              <div
-                className="flex size-14 shrink-0 items-center justify-center rounded-lg text-xl font-medium text-white ring-1 ring-black/5"
-                style={{ backgroundColor: item.iconBg }}
-                title={item.title}
-              >
+              <ContentIconBadge size="lg" tone={item.iconBg} title={item.title}>
                 {iconOption ? (
                   <iconOption.icon className="size-6" />
                 ) : (
                   <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
                 )}
-              </div>
+              </ContentIconBadge>
 
               <div className="min-w-0 space-y-2">
                 <DialogTitle className="truncate">{item.title}</DialogTitle>

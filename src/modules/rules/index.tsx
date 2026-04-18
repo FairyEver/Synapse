@@ -20,6 +20,8 @@ function RulesModule({
   const logger = useMemo(() => createRendererLogger("rules"), [])
   const { activeRepository, config } = useAppConfig()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [refreshSignal, setRefreshSignal] = useState(0)
 
   useEffect(() => {
     onCreateDialogOpenChange?.(isCreateDialogOpen)
@@ -46,16 +48,16 @@ function RulesModule({
       repositoryUuid: activeRepository?.uuid ?? null,
       targetBranch: result.targetBranch ?? null,
     })
-
-    window.setTimeout(() => {
-      window.alert(result.message ?? "提交成功，等待审核。")
-    }, 0)
+    setRefreshSignal((currentSignal) => currentSignal + 1)
+    setNotice(result.message ?? "已提交审核，列表已刷新。")
   }
 
   return (
     <>
       <ContentBrowserPage
         contentType="rule"
+        notice={notice ? { message: notice, onDismiss: () => setNotice(null) } : undefined}
+        refreshSignal={refreshSignal}
         title="Rules"
         onCreateClick={() => setIsCreateDialogOpen(true)}
         onDetailDialogOpenChange={onDetailDialogOpenChange}

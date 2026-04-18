@@ -130,7 +130,7 @@ function RepositoryListEditor({
   return (
     <SettingsGroup>
       {repositories.length > 0 ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col divide-y divide-border/60">
           {repositories.map((repository) => {
             const isActive = repository.uuid === activeRepoUuid
             const operation = operations[repository.uuid]
@@ -139,7 +139,7 @@ function RepositoryListEditor({
             const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
 
             return (
-              <div key={repository.uuid} className="flex flex-col gap-3 rounded-lg border p-3">
+              <div key={repository.uuid} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-medium">{repository.name}</p>

@@ -20,7 +20,6 @@ function createMainWindow() {
     height,
     minWidth,
     minHeight,
-    backgroundColor: "#edf2ea",
     show: false,
     title: "Synapse",
     webPreferences: {
@@ -38,7 +37,6 @@ function createMainWindow() {
       error,
       preloadPath,
     })
-    console.error("[preload error]", preloadPath, error)
   })
 
   window.once("ready-to-show", () => {
@@ -110,7 +108,6 @@ if (!gotSingleInstanceLock) {
     })
   }).catch((error) => {
     logger.error("Failed to initialize app services.", error)
-    console.error("[main] Failed to initialize app services.", error)
     app.quit()
   })
 }

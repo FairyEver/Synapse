@@ -11,7 +11,7 @@ function AppShellLayout({ brand, navigation, children, actions }: AppShellLayout
   return (
     <main className="h-screen overflow-hidden bg-background">
       <div className="flex h-full flex-col">
-        <header className="shrink-0 border-b border-border/80 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+        <header className="shrink-0 border-b border-border bg-background">
           <div className="flex min-h-[68px] items-center gap-4 px-4">
             <div className="shrink-0">{brand}</div>
             <div className="min-w-0 flex-1">{navigation}</div>

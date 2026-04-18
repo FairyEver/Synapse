@@ -76,9 +76,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   return (
     <SettingsGroup>
       {projects.length > 0 ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col divide-y divide-border/60">
           {projects.map((project) => (
-            <div key={project.id} className="flex flex-col gap-3 rounded-lg border p-3">
+            <div key={project.id} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
               <div className="flex flex-col gap-1">
                 <p className="font-medium">{project.name}</p>
                 <p className="break-all text-sm text-muted-foreground">{project.path}</p>

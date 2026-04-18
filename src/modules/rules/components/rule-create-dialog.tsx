@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Palette, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,12 +21,12 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  getContentIconOption,
   SYNAPSE_CONTENT_COLOR_OPTIONS,
   SYNAPSE_CONTENT_ICON_OPTIONS,
+  getContentIconOption,
 } from "@/lib/content-appearance"
 import { getCategoryDefinitions } from "@/lib/content-categories"
-import { cn } from "@/lib/utils"
+import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import type { CreateRulePayload, RuleCreateFieldErrors } from "@/modules/rules/types"
 import {
   createEmptyRulePayload,
@@ -67,7 +67,6 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
 
   const selectedIconOption = form.icon ? getContentIconOption(form.icon) : null
   const previewIconOption = selectedIconOption ?? getContentIconOption("sparkles")
-  const previewColor = form.iconBg
 
   const updateField = <K extends keyof CreateRulePayload>(field: K, value: CreateRulePayload[K]) => {
     const nextForm = {
@@ -230,8 +229,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
                         title={option.label}
                       >
                         <span
-                          className="size-4 rounded-sm ring-1 ring-black/5"
-                          style={{ backgroundColor: option.value }}
+                          className={`size-4 rounded-sm ring-1 ring-border/60 ${option.swatchClassName}`}
                         />
                         <span>{option.label}</span>
                       </Button>
@@ -254,50 +252,24 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
                 </div>
               </div>
 
-              <aside className="flex flex-col gap-3">
-                <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+              <aside className="rounded-lg border border-border/70 bg-muted/10 p-4">
+                <div className="space-y-4">
                   <p className="text-sm font-medium text-foreground">预览</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    图标卡片会显示成这样。
-                  </p>
+                  <div className="flex items-center gap-4">
+                    <ContentIconBadge size="lg" tone={form.iconBg || null} title={form.title || "Rule 预览"}>
+                      {previewIconOption ? (
+                        <previewIconOption.icon className="size-6" />
+                      ) : (
+                        <Sparkles className="size-6" />
+                      )}
+                    </ContentIconBadge>
 
-                  <div className="mt-4 rounded-lg border border-border/70 bg-background p-4">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={cn(
-                          "flex size-14 shrink-0 items-center justify-center rounded-lg text-white ring-1 ring-black/5",
-                          !previewColor && "bg-muted text-muted-foreground ring-border",
-                        )}
-                        style={previewColor ? { backgroundColor: previewColor } : undefined}
-                      >
-                        {previewIconOption ? (
-                          <previewIconOption.icon className="size-6" />
-                        ) : (
-                          <Sparkles className="size-6" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {form.title.trim() || "Rule 标题"}
-                        </p>
-                        <p className="line-clamp-2 text-sm text-muted-foreground">
-                          {form.description.trim() || "简介会显示在这里。"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-                      <Palette />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">创建说明</p>
-                      <p className="text-sm text-muted-foreground">
-                        Rule 只能通过输入或粘贴正文创建，不能上传文件。
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {form.title.trim() || "Rule 标题"}
+                      </p>
+                      <p className="line-clamp-2 text-sm text-muted-foreground">
+                        {form.description.trim() || "简介会显示在这里。"}
                       </p>
                     </div>
                   </div>

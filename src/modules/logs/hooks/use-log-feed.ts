@@ -26,7 +26,6 @@ function useLogFeed() {
   const [isLoading, setIsLoading] = useState(true)
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedEntryId, setSelectedEntryId] = useState<number | null>(null)
   const pagesRef = useRef<Record<number, SynapseLogEntry[]>>({})
   const loadingPagesRef = useRef(new Set<number>())
 
@@ -114,15 +113,11 @@ function useLogFeed() {
 
         if (summary.total > 0) {
           const lastIndex = summary.total - 1
-          const lastPageEntries = await loadPage(getPageIndex(lastIndex))
+          await loadPage(getPageIndex(lastIndex))
 
           if (cancelled) {
             return
           }
-
-          setSelectedEntryId(lastPageEntries.at(-1)?.id ?? null)
-        } else {
-          setSelectedEntryId(null)
         }
       } catch (loadError) {
         logger.error("Failed to load log summary.", loadError)
@@ -157,26 +152,8 @@ function useLogFeed() {
         pagesRef.current = nextPages
         return nextPages
       })
-
-      setSelectedEntryId((currentSelectedEntryId) => currentSelectedEntryId ?? event.entry.id)
     })
   }, [])
-
-  const selectedEntry = useMemo(() => {
-    if (selectedEntryId === null) {
-      return null
-    }
-
-    for (const pageEntries of Object.values(pages)) {
-      const matchedEntry = pageEntries.find((entry) => entry.id === selectedEntryId)
-
-      if (matchedEntry) {
-        return matchedEntry
-      }
-    }
-
-    return null
-  }, [pages, selectedEntryId])
 
   const getEntryAtIndex = useCallback((entryIndex: number): SynapseLogEntry | null => {
     const pageEntries = pagesRef.current[getPageIndex(entryIndex)]
@@ -194,7 +171,7 @@ function useLogFeed() {
     } catch (exportError) {
       logger.error("Failed to export log file.", exportError)
       setError(exportError instanceof Error ? exportError.message : "导出日志失败。")
-      throw exportError
+      return null
     } finally {
       setIsExporting(false)
     }
@@ -207,9 +184,6 @@ function useLogFeed() {
     getEntryAtIndex,
     isExporting,
     isLoading,
-    selectedEntry,
-    selectedEntryId,
-    setSelectedEntryId,
     total,
   }
 }

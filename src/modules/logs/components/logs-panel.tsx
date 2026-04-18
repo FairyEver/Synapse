@@ -7,7 +7,7 @@ import { useLogFeed } from "@/modules/logs/hooks/use-log-feed"
 const LOG_ROW_HEIGHT = 24
 const LOG_LIST_FALLBACK_HEIGHT = 520
 const LOG_OVERSCAN = 12
-const LOG_ROW_HOVER_TEXT_CLASS = "group-hover:text-white"
+const LOG_ROW_HOVER_TEXT_CLASS = "group-hover:text-accent-foreground"
 
 function formatTimestamp(value: string): string {
   const date = new Date(value)
@@ -161,7 +161,7 @@ function LogsPanel() {
           size="sm"
           disabled={isExporting}
           onClick={() => {
-            void exportLogFile().catch(() => {})
+            void exportLogFile()
           }}
         >
           {isExporting ? "导出中..." : "下载日志"}
@@ -203,7 +203,7 @@ function LogsPanel() {
             {visibleRows.map(({ entry, index }) => (
               <div
                 key={entry?.id ?? `placeholder-${index}`}
-                className="group absolute inset-x-0 flex h-6 select-text items-center bg-transparent text-foreground transition-colors hover:bg-black hover:text-white"
+                className="group absolute inset-x-0 flex h-6 select-text items-center bg-transparent text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 style={{ top: `${index * LOG_ROW_HEIGHT}px` }}
               >
                 <div
