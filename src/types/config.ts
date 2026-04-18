@@ -17,7 +17,6 @@ export type SynapseRepositoryConfig = {
 }
 
 export type SynapseGlobalConfig = {
-  displayName: string
   language: SynapseLanguage
   projects: SynapseProjectConfig[]
 }

@@ -105,11 +105,10 @@ function ModuleSidebarItem({
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex h-9 w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
-        "hover:bg-muted hover:text-foreground",
+        "hover:bg-muted/60 hover:text-foreground",
         "focus-visible:ring-3 focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
-        active &&
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        active && "bg-secondary text-secondary-foreground hover:bg-secondary",
       )}
     >
       <span className="truncate text-left">{children}</span>

@@ -1,4 +1,4 @@
-export type SynapseRepositoryOperationKind = "sync"
+export type SynapseRepositoryOperationKind = "sync" | "push"
 
 export type SynapseRepositoryLocalStatus = "missing" | "ready"
 
@@ -27,4 +27,25 @@ export type SynapseRepositoryOperationResult = {
   operation: SynapseRepositoryOperationKind
   repository: SynapseRepositoryLocalState
   completedAt: string
+}
+
+export type SynapsePendingPushEntry = {
+  id: number
+  commitHash: string | null
+  action: string
+  targetId: string
+  createdAt: string
+  retryCount: number
+  lastError: string | null
+  title: string | null
+}
+
+export type SynapsePendingPushState = {
+  count: number
+  items: SynapsePendingPushEntry[]
+}
+
+export type SynapsePendingPushUpdatedEvent = {
+  repositoryUuid: string
+  pendingPushes: SynapsePendingPushState
 }

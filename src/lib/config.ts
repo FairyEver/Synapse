@@ -124,10 +124,6 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
     return true
   }
 
-  if (hasOwnKey(value, "displayName") && typeof value.displayName !== "string") {
-    return true
-  }
-
   if (hasOwnKey(value, "language") && typeof value.language !== "string") {
     return true
   }
@@ -243,7 +239,6 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   }
 
   return {
-    displayName: asTrimmedString(value.displayName, DEFAULT_GLOBAL_CONFIG.displayName),
     language: normalizeLanguage(value.language, DEFAULT_INTERFACE_LANGUAGE),
     projects: normalizeProjects(value.projects),
   }

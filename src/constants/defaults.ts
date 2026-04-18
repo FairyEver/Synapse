@@ -26,7 +26,6 @@ export const DEFAULT_WINDOW_BOUNDS = {
 export const DEFAULT_INTERFACE_LANGUAGE: SynapseLanguage = "zh-CN"
 
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
-  displayName: "",
   language: DEFAULT_INTERFACE_LANGUAGE,
   projects: [],
 }
