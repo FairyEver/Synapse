@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { getContentIconOption } from "@/lib/content-appearance"
 import {
   getCategoryLabel,
   resolveCategoryViewId,
@@ -36,6 +37,7 @@ import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentBrowserPageProps = {
   contentType: SynapseContentType
+  onCreateClick?: () => void
   onDetailDialogOpenChange?: (open: boolean) => void
   title: string
 }
@@ -209,6 +211,7 @@ function ContentListCard({
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
+  const iconOption = getContentIconOption(item.icon)
 
   return (
     <Card
@@ -230,7 +233,11 @@ function ContentListCard({
           style={{ backgroundColor: item.iconBg }}
           title={item.title}
         >
-          <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
+          {iconOption ? (
+            <iconOption.icon className="size-5" />
+          ) : (
+            <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -270,6 +277,7 @@ function ContentListCard({
 
 function ContentBrowserPage({
   contentType,
+  onCreateClick,
   onDetailDialogOpenChange,
   title,
 }: ContentBrowserPageProps) {
@@ -402,6 +410,12 @@ function ContentBrowserPage({
                       contentType,
                       repositoryUuid: activeRepository.uuid,
                     })
+
+                    if (onCreateClick) {
+                      onCreateClick()
+                      return
+                    }
+
                     window.alert(`现在还不能在这里新建 ${getSingularLabel(contentType)}。`)
                   }}
                   title={createButtonTitle}

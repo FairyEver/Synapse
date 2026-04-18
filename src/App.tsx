@@ -17,11 +17,12 @@ function App() {
   const { activeRepository, isReady } = useAppConfig()
   const { operations, states, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
+  const [isRulesCreateOpen, setIsRulesCreateOpen] = useState(false)
   const [isRulesDetailOpen, setIsRulesDetailOpen] = useState(false)
   const [isSkillsDetailOpen, setIsSkillsDetailOpen] = useState(false)
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
-  const hasBlockingModalOpen = isRulesDetailOpen || isSkillsDetailOpen
+  const hasBlockingModalOpen = isRulesCreateOpen || isRulesDetailOpen || isSkillsDetailOpen
   const canSyncActiveRepository =
     activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
   const refreshTitle = activeRepositoryOperation?.isRunning
@@ -99,7 +100,10 @@ function App() {
     >
       <div className="h-full min-h-0">
         <div className={activeTab === "rules" ? "h-full" : "hidden h-full"}>
-          <RulesModule onDetailDialogOpenChange={setIsRulesDetailOpen} />
+          <RulesModule
+            onCreateDialogOpenChange={setIsRulesCreateOpen}
+            onDetailDialogOpenChange={setIsRulesDetailOpen}
+          />
         </div>
         <div className={activeTab === "skills" ? "h-full" : "hidden h-full"}>
           <SkillsModule onDetailDialogOpenChange={setIsSkillsDetailOpen} />

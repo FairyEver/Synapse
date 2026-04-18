@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { getContentIconOption } from "@/lib/content-appearance"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { useContentDetail } from "@/modules/content/hooks/use-content-detail"
 import type {
@@ -197,6 +198,7 @@ function ContentDetailDialog({
   }
 
   const categoryLabel = getCategoryLabel(item.type, item.category)
+  const iconOption = getContentIconOption(item.icon)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -209,7 +211,11 @@ function ContentDetailDialog({
                 style={{ backgroundColor: item.iconBg }}
                 title={item.title}
               >
-                <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
+                {iconOption ? (
+                  <iconOption.icon className="size-6" />
+                ) : (
+                  <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
+                )}
               </div>
 
               <div className="min-w-0 space-y-2">
