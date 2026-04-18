@@ -11,8 +11,6 @@ export type SynapseAppUpdateStatus =
 export type SynapseAppUpdateState = {
   currentVersion: string
   releaseVersion: string | null
-  releaseNotes: string[]
-  releasePublishedAt: string | null
   status: SynapseAppUpdateStatus
   message: string
   error: string | null

@@ -9,8 +9,6 @@ const logger = createRendererLogger("settings.about")
 const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   currentVersion: "0.0.0",
   releaseVersion: null,
-  releaseNotes: [],
-  releasePublishedAt: null,
   status: "idle",
   message: "正在读取更新信息...",
   error: null,
@@ -21,22 +19,6 @@ const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   lastCheckedAt: null,
   canCheck: false,
   downloadedFilePath: null,
-}
-
-function formatReleaseDate(value: string | null): string | null {
-  if (!value) {
-    return null
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "medium",
-  }).format(date)
 }
 
 function formatBytes(value: number | null): string | null {
@@ -172,9 +154,6 @@ function AboutPanel() {
     : "text-sm text-muted-foreground"
   const downloadDetails = getDownloadDetails(updateState)
   const progressWidth = `${Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))}%`
-  const visibleReleaseNotes = updateState.releaseNotes.slice(0, 6)
-  const remainingReleaseNoteCount = Math.max(0, updateState.releaseNotes.length - visibleReleaseNotes.length)
-  const releaseDateLabel = formatReleaseDate(updateState.releasePublishedAt)
 
   const handleAction = async () => {
     const bridge = window.synapse?.updater
@@ -213,9 +192,6 @@ function AboutPanel() {
             {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
               <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
             ) : null}
-            {releaseDateLabel && updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
-              <p className="text-xs text-muted-foreground">发布时间：{releaseDateLabel}</p>
-            ) : null}
             {isDownloaded ? (
               <p className="text-xs text-muted-foreground">
                 请先完全退出 Synapse，再打开下载好的安装包重新安装。
@@ -225,21 +201,6 @@ function AboutPanel() {
               <p className="text-xs break-all text-muted-foreground">
                 下载位置：{updateState.downloadedFilePath}
               </p>
-            ) : null}
-            {visibleReleaseNotes.length > 0 && updateState.releaseVersion !== updateState.currentVersion ? (
-              <div className="flex flex-col gap-2 pt-1">
-                <p className="text-xs font-medium">更新说明</p>
-                <ul className="grid gap-1 text-xs text-muted-foreground">
-                  {visibleReleaseNotes.map((note) => (
-                    <li key={note} className="leading-5">
-                      {note}
-                    </li>
-                  ))}
-                </ul>
-                {remainingReleaseNoteCount > 0 ? (
-                  <p className="text-xs text-muted-foreground">还有 {remainingReleaseNoteCount} 项更新。</p>
-                ) : null}
-              </div>
             ) : null}
           </div>
 
