@@ -30,6 +30,7 @@ import type {
   SynapseRepositoryProgressEvent,
   SynapseRepositoryUpdatedEvent,
 } from "./repository"
+import type { SynapseAppUpdateState } from "./update"
 
 export type SynapseBridge = {
   platform: string
@@ -73,5 +74,11 @@ export type SynapseBridge = {
     sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
     onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void
+  }
+  updater: {
+    checkForUpdates: () => Promise<SynapseAppUpdateState>
+    getState: () => Promise<SynapseAppUpdateState>
+    onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
+    quitAndInstall: () => Promise<void>
   }
 }

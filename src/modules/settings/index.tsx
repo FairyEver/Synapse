@@ -38,10 +38,6 @@ function SettingsModule() {
   const regularItems = categoryItems.filter((item) => item.type !== "list" && activeCategory !== "about")
   const hasRepositoriesItem = categoryItems.some((item) => item.key === "repositories")
   const hasProjectsItem = categoryItems.some((item) => item.key === "global.projects")
-  const aboutVersionItem = useMemo(
-    () => settingsItems.find((item) => item.key === "app.version") ?? null,
-    [],
-  )
   const isLogsCategory = activeCategory === "logs"
 
   const applyPatch = useCallback(
@@ -116,10 +112,6 @@ function SettingsModule() {
     },
     [applyPatch],
   )
-
-  const aboutVersion = aboutVersionItem
-    ? String(getSettingValue(aboutVersionItem, context))
-    : "0.0.0"
 
   return (
     <div className="flex h-full min-h-0">
@@ -199,7 +191,7 @@ function SettingsModule() {
             </div>
           ) : null}
 
-          {isReady && activeCategory === "about" ? <AboutPanel version={aboutVersion} /> : null}
+          {isReady && activeCategory === "about" ? <AboutPanel /> : null}
         </div>
       </div>
     </div>

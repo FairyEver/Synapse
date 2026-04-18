@@ -36,6 +36,12 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     progress: "synapse:repository:progress",
     updated: "synapse:repository:updated",
   },
+  update: {
+    checkForUpdates: "synapse:update:check-for-updates",
+    getState: "synapse:update:get-state",
+    quitAndInstall: "synapse:update:quit-and-install",
+    stateChanged: "synapse:update:state-changed",
+  },
 } as const
 
 function subscribeToChannel<T>(channel: string, listener: (payload: T) => void): () => void {
@@ -92,6 +98,13 @@ const synapseBridge: SynapseBridge = {
     onProgress: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.progress, listener),
     onUpdated: (listener) => subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.updated, listener),
+  },
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.checkForUpdates),
+    getState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.getState),
+    onStateChanged: (listener) =>
+      subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.stateChanged, listener),
+    quitAndInstall: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.quitAndInstall),
   },
 }
 

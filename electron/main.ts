@@ -5,8 +5,10 @@ import { registerContentHandlers } from "./ipc/content-handlers"
 import { registerConfigHandlers } from "./ipc/config-handlers"
 import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
+import { registerUpdateHandlers } from "./ipc/update-handlers"
 import { configStore } from "./services/config-store"
 import { createMainLogger } from "./services/log-store"
+import { updateService } from "./services/update-service"
 
 let mainWindow: BrowserWindow | null = null
 const logger = createMainLogger("main")
@@ -93,7 +95,9 @@ if (!gotSingleInstanceLock) {
     registerLogHandlers()
     registerConfigHandlers()
     registerRepositoryHandlers()
+    registerUpdateHandlers()
     await configStore.load()
+    updateService.initialize()
 
     logger.info("Core services initialized. Creating main window.")
     createMainWindow()

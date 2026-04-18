@@ -21,7 +21,8 @@
       "WebFetch(domain:antigravity.google)",
       "Skill(update-config)",
       "Skill(update-config:*)",
-      "WebFetch(domain:openai.github.io)"
+      "WebFetch(domain:openai.github.io)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

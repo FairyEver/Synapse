@@ -1,28 +1,240 @@
+import { useEffect, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
+import type { SynapseAppUpdateState } from "@/types/update"
 
-type AboutPanelProps = {
-  version: string
+const logger = createRendererLogger("settings.about")
+
+const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
+  currentVersion: "0.0.0",
+  releaseVersion: null,
+  status: "idle",
+  message: "正在读取更新信息...",
+  error: null,
+  downloadPercent: null,
+  bytesPerSecond: null,
+  transferredBytes: null,
+  totalBytes: null,
+  lastCheckedAt: null,
+  canCheck: false,
+  canRestartToInstall: false,
 }
 
-function AboutPanel({ version }: AboutPanelProps) {
+function formatBytes(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return null
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  let nextValue = value
+  let unitIndex = 0
+
+  while (nextValue >= 1024 && unitIndex < units.length - 1) {
+    nextValue /= 1024
+    unitIndex += 1
+  }
+
+  const digits = unitIndex === 0 ? 0 : nextValue >= 100 ? 0 : nextValue >= 10 ? 1 : 2
+
+  return `${nextValue.toFixed(digits)} ${units[unitIndex]}`
+}
+
+function formatDuration(totalSeconds: number): string {
+  if (totalSeconds < 60) {
+    return `${totalSeconds} 秒`
+  }
+
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+
+  if (minutes < 60) {
+    return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+
+  return remainingMinutes > 0 ? `${hours} 小时 ${remainingMinutes} 分` : `${hours} 小时`
+}
+
+function getDownloadDetails(updateState: SynapseAppUpdateState): string | null {
+  if (updateState.status !== "downloading") {
+    return null
+  }
+
+  const parts: string[] = []
+  const transferred = formatBytes(updateState.transferredBytes)
+  const total = formatBytes(updateState.totalBytes)
+  const speed = formatBytes(updateState.bytesPerSecond)
+
+  if (transferred && total) {
+    parts.push(`已下载 ${transferred} / ${total}`)
+  }
+
+  if (speed) {
+    parts.push(`${speed}/s`)
+  }
+
+  if (
+    updateState.transferredBytes !== null
+    && updateState.totalBytes !== null
+    && updateState.bytesPerSecond
+    && updateState.bytesPerSecond > 0
+  ) {
+    const remainingSeconds = Math.max(
+      0,
+      Math.round((updateState.totalBytes - updateState.transferredBytes) / updateState.bytesPerSecond),
+    )
+
+    parts.push(`剩余约 ${formatDuration(remainingSeconds)}`)
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null
+}
+
+function AboutPanel() {
+  const [updateState, setUpdateState] = useState<SynapseAppUpdateState>(INITIAL_UPDATE_STATE)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const bridge = window.synapse?.updater
+
+    if (!bridge) {
+      setUpdateState({
+        ...INITIAL_UPDATE_STATE,
+        status: "unsupported",
+        message: "当前实例没有可用的更新能力。",
+      })
+      return
+    }
+
+    let cancelled = false
+
+    void bridge.getState().then((state) => {
+      if (!cancelled) {
+        setUpdateState(state)
+      }
+    }).catch((error) => {
+      logger.error("Failed to read initial app update state.", error)
+
+      if (!cancelled) {
+        const message = error instanceof Error ? error.message : "读取更新信息失败。"
+
+        setUpdateState({
+          ...INITIAL_UPDATE_STATE,
+          status: "error",
+          message,
+          error: message,
+        })
+      }
+    })
+
+    const unsubscribe = bridge.onStateChanged((state) => {
+      setUpdateState(state)
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  const isRestartAction = updateState.canRestartToInstall
+  const isChecking = updateState.status === "checking"
+  const isDownloading = updateState.status === "downloading"
+  const actionLabel = isRestartAction
+    ? "立即重启并安装"
+    : isChecking
+      ? "检查中..."
+      : isDownloading
+        ? "下载中..."
+        : "检查更新"
+  const actionDisabled = isRestartAction
+    ? false
+    : !updateState.canCheck || isChecking || isDownloading
+  const statusClassName = updateState.status === "error" || actionError
+    ? "text-sm text-destructive"
+    : "text-sm text-muted-foreground"
+  const downloadDetails = getDownloadDetails(updateState)
+
+  const handleAction = async () => {
+    const bridge = window.synapse?.updater
+
+    if (!bridge) {
+      return
+    }
+
+    setActionError(null)
+
+    try {
+      if (isRestartAction) {
+        await bridge.quitAndInstall()
+        return
+      }
+
+      const nextState = await bridge.checkForUpdates()
+      setUpdateState(nextState)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "软件更新操作失败。"
+
+      logger.error("App update action failed in settings.", error)
+      setActionError(message)
+    }
+  }
+
   return (
     <SettingsGroup>
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium">当前版本</p>
-          <p className="text-sm text-muted-foreground">v{version}</p>
+          <p className="text-sm text-muted-foreground">v{updateState.currentVersion}</p>
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium">软件更新</p>
-          <p className="text-sm text-muted-foreground">暂不可用</p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium">软件更新</p>
+            <p className={statusClassName}>{actionError ?? updateState.message}</p>
+            {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
+              <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
+            ) : null}
+            {updateState.canRestartToInstall ? (
+              <p className="text-xs text-muted-foreground">安装时会重启 Synapse，请先保存正在进行的操作。</p>
+            ) : null}
+          </div>
+
+          {updateState.status === "downloading" || updateState.status === "downloaded" ? (
+            <div className="flex max-w-md flex-col gap-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>{updateState.status === "downloaded" ? "下载完成" : "下载进度"}</span>
+                {updateState.downloadPercent !== null ? (
+                  <span>{Math.round(updateState.downloadPercent)}%</span>
+                ) : null}
+              </div>
+              <div className="h-2 rounded bg-muted">
+                <div
+                  className="h-full rounded bg-primary transition-[width] duration-200"
+                  style={{ width: `${updateState.downloadPercent ?? 0}%` }}
+                />
+              </div>
+              {downloadDetails ? <p className="text-xs text-muted-foreground">{downloadDetails}</p> : null}
+            </div>
+          ) : null}
         </div>
-        <Button variant="outline" disabled>
-          检查更新
-        </Button>
+
+        <div className="flex justify-start md:justify-end">
+          <Button
+            variant={isRestartAction ? "default" : "outline"}
+            disabled={actionDisabled}
+            onClick={() => {
+              void handleAction()
+            }}
+          >
+            {actionLabel}
+          </Button>
+        </div>
       </div>
     </SettingsGroup>
   )

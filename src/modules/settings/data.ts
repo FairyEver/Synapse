@@ -1,4 +1,3 @@
-import packageJson from "../../../package.json"
 import {
   DEFAULT_GLOBAL_CONFIG,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
@@ -109,16 +108,6 @@ const settingsItems: SettingItem[] = [
     type: "list",
     defaultValue: DEFAULT_GLOBAL_CONFIG.projects,
     scope: "global",
-  },
-  {
-    key: "app.version",
-    label: "当前版本",
-    category: "about",
-    type: "text",
-    defaultValue: packageJson.version,
-    scope: "global",
-    readOnly: true,
-    getValue: () => packageJson.version,
   },
 ]
 
