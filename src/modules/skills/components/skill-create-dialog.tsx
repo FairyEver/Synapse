@@ -34,8 +34,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { getCategoryDefinitions } from "@/lib/content-categories"
 import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
-import { ContentBackgroundPicker } from "@/modules/content/components/content-background-picker"
-import { ContentIconPicker } from "@/modules/content/components/content-icon-picker"
+import { ContentAppearanceFields } from "@/modules/content/components/content-appearance-fields"
 import type {
   CreateSkillFilePayload,
   CreateSkillPayload,
@@ -441,23 +440,14 @@ function SkillCreateDialog({
               <FieldError message={errors.category} />
             </div>
 
-            <div className="flex flex-col gap-3">
-              <Label>图标</Label>
-              <ContentIconPicker
-                value={form.icon}
-                onValueChange={(value) => updateField("icon", value)}
-              />
-              <FieldError message={errors.icon} />
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <Label>背景色</Label>
-              <ContentBackgroundPicker
-                value={form.iconBg}
-                onValueChange={(value) => updateField("iconBg", value)}
-              />
-              <FieldError message={errors.iconBg} />
-            </div>
+            <ContentAppearanceFields
+              backgroundValue={form.iconBg}
+              backgroundError={errors.iconBg}
+              iconValue={form.icon}
+              iconError={errors.icon}
+              onBackgroundValueChange={(value) => updateField("iconBg", value)}
+              onIconValueChange={(value) => updateField("icon", value)}
+            />
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="skill-create-content">主说明</Label>

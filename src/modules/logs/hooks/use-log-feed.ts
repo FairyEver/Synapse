@@ -7,6 +7,7 @@ import {
   readLogSummary,
   subscribeToLogAppends,
 } from "@/app-shell/logging"
+import { formatLogExportText } from "@/lib/log-export"
 import type { SynapseLogEntry } from "@/types/log"
 
 const LOG_PAGE_SIZE = 200
@@ -26,12 +27,8 @@ function useLogFeed() {
   const [isLoading, setIsLoading] = useState(true)
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [exportError, setExportError] = useState<string | null>(null)
   const pagesRef = useRef<Record<number, SynapseLogEntry[]>>({})
-  const loadingPagesRef = useRef(new Set<number>())
-  const clearExportError = useCallback(() => {
-    setExportError(null)
-  }, [])
+  const loadingPagesRef = useRef(new Map<number, Promise<SynapseLogEntry[]>>())
 
   const storePage = useCallback((pageIndex: number, entries: SynapseLogEntry[]) => {
     setPages((currentPages) => {
@@ -56,34 +53,39 @@ function useLogFeed() {
       return cachedEntries
     }
 
-    if (loadingPagesRef.current.has(pageIndex)) {
-      return []
+    const loadingPromise = loadingPagesRef.current.get(pageIndex)
+
+    if (loadingPromise) {
+      return loadingPromise
     }
 
-    loadingPagesRef.current.add(pageIndex)
+    const nextPromise = (async () => {
+      try {
+        const result = await readLogList({
+          offset: pageIndex * LOG_PAGE_SIZE,
+          limit: LOG_PAGE_SIZE,
+        })
 
-    try {
-      const result = await readLogList({
-        offset: pageIndex * LOG_PAGE_SIZE,
-        limit: LOG_PAGE_SIZE,
-      })
+        setTotal(result.total)
+        storePage(pageIndex, result.entries)
+        setError(null)
 
-      setTotal(result.total)
-      storePage(pageIndex, result.entries)
-      setError(null)
+        return result.entries
+      } catch (loadError) {
+        logger.error("Failed to load log page.", {
+          loadError,
+          pageIndex,
+        })
+        setError(loadError instanceof Error ? loadError.message : "加载日志失败。")
 
-      return result.entries
-    } catch (loadError) {
-      logger.error("Failed to load log page.", {
-        loadError,
-        pageIndex,
-      })
-      setError(loadError instanceof Error ? loadError.message : "加载日志失败。")
+        return []
+      } finally {
+        loadingPagesRef.current.delete(pageIndex)
+      }
+    })()
 
-      return []
-    } finally {
-      loadingPagesRef.current.delete(pageIndex)
-    }
+    loadingPagesRef.current.set(pageIndex, nextPromise)
+    return nextPromise
   }, [logger, storePage])
 
   const ensureRangeLoaded = useCallback((startIndex: number, endIndex: number) => {
@@ -167,7 +169,6 @@ function useLogFeed() {
 
   const exportLogFile = useCallback(async () => {
     setIsExporting(true)
-    setExportError(null)
 
     try {
       const result = await exportLogs()
@@ -175,22 +176,43 @@ function useLogFeed() {
       return result
     } catch (exportError) {
       logger.error("Failed to export log file.", exportError)
-      setExportError(exportError instanceof Error ? exportError.message : "导出日志失败。")
-      return null
+      throw exportError
     } finally {
       setIsExporting(false)
     }
   }, [logger])
 
+  const readLogExportText = useCallback(async () => {
+    if (total === 0) {
+      return {
+        entryCount: 0,
+        text: "",
+      }
+    }
+
+    const pageCount = Math.ceil(total / LOG_PAGE_SIZE)
+    const entries = (
+      await Promise.all(
+        Array.from({ length: pageCount }, (_, pageIndex) => loadPage(pageIndex)),
+      )
+    )
+      .flat()
+      .slice(0, total)
+
+    return {
+      entryCount: entries.length,
+      text: formatLogExportText(entries),
+    }
+  }, [loadPage, total])
+
   return {
-    clearExportError,
     ensureRangeLoaded,
     error,
-    exportError,
     exportLogFile,
     getEntryAtIndex,
     isExporting,
     isLoading,
+    readLogExportText,
     total,
   }
 }

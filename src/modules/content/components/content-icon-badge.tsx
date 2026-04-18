@@ -27,9 +27,11 @@ function ContentIconBadge({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg ring-1 ring-border/60",
+        "flex shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ring-zinc-700/20",
         badgeSizeClassName[size],
-        colorOption ? colorOption.badgeClassName : "bg-muted text-muted-foreground",
+        colorOption
+          ? [colorOption.backgroundClassName, colorOption.foregroundClassName]
+          : "bg-muted text-muted-foreground",
         className,
       )}
       title={title}

@@ -27,7 +27,9 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     updateSkill: "synapse:content:update-skill",
   },
   config: {
+    exportBackup: "synapse:config:export-backup",
     get: "synapse:config:get",
+    importBackup: "synapse:config:import-backup",
     update: "synapse:config:update",
   },
   identity: {
@@ -108,7 +110,9 @@ const synapseBridge: SynapseBridge = {
     updateSkill: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.updateSkill, payload),
   },
   config: {
+    exportBackup: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.exportBackup),
     get: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.get),
+    importBackup: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.importBackup),
     update: (patch) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.update, patch),
   },
   identity: {

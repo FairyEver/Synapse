@@ -2,6 +2,7 @@ import { app } from "electron"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { inspect } from "node:util"
+import { formatLogExportText } from "../../src/lib/log-export"
 import type {
   SynapseLogAppendedEvent,
   SynapseLogEntry,
@@ -83,16 +84,6 @@ function normalizeLogInput(message: unknown, details: unknown): { message: strin
       }).trim() || "(empty message)",
     details: details ?? message,
   }
-}
-
-function formatLogLine(entry: SynapseLogEntry): string {
-  const head = `[${entry.createdAt}] [${entry.level.toUpperCase()}] [${entry.source}:${entry.category}] ${entry.message}`
-
-  if (!entry.details) {
-    return head
-  }
-
-  return `${head}\n${entry.details}`
 }
 
 function createLogFileName(): string {
@@ -189,10 +180,10 @@ class LogStore {
   async exportToDownloads(): Promise<SynapseLogExportResult> {
     const downloadsDir = app.getPath("downloads")
     const filePath = path.join(downloadsDir, createLogFileName())
-    const content = this.entries.map(formatLogLine).join("\n\n")
+    const content = formatLogExportText(this.entries)
 
     await mkdir(downloadsDir, { recursive: true })
-    await writeFile(filePath, content.length > 0 ? `${content}\n` : "", "utf8")
+    await writeFile(filePath, content, "utf8")
 
     return {
       entryCount: this.entries.length,

@@ -1,5 +1,4 @@
 import { Children, Fragment, type ReactNode } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
@@ -17,16 +16,14 @@ function SettingsGroup({ children, className, sectionClassName }: SettingsGroupP
   }
 
   return (
-    <Card className={cn("gap-0 py-0", className)}>
-      <CardContent className="px-0">
-        {sections.map((section, index) => (
-          <Fragment key={index}>
-            {index > 0 ? <Separator className="bg-border/60" /> : null}
-            <div className={cn("px-4 py-4", sectionClassName)}>{section}</div>
-          </Fragment>
-        ))}
-      </CardContent>
-    </Card>
+    <div className={cn("overflow-hidden rounded-xl bg-background", className)}>
+      {sections.map((section, index) => (
+        <Fragment key={index}>
+          {index > 0 ? <Separator className="bg-muted/30" /> : null}
+          <div className={cn("px-4 py-4", sectionClassName)}>{section}</div>
+        </Fragment>
+      ))}
+    </div>
   )
 }
 

@@ -19,9 +19,9 @@ type SynapseContentIconOption = {
 }
 
 type SynapseContentColorOption = {
-  badgeClassName: string
+  backgroundClassName: string
+  foregroundClassName: string
   label: string
-  swatchClassName: string
   value: string
 }
 
@@ -41,72 +41,78 @@ const SYNAPSE_CONTENT_ICON_OPTIONS: SynapseContentIconOption[] = [
 const SYNAPSE_CONTENT_COLOR_OPTIONS: SynapseContentColorOption[] = [
   {
     value: "graphite",
-    label: "石墨",
-    badgeClassName: "bg-zinc-700 text-white",
-    swatchClassName: "bg-zinc-700",
+    label: "浅灰",
+    backgroundClassName: "bg-linear-to-br from-zinc-100 to-zinc-300",
+    foregroundClassName: "text-zinc-700",
   },
   {
     value: "teal",
     label: "青绿",
-    badgeClassName: "bg-teal-700 text-white",
-    swatchClassName: "bg-teal-700",
+    backgroundClassName: "bg-linear-to-br from-teal-600 to-teal-800",
+    foregroundClassName: "text-white",
   },
   {
     value: "blue",
     label: "蓝色",
-    badgeClassName: "bg-blue-600 text-white",
-    swatchClassName: "bg-blue-600",
+    backgroundClassName: "bg-linear-to-br from-blue-500 to-blue-700",
+    foregroundClassName: "text-white",
   },
   {
     value: "indigo",
     label: "靛蓝",
-    badgeClassName: "bg-indigo-600 text-white",
-    swatchClassName: "bg-indigo-600",
-  },
-  {
-    value: "rose",
-    label: "莓红",
-    badgeClassName: "bg-rose-600 text-white",
-    swatchClassName: "bg-rose-600",
+    backgroundClassName: "bg-linear-to-br from-indigo-500 to-indigo-700",
+    foregroundClassName: "text-white",
   },
   {
     value: "red",
     label: "赤红",
-    badgeClassName: "bg-red-600 text-white",
-    swatchClassName: "bg-red-600",
+    backgroundClassName: "bg-linear-to-br from-red-500 to-red-700",
+    foregroundClassName: "text-white",
   },
   {
     value: "orange",
     label: "橙色",
-    badgeClassName: "bg-orange-600 text-white",
-    swatchClassName: "bg-orange-600",
+    backgroundClassName: "bg-linear-to-br from-orange-500 to-orange-700",
+    foregroundClassName: "text-white",
   },
   {
     value: "amber",
     label: "金黄",
-    badgeClassName: "bg-amber-500 text-white",
-    swatchClassName: "bg-amber-500",
+    backgroundClassName: "bg-linear-to-br from-amber-400 to-amber-600",
+    foregroundClassName: "text-white",
   },
   {
     value: "lime",
     label: "草绿",
-    badgeClassName: "bg-lime-600 text-white",
-    swatchClassName: "bg-lime-600",
+    backgroundClassName: "bg-linear-to-br from-lime-500 to-lime-700",
+    foregroundClassName: "text-white",
   },
   {
     value: "cyan",
     label: "湖蓝",
-    badgeClassName: "bg-cyan-600 text-white",
-    swatchClassName: "bg-cyan-600",
+    backgroundClassName: "bg-linear-to-br from-cyan-500 to-cyan-700",
+    foregroundClassName: "text-white",
   },
 ]
+
+const SYNAPSE_LEGACY_CONTENT_COLOR_OPTIONS: SynapseContentColorOption[] = [
+  {
+    value: "rose",
+    label: "莓红",
+    backgroundClassName: "bg-linear-to-br from-rose-500 to-rose-700",
+    foregroundClassName: "text-white",
+  },
+]
+
+const DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE = SYNAPSE_CONTENT_COLOR_OPTIONS[0]?.value ?? ""
 
 const contentIconOptionMap = new Map(
   SYNAPSE_CONTENT_ICON_OPTIONS.map((option) => [option.value, option]),
 )
 
 const contentColorOptionMap = new Map(
-  SYNAPSE_CONTENT_COLOR_OPTIONS.map((option) => [option.value, option]),
+  [...SYNAPSE_CONTENT_COLOR_OPTIONS, ...SYNAPSE_LEGACY_CONTENT_COLOR_OPTIONS]
+    .map((option) => [option.value, option]),
 )
 
 function getContentIconOption(value: string): SynapseContentIconOption | null {
@@ -118,6 +124,7 @@ function getContentColorOption(value: string): SynapseContentColorOption | null 
 }
 
 export {
+  DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
   getContentColorOption,
   getContentIconOption,
   SYNAPSE_CONTENT_COLOR_OPTIONS,

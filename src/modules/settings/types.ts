@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
@@ -23,6 +24,7 @@ type SettingsContext = {
 
 type SettingsCategory = {
   id: SettingsCategoryId
+  icon: LucideIcon
   label: string
   description: string
 }

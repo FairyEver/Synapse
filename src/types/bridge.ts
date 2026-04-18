@@ -1,3 +1,7 @@
+import type {
+  SynapseConfigBackupExportResult,
+  SynapseConfigBackupImportResult,
+} from "./backup"
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseContentDownloadResult,
@@ -74,7 +78,9 @@ export type SynapseBridge = {
     ) => Promise<SynapseEditorResolvedTarget>
   }
   config: {
+    exportBackup: () => Promise<SynapseConfigBackupExportResult | null>
     get: () => Promise<SynapseConfig>
+    importBackup: () => Promise<SynapseConfigBackupImportResult | null>
     update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
   }
   identity: {

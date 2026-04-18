@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
 import {
   AlertDialog,
@@ -55,6 +56,7 @@ function RepositoryListEditor({
   onSave,
 }: RepositoryListEditorProps) {
   const { hasRepositoryBridge, operations, states, syncRepository } = useRepositoryManager()
+  const { promise } = useAppNotifications()
   const [formError, setFormError] = useState<string | null>(null)
   const [manualPath, setManualPath] = useState("")
   const [pendingRemovalUuid, setPendingRemovalUuid] = useState<string | null>(null)
@@ -230,8 +232,18 @@ function RepositoryListEditor({
                         size="sm"
                         disabled={isBusy || !canSync}
                         onClick={() => {
-                          void syncRepository(repository.uuid).catch((error) => {
-                            setFormError(error instanceof Error ? error.message : "Git 仓库操作失败。")
+                          void promise(
+                            () => syncRepository(repository.uuid),
+                            {
+                              loading: "正在同步仓库...",
+                              success: (result) => result.message ?? "仓库同步完成。",
+                              error: (error) => error instanceof Error ? error.message : "Git 仓库操作失败。",
+                            },
+                          ).catch((error) => {
+                            logger.error("Repository sync failed from settings.", {
+                              error,
+                              repositoryUuid: repository.uuid,
+                            })
                           })
                         }}
                       >

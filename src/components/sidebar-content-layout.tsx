@@ -1,4 +1,9 @@
 import type { ReactNode } from "react"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 import { cn } from "@/lib/utils"
 
 type SidebarContentLayoutProps = {
@@ -21,25 +26,47 @@ function SidebarContentLayout({
   contentScrollable = true,
 }: SidebarContentLayoutProps) {
   return (
-    <div className={cn("h-full overflow-hidden px-6", className)}>
-      <div
-        className={cn(
-          "mx-auto grid h-full max-w-6xl gap-6 md:grid-cols-[200px_minmax(0,1fr)]",
-          containerClassName,
-        )}
+    <ResizablePanelGroup
+      orientation="horizontal"
+      className={cn("h-full min-h-0 w-full overflow-hidden", containerClassName, className)}
+    >
+      <ResizablePanel
+        defaultSize={280}
+        minSize={220}
+        maxSize={420}
+        groupResizeBehavior="preserve-pixel-size"
       >
-        <div className={cn("min-h-0 min-w-0 p-1", sidebarClassName)}>{sidebar}</div>
         <div
           className={cn(
-            "min-h-0 min-w-0 p-1",
+            "h-full min-h-0 min-w-0 overflow-hidden bg-background px-4 py-5",
+            sidebarClassName,
+          )}
+        >
+          {sidebar}
+        </div>
+      </ResizablePanel>
+
+      <ResizableHandle withHandle />
+
+      <ResizablePanel>
+        <div
+          className={cn(
+            "h-full min-h-0 min-w-0 bg-background px-6 py-5",
             contentScrollable ? "overflow-y-auto" : "overflow-hidden",
             contentClassName,
           )}
         >
-          {children}
+          <div
+            className={cn(
+              "h-full min-h-0 min-w-0",
+              contentScrollable ? undefined : "overflow-hidden",
+            )}
+          >
+            {children}
+          </div>
         </div>
-      </div>
-    </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   )
 }
 

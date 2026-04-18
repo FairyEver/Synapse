@@ -12,9 +12,9 @@ import {
   readRuleContent,
   readSkillContent,
 } from "@/app-shell/content"
-import type { AppNotificationTone } from "@/app-shell/notifications"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
 import {
@@ -33,7 +33,6 @@ import type { SynapseEditorAdapterSummary } from "@/types/editor"
 type ContentActionSplitButtonProps = {
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
-  onStatusChange?: (message: string | null, tone?: AppNotificationTone) => void
 }
 
 function canCopyContent(item: SynapseContentMeta): boolean {
@@ -50,9 +49,9 @@ function supportsContentType(
 function ContentActionSplitButton({
   item,
   onInstallDialogOpenChange,
-  onStatusChange,
 }: ContentActionSplitButtonProps) {
   const { config } = useAppConfig()
+  const { promise } = useAppNotifications()
   const logger = useMemo(
     () => createRendererLogger(`content.action.${item.type}`),
     [item.type],
@@ -68,6 +67,7 @@ function ContentActionSplitButton({
   const canCopy = canCopyContent(item)
   const isBusy = isCopying || isDownloading
   const filteredAdapters = (adapters ?? []).filter((adapter) => supportsContentType(adapter, item))
+  const contentLabel = item.type === "rule" ? "Rule" : "Skill"
 
   useEffect(() => {
     onInstallDialogOpenChange?.(isInstallDialogOpen)
@@ -101,31 +101,47 @@ function ContentActionSplitButton({
     setIsDownloading(true)
 
     try {
-      const result =
-        item.type === "rule"
-          ? await downloadRule(item.id)
-          : await downloadSkill(item.id)
+      await promise(
+        async () => {
+          const result =
+            item.type === "rule"
+              ? await downloadRule(item.id)
+              : await downloadSkill(item.id)
 
-      logger.info("Content download requested.", {
-        canceled: result.canceled,
-        contentId: item.id,
-        contentType: item.type,
-        filePath: result.filePath,
-      })
+          logger.info("Content download requested.", {
+            canceled: result.canceled,
+            contentId: item.id,
+            contentType: item.type,
+            filePath: result.filePath,
+          })
 
-      if (result.canceled) {
-        onStatusChange?.("已取消下载。", "info")
-      } else if (result.filePath) {
-        onStatusChange?.(`已保存到 ${result.filePath}`, "success")
-      }
+          return result
+        },
+        {
+          loading: `正在下载 ${contentLabel}...`,
+          success: (result) => {
+            if (result.canceled) {
+              return {
+                message: "已取消下载。",
+                tone: "info",
+              }
+            }
+
+            if (result.filePath) {
+              return `已保存到 ${result.filePath}`
+            }
+
+            return null
+          },
+          error: (error) => error instanceof Error ? error.message : "下载失败。",
+        },
+      )
     } catch (error) {
       logger.error("Content download failed.", {
         contentId: item.id,
         contentType: item.type,
         error,
       })
-
-      onStatusChange?.(error instanceof Error ? error.message : "下载失败。", "destructive")
     } finally {
       setIsDownloading(false)
     }
@@ -139,30 +155,36 @@ function ContentActionSplitButton({
     setIsCopying(true)
 
     try {
-      const file =
-        item.type === "rule"
-          ? await readRuleContent(item.id)
-          : await readSkillContent(item.id)
+      await promise(
+        async () => {
+          const file =
+            item.type === "rule"
+              ? await readRuleContent(item.id)
+              : await readSkillContent(item.id)
 
-      if (!navigator.clipboard?.writeText) {
-        throw new Error("当前环境不支持复制到剪贴板。")
-      }
+          if (!navigator.clipboard?.writeText) {
+            throw new Error("当前环境不支持复制到剪贴板。")
+          }
 
-      await navigator.clipboard.writeText(file.content)
+          await navigator.clipboard.writeText(file.content)
 
-      logger.info("Content copied to clipboard.", {
-        contentId: item.id,
-        contentType: item.type,
-      })
-      onStatusChange?.("正文已复制。", "success")
+          logger.info("Content copied to clipboard.", {
+            contentId: item.id,
+            contentType: item.type,
+          })
+        },
+        {
+          loading: "正在复制正文...",
+          success: "正文已复制。",
+          error: (error) => error instanceof Error ? error.message : "复制失败。",
+        },
+      )
     } catch (error) {
       logger.error("Copy to clipboard failed.", {
         contentId: item.id,
         contentType: item.type,
         error,
       })
-
-      onStatusChange?.(error instanceof Error ? error.message : "复制失败。", "destructive")
     } finally {
       setIsCopying(false)
     }
@@ -257,7 +279,6 @@ function ContentActionSplitButton({
       <ContentInstallDialog
         editor={selectedEditor}
         item={item}
-        onInstallComplete={(message) => onStatusChange?.(message, "success")}
         open={isInstallDialogOpen}
         projects={config.global.projects}
         onOpenChange={(open) => {

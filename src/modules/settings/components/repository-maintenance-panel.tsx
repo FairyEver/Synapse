@@ -10,7 +10,7 @@ type RepositoryMaintenancePanelProps = {
 
 function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePanelProps) {
   const { operations, runMaintenance } = useRepositoryManager()
-  const { error: showError, success } = useAppNotifications()
+  const { promise } = useAppNotifications()
   const operation = operations[repositoryUuid]
   const isBusy = operation?.isRunning && operation.operation === "maintenance"
 
@@ -20,7 +20,7 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-foreground">整理历史记录</p>
           <p className="text-sm text-muted-foreground">
-            会压实旧历史，并清理未被任何版本引用的附件。
+            会优化较早历史版本的存储，并清理不再被任何版本引用的附件。
           </p>
         </div>
 
@@ -34,13 +34,14 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
             variant="outline"
             disabled={Boolean(operation?.isRunning)}
             onClick={() => {
-              void runMaintenance(repositoryUuid)
-                .then((result) => {
-                  success(result.message ?? "整理完成。")
-                })
-                .catch((error) => {
-                  showError(error instanceof Error ? error.message : "整理失败。")
-                })
+              void promise(
+                () => runMaintenance(repositoryUuid),
+                {
+                  loading: "正在整理历史记录...",
+                  success: (result) => result.message ?? "整理完成。",
+                  error: (error) => error instanceof Error ? error.message : "整理失败。",
+                },
+              ).catch(() => {})
             }}
           >
             {isBusy ? <LoaderCircle className="animate-spin" /> : null}

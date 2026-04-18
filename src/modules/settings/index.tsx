@@ -7,6 +7,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { LogsModule } from "@/modules/logs"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
+import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
 import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
@@ -22,7 +23,7 @@ const logger = createRendererLogger("settings")
 
 function SettingsModule() {
   const { activeRepository, config, error, isReady, updateConfig } = useAppConfig()
-  const { error: showError } = useAppNotifications()
+  const { promise } = useAppNotifications()
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general")
   const context = useMemo(
     () => ({
@@ -51,21 +52,30 @@ function SettingsModule() {
           patch,
           reloadAfterUpdate,
         })
-        await updateConfig(patch)
+        await promise(
+          () => updateConfig(patch),
+          {
+            loading: reloadAfterUpdate ? "正在保存并刷新..." : "正在保存设置...",
+            success: () => {
+              if (reloadAfterUpdate && window.synapse?.config) {
+                logger.info("Reloading window after settings patch.")
+                window.location.reload()
+                return null
+              }
 
-        if (reloadAfterUpdate && window.synapse?.config) {
-          logger.info("Reloading window after settings patch.")
-          window.location.reload()
-        }
+              return "设置已保存。"
+            },
+            error: (updateError) => updateError instanceof Error ? updateError.message : "保存设置失败。",
+          },
+        )
 
         return true
       } catch (updateError) {
         logger.error("Failed to apply settings patch.", updateError)
-        showError(updateError instanceof Error ? updateError.message : "保存设置失败。")
         return false
       }
     },
-    [showError, updateConfig],
+    [promise, updateConfig],
   )
 
   const handleSaveItem = useCallback(
@@ -118,6 +128,7 @@ function SettingsModule() {
 
   return (
     <SidebarContentLayout
+      contentClassName="bg-muted/30"
       contentScrollable={!isLogsCategory}
       sidebar={
         <SettingsCategorySidebar
@@ -141,7 +152,7 @@ function SettingsModule() {
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         {!isReady ? (
-          <Card>
+          <Card className="bg-background ring-0">
             <CardHeader>
               <CardTitle>加载中</CardTitle>
               <CardDescription>正在读取设置。</CardDescription>
@@ -170,6 +181,7 @@ function SettingsModule() {
         ) : null}
 
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
+        {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
 
         {isReady && activeCategory === "content" && activeRepository ? (
           <RepositoryMaintenancePanel repositoryUuid={activeRepository.uuid} />

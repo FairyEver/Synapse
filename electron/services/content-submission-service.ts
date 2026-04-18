@@ -359,9 +359,6 @@ class ContentSubmissionService {
   ): Promise<SynapseContentMutationResult> {
     const repositoryConfig = await this.resolveActiveRepository()
 
-    await pullWithRebase(repositoryConfig)
-    await contentIndexService.syncIndex(repositoryConfig)
-
     const latestDetail = await contentHistoryService.readCurrentDetail(
       repositoryConfig,
       contentType,
@@ -388,7 +385,9 @@ class ContentSubmissionService {
         ? await contentWriteService.updateRule(payload as SynapseUpdateRulePayload, identity)
         : await contentWriteService.updateSkill(payload as SynapseUpdateSkillPayload, identity)
 
-    return this.commitAndMaybePush("update", writeResult)
+    return this.commitAndMaybePush("update", writeResult, {
+      deferPush: true,
+    })
   }
 
   private async deleteWithConflictCheck(

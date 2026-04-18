@@ -1,7 +1,11 @@
 import type { ReactNode } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Search, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { cn } from "@/lib/utils"
 
 type ModuleSidebarProps = {
@@ -48,12 +52,17 @@ function ModuleSidebarHeader({
   return (
     <div className="flex items-center gap-2">
       {showSearch ? (
-        <Input
-          value={searchValue ?? ""}
-          disabled={searchDisabled}
-          onChange={(event) => onSearchChange?.(event.target.value)}
-          placeholder={searchPlaceholder}
-        />
+        <InputGroup className="min-w-0 flex-1">
+          <InputGroupInput
+            value={searchValue ?? ""}
+            disabled={searchDisabled}
+            onChange={(event) => onSearchChange?.(event.target.value)}
+            placeholder={searchPlaceholder}
+          />
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+        </InputGroup>
       ) : null}
       {onAddClick ? (
         <Button
@@ -87,6 +96,7 @@ function ModuleSidebarList({ children, className }: ModuleSidebarListProps) {
 type ModuleSidebarItemProps = {
   active?: boolean
   disabled?: boolean
+  icon?: LucideIcon
   onClick?: () => void
   trailing?: ReactNode
   children: ReactNode
@@ -96,6 +106,7 @@ type ModuleSidebarItemProps = {
 function ModuleSidebarItem({
   active,
   disabled,
+  icon: Icon,
   onClick,
   trailing,
   children,
@@ -116,7 +127,10 @@ function ModuleSidebarItem({
         className,
       )}
     >
-      <span className="truncate text-left">{children}</span>
+      <span className="flex min-w-0 items-center gap-2 text-left">
+        {Icon ? <Icon className="size-4 shrink-0" /> : null}
+        <span className="truncate">{children}</span>
+      </span>
       {trailing ? <span className="ml-2 shrink-0">{trailing}</span> : null}
     </button>
   )

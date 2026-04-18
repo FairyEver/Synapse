@@ -8,6 +8,7 @@ type AppShellActionsProps = {
   pushDisabled?: boolean
   refreshBusy?: boolean
   refreshDisabled?: boolean
+  showRefresh?: boolean
   onPush?: () => void
   onRefresh?: () => void
   pushTitle?: string
@@ -21,6 +22,7 @@ function AppShellActions({
   pushDisabled = false,
   refreshBusy = false,
   refreshDisabled = false,
+  showRefresh = true,
   onPush,
   onRefresh,
   pushTitle = "同步待推送内容",
@@ -51,16 +53,18 @@ function AppShellActions({
         <span className="text-sm text-muted-foreground">{activityLabel}</span>
       ) : null}
 
-      <Button
-        variant="secondary"
-        size="icon"
-        disabled={refreshDisabled}
-        onClick={onRefresh}
-        title={refreshTitle}
-      >
-        <RefreshCw className={refreshBusy ? "animate-spin" : undefined} />
-        <span className="sr-only">{refreshTitle}</span>
-      </Button>
+      {showRefresh ? (
+        <Button
+          variant="secondary"
+          size="icon"
+          disabled={refreshDisabled}
+          onClick={onRefresh}
+          title={refreshTitle}
+        >
+          <RefreshCw className={refreshBusy ? "animate-spin" : undefined} />
+          <span className="sr-only">{refreshTitle}</span>
+        </Button>
+      ) : null}
     </div>
   )
 }

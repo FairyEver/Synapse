@@ -3,6 +3,7 @@ import type {
   CreateSkillPayload,
   SkillCreateFieldErrors,
 } from "@/modules/skills/types"
+import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 import { normalizeContentAttachmentPath } from "@/lib/content-attachments"
 import type { SynapseCreateSkillFilePayload } from "@/types/content"
 
@@ -13,7 +14,7 @@ const EMPTY_CREATE_SKILL_PAYLOAD: CreateSkillPayload = {
   description: "",
   category: "",
   icon: "",
-  iconBg: "",
+  iconBg: DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
   content: "",
   files: [],
 }
@@ -59,6 +60,7 @@ function createEmptySkillPayload(): CreateSkillPayload {
 function normalizeCreateSkillPayload(payload: CreateSkillPayload): CreateSkillPayload {
   return {
     ...payload,
+    iconBg: payload.iconBg || DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
     title: payload.title.trim(),
     description: payload.description.trim(),
     content: payload.content.trim(),
@@ -140,7 +142,7 @@ function isCreateSkillPayloadDirty(payload: CreateSkillPayload): boolean {
     || payload.description !== ""
     || payload.category !== ""
     || payload.icon !== ""
-    || payload.iconBg !== ""
+    || payload.iconBg !== DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE
     || payload.content !== ""
     || payload.files.length > 0
   )

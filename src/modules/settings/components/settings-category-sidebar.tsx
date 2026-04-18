@@ -23,6 +23,7 @@ function SettingsCategorySidebar({
           <ModuleSidebarItem
             key={category.id}
             active={category.id === activeCategory}
+            icon={category.icon}
             onClick={() => onCategoryChange(category.id)}
             className="h-10 px-4"
           >

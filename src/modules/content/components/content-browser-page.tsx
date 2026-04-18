@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { type ReactNode, useEffect, useMemo, useState } from "react"
+import Fuse, { type IFuseOptions } from "fuse.js"
 import {
   Folders,
   LoaderCircle,
@@ -9,7 +10,6 @@ import {
 } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useAppNotifications, type AppNotificationTone } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
 import {
   ModuleSidebar,
@@ -25,6 +25,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { Badge } from "@/components/ui/badge"
 import { getContentIconOption } from "@/lib/content-appearance"
 import {
   getCategoryLabel,
@@ -34,10 +35,17 @@ import {
 import { cn } from "@/lib/utils"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
-import { ContentDetailDialog } from "@/modules/content/components/content-detail-dialog"
 import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
+
+type ContentBrowserDetailDialogProps = {
+  item: SynapseContentMeta | null
+  onContentChanged: () => void
+  onOpenChange: (open: boolean) => void
+  open: boolean
+  refreshSignal: number
+}
 
 type ContentBrowserPageProps = {
   contentType: SynapseContentType
@@ -45,6 +53,7 @@ type ContentBrowserPageProps = {
   onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
   refreshSignal?: number
+  renderDetailDialog: (props: ContentBrowserDetailDialogProps) => ReactNode
   title: string
 }
 
@@ -79,30 +88,18 @@ function getRepositoryDescription(
 }
 
 function normalizeSearchQuery(value: string): string {
-  return value.trim().toLocaleLowerCase()
+  return value.trim()
 }
 
-function matchesSearch(item: SynapseContentMeta, normalizedQuery: string): boolean {
-  if (!normalizedQuery) {
-    return true
-  }
-
-  const haystack = `${item.title} ${item.description}`.toLocaleLowerCase()
-
-  return haystack.includes(normalizedQuery)
-}
-
-function formatModifiedAt(value: string): string {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date)
+const contentSearchOptions: IFuseOptions<SynapseContentMeta> = {
+  ignoreLocation: true,
+  keys: [
+    { name: "title", weight: 0.45 },
+    { name: "description", weight: 0.3 },
+    { name: "createdByDisplayName", weight: 0.15 },
+    { name: "modifiedByDisplayName", weight: 0.1 },
+  ],
+  threshold: 0.35,
 }
 
 function getContentState(params: {
@@ -209,51 +206,47 @@ function ContentListCard({
   contentType,
   item,
   onInstallDialogOpenChange,
-  onStatusChange,
   onOpen,
 }: {
   contentType: SynapseContentType
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
-  onStatusChange?: (message: string | null, tone?: AppNotificationTone) => void
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
   const iconOption = getContentIconOption(item.icon)
-  const modifiedByLabel = item.modifiedByDisplayName || "未命名用户"
-
+  const authorLabel = item.createdByDisplayName || "未命名用户"
   return (
-    <div className="flex items-start gap-3 rounded-xl bg-background px-3 py-3 ring-1 ring-foreground/10">
+    <div className="flex items-start gap-3 rounded-xl bg-background px-3 py-3">
       <button
         type="button"
         className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={onOpen}
       >
-        <ContentIconBadge size="md" tone={item.iconBg} title={item.title}>
+        <ContentIconBadge
+          size="md"
+          tone={item.iconBg}
+          title={item.title}
+          className="size-10"
+        >
           {iconOption ? (
-            <iconOption.icon className="size-5" />
+            <iconOption.icon className="size-6" />
           ) : (
             <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
           )}
         </ContentIconBadge>
 
         <div className="min-w-0 flex-1 pt-0.5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
-              <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
-                {item.description}
-              </p>
-            </div>
-
-            <span className="shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
-              {formatModifiedAt(item.modifiedAt)}
-            </span>
+          <div className="min-w-0 flex flex-col gap-1">
+            <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+            <p className="truncate text-sm text-muted-foreground">{item.description}</p>
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>{categoryLabel}</span>
-            <span className="truncate">{modifiedByLabel}</span>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Badge variant="outline" className="max-w-full truncate">
+              @{authorLabel}
+            </Badge>
+            <Badge variant="secondary">{categoryLabel}</Badge>
           </div>
         </div>
       </button>
@@ -270,7 +263,6 @@ function ContentListCard({
         <ContentActionSplitButton
           item={item}
           onInstallDialogOpenChange={onInstallDialogOpenChange}
-          onStatusChange={onStatusChange}
         />
       </div>
     </div>
@@ -283,11 +275,11 @@ function ContentBrowserPage({
   onDetailDialogOpenChange,
   onInstallDialogOpenChange,
   refreshSignal = 0,
+  renderDetailDialog,
   title,
 }: ContentBrowserPageProps) {
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
-  const { notify } = useAppNotifications()
   const { states } = useRepositoryManager()
   const [contentRefreshSignal, setContentRefreshSignal] = useState(0)
   const catalogRefreshSignal = refreshSignal + contentRefreshSignal
@@ -310,13 +302,6 @@ function ContentBrowserPage({
   const canCreateContent =
     canBrowseContent && Boolean(activeRepositoryState?.isGitRepository)
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
-  const showStatus = (message: string | null, tone: AppNotificationTone = "success") => {
-    if (!message) {
-      return
-    }
-
-    notify({ message, tone })
-  }
 
   useEffect(() => {
     if (!categories.some((item) => item.id === activeCategoryId)) {
@@ -359,10 +344,18 @@ function ContentBrowserPage({
     )),
     [activeCategoryId, contentType, items],
   )
+  const contentSearch = useMemo(
+    () => new Fuse(itemsInActiveCategory, contentSearchOptions),
+    [itemsInActiveCategory],
+  )
 
   const filteredItems = useMemo(
-    () => itemsInActiveCategory.filter((item) => matchesSearch(item, normalizedSearchQuery)),
-    [itemsInActiveCategory, normalizedSearchQuery],
+    () => (
+      normalizedSearchQuery
+        ? contentSearch.search(normalizedSearchQuery).map((result) => result.item)
+        : itemsInActiveCategory
+    ),
+    [contentSearch, itemsInActiveCategory, normalizedSearchQuery],
   )
 
   const summaryLabel = useMemo(() => {
@@ -420,6 +413,7 @@ function ContentBrowserPage({
   return (
     <>
       <SidebarContentLayout
+        contentClassName="bg-muted/30"
         sidebar={
           <ModuleSidebar variant="bare">
             <div className="pb-2">
@@ -496,7 +490,6 @@ function ContentBrowserPage({
                     contentType={contentType}
                     item={item}
                     onInstallDialogOpenChange={onInstallDialogOpenChange}
-                    onStatusChange={showStatus}
                     onOpen={() => {
                       logger.info("Content detail opened from browser page.", {
                         contentId: item.id,
@@ -512,20 +505,19 @@ function ContentBrowserPage({
         </section>
       </SidebarContentLayout>
 
-      <ContentDetailDialog
-        item={selectedItem}
-        open={selectedItem !== null}
-        refreshSignal={contentRefreshSignal}
-        onContentChanged={() => {
+      {renderDetailDialog({
+        item: selectedItem,
+        open: selectedItem !== null,
+        refreshSignal: contentRefreshSignal,
+        onContentChanged: () => {
           setContentRefreshSignal((currentSignal) => currentSignal + 1)
-        }}
-        onStatusChange={showStatus}
-        onOpenChange={(open) => {
+        },
+        onOpenChange: (open) => {
           if (!open) {
             setSelectedItem(null)
           }
-        }}
-      />
+        },
+      })}
     </>
   )
 }

@@ -5,6 +5,7 @@ import {
   resolveEditorInstallTarget,
 } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -51,7 +52,6 @@ type InstallTargetState = {
 type ContentInstallDialogProps = {
   editor: SynapseEditorAdapterSummary | null
   item: SynapseContentMeta
-  onInstallComplete?: (message: string) => void
   onOpenChange: (open: boolean) => void
   open: boolean
   projects: SynapseProjectConfig[]
@@ -68,7 +68,6 @@ function createIdleTargetState(): InstallTargetState {
 function ContentInstallDialog({
   editor,
   item,
-  onInstallComplete,
   onOpenChange,
   open,
   projects,
@@ -77,6 +76,7 @@ function ContentInstallDialog({
     () => createRendererLogger(`content.install.${item.type}`),
     [item.type],
   )
+  const { promise } = useAppNotifications()
   const [scope, setScope] = useState<"global" | "project">("global")
   const [projectSelection, setProjectSelection] = useState<string>(CUSTOM_PROJECT_OPTION)
   const [customProjectPath, setCustomProjectPath] = useState("")
@@ -260,13 +260,20 @@ function ContentInstallDialog({
     setIsInstalling(true)
 
     try {
-      const result = await installToEditor({
-        editorId: editor.id,
-        scope,
-        contentId: item.id,
-        contentType: item.type,
-        projectPath: scope === "project" ? projectPath : undefined,
-      })
+      const result = await promise(
+        () => installToEditor({
+          editorId: editor.id,
+          scope,
+          contentId: item.id,
+          contentType: item.type,
+          projectPath: scope === "project" ? projectPath : undefined,
+        }),
+        {
+          loading: `正在安装到 ${editor.label}...`,
+          success: (value) => `已写入 ${value.targetPath}`,
+          error: (error) => error instanceof Error ? error.message : "安装失败。",
+        },
+      )
 
       logger.info("Content installed from renderer.", {
         contentId: item.id,
@@ -275,7 +282,6 @@ function ContentInstallDialog({
         scope,
         targetPath: result.targetPath,
       })
-      onInstallComplete?.(`已写入 ${result.targetPath}`)
       onOpenChange(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : "安装失败。"

@@ -17,6 +17,10 @@ function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT"
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 function createBackupFilePath(filePath: string): string {
   const extension = path.extname(filePath)
   const baseName = path.basename(filePath, extension)
@@ -54,6 +58,24 @@ class ConfigStore {
     this.cachedConfig = nextConfig
 
     logger.info("Config persisted after update.", {
+      activeRepoUuid: nextConfig.activeRepoUuid,
+      repositoryCount: nextConfig.repositories.length,
+    })
+
+    return structuredClone(nextConfig)
+  }
+
+  async replace(rawConfig: unknown): Promise<SynapseConfig> {
+    if (!isRecord(rawConfig)) {
+      throw new Error("备份文件里的配置格式不对。")
+    }
+
+    const nextConfig = sanitizeSynapseConfig(rawConfig)
+
+    await this.persist(nextConfig)
+    this.cachedConfig = nextConfig
+
+    logger.info("Config replaced from backup.", {
       activeRepoUuid: nextConfig.activeRepoUuid,
       repositoryCount: nextConfig.repositories.length,
     })

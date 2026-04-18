@@ -22,7 +22,9 @@ export const SYNAPSE_IPC_CHANNELS = {
     updateSkill: "synapse:content:update-skill",
   },
   config: {
+    exportBackup: "synapse:config:export-backup",
     get: "synapse:config:get",
+    importBackup: "synapse:config:import-backup",
     update: "synapse:config:update",
   },
   identity: {

@@ -189,6 +189,16 @@ function formatGitFailureMessage(output: string, fallbackMessage: string): strin
   return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
 }
 
+function isNonFastForwardError(errorMessage: string): boolean {
+  const loweredMessage = errorMessage.toLowerCase()
+
+  return (
+    loweredMessage.includes("non-fast-forward")
+    || loweredMessage.includes("[rejected]")
+    || loweredMessage.includes("fetch first")
+  )
+}
+
 function createPendingPushTitle(action: "compaction" | "gc"): string {
   return action === "compaction" ? "整理历史记录" : "清理附件池"
 }
@@ -506,6 +516,7 @@ class RepositoryMaintenanceService {
     onProgress?: MaintenanceProgressListener,
   ): Promise<RepositoryMaintenanceResult> {
     return this.runMaintenance(repository, {
+      compactionSkipThreshold: COMPACTION_KEEP_RECENT,
       onProgress,
       targets: null,
     })
@@ -528,6 +539,7 @@ class RepositoryMaintenanceService {
     }
 
     return this.runMaintenance(repository, {
+      compactionSkipThreshold: COMPACTION_SKIP_THRESHOLD,
       onProgress: undefined,
       targets: null,
     })
@@ -548,6 +560,7 @@ class RepositoryMaintenanceService {
     }
 
     return this.runMaintenance(repository, {
+      compactionSkipThreshold: COMPACTION_SKIP_THRESHOLD,
       onProgress: undefined,
       targets: [target],
     })
@@ -556,6 +569,7 @@ class RepositoryMaintenanceService {
   private async runMaintenance(
     repository: SynapseRepositoryConfig,
     options: {
+      compactionSkipThreshold: number
       onProgress?: MaintenanceProgressListener
       targets: MaintenanceTarget[] | null
     },
@@ -573,7 +587,12 @@ class RepositoryMaintenanceService {
     await ensureBotIdentity(repositoryState.gitRootPath)
     await pullWithRebase(repository, options.onProgress)
 
-    const compactionResult = await this.runCompaction(repository, options.targets, options.onProgress)
+    const compactionResult = await this.runCompaction(
+      repository,
+      options.targets,
+      options.compactionSkipThreshold,
+      options.onProgress,
+    )
     const attachmentsGcResult = await this.runAttachmentsGc(repository, options.onProgress)
     const commitQueue: Array<{
       action: "compaction" | "gc"
@@ -625,22 +644,49 @@ class RepositoryMaintenanceService {
     if (commitQueue.length > 0) {
       try {
         await pushRepository(repository, options.onProgress)
+        await pendingPushesService.clear(repository)
       } catch (error) {
-        pushed = false
+        const message = error instanceof Error ? error.message : "推送到仓库失败。"
 
-        for (const commit of commitQueue) {
-          await pendingPushesService.enqueue(repository, {
-            action: commit.action,
-            commitHash: commit.commitHash,
-            targetId: commit.targetId,
-            title: commit.title,
+        if (isNonFastForwardError(message)) {
+          try {
+            await pullWithRebase(repository, options.onProgress)
+            await pushRepository(repository, options.onProgress)
+            await pendingPushesService.clear(repository)
+          } catch (retryError) {
+            pushed = false
+
+            for (const commit of commitQueue) {
+              await pendingPushesService.enqueue(repository, {
+                action: commit.action,
+                commitHash: commit.commitHash,
+                targetId: commit.targetId,
+                title: commit.title,
+              })
+            }
+
+            logger.warn("Repository maintenance push retry failed and was queued.", {
+              error: retryError,
+              repositoryUuid: repository.uuid,
+            })
+          }
+        } else {
+          pushed = false
+
+          for (const commit of commitQueue) {
+            await pendingPushesService.enqueue(repository, {
+              action: commit.action,
+              commitHash: commit.commitHash,
+              targetId: commit.targetId,
+              title: commit.title,
+            })
+          }
+
+          logger.warn("Repository maintenance push failed and was queued.", {
+            error,
+            repositoryUuid: repository.uuid,
           })
         }
-
-        logger.warn("Repository maintenance push failed and was queued.", {
-          error,
-          repositoryUuid: repository.uuid,
-        })
       }
     }
 
@@ -668,6 +714,7 @@ class RepositoryMaintenanceService {
   private async runCompaction(
     repository: SynapseRepositoryConfig,
     targets: MaintenanceTarget[] | null,
+    compactionSkipThreshold: number,
     onProgress?: MaintenanceProgressListener,
   ): Promise<CompactionRunResult> {
     const gitPaths = new Set<string>()
@@ -714,7 +761,7 @@ class RepositoryMaintenanceService {
           continue
         }
 
-        if (historyVersions.length <= COMPACTION_SKIP_THRESHOLD) {
+        if (historyVersions.length <= compactionSkipThreshold) {
           continue
         }
 

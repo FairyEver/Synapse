@@ -1,5 +1,6 @@
 import {
   createContext,
+  isValidElement,
   type ReactNode,
   useCallback,
   useContext,
@@ -13,9 +14,26 @@ type AppNotificationTone = "default" | "success" | "info" | "warning" | "destruc
 type AppNotificationOptions = Omit<ExternalToast, "duration"> & {
   durationMs?: number
 }
+type AppNotificationResultTone = Exclude<AppNotificationTone, "default" | "loading">
 type AppNotificationInput = AppNotificationOptions & {
   message: ReactNode
   tone?: AppNotificationTone
+}
+type AppNotificationResult =
+  | ReactNode
+  | null
+  | {
+      message: ReactNode | null
+      tone?: AppNotificationResultTone
+    }
+type AppNotificationResultResolver<Value> =
+  | AppNotificationResult
+  | ((value: Value) => AppNotificationResult)
+type AppNotificationPromiseSource<Value> = Promise<Value> | (() => Promise<Value>)
+type AppNotificationPromiseInput<Value> = AppNotificationOptions & {
+  error?: AppNotificationResultResolver<unknown>
+  loading: ReactNode
+  success?: AppNotificationResultResolver<Value>
 }
 type AppNotificationRecord = {
   id: AppNotificationId
@@ -33,12 +51,65 @@ type AppNotificationsContextValue = {
   info: (message: ReactNode, options?: AppNotificationOptions) => AppNotificationId
   loading: (message: ReactNode, options?: AppNotificationOptions) => AppNotificationId
   notify: (input: AppNotificationInput) => AppNotificationId
+  promise: <Value>(
+    source: AppNotificationPromiseSource<Value>,
+    input: AppNotificationPromiseInput<Value>,
+  ) => Promise<Value>
   success: (message: ReactNode, options?: AppNotificationOptions) => AppNotificationId
   warning: (message: ReactNode, options?: AppNotificationOptions) => AppNotificationId
 }
 
 const DEFAULT_NOTIFICATION_DURATION_MS = 4500
 const AppNotificationsContext = createContext<AppNotificationsContextValue | null>(null)
+
+function isNotificationResultObject(
+  value: AppNotificationResult,
+): value is { message: ReactNode | null; tone?: AppNotificationResultTone } {
+  return (
+    value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && !isValidElement(value)
+    && "message" in value
+  )
+}
+
+function resolveNotificationResult<Value>(
+  resolver: AppNotificationResultResolver<Value> | undefined,
+  value: Value,
+  fallbackTone: AppNotificationResultTone,
+  fallbackMessage: ReactNode | null,
+): { message: ReactNode | null; tone: AppNotificationResultTone } {
+  const resolved =
+    typeof resolver === "function"
+      ? resolver(value)
+      : resolver
+
+  if (resolved === undefined) {
+    return {
+      message: fallbackMessage,
+      tone: fallbackTone,
+    }
+  }
+
+  if (isNotificationResultObject(resolved)) {
+    return {
+      message: resolved.message,
+      tone: resolved.tone ?? fallbackTone,
+    }
+  }
+
+  return {
+    message: resolved,
+    tone: fallbackTone,
+  }
+}
+
+function resolvePromiseSource<Value>(
+  source: AppNotificationPromiseSource<Value>,
+): Promise<Value> {
+  return typeof source === "function" ? source() : source
+}
 
 function buildToastOptions(
   tone: AppNotificationTone,
@@ -84,6 +155,60 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
     return showToast(message, tone, options)
   }, [])
 
+  const promise = useCallback(
+    async <Value,>(
+      source: AppNotificationPromiseSource<Value>,
+      input: AppNotificationPromiseInput<Value>,
+    ) => {
+      const {
+        error: errorResolver,
+        loading: loadingMessage,
+        success: successResolver,
+        ...options
+      } = input
+      const toastId = showToast(loadingMessage, "loading", options)
+
+      try {
+        const value = await resolvePromiseSource(source)
+        const result = resolveNotificationResult(successResolver, value, "success", null)
+
+        if (result.message === null) {
+          toast.dismiss(toastId)
+        } else {
+          showToast(result.message, result.tone, {
+            ...options,
+            id: toastId,
+          })
+        }
+
+        return value
+      } catch (error) {
+        const fallbackMessage =
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : "操作失败。"
+        const result = resolveNotificationResult(
+          errorResolver,
+          error,
+          "destructive",
+          fallbackMessage,
+        )
+
+        if (result.message === null) {
+          toast.dismiss(toastId)
+        } else {
+          showToast(result.message, result.tone, {
+            ...options,
+            id: toastId,
+          })
+        }
+
+        throw error
+      }
+    },
+    [],
+  )
+
   const success = useCallback(
     (message: ReactNode, options?: AppNotificationOptions) => showToast(message, "success", options),
     [],
@@ -112,10 +237,11 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
       info,
       loading,
       notify,
+      promise,
       success,
       warning,
     }),
-    [dismiss, error, info, loading, notify, success, warning],
+    [dismiss, error, info, loading, notify, promise, success, warning],
   )
 
   return (
@@ -148,6 +274,7 @@ export {
   useAppNotifications,
   type AppNotificationInput,
   type AppNotificationOptions,
+  type AppNotificationPromiseInput,
   type AppNotificationRecord,
   type AppNotificationTone,
 }

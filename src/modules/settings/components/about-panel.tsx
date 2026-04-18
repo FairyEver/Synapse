@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseAppUpdateState } from "@/types/update"
+import synapseLogo from "@/modules/settings/assets/synapse-logo.png"
 
 const logger = createRendererLogger("settings.about")
 
@@ -153,7 +155,7 @@ function AboutPanel() {
     ? "text-sm text-destructive"
     : "text-sm text-muted-foreground"
   const downloadDetails = getDownloadDetails(updateState)
-  const progressWidth = `${Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))}%`
+  const downloadProgressValue = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
 
   const handleAction = async () => {
     const bridge = window.synapse?.updater
@@ -176,67 +178,73 @@ function AboutPanel() {
   }
 
   return (
-    <SettingsGroup>
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium">当前版本</p>
-          <p className="text-sm text-muted-foreground">v{updateState.currentVersion}</p>
-        </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex justify-center">
+        <img
+          src={synapseLogo}
+          alt="Synapse"
+          draggable={false}
+          className="size-24 shrink-0 object-contain"
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-        <div className="flex min-w-0 flex-col gap-3">
+      <SettingsGroup>
+        <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">软件更新</p>
-            <p className={statusClassName}>{actionError ?? updateState.message}</p>
-            {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
-              <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
-            ) : null}
-            {isDownloaded ? (
-              <p className="text-xs text-muted-foreground">
-                请先完全退出 Synapse，再打开下载好的安装包重新安装。
-              </p>
-            ) : null}
-            {updateState.downloadedFilePath ? (
-              <p className="text-xs break-all text-muted-foreground">
-                下载位置：{updateState.downloadedFilePath}
-              </p>
-            ) : null}
+            <p className="text-sm font-medium">当前版本</p>
+            <p className="text-sm text-muted-foreground">v{updateState.currentVersion}</p>
           </div>
-
         </div>
 
-        <div className="flex justify-start md:justify-end">
-          <Button
-            variant="outline"
-            disabled={actionDisabled}
-            onClick={() => {
-              void handleAction()
-            }}
-          >
-            {actionLabel}
-          </Button>
-        </div>
-
-        {updateState.status === "downloading" || updateState.status === "downloaded" ? (
-          <div className="flex min-w-0 flex-col gap-2 md:col-span-2">
-            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span>{updateState.status === "downloaded" ? "下载完成" : "下载进度"}</span>
-              {updateState.downloadPercent !== null ? (
-                <span>{Math.round(updateState.downloadPercent)}%</span>
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+          <div className="flex min-w-0 flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">软件更新</p>
+              <p className={statusClassName}>{actionError ?? updateState.message}</p>
+              {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
+                <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
+              ) : null}
+              {isDownloaded ? (
+                <p className="text-xs text-muted-foreground">
+                  请先完全退出 Synapse，再打开下载好的安装包重新安装。
+                </p>
+              ) : null}
+              {updateState.downloadedFilePath ? (
+                <p className="text-xs break-all text-muted-foreground">
+                  下载位置：{updateState.downloadedFilePath}
+                </p>
               ) : null}
             </div>
-            <div className="h-2 w-full overflow-hidden rounded bg-muted">
-              <div
-                className="h-full rounded bg-primary transition-[width] duration-200"
-                style={{ width: progressWidth }}
-              />
-            </div>
-            {downloadDetails ? <p className="text-xs text-muted-foreground">{downloadDetails}</p> : null}
+
           </div>
-        ) : null}
-      </div>
-    </SettingsGroup>
+
+          <div className="flex justify-start md:justify-end">
+            <Button
+              variant="outline"
+              disabled={actionDisabled}
+              onClick={() => {
+                void handleAction()
+              }}
+            >
+              {actionLabel}
+            </Button>
+          </div>
+
+          {updateState.status === "downloading" || updateState.status === "downloaded" ? (
+            <div className="flex min-w-0 flex-col gap-2 md:col-span-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>{updateState.status === "downloaded" ? "下载完成" : "下载进度"}</span>
+                {updateState.downloadPercent !== null ? (
+                  <span>{Math.round(updateState.downloadPercent)}%</span>
+                ) : null}
+              </div>
+              <Progress value={downloadProgressValue} className="h-2" />
+              {downloadDetails ? <p className="text-xs text-muted-foreground">{downloadDetails}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      </SettingsGroup>
+    </div>
   )
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
@@ -26,7 +26,7 @@ const logger = createRendererLogger("app")
 
 function App() {
   const { activeRepository, isReady } = useAppConfig()
-  const { error: showError } = useAppNotifications()
+  const { promise } = useAppNotifications()
   const { flushPendingPushes, operations, pendingPushes, states, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
   const [isRulesCreateOpen, setIsRulesCreateOpen] = useState(false)
@@ -39,8 +39,11 @@ function App() {
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
   const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
-  const lastOperationErrorRef = useRef<string | null>(null)
   const isRepositoryTaskRunning = Boolean(activeRepositoryOperation?.isRunning)
+  const isPushOperationRunning =
+    activeRepositoryOperation?.operation === "push" && Boolean(activeRepositoryOperation.isRunning)
+  const isSyncOperationRunning =
+    activeRepositoryOperation?.operation === "sync" && Boolean(activeRepositoryOperation.isRunning)
   const repositoryActivityLabel = isRepositoryTaskRunning
     ? activeRepositoryOperation?.operation === "maintenance"
       ? "正在整理"
@@ -87,20 +90,6 @@ function App() {
     })
   }, [])
 
-  useEffect(() => {
-    if (!activeRepositoryOperation?.error) {
-      lastOperationErrorRef.current = null
-      return
-    }
-
-    if (lastOperationErrorRef.current === activeRepositoryOperation.error) {
-      return
-    }
-
-    lastOperationErrorRef.current = activeRepositoryOperation.error
-    showError(activeRepositoryOperation.error)
-  }, [activeRepositoryOperation?.error, showError])
-
   return (
     <IdentityGate>
       <AlertDialog open={isPendingPushDialogOpen} onOpenChange={setIsPendingPushDialogOpen}>
@@ -130,7 +119,14 @@ function App() {
                   return
                 }
 
-                void flushPendingPushes(activeRepository.uuid).catch((error) => {
+                void promise(
+                  () => flushPendingPushes(activeRepository.uuid),
+                  {
+                    loading: "正在同步变更...",
+                    success: (result) => result.message ?? "同步完成。",
+                    error: (error) => error instanceof Error ? error.message : "同步变更失败。",
+                  },
+                ).catch((error) => {
                   logger.error("Pending push flush failed from app shell.", error)
                 })
               }}
@@ -157,20 +153,21 @@ function App() {
         actions={
           <AppShellActions
             activityLabel={repositoryActivityLabel}
-            isPushBusy={activeRepositoryOperation?.operation === "push" && Boolean(activeRepositoryOperation.isRunning)}
+            isPushBusy={isPushOperationRunning}
             pendingPushCount={activePendingPushState?.count ?? 0}
             pushDisabled={
               !isReady
               || !canSyncActiveRepository
               || Boolean(activeRepositoryOperation?.isRunning)
             }
-            refreshBusy={isRepositoryTaskRunning}
+            refreshBusy={isSyncOperationRunning}
             refreshDisabled={
               !isReady
               || !canSyncActiveRepository
               || Boolean(activeRepositoryOperation?.isRunning)
               || hasBlockingModalOpen
             }
+            showRefresh={!isPushOperationRunning}
             onPush={() => setIsPendingPushDialogOpen(true)}
             onRefresh={() => {
               if (!activeRepository) {
@@ -180,7 +177,14 @@ function App() {
               logger.info("Manual repository sync requested from app shell.", {
                 repositoryUuid: activeRepository.uuid,
               })
-              void syncRepository(activeRepository.uuid).catch((error) => {
+              void promise(
+                () => syncRepository(activeRepository.uuid),
+                {
+                  loading: "正在同步仓库...",
+                  success: (result) => result.message ?? "仓库同步完成。",
+                  error: (error) => error instanceof Error ? error.message : "同步仓库失败。",
+                },
+              ).catch((error) => {
                 logger.error("Manual repository sync failed from app shell.", error)
               })
             }}

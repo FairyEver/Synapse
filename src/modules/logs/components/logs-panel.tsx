@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Copy, Download, LoaderCircle } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { cn } from "@/lib/utils"
 import type { SynapseLogEntry } from "@/types/log"
 import { useLogFeed } from "@/modules/logs/hooks/use-log-feed"
@@ -53,23 +55,24 @@ function getLevelLabel(entry: SynapseLogEntry | null): string {
 
 function LogsPanel() {
   const {
-    clearExportError,
     ensureRangeLoaded,
     error,
-    exportError,
     exportLogFile,
     getEntryAtIndex,
     isExporting,
     isLoading,
+    readLogExportText,
     total,
   } = useLogFeed()
-  const { error: showError, success } = useAppNotifications()
+  const { promise } = useAppNotifications()
   const listRef = useRef<HTMLDivElement | null>(null)
   const pinnedToBottomRef = useRef(true)
   const [scrollTop, setScrollTop] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
+  const [isCopying, setIsCopying] = useState(false)
   const [viewportHeight, setViewportHeight] = useState(LOG_LIST_FALLBACK_HEIGHT)
   const [viewportWidth, setViewportWidth] = useState(0)
+  const isActionBusy = isExporting || isCopying
 
   const visibleStartIndex = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - LOG_OVERSCAN)
   const visibleEndIndex = Math.min(
@@ -115,15 +118,6 @@ function LogsPanel() {
   }, [total])
 
   useEffect(() => {
-    if (!exportError) {
-      return
-    }
-
-    showError(exportError)
-    clearExportError()
-  }, [clearExportError, exportError, showError])
-
-  useEffect(() => {
     if (total === 0) {
       return
     }
@@ -166,25 +160,84 @@ function LogsPanel() {
     ))
   }, [])
 
+  const handleCopy = useCallback(async () => {
+    setIsCopying(true)
+
+    try {
+      await promise(
+        async () => {
+          const result = await readLogExportText()
+
+          if (result.entryCount === 0) {
+            return result
+          }
+
+          if (!navigator.clipboard?.writeText) {
+            throw new Error("当前环境不支持复制到剪贴板。")
+          }
+
+          await navigator.clipboard.writeText(result.text)
+          return result
+        },
+        {
+          loading: "正在复制日志...",
+          success: (result) => result.entryCount > 0
+            ? `已复制 ${result.entryCount} 条日志。`
+            : {
+                message: "暂无可复制的日志。",
+                tone: "info",
+              },
+          error: (error) => error instanceof Error ? error.message : "复制日志失败。",
+        },
+      )
+    } finally {
+      setIsCopying(false)
+    }
+  }, [promise, readLogExportText])
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
       <div className="flex items-center justify-between gap-4 border-b bg-muted/20 px-3 py-2">
         <p className="font-mono text-xs text-muted-foreground">共 {total} 条</p>
-        <Button
-          size="sm"
-          disabled={isExporting}
-          onClick={async () => {
-            const result = await exportLogFile()
-
-            if (!result) {
-              return
-            }
-
-            success(`已保存到 ${result.filePath}`)
-          }}
-        >
-          {isExporting ? "导出中..." : "下载日志"}
-        </Button>
+        <ButtonGroup aria-label="日志操作">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isActionBusy}
+            onClick={() => {
+              void promise(
+                () => exportLogFile(),
+                {
+                  loading: "正在导出日志...",
+                  success: (result) => `已保存到 ${result.filePath}`,
+                  error: (error) => error instanceof Error ? error.message : "导出日志失败。",
+                },
+              ).catch(() => {})
+            }}
+          >
+            {isExporting ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Download data-icon="inline-start" />
+            )}
+            {isExporting ? "导出中..." : "下载日志"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isActionBusy}
+            onClick={() => {
+              void handleCopy().catch(() => {})
+            }}
+          >
+            {isCopying ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Copy data-icon="inline-start" />
+            )}
+            {isCopying ? "复制中..." : "复制日志"}
+          </Button>
+        </ButtonGroup>
       </div>
 
       <div

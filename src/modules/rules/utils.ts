@@ -1,3 +1,4 @@
+import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 import type { CreateRulePayload, RuleCreateFieldErrors } from "@/modules/rules/types"
 
 const EMPTY_CREATE_RULE_PAYLOAD: CreateRulePayload = {
@@ -5,7 +6,7 @@ const EMPTY_CREATE_RULE_PAYLOAD: CreateRulePayload = {
   description: "",
   category: "",
   icon: "",
-  iconBg: "",
+  iconBg: DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
   content: "",
 }
 
@@ -18,6 +19,7 @@ function createEmptyRulePayload(): CreateRulePayload {
 function normalizeCreateRulePayload(payload: CreateRulePayload): CreateRulePayload {
   return {
     ...payload,
+    iconBg: payload.iconBg || DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
     title: payload.title.trim(),
     description: payload.description.trim(),
     content: payload.content.trim(),
@@ -56,7 +58,14 @@ function validateCreateRulePayload(payload: CreateRulePayload): RuleCreateFieldE
 }
 
 function isCreateRulePayloadDirty(payload: CreateRulePayload): boolean {
-  return Object.values(payload).some((value) => value !== "")
+  return (
+    payload.title !== ""
+    || payload.description !== ""
+    || payload.category !== ""
+    || payload.icon !== ""
+    || payload.iconBg !== DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE
+    || payload.content !== ""
+  )
 }
 
 export {

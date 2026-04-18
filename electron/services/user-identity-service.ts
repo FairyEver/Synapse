@@ -139,6 +139,16 @@ class UserIdentityService {
     return state.identity
   }
 
+  async exportIdentity(): Promise<SynapseUserIdentity> {
+    const state = await this.loadState()
+
+    if (state.status === "needs-recovery") {
+      throw new Error("身份无法读取，请先恢复身份后再导出。")
+    }
+
+    return state.identity
+  }
+
   async updateDisplayName(displayName: string): Promise<SynapseIdentityState> {
     const state = await this.loadState()
 
@@ -197,6 +207,21 @@ class UserIdentityService {
     }
   }
 
+  async importIdentity(rawIdentity: unknown): Promise<SynapseIdentityState> {
+    const nextIdentity = normalizeIdentity(rawIdentity)
+
+    if (!nextIdentity) {
+      throw new Error("备份文件里的身份格式不对。")
+    }
+
+    await this.persist(nextIdentity)
+
+    return {
+      status: nextIdentity.displayName ? "ready" : "needs-onboarding",
+      identity: nextIdentity,
+    }
+  }
+
   private async persist(identity: SynapseUserIdentity): Promise<void> {
     const filePath = this.getFilePath()
 
@@ -211,6 +236,7 @@ class UserIdentityService {
 export {
   generateUserId,
   normalizeUserId,
+  normalizeIdentity,
   userIdentityService,
 }
 

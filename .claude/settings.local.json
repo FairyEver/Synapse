@@ -23,7 +23,8 @@
       "Skill(update-config:*)",
       "WebFetch(domain:openai.github.io)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(xargs cat *)"
     ]
   }
 }

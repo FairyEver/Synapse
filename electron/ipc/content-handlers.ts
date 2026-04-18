@@ -218,7 +218,14 @@ function registerContentHandlers() {
     SYNAPSE_IPC_CHANNELS.content.updateRule,
     async (event, payload: SynapseUpdateRulePayload) => {
       const result = await contentSubmissionService.updateRule(payload)
-      await notifyPendingPushesUpdated(event.sender)
+      const repository = await resolveActiveRepository()
+
+      await notifyPendingPushesUpdated(event.sender, repository)
+
+      if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
+        scheduleBackgroundPush(event.sender, repository)
+      }
+
       return result
     },
   )
@@ -227,7 +234,14 @@ function registerContentHandlers() {
     SYNAPSE_IPC_CHANNELS.content.updateSkill,
     async (event, payload: SynapseUpdateSkillPayload) => {
       const result = await contentSubmissionService.updateSkill(payload)
-      await notifyPendingPushesUpdated(event.sender)
+      const repository = await resolveActiveRepository()
+
+      await notifyPendingPushesUpdated(event.sender, repository)
+
+      if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
+        scheduleBackgroundPush(event.sender, repository)
+      }
+
       return result
     },
   )

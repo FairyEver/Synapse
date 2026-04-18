@@ -1,4 +1,12 @@
 import {
+  FileText,
+  FolderGit2,
+  FolderKanban,
+  Info,
+  Logs,
+  Settings2,
+} from "lucide-react"
+import {
   DEFAULT_GLOBAL_CONFIG,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
 } from "@/constants/defaults"
@@ -22,31 +30,37 @@ function validateRepositoryDirectoryName(value: unknown): string | null {
 const settingsCategories: SettingsCategory[] = [
   {
     id: "general",
+    icon: Settings2,
     label: "通用",
     description: "身份和外观。",
   },
   {
     id: "repositories",
+    icon: FolderGit2,
     label: "仓库",
     description: "本地目录。",
   },
   {
     id: "content",
+    icon: FileText,
     label: "内容",
     description: "Rules 和 Skills 目录。",
   },
   {
     id: "projects",
+    icon: FolderKanban,
     label: "项目",
     description: "项目路径。",
   },
   {
     id: "logs",
+    icon: Logs,
     label: "日志",
     description: "运行日志。",
   },
   {
     id: "about",
+    icon: Info,
     label: "关于",
     description: "版本与更新。",
   },

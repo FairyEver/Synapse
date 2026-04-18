@@ -27,7 +27,7 @@ function validateUserIdInput(value: string): string | null {
 
 function IdentityPanel() {
   const { identityState, replaceUserId, updateDisplayName } = useIdentity()
-  const { success } = useAppNotifications()
+  const { promise } = useAppNotifications()
   const [draftDisplayName, setDraftDisplayName] = useState("")
   const [restoreValue, setRestoreValue] = useState("")
   const [restoreError, setRestoreError] = useState<string | null>(null)
@@ -98,9 +98,14 @@ function IdentityPanel() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  void navigator.clipboard.writeText(identityState.identity.userId).then(() => {
-                    success("已复制到剪贴板。")
-                  })
+                  void promise(
+                    () => navigator.clipboard.writeText(identityState.identity.userId),
+                    {
+                      loading: "正在复制用户 ID...",
+                      success: "已复制到剪贴板。",
+                      error: (error) => error instanceof Error ? error.message : "复制失败。",
+                    },
+                  ).catch(() => {})
                 }}
               >
                 <Copy />
@@ -175,12 +180,19 @@ function IdentityPanel() {
               type="button"
               disabled={Boolean(validateUserIdInput(restoreValue))}
               onClick={() => {
-                void replaceUserId(normalizedRestoreValue)
-                  .then(() => {
-                    setIsRestoreOpen(false)
-                    setRestoreValue("")
-                    setRestoreError(null)
-                  })
+                void promise(
+                  () => replaceUserId(normalizedRestoreValue),
+                  {
+                    loading: "正在恢复身份...",
+                    success: () => {
+                      setIsRestoreOpen(false)
+                      setRestoreValue("")
+                      setRestoreError(null)
+                      return "身份已切换。"
+                    },
+                    error: (error) => error instanceof Error ? error.message : "恢复身份失败。",
+                  },
+                )
                   .catch((error) => {
                     setRestoreError(error instanceof Error ? error.message : "恢复身份失败。")
                   })

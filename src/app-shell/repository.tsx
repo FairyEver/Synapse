@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import { useAppConfig } from "@/app-shell/config"
@@ -35,11 +36,13 @@ type RepositoryManagerContextValue = {
   refreshPendingPushes: (repositoryUuid: string) => Promise<void>
   runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   syncRepository: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+  waitForBackgroundPush: (repositoryUuid: string, timeoutMs?: number) => Promise<void>
   refreshRepositoryStates: () => Promise<void>
 }
 
 const RepositoryManagerContext = createContext<RepositoryManagerContextValue | null>(null)
 const logger = createRendererLogger("app.repository")
+const DEFAULT_BACKGROUND_PUSH_TIMEOUT_MS = 120000
 
 function createFallbackRepositoryState(repositoryUuid: string): SynapseRepositoryLocalState {
   return {
@@ -123,11 +126,16 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const [operations, setOperations] = useState<Record<string, RepositoryOperationState>>({})
   const [pendingPushes, setPendingPushes] = useState<Record<string, SynapsePendingPushState>>({})
   const hasRepositoryBridge = Boolean(getSynapseBridge())
+  const operationsRef = useRef<Record<string, RepositoryOperationState>>({})
 
   const repositoryIds = useMemo(
     () => config.repositories.map((repository) => repository.uuid),
     [config.repositories],
   )
+
+  useEffect(() => {
+    operationsRef.current = operations
+  }, [operations])
 
   const refreshRepositoryStates = useCallback(async () => {
     logger.debug("Refreshing repository states.", {
@@ -350,6 +358,73 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const waitForBackgroundPush = useCallback(
+    async (repositoryUuid: string, timeoutMs = DEFAULT_BACKGROUND_PUSH_TIMEOUT_MS) => {
+      const bridge = getSynapseBridge()
+
+      if (!bridge) {
+        throw new Error("当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。")
+      }
+
+      return new Promise<void>((resolve, reject) => {
+        let settled = false
+
+        const cleanup = () => {
+          window.clearTimeout(timeoutId)
+          unsubscribeUpdated()
+        }
+
+        const settle = (callback: () => void) => {
+          if (settled) {
+            return
+          }
+
+          settled = true
+          cleanup()
+          callback()
+        }
+
+        const timeoutId = window.setTimeout(() => {
+          settle(() => {
+            reject(new Error("等待仓库同步超时，请稍后查看右上角同步状态。"))
+          })
+        }, timeoutMs)
+
+        const unsubscribeUpdated = bridge.repository.onUpdated((updatedEvent) => {
+          if (updatedEvent.repositoryUuid !== repositoryUuid || updatedEvent.operation !== "push") {
+            return
+          }
+
+          if (updatedEvent.error) {
+            settle(() => {
+              reject(new Error(updatedEvent.error ?? updatedEvent.message ?? "同步变更失败。"))
+            })
+            return
+          }
+
+          settle(resolve)
+        })
+
+        void bridge.repository.getPendingPushes(repositoryUuid)
+          .then((pendingState) => {
+            const isPushRunning =
+              operationsRef.current[repositoryUuid]?.isRunning
+              && operationsRef.current[repositoryUuid]?.operation === "push"
+
+            if (pendingState.count === 0 && !isPushRunning) {
+              settle(resolve)
+            }
+          })
+          .catch((error) => {
+            settle(() => {
+              reject(error instanceof Error ? error : new Error("读取同步状态失败。"))
+            })
+          })
+      })
+    },
+    [],
+  )
+
   const value = useMemo<RepositoryManagerContextValue>(
     () => ({
       hasRepositoryBridge,
@@ -360,6 +435,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       refreshPendingPushes,
       runMaintenance: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "maintenance"),
       syncRepository: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "sync"),
+      waitForBackgroundPush,
       refreshRepositoryStates,
     }),
     [
@@ -370,6 +446,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       refreshRepositoryStates,
       runRepositoryOperation,
       states,
+      waitForBackgroundPush,
     ],
   )
 

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { SYNAPSE_CONTENT_COLOR_OPTIONS } from "@/lib/content-appearance"
 
 type ContentBackgroundPickerProps = {
@@ -11,25 +11,24 @@ function ContentBackgroundPicker({
   value,
 }: ContentBackgroundPickerProps) {
   return (
-    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+    <div className="flex flex-wrap gap-2">
       {SYNAPSE_CONTENT_COLOR_OPTIONS.map((option) => {
         const isSelected = value === option.value
 
         return (
-          <Button
+          <button
             key={option.value}
             type="button"
-            variant={isSelected ? "secondary" : "outline"}
             aria-pressed={isSelected}
-            className="h-10 justify-start px-2 text-xs"
+            aria-label={option.label}
+            className={cn(
+              "size-10 cursor-pointer rounded-md ring-1 ring-border/60 transition-shadow focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+              option.backgroundClassName,
+              isSelected && "ring-2 ring-foreground/70 ring-offset-2 ring-offset-background",
+            )}
             onClick={() => onValueChange(option.value)}
             title={option.label}
-          >
-            <span
-              className={`size-3.5 rounded-sm ring-1 ring-border/60 ${option.swatchClassName}`}
-            />
-            <span className="truncate">{option.label}</span>
-          </Button>
+          />
         )
       })}
     </div>
