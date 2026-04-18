@@ -16,6 +16,7 @@ import { contentWriteService, type ContentWriteResult } from "./content-write-se
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
 import { pendingPushesService } from "./pending-pushes-service"
+import { repositoryMaintenanceService } from "./repository-maintenance-service"
 import { repositoryStore } from "./repository-store"
 import { userIdentityService } from "./user-identity-service"
 
@@ -474,6 +475,19 @@ class ContentSubmissionService {
     await contentIndexService.syncIndex(repository)
 
     const pendingPushState = await pendingPushesService.readState(repository)
+
+    if (pushed) {
+      void repositoryMaintenanceService.maybeRunAfterPush(repository, {
+        contentId: writeResult.id,
+        contentType: writeResult.type,
+      }).catch((error) => {
+        logger.warn("Post-push maintenance failed.", {
+          error,
+          repositoryUuid: repository.uuid,
+          writeResult,
+        })
+      })
+    }
 
     return {
       id: writeResult.id,

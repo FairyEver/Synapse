@@ -28,6 +28,7 @@ type UseContentDetailResult = {
 function useContentDetail(
   item: SynapseContentMeta | null,
   open: boolean,
+  refreshSignal = 0,
 ): UseContentDetailResult {
   const logger = useMemo(
     () => createRendererLogger(`content.detail.${item?.type ?? "idle"}`),
@@ -105,7 +106,7 @@ function useContentDetail(
     return () => {
       cancelled = true
     }
-  }, [item, logger, open])
+  }, [item, logger, open, refreshSignal])
 
   useEffect(() => {
     if (!open || !item || !detail || !selectedHistoryDirname || selectedHistoryDirname === detail.latestHistoryDirname) {

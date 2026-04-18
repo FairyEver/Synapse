@@ -4,6 +4,7 @@ import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
 import { configStore } from "../services/config-store"
 import { contentIndexService } from "../services/content-index-service"
+import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { contentSubmissionService } from "../services/content-submission-service"
 import { repositoryGitService } from "../services/repository-git-service"
 import { createMainLogger } from "../services/log-store"
@@ -111,6 +112,60 @@ function registerRepositoryHandlers() {
         return result
       } catch (error) {
         logger.error("repository.sync request failed.", {
+          repositoryUuid,
+          error,
+        })
+        throw error
+      }
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.repository.runMaintenance,
+    async (event, repositoryUuid: string) => {
+      const repository = await resolveRepositoryConfig(repositoryUuid)
+
+      try {
+        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.progress, {
+          repositoryUuid,
+          operation: "maintenance",
+          statusText: "正在准备整理...",
+          percent: 0,
+        })
+        const maintenanceResult = await repositoryMaintenanceService.runManualMaintenance(
+          repository,
+          (statusText) => {
+            sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.progress, {
+              repositoryUuid,
+              operation: "maintenance",
+              statusText,
+              percent: null,
+            })
+          },
+        )
+        const repositoryState = await repositoryStore.getRepositoryState(repository)
+        const completedAt = new Date().toISOString()
+        const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
+
+        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.updated, {
+          repositoryUuid,
+          operation: "maintenance",
+          completedAt,
+        })
+        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.pendingPushesUpdated, {
+          repositoryUuid,
+          pendingPushes,
+        })
+
+        return {
+          operation: "maintenance" as const,
+          repository: repositoryState,
+          completedAt,
+          message: maintenanceResult.message,
+          pendingPushCount: maintenanceResult.pendingPushCount,
+        }
+      } catch (error) {
+        logger.error("repository.runMaintenance request failed.", {
           repositoryUuid,
           error,
         })

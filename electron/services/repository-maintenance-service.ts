@@ -1,0 +1,959 @@
+import { spawn } from "node:child_process"
+import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import type { Dirent } from "node:fs"
+import path from "node:path"
+import type { SynapseRepositoryConfig } from "../../src/types/config"
+import type {
+  SynapseContentAttachmentRecord,
+  SynapseContentAttachmentsRecord,
+  SynapseContentSnapshotRecord,
+  SynapseContentType,
+} from "../../src/types/content"
+import { contentIndexService } from "./content-index-service"
+import {
+  CONTENT_ATTACHMENTS_FILE_NAME,
+  CONTENT_MAIN_FILE_NAME,
+  HISTORY_DIRECTORY_NAME,
+  resolveContentDirectoryPath,
+  resolveContentRootPath,
+} from "./content-history-service"
+import { createMainLogger } from "./log-store"
+import { pendingPushesService } from "./pending-pushes-service"
+import { withRepositoryCacheDatabase } from "./repository-cache-database"
+import { repositoryStore } from "./repository-store"
+
+const SYNAPSE_BOT_NAME = "Synapse Bot"
+const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
+const ZERO_USER_ID = "00000000000000000000000000000000"
+const ATTACHMENTS_POOL_DIRECTORY_NAME = "attachments-pool"
+const LAST_MAINTENANCE_AT_KEY = "last_maintenance_at"
+const MANUAL_MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000
+const COMPACTION_TRIGGER_THRESHOLD = 20
+const COMPACTION_SKIP_THRESHOLD = 10
+const COMPACTION_KEEP_RECENT = 5
+const SOFT_DELETE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
+const ATTACHMENT_GC_WINDOW_MS = 24 * 60 * 60 * 1000
+const logger = createMainLogger("service.repository-maintenance")
+
+type GitCommandResult = {
+  stderr: string
+  stdout: string
+}
+
+type MaintenanceProgressListener = (statusText: string) => void
+
+type MaintenanceTarget = {
+  contentId: string
+  contentType: SynapseContentType
+}
+
+type CompactionHistoryVersion = {
+  attachments: SynapseContentAttachmentsRecord
+  dirname: string
+  mainContent: string
+  snapshot: SynapseContentSnapshotRecord
+}
+
+type CompactionRunResult = {
+  compactedCount: number
+  gitPaths: string[]
+}
+
+type AttachmentsGcResult = {
+  deletedCount: number
+  gitPaths: string[]
+}
+
+type RepositoryMaintenanceResult = {
+  compactedCount: number
+  deletedAttachmentCount: number
+  message: string
+  pendingPushCount: number
+  pushed: boolean
+}
+
+function toGitPath(filePath: string): string {
+  return filePath.split(path.sep).join("/")
+}
+
+function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === "ENOENT"
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0
+}
+
+function sortEntriesByName(left: Dirent, right: Dirent): number {
+  return left.name.localeCompare(right.name)
+}
+
+function formatCompactTimestamp(date: Date): string {
+  return `${date.toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`
+}
+
+function createCompactHistoryDirname(modifiedAt: string): string | null {
+  const date = new Date(modifiedAt)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return `${formatCompactTimestamp(date)}__${ZERO_USER_ID}__compact`
+}
+
+function createMaintenanceMessage(
+  compactedCount: number,
+  deletedAttachmentCount: number,
+  pushed: boolean,
+  pendingPushCount: number,
+): string {
+  const fragments: string[] = []
+
+  if (compactedCount > 0) {
+    fragments.push(`整理了 ${compactedCount} 条内容`)
+  }
+
+  if (deletedAttachmentCount > 0) {
+    fragments.push(`清理了 ${deletedAttachmentCount} 个附件`)
+  }
+
+  if (fragments.length === 0) {
+    return "没有需要整理的内容。"
+  }
+
+  if (pushed) {
+    return `${fragments.join("，")}，已同步。`
+  }
+
+  return pendingPushCount > 1
+    ? `${fragments.join("，")}，等待同步 ${pendingPushCount} 条变更。`
+    : `${fragments.join("，")}，等待同步。`
+}
+
+function formatGitSpawnError(error: unknown): string {
+  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    return "当前系统没有可用的 git 命令，请先安装 Git 并确保命令行可访问。"
+  }
+
+  return error instanceof Error ? error.message : "启动 Git 命令失败。"
+}
+
+function formatGitFailureMessage(output: string, fallbackMessage: string): string {
+  const normalizedOutput = output.trim()
+  const firstLine = normalizedOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+  const loweredOutput = normalizedOutput.toLowerCase()
+
+  if (
+    loweredOutput.includes("authentication failed")
+    || loweredOutput.includes("could not read username")
+    || loweredOutput.includes("permission denied (publickey)")
+    || loweredOutput.includes("permission denied")
+    || loweredOutput.includes("fatal: could not read from remote repository")
+  ) {
+    return "无法连接仓库，请检查网络。"
+  }
+
+  if (
+    loweredOutput.includes("repository not found")
+    || loweredOutput.includes("not found")
+    || loweredOutput.includes("no such remote")
+  ) {
+    return "当前仓库没有可用的远程配置，或当前账号没有访问权限。"
+  }
+
+  if (
+    loweredOutput.includes("could not resolve host")
+    || loweredOutput.includes("failed to connect")
+    || loweredOutput.includes("connection timed out")
+    || loweredOutput.includes("network is unreachable")
+    || loweredOutput.includes("connection reset")
+  ) {
+    return "无法连接仓库，请检查网络。"
+  }
+
+  if (
+    loweredOutput.includes("nothing to commit")
+    || loweredOutput.includes("no changes added to commit")
+  ) {
+    return "当前没有可提交的改动。"
+  }
+
+  return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
+}
+
+function createPendingPushTitle(action: "compaction" | "gc"): string {
+  return action === "compaction" ? "整理历史记录" : "清理附件池"
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await access(targetPath)
+    return true
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return false
+    }
+
+    throw error
+  }
+}
+
+async function readDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
+  try {
+    const entries = await readdir(directoryPath, { withFileTypes: true })
+
+    return entries.sort(sortEntriesByName)
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return []
+    }
+
+    throw error
+  }
+}
+
+async function readJsonFile<T>(filePath: string): Promise<T | null> {
+  try {
+    const fileContent = await readFile(filePath, "utf8")
+
+    return JSON.parse(fileContent) as T
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return null
+    }
+
+    throw error
+  }
+}
+
+function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | null {
+  if (!isRecord(rawValue)) {
+    return null
+  }
+
+  if (
+    rawValue.schemaVersion !== 1
+    || !isNonEmptyString(rawValue.title)
+    || !isNonEmptyString(rawValue.description)
+    || !isNonEmptyString(rawValue.category)
+    || !isNonEmptyString(rawValue.icon)
+    || !isNonEmptyString(rawValue.iconBg)
+    || !isNonEmptyString(rawValue.modifiedBy)
+    || !isNonEmptyString(rawValue.modifiedAt)
+    || typeof rawValue.deleted !== "boolean"
+  ) {
+    return null
+  }
+
+  return {
+    schemaVersion: 1,
+    title: rawValue.title.trim(),
+    description: rawValue.description.trim(),
+    category: rawValue.category.trim(),
+    icon: rawValue.icon.trim(),
+    iconBg: rawValue.iconBg.trim(),
+    modifiedBy: rawValue.modifiedBy.trim(),
+    modifiedByDisplayName:
+      typeof rawValue.modifiedByDisplayName === "string" ? rawValue.modifiedByDisplayName.trim() : "",
+    modifiedAt: rawValue.modifiedAt.trim(),
+    deleted: rawValue.deleted,
+  }
+}
+
+function parseAttachmentsRecord(rawValue: unknown): SynapseContentAttachmentsRecord {
+  if (!isRecord(rawValue) || rawValue.schemaVersion !== 1 || !Array.isArray(rawValue.files)) {
+    return {
+      schemaVersion: 1,
+      files: [],
+    }
+  }
+
+  const files = rawValue.files
+    .filter((item): item is Record<string, unknown> => isRecord(item))
+    .map((item) => {
+      if (
+        !isNonEmptyString(item.originalName)
+        || !isNonEmptyString(item.sha256)
+        || typeof item.size !== "number"
+        || !Number.isFinite(item.size)
+      ) {
+        return null
+      }
+
+      return {
+        originalName: item.originalName.trim(),
+        sha256: item.sha256.trim(),
+        size: item.size,
+      }
+    })
+    .filter((item): item is SynapseContentAttachmentRecord => item !== null)
+
+  return {
+    schemaVersion: 1,
+    files,
+  }
+}
+
+function createAttachmentPoolPath(repositoryRootPath: string, sha256: string): string {
+  return path.join(
+    repositoryRootPath,
+    ATTACHMENTS_POOL_DIRECTORY_NAME,
+    sha256.slice(0, 2),
+    sha256.slice(2, 4),
+    sha256,
+  )
+}
+
+function toCommitMessage(action: "compaction" | "gc", count: number): string {
+  return action === "compaction"
+    ? `[synapse] compaction ${count} content`
+    : `[synapse] gc ${count} attachments`
+}
+
+function readMaintenanceMetaValue(repositoryUuid: string, key: string): Promise<string | null> {
+  return withRepositoryCacheDatabase(repositoryUuid, (database) => {
+    const row = database.prepare(`
+      SELECT value
+      FROM index_meta
+      WHERE key = ?
+      LIMIT 1
+    `).get(key) as { value?: string } | undefined
+
+    return row?.value?.trim() || null
+  })
+}
+
+function writeMaintenanceMetaValue(repositoryUuid: string, key: string, value: string): Promise<void> {
+  return withRepositoryCacheDatabase(repositoryUuid, (database) => {
+    database.prepare(`
+      INSERT INTO index_meta (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(key, value)
+  })
+}
+
+function runGitCommand(
+  cwd: string,
+  args: string[],
+  fallbackMessage: string,
+  onOutput?: (line: string) => void,
+): Promise<GitCommandResult> {
+  return new Promise((resolve, reject) => {
+    const childProcess = spawn("git", args, {
+      cwd,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+        LANG: "C",
+        LC_ALL: "C",
+      },
+    })
+
+    let stdout = ""
+    let stderr = ""
+
+    const handleChunk = (chunk: Buffer) => {
+      const text = chunk.toString("utf8")
+
+      stdout += text
+      text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .forEach((line) => onOutput?.(line))
+    }
+
+    childProcess.stdout.on("data", handleChunk)
+    childProcess.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8")
+
+      stderr += text
+      text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .forEach((line) => onOutput?.(line))
+    })
+
+    childProcess.on("error", (error) => {
+      reject(new Error(formatGitSpawnError(error)))
+    })
+
+    childProcess.on("close", (code) => {
+      if (code === 0) {
+        resolve({
+          stderr,
+          stdout,
+        })
+        return
+      }
+
+      reject(new Error(formatGitFailureMessage(`${stdout}\n${stderr}`, fallbackMessage)))
+    })
+  })
+}
+
+async function ensureBotIdentity(gitRootPath: string): Promise<void> {
+  await runGitCommand(
+    gitRootPath,
+    ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
+    "无法初始化 Synapse 提交身份。",
+  )
+  await runGitCommand(
+    gitRootPath,
+    ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
+    "无法初始化 Synapse 提交身份。",
+  )
+}
+
+async function pullWithRebase(
+  repository: SynapseRepositoryConfig,
+  onProgress?: MaintenanceProgressListener,
+): Promise<void> {
+  onProgress?.("正在拉取最新内容...")
+  await runGitCommand(
+    repository.localPath,
+    ["pull", "--rebase"],
+    "同步仓库失败，请检查网络或仓库状态后重试。",
+    (line) => {
+      onProgress?.(line)
+    },
+  )
+}
+
+async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
+  const relativePaths = Array.from(new Set(
+    filePaths
+      .map((filePath) => path.relative(gitRootPath, filePath))
+      .filter((relativePath) => relativePath && !relativePath.startsWith(".."))
+      .map(toGitPath),
+  ))
+
+  if (relativePaths.length === 0) {
+    throw new Error("当前没有可提交的改动。")
+  }
+
+  await runGitCommand(
+    gitRootPath,
+    ["add", "--", ...relativePaths],
+    "暂存本地改动失败。",
+  )
+}
+
+async function commitChanges(
+  gitRootPath: string,
+  action: "compaction" | "gc",
+  count: number,
+): Promise<string> {
+  await runGitCommand(
+    gitRootPath,
+    ["commit", "-m", toCommitMessage(action, count)],
+    "提交整理结果失败。",
+  )
+
+  const headCommit = await runGitCommand(
+    gitRootPath,
+    ["rev-parse", "HEAD"],
+    "读取最新提交失败。",
+  )
+
+  return headCommit.stdout.trim()
+}
+
+async function pushRepository(
+  repository: SynapseRepositoryConfig,
+  onProgress?: MaintenanceProgressListener,
+): Promise<void> {
+  onProgress?.("正在推送到仓库...")
+  await runGitCommand(
+    repository.localPath,
+    ["push"],
+    "推送到仓库失败。",
+    (line) => {
+      onProgress?.(line)
+    },
+  )
+}
+
+async function removeEmptyDirectoryIfNeeded(directoryPath: string): Promise<void> {
+  try {
+    const entries = await readdir(directoryPath)
+
+    if (entries.length === 0) {
+      await rm(directoryPath, { recursive: true, force: true })
+    }
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return
+    }
+
+    throw error
+  }
+}
+
+class RepositoryMaintenanceService {
+  async runManualMaintenance(
+    repository: SynapseRepositoryConfig,
+    onProgress?: MaintenanceProgressListener,
+  ): Promise<RepositoryMaintenanceResult> {
+    return this.runMaintenance(repository, {
+      onProgress,
+      targets: null,
+    })
+  }
+
+  async runScheduledMaintenanceIfDue(
+    repository: SynapseRepositoryConfig,
+  ): Promise<RepositoryMaintenanceResult | null> {
+    const lastMaintenanceAt = await readMaintenanceMetaValue(repository.uuid, LAST_MAINTENANCE_AT_KEY)
+
+    if (lastMaintenanceAt) {
+      const lastMaintenanceDate = new Date(lastMaintenanceAt)
+
+      if (
+        !Number.isNaN(lastMaintenanceDate.getTime())
+        && Date.now() - lastMaintenanceDate.getTime() < MANUAL_MAINTENANCE_INTERVAL_MS
+      ) {
+        return null
+      }
+    }
+
+    return this.runMaintenance(repository, {
+      onProgress: undefined,
+      targets: null,
+    })
+  }
+
+  async maybeRunAfterPush(
+    repository: SynapseRepositoryConfig,
+    target: MaintenanceTarget,
+  ): Promise<RepositoryMaintenanceResult | null> {
+    const historyVersions = await this.readHistoryVersions(
+      repository,
+      target.contentType,
+      target.contentId,
+    )
+
+    if (historyVersions.length <= COMPACTION_TRIGGER_THRESHOLD) {
+      return null
+    }
+
+    return this.runMaintenance(repository, {
+      onProgress: undefined,
+      targets: [target],
+    })
+  }
+
+  private async runMaintenance(
+    repository: SynapseRepositoryConfig,
+    options: {
+      onProgress?: MaintenanceProgressListener
+      targets: MaintenanceTarget[] | null
+    },
+  ): Promise<RepositoryMaintenanceResult> {
+    const repositoryState = await repositoryStore.getRepositoryState(repository)
+
+    if (repositoryState.status !== "ready") {
+      throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
+    }
+
+    if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
+      throw new Error("当前目录不是 Git 仓库，无法整理历史。")
+    }
+
+    await ensureBotIdentity(repositoryState.gitRootPath)
+    await pullWithRebase(repository, options.onProgress)
+
+    const compactionResult = await this.runCompaction(repository, options.targets, options.onProgress)
+    const attachmentsGcResult = await this.runAttachmentsGc(repository, options.onProgress)
+    const commitQueue: Array<{
+      action: "compaction" | "gc"
+      commitHash: string
+      targetId: string
+      title: string
+    }> = []
+
+    if (compactionResult.compactedCount > 0) {
+      options.onProgress?.("正在提交整理结果...")
+      await stagePaths(repositoryState.gitRootPath, compactionResult.gitPaths)
+      const commitHash = await commitChanges(
+        repositoryState.gitRootPath,
+        "compaction",
+        compactionResult.compactedCount,
+      )
+
+      commitQueue.push({
+        action: "compaction",
+        commitHash,
+        targetId:
+          options.targets?.[0]?.contentId
+          ?? repository.uuid,
+        title: createPendingPushTitle("compaction"),
+      })
+    }
+
+    if (attachmentsGcResult.deletedCount > 0) {
+      options.onProgress?.("正在提交附件清理结果...")
+      await stagePaths(repositoryState.gitRootPath, attachmentsGcResult.gitPaths)
+      const commitHash = await commitChanges(
+        repositoryState.gitRootPath,
+        "gc",
+        attachmentsGcResult.deletedCount,
+      )
+
+      commitQueue.push({
+        action: "gc",
+        commitHash,
+        targetId: ATTACHMENTS_POOL_DIRECTORY_NAME,
+        title: createPendingPushTitle("gc"),
+      })
+    }
+
+    await contentIndexService.syncIndex(repository)
+
+    let pushed = true
+
+    if (commitQueue.length > 0) {
+      try {
+        await pushRepository(repository, options.onProgress)
+      } catch (error) {
+        pushed = false
+
+        for (const commit of commitQueue) {
+          await pendingPushesService.enqueue(repository, {
+            action: commit.action,
+            commitHash: commit.commitHash,
+            targetId: commit.targetId,
+            title: commit.title,
+          })
+        }
+
+        logger.warn("Repository maintenance push failed and was queued.", {
+          error,
+          repositoryUuid: repository.uuid,
+        })
+      }
+    }
+
+    await contentIndexService.syncIndex(repository)
+
+    const pendingPushState = await pendingPushesService.readState(repository)
+    const completedAt = new Date().toISOString()
+
+    await writeMaintenanceMetaValue(repository.uuid, LAST_MAINTENANCE_AT_KEY, completedAt)
+
+    return {
+      compactedCount: compactionResult.compactedCount,
+      deletedAttachmentCount: attachmentsGcResult.deletedCount,
+      pushed,
+      pendingPushCount: pendingPushState.count,
+      message: createMaintenanceMessage(
+        compactionResult.compactedCount,
+        attachmentsGcResult.deletedCount,
+        pushed,
+        pendingPushState.count,
+      ),
+    }
+  }
+
+  private async runCompaction(
+    repository: SynapseRepositoryConfig,
+    targets: MaintenanceTarget[] | null,
+    onProgress?: MaintenanceProgressListener,
+  ): Promise<CompactionRunResult> {
+    const gitPaths = new Set<string>()
+    let compactedCount = 0
+    const targetsByType = new Map<SynapseContentType, Set<string>>()
+
+    if (targets) {
+      for (const target of targets) {
+        const bucket = targetsByType.get(target.contentType) ?? new Set<string>()
+
+        bucket.add(target.contentId)
+        targetsByType.set(target.contentType, bucket)
+      }
+    }
+
+    for (const contentType of ["rule", "skill"] as const) {
+      const contentIds = await this.listContentIds(
+        repository,
+        contentType,
+        targetsByType.get(contentType) ?? null,
+      )
+
+      for (const contentId of contentIds) {
+        onProgress?.(`正在整理 ${contentType === "rule" ? "Rule" : "Skill"} ${contentId.slice(0, 8)}...`)
+        const historyVersions = await this.readHistoryVersions(repository, contentType, contentId)
+
+        if (historyVersions.length === 0) {
+          continue
+        }
+
+        const latestVersion = historyVersions[historyVersions.length - 1]
+        const latestDate = new Date(latestVersion.snapshot.modifiedAt)
+
+        if (
+          latestVersion.snapshot.deleted
+          && !Number.isNaN(latestDate.getTime())
+          && Date.now() - latestDate.getTime() > SOFT_DELETE_RETENTION_MS
+        ) {
+          const contentDirectoryPath = resolveContentDirectoryPath(repository, contentType, contentId)
+
+          await rm(contentDirectoryPath, { recursive: true, force: true })
+          gitPaths.add(contentDirectoryPath)
+          compactedCount += 1
+          continue
+        }
+
+        if (historyVersions.length <= COMPACTION_SKIP_THRESHOLD) {
+          continue
+        }
+
+        const oldVersions = historyVersions.slice(0, Math.max(0, historyVersions.length - COMPACTION_KEEP_RECENT))
+
+        if (oldVersions.length === 0) {
+          continue
+        }
+
+        const baselineVersion = oldVersions[oldVersions.length - 1]
+        const compactDirname = createCompactHistoryDirname(baselineVersion.snapshot.modifiedAt)
+
+        if (!compactDirname) {
+          logger.warn("Skipped compaction because baseline modifiedAt is invalid.", {
+            contentId,
+            contentType,
+            modifiedAt: baselineVersion.snapshot.modifiedAt,
+            repositoryUuid: repository.uuid,
+          })
+          continue
+        }
+
+        const contentDirectoryPath = resolveContentDirectoryPath(repository, contentType, contentId)
+        const historyDirectoryPath = path.join(contentDirectoryPath, HISTORY_DIRECTORY_NAME)
+        const compactHistoryPath = path.join(historyDirectoryPath, compactDirname)
+
+        if (!(await pathExists(compactHistoryPath))) {
+          await mkdir(compactHistoryPath, { recursive: true })
+          await writeFile(
+            path.join(compactHistoryPath, "snapshot.json"),
+            `${JSON.stringify(baselineVersion.snapshot, null, 2)}\n`,
+            "utf8",
+          )
+          await writeFile(
+            path.join(compactHistoryPath, CONTENT_MAIN_FILE_NAME),
+            baselineVersion.mainContent,
+            "utf8",
+          )
+          await writeFile(
+            path.join(compactHistoryPath, CONTENT_ATTACHMENTS_FILE_NAME),
+            `${JSON.stringify(baselineVersion.attachments, null, 2)}\n`,
+            "utf8",
+          )
+        }
+
+        for (const version of oldVersions) {
+          await rm(path.join(historyDirectoryPath, version.dirname), { recursive: true, force: true })
+        }
+
+        gitPaths.add(contentDirectoryPath)
+        compactedCount += 1
+      }
+    }
+
+    return {
+      compactedCount,
+      gitPaths: Array.from(gitPaths),
+    }
+  }
+
+  private async runAttachmentsGc(
+    repository: SynapseRepositoryConfig,
+    onProgress?: MaintenanceProgressListener,
+  ): Promise<AttachmentsGcResult> {
+    onProgress?.("正在检查附件池...")
+
+    const referencedShaSet = await this.collectReferencedAttachmentShas(repository)
+    const poolFiles = await this.listAttachmentPoolFiles(repository.localPath)
+    const gitPaths = new Set<string>()
+    let deletedCount = 0
+
+    for (const poolFilePath of poolFiles) {
+      const sha256 = path.basename(poolFilePath)
+
+      if (referencedShaSet.has(sha256)) {
+        continue
+      }
+
+      const fileStat = await stat(poolFilePath)
+
+      if (Date.now() - fileStat.mtimeMs < ATTACHMENT_GC_WINDOW_MS) {
+        continue
+      }
+
+      await rm(poolFilePath, { force: true })
+      gitPaths.add(path.join(repository.localPath, ATTACHMENTS_POOL_DIRECTORY_NAME))
+      deletedCount += 1
+
+      await removeEmptyDirectoryIfNeeded(path.dirname(poolFilePath))
+      await removeEmptyDirectoryIfNeeded(path.dirname(path.dirname(poolFilePath)))
+    }
+
+    return {
+      deletedCount,
+      gitPaths: Array.from(gitPaths),
+    }
+  }
+
+  private async listContentIds(
+    repository: SynapseRepositoryConfig,
+    contentType: SynapseContentType,
+    allowedIds: Set<string> | null,
+  ): Promise<string[]> {
+    const rootPath = resolveContentRootPath(repository, contentType)
+    const entries = await readDirectoryEntries(rootPath)
+
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .filter((contentId) => !allowedIds || allowedIds.has(contentId))
+  }
+
+  private async readHistoryVersions(
+    repository: SynapseRepositoryConfig,
+    contentType: SynapseContentType,
+    contentId: string,
+  ): Promise<CompactionHistoryVersion[]> {
+    const historyRootPath = path.join(
+      resolveContentDirectoryPath(repository, contentType, contentId),
+      HISTORY_DIRECTORY_NAME,
+    )
+    const entries = await readDirectoryEntries(historyRootPath)
+    const versions: CompactionHistoryVersion[] = []
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue
+      }
+
+      const historyDirectoryPath = path.join(historyRootPath, entry.name)
+      const snapshot = parseSnapshotRecord(
+        await readJsonFile<unknown>(path.join(historyDirectoryPath, "snapshot.json")),
+      )
+
+      if (!snapshot) {
+        continue
+      }
+
+      try {
+        const [mainContent, attachmentsRaw] = await Promise.all([
+          readFile(path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME), "utf8"),
+          readJsonFile<unknown>(path.join(historyDirectoryPath, CONTENT_ATTACHMENTS_FILE_NAME)),
+        ])
+
+        versions.push({
+          dirname: entry.name,
+          mainContent,
+          snapshot,
+          attachments: parseAttachmentsRecord(attachmentsRaw),
+        })
+      } catch (error) {
+        if (isFileNotFoundError(error)) {
+          logger.warn("Skipped malformed history version during compaction.", {
+            contentId,
+            contentType,
+            dirname: entry.name,
+            repositoryUuid: repository.uuid,
+          })
+          continue
+        }
+
+        throw error
+      }
+    }
+
+    return versions.sort((left, right) => left.snapshot.modifiedAt.localeCompare(right.snapshot.modifiedAt))
+  }
+
+  private async collectReferencedAttachmentShas(
+    repository: SynapseRepositoryConfig,
+  ): Promise<Set<string>> {
+    const referencedShaSet = new Set<string>()
+
+    for (const contentType of ["rule", "skill"] as const) {
+      const contentIds = await this.listContentIds(repository, contentType, null)
+
+      for (const contentId of contentIds) {
+        const historyRootPath = path.join(
+          resolveContentDirectoryPath(repository, contentType, contentId),
+          HISTORY_DIRECTORY_NAME,
+        )
+        const entries = await readDirectoryEntries(historyRootPath)
+
+        for (const entry of entries) {
+          if (!entry.isDirectory()) {
+            continue
+          }
+
+          const attachmentsRecord = parseAttachmentsRecord(
+            await readJsonFile<unknown>(
+              path.join(historyRootPath, entry.name, CONTENT_ATTACHMENTS_FILE_NAME),
+            ),
+          )
+
+          for (const file of attachmentsRecord.files) {
+            referencedShaSet.add(file.sha256)
+          }
+        }
+      }
+    }
+
+    return referencedShaSet
+  }
+
+  private async listAttachmentPoolFiles(repositoryRootPath: string): Promise<string[]> {
+    const poolRootPath = path.join(repositoryRootPath, ATTACHMENTS_POOL_DIRECTORY_NAME)
+    const firstLevelEntries = await readDirectoryEntries(poolRootPath)
+    const files: string[] = []
+
+    for (const firstLevelEntry of firstLevelEntries) {
+      if (!firstLevelEntry.isDirectory()) {
+        continue
+      }
+
+      const secondLevelPath = path.join(poolRootPath, firstLevelEntry.name)
+      const secondLevelEntries = await readDirectoryEntries(secondLevelPath)
+
+      for (const secondLevelEntry of secondLevelEntries) {
+        if (!secondLevelEntry.isDirectory()) {
+          continue
+        }
+
+        const shardPath = path.join(secondLevelPath, secondLevelEntry.name)
+        const shardEntries = await readDirectoryEntries(shardPath)
+
+        for (const shardEntry of shardEntries) {
+          if (shardEntry.isFile()) {
+            files.push(path.join(shardPath, shardEntry.name))
+          }
+        }
+      }
+    }
+
+    return files
+  }
+}
+
+const repositoryMaintenanceService = new RepositoryMaintenanceService()
+
+export {
+  repositoryMaintenanceService,
+}

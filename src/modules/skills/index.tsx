@@ -1,5 +1,6 @@
 import { useMemo } from "react"
 import { createSkill } from "@/app-shell/content"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import { useContentCreationState } from "@/modules/content/hooks/use-content-creation-state"

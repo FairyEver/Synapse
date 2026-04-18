@@ -8,6 +8,7 @@ import { attachmentsPoolService } from "./attachments-pool-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { createMainLogger } from "./log-store"
+import { repositoryStore } from "./repository-store"
 
 const logger = createMainLogger("service.content-download")
 
@@ -39,6 +40,13 @@ async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   }
 
   return repository
+}
+
+async function getActiveRepositoryRootPath(): Promise<string> {
+  const repository = await getActiveRepository()
+  const repositoryState = await repositoryStore.getRepositoryState(repository)
+
+  return repositoryState.gitRootPath ?? repository.localPath
 }
 
 function escapePowerShellSingleQuotedString(value: string): string {
@@ -157,7 +165,7 @@ class ContentDownloadService {
   }
 
   async downloadSkill(skillId: string, targetPath: string): Promise<void> {
-    const repository = await getActiveRepository()
+    const repositoryRootPath = await getActiveRepositoryRootPath()
     const detail = await contentService.getSkillDetail(skillId)
 
     await withTemporaryOutput(".zip", async (tempPath) => {
@@ -170,7 +178,7 @@ class ContentDownloadService {
 
         for (const attachment of detail.attachments) {
           await attachmentsPoolService.copyAttachmentToPath(
-            repository.localPath,
+            repositoryRootPath,
             attachment,
             path.join(stagingDirectoryPath, attachment.originalName),
           )

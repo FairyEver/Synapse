@@ -11,6 +11,7 @@ import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { createMainLogger } from "./log-store"
+import { repositoryStore } from "./repository-store"
 
 const INSTALLED_SKILL_MAIN_FILE_NAME = "SKILL.md"
 const logger = createMainLogger("service.content-install")
@@ -49,6 +50,13 @@ async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   }
 
   return repository
+}
+
+async function getActiveRepositoryRootPath(): Promise<string> {
+  const repository = await getActiveRepository()
+  const repositoryState = await repositoryStore.getRepositoryState(repository)
+
+  return repositoryState.gitRootPath ?? repository.localPath
 }
 
 async function swapPathAtomically(replacementPath: string, targetPath: string): Promise<void> {
@@ -157,7 +165,7 @@ class ContentInstallService {
           throw new Error("当前编辑器没有返回合法的 Skill 安装目标。")
         }
 
-        const repository = await getActiveRepository()
+        const repositoryRootPath = await getActiveRepositoryRootPath()
         const detail = await contentService.getSkillDetail(payload.contentId)
 
         await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
@@ -169,7 +177,7 @@ class ContentInstallService {
 
           for (const attachment of detail.attachments) {
             await attachmentsPoolService.copyAttachmentToPath(
-              repository.localPath,
+              repositoryRootPath,
               attachment,
               path.join(stagingDirectoryPath, attachment.originalName),
             )

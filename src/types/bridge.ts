@@ -96,6 +96,7 @@ export type SynapseBridge = {
     getPendingPushes: (repositoryUuid: string) => Promise<SynapsePendingPushState>
     getStates: () => Promise<SynapseRepositoryLocalState[]>
     onPendingPushesUpdated: (listener: (payload: SynapsePendingPushUpdatedEvent) => void) => () => void
+    runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
     onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void

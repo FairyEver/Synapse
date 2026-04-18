@@ -55,15 +55,15 @@ import type {
   SynapseDeleteContentPayload,
   SynapseRuleDetail,
   SynapseSkillDetail,
-  SynapseUpdateRulePayload,
-  SynapseUpdateSkillPayload,
 } from "@/types/content"
 
 type ContentDetailDialogProps = {
   item: SynapseContentMeta | null
+  onContentChanged?: () => void
   onOpenChange: (open: boolean) => void
   onStatusChange?: (message: string | null, tone?: "default" | "destructive") => void
   open: boolean
+  refreshSignal?: number
 }
 
 type ConflictState =
@@ -265,9 +265,11 @@ function ContentHistoryPanel({
 
 function ContentDetailDialog({
   item,
+  onContentChanged,
   onOpenChange,
   onStatusChange,
   open,
+  refreshSignal = 0,
 }: ContentDetailDialogProps) {
   const {
     detail,
@@ -277,7 +279,7 @@ function ContentDetailDialog({
     previewError,
     selectedHistoryDirname,
     setSelectedHistoryDirname,
-  } = useContentDetail(item, open)
+  } = useContentDetail(item, open, refreshSignal)
   const [activeTab, setActiveTab] = useState("content")
   const [isRuleEditOpen, setIsRuleEditOpen] = useState(false)
   const [isSkillEditOpen, setIsSkillEditOpen] = useState(false)
@@ -327,6 +329,7 @@ function ContentDetailDialog({
     }
 
     setIsRuleEditOpen(false)
+    onContentChanged?.()
     onStatusChange?.(result.message)
   }
 
@@ -335,17 +338,21 @@ function ContentDetailDialog({
       return
     }
 
-    const result = await updateSkill({
-      ...payload,
-      id: detail.id,
-      baseHistoryDirname: detail.latestHistoryDirname,
-      force,
-      files: payload.files.map((file) => ({
+    const files = await Promise.all(
+      payload.files.map(async (file) => ({
         originalName: file.originalName,
         sha256: file.sha256,
         size: file.size,
         bytes: file.file ? new Uint8Array(await file.file.arrayBuffer()) : undefined,
       })),
+    )
+
+    const result = await updateSkill({
+      ...payload,
+      id: detail.id,
+      baseHistoryDirname: detail.latestHistoryDirname,
+      force,
+      files,
     })
 
     if (result.status === "conflict") {
@@ -360,6 +367,7 @@ function ContentDetailDialog({
     }
 
     setIsSkillEditOpen(false)
+    onContentChanged?.()
     onStatusChange?.(result.message)
   }
 
@@ -391,6 +399,7 @@ function ContentDetailDialog({
     }
 
     setIsDeleteConfirmOpen(false)
+    onContentChanged?.()
     onOpenChange(false)
     onStatusChange?.(result.message)
   }

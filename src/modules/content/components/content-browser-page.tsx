@@ -288,7 +288,12 @@ function ContentBrowserPage({
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
   const { states } = useRepositoryManager()
-  const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType, refreshSignal)
+  const [contentRefreshSignal, setContentRefreshSignal] = useState(0)
+  const catalogRefreshSignal = refreshSignal + contentRefreshSignal
+  const { categories, error, isLoading, items, totalCount } = useContentCatalog(
+    contentType,
+    catalogRefreshSignal,
+  )
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
@@ -318,6 +323,18 @@ function ContentBrowserPage({
   useEffect(() => {
     if (selectedItem && !items.some((item) => item.id === selectedItem.id)) {
       setSelectedItem(null)
+    }
+  }, [items, selectedItem])
+
+  useEffect(() => {
+    if (!selectedItem) {
+      return
+    }
+
+    const nextSelectedItem = items.find((item) => item.id === selectedItem.id) ?? null
+
+    if (nextSelectedItem && nextSelectedItem !== selectedItem) {
+      setSelectedItem(nextSelectedItem)
     }
   }, [items, selectedItem])
 
@@ -505,6 +522,10 @@ function ContentBrowserPage({
       <ContentDetailDialog
         item={selectedItem}
         open={selectedItem !== null}
+        refreshSignal={contentRefreshSignal}
+        onContentChanged={() => {
+          setContentRefreshSignal((currentSignal) => currentSignal + 1)
+        }}
         onStatusChange={(message, tone = "default") => {
           setActionNotice(message ? { message, tone } : null)
         }}

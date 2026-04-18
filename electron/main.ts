@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
 import { registerContentHandlers } from "./ipc/content-handlers"
@@ -8,10 +8,14 @@ import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
 import { registerUpdateHandlers } from "./ipc/update-handlers"
 import { configStore } from "./services/config-store"
+import { contentSubmissionService } from "./services/content-submission-service"
 import { createMainLogger } from "./services/log-store"
+import { pendingPushesService } from "./services/pending-pushes-service"
+import { repositoryMaintenanceService } from "./services/repository-maintenance-service"
 import { updateService } from "./services/update-service"
 
 let mainWindow: BrowserWindow | null = null
+let allowAppQuit = false
 const logger = createMainLogger("main")
 
 function createMainWindow() {
@@ -102,6 +106,21 @@ if (!gotSingleInstanceLock) {
     logger.info("Core services initialized. Creating main window.")
     createMainWindow()
 
+    void (async () => {
+      const config = await configStore.load()
+
+      for (const repository of config.repositories) {
+        try {
+          await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
+        } catch (error) {
+          logger.warn("Scheduled repository maintenance failed.", {
+            error,
+            repositoryUuid: repository.uuid,
+          })
+        }
+      }
+    })()
+
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         logger.info("App activated with no windows. Recreating main window.")
@@ -119,4 +138,66 @@ app.on("window-all-closed", () => {
     logger.info("All windows closed. Quitting app on non-macOS platform.")
     app.quit()
   }
+})
+
+app.on("before-quit", (event) => {
+  if (allowAppQuit) {
+    return
+  }
+
+  event.preventDefault()
+
+  void (async () => {
+    try {
+      const config = await configStore.load()
+      const pendingPushCount = await pendingPushesService.countAll(config.repositories)
+
+      if (pendingPushCount === 0) {
+        allowAppQuit = true
+        app.quit()
+        return
+      }
+
+      const ownerWindow = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null
+      const result = ownerWindow
+        ? await dialog.showMessageBox(ownerWindow, {
+            type: "warning",
+            title: "还有未同步的变更",
+            message: `你有 ${pendingPushCount} 条变更未同步到仓库。`,
+            detail: "下次启动时可以继续推送。",
+            buttons: ["先同步", "继续退出"],
+            defaultId: 0,
+            cancelId: 1,
+          })
+        : await dialog.showMessageBox({
+            type: "warning",
+            title: "还有未同步的变更",
+            message: `你有 ${pendingPushCount} 条变更未同步到仓库。`,
+            detail: "下次启动时可以继续推送。",
+            buttons: ["先同步", "继续退出"],
+            defaultId: 0,
+            cancelId: 1,
+          })
+
+      if (result.response === 0) {
+        for (const repository of config.repositories) {
+          await contentSubmissionService.flushPendingPushes(repository)
+        }
+      }
+
+      allowAppQuit = true
+      app.quit()
+    } catch (error) {
+      logger.error("Failed to resolve before-quit pending pushes flow.", error)
+
+      if (mainWindow) {
+        await dialog.showMessageBox(mainWindow, {
+          type: "error",
+          title: "无法完成同步",
+          message: error instanceof Error ? error.message : "同步失败。",
+          buttons: ["关闭"],
+        })
+      }
+    }
+  })()
 })

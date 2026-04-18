@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from "react"
 import { AppBrand } from "@/app-shell/components/app-brand"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
+import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { InlineNotice } from "@/components/inline-notice"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { SkillsModule } from "@/modules/skills"
 import { RulesModule } from "@/modules/rules"
 import { SettingsModule } from "@/modules/settings"
@@ -16,7 +27,7 @@ const logger = createRendererLogger("app")
 
 function App() {
   const { activeRepository, isReady } = useAppConfig()
-  const { operations, states, syncRepository } = useRepositoryManager()
+  const { flushPendingPushes, operations, pendingPushes, states, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
   const [isRulesCreateOpen, setIsRulesCreateOpen] = useState(false)
   const [isRulesDetailOpen, setIsRulesDetailOpen] = useState(false)
@@ -24,9 +35,11 @@ function App() {
   const [isSkillsCreateOpen, setIsSkillsCreateOpen] = useState(false)
   const [isSkillsDetailOpen, setIsSkillsDetailOpen] = useState(false)
   const [isSkillsInstallOpen, setIsSkillsInstallOpen] = useState(false)
+  const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
+  const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
   const hasBlockingModalOpen =
     isRulesCreateOpen
     || isRulesDetailOpen
@@ -34,6 +47,7 @@ function App() {
     || isSkillsCreateOpen
     || isSkillsDetailOpen
     || isSkillsInstallOpen
+    || isPendingPushDialogOpen
   const canSyncActiveRepository =
     activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
   const refreshTitle = activeRepositoryOperation?.isRunning
@@ -68,72 +82,122 @@ function App() {
   }, [])
 
   return (
-    <AppShellLayout
-      brand={<AppBrand />}
-      navigation={
-        <AppShellNavigation
-          tabs={tabs}
-          value={activeTab}
-          onValueChange={(value) => {
-            logger.info("Top-level tab changed.", {
-              nextTab: value,
-            })
-            setActiveTab(value as AppTabId)
-          }}
-        />
-      }
-      actions={
-        <AppShellActions
-          busy={Boolean(activeRepositoryOperation?.isRunning)}
-          disabled={
-            !isReady
-            || !canSyncActiveRepository
-            || Boolean(activeRepositoryOperation?.isRunning)
-            || hasBlockingModalOpen
-          }
-          onRefresh={() => {
-            if (!activeRepository) {
-              return
-            }
+    <IdentityGate>
+      <AlertDialog open={isPendingPushDialogOpen} onOpenChange={setIsPendingPushDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>同步变更</AlertDialogTitle>
+            <AlertDialogDescription>
+              本地有 {activePendingPushState?.count ?? 0} 条变更等待同步到仓库。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
 
-            logger.info("Manual repository sync requested from app shell.", {
-              repositoryUuid: activeRepository.uuid,
-            })
-            setSyncError(null)
-            void syncRepository(activeRepository.uuid).catch((error) => {
-              logger.error("Manual repository sync failed from app shell.", error)
-              setSyncError(error instanceof Error ? error.message : "仓库同步失败。")
-            })
-          }}
-          title={refreshTitle}
-        />
-      }
-    >
-      <div className="flex h-full min-h-0 flex-col">
-        {syncError ? (
-          <div className="shrink-0 px-6 pt-6">
-            <InlineNotice message={syncError} tone="destructive" onDismiss={() => setSyncError(null)} />
+          {activePendingPushState && activePendingPushState.items.length > 0 ? (
+            <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+              {activePendingPushState.items.map((entry) => (
+                <p key={entry.id}>
+                  · {entry.action} {entry.title ?? entry.targetId}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>稍后</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!activeRepository) {
+                  return
+                }
+
+                setSyncError(null)
+                void flushPendingPushes(activeRepository.uuid).catch((error) => {
+                  logger.error("Pending push flush failed from app shell.", error)
+                  setSyncError(error instanceof Error ? error.message : "同步失败。")
+                })
+              }}
+            >
+              立即同步
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AppShellLayout
+        brand={<AppBrand />}
+        navigation={
+          <AppShellNavigation
+            tabs={tabs}
+            value={activeTab}
+            onValueChange={(value) => {
+              logger.info("Top-level tab changed.", {
+                nextTab: value,
+              })
+              setActiveTab(value as AppTabId)
+            }}
+          />
+        }
+        actions={
+          <AppShellActions
+            isPushBusy={activeRepositoryOperation?.operation === "push" && Boolean(activeRepositoryOperation.isRunning)}
+            pendingPushCount={activePendingPushState?.count ?? 0}
+            pushDisabled={
+              !isReady
+              || !canSyncActiveRepository
+              || Boolean(activeRepositoryOperation?.isRunning)
+            }
+            refreshBusy={activeRepositoryOperation?.operation === "sync" && Boolean(activeRepositoryOperation.isRunning)}
+            refreshDisabled={
+              !isReady
+              || !canSyncActiveRepository
+              || Boolean(activeRepositoryOperation?.isRunning)
+              || hasBlockingModalOpen
+            }
+            onPush={() => setIsPendingPushDialogOpen(true)}
+            onRefresh={() => {
+              if (!activeRepository) {
+                return
+              }
+
+              logger.info("Manual repository sync requested from app shell.", {
+                repositoryUuid: activeRepository.uuid,
+              })
+              setSyncError(null)
+              void syncRepository(activeRepository.uuid).catch((error) => {
+                logger.error("Manual repository sync failed from app shell.", error)
+                setSyncError(error instanceof Error ? error.message : "仓库同步失败。")
+              })
+            }}
+            refreshTitle={refreshTitle}
+          />
+        }
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          {syncError ? (
+            <div className="shrink-0 px-6 pt-6">
+              <InlineNotice message={syncError} tone="destructive" onDismiss={() => setSyncError(null)} />
+            </div>
+          ) : null}
+          <div className={activeTab === "rules" ? "h-full" : "hidden h-full"}>
+            <RulesModule
+              onCreateDialogOpenChange={setIsRulesCreateOpen}
+              onDetailDialogOpenChange={setIsRulesDetailOpen}
+              onInstallDialogOpenChange={setIsRulesInstallOpen}
+            />
           </div>
-        ) : null}
-        <div className={activeTab === "rules" ? "h-full" : "hidden h-full"}>
-          <RulesModule
-            onCreateDialogOpenChange={setIsRulesCreateOpen}
-            onDetailDialogOpenChange={setIsRulesDetailOpen}
-            onInstallDialogOpenChange={setIsRulesInstallOpen}
-          />
+          <div className={activeTab === "skills" ? "h-full" : "hidden h-full"}>
+            <SkillsModule
+              onCreateDialogOpenChange={setIsSkillsCreateOpen}
+              onDetailDialogOpenChange={setIsSkillsDetailOpen}
+              onInstallDialogOpenChange={setIsSkillsInstallOpen}
+            />
+          </div>
+          <div className={activeTab === "settings" ? "h-full" : "hidden h-full"}>
+            <SettingsModule />
+          </div>
         </div>
-        <div className={activeTab === "skills" ? "h-full" : "hidden h-full"}>
-          <SkillsModule
-            onCreateDialogOpenChange={setIsSkillsCreateOpen}
-            onDetailDialogOpenChange={setIsSkillsDetailOpen}
-            onInstallDialogOpenChange={setIsSkillsInstallOpen}
-          />
-        </div>
-        <div className={activeTab === "settings" ? "h-full" : "hidden h-full"}>
-          <SettingsModule />
-        </div>
-      </div>
-    </AppShellLayout>
+      </AppShellLayout>
+    </IdentityGate>
   )
 }
 

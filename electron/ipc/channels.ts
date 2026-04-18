@@ -44,6 +44,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     getPendingPushes: "synapse:repository:get-pending-pushes",
     getStates: "synapse:repository:get-states",
     pendingPushesUpdated: "synapse:repository:pending-pushes-updated",
+    runMaintenance: "synapse:repository:run-maintenance",
     sync: "synapse:repository:sync",
     progress: "synapse:repository:progress",
     updated: "synapse:repository:updated",

@@ -6,7 +6,9 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { LogsModule } from "@/modules/logs"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
+import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
+import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
 import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
 import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
@@ -166,6 +168,12 @@ function SettingsModule() {
               />
             ))}
           </SettingsGroup>
+        ) : null}
+
+        {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
+
+        {isReady && activeCategory === "content" && activeRepository ? (
+          <RepositoryMaintenancePanel repositoryUuid={activeRepository.uuid} />
         ) : null}
 
         {isReady && hasRepositoriesItem ? (

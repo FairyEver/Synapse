@@ -49,6 +49,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     getPendingPushes: "synapse:repository:get-pending-pushes",
     getStates: "synapse:repository:get-states",
     pendingPushesUpdated: "synapse:repository:pending-pushes-updated",
+    runMaintenance: "synapse:repository:run-maintenance",
     sync: "synapse:repository:sync",
     progress: "synapse:repository:progress",
     updated: "synapse:repository:updated",
@@ -133,6 +134,8 @@ const synapseBridge: SynapseBridge = {
     getStates: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.getStates),
     onPendingPushesUpdated: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.pendingPushesUpdated, listener),
+    runMaintenance: (repositoryUuid) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.runMaintenance, repositoryUuid),
     sync: (repositoryUuid) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.sync, repositoryUuid),
     onProgress: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.progress, listener),

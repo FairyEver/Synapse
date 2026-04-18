@@ -33,6 +33,7 @@ type RepositoryManagerContextValue = {
   states: Record<string, SynapseRepositoryLocalState>
   flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   refreshPendingPushes: (repositoryUuid: string) => Promise<void>
+  runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   syncRepository: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   refreshRepositoryStates: () => Promise<void>
 }
@@ -61,6 +62,28 @@ function createOperationState(
     error: null,
     completedAt: null,
     ...value,
+  }
+}
+
+function getPreparingStatusText(operation: SynapseRepositoryOperationKind): string {
+  switch (operation) {
+    case "push":
+      return "正在准备推送..."
+    case "maintenance":
+      return "正在准备整理..."
+    default:
+      return "正在准备同步..."
+  }
+}
+
+function getCompletedStatusText(operation: SynapseRepositoryOperationKind): string {
+  switch (operation) {
+    case "push":
+      return "同步完成。"
+    case "maintenance":
+      return "整理完成。"
+    default:
+      return "仓库同步完成。"
   }
 }
 
@@ -167,7 +190,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           ...currentOperations[updatedEvent.repositoryUuid],
           operation: updatedEvent.operation,
           isRunning: false,
-          statusText: "仓库同步完成。",
+          statusText: getCompletedStatusText(updatedEvent.operation),
           percent: 100,
           error: null,
           completedAt: updatedEvent.completedAt,
@@ -257,7 +280,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           ...currentOperations[repositoryUuid],
           operation,
           isRunning: true,
-          statusText: "正在准备同步...",
+          statusText: getPreparingStatusText(operation),
           percent: 0,
           error: null,
         }),
@@ -271,6 +294,8 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
         const result =
           operation === "sync"
             ? await bridge.repository.sync(repositoryUuid)
+            : operation === "maintenance"
+              ? await bridge.repository.runMaintenance(repositoryUuid)
             : await bridge.repository.flushPendingPushes(repositoryUuid)
 
         setStates((currentStates) => ({
@@ -284,7 +309,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
             ...currentOperations[repositoryUuid],
             operation: result.operation,
             isRunning: false,
-            statusText: "仓库同步完成。",
+            statusText: result.message ?? getCompletedStatusText(result.operation),
             percent: 100,
             error: null,
             completedAt: result.completedAt,
@@ -331,6 +356,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       states,
       flushPendingPushes: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "push"),
       refreshPendingPushes,
+      runMaintenance: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "maintenance"),
       syncRepository: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "sync"),
       refreshRepositoryStates,
     }),
