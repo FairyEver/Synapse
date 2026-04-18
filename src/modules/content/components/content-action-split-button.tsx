@@ -35,7 +35,7 @@ type ContentActionSplitButtonProps = {
 }
 
 function canCopyContent(item: SynapseContentMeta): boolean {
-  return item.type === "rule" || item.files.length === 0
+  return true
 }
 
 function supportsContentType(

@@ -1,21 +1,28 @@
 import { useEffect, useMemo, useState } from "react"
 import {
-  readRuleContent,
-  readSkillContent,
-  readSkillFiles,
+  readRuleDetail,
+  readRuleHistory,
+  readRuleHistoryVersion,
+  readSkillDetail,
+  readSkillHistory,
+  readSkillHistoryVersion,
 } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
 import type {
-  SynapseContentFile,
+  SynapseContentDetail,
+  SynapseContentHistoryEntry,
+  SynapseContentHistoryVersion,
   SynapseContentMeta,
 } from "@/types/content"
 
 type UseContentDetailResult = {
-  activeFilePath: string | null
-  files: SynapseContentFile[]
+  detail: SynapseContentDetail | null
+  displayedVersion: SynapseContentHistoryVersion | null
+  history: SynapseContentHistoryEntry[]
   isLoading: boolean
   previewError: string | null
-  setActiveFilePath: (path: string) => void
+  selectedHistoryDirname: string | null
+  setSelectedHistoryDirname: (historyDirname: string | null) => void
 }
 
 function useContentDetail(
@@ -26,43 +33,53 @@ function useContentDetail(
     () => createRendererLogger(`content.detail.${item?.type ?? "idle"}`),
     [item?.type],
   )
-  const [files, setFiles] = useState<SynapseContentFile[]>([])
+  const [detail, setDetail] = useState<SynapseContentDetail | null>(null)
+  const [displayedVersion, setDisplayedVersion] = useState<SynapseContentHistoryVersion | null>(null)
+  const [history, setHistory] = useState<SynapseContentHistoryEntry[]>([])
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [activeFilePath, setActiveFilePathState] = useState<string | null>(null)
+  const [selectedHistoryDirname, setSelectedHistoryDirnameState] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open || item === null) {
-      setFiles([])
+      setDetail(null)
+      setDisplayedVersion(null)
+      setHistory([])
       setPreviewError(null)
       setIsLoading(false)
-      setActiveFilePathState(null)
+      setSelectedHistoryDirnameState(null)
       return
     }
 
     let cancelled = false
 
-    setFiles([])
+    setDetail(null)
+    setDisplayedVersion(null)
+    setHistory([])
     setPreviewError(null)
     setIsLoading(true)
-    setActiveFilePathState(null)
+    setSelectedHistoryDirnameState(null)
 
     void (async () => {
       try {
-        const nextFiles =
+        const [nextDetail, nextHistory] = await Promise.all(
           item.type === "rule"
-            ? [await readRuleContent(item.id)]
-            : item.files.length === 0
-              ? [await readSkillContent(item.id)]
-              : await readSkillFiles(item.id)
+            ? [readRuleDetail(item.id), readRuleHistory(item.id)]
+            : [readSkillDetail(item.id), readSkillHistory(item.id)],
+        )
 
         if (cancelled) {
           return
         }
 
-        setFiles(nextFiles)
+        setDetail(nextDetail)
+        setDisplayedVersion({
+          ...nextDetail,
+          historyDirname: nextDetail.latestHistoryDirname,
+          isCurrent: true,
+        })
+        setHistory(nextHistory)
         setPreviewError(null)
-        setActiveFilePathState(nextFiles[0]?.relativePath ?? null)
       } catch (loadError) {
         logger.error("Failed to load content detail.", {
           contentId: item.id,
@@ -74,7 +91,9 @@ function useContentDetail(
           return
         }
 
-        setFiles([])
+        setDetail(null)
+        setDisplayedVersion(null)
+        setHistory([])
         setPreviewError(loadError instanceof Error ? loadError.message : "读取详情失败。")
       } finally {
         if (!cancelled) {
@@ -88,16 +107,68 @@ function useContentDetail(
     }
   }, [item, logger, open])
 
-  const setActiveFilePath = (path: string) => {
-    setActiveFilePathState(path)
-  }
+  useEffect(() => {
+    if (!open || !item || !detail || !selectedHistoryDirname || selectedHistoryDirname === detail.latestHistoryDirname) {
+      if (detail) {
+        setDisplayedVersion({
+          ...detail,
+          historyDirname: detail.latestHistoryDirname,
+          isCurrent: true,
+        })
+      }
+      return
+    }
+
+    let cancelled = false
+
+    setIsLoading(true)
+
+    void (async () => {
+      try {
+        const nextVersion =
+          item.type === "rule"
+            ? await readRuleHistoryVersion(item.id, selectedHistoryDirname)
+            : await readSkillHistoryVersion(item.id, selectedHistoryDirname)
+
+        if (cancelled) {
+          return
+        }
+
+        setDisplayedVersion(nextVersion)
+        setPreviewError(null)
+      } catch (loadError) {
+        logger.error("Failed to load history version.", {
+          contentId: item.id,
+          contentType: item.type,
+          historyDirname: selectedHistoryDirname,
+          loadError,
+        })
+
+        if (cancelled) {
+          return
+        }
+
+        setPreviewError(loadError instanceof Error ? loadError.message : "读取历史失败。")
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [detail, item, logger, open, selectedHistoryDirname])
 
   return {
-    activeFilePath,
-    files,
+    detail,
+    displayedVersion,
+    history,
     isLoading,
     previewError,
-    setActiveFilePath,
+    selectedHistoryDirname,
+    setSelectedHistoryDirname: setSelectedHistoryDirnameState,
   }
 }
 

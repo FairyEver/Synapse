@@ -1,14 +1,20 @@
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseContentDownloadResult,
-  SynapseContentWriteResult,
+  SynapseContentDetail,
+  SynapseContentHistoryEntry,
+  SynapseContentHistoryVersion,
   SynapseCreateRulePayload,
   SynapseCreateSkillPayload,
-  SynapseContentFile,
+  SynapseDeleteContentPayload,
+  SynapseContentMutationResult,
   SynapseRuleMeta,
   SynapseSkillMeta,
   SynapseTextContentFile,
+  SynapseUpdateRulePayload,
+  SynapseUpdateSkillPayload,
 } from "./content"
+import type { SynapseIdentityState } from "./identity"
 import type {
   SynapseEditorAdapterSummary,
   SynapseContentInstallResult,
@@ -27,6 +33,8 @@ import type {
 import type {
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationResult,
+  SynapsePendingPushState,
+  SynapsePendingPushUpdatedEvent,
   SynapseRepositoryProgressEvent,
   SynapseRepositoryUpdatedEvent,
 } from "./repository"
@@ -40,15 +48,23 @@ export type SynapseBridge = {
     node: string
   }
   content: {
-    createRule: (payload: SynapseCreateRulePayload) => Promise<SynapseContentWriteResult>
-    createSkill: (payload: SynapseCreateSkillPayload) => Promise<SynapseContentWriteResult>
+    createRule: (payload: SynapseCreateRulePayload) => Promise<SynapseContentMutationResult>
+    createSkill: (payload: SynapseCreateSkillPayload) => Promise<SynapseContentMutationResult>
+    updateRule: (payload: SynapseUpdateRulePayload) => Promise<SynapseContentMutationResult>
+    updateSkill: (payload: SynapseUpdateSkillPayload) => Promise<SynapseContentMutationResult>
+    deleteContent: (payload: SynapseDeleteContentPayload) => Promise<SynapseContentMutationResult>
     downloadRule: (ruleId: string) => Promise<SynapseContentDownloadResult>
     downloadSkill: (skillId: string) => Promise<SynapseContentDownloadResult>
     getEditorAdapters: () => Promise<SynapseEditorAdapterSummary[]>
     getRuleContent: (ruleId: string) => Promise<SynapseTextContentFile>
+    getRuleDetail: (ruleId: string) => Promise<SynapseContentDetail>
+    getRuleHistory: (ruleId: string) => Promise<SynapseContentHistoryEntry[]>
+    getRuleHistoryVersion: (ruleId: string, historyDirname: string) => Promise<SynapseContentHistoryVersion>
     getRules: () => Promise<SynapseRuleMeta[]>
     getSkillContent: (skillId: string) => Promise<SynapseTextContentFile>
-    getSkillFiles: (skillId: string) => Promise<SynapseContentFile[]>
+    getSkillDetail: (skillId: string) => Promise<SynapseContentDetail>
+    getSkillHistory: (skillId: string) => Promise<SynapseContentHistoryEntry[]>
+    getSkillHistoryVersion: (skillId: string, historyDirname: string) => Promise<SynapseContentHistoryVersion>
     getSkills: () => Promise<SynapseSkillMeta[]>
     installToEditor: (
       payload: SynapseInstallToEditorPayload,
@@ -61,6 +77,12 @@ export type SynapseBridge = {
     get: () => Promise<SynapseConfig>
     update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
   }
+  identity: {
+    generateNewId: () => Promise<SynapseIdentityState>
+    getState: () => Promise<SynapseIdentityState>
+    replaceUserId: (userId: string) => Promise<SynapseIdentityState>
+    updateDisplayName: (displayName: string) => Promise<SynapseIdentityState>
+  }
   log: {
     export: () => Promise<SynapseLogExportResult>
     list: (query: SynapseLogListQuery) => Promise<SynapseLogListResult>
@@ -70,7 +92,10 @@ export type SynapseBridge = {
   }
   repository: {
     chooseDirectory: () => Promise<string | null>
+    flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+    getPendingPushes: (repositoryUuid: string) => Promise<SynapsePendingPushState>
     getStates: () => Promise<SynapseRepositoryLocalState[]>
+    onPendingPushesUpdated: (listener: (payload: SynapsePendingPushUpdatedEvent) => void) => () => void
     sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
     onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void

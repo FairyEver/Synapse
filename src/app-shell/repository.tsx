@@ -11,6 +11,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type {
+  SynapsePendingPushState,
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
@@ -28,7 +29,10 @@ type RepositoryOperationState = {
 type RepositoryManagerContextValue = {
   hasRepositoryBridge: boolean
   operations: Record<string, RepositoryOperationState>
+  pendingPushes: Record<string, SynapsePendingPushState>
   states: Record<string, SynapseRepositoryLocalState>
+  flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+  refreshPendingPushes: (repositoryUuid: string) => Promise<void>
   syncRepository: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   refreshRepositoryStates: () => Promise<void>
 }
@@ -94,6 +98,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const { config } = useAppConfig()
   const [states, setStates] = useState<Record<string, SynapseRepositoryLocalState>>({})
   const [operations, setOperations] = useState<Record<string, RepositoryOperationState>>({})
+  const [pendingPushes, setPendingPushes] = useState<Record<string, SynapsePendingPushState>>({})
   const hasRepositoryBridge = Boolean(getSynapseBridge())
 
   const repositoryIds = useMemo(
@@ -118,6 +123,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
 
     setStates((currentStates) => filterRecordByRepositoryIds(currentStates, repositoryIdSet))
     setOperations((currentOperations) => filterRecordByRepositoryIds(currentOperations, repositoryIdSet))
+    setPendingPushes((currentPendingPushes) => filterRecordByRepositoryIds(currentPendingPushes, repositoryIdSet))
   }, [repositoryIds])
 
   useEffect(() => {
@@ -178,6 +184,47 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshRepositoryStates])
 
+  const refreshPendingPushes = useCallback(
+    async (repositoryUuid: string) => {
+      const bridge = getSynapseBridge()
+
+      if (!bridge) {
+        return
+      }
+
+      const nextPendingPushes = await bridge.repository.getPendingPushes(repositoryUuid)
+
+      setPendingPushes((currentPendingPushes) => ({
+        ...currentPendingPushes,
+        [repositoryUuid]: nextPendingPushes,
+      }))
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!config.activeRepoUuid) {
+      return
+    }
+
+    void refreshPendingPushes(config.activeRepoUuid).catch((error) => {
+      logger.error("Failed to refresh pending pushes.", error)
+    })
+  }, [config.activeRepoUuid, refreshPendingPushes])
+
+  useEffect(() => {
+    const unsubscribe = getSynapseBridge()?.repository.onPendingPushesUpdated((updatedEvent) => {
+      setPendingPushes((currentPendingPushes) => ({
+        ...currentPendingPushes,
+        [updatedEvent.repositoryUuid]: updatedEvent.pendingPushes,
+      }))
+    })
+
+    return () => {
+      unsubscribe?.()
+    }
+  }, [])
+
   const runRepositoryOperation = useCallback(
     async (repositoryUuid: string, operation: SynapseRepositoryOperationKind) => {
       const bridge = getSynapseBridge()
@@ -221,7 +268,10 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           repositoryUuid,
           operation,
         })
-        const result = await bridge.repository.sync(repositoryUuid)
+        const result =
+          operation === "sync"
+            ? await bridge.repository.sync(repositoryUuid)
+            : await bridge.repository.flushPendingPushes(repositoryUuid)
 
         setStates((currentStates) => ({
           ...currentStates,
@@ -277,11 +327,22 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
     () => ({
       hasRepositoryBridge,
       operations,
+      pendingPushes,
       states,
+      flushPendingPushes: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "push"),
+      refreshPendingPushes,
       syncRepository: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "sync"),
       refreshRepositoryStates,
     }),
-    [hasRepositoryBridge, operations, refreshRepositoryStates, runRepositoryOperation, states],
+    [
+      hasRepositoryBridge,
+      operations,
+      pendingPushes,
+      refreshPendingPushes,
+      refreshRepositoryStates,
+      runRepositoryOperation,
+      states,
+    ],
   )
 
   return (

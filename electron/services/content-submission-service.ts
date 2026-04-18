@@ -13,6 +13,7 @@ import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { contentHistoryService } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { contentWriteService, type ContentWriteResult } from "./content-write-service"
+import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryStore } from "./repository-store"
@@ -300,14 +301,6 @@ class ContentSubmissionService {
 
   async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
     const identity = await userIdentityService.requireReadyIdentity()
-    const repositoryState = await readRepositoryState(
-      (await contentWriteService.readLatestHistoryDirname(payload.type, payload.id, identity), await (async () => {
-        const configState = await userIdentityService.requireReadyIdentity()
-        void configState
-        return null
-      })()),
-    )
-    void repositoryState
     return this.deleteWithConflictCheck(payload, identity)
   }
 
@@ -350,10 +343,7 @@ class ContentSubmissionService {
     payload: SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
   ): Promise<SynapseContentMutationResult> {
-    const repositoryContext = await contentWriteService.readLatestHistoryDirname(contentType, payload.id, identity)
-    void repositoryContext
-
-    const repositoryConfig = await this.resolveActiveRepositoryFromIdentity(identity)
+    const repositoryConfig = await this.resolveActiveRepository()
 
     await pullWithRebase(repositoryConfig)
     await contentIndexService.syncIndex(repositoryConfig)
@@ -391,7 +381,7 @@ class ContentSubmissionService {
     payload: SynapseDeleteContentPayload,
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepositoryFromIdentity(identity)
+    const repository = await this.resolveActiveRepository()
 
     await pullWithRebase(repository)
     await contentIndexService.syncIndex(repository)
@@ -426,7 +416,7 @@ class ContentSubmissionService {
     action: "create" | "update" | "delete",
     writeResult: ContentWriteResult,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository(writeResult)
+    const repository = await this.resolveActiveRepository()
     const repositoryState = await readRepositoryState(repository)
 
     await ensureBotIdentity(repositoryState.gitRootPath ?? repository.localPath)
@@ -481,6 +471,8 @@ class ContentSubmissionService {
       }
     }
 
+    await contentIndexService.syncIndex(repository)
+
     const pendingPushState = await pendingPushesService.readState(repository)
 
     return {
@@ -496,20 +488,8 @@ class ContentSubmissionService {
     }
   }
 
-  private async resolveActiveRepository(writeResult: ContentWriteResult): Promise<SynapseRepositoryConfig> {
-    const identity = await userIdentityService.requireReadyIdentity()
-
-    return this.resolveActiveRepositoryFromIdentity(identity, writeResult.type)
-  }
-
-  private async resolveActiveRepositoryFromIdentity(
-    _identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
-    _contentType?: SynapseContentType,
-  ): Promise<SynapseRepositoryConfig> {
-    const repositoryState = await contentWriteService.readLatestHistoryDirname("rule", "", _identity).catch(() => null)
-    void repositoryState
-    const configStoreModule = await import("./config-store")
-    const config = await configStoreModule.configStore.load()
+  private async resolveActiveRepository(): Promise<SynapseRepositoryConfig> {
+    const config = await configStore.load()
     const repository = config.repositories.find((item) => item.uuid === config.activeRepoUuid) ?? null
 
     if (!repository) {

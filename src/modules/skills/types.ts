@@ -1,7 +1,8 @@
 export type CreateSkillFilePayload = {
-  relativePath: string
+  originalName: string
+  sha256?: string
   size: number
-  file: File
+  file?: File
 }
 
 export type CreateSkillPayload = {

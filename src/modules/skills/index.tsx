@@ -1,6 +1,5 @@
 import { useMemo } from "react"
 import { createSkill } from "@/app-shell/content"
-import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import { useContentCreationState } from "@/modules/content/hooks/use-content-creation-state"
@@ -19,7 +18,7 @@ function SkillsModule({
   onInstallDialogOpenChange,
 }: SkillsModuleProps) {
   const logger = useMemo(() => createRendererLogger("skills"), [])
-  const { activeRepository, config } = useAppConfig()
+  const { activeRepository } = useAppConfig()
   const {
     dismissNotice,
     handleCreated,
@@ -32,11 +31,11 @@ function SkillsModule({
   const handleSubmit = async (payload: CreateSkillPayload) => {
     logger.info("Skill create payload prepared.", {
       repositoryUuid: activeRepository?.uuid ?? null,
-      authorDisplayName: config.global.displayName || null,
       payload: {
         ...payload,
         files: payload.files.map((file) => ({
-          relativePath: file.relativePath,
+          originalName: file.originalName,
+          sha256: file.sha256,
           size: file.size,
         })),
       },
@@ -46,21 +45,24 @@ function SkillsModule({
       ...payload,
       files: await Promise.all(
         payload.files.map(async (file) => ({
-          relativePath: file.relativePath,
+          originalName: file.originalName,
+          sha256: file.sha256,
           size: file.size,
-          bytes: new Uint8Array(await file.file.arrayBuffer()),
+          bytes: file.file ? new Uint8Array(await file.file.arrayBuffer()) : undefined,
         })),
       ),
     })
 
-    logger.info("Skill submitted for review.", {
+    logger.info("Skill saved.", {
       attachmentCount: payload.files.length,
-      branchName: result.branchName ?? null,
       contentId: result.id,
+      pendingPushCount: result.status === "saved" ? result.pendingPushCount : null,
       repositoryUuid: activeRepository?.uuid ?? null,
-      targetBranch: result.targetBranch ?? null,
     })
-    handleCreated(result.message)
+
+    if (result.status === "saved") {
+      handleCreated(result.message)
+    }
   }
 
   return (

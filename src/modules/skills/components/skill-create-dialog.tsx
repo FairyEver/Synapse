@@ -51,11 +51,13 @@ import {
   MAX_SKILL_ATTACHMENT_SIZE,
   mergeCreateSkillFiles,
   normalizeCreateSkillPayload,
-  normalizeSkillAttachmentPath,
+  normalizeSkillAttachmentName,
   validateCreateSkillPayload,
 } from "@/modules/skills/utils"
 
 type SkillCreateDialogProps = {
+  initialValue?: CreateSkillPayload | null
+  mode?: "create" | "edit"
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: CreateSkillPayload) => Promise<void> | void
   open: boolean
@@ -85,7 +87,7 @@ function isFileSystemDirectoryEntry(
 
 function toCreateSkillFiles(files: Iterable<File>): CreateSkillFilePayload[] {
   return Array.from(files, (file) => ({
-    relativePath: normalizeSkillAttachmentPath(file.webkitRelativePath || file.name),
+    originalName: normalizeSkillAttachmentName(file.webkitRelativePath || file.name),
     size: file.size,
     file,
   }))
@@ -132,7 +134,7 @@ async function collectCreateSkillFilesFromEntry(
 
     return [
       {
-        relativePath: normalizeSkillAttachmentPath(entry.fullPath || file.name),
+        originalName: normalizeSkillAttachmentName(entry.fullPath || file.name),
         size: file.size,
         file,
       },
@@ -170,13 +172,23 @@ async function collectCreateSkillFilesFromDataTransfer(
   return nestedFiles.flat()
 }
 
-function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogProps) {
+function SkillCreateDialog({
+  initialValue = null,
+  mode = "create",
+  onOpenChange,
+  onSubmit,
+  open,
+}: SkillCreateDialogProps) {
   const logger = useMemo(() => createRendererLogger("skills.create"), [])
   const categoryOptions = useMemo(() => getCategoryDefinitions("skill"), [])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const dragDepthRef = useRef(0)
-  const [form, setForm] = useState<CreateSkillPayload>(() => createEmptySkillPayload())
+  const baseline = useMemo(
+    () => normalizeCreateSkillPayload(initialValue ?? createEmptySkillPayload()),
+    [initialValue],
+  )
+  const [form, setForm] = useState<CreateSkillPayload>(() => baseline)
   const [errors, setErrors] = useState<SkillCreateFieldErrors>({})
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null)
   const [isDraggingFiles, setIsDraggingFiles] = useState(false)
@@ -197,18 +209,16 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
   }, [])
 
   useEffect(() => {
-    if (!open) {
-      setForm(createEmptySkillPayload())
-      setErrors({})
-      setAttachmentMessage(null)
-      setIsDraggingFiles(false)
-      setIsCollectingFiles(false)
-      setIsDiscardConfirmOpen(false)
-      setIsSubmitting(false)
-      setSubmitError(null)
-      dragDepthRef.current = 0
-    }
-  }, [open])
+    setForm(baseline)
+    setErrors({})
+    setAttachmentMessage(null)
+    setIsDraggingFiles(false)
+    setIsCollectingFiles(false)
+    setIsDiscardConfirmOpen(false)
+    setIsSubmitting(false)
+    setSubmitError(null)
+    dragDepthRef.current = 0
+  }, [baseline, open])
 
   const selectedIconOption = form.icon ? getContentIconOption(form.icon) : null
   const previewIconOption = selectedIconOption ?? getContentIconOption("sparkles")
@@ -269,7 +279,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
       return
     }
 
-    if (isCreateSkillPayloadDirty(form)) {
+    if (JSON.stringify(normalizeCreateSkillPayload(form)) !== JSON.stringify(baseline)) {
       setIsDiscardConfirmOpen(true)
       return
     }
@@ -327,7 +337,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
       await onSubmit(normalizeCreateSkillPayload(form))
       onOpenChange(false)
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "提交 Skill 失败。")
+      setSubmitError(error instanceof Error ? error.message : "保存 Skill 失败。")
     } finally {
       setIsSubmitting(false)
     }
@@ -340,7 +350,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
           <AlertDialogHeader>
             <AlertDialogTitle>放弃当前填写内容？</AlertDialogTitle>
             <AlertDialogDescription>
-              当前还没有提交，关闭后已填写的 Skill 内容和附件会被清空。
+              当前还没有保存，关闭后已填写的 Skill 内容和附件会被清空。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -359,8 +369,8 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
 
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <FormDialog
-          title="新建 Skill"
-          description="填好主说明和附件后提交审核。"
+          title={mode === "create" ? "新建 Skill" : "编辑 Skill"}
+          description={mode === "create" ? "填好主说明和附件后保存。" : "修改后保存。"}
           contentClassName="sm:max-w-5xl"
           footer={(
             <>
@@ -377,7 +387,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
                   取消
                 </Button>
                 <Button type="submit" disabled={isSubmitting || isCollectingFiles}>
-                  {isSubmitting ? "正在提交..." : "提交审核"}
+                  {isSubmitting ? "正在保存..." : mode === "create" ? "保存" : "保存修改"}
                 </Button>
               </div>
             </>
@@ -597,12 +607,12 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
                     <div className="max-h-56 overflow-y-auto">
                       {form.files.map((file) => (
                         <div
-                          key={file.relativePath}
+                          key={file.originalName}
                           className="flex items-start justify-between gap-3 border-b border-border/70 px-3 py-3 last:border-b-0"
                         >
                           <div className="min-w-0">
                             <p className="break-all text-sm font-medium text-foreground">
-                              {file.relativePath}
+                              {file.originalName}
                             </p>
                             <p className="mt-1 text-sm text-muted-foreground">
                               {formatSkillAttachmentSize(file.size)}
@@ -614,7 +624,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
                             size="icon-sm"
                             onClick={() => {
                               updateFiles(
-                                form.files.filter((item) => item.relativePath !== file.relativePath),
+                                form.files.filter((item) => item.originalName !== file.originalName),
                               )
                             }}
                             title="移除附件"

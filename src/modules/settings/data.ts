@@ -23,7 +23,7 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "general",
     label: "通用",
-    description: "昵称和界面语言。",
+    description: "身份和界面语言。",
   },
   {
     id: "repositories",
@@ -53,14 +53,6 @@ const settingsCategories: SettingsCategory[] = [
 ]
 
 const settingsItems: SettingItem[] = [
-  {
-    key: "global.displayName",
-    label: "显示昵称",
-    category: "general",
-    type: "text",
-    defaultValue: DEFAULT_GLOBAL_CONFIG.displayName,
-    scope: "global",
-  },
   {
     key: "global.language",
     label: "界面语言",

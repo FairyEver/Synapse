@@ -97,7 +97,7 @@ function matchesSearch(item: SynapseContentMeta, normalizedQuery: string): boole
   return haystack.includes(normalizedQuery)
 }
 
-function formatCreatedAt(value: string): string {
+function formatModifiedAt(value: string): string {
   const date = new Date(value)
 
   if (Number.isNaN(date.getTime())) {
@@ -250,8 +250,8 @@ function ContentListCard({
 
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{categoryLabel}</span>
-              <span>{item.author}</span>
-              <span>{formatCreatedAt(item.createdAt)}</span>
+              <span>{item.modifiedByDisplayName || "未命名用户"}</span>
+              <span>{formatModifiedAt(item.modifiedAt)}</span>
             </div>
           </div>
         </button>

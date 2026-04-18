@@ -21,8 +21,6 @@ function updateActiveRepository(
 
 function getGlobalSettingValue(key: string, context: SettingsContext, fallback: unknown): unknown {
   switch (key) {
-    case "displayName":
-      return context.config.global.displayName
     case "language":
       return context.config.global.language
     case "projects":
@@ -49,8 +47,6 @@ function getRepositorySettingValue(key: string, context: SettingsContext, fallba
 
 function createGlobalSettingPatch(key: string, value: unknown): SynapseConfigPatch | null {
   switch (key) {
-    case "displayName":
-      return { global: { displayName: String(value ?? "") } }
     case "language":
       return { global: { language: String(value ?? "") as SynapseLanguage } }
     case "projects":

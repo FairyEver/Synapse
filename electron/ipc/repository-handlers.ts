@@ -3,6 +3,8 @@ import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
 import { configStore } from "../services/config-store"
+import { contentIndexService } from "../services/content-index-service"
+import { contentSubmissionService } from "../services/content-submission-service"
 import { repositoryGitService } from "../services/repository-git-service"
 import { createMainLogger } from "../services/log-store"
 import { repositoryStore } from "../services/repository-store"
@@ -48,6 +50,14 @@ function registerRepositoryHandlers() {
   })
 
   handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.repository.getPendingPushes,
+    async (_event, repositoryUuid: string) => {
+      const repository = await resolveRepositoryConfig(repositoryUuid)
+      return contentSubmissionService.readPendingPushState(repository)
+    },
+  )
+
+  handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.repository.chooseDirectory,
     async (event) => {
       logger.info("Opening native directory picker.")
@@ -80,11 +90,17 @@ function registerRepositoryHandlers() {
         const result = await repositoryGitService.syncRepository(repository, (progressEvent) => {
           sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.progress, progressEvent)
         })
+        await contentIndexService.syncIndex(repository)
+        const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
 
         sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.updated, {
           repositoryUuid,
           operation: result.operation,
           completedAt: result.completedAt,
+        })
+        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.pendingPushesUpdated, {
+          repositoryUuid,
+          pendingPushes,
         })
 
         logger.info("repository.sync request completed.", {
@@ -95,6 +111,55 @@ function registerRepositoryHandlers() {
         return result
       } catch (error) {
         logger.error("repository.sync request failed.", {
+          repositoryUuid,
+          error,
+        })
+        throw error
+      }
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.repository.flushPendingPushes,
+    async (event, repositoryUuid: string) => {
+      const repository = await resolveRepositoryConfig(repositoryUuid)
+
+      try {
+        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.progress, {
+          repositoryUuid,
+          operation: "push",
+          statusText: "正在准备推送...",
+          percent: 0,
+        })
+        await contentSubmissionService.flushPendingPushes(repository, (statusText) => {
+          sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.progress, {
+            repositoryUuid,
+            operation: "push",
+            statusText,
+            percent: null,
+          })
+        })
+        const repositoryState = await repositoryStore.getRepositoryState(repository)
+        const completedAt = new Date().toISOString()
+        const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
+
+        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.updated, {
+          repositoryUuid,
+          operation: "push",
+          completedAt,
+        })
+        sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.pendingPushesUpdated, {
+          repositoryUuid,
+          pendingPushes,
+        })
+
+        return {
+          operation: "push" as const,
+          repository: repositoryState,
+          completedAt,
+        }
+      } catch (error) {
+        logger.error("repository.flushPendingPushes request failed.", {
           repositoryUuid,
           error,
         })

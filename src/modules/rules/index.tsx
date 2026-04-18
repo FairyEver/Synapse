@@ -1,6 +1,5 @@
 import { useMemo } from "react"
 import { createRule } from "@/app-shell/content"
-import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import { useContentCreationState } from "@/modules/content/hooks/use-content-creation-state"
@@ -19,7 +18,7 @@ function RulesModule({
   onInstallDialogOpenChange,
 }: RulesModuleProps) {
   const logger = useMemo(() => createRendererLogger("rules"), [])
-  const { activeRepository, config } = useAppConfig()
+  const { activeRepository } = useAppConfig()
   const {
     dismissNotice,
     handleCreated,
@@ -32,19 +31,20 @@ function RulesModule({
   const handleSubmit = async (payload: CreateRulePayload) => {
     logger.info("Rule create payload prepared.", {
       repositoryUuid: activeRepository?.uuid ?? null,
-      authorDisplayName: config.global.displayName || null,
       payload,
     })
 
     const result = await createRule(payload)
 
-    logger.info("Rule submitted for review.", {
-      branchName: result.branchName ?? null,
+    logger.info("Rule saved.", {
       contentId: result.id,
+      pendingPushCount: result.status === "saved" ? result.pendingPushCount : null,
       repositoryUuid: activeRepository?.uuid ?? null,
-      targetBranch: result.targetBranch ?? null,
     })
-    handleCreated(result.message)
+
+    if (result.status === "saved") {
+      handleCreated(result.message)
+    }
   }
 
   return (

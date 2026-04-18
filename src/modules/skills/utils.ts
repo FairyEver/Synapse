@@ -28,19 +28,19 @@ function formatAttachmentList(paths: string[]): string {
   return `${paths.slice(0, 3).join("、")} 等 ${paths.length} 项`
 }
 
-function normalizeSkillAttachmentPath(relativePath: string): string {
-  return relativePath
+function normalizeSkillAttachmentName(originalName: string): string {
+  return originalName
     .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
     .split("/")
     .filter((segment) => segment.length > 0)
-    .join("/")
+    .at(-1)
+    ?.trim() ?? ""
 }
 
 function normalizeCreateSkillFilePayload(file: CreateSkillFilePayload): CreateSkillFilePayload {
   return {
     ...file,
-    relativePath: normalizeSkillAttachmentPath(file.relativePath),
+    originalName: normalizeSkillAttachmentName(file.originalName),
     size: file.size,
   }
 }
@@ -49,7 +49,7 @@ function compareCreateSkillFiles(
   left: CreateSkillFilePayload,
   right: CreateSkillFilePayload,
 ): number {
-  return left.relativePath.localeCompare(right.relativePath, "zh-CN")
+  return left.originalName.localeCompare(right.originalName, "zh-CN")
 }
 
 function createEmptySkillPayload(): CreateSkillPayload {
@@ -74,9 +74,9 @@ function normalizeCreateSkillPayload(payload: CreateSkillPayload): CreateSkillPa
 function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFieldErrors {
   const normalizedPayload = normalizeCreateSkillPayload(payload)
   const errors: SkillCreateFieldErrors = {}
-  const seenRelativePaths = new Set<string>()
-  const duplicatedPaths: string[] = []
-  const oversizedPaths: string[] = []
+  const seenOriginalNames = new Set<string>()
+  const duplicatedNames: string[] = []
+  const oversizedNames: string[] = []
 
   if (!normalizedPayload.title) {
     errors.title = "请输入标题。"
@@ -103,34 +103,34 @@ function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFie
   }
 
   for (const file of normalizedPayload.files) {
-    if (!file.relativePath) {
-      errors.files = appendErrorMessage(errors.files, "附件路径不能为空。")
+    if (!file.originalName) {
+      errors.files = appendErrorMessage(errors.files, "附件文件名不能为空。")
       continue
     }
 
-    if (seenRelativePaths.has(file.relativePath)) {
-      duplicatedPaths.push(file.relativePath)
+    if (seenOriginalNames.has(file.originalName)) {
+      duplicatedNames.push(file.originalName)
       continue
     }
 
-    seenRelativePaths.add(file.relativePath)
+    seenOriginalNames.add(file.originalName)
 
     if (file.size > MAX_SKILL_ATTACHMENT_SIZE) {
-      oversizedPaths.push(file.relativePath)
+      oversizedNames.push(file.originalName)
     }
   }
 
-  if (duplicatedPaths.length > 0) {
+  if (duplicatedNames.length > 0) {
     errors.files = appendErrorMessage(
       errors.files,
-      `附件路径重复：${formatAttachmentList(duplicatedPaths)}。`,
+      `附件文件名重复：${formatAttachmentList(duplicatedNames)}。`,
     )
   }
 
-  if (oversizedPaths.length > 0) {
+  if (oversizedNames.length > 0) {
     errors.files = appendErrorMessage(
       errors.files,
-      `以下附件超过 10MB：${formatAttachmentList(oversizedPaths)}。`,
+      `以下附件超过 10MB：${formatAttachmentList(oversizedNames)}。`,
     )
   }
 
@@ -167,45 +167,45 @@ function mergeCreateSkillFiles(
 ): { files: CreateSkillFilePayload[]; rejectedMessages: string[] } {
   const normalizedCurrentFiles = currentFiles.map((file) => normalizeCreateSkillFilePayload(file))
   const nextFilesByPath = new Map(
-    normalizedCurrentFiles.map((file) => [file.relativePath, file] as const),
+    normalizedCurrentFiles.map((file) => [file.originalName, file] as const),
   )
-  const duplicatePaths: string[] = []
-  const oversizedPaths: string[] = []
-  const invalidPaths: string[] = []
+  const duplicateNames: string[] = []
+  const oversizedNames: string[] = []
+  const invalidNames: string[] = []
 
   for (const incomingFile of incomingFiles) {
     const normalizedFile = normalizeCreateSkillFilePayload(incomingFile)
 
-    if (!normalizedFile.relativePath) {
-      invalidPaths.push(incomingFile.file.name || "未命名文件")
+    if (!normalizedFile.originalName) {
+      invalidNames.push(incomingFile.file?.name || "未命名文件")
       continue
     }
 
     if (normalizedFile.size > MAX_SKILL_ATTACHMENT_SIZE) {
-      oversizedPaths.push(normalizedFile.relativePath)
+      oversizedNames.push(normalizedFile.originalName)
       continue
     }
 
-    if (nextFilesByPath.has(normalizedFile.relativePath)) {
-      duplicatePaths.push(normalizedFile.relativePath)
+    if (nextFilesByPath.has(normalizedFile.originalName)) {
+      duplicateNames.push(normalizedFile.originalName)
       continue
     }
 
-    nextFilesByPath.set(normalizedFile.relativePath, normalizedFile)
+    nextFilesByPath.set(normalizedFile.originalName, normalizedFile)
   }
 
   const rejectedMessages: string[] = []
 
-  if (invalidPaths.length > 0) {
-    rejectedMessages.push(`以下附件缺少有效路径，已跳过：${formatAttachmentList(invalidPaths)}。`)
+  if (invalidNames.length > 0) {
+    rejectedMessages.push(`以下附件缺少有效文件名，已跳过：${formatAttachmentList(invalidNames)}。`)
   }
 
-  if (duplicatePaths.length > 0) {
-    rejectedMessages.push(`以下附件路径重复，已跳过：${formatAttachmentList(duplicatePaths)}。`)
+  if (duplicateNames.length > 0) {
+    rejectedMessages.push(`以下附件文件名重复，已跳过：${formatAttachmentList(duplicateNames)}。`)
   }
 
-  if (oversizedPaths.length > 0) {
-    rejectedMessages.push(`以下附件超过 10MB，已跳过：${formatAttachmentList(oversizedPaths)}。`)
+  if (oversizedNames.length > 0) {
+    rejectedMessages.push(`以下附件超过 10MB，已跳过：${formatAttachmentList(oversizedNames)}。`)
   }
 
   return {
@@ -221,6 +221,6 @@ export {
   MAX_SKILL_ATTACHMENT_SIZE,
   mergeCreateSkillFiles,
   normalizeCreateSkillPayload,
-  normalizeSkillAttachmentPath,
+  normalizeSkillAttachmentName,
   validateCreateSkillPayload,
 }

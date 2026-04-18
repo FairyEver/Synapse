@@ -1,13 +1,18 @@
 import { createMissingBridgeError, getSynapseBridge } from "@/lib/electron-bridge"
 import type {
+  SynapseContentDetail,
   SynapseContentDownloadResult,
-  SynapseContentWriteResult,
+  SynapseContentHistoryEntry,
+  SynapseContentHistoryVersion,
+  SynapseContentMutationResult,
   SynapseCreateRulePayload,
   SynapseCreateSkillPayload,
-  SynapseContentFile,
+  SynapseDeleteContentPayload,
   SynapseRuleMeta,
   SynapseSkillMeta,
   SynapseTextContentFile,
+  SynapseUpdateRulePayload,
+  SynapseUpdateSkillPayload,
 } from "@/types/content"
 import type {
   SynapseEditorAdapterSummary,
@@ -30,17 +35,7 @@ function hasContentBridge(): boolean {
   return Boolean(getContentBridge())
 }
 
-function readRules(): Promise<SynapseRuleMeta[]> {
-  const bridge = getContentBridge()
-
-  if (!bridge) {
-    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
-  }
-
-  return bridge.getRules()
-}
-
-function createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentWriteResult> {
+function createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentMutationResult> {
   const bridge = getContentBridge()
 
   if (!bridge) {
@@ -50,7 +45,7 @@ function createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentWr
   return bridge.createRule(payload)
 }
 
-function createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentWriteResult> {
+function createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentMutationResult> {
   const bridge = getContentBridge()
 
   if (!bridge) {
@@ -60,34 +55,44 @@ function createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContent
   return bridge.createSkill(payload)
 }
 
-function downloadRule(ruleId: string): Promise<SynapseContentDownloadResult> {
+function updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {
   const bridge = getContentBridge()
 
   if (!bridge) {
     return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
   }
 
-  return bridge.downloadRule(ruleId)
+  return bridge.updateRule(payload)
 }
 
-function downloadSkill(skillId: string): Promise<SynapseContentDownloadResult> {
+function updateSkill(payload: SynapseUpdateSkillPayload): Promise<SynapseContentMutationResult> {
   const bridge = getContentBridge()
 
   if (!bridge) {
     return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
   }
 
-  return bridge.downloadSkill(skillId)
+  return bridge.updateSkill(payload)
 }
 
-function getEditorAdapters(): Promise<SynapseEditorAdapterSummary[]> {
+function deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
   const bridge = getContentBridge()
 
   if (!bridge) {
     return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
   }
 
-  return bridge.getEditorAdapters()
+  return bridge.deleteContent(payload)
+}
+
+function readRules(): Promise<SynapseRuleMeta[]> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getRules()
 }
 
 function readSkills(): Promise<SynapseSkillMeta[]> {
@@ -120,14 +125,100 @@ function readSkillContent(skillId: string): Promise<SynapseTextContentFile> {
   return bridge.getSkillContent(skillId)
 }
 
-function readSkillFiles(skillId: string): Promise<SynapseContentFile[]> {
+function readRuleDetail(ruleId: string): Promise<SynapseContentDetail> {
   const bridge = getContentBridge()
 
   if (!bridge) {
     return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
   }
 
-  return bridge.getSkillFiles(skillId)
+  return bridge.getRuleDetail(ruleId)
+}
+
+function readSkillDetail(skillId: string): Promise<SynapseContentDetail> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getSkillDetail(skillId)
+}
+
+function readRuleHistory(ruleId: string): Promise<SynapseContentHistoryEntry[]> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getRuleHistory(ruleId)
+}
+
+function readSkillHistory(skillId: string): Promise<SynapseContentHistoryEntry[]> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getSkillHistory(skillId)
+}
+
+function readRuleHistoryVersion(
+  ruleId: string,
+  historyDirname: string,
+): Promise<SynapseContentHistoryVersion> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getRuleHistoryVersion(ruleId, historyDirname)
+}
+
+function readSkillHistoryVersion(
+  skillId: string,
+  historyDirname: string,
+): Promise<SynapseContentHistoryVersion> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getSkillHistoryVersion(skillId, historyDirname)
+}
+
+function downloadRule(ruleId: string): Promise<SynapseContentDownloadResult> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.downloadRule(ruleId)
+}
+
+function downloadSkill(skillId: string): Promise<SynapseContentDownloadResult> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.downloadSkill(skillId)
+}
+
+function getEditorAdapters(): Promise<SynapseEditorAdapterSummary[]> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getEditorAdapters()
 }
 
 function installToEditor(
@@ -157,15 +248,23 @@ function resolveEditorInstallTarget(
 export {
   createRule,
   createSkill,
+  deleteContent,
   downloadRule,
   downloadSkill,
   getEditorAdapters,
   hasContentBridge,
   installToEditor,
   readRuleContent,
+  readRuleDetail,
+  readRuleHistory,
+  readRuleHistoryVersion,
   readRules,
   readSkillContent,
-  readSkillFiles,
+  readSkillDetail,
+  readSkillHistory,
+  readSkillHistoryVersion,
   readSkills,
   resolveEditorInstallTarget,
+  updateRule,
+  updateSkill,
 }

@@ -13,6 +13,7 @@
     "dev:renderer": "node scripts/dev-renderer.mjs",
     "dev:electron:build": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:electron:app": "node scripts/dev-electron-app.mjs",
+    "icons": "node scripts/build-icons.mjs",
     "build": "pnpm build:renderer && pnpm build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",

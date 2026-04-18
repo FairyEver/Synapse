@@ -28,7 +28,7 @@ function useContentCreationState(
 
   const handleCreated = useCallback((message?: string) => {
     setRefreshSignal((currentSignal) => currentSignal + 1)
-    setNotice(message ?? "已提交审核，列表已刷新。")
+    setNotice(message ?? "已保存。")
   }, [])
 
   const dismissNotice = useCallback(() => {

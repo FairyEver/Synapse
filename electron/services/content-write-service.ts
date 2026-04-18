@@ -212,10 +212,57 @@ async function resolveAttachmentRecords(
   }
 
   const skillPayload = payload as SynapseCreateSkillPayload | SynapseUpdateSkillPayload
-  const written = await attachmentsPoolService.writeAttachments(context.gitRootPath, skillPayload.files)
+  const existingAttachmentsBySha = new Map(
+    (baseline?.attachments ?? []).map((attachment) => [attachment.sha256, attachment] as const),
+  )
+  const nextAttachments: SynapseContentAttachmentRecord[] = []
+  const pendingWrites = skillPayload.files.filter((file) => !file.sha256 || file.bytes)
+  const written = await attachmentsPoolService.writeAttachments(
+    context.gitRootPath,
+    pendingWrites
+      .map((file) => {
+        if (!file.bytes) {
+          return null
+        }
+
+        return {
+          originalName: file.originalName,
+          size: file.size,
+          bytes: file.bytes,
+        }
+      })
+      .filter((file): file is { originalName: string; size: number; bytes: Uint8Array } => file !== null),
+  )
+
+  for (const file of skillPayload.files) {
+    if (file.sha256 && !file.bytes) {
+      const existingAttachment = existingAttachmentsBySha.get(file.sha256)
+
+      if (!existingAttachment) {
+        throw new Error(`找不到已有附件：${file.originalName}`)
+      }
+
+      nextAttachments.push({
+        ...existingAttachment,
+        originalName: file.originalName,
+        size: file.size,
+      })
+      continue
+    }
+
+    const createdAttachment = written.records.find(
+      (attachment) => attachment.originalName === file.originalName,
+    )
+
+    if (!createdAttachment) {
+      throw new Error(`写入附件失败：${file.originalName}`)
+    }
+
+    nextAttachments.push(createdAttachment)
+  }
 
   return {
-    attachments: written.records,
+    attachments: nextAttachments,
     createdPaths: written.createdPaths,
   }
 }

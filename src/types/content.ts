@@ -123,7 +123,8 @@ export type SynapseCreateRulePayload = SynapseCreateContentPayloadBase
 export type SynapseCreateSkillFilePayload = {
   originalName: string
   size: number
-  bytes: Uint8Array
+  sha256?: string
+  bytes?: Uint8Array
 }
 
 export type SynapseCreateSkillPayload = SynapseCreateContentPayloadBase & {

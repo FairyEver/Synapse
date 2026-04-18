@@ -3,6 +3,7 @@ import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
 import { registerContentHandlers } from "./ipc/content-handlers"
 import { registerConfigHandlers } from "./ipc/config-handlers"
+import { registerIdentityHandlers } from "./ipc/identity-handlers"
 import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
 import { registerUpdateHandlers } from "./ipc/update-handlers"
@@ -92,6 +93,7 @@ if (!gotSingleInstanceLock) {
     registerContentHandlers()
     registerLogHandlers()
     registerConfigHandlers()
+    registerIdentityHandlers()
     registerRepositoryHandlers()
     registerUpdateHandlers()
     await configStore.load()

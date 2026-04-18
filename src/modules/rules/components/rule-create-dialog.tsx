@@ -38,6 +38,8 @@ import {
 } from "@/modules/rules/utils"
 
 type RuleCreateDialogProps = {
+  initialValue?: CreateRulePayload | null
+  mode?: "create" | "edit"
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: CreateRulePayload) => Promise<void> | void
   open: boolean
@@ -51,23 +53,31 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-sm text-destructive">{message}</p>
 }
 
-function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProps) {
+function RuleCreateDialog({
+  initialValue = null,
+  mode = "create",
+  onOpenChange,
+  onSubmit,
+  open,
+}: RuleCreateDialogProps) {
   const categoryOptions = useMemo(() => getCategoryDefinitions("rule"), [])
-  const [form, setForm] = useState<CreateRulePayload>(() => createEmptyRulePayload())
+  const baseline = useMemo(
+    () => normalizeCreateRulePayload(initialValue ?? createEmptyRulePayload()),
+    [initialValue],
+  )
+  const [form, setForm] = useState<CreateRulePayload>(() => baseline)
   const [errors, setErrors] = useState<RuleCreateFieldErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!open) {
-      setForm(createEmptyRulePayload())
-      setErrors({})
-      setIsSubmitting(false)
-      setIsDiscardConfirmOpen(false)
-      setSubmitError(null)
-    }
-  }, [open])
+    setForm(baseline)
+    setErrors({})
+    setIsSubmitting(false)
+    setIsDiscardConfirmOpen(false)
+    setSubmitError(null)
+  }, [baseline, open])
 
   const selectedIconOption = form.icon ? getContentIconOption(form.icon) : null
   const previewIconOption = selectedIconOption ?? getContentIconOption("sparkles")
@@ -96,7 +106,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
       return
     }
 
-    if (isCreateRulePayloadDirty(form)) {
+    if (JSON.stringify(normalizeCreateRulePayload(form)) !== JSON.stringify(baseline)) {
       setIsDiscardConfirmOpen(true)
       return
     }
@@ -121,7 +131,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
       await onSubmit(normalizeCreateRulePayload(form))
       onOpenChange(false)
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "提交 Rule 失败。")
+      setSubmitError(error instanceof Error ? error.message : "保存 Rule 失败。")
     } finally {
       setIsSubmitting(false)
     }
@@ -153,8 +163,8 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
 
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <FormDialog
-          title="新建 Rule"
-          description="填好内容后提交审核。"
+          title={mode === "create" ? "新建 Rule" : "编辑 Rule"}
+          description={mode === "create" ? "填好内容后保存。" : "修改后保存。"}
           contentClassName="sm:max-w-4xl"
           footer={(
             <>
@@ -171,7 +181,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
                   取消
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "正在提交..." : "提交审核"}
+                  {isSubmitting ? "正在保存..." : mode === "create" ? "保存" : "保存修改"}
                 </Button>
               </div>
             </>
