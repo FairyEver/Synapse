@@ -1,21 +1,36 @@
 import type { ReactNode } from "react"
+import { getSynapseBridge } from "@/lib/electron-bridge"
+import { cn } from "@/lib/utils"
 
 type AppShellLayoutProps = {
-  brand: ReactNode
   navigation: ReactNode
   children: ReactNode
   actions?: ReactNode
 }
 
-function AppShellLayout({ brand, navigation, children, actions }: AppShellLayoutProps) {
+function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) {
+  const isMacDesktop = getSynapseBridge()?.platform === "darwin"
+
   return (
-    <main className="h-screen overflow-hidden bg-background">
+    <main className="h-screen overflow-hidden bg-muted/30">
       <div className="flex h-full flex-col">
-        <header className="shrink-0 border-b border-border bg-background">
-          <div className="flex min-h-[68px] items-center gap-4 px-4">
-            <div className="shrink-0">{brand}</div>
-            <div className="min-w-0 flex-1">{navigation}</div>
-            {actions ? <div className="shrink-0">{actions}</div> : null}
+        <header className="shrink-0">
+          <div
+            className={cn(
+              "flex min-h-14 items-center gap-4",
+              isMacDesktop ? "pr-4 pl-20 [-webkit-app-region:drag]" : "px-4",
+            )}
+          >
+            <div className="flex min-w-0 flex-1 justify-center">
+              <div className={cn("min-w-0", isMacDesktop && "[-webkit-app-region:no-drag]")}>
+                {navigation}
+              </div>
+            </div>
+            {actions ? (
+              <div className={cn("shrink-0", isMacDesktop && "[-webkit-app-region:no-drag]")}>
+                {actions}
+              </div>
+            ) : null}
           </div>
         </header>
 

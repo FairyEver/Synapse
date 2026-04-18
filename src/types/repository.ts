@@ -21,6 +21,8 @@ export type SynapseRepositoryUpdatedEvent = {
   repositoryUuid: string
   operation: SynapseRepositoryOperationKind
   completedAt: string
+  message?: string
+  error?: string
 }
 
 export type SynapseRepositoryOperationResult = {

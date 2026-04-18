@@ -27,6 +27,7 @@ function createMainWindow() {
     minHeight,
     show: false,
     title: "Synapse",
+    ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

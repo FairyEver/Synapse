@@ -21,10 +21,8 @@ function SkillsModule({
   const logger = useMemo(() => createRendererLogger("skills"), [])
   const { activeRepository } = useAppConfig()
   const {
-    dismissNotice,
     handleCreated,
     isCreateDialogOpen,
-    notice,
     refreshSignal,
     setIsCreateDialogOpen,
   } = useContentCreationState(onCreateDialogOpenChange)
@@ -70,7 +68,6 @@ function SkillsModule({
     <>
       <ContentBrowserPage
         contentType="skill"
-        notice={notice ? { message: notice, onDismiss: dismissNotice } : undefined}
         refreshSignal={refreshSignal}
         title="Skills"
         onCreateClick={() => setIsCreateDialogOpen(true)}

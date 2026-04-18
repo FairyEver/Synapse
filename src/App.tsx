@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react"
-import { AppBrand } from "@/app-shell/components/app-brand"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
-import { InlineNotice } from "@/components/inline-notice"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +26,7 @@ const logger = createRendererLogger("app")
 
 function App() {
   const { activeRepository, isReady } = useAppConfig()
+  const { error: showError } = useAppNotifications()
   const { flushPendingPushes, operations, pendingPushes, states, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rules")
   const [isRulesCreateOpen, setIsRulesCreateOpen] = useState(false)
@@ -36,10 +36,16 @@ function App() {
   const [isSkillsDetailOpen, setIsSkillsDetailOpen] = useState(false)
   const [isSkillsInstallOpen, setIsSkillsInstallOpen] = useState(false)
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
-  const [syncError, setSyncError] = useState<string | null>(null)
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
   const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
+  const lastOperationErrorRef = useRef<string | null>(null)
+  const isRepositoryTaskRunning = Boolean(activeRepositoryOperation?.isRunning)
+  const repositoryActivityLabel = isRepositoryTaskRunning
+    ? activeRepositoryOperation?.operation === "maintenance"
+      ? "正在整理"
+      : "正在同步"
+    : null
   const hasBlockingModalOpen =
     isRulesCreateOpen
     || isRulesDetailOpen
@@ -51,7 +57,7 @@ function App() {
   const canSyncActiveRepository =
     activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
   const refreshTitle = activeRepositoryOperation?.isRunning
-    ? activeRepositoryOperation.statusText ?? "正在同步仓库..."
+    ? activeRepositoryOperation.statusText ?? "正在同步..."
     : hasBlockingModalOpen
       ? "请先关闭当前弹窗"
     : !isReady
@@ -80,6 +86,20 @@ function App() {
       activeTab,
     })
   }, [])
+
+  useEffect(() => {
+    if (!activeRepositoryOperation?.error) {
+      lastOperationErrorRef.current = null
+      return
+    }
+
+    if (lastOperationErrorRef.current === activeRepositoryOperation.error) {
+      return
+    }
+
+    lastOperationErrorRef.current = activeRepositoryOperation.error
+    showError(activeRepositoryOperation.error)
+  }, [activeRepositoryOperation?.error, showError])
 
   return (
     <IdentityGate>
@@ -110,10 +130,8 @@ function App() {
                   return
                 }
 
-                setSyncError(null)
                 void flushPendingPushes(activeRepository.uuid).catch((error) => {
                   logger.error("Pending push flush failed from app shell.", error)
-                  setSyncError(error instanceof Error ? error.message : "同步失败。")
                 })
               }}
             >
@@ -124,7 +142,6 @@ function App() {
       </AlertDialog>
 
       <AppShellLayout
-        brand={<AppBrand />}
         navigation={
           <AppShellNavigation
             tabs={tabs}
@@ -139,6 +156,7 @@ function App() {
         }
         actions={
           <AppShellActions
+            activityLabel={repositoryActivityLabel}
             isPushBusy={activeRepositoryOperation?.operation === "push" && Boolean(activeRepositoryOperation.isRunning)}
             pendingPushCount={activePendingPushState?.count ?? 0}
             pushDisabled={
@@ -146,7 +164,7 @@ function App() {
               || !canSyncActiveRepository
               || Boolean(activeRepositoryOperation?.isRunning)
             }
-            refreshBusy={activeRepositoryOperation?.operation === "sync" && Boolean(activeRepositoryOperation.isRunning)}
+            refreshBusy={isRepositoryTaskRunning}
             refreshDisabled={
               !isReady
               || !canSyncActiveRepository
@@ -162,10 +180,8 @@ function App() {
               logger.info("Manual repository sync requested from app shell.", {
                 repositoryUuid: activeRepository.uuid,
               })
-              setSyncError(null)
               void syncRepository(activeRepository.uuid).catch((error) => {
                 logger.error("Manual repository sync failed from app shell.", error)
-                setSyncError(error instanceof Error ? error.message : "仓库同步失败。")
               })
             }}
             refreshTitle={refreshTitle}
@@ -173,11 +189,6 @@ function App() {
         }
       >
         <div className="flex h-full min-h-0 flex-col">
-          {syncError ? (
-            <div className="shrink-0 px-6 pt-6">
-              <InlineNotice message={syncError} tone="destructive" onDismiss={() => setSyncError(null)} />
-            </div>
-          ) : null}
           <div className={activeTab === "rules" ? "h-full" : "hidden h-full"}>
             <RulesModule
               onCreateDialogOpenChange={setIsRulesCreateOpen}

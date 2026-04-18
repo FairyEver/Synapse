@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
+import { useAppNotifications } from "@/app-shell/notifications"
 
 type UseContentCreationStateResult = {
-  dismissNotice: () => void
   handleCreated: (message?: string) => void
   isCreateDialogOpen: boolean
-  notice: string | null
   refreshSignal: number
   setIsCreateDialogOpen: (open: boolean) => void
 }
@@ -12,8 +11,8 @@ type UseContentCreationStateResult = {
 function useContentCreationState(
   onCreateDialogOpenChange?: (open: boolean) => void,
 ): UseContentCreationStateResult {
+  const { success } = useAppNotifications()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
   const [refreshSignal, setRefreshSignal] = useState(0)
 
   useEffect(() => {
@@ -28,18 +27,12 @@ function useContentCreationState(
 
   const handleCreated = useCallback((message?: string) => {
     setRefreshSignal((currentSignal) => currentSignal + 1)
-    setNotice(message ?? "已保存。")
-  }, [])
-
-  const dismissNotice = useCallback(() => {
-    setNotice(null)
-  }, [])
+    success(message ?? "已保存。")
+  }, [success])
 
   return {
-    dismissNotice,
     handleCreated,
     isCreateDialogOpen,
-    notice,
     refreshSignal,
     setIsCreateDialogOpen,
   }

@@ -3,7 +3,7 @@ import {
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
 } from "@/constants/defaults"
 import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
-import { SYNAPSE_LANGUAGE_OPTIONS } from "@/types/config"
+import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
 
 function validateRepositoryDirectoryName(value: unknown): string | null {
   const nextValue = typeof value === "string" ? value.trim() : ""
@@ -23,7 +23,7 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "general",
     label: "通用",
-    description: "身份和界面语言。",
+    description: "身份和外观。",
   },
   {
     id: "repositories",
@@ -54,13 +54,18 @@ const settingsCategories: SettingsCategory[] = [
 
 const settingsItems: SettingItem[] = [
   {
-    key: "global.language",
-    label: "界面语言",
+    key: "global.themeMode",
+    label: "外观",
     category: "general",
     type: "select",
-    defaultValue: DEFAULT_GLOBAL_CONFIG.language,
-    options: SYNAPSE_LANGUAGE_OPTIONS.map((value) => ({
-      label: value === "zh-CN" ? "简体中文" : "English",
+    defaultValue: DEFAULT_GLOBAL_CONFIG.themeMode,
+    options: SYNAPSE_THEME_MODE_OPTIONS.map((value) => ({
+      label:
+        value === "light"
+          ? "浅色"
+          : value === "dark"
+            ? "深色"
+            : "跟随系统",
       value,
     })),
     scope: "global",

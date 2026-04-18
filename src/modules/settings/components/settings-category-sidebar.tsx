@@ -17,13 +17,14 @@ function SettingsCategorySidebar({
   onCategoryChange,
 }: SettingsCategorySidebarProps) {
   return (
-    <ModuleSidebar>
+    <ModuleSidebar variant="bare">
       <ModuleSidebarList>
         {categories.map((category) => (
           <ModuleSidebarItem
             key={category.id}
             active={category.id === activeCategory}
             onClick={() => onCategoryChange(category.id)}
+            className="h-10 px-4"
           >
             {category.label}
           </ModuleSidebarItem>

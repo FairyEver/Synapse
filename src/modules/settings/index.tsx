@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { LogsModule } from "@/modules/logs"
@@ -21,8 +22,8 @@ const logger = createRendererLogger("settings")
 
 function SettingsModule() {
   const { activeRepository, config, error, isReady, updateConfig } = useAppConfig()
+  const { error: showError } = useAppNotifications()
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general")
-  const [saveError, setSaveError] = useState<string | null>(null)
   const context = useMemo(
     () => ({
       config,
@@ -50,7 +51,6 @@ function SettingsModule() {
           patch,
           reloadAfterUpdate,
         })
-        setSaveError(null)
         await updateConfig(patch)
 
         if (reloadAfterUpdate && window.synapse?.config) {
@@ -61,11 +61,11 @@ function SettingsModule() {
         return true
       } catch (updateError) {
         logger.error("Failed to apply settings patch.", updateError)
-        setSaveError(updateError instanceof Error ? updateError.message : "保存设置失败。")
+        showError(updateError instanceof Error ? updateError.message : "保存设置失败。")
         return false
       }
     },
-    [updateConfig],
+    [showError, updateConfig],
   )
 
   const handleSaveItem = useCallback(
@@ -118,7 +118,7 @@ function SettingsModule() {
 
   return (
     <SidebarContentLayout
-      contentClassName={cn(isLogsCategory ? "overflow-hidden" : "overflow-y-auto")}
+      contentScrollable={!isLogsCategory}
       sidebar={
         <SettingsCategorySidebar
           categories={settingsCategories}
@@ -132,14 +132,13 @@ function SettingsModule() {
         />
       }
     >
-      <div className={cn("flex flex-col gap-6", isLogsCategory ? "h-full min-h-0 p-4" : "p-6")}>
+      <div className={cn("flex flex-col gap-6", isLogsCategory ? "h-full min-h-0 pb-4" : "pb-6")}>
         {activeCategory === "content" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
             当前目录：{activeRepository.name}
           </p>
         ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
 
         {!isReady ? (
           <Card>

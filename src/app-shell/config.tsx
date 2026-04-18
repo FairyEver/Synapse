@@ -10,7 +10,12 @@ import {
 } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseConfig, SynapseConfigPatch, SynapseRepositoryConfig } from "@/types/config"
+import type {
+  SynapseConfig,
+  SynapseConfigPatch,
+  SynapseRepositoryConfig,
+  SynapseThemeMode,
+} from "@/types/config"
 import { createDefaultConfig, getActiveRepositoryConfig } from "@/lib/config"
 
 type AppConfigContextValue = {
@@ -24,6 +29,7 @@ type AppConfigContextValue = {
 
 const AppConfigContext = createContext<AppConfigContextValue | null>(null)
 const logger = createRendererLogger("app.config")
+const DARK_MODE_MEDIA_QUERY = "(prefers-color-scheme: dark)"
 
 async function readConfigFromBridge(): Promise<SynapseConfig> {
   return requireSynapseBridge().config.get()
@@ -31,6 +37,25 @@ async function readConfigFromBridge(): Promise<SynapseConfig> {
 
 async function updateConfigThroughBridge(patch: SynapseConfigPatch): Promise<SynapseConfig> {
   return requireSynapseBridge().config.update(patch)
+}
+
+function resolveDarkMode(themeMode: SynapseThemeMode, mediaQueryList: MediaQueryList | null): boolean {
+  if (themeMode === "dark") {
+    return true
+  }
+
+  if (themeMode === "light") {
+    return false
+  }
+
+  return mediaQueryList?.matches ?? false
+}
+
+function applyThemeMode(themeMode: SynapseThemeMode, mediaQueryList: MediaQueryList | null): void {
+  const shouldUseDarkMode = resolveDarkMode(themeMode, mediaQueryList)
+
+  document.documentElement.classList.toggle("dark", shouldUseDarkMode)
+  document.documentElement.style.colorScheme = shouldUseDarkMode ? "dark" : "light"
 }
 
 function AppConfigProvider({ children }: { children: ReactNode }) {
@@ -87,6 +112,28 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
       setIsReady(true)
     })
   }, [refreshConfig])
+
+  useEffect(() => {
+    const mediaQueryList =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia(DARK_MODE_MEDIA_QUERY)
+        : null
+    const syncThemeMode = () => {
+      applyThemeMode(config.global.themeMode, mediaQueryList)
+    }
+
+    syncThemeMode()
+
+    if (config.global.themeMode !== "system" || mediaQueryList === null) {
+      return
+    }
+
+    mediaQueryList.addEventListener("change", syncThemeMode)
+
+    return () => {
+      mediaQueryList.removeEventListener("change", syncThemeMode)
+    }
+  }, [config.global.themeMode])
 
   const value = useMemo<AppConfigContextValue>(
     () => ({

@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import { Switch } from "@/components/ui/switch"
 import type { SettingItem, SettingsContext } from "@/modules/settings/types"
 
@@ -44,6 +45,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
   const [draftValue, setDraftValue] = useState(currentInputValue)
   const pendingSaveRef = useRef<number | null>(null)
   const hasLocalEditRef = useRef(false)
+  const controlClassName = "border-border/70"
 
   useEffect(() => {
     setDraftValue(currentInputValue)
@@ -106,67 +108,59 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
   }, [candidateValue, currentInputValue, draftValue, item, item.readOnly, onSave, supportsDraftInput, validationMessage])
 
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-      <div className="flex max-w-2xl flex-col gap-1">
-        <p className="text-sm font-medium">{item.label}</p>
-        {item.description ? (
-          <p className="text-sm text-muted-foreground">{item.description}</p>
-        ) : null}
-        {validationMessage ? (
-          <p className="text-sm text-destructive">{validationMessage}</p>
-        ) : null}
-      </div>
+    <SettingsFieldRow
+      label={item.label}
+      description={item.description}
+      error={validationMessage}
+      controlClassName={item.type === "toggle" ? "flex w-full justify-end md:w-[200px]" : undefined}
+    >
+      {item.type === "select" ? (
+        <Select
+          value={typeof value === "string" ? value : undefined}
+          onValueChange={(nextValue) => {
+            void onSave(item, nextValue)
+          }}
+        >
+          <SelectTrigger className="w-full border-border/70">
+            <SelectValue placeholder="请选择" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {item.options?.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      ) : null}
 
-      <div className="w-full md:max-w-sm">
-        {item.type === "select" ? (
-          <Select
-            value={typeof value === "string" ? value : undefined}
-            onValueChange={(nextValue) => {
-              void onSave(item, nextValue)
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="请选择" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {item.options?.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        ) : null}
+      {item.type === "toggle" ? (
+        <Switch
+          checked={Boolean(value)}
+          onCheckedChange={(checked) => {
+            void onSave(item, checked)
+          }}
+        />
+      ) : null}
 
-        {item.type === "toggle" ? (
-          <div className="flex justify-end">
-            <Switch
-              checked={Boolean(value)}
-              onCheckedChange={(checked) => {
-                void onSave(item, checked)
-              }}
-            />
-          </div>
-        ) : null}
-
-        {supportsDraftInput ? (
-          <Input
-            type={item.type === "number" ? "number" : "text"}
-            value={draftValue}
-            readOnly={item.readOnly}
-            disabled={item.readOnly}
-            aria-invalid={validationMessage ? true : undefined}
-            onBlur={commitDraftValue}
-            onChange={(event) => {
-              hasLocalEditRef.current = true
-              setDraftValue(event.target.value)
-            }}
-          />
-        ) : null}
-      </div>
-    </div>
+      {supportsDraftInput ? (
+        <Input
+          className={controlClassName}
+          type={item.type === "number" ? "number" : "text"}
+          value={draftValue}
+          readOnly={item.readOnly}
+          disabled={item.readOnly}
+          aria-invalid={validationMessage ? true : undefined}
+          onBlur={commitDraftValue}
+          onChange={(event) => {
+            hasLocalEditRef.current = true
+            setDraftValue(event.target.value)
+          }}
+        />
+      ) : null}
+    </SettingsFieldRow>
   )
 }
 

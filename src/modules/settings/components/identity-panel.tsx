@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Copy } from "lucide-react"
 import { useIdentity } from "@/app-shell/identity-context"
-import { InlineNotice } from "@/components/inline-notice"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 
 function normalizeUserIdInput(value: string): string {
@@ -26,8 +27,8 @@ function validateUserIdInput(value: string): string | null {
 
 function IdentityPanel() {
   const { identityState, replaceUserId, updateDisplayName } = useIdentity()
+  const { success } = useAppNotifications()
   const [draftDisplayName, setDraftDisplayName] = useState("")
-  const [copyNotice, setCopyNotice] = useState<string | null>(null)
   const [restoreValue, setRestoreValue] = useState("")
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [isRestoreOpen, setIsRestoreOpen] = useState(false)
@@ -45,20 +46,6 @@ function IdentityPanel() {
     setDraftDisplayName(identityState?.identity.displayName ?? "")
     lastSavedDisplayNameRef.current = identityState?.identity.displayName ?? ""
   }, [identityState])
-
-  useEffect(() => {
-    if (!copyNotice) {
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setCopyNotice(null)
-    }, 2500)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [copyNotice])
 
   const normalizedRestoreValue = useMemo(
     () => normalizeUserIdInput(restoreValue),
@@ -112,7 +99,7 @@ function IdentityPanel() {
                 size="sm"
                 onClick={() => {
                   void navigator.clipboard.writeText(identityState.identity.userId).then(() => {
-                    setCopyNotice("已复制到剪贴板。")
+                    success("已复制到剪贴板。")
                   })
                 }}
               >
@@ -127,23 +114,21 @@ function IdentityPanel() {
               className="font-mono"
             />
             <p className="text-sm text-muted-foreground">
-              这是你在 Synapse 中的唯一身份凭证。请立即复制并备份到密码管理器或其他安全位置。本地数据丢失且没有备份时，无法恢复历史身份。
+              这是当前身份 ID。请及时备份；本地数据丢失后无法恢复。
             </p>
-            {copyNotice ? <InlineNotice message={copyNotice} /> : null}
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium">恢复已有身份</p>
-              <p className="text-sm text-muted-foreground">切换后，新提交会被认作来自另一个身份。</p>
-            </div>
+          <SettingsFieldRow
+            label="恢复已有身份"
+            description="切换后，新的提交会归属到该身份。"
+            controlClassName="flex w-full justify-start md:w-[200px] md:justify-end"
+          >
             <Button type="button" variant="outline" onClick={() => setIsRestoreOpen(true)}>
               恢复已有身份
             </Button>
-          </div>
+          </SettingsFieldRow>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="identity-display-name">显示名称</Label>
+          <SettingsFieldRow label="显示名称">
             <Input
               id="identity-display-name"
               value={draftDisplayName}
@@ -152,7 +137,7 @@ function IdentityPanel() {
                 setDraftDisplayName(event.target.value)
               }}
             />
-          </div>
+          </SettingsFieldRow>
         </div>
       </SettingsGroup>
 

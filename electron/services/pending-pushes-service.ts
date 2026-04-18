@@ -9,6 +9,14 @@ type PendingPushInsertParams = {
   title: string | null
 }
 
+function getTargetIds(ids?: number[]): number[] | null {
+  if (!ids || ids.length === 0) {
+    return null
+  }
+
+  return Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)))
+}
+
 function mapPendingPushRow(row: Record<string, unknown>): SynapsePendingPushEntry | null {
   if (
     typeof row.id !== "number"
@@ -90,27 +98,58 @@ class PendingPushesService {
     })
   }
 
-  async clear(repository: SynapseRepositoryConfig): Promise<SynapsePendingPushState> {
-    await withRepositoryCacheDatabase(repository.uuid, (database) => {
-      database.exec("DELETE FROM pending_pushes")
-    })
+  async clear(repository: SynapseRepositoryConfig, ids?: number[]): Promise<SynapsePendingPushState> {
+    const targetIds = getTargetIds(ids)
 
-    return {
-      count: 0,
-      items: [],
-    }
+    return withRepositoryCacheDatabase(repository.uuid, (database) => {
+      if (!targetIds) {
+        database.exec("DELETE FROM pending_pushes")
+      } else {
+        const placeholders = targetIds.map(() => "?").join(", ")
+
+        database.prepare(`
+          DELETE FROM pending_pushes
+          WHERE id IN (${placeholders})
+        `).run(...targetIds)
+      }
+
+      const rows = database.prepare(`
+        SELECT *
+        FROM pending_pushes
+        ORDER BY created_at ASC, id ASC
+      `).all() as Record<string, unknown>[]
+      const items = rows
+        .map(mapPendingPushRow)
+        .filter((item): item is SynapsePendingPushEntry => item !== null)
+
+      return {
+        count: items.length,
+        items,
+      }
+    })
   }
 
   async markFailure(
     repository: SynapseRepositoryConfig,
     lastError: string,
+    ids?: number[],
   ): Promise<SynapsePendingPushState> {
+    const targetIds = getTargetIds(ids)
+
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
-      database.prepare(`
+      const placeholders = targetIds?.map(() => "?").join(", ")
+      const statement = database.prepare(`
         UPDATE pending_pushes
         SET retry_count = retry_count + 1,
             last_error = ?
-      `).run(lastError)
+        ${placeholders ? `WHERE id IN (${placeholders})` : ""}
+      `)
+
+      if (targetIds) {
+        statement.run(lastError, ...targetIds)
+      } else {
+        statement.run(lastError)
+      }
 
       const rows = database.prepare(`
         SELECT *

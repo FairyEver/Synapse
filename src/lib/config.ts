@@ -1,17 +1,17 @@
 import {
   DEFAULT_CONFIG,
   DEFAULT_GLOBAL_CONFIG,
-  DEFAULT_INTERFACE_LANGUAGE,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
+  DEFAULT_THEME_MODE,
 } from "../constants/defaults"
-import { SYNAPSE_LANGUAGE_OPTIONS } from "../types/config"
+import { SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
   SynapseGlobalConfig,
-  SynapseLanguage,
   SynapseProjectConfig,
   SynapseRepositoryConfig,
+  SynapseThemeMode,
 } from "../types/config"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -30,8 +30,8 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
 }
 
-function isSynapseLanguage(value: unknown): value is SynapseLanguage {
-  return typeof value === "string" && SYNAPSE_LANGUAGE_OPTIONS.includes(value as SynapseLanguage)
+function isSynapseThemeMode(value: unknown): value is SynapseThemeMode {
+  return typeof value === "string" && SYNAPSE_THEME_MODE_OPTIONS.includes(value as SynapseThemeMode)
 }
 
 function asTrimmedString(value: unknown, fallback = ""): string {
@@ -44,8 +44,8 @@ function normalizeDirectoryName(value: unknown, fallback: string): string {
   return nextValue.length > 0 ? nextValue : fallback
 }
 
-function normalizeLanguage(value: unknown, fallback: SynapseLanguage): SynapseLanguage {
-  return isSynapseLanguage(value) ? value : fallback
+function normalizeThemeMode(value: unknown, fallback: SynapseThemeMode): SynapseThemeMode {
+  return isSynapseThemeMode(value) ? value : fallback
 }
 
 function dedupeByKey<T>(items: T[], getKey: (item: T) => string): T[] {
@@ -124,7 +124,7 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
     return true
   }
 
-  if (hasOwnKey(value, "language") && typeof value.language !== "string") {
+  if (hasOwnKey(value, "themeMode") && typeof value.themeMode !== "string") {
     return true
   }
 
@@ -239,7 +239,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   }
 
   return {
-    language: normalizeLanguage(value.language, DEFAULT_INTERFACE_LANGUAGE),
+    themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
     projects: normalizeProjects(value.projects),
   }
 }

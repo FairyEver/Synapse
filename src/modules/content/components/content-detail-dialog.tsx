@@ -13,6 +13,7 @@ import {
   updateRule,
   updateSkill,
 } from "@/app-shell/content"
+import type { AppNotificationTone } from "@/app-shell/notifications"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,7 +62,7 @@ type ContentDetailDialogProps = {
   item: SynapseContentMeta | null
   onContentChanged?: () => void
   onOpenChange: (open: boolean) => void
-  onStatusChange?: (message: string | null, tone?: "default" | "destructive") => void
+  onStatusChange?: (message: string | null, tone?: AppNotificationTone) => void
   open: boolean
   refreshSignal?: number
 }
@@ -302,6 +303,7 @@ function ContentDetailDialog({
   }
 
   const resolvedItem = detail ?? item
+  const deleteTarget = detail ?? item
   const categoryLabel = getCategoryLabel(item.type, resolvedItem.category)
   const iconOption = getContentIconOption(resolvedItem.icon)
 
@@ -372,14 +374,10 @@ function ContentDetailDialog({
   }
 
   const handleDelete = async (force = false) => {
-    if (!detail) {
-      return
-    }
-
     const result = await deleteContent({
-      id: detail.id,
-      type: detail.type,
-      baseHistoryDirname: detail.latestHistoryDirname,
+      id: deleteTarget.id,
+      type: deleteTarget.type,
+      baseHistoryDirname: deleteTarget.latestHistoryDirname,
       force,
     })
 
@@ -390,9 +388,9 @@ function ContentDetailDialog({
         latestModifiedByDisplayName: result.latestModifiedByDisplayName,
         mode: "delete",
         payload: {
-          id: detail.id,
-          type: detail.type,
-          baseHistoryDirname: detail.latestHistoryDirname,
+          id: deleteTarget.id,
+          type: deleteTarget.type,
+          baseHistoryDirname: deleteTarget.latestHistoryDirname,
         },
       })
       return
@@ -487,7 +485,7 @@ function ContentDetailDialog({
       </AlertDialog>
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+        <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
           <DialogHeader className="px-5 pt-5">
             <div className="flex items-start justify-between gap-4 pr-8">
               <div className="flex min-w-0 items-start gap-4">
@@ -514,6 +512,7 @@ function ContentDetailDialog({
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!detail}
                   onClick={() => {
                     if (detail?.type === "rule") {
                       setIsRuleEditOpen(true)

@@ -2,6 +2,7 @@ import { LoaderCircle, RefreshCw, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 type AppShellActionsProps = {
+  activityLabel?: string | null
   isPushBusy?: boolean
   pendingPushCount?: number
   pushDisabled?: boolean
@@ -14,6 +15,7 @@ type AppShellActionsProps = {
 }
 
 function AppShellActions({
+  activityLabel = null,
   isPushBusy = false,
   pendingPushCount = 0,
   pushDisabled = false,
@@ -43,6 +45,10 @@ function AppShellActions({
           ) : null}
           <span className="sr-only">{pushTitle}</span>
         </Button>
+      ) : null}
+
+      {activityLabel ? (
+        <span className="text-sm text-muted-foreground">{activityLabel}</span>
       ) : null}
 
       <Button

@@ -12,9 +12,11 @@ import {
   readRuleContent,
   readSkillContent,
 } from "@/app-shell/content"
+import type { AppNotificationTone } from "@/app-shell/notifications"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +33,7 @@ import type { SynapseEditorAdapterSummary } from "@/types/editor"
 type ContentActionSplitButtonProps = {
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
-  onStatusChange?: (message: string | null, tone?: "default" | "destructive") => void
+  onStatusChange?: (message: string | null, tone?: AppNotificationTone) => void
 }
 
 function canCopyContent(item: SynapseContentMeta): boolean {
@@ -112,9 +114,9 @@ function ContentActionSplitButton({
       })
 
       if (result.canceled) {
-        onStatusChange?.("已取消下载。")
+        onStatusChange?.("已取消下载。", "info")
       } else if (result.filePath) {
-        onStatusChange?.(`已保存到 ${result.filePath}`)
+        onStatusChange?.(`已保存到 ${result.filePath}`, "success")
       }
     } catch (error) {
       logger.error("Content download failed.", {
@@ -152,7 +154,7 @@ function ContentActionSplitButton({
         contentId: item.id,
         contentType: item.type,
       })
-      onStatusChange?.("正文已复制。")
+      onStatusChange?.("正文已复制。", "success")
     } catch (error) {
       logger.error("Copy to clipboard failed.", {
         contentId: item.id,
@@ -168,11 +170,10 @@ function ContentActionSplitButton({
 
   return (
     <>
-      <div data-slot="button-group" className="inline-flex items-stretch">
+      <ButtonGroup>
         <Button
           variant="outline"
           size="sm"
-          className="rounded-r-none border-r-0"
           disabled={isBusy}
           onClick={() => {
             void handleDownload()
@@ -200,7 +201,6 @@ function ContentActionSplitButton({
             <Button
               variant="outline"
               size="icon-sm"
-              className="rounded-l-none"
               disabled={isBusy}
               title="更多操作"
             >
@@ -252,12 +252,12 @@ function ContentActionSplitButton({
             ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </ButtonGroup>
 
       <ContentInstallDialog
         editor={selectedEditor}
         item={item}
-        onInstallComplete={(message) => onStatusChange?.(message)}
+        onInstallComplete={(message) => onStatusChange?.(message, "success")}
         open={isInstallDialogOpen}
         projects={config.global.projects}
         onOpenChange={(open) => {

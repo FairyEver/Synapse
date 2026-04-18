@@ -9,8 +9,8 @@ import {
 } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications, type AppNotificationTone } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
-import { InlineNotice } from "@/components/inline-notice"
 import {
   ModuleSidebar,
   ModuleSidebarHeader,
@@ -18,7 +18,6 @@ import {
   ModuleSidebarList,
 } from "@/components/module-sidebar"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
-import { Card, CardContent } from "@/components/ui/card"
 import {
   Empty,
   EmptyDescription,
@@ -42,10 +41,6 @@ import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentBrowserPageProps = {
   contentType: SynapseContentType
-  notice?: {
-    message: string
-    onDismiss?: () => void
-  }
   onCreateClick?: () => void
   onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
@@ -198,7 +193,7 @@ function getContentState(params: {
 
 function ContentStateView({ description, icon: Icon, title }: ContentState) {
   return (
-    <Empty className="min-h-[320px] rounded-lg border border-border bg-muted/20">
+    <Empty className="min-h-[320px] rounded-lg border border-border bg-background">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Icon className={cn(title.startsWith("正在加载") ? "animate-spin" : undefined)} />
@@ -220,65 +215,70 @@ function ContentListCard({
   contentType: SynapseContentType
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
-  onStatusChange?: (message: string | null, tone?: "default" | "destructive") => void
+  onStatusChange?: (message: string | null, tone?: AppNotificationTone) => void
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
   const iconOption = getContentIconOption(item.icon)
+  const modifiedByLabel = item.modifiedByDisplayName || "未命名用户"
 
   return (
-    <Card size="sm" className="border border-border/70">
-      <CardContent className="flex items-center gap-4">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 rounded-lg px-1 py-1 text-left outline-none transition-colors hover:bg-muted/20 focus-visible:bg-muted/20 focus-visible:ring-3 focus-visible:ring-ring/50"
-          onClick={onOpen}
-        >
-          <ContentIconBadge size="md" tone={item.iconBg} title={item.title}>
-            {iconOption ? (
-              <iconOption.icon className="size-5" />
-            ) : (
-              <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
-            )}
-          </ContentIconBadge>
+    <div className="flex items-start gap-3 rounded-xl bg-background px-3 py-3 ring-1 ring-foreground/10">
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={onOpen}
+      >
+        <ContentIconBadge size="md" tone={item.iconBg} title={item.title}>
+          {iconOption ? (
+            <iconOption.icon className="size-5" />
+          ) : (
+            <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
+          )}
+        </ContentIconBadge>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-col gap-1">
+        <div className="min-w-0 flex-1 pt-0.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
-              <p className="line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
+              <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                {item.description}
+              </p>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>{categoryLabel}</span>
-              <span>{item.modifiedByDisplayName || "未命名用户"}</span>
-              <span>{formatModifiedAt(item.modifiedAt)}</span>
-            </div>
+            <span className="shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
+              {formatModifiedAt(item.modifiedAt)}
+            </span>
           </div>
-        </button>
 
-        <div
-          className="shrink-0 self-center"
-          onClick={(event) => {
-            event.stopPropagation()
-          }}
-          onKeyDown={(event) => {
-            event.stopPropagation()
-          }}
-        >
-          <ContentActionSplitButton
-            item={item}
-            onInstallDialogOpenChange={onInstallDialogOpenChange}
-            onStatusChange={onStatusChange}
-          />
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>{categoryLabel}</span>
+            <span className="truncate">{modifiedByLabel}</span>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </button>
+
+      <div
+        className="shrink-0 self-start"
+        onClick={(event) => {
+          event.stopPropagation()
+        }}
+        onKeyDown={(event) => {
+          event.stopPropagation()
+        }}
+      >
+        <ContentActionSplitButton
+          item={item}
+          onInstallDialogOpenChange={onInstallDialogOpenChange}
+          onStatusChange={onStatusChange}
+        />
+      </div>
+    </div>
   )
 }
 
 function ContentBrowserPage({
   contentType,
-  notice,
   onCreateClick,
   onDetailDialogOpenChange,
   onInstallDialogOpenChange,
@@ -287,6 +287,7 @@ function ContentBrowserPage({
 }: ContentBrowserPageProps) {
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
+  const { notify } = useAppNotifications()
   const { states } = useRepositoryManager()
   const [contentRefreshSignal, setContentRefreshSignal] = useState(0)
   const catalogRefreshSignal = refreshSignal + contentRefreshSignal
@@ -297,10 +298,6 @@ function ContentBrowserPage({
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
-  const [actionNotice, setActionNotice] = useState<{
-    message: string
-    tone: "default" | "destructive"
-  } | null>(null)
 
   const activeRepositoryState = activeRepository ? (states[activeRepository.uuid] ?? null) : null
   const repositoryStatus =
@@ -313,6 +310,13 @@ function ContentBrowserPage({
   const canCreateContent =
     canBrowseContent && Boolean(activeRepositoryState?.isGitRepository)
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
+  const showStatus = (message: string | null, tone: AppNotificationTone = "success") => {
+    if (!message) {
+      return
+    }
+
+    notify({ message, tone })
+  }
 
   useEffect(() => {
     if (!categories.some((item) => item.id === activeCategoryId)) {
@@ -417,31 +421,33 @@ function ContentBrowserPage({
     <>
       <SidebarContentLayout
         sidebar={
-          <ModuleSidebar>
-            <ModuleSidebarHeader
-              searchValue={searchQuery}
-              onSearchChange={setSearchQuery}
-              searchPlaceholder={`搜索 ${title}`}
-              searchDisabled={!canBrowseContent}
-              onAddClick={() => {
-                logger.info("Create entry requested from browser page.", {
-                  contentType,
-                  repositoryUuid: activeRepository.uuid,
-                })
+          <ModuleSidebar variant="bare">
+            <div className="pb-2">
+              <ModuleSidebarHeader
+                searchValue={searchQuery}
+                onSearchChange={setSearchQuery}
+                searchPlaceholder={`搜索 ${title}`}
+                searchDisabled={!canBrowseContent}
+                onAddClick={() => {
+                  logger.info("Create entry requested from browser page.", {
+                    contentType,
+                    repositoryUuid: activeRepository.uuid,
+                  })
 
-                if (onCreateClick) {
-                  onCreateClick()
-                  return
-                }
+                  if (onCreateClick) {
+                    onCreateClick()
+                    return
+                  }
 
-                logger.warn("Create entry requested without a registered handler.", {
-                  contentType,
-                  repositoryUuid: activeRepository.uuid,
-                })
-              }}
-              addDisabled={!canCreateContent}
-              addTitle={createButtonTitle}
-            />
+                  logger.warn("Create entry requested without a registered handler.", {
+                    contentType,
+                    repositoryUuid: activeRepository.uuid,
+                  })
+                }}
+                addDisabled={!canCreateContent}
+                addTitle={createButtonTitle}
+              />
+            </div>
             <ModuleSidebarList>
               {categories.map((category) => (
                 <ModuleSidebarItem
@@ -449,6 +455,7 @@ function ContentBrowserPage({
                   active={category.id === activeCategoryId}
                   disabled={!canBrowseContent}
                   onClick={() => setActiveCategoryId(category.id)}
+                  className="h-10 px-4"
                   trailing={
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {category.count}
@@ -462,20 +469,8 @@ function ContentBrowserPage({
           </ModuleSidebar>
         }
       >
-        <section className="h-full min-h-0 overflow-y-auto">
-          <div className="flex min-h-full flex-col gap-4">
-            {notice ? (
-              <InlineNotice message={notice.message} onDismiss={notice.onDismiss} />
-            ) : null}
-
-            {actionNotice ? (
-              <InlineNotice
-                message={actionNotice.message}
-                tone={actionNotice.tone}
-                onDismiss={() => setActionNotice(null)}
-              />
-            ) : null}
-
+        <section className="h-full min-h-0">
+          <div className="flex min-h-full flex-col gap-4 pb-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-base font-medium text-foreground">{title}</h2>
@@ -494,16 +489,14 @@ function ContentBrowserPage({
             {state ? (
               <ContentStateView {...state} />
             ) : (
-              <div className="grid gap-3 xl:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3">
                 {filteredItems.map((item) => (
                   <ContentListCard
                     key={item.id}
                     contentType={contentType}
                     item={item}
                     onInstallDialogOpenChange={onInstallDialogOpenChange}
-                    onStatusChange={(message, tone = "default") => {
-                      setActionNotice(message ? { message, tone } : null)
-                    }}
+                    onStatusChange={showStatus}
                     onOpen={() => {
                       logger.info("Content detail opened from browser page.", {
                         contentId: item.id,
@@ -526,9 +519,7 @@ function ContentBrowserPage({
         onContentChanged={() => {
           setContentRefreshSignal((currentSignal) => currentSignal + 1)
         }}
-        onStatusChange={(message, tone = "default") => {
-          setActionNotice(message ? { message, tone } : null)
-        }}
+        onStatusChange={showStatus}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedItem(null)

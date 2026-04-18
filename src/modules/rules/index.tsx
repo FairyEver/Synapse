@@ -21,10 +21,8 @@ function RulesModule({
   const logger = useMemo(() => createRendererLogger("rules"), [])
   const { activeRepository } = useAppConfig()
   const {
-    dismissNotice,
     handleCreated,
     isCreateDialogOpen,
-    notice,
     refreshSignal,
     setIsCreateDialogOpen,
   } = useContentCreationState(onCreateDialogOpenChange)
@@ -52,7 +50,6 @@ function RulesModule({
     <>
       <ContentBrowserPage
         contentType="rule"
-        notice={notice ? { message: notice, onDismiss: dismissNotice } : undefined}
         refreshSignal={refreshSignal}
         title="Rules"
         onCreateClick={() => setIsCreateDialogOpen(true)}

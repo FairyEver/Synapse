@@ -4,6 +4,7 @@ import App from "@/App"
 import { AppConfigProvider } from "@/app-shell/config"
 import { IdentityProvider } from "@/app-shell/identity-context"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
+import { AppNotificationsProvider } from "@/app-shell/notifications"
 import { RepositoryManagerProvider } from "@/app-shell/repository"
 import "@/styles/globals.css"
 
@@ -17,7 +18,9 @@ createRoot(document.getElementById("root")!).render(
     <IdentityProvider>
       <AppConfigProvider>
         <RepositoryManagerProvider>
-          <App />
+          <AppNotificationsProvider>
+            <App />
+          </AppNotificationsProvider>
         </RepositoryManagerProvider>
       </AppConfigProvider>
     </IdentityProvider>

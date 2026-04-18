@@ -8,6 +8,7 @@ import type {
   SynapseUpdateRulePayload,
   SynapseUpdateSkillPayload,
 } from "../../src/types/content"
+import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseInstallToEditorPayload,
   SynapseResolveEditorTargetPayload,
@@ -24,6 +25,7 @@ import { createMainLogger } from "../services/log-store"
 
 let handlersRegistered = false
 const logger = createMainLogger("ipc.content")
+const backgroundPushStates = new Map<string, { rerunRequested: boolean }>()
 
 function sendToRenderer<T>(sender: WebContents, channel: string, payload: T): void {
   if (!sender.isDestroyed()) {
@@ -42,20 +44,116 @@ async function chooseDownloadPath(
   return result.canceled ? null : result.filePath ?? null
 }
 
-async function notifyPendingPushesUpdated(sender: WebContents): Promise<void> {
+async function resolveActiveRepository(): Promise<SynapseRepositoryConfig | null> {
   const config = await configStore.load()
-  const repository = getActiveRepositoryConfig(config)
 
-  if (!repository) {
+  return getActiveRepositoryConfig(config)
+}
+
+function sendPendingPushesUpdated(
+  sender: WebContents,
+  repositoryUuid: string,
+  pendingPushes: Awaited<ReturnType<typeof contentSubmissionService.readPendingPushState>>,
+): void {
+  sendToRenderer(sender, SYNAPSE_IPC_CHANNELS.repository.pendingPushesUpdated, {
+    repositoryUuid,
+    pendingPushes,
+  })
+}
+
+function sendBackgroundPushUpdated(
+  sender: WebContents,
+  repositoryUuid: string,
+  payload: {
+    error?: string
+    message?: string
+  } = {},
+): void {
+  sendToRenderer(sender, SYNAPSE_IPC_CHANNELS.repository.updated, {
+    repositoryUuid,
+    operation: "push",
+    completedAt: new Date().toISOString(),
+    error: payload.error,
+    message: payload.message,
+  })
+}
+
+async function notifyPendingPushesUpdated(
+  sender: WebContents,
+  repository: SynapseRepositoryConfig | null = null,
+): Promise<void> {
+  const resolvedRepository = repository ?? await resolveActiveRepository()
+
+  if (!resolvedRepository) {
     return
   }
 
-  const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
+  const pendingPushes = await contentSubmissionService.readPendingPushState(resolvedRepository)
+  sendPendingPushesUpdated(sender, resolvedRepository.uuid, pendingPushes)
+}
 
-  sendToRenderer(sender, SYNAPSE_IPC_CHANNELS.repository.pendingPushesUpdated, {
-    repositoryUuid: repository.uuid,
-    pendingPushes,
-  })
+function scheduleBackgroundPush(sender: WebContents, repository: SynapseRepositoryConfig): void {
+  const activeState = backgroundPushStates.get(repository.uuid)
+
+  if (activeState) {
+    activeState.rerunRequested = true
+    return
+  }
+
+  const nextState = {
+    rerunRequested: false,
+  }
+
+  backgroundPushStates.set(repository.uuid, nextState)
+
+  void (async () => {
+    try {
+      while (true) {
+        nextState.rerunRequested = false
+        sendToRenderer(sender, SYNAPSE_IPC_CHANNELS.repository.progress, {
+          repositoryUuid: repository.uuid,
+          operation: "push",
+          statusText: "正在同步...",
+          percent: 0,
+        })
+
+        try {
+          await contentSubmissionService.flushPendingPushes(repository, (statusText) => {
+            sendToRenderer(sender, SYNAPSE_IPC_CHANNELS.repository.progress, {
+              repositoryUuid: repository.uuid,
+              operation: "push",
+              statusText,
+              percent: null,
+            })
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+          await notifyPendingPushesUpdated(sender, repository)
+          sendBackgroundPushUpdated(sender, repository.uuid, {
+            error: message,
+            message,
+          })
+          return
+        }
+
+        const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
+
+        sendPendingPushesUpdated(sender, repository.uuid, pendingPushes)
+
+        if (nextState.rerunRequested || pendingPushes.count > 0) {
+          continue
+        }
+
+        sendBackgroundPushUpdated(sender, repository.uuid, {
+          message: "同步完成。",
+        })
+        return
+      }
+    } finally {
+      backgroundPushStates.delete(repository.uuid)
+    }
+  })()
 }
 
 function registerContentHandlers() {
@@ -83,7 +181,13 @@ function registerContentHandlers() {
       })
 
       const result = await contentSubmissionService.createRule(payload)
-      await notifyPendingPushesUpdated(event.sender)
+      const repository = await resolveActiveRepository()
+
+      await notifyPendingPushesUpdated(event.sender, repository)
+
+      if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
+        scheduleBackgroundPush(event.sender, repository)
+      }
 
       return result
     },
@@ -98,7 +202,13 @@ function registerContentHandlers() {
       })
 
       const result = await contentSubmissionService.createSkill(payload)
-      await notifyPendingPushesUpdated(event.sender)
+      const repository = await resolveActiveRepository()
+
+      await notifyPendingPushesUpdated(event.sender, repository)
+
+      if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
+        scheduleBackgroundPush(event.sender, repository)
+      }
 
       return result
     },

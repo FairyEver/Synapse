@@ -1,8 +1,8 @@
 import type {
   SynapseConfigPatch,
-  SynapseLanguage,
   SynapseProjectConfig,
   SynapseRepositoryConfig,
+  SynapseThemeMode,
 } from "@/types/config"
 import type { SettingItem, SettingsContext } from "@/modules/settings/types"
 
@@ -21,8 +21,8 @@ function updateActiveRepository(
 
 function getGlobalSettingValue(key: string, context: SettingsContext, fallback: unknown): unknown {
   switch (key) {
-    case "language":
-      return context.config.global.language
+    case "themeMode":
+      return context.config.global.themeMode
     case "projects":
       return context.config.global.projects
     default:
@@ -47,8 +47,8 @@ function getRepositorySettingValue(key: string, context: SettingsContext, fallba
 
 function createGlobalSettingPatch(key: string, value: unknown): SynapseConfigPatch | null {
   switch (key) {
-    case "language":
-      return { global: { language: String(value ?? "") as SynapseLanguage } }
+    case "themeMode":
+      return { global: { themeMode: String(value ?? "") as SynapseThemeMode } }
     case "projects":
       return { global: { projects: value as SynapseProjectConfig[] } }
     default:

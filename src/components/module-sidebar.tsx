@@ -7,13 +7,15 @@ import { cn } from "@/lib/utils"
 type ModuleSidebarProps = {
   children: ReactNode
   className?: string
+  variant?: "card" | "bare"
 }
 
-function ModuleSidebar({ children, className }: ModuleSidebarProps) {
+function ModuleSidebar({ children, className, variant = "card" }: ModuleSidebarProps) {
   return (
     <aside
       className={cn(
-        "flex h-full min-h-0 flex-col gap-2 rounded-2xl bg-muted/30 p-2",
+        "flex h-full min-h-0 flex-col gap-2",
+        variant === "card" && "rounded-2xl bg-background p-2 ring-1 ring-foreground/10",
         className,
       )}
     >
@@ -88,6 +90,7 @@ type ModuleSidebarItemProps = {
   onClick?: () => void
   trailing?: ReactNode
   children: ReactNode
+  className?: string
 }
 
 function ModuleSidebarItem({
@@ -96,6 +99,7 @@ function ModuleSidebarItem({
   onClick,
   trailing,
   children,
+  className,
 }: ModuleSidebarItemProps) {
   return (
     <button
@@ -106,9 +110,10 @@ function ModuleSidebarItem({
       className={cn(
         "flex h-9 w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
         "hover:bg-muted/60 hover:text-foreground",
-        "focus-visible:ring-3 focus-visible:ring-ring/50",
+        "focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
         active && "bg-secondary text-secondary-foreground hover:bg-secondary",
+        className,
       )}
     >
       <span className="truncate text-left">{children}</span>

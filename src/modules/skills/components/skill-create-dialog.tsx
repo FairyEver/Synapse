@@ -3,7 +3,6 @@ import {
   FolderOpen,
   LoaderCircle,
   Paperclip,
-  Sparkles,
   Trash2,
   Upload,
   X,
@@ -32,12 +31,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { getContentIconOption } from "@/lib/content-appearance"
 import { getCategoryDefinitions } from "@/lib/content-categories"
 import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
 import { ContentBackgroundPicker } from "@/modules/content/components/content-background-picker"
-import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import { ContentIconPicker } from "@/modules/content/components/content-icon-picker"
 import type {
   CreateSkillFilePayload,
@@ -220,8 +217,6 @@ function SkillCreateDialog({
     dragDepthRef.current = 0
   }, [baseline, open])
 
-  const selectedIconOption = form.icon ? getContentIconOption(form.icon) : null
-  const previewIconOption = selectedIconOption ?? getContentIconOption("sparkles")
   const totalAttachmentSize = useMemo(
     () => form.files.reduce((total, file) => total + file.size, 0),
     [form.files],
@@ -371,7 +366,7 @@ function SkillCreateDialog({
         <FormDialog
           title={mode === "create" ? "新建 Skill" : "编辑 Skill"}
           description={mode === "create" ? "填好主说明和附件后保存。" : "修改后保存。"}
-          contentClassName="sm:max-w-5xl"
+          contentClassName="sm:max-w-[600px]"
           footer={(
             <>
               {submitError ? (
@@ -394,285 +389,253 @@ function SkillCreateDialog({
           )}
           onSubmit={handleSubmit}
         >
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="skill-create-title">标题</Label>
-                <Input
-                  id="skill-create-title"
-                  value={form.title}
-                  aria-invalid={errors.title ? "true" : undefined}
-                  onChange={(event) => updateField("title", event.target.value)}
-                  placeholder="例如：API 文档生成助手"
-                />
-                <FieldError message={errors.title} />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="skill-create-description">简介</Label>
-                <Textarea
-                  id="skill-create-description"
-                  value={form.description}
-                  aria-invalid={errors.description ? "true" : undefined}
-                  className="min-h-24"
-                  onChange={(event) => updateField("description", event.target.value)}
-                  placeholder="例如：自动整理 API 文档。"
-                />
-                <FieldError message={errors.description} />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="skill-create-category">分类</Label>
-                <Select
-                  value={form.category || undefined}
-                  onValueChange={(value) => updateField("category", value)}
-                >
-                  <SelectTrigger
-                    id="skill-create-category"
-                    aria-invalid={errors.category ? "true" : undefined}
-                    className="w-full"
-                  >
-                    <SelectValue placeholder="选择分类" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {categoryOptions.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FieldError message={errors.category} />
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <Label>图标</Label>
-                <ContentIconPicker
-                  value={form.icon}
-                  onValueChange={(value) => updateField("icon", value)}
-                />
-                <FieldError message={errors.icon} />
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <Label>背景色</Label>
-                <ContentBackgroundPicker
-                  value={form.iconBg}
-                  onValueChange={(value) => updateField("iconBg", value)}
-                />
-                <FieldError message={errors.iconBg} />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="skill-create-content">主说明</Label>
-                <Textarea
-                  id="skill-create-content"
-                  value={form.content}
-                  aria-invalid={errors.content ? "true" : undefined}
-                  className="min-h-56"
-                  onChange={(event) => updateField("content", event.target.value)}
-                  placeholder="输入 Skill 的主说明。"
-                />
-                <FieldError message={errors.content} />
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <Label>附件</Label>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      拖入文件或文件夹，目录结构会一起保留。
-                    </p>
-                  </div>
-                  {form.files.length > 0 ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        updateFiles([])
-                        setAttachmentMessage(null)
-                      }}
-                    >
-                      <Trash2 />
-                      清空全部
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div
-                  className={cn(
-                    "rounded-lg border border-dashed border-border/80 bg-muted/10 p-5 transition-colors",
-                    isDraggingFiles && "border-primary bg-muted/30",
-                  )}
-                  onDragEnter={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    dragDepthRef.current += 1
-                    setIsDraggingFiles(true)
-                  }}
-                  onDragLeave={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
-
-                    if (dragDepthRef.current === 0) {
-                      setIsDraggingFiles(false)
-                    }
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    event.dataTransfer.dropEffect = "copy"
-                  }}
-                  onDrop={handleDrop}
-                >
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-                      {isCollectingFiles ? (
-                        <LoaderCircle className="animate-spin" />
-                      ) : (
-                        <Upload />
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {isCollectingFiles ? "正在整理附件..." : "拖入文件或文件夹"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        单个附件最大 {formatSkillAttachmentSize(MAX_SKILL_ATTACHMENT_SIZE)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={isCollectingFiles || isSubmitting}
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Paperclip />
-                        选择文件
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={isCollectingFiles || isSubmitting}
-                        onClick={() => folderInputRef.current?.click()}
-                      >
-                        <FolderOpen />
-                        选择文件夹
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <input
-                  ref={fileInputRef}
-                  className="hidden"
-                  type="file"
-                  multiple
-                  onChange={(event) => {
-                    handleHiddenInputFiles(event.target.files)
-                    event.currentTarget.value = ""
-                  }}
-                />
-                <input
-                  ref={folderInputRef}
-                  className="hidden"
-                  type="file"
-                  multiple
-                  onChange={(event) => {
-                    handleHiddenInputFiles(event.target.files)
-                    event.currentTarget.value = ""
-                  }}
-                />
-
-                {attachmentMessage ? (
-                  <p className="text-sm text-destructive">{attachmentMessage}</p>
-                ) : null}
-                <FieldError message={errors.files} />
-
-                {form.files.length > 0 ? (
-                  <div className="overflow-hidden rounded-lg border border-border/70">
-                    <div className="flex items-center justify-between border-b border-border/70 bg-muted/20 px-3 py-2 text-sm">
-                      <span className="font-medium text-foreground">
-                        已选 {form.files.length} 个附件
-                      </span>
-                      <span className="text-muted-foreground">
-                        共 {formatSkillAttachmentSize(totalAttachmentSize)}
-                      </span>
-                    </div>
-                    <div className="max-h-56 overflow-y-auto">
-                      {form.files.map((file) => (
-                        <div
-                          key={file.originalName}
-                          className="flex items-start justify-between gap-3 border-b border-border/70 px-3 py-3 last:border-b-0"
-                        >
-                          <div className="min-w-0">
-                            <p className="break-all text-sm font-medium text-foreground">
-                              {file.originalName}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {formatSkillAttachmentSize(file.size)}
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              updateFiles(
-                                form.files.filter((item) => item.originalName !== file.originalName),
-                              )
-                            }}
-                            title="移除附件"
-                          >
-                            <X />
-                            <span className="sr-only">移除附件</span>
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    还没有附件。
-                  </p>
-                )}
-              </div>
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="skill-create-title">标题</Label>
+              <Input
+                id="skill-create-title"
+                value={form.title}
+                aria-invalid={errors.title ? "true" : undefined}
+                onChange={(event) => updateField("title", event.target.value)}
+                placeholder="例如：API 文档生成助手"
+              />
+              <FieldError message={errors.title} />
             </div>
 
-            <aside className="rounded-lg border border-border/70 bg-muted/10 p-4">
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">预览</p>
-                  <p className="text-sm text-muted-foreground">
-                    已选 {form.files.length} 个附件，共 {formatSkillAttachmentSize(totalAttachmentSize)}。
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="skill-create-description">简介</Label>
+              <Textarea
+                id="skill-create-description"
+                value={form.description}
+                aria-invalid={errors.description ? "true" : undefined}
+                className="min-h-24"
+                onChange={(event) => updateField("description", event.target.value)}
+                placeholder="例如：自动整理 API 文档。"
+              />
+              <FieldError message={errors.description} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="skill-create-category">分类</Label>
+              <Select
+                value={form.category || undefined}
+                onValueChange={(value) => updateField("category", value)}
+              >
+                <SelectTrigger
+                  id="skill-create-category"
+                  aria-invalid={errors.category ? "true" : undefined}
+                  className="w-full"
+                >
+                  <SelectValue placeholder="选择分类" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {categoryOptions.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldError message={errors.category} />
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Label>图标</Label>
+              <ContentIconPicker
+                value={form.icon}
+                onValueChange={(value) => updateField("icon", value)}
+              />
+              <FieldError message={errors.icon} />
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Label>背景色</Label>
+              <ContentBackgroundPicker
+                value={form.iconBg}
+                onValueChange={(value) => updateField("iconBg", value)}
+              />
+              <FieldError message={errors.iconBg} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="skill-create-content">主说明</Label>
+              <Textarea
+                id="skill-create-content"
+                value={form.content}
+                aria-invalid={errors.content ? "true" : undefined}
+                className="min-h-56"
+                onChange={(event) => updateField("content", event.target.value)}
+                placeholder="输入 Skill 的主说明。"
+              />
+              <FieldError message={errors.content} />
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Label>附件</Label>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    拖入文件或文件夹，目录结构会一起保留。
                   </p>
                 </div>
+                {form.files.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      updateFiles([])
+                      setAttachmentMessage(null)
+                    }}
+                  >
+                    <Trash2 />
+                    清空全部
+                  </Button>
+                ) : null}
+              </div>
 
-                <div className="flex items-center gap-4">
-                  <ContentIconBadge size="lg" tone={form.iconBg || null} title={form.title || "Skill 预览"}>
-                    {previewIconOption ? (
-                      <previewIconOption.icon className="size-6" />
+              <div
+                className={cn(
+                  "rounded-lg border border-dashed border-border/80 bg-muted/10 p-5 transition-colors",
+                  isDraggingFiles && "border-primary bg-muted/30",
+                )}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  dragDepthRef.current += 1
+                  setIsDraggingFiles(true)
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+
+                  if (dragDepthRef.current === 0) {
+                    setIsDraggingFiles(false)
+                  }
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  event.dataTransfer.dropEffect = "copy"
+                }}
+                onDrop={handleDrop}
+              >
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+                    {isCollectingFiles ? (
+                      <LoaderCircle className="animate-spin" />
                     ) : (
-                      <Sparkles className="size-6" />
+                      <Upload />
                     )}
-                  </ContentIconBadge>
-
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {form.title.trim() || "Skill 标题"}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {isCollectingFiles ? "正在整理附件..." : "拖入文件或文件夹"}
                     </p>
-                    <p className="line-clamp-2 text-sm text-muted-foreground">
-                      {form.description.trim() || "简要说明"}
+                    <p className="text-sm text-muted-foreground">
+                      单个附件最大 {formatSkillAttachmentSize(MAX_SKILL_ATTACHMENT_SIZE)}
                     </p>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={isCollectingFiles || isSubmitting}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Paperclip />
+                      选择文件
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isCollectingFiles || isSubmitting}
+                      onClick={() => folderInputRef.current?.click()}
+                    >
+                      <FolderOpen />
+                      选择文件夹
+                    </Button>
                   </div>
                 </div>
               </div>
-            </aside>
+
+              <input
+                ref={fileInputRef}
+                className="hidden"
+                type="file"
+                multiple
+                onChange={(event) => {
+                  handleHiddenInputFiles(event.target.files)
+                  event.currentTarget.value = ""
+                }}
+              />
+              <input
+                ref={folderInputRef}
+                className="hidden"
+                type="file"
+                multiple
+                onChange={(event) => {
+                  handleHiddenInputFiles(event.target.files)
+                  event.currentTarget.value = ""
+                }}
+              />
+
+              {attachmentMessage ? (
+                <p className="text-sm text-destructive">{attachmentMessage}</p>
+              ) : null}
+              <FieldError message={errors.files} />
+
+              {form.files.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border border-border/70">
+                  <div className="flex items-center justify-between border-b border-border/70 bg-muted/20 px-3 py-2 text-sm">
+                    <span className="font-medium text-foreground">
+                      已选 {form.files.length} 个附件
+                    </span>
+                    <span className="text-muted-foreground">
+                      共 {formatSkillAttachmentSize(totalAttachmentSize)}
+                    </span>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto">
+                    {form.files.map((file) => (
+                      <div
+                        key={file.originalName}
+                        className="flex items-start justify-between gap-3 border-b border-border/70 px-3 py-3 last:border-b-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="break-all text-sm font-medium text-foreground">
+                            {file.originalName}
+                          </p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {formatSkillAttachmentSize(file.size)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => {
+                            updateFiles(
+                              form.files.filter((item) => item.originalName !== file.originalName),
+                            )
+                          }}
+                          title="移除附件"
+                        >
+                          <X />
+                          <span className="sr-only">移除附件</span>
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  还没有附件。
+                </p>
+              )}
+            </div>
           </div>
         </FormDialog>
       </Dialog>

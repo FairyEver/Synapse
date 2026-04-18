@@ -118,6 +118,10 @@ function createMutationMessage(pushed: boolean, pendingPushCount: number): strin
   return pendingPushCount > 1 ? `已保存，等待同步 ${pendingPushCount} 条变更。` : "已保存，等待同步。"
 }
 
+function createDeferredMutationMessage(): string {
+  return "已保存。"
+}
+
 function runGitCommand(
   cwd: string,
   args: string[],
@@ -274,18 +278,24 @@ async function readRepositoryState(repository: SynapseRepositoryConfig) {
 }
 
 class ContentSubmissionService {
+  private pendingPushChains = new Map<string, Promise<void>>()
+
   async createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentMutationResult> {
     const identity = await userIdentityService.requireReadyIdentity()
     const writeResult = await contentWriteService.createRule(payload, identity)
 
-    return this.commitAndMaybePush("create", writeResult)
+    return this.commitAndMaybePush("create", writeResult, {
+      deferPush: true,
+    })
   }
 
   async createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentMutationResult> {
     const identity = await userIdentityService.requireReadyIdentity()
     const writeResult = await contentWriteService.createSkill(payload, identity)
 
-    return this.commitAndMaybePush("create", writeResult)
+    return this.commitAndMaybePush("create", writeResult, {
+      deferPush: true,
+    })
   }
 
   async updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {
@@ -313,30 +323,33 @@ class ContentSubmissionService {
     repository: SynapseRepositoryConfig,
     onProgress?: PushProgressListener,
   ): Promise<void> {
-    const pendingState = await pendingPushesService.readState(repository)
+    return this.runPushExclusive(repository.uuid, async () => {
+      const pendingState = await pendingPushesService.readState(repository)
+      const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
 
-    if (pendingState.count === 0) {
-      return
-    }
-
-    try {
-      await pushRepository(repository, onProgress)
-      await pendingPushesService.clear(repository)
-      await contentIndexService.syncIndex(repository)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "推送到仓库失败。"
-
-      if (isNonFastForwardError(message)) {
-        await pullWithRebase(repository, onProgress)
-        await pushRepository(repository, onProgress)
-        await pendingPushesService.clear(repository)
-        await contentIndexService.syncIndex(repository)
+      if (pendingState.count === 0) {
         return
       }
 
-      await pendingPushesService.markFailure(repository, message)
-      throw error
-    }
+      try {
+        await pushRepository(repository, onProgress)
+        await pendingPushesService.clear(repository, attemptedPendingPushIds)
+        await contentIndexService.syncIndex(repository)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+        if (isNonFastForwardError(message)) {
+          await pullWithRebase(repository, onProgress)
+          await pushRepository(repository, onProgress)
+          await pendingPushesService.clear(repository, attemptedPendingPushIds)
+          await contentIndexService.syncIndex(repository)
+          return
+        }
+
+        await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
+        throw error
+      }
+    })
   }
 
   private async updateContent(
@@ -416,6 +429,9 @@ class ContentSubmissionService {
   private async commitAndMaybePush(
     action: "create" | "update" | "delete",
     writeResult: ContentWriteResult,
+    options: {
+      deferPush?: boolean
+    } = {},
   ): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
     const repositoryState = await readRepositoryState(repository)
@@ -428,6 +444,27 @@ class ContentSubmissionService {
       writeResult,
     )
     await contentIndexService.syncIndex(repository)
+
+    if (options.deferPush) {
+      const pendingPushState = await pendingPushesService.enqueue(repository, {
+        action,
+        commitHash,
+        targetId: writeResult.id,
+        title: writeResult.title,
+      })
+
+      return {
+        id: writeResult.id,
+        type: writeResult.type,
+        status: "saved",
+        title: writeResult.title,
+        latestHistoryDirname: writeResult.latestHistoryDirname,
+        modifiedAt: writeResult.modifiedAt,
+        pushed: false,
+        pendingPushCount: pendingPushState.count,
+        message: createDeferredMutationMessage(),
+      }
+    }
 
     let pushed = true
 
@@ -511,6 +548,35 @@ class ContentSubmissionService {
     }
 
     return repository
+  }
+
+  private async runPushExclusive<T>(
+    repositoryUuid: string,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    const previousChain = this.pendingPushChains.get(repositoryUuid) ?? Promise.resolve()
+    let releaseCurrentChain!: () => void
+
+    const currentChain = new Promise<void>((resolve) => {
+      releaseCurrentChain = resolve
+    })
+    const nextChain = previousChain
+      .catch(() => undefined)
+      .then(() => currentChain)
+
+    this.pendingPushChains.set(repositoryUuid, nextChain)
+
+    await previousChain.catch(() => undefined)
+
+    try {
+      return await callback()
+    } finally {
+      releaseCurrentChain()
+
+      if (this.pendingPushChains.get(repositoryUuid) === nextChain) {
+        this.pendingPushChains.delete(repositoryUuid)
+      }
+    }
   }
 }
 

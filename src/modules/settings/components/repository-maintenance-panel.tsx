@@ -1,7 +1,6 @@
-import { useState } from "react"
 import { LoaderCircle } from "lucide-react"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
-import { InlineNotice } from "@/components/inline-notice"
 import { Button } from "@/components/ui/button"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 
@@ -11,10 +10,7 @@ type RepositoryMaintenancePanelProps = {
 
 function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePanelProps) {
   const { operations, runMaintenance } = useRepositoryManager()
-  const [notice, setNotice] = useState<{
-    message: string
-    tone: "default" | "destructive"
-  } | null>(null)
+  const { error: showError, success } = useAppNotifications()
   const operation = operations[repositoryUuid]
   const isBusy = operation?.isRunning && operation.operation === "maintenance"
 
@@ -28,18 +24,6 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
           </p>
         </div>
 
-        {notice ? (
-          <InlineNotice
-            message={notice.message}
-            tone={notice.tone}
-            onDismiss={() => setNotice(null)}
-          />
-        ) : null}
-
-        {operation?.error && operation.operation === "maintenance" ? (
-          <InlineNotice message={operation.error} tone="destructive" />
-        ) : null}
-
         {isBusy && operation?.statusText ? (
           <p className="text-sm text-muted-foreground">{operation.statusText}</p>
         ) : null}
@@ -50,19 +34,12 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
             variant="outline"
             disabled={Boolean(operation?.isRunning)}
             onClick={() => {
-              setNotice(null)
               void runMaintenance(repositoryUuid)
                 .then((result) => {
-                  setNotice({
-                    message: result.message ?? "整理完成。",
-                    tone: "default",
-                  })
+                  success(result.message ?? "整理完成。")
                 })
                 .catch((error) => {
-                  setNotice({
-                    message: error instanceof Error ? error.message : "整理失败。",
-                    tone: "destructive",
-                  })
+                  showError(error instanceof Error ? error.message : "整理失败。")
                 })
             }}
           >

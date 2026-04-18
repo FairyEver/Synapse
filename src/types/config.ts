@@ -1,6 +1,6 @@
-export const SYNAPSE_LANGUAGE_OPTIONS = ["zh-CN", "en-US"] as const
+export const SYNAPSE_THEME_MODE_OPTIONS = ["light", "dark", "system"] as const
 
-export type SynapseLanguage = (typeof SYNAPSE_LANGUAGE_OPTIONS)[number]
+export type SynapseThemeMode = (typeof SYNAPSE_THEME_MODE_OPTIONS)[number]
 
 export type SynapseProjectConfig = {
   id: string
@@ -17,7 +17,7 @@ export type SynapseRepositoryConfig = {
 }
 
 export type SynapseGlobalConfig = {
-  language: SynapseLanguage
+  themeMode: SynapseThemeMode
   projects: SynapseProjectConfig[]
 }
 

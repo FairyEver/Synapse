@@ -190,9 +190,11 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           ...currentOperations[updatedEvent.repositoryUuid],
           operation: updatedEvent.operation,
           isRunning: false,
-          statusText: getCompletedStatusText(updatedEvent.operation),
-          percent: 100,
-          error: null,
+          statusText: updatedEvent.error
+            ? (updatedEvent.message ?? null)
+            : (updatedEvent.message ?? getCompletedStatusText(updatedEvent.operation)),
+          percent: updatedEvent.error ? null : 100,
+          error: updatedEvent.error ?? null,
           completedAt: updatedEvent.completedAt,
         }),
       }))
