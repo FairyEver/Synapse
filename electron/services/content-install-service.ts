@@ -1,27 +1,19 @@
-import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
-import type { Dirent } from "node:fs"
+import { access, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
-import type { SynapseContentType } from "../../src/types/content"
 import type {
   SynapseContentInstallResult,
   SynapseInstallToEditorPayload,
 } from "../../src/types/editor"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
+import { attachmentsPoolService } from "./attachments-pool-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { createMainLogger } from "./log-store"
 
-const CONTENT_MAIN_FILE_NAME = "main.md"
-const CONTENT_META_FILE_NAME = "meta.json"
 const INSTALLED_SKILL_MAIN_FILE_NAME = "SKILL.md"
 const logger = createMainLogger("service.content-install")
-
-type ActiveRepositoryInstallContext = {
-  repository: SynapseRepositoryConfig
-  rootPath: string
-}
 
 function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT"
@@ -29,14 +21,6 @@ function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
 
 function isPermissionError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && (error.code === "EACCES" || error.code === "EPERM")
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0
 }
 
 function normalizeMarkdownContent(content: string): string {
@@ -56,115 +40,15 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-async function readDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
-  try {
-    return await readdir(directoryPath, { withFileTypes: true })
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return []
-    }
-
-    logger.warn("Failed to read content directory while installing content.", {
-      directoryPath,
-      error,
-    })
-
-    return []
-  }
-}
-
-async function readMetaId(directoryPath: string): Promise<string | null> {
-  const metaPath = path.join(directoryPath, CONTENT_META_FILE_NAME)
-
-  try {
-    const rawMeta = JSON.parse(await readFile(metaPath, "utf8")) as unknown
-
-    if (!isRecord(rawMeta) || !isNonEmptyString(rawMeta.id)) {
-      return null
-    }
-
-    return rawMeta.id.trim()
-  } catch (error) {
-    if (!isFileNotFoundError(error)) {
-      logger.warn("Failed to read content meta while locating install source.", {
-        directoryPath,
-        error,
-      })
-    }
-
-    return null
-  }
-}
-
-async function getActiveRepositoryContext(
-  contentType: SynapseContentType,
-): Promise<ActiveRepositoryInstallContext | null> {
+async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   const config = await configStore.load()
   const repository = getActiveRepositoryConfig(config)
 
   if (!repository) {
-    return null
-  }
-
-  return {
-    repository,
-    rootPath: path.join(
-      repository.localPath,
-      contentType === "rule" ? repository.rulesDir : repository.skillsDir,
-    ),
-  }
-}
-
-async function resolveContentDirectory(
-  repository: SynapseRepositoryConfig,
-  contentType: SynapseContentType,
-  contentId: string,
-): Promise<string | null> {
-  const rootPath = path.join(
-    repository.localPath,
-    contentType === "rule" ? repository.rulesDir : repository.skillsDir,
-  )
-  const directPath = path.join(rootPath, contentId)
-
-  if (await pathExists(directPath)) {
-    return directPath
-  }
-
-  const entries = await readDirectoryEntries(rootPath)
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    const directoryPath = path.join(rootPath, entry.name)
-    const metaId = await readMetaId(directoryPath)
-
-    if (metaId === contentId) {
-      return directoryPath
-    }
-  }
-
-  return null
-}
-
-async function resolveActiveContentDirectory(
-  contentType: SynapseContentType,
-  contentId: string,
-): Promise<string> {
-  const context = await getActiveRepositoryContext(contentType)
-
-  if (!context) {
     throw new Error("当前还没有激活的本地目录。")
   }
 
-  const directoryPath = await resolveContentDirectory(context.repository, contentType, contentId)
-
-  if (directoryPath) {
-    return directoryPath
-  }
-
-  throw new Error(contentType === "rule" ? "找不到对应的 Rule 内容。" : "找不到对应的 Skill 内容。")
+  return repository
 }
 
 async function swapPathAtomically(replacementPath: string, targetPath: string): Promise<void> {
@@ -215,43 +99,6 @@ async function replaceFileAtomically(targetPath: string, content: string): Promi
     await swapPathAtomically(tempFilePath, targetPath)
   } finally {
     await rm(tempDirectoryPath, { recursive: true, force: true }).catch(() => {})
-  }
-}
-
-async function copySkillInstallFiles(sourceDirectoryPath: string, targetDirectoryPath: string): Promise<void> {
-  const entries = await readdir(sourceDirectoryPath, { withFileTypes: true })
-
-  for (const entry of entries) {
-    const sourcePath = path.join(sourceDirectoryPath, entry.name)
-
-    if (entry.isDirectory()) {
-      const nextTargetPath = path.join(targetDirectoryPath, entry.name)
-
-      await mkdir(nextTargetPath, { recursive: true })
-      await copySkillInstallFiles(sourcePath, nextTargetPath)
-      continue
-    }
-
-    if (!entry.isFile()) {
-      continue
-    }
-
-    if (entry.name === CONTENT_META_FILE_NAME) {
-      continue
-    }
-
-    if (entry.name === CONTENT_MAIN_FILE_NAME) {
-      const skillContent = await readFile(sourcePath, "utf8")
-
-      await writeFile(
-        path.join(targetDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
-        normalizeMarkdownContent(skillContent),
-        "utf8",
-      )
-      continue
-    }
-
-    await copyFile(sourcePath, path.join(targetDirectoryPath, entry.name))
   }
 }
 
@@ -310,10 +157,23 @@ class ContentInstallService {
           throw new Error("当前编辑器没有返回合法的 Skill 安装目标。")
         }
 
-        const sourceDirectoryPath = await resolveActiveContentDirectory("skill", payload.contentId)
+        const repository = await getActiveRepository()
+        const detail = await contentService.getSkillDetail(payload.contentId)
 
         await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
-          await copySkillInstallFiles(sourceDirectoryPath, stagingDirectoryPath)
+          await writeFile(
+            path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
+            normalizeMarkdownContent(detail.content),
+            "utf8",
+          )
+
+          for (const attachment of detail.attachments) {
+            await attachmentsPoolService.copyAttachmentToPath(
+              repository.localPath,
+              attachment,
+              path.join(stagingDirectoryPath, attachment.originalName),
+            )
+          }
         })
       }
     } catch (error) {

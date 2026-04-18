@@ -1,24 +1,25 @@
 import { spawn } from "node:child_process"
-import { mkdtemp, rm } from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
 import type {
+  SynapseContentMutationResult,
   SynapseContentType,
-  SynapseContentWriteResult,
   SynapseCreateRulePayload,
   SynapseCreateSkillPayload,
+  SynapseDeleteContentPayload,
+  SynapseUpdateRulePayload,
+  SynapseUpdateSkillPayload,
 } from "../../src/types/content"
-import {
-  contentCreateService,
-  getActiveRepositoryWriteContext,
-  type ActiveRepositoryWriteContext,
-  type WrittenContentArtifact,
-} from "./content-create-service"
+import type { SynapseRepositoryConfig } from "../../src/types/config"
+import { contentHistoryService } from "./content-history-service"
+import { contentIndexService } from "./content-index-service"
+import { contentWriteService, type ContentWriteResult } from "./content-write-service"
 import { createMainLogger } from "./log-store"
-import { createPullRequestProvider } from "./pull-request-provider"
+import { pendingPushesService } from "./pending-pushes-service"
+import { repositoryStore } from "./repository-store"
+import { userIdentityService } from "./user-identity-service"
 
-const DEFAULT_TARGET_BRANCH = "main"
-const REMOTE_NAME = "origin"
+const SYNAPSE_BOT_NAME = "Synapse Bot"
+const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const logger = createMainLogger("service.content-submit")
 
 type GitCommandResult = {
@@ -26,88 +27,14 @@ type GitCommandResult = {
   stdout: string
 }
 
-type SubmissionWorktree = {
-  branchName: string
-  repositoryWorkPath: string
-  targetBranch: string
-  worktreePath: string
-}
-
-type SubmitContentParams = {
-  contentType: SynapseContentType
-  createArtifact: (
-    context: ActiveRepositoryWriteContext,
-    repositoryWorkPath: string,
-  ) => Promise<WrittenContentArtifact>
-}
-
-function formatBranchTimestamp(date = new Date()): string {
-  const parts = [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-    String(date.getHours()).padStart(2, "0"),
-    String(date.getMinutes()).padStart(2, "0"),
-    String(date.getSeconds()).padStart(2, "0"),
-  ]
-
-  return parts.join("")
-}
-
-function sanitizeBranchDisplayName(displayName: string): string {
-  const trimmedValue = displayName.trim().toLowerCase()
-
-  if (!trimmedValue) {
-    return "user"
-  }
-
-  const asciiSlug = trimmedValue
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-")
-
-  if (asciiSlug) {
-    return asciiSlug
-  }
-
-  const utf8Hex = Buffer.from(trimmedValue, "utf8").toString("hex").slice(0, 12)
-
-  return utf8Hex ? `user-${utf8Hex}` : "user"
-}
-
-function buildBranchName(contentType: SynapseContentType, displayName: string): string {
-  return `${contentType}/add/${sanitizeBranchDisplayName(displayName)}/${formatBranchTimestamp()}`
-}
-
-function buildCommitMessage(contentType: SynapseContentType, contentId: string): string {
-  return `feat(${contentType}): add ${contentId}`
-}
-
-function buildPullRequestTitle(contentType: SynapseContentType, contentTitle: string): string {
-  const contentLabel = contentType === "rule" ? "rule" : "skill"
-
-  return `Add ${contentLabel}: ${contentTitle}`
-}
-
-function buildPullRequestBody(
-  artifact: WrittenContentArtifact,
-  context: ActiveRepositoryWriteContext,
-): string {
-  return [
-    "Created from Synapse.",
-    "",
-    `- Type: ${artifact.type}`,
-    `- ID: ${artifact.id}`,
-    `- Title: ${artifact.title}`,
-    `- Author: ${context.author}`,
-    `- Git User: ${context.gitUser}`,
-  ].join("\n")
-}
+type PushProgressListener = (statusText: string) => void
 
 function toGitPath(filePath: string): string {
   return filePath.split(path.sep).join("/")
+}
+
+function toCommitMessage(action: "create" | "update" | "delete", result: ContentWriteResult): string {
+  return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
 }
 
 function formatGitSpawnError(error: unknown): string {
@@ -133,7 +60,7 @@ function formatGitFailureMessage(output: string, fallbackMessage: string): strin
     || loweredOutput.includes("permission denied")
     || loweredOutput.includes("fatal: could not read from remote repository")
   ) {
-    return "Git 认证失败。请检查系统凭证、SSH Key 或 credential.helper 配置。"
+    return "无法连接仓库，请检查网络。"
   }
 
   if (
@@ -151,7 +78,7 @@ function formatGitFailureMessage(output: string, fallbackMessage: string): strin
     || loweredOutput.includes("network is unreachable")
     || loweredOutput.includes("connection reset")
   ) {
-    return "无法连接到远程仓库。请检查网络连接、代理设置或仓库域名。"
+    return "无法连接仓库，请检查网络。"
   }
 
   if (
@@ -165,25 +92,35 @@ function formatGitFailureMessage(output: string, fallbackMessage: string): strin
     loweredOutput.includes("nothing to commit")
     || loweredOutput.includes("no changes added to commit")
   ) {
-    return "当前没有可提交的改动。请检查内容目录是否被 .gitignore 忽略，或仓库里是否已经存在相同内容。"
+    return "当前没有可提交的改动。"
   }
 
-  if (
-    loweredOutput.includes("already exists")
-    && loweredOutput.includes("branch")
-  ) {
-    return "当前提交分支名已存在，请稍后重试。"
+  return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
+}
+
+function isNonFastForwardError(errorMessage: string): boolean {
+  const loweredMessage = errorMessage.toLowerCase()
+
+  return (
+    loweredMessage.includes("non-fast-forward")
+    || loweredMessage.includes("[rejected]")
+    || loweredMessage.includes("fetch first")
+  )
+}
+
+function createMutationMessage(pushed: boolean, pendingPushCount: number): string {
+  if (pushed) {
+    return "已保存并同步。"
   }
 
-  const formattedMessage = firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
-
-  return formattedMessage
+  return pendingPushCount > 1 ? `已保存，等待同步 ${pendingPushCount} 条变更。` : "已保存，等待同步。"
 }
 
 function runGitCommand(
   cwd: string,
   args: string[],
   fallbackMessage: string,
+  onOutput?: (line: string) => void,
 ): Promise<GitCommandResult> {
   return new Promise((resolve, reject) => {
     const childProcess = spawn("git", args, {
@@ -199,12 +136,27 @@ function runGitCommand(
     let stdout = ""
     let stderr = ""
 
-    childProcess.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8")
-    })
+    const handleChunk = (chunk: Buffer) => {
+      const text = chunk.toString("utf8")
 
+      stdout += text
+      text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .forEach((line) => onOutput?.(line))
+    }
+
+    childProcess.stdout.on("data", handleChunk)
     childProcess.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8")
+      const text = chunk.toString("utf8")
+
+      stderr += text
+      text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .forEach((line) => onOutput?.(line))
     })
 
     childProcess.on("error", (error) => {
@@ -225,288 +177,349 @@ function runGitCommand(
   })
 }
 
-async function resolveOriginRemoteUrl(gitRootPath: string): Promise<string> {
-  const result = await runGitCommand(
+async function ensureBotIdentity(gitRootPath: string): Promise<void> {
+  await runGitCommand(
     gitRootPath,
-    ["remote", "get-url", REMOTE_NAME],
-    "当前仓库缺少 origin 远程配置，暂时无法创建 PR。",
+    ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
+    "无法初始化 Synapse 提交身份。",
   )
-  const remoteUrl = result.stdout.trim()
-
-  if (!remoteUrl) {
-    throw new Error("当前仓库缺少 origin 远程配置，暂时无法创建 PR。")
-  }
-
-  return remoteUrl
+  await runGitCommand(
+    gitRootPath,
+    ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
+    "无法初始化 Synapse 提交身份。",
+  )
 }
 
-async function resolveTargetBranch(gitRootPath: string): Promise<string> {
-  try {
-    const result = await runGitCommand(
-      gitRootPath,
-      ["symbolic-ref", "--short", `refs/remotes/${REMOTE_NAME}/HEAD`],
-      "",
-    )
-    const branchRef = result.stdout.trim()
-
-    if (branchRef.startsWith(`${REMOTE_NAME}/`)) {
-      return branchRef.slice(REMOTE_NAME.length + 1)
-    }
-  } catch (error) {
-    logger.warn("Falling back from origin/HEAD branch detection.", { error })
-  }
-
-  try {
-    const result = await runGitCommand(
-      gitRootPath,
-      ["ls-remote", "--symref", REMOTE_NAME, "HEAD"],
-      "",
-    )
-    const branchMatch = result.stdout.match(/ref:\s+refs\/heads\/([^\s]+)\s+HEAD/)
-
-    if (branchMatch?.[1]) {
-      return branchMatch[1]
-    }
-  } catch (error) {
-    logger.warn("Falling back to the default branch name after remote HEAD lookup failed.", { error })
-  }
-
-  return DEFAULT_TARGET_BRANCH
-}
-
-async function createSubmissionWorktree(
-  context: ActiveRepositoryWriteContext,
-  contentType: SynapseContentType,
-  targetBranch: string,
-): Promise<SubmissionWorktree> {
-  const branchName = buildBranchName(contentType, context.author)
-  const worktreePath = await mkdtemp(path.join(os.tmpdir(), "synapse-submit-"))
-  const repositoryRelativePath = path.relative(context.gitRootPath, context.repository.localPath)
-  let worktreeAdded = false
-  let branchCreated = false
-
-  if (repositoryRelativePath.startsWith("..") || path.isAbsolute(repositoryRelativePath)) {
-    throw new Error("当前目录不在 Git 工作区中，不能继续提交。")
-  }
-
-  try {
-    await runGitCommand(
-      context.gitRootPath,
-      ["worktree", "add", "--detach", worktreePath, `${REMOTE_NAME}/${targetBranch}`],
-      "创建临时提交工作区失败，请稍后重试。",
-    )
-    worktreeAdded = true
-    await runGitCommand(
-      worktreePath,
-      ["checkout", "-b", branchName],
-      "创建提交分支失败，请稍后重试。",
-    )
-    branchCreated = true
-
-    return {
-      branchName,
-      repositoryWorkPath: repositoryRelativePath
-        ? path.join(worktreePath, repositoryRelativePath)
-        : worktreePath,
-      targetBranch,
-      worktreePath,
-    }
-  } catch (error) {
-    if (worktreeAdded) {
-      try {
-        await runGitCommand(
-          context.gitRootPath,
-          ["worktree", "remove", "--force", worktreePath],
-          "",
-        )
-      } catch (cleanupError) {
-        logger.warn("Failed to clean up the temporary worktree after creation failed.", {
-          cleanupError,
-          worktreePath,
-        })
-      }
-    }
-
-    if (branchCreated) {
-      try {
-        await runGitCommand(
-          context.gitRootPath,
-          ["branch", "-D", branchName],
-          "",
-        )
-      } catch (cleanupError) {
-        logger.warn("Failed to delete a partial submission branch after setup failed.", {
-          branchName,
-          cleanupError,
-        })
-      }
-    }
-
-    await rm(worktreePath, { recursive: true, force: true }).catch(() => {})
-    throw error
-  }
-}
-
-async function cleanupLocalSubmissionArtifacts(
-  gitRootPath: string,
-  worktreePath: string,
-  branchName: string,
+async function pullWithRebase(
+  repository: SynapseRepositoryConfig,
+  onProgress?: PushProgressListener,
 ): Promise<void> {
-  try {
-    await runGitCommand(
-      gitRootPath,
-      ["worktree", "remove", "--force", worktreePath],
-      "",
-    )
-  } catch (error) {
-    logger.warn("Failed to remove temporary worktree.", {
-      branchName,
-      error,
-      worktreePath,
-    })
-  }
-
-  await rm(worktreePath, { recursive: true, force: true }).catch(() => {})
-
-  try {
-    await runGitCommand(
-      gitRootPath,
-      ["branch", "-D", branchName],
-      "",
-    )
-  } catch (error) {
-    logger.warn("Failed to delete local submission branch.", {
-      branchName,
-      error,
-    })
-  }
+  onProgress?.("正在拉取最新内容...")
+  await runGitCommand(
+    repository.localPath,
+    ["pull", "--rebase"],
+    "同步仓库失败，请检查网络或仓库状态后重试。",
+    (line) => {
+      onProgress?.(line)
+    },
+  )
 }
 
-async function cleanupRemoteSubmissionBranch(
-  gitRootPath: string,
-  branchName: string,
-): Promise<void> {
-  try {
-    await runGitCommand(
-      gitRootPath,
-      ["push", REMOTE_NAME, "--delete", branchName],
-      "",
-    )
-  } catch (error) {
-    logger.warn("Failed to delete remote submission branch after PR creation failed.", {
-      branchName,
-      error,
-    })
+async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
+  const relativePaths = filePaths
+    .map((filePath) => path.relative(gitRootPath, filePath))
+    .filter((relativePath) => relativePath && !relativePath.startsWith(".."))
+    .map(toGitPath)
+
+  if (relativePaths.length === 0) {
+    throw new Error("当前没有可提交的改动。")
   }
+
+  await runGitCommand(
+    gitRootPath,
+    ["add", "--", ...relativePaths],
+    "暂存本地改动失败。",
+  )
+}
+
+async function commitChanges(
+  gitRootPath: string,
+  action: "create" | "update" | "delete",
+  result: ContentWriteResult,
+): Promise<string> {
+  await runGitCommand(
+    gitRootPath,
+    ["commit", "-m", toCommitMessage(action, result)],
+    "提交内容失败。",
+  )
+
+  const headCommit = await runGitCommand(
+    gitRootPath,
+    ["rev-parse", "HEAD"],
+    "读取最新提交失败。",
+  )
+
+  return headCommit.stdout.trim()
+}
+
+async function pushRepository(
+  repository: SynapseRepositoryConfig,
+  onProgress?: PushProgressListener,
+): Promise<void> {
+  onProgress?.("正在推送到仓库...")
+  await runGitCommand(
+    repository.localPath,
+    ["push"],
+    "推送到仓库失败。",
+    (line) => {
+      onProgress?.(line)
+    },
+  )
+}
+
+async function readRepositoryState(repository: SynapseRepositoryConfig) {
+  const repositoryState = await repositoryStore.getRepositoryState(repository)
+
+  if (repositoryState.status !== "ready") {
+    throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
+  }
+
+  if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
+    throw new Error("当前目录不是 Git 仓库，无法提交内容。")
+  }
+
+  return repositoryState
 }
 
 class ContentSubmissionService {
-  async createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentWriteResult> {
-    return this.submitContent({
-      contentType: "rule",
-      createArtifact: (context, repositoryWorkPath) => contentCreateService.writeRuleToRepository(
-        payload,
-        context,
-        { baseLocalPath: repositoryWorkPath },
-      ),
-    })
+  async createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentMutationResult> {
+    const identity = await userIdentityService.requireReadyIdentity()
+    const writeResult = await contentWriteService.createRule(payload, identity)
+
+    return this.commitAndMaybePush("create", writeResult)
   }
 
-  async createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentWriteResult> {
-    return this.submitContent({
-      contentType: "skill",
-      createArtifact: (context, repositoryWorkPath) => contentCreateService.writeSkillToRepository(
-        payload,
-        context,
-        { baseLocalPath: repositoryWorkPath },
-      ),
-    })
+  async createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentMutationResult> {
+    const identity = await userIdentityService.requireReadyIdentity()
+    const writeResult = await contentWriteService.createSkill(payload, identity)
+
+    return this.commitAndMaybePush("create", writeResult)
   }
 
-  private async submitContent(params: SubmitContentParams): Promise<SynapseContentWriteResult> {
-    const context = await getActiveRepositoryWriteContext()
-    const remoteUrl = await resolveOriginRemoteUrl(context.gitRootPath)
-    const pullRequestProvider = createPullRequestProvider(remoteUrl)
-    const targetBranch = await resolveTargetBranch(context.gitRootPath)
+  async updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {
+    const identity = await userIdentityService.requireReadyIdentity()
 
-    await pullRequestProvider.assertReady()
-    await runGitCommand(
-      context.gitRootPath,
-      ["fetch", REMOTE_NAME, targetBranch, "--prune"],
-      "无法获取最新主分支，请检查网络、权限或远程配置。",
+    return this.updateContent("rule", payload, identity)
+  }
+
+  async updateSkill(payload: SynapseUpdateSkillPayload): Promise<SynapseContentMutationResult> {
+    const identity = await userIdentityService.requireReadyIdentity()
+
+    return this.updateContent("skill", payload, identity)
+  }
+
+  async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
+    const identity = await userIdentityService.requireReadyIdentity()
+    const repositoryState = await readRepositoryState(
+      (await contentWriteService.readLatestHistoryDirname(payload.type, payload.id, identity), await (async () => {
+        const configState = await userIdentityService.requireReadyIdentity()
+        void configState
+        return null
+      })()),
     )
+    void repositoryState
+    return this.deleteWithConflictCheck(payload, identity)
+  }
 
-    const submissionWorktree = await createSubmissionWorktree(context, params.contentType, targetBranch)
-    let pushCompleted = false
+  async readPendingPushState(repository: SynapseRepositoryConfig) {
+    return pendingPushesService.readState(repository)
+  }
+
+  async flushPendingPushes(
+    repository: SynapseRepositoryConfig,
+    onProgress?: PushProgressListener,
+  ): Promise<void> {
+    const pendingState = await pendingPushesService.readState(repository)
+
+    if (pendingState.count === 0) {
+      return
+    }
 
     try {
-      const artifact = await params.createArtifact(context, submissionWorktree.repositoryWorkPath)
-      const gitRelativeContentPath = toGitPath(
-        path.relative(submissionWorktree.worktreePath, artifact.directoryPath),
-      )
-
-      await runGitCommand(
-        submissionWorktree.worktreePath,
-        ["add", "--", gitRelativeContentPath],
-        "暂存新内容失败，请检查仓库状态后重试。",
-      )
-
-      await runGitCommand(
-        submissionWorktree.worktreePath,
-        ["commit", "-m", buildCommitMessage(params.contentType, artifact.id)],
-        "创建 Git 提交失败，请检查仓库配置后重试。",
-      )
-
-      await runGitCommand(
-        submissionWorktree.worktreePath,
-        ["push", "--set-upstream", REMOTE_NAME, submissionWorktree.branchName],
-        "推送分支失败，请检查网络连接、远程权限或凭证配置。",
-      )
-      pushCompleted = true
-
-      await pullRequestProvider.createPullRequest({
-        baseBranch: submissionWorktree.targetBranch,
-        body: buildPullRequestBody(artifact, context),
-        headBranch: submissionWorktree.branchName,
-        title: buildPullRequestTitle(params.contentType, artifact.title),
-      })
-
-      logger.info("Content submission flow completed.", {
-        branchName: submissionWorktree.branchName,
-        contentId: artifact.id,
-        contentType: params.contentType,
-        repositoryUuid: context.repository.uuid,
-        targetBranch: submissionWorktree.targetBranch,
-      })
-
-      return {
-        id: artifact.id,
-        type: artifact.type,
-        title: artifact.title,
-        createdAt: artifact.createdAt,
-        branchName: submissionWorktree.branchName,
-        targetBranch: submissionWorktree.targetBranch,
-        message: "提交成功，等待审核。",
-      }
+      await pushRepository(repository, onProgress)
+      await pendingPushesService.clear(repository)
+      await contentIndexService.syncIndex(repository)
     } catch (error) {
-      if (pushCompleted) {
-        await cleanupRemoteSubmissionBranch(context.gitRootPath, submissionWorktree.branchName)
+      const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+      if (isNonFastForwardError(message)) {
+        await pullWithRebase(repository, onProgress)
+        await pushRepository(repository, onProgress)
+        await pendingPushesService.clear(repository)
+        await contentIndexService.syncIndex(repository)
+        return
       }
 
-      logger.error("Content submission flow failed.", {
-        contentType: params.contentType,
-        error,
-        repositoryUuid: context.repository.uuid,
-      })
+      await pendingPushesService.markFailure(repository, message)
       throw error
-    } finally {
-      await cleanupLocalSubmissionArtifacts(
-        context.gitRootPath,
-        submissionWorktree.worktreePath,
-        submissionWorktree.branchName,
-      )
     }
+  }
+
+  private async updateContent(
+    contentType: SynapseContentType,
+    payload: SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
+    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
+  ): Promise<SynapseContentMutationResult> {
+    const repositoryContext = await contentWriteService.readLatestHistoryDirname(contentType, payload.id, identity)
+    void repositoryContext
+
+    const repositoryConfig = await this.resolveActiveRepositoryFromIdentity(identity)
+
+    await pullWithRebase(repositoryConfig)
+    await contentIndexService.syncIndex(repositoryConfig)
+
+    const latestDetail = await contentHistoryService.readCurrentDetail(
+      repositoryConfig,
+      contentType,
+      payload.id,
+    )
+
+    if (!latestDetail) {
+      throw new Error(contentType === "rule" ? "找不到对应的 Rule 内容。" : "找不到对应的 Skill 内容。")
+    }
+
+    if (!payload.force && latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
+      return {
+        id: payload.id,
+        type: contentType,
+        status: "conflict",
+        latestHistoryDirname: latestDetail.latestHistoryDirname,
+        latestModifiedAt: latestDetail.modifiedAt,
+        latestModifiedByDisplayName: latestDetail.modifiedByDisplayName,
+      }
+    }
+
+    const writeResult =
+      contentType === "rule"
+        ? await contentWriteService.updateRule(payload as SynapseUpdateRulePayload, identity)
+        : await contentWriteService.updateSkill(payload as SynapseUpdateSkillPayload, identity)
+
+    return this.commitAndMaybePush("update", writeResult)
+  }
+
+  private async deleteWithConflictCheck(
+    payload: SynapseDeleteContentPayload,
+    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
+  ): Promise<SynapseContentMutationResult> {
+    const repository = await this.resolveActiveRepositoryFromIdentity(identity)
+
+    await pullWithRebase(repository)
+    await contentIndexService.syncIndex(repository)
+
+    const latestDetail = await contentHistoryService.readCurrentDetail(
+      repository,
+      payload.type,
+      payload.id,
+    )
+
+    if (!latestDetail) {
+      throw new Error(payload.type === "rule" ? "找不到对应的 Rule 内容。" : "找不到对应的 Skill 内容。")
+    }
+
+    if (!payload.force && latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
+      return {
+        id: payload.id,
+        type: payload.type,
+        status: "conflict",
+        latestHistoryDirname: latestDetail.latestHistoryDirname,
+        latestModifiedAt: latestDetail.modifiedAt,
+        latestModifiedByDisplayName: latestDetail.modifiedByDisplayName,
+      }
+    }
+
+    const writeResult = await contentWriteService.deleteContent(payload.type, payload.id, identity)
+
+    return this.commitAndMaybePush("delete", writeResult)
+  }
+
+  private async commitAndMaybePush(
+    action: "create" | "update" | "delete",
+    writeResult: ContentWriteResult,
+  ): Promise<SynapseContentMutationResult> {
+    const repository = await this.resolveActiveRepository(writeResult)
+    const repositoryState = await readRepositoryState(repository)
+
+    await ensureBotIdentity(repositoryState.gitRootPath ?? repository.localPath)
+    await stagePaths(repositoryState.gitRootPath ?? repository.localPath, writeResult.gitPaths)
+    const commitHash = await commitChanges(
+      repositoryState.gitRootPath ?? repository.localPath,
+      action,
+      writeResult,
+    )
+    await contentIndexService.syncIndex(repository)
+
+    let pushed = true
+
+    try {
+      await pushRepository(repository)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+      if (isNonFastForwardError(message)) {
+        try {
+          await pullWithRebase(repository)
+          await pushRepository(repository)
+        } catch (retryError) {
+          pushed = false
+          await pendingPushesService.enqueue(repository, {
+            action,
+            commitHash,
+            targetId: writeResult.id,
+            title: writeResult.title,
+          })
+          logger.warn("Deferred push after non-fast-forward retry failed.", {
+            action,
+            error: retryError,
+            repositoryUuid: repository.uuid,
+            writeResult,
+          })
+        }
+      } else {
+        pushed = false
+        await pendingPushesService.enqueue(repository, {
+          action,
+          commitHash,
+          targetId: writeResult.id,
+          title: writeResult.title,
+        })
+        logger.warn("Deferred push after push failure.", {
+          action,
+          error,
+          repositoryUuid: repository.uuid,
+          writeResult,
+        })
+      }
+    }
+
+    const pendingPushState = await pendingPushesService.readState(repository)
+
+    return {
+      id: writeResult.id,
+      type: writeResult.type,
+      status: "saved",
+      title: writeResult.title,
+      latestHistoryDirname: writeResult.latestHistoryDirname,
+      modifiedAt: writeResult.modifiedAt,
+      pushed,
+      pendingPushCount: pendingPushState.count,
+      message: createMutationMessage(pushed, pendingPushState.count),
+    }
+  }
+
+  private async resolveActiveRepository(writeResult: ContentWriteResult): Promise<SynapseRepositoryConfig> {
+    const identity = await userIdentityService.requireReadyIdentity()
+
+    return this.resolveActiveRepositoryFromIdentity(identity, writeResult.type)
+  }
+
+  private async resolveActiveRepositoryFromIdentity(
+    _identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
+    _contentType?: SynapseContentType,
+  ): Promise<SynapseRepositoryConfig> {
+    const repositoryState = await contentWriteService.readLatestHistoryDirname("rule", "", _identity).catch(() => null)
+    void repositoryState
+    const configStoreModule = await import("./config-store")
+    const config = await configStoreModule.configStore.load()
+    const repository = config.repositories.find((item) => item.uuid === config.activeRepoUuid) ?? null
+
+    if (!repository) {
+      throw new Error("当前还没有激活的本地目录。")
+    }
+
+    return repository
   }
 }
 
-export const contentSubmissionService = new ContentSubmissionService()
+const contentSubmissionService = new ContentSubmissionService()
+
+export { contentSubmissionService }

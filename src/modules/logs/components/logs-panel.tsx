@@ -200,7 +200,8 @@ function LogsPanel() {
 
       <div
         ref={listRef}
-        className="flex-1 overflow-auto bg-background font-mono text-xs leading-6"
+        data-allow-select="true"
+        className="flex-1 overflow-auto bg-background font-mono text-xs leading-6 select-text"
         onScroll={(event) => {
           const nextScrollTop = event.currentTarget.scrollTop
 

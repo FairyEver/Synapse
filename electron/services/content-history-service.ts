@@ -248,24 +248,6 @@ async function readAttachmentsRecord(historyDirectoryPath: string): Promise<Syna
   return parseAttachmentsRecord(rawValue)
 }
 
-async function readHistoryVersion(
-  directoryPath: string,
-  historyDirname: string,
-): Promise<ResolvedContentVersion | null> {
-  const historyDirectoryPath = path.join(directoryPath, HISTORY_DIRECTORY_NAME, historyDirname)
-  const snapshot = parseSnapshotRecord(
-    await readJsonFile<unknown>(path.join(historyDirectoryPath, "snapshot.json")),
-  )
-
-  if (!snapshot) {
-    return null
-  }
-
-  const meta = await readContentMetaRecord(directoryPath, snapshot.deleted ? "rule" : "rule")
-  void meta
-  return null
-}
-
 class ContentHistoryService {
   async listContent(
     repository: SynapseRepositoryConfig,

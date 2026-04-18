@@ -126,6 +126,40 @@
     @apply bg-background text-foreground;
   }
 
+  #root,
+  #root * {
+    @apply select-none;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"],
+  [data-allow-select="true"],
+  [data-allow-select="true"] * {
+    @apply select-text;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="menuitemcheckbox"]:not([aria-disabled="true"]),
+  [role="menuitemradio"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  label[for],
+  summary {
+    @apply cursor-pointer;
+  }
+
+  button:disabled,
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  [aria-disabled="true"] {
+    @apply cursor-not-allowed;
+  }
+
   html {
     @apply font-sans;
   }

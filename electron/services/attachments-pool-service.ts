@@ -66,8 +66,12 @@ class AttachmentsPoolService {
   async writeAttachments(
     repositoryRootPath: string,
     files: AttachmentWriteInput[],
-  ): Promise<SynapseContentAttachmentRecord[]> {
+  ): Promise<{
+    createdPaths: string[]
+    records: SynapseContentAttachmentRecord[]
+  }> {
     const references: SynapseContentAttachmentRecord[] = []
+    const createdPaths: string[] = []
     const seenNames = new Set<string>()
 
     for (const file of files) {
@@ -96,6 +100,7 @@ class AttachmentsPoolService {
       if (!(await pathExists(targetPath))) {
         await mkdir(path.dirname(targetPath), { recursive: true })
         await writeFile(targetPath, Buffer.from(file.bytes))
+        createdPaths.push(targetPath)
         logger.info("Stored attachment in pool.", {
           originalName,
           sha256: reference.sha256,
@@ -105,7 +110,10 @@ class AttachmentsPoolService {
       references.push(reference)
     }
 
-    return references
+    return {
+      createdPaths,
+      records: references,
+    }
   }
 
   resolveAttachmentPath(repositoryRootPath: string, sha256: string): string {
