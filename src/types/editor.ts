@@ -15,8 +15,7 @@ export type SynapseEditorAdapterSummary = {
   label: string
   supportsGlobal: boolean
   supportsProject: boolean
-  supportsRule: boolean
-  supportsSkill: boolean
+  supportedContentTypes: SynapseContentType[]
 }
 
 export type SynapseResolveEditorTargetPayload = {

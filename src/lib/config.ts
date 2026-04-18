@@ -4,7 +4,12 @@ import {
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
   DEFAULT_THEME_MODE,
 } from "../constants/defaults"
+import {
+  CONTENT_TYPE_DEFINITIONS,
+  getContentTypeDefinition,
+} from "../config/content-types"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
+import type { SynapseContentType } from "../types/content"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
@@ -42,6 +47,14 @@ function normalizeDirectoryName(value: unknown, fallback: string): string {
   const nextValue = asTrimmedString(value, fallback)
 
   return nextValue.length > 0 ? nextValue : fallback
+}
+
+function hasContentDirsFormatError(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return true
+  }
+
+  return Object.values(value).some((directoryName) => typeof directoryName !== "string")
 }
 
 function normalizeThemeMode(value: unknown, fallback: SynapseThemeMode): SynapseThemeMode {
@@ -113,6 +126,10 @@ function hasRepositoryConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "skillsDir") && typeof value.skillsDir !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "contentDirs") && hasContentDirsFormatError(value.contentDirs)) {
     return true
   }
 
@@ -206,9 +223,33 @@ function normalizeRepositoryConfig(value: unknown): SynapseRepositoryConfig | nu
     uuid,
     name,
     localPath,
-    rulesDir: normalizeDirectoryName(value.rulesDir, DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir),
-    skillsDir: normalizeDirectoryName(value.skillsDir, DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir),
+    contentDirs: resolveContentDirs(value),
   }
+}
+
+function resolveContentDirs(
+  value: Record<string, unknown>,
+): Record<SynapseContentType, string> {
+  const directories = CONTENT_TYPE_DEFINITIONS.map((definition) => {
+    const contentDirs = isRecord(value.contentDirs) ? value.contentDirs : null
+    const fromMap = contentDirs?.[definition.id]
+
+    if (typeof fromMap === "string" && fromMap.trim().length > 0) {
+      return [definition.id, fromMap.trim()] as const
+    }
+
+    if (definition.repositoryDir.legacyConfigKey) {
+      const legacyValue = value[definition.repositoryDir.legacyConfigKey]
+
+      if (typeof legacyValue === "string" && legacyValue.trim().length > 0) {
+        return [definition.id, legacyValue.trim()] as const
+      }
+    }
+
+    return [definition.id, DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id]] as const
+  })
+
+  return Object.fromEntries(directories) as Record<SynapseContentType, string>
 }
 
 function normalizeProjects(value: unknown): SynapseProjectConfig[] {
@@ -281,6 +322,17 @@ export function getActiveRepositoryConfig(config: SynapseConfig): SynapseReposit
   }
 
   return config.repositories.find((repository) => repository.uuid === config.activeRepoUuid) ?? null
+}
+
+export function getContentDir(
+  repository: SynapseRepositoryConfig,
+  contentType: SynapseContentType,
+): string {
+  const legacyConfigKey = getContentTypeDefinition(contentType).repositoryDir.legacyConfigKey
+
+  return repository.contentDirs?.[contentType]
+    ?? (legacyConfigKey ? repository[legacyConfigKey] : undefined)
+    ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[contentType]
 }
 
 export function applySynapseConfigPatch(

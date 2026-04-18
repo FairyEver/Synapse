@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { hasContentBridge, readRules, readSkills } from "@/app-shell/content"
+import { hasContentBridge, listContent } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
@@ -8,26 +8,19 @@ import type { SynapseCategoryViewItem } from "@/types/category"
 import type {
   SynapseContentMeta,
   SynapseContentType,
-  SynapseRuleMeta,
-  SynapseSkillMeta,
 } from "@/types/content"
-
-type SynapseContentItemsByType = {
-  rule: SynapseRuleMeta[]
-  skill: SynapseSkillMeta[]
-}
 
 type UseContentCatalogResult<T extends SynapseContentType> = {
   categories: SynapseCategoryViewItem[]
   error: string | null
   isLoading: boolean
-  items: SynapseContentItemsByType[T]
+  items: SynapseContentMeta<T>[]
   refresh: () => Promise<void>
   totalCount: number
 }
 
-function createEmptyItems<T extends SynapseContentType>(): SynapseContentItemsByType[T] {
-  return [] as SynapseContentItemsByType[T]
+function createEmptyItems<T extends SynapseContentType>(): SynapseContentMeta<T>[] {
+  return [] as SynapseContentMeta<T>[]
 }
 
 function useContentCatalog<T extends SynapseContentType>(
@@ -39,7 +32,7 @@ function useContentCatalog<T extends SynapseContentType>(
   const { operations, states } = useRepositoryManager()
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
-  const [items, setItems] = useState<SynapseContentItemsByType[T]>(() => createEmptyItems<T>())
+  const [items, setItems] = useState<SynapseContentMeta<T>[]>(() => createEmptyItems<T>())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const latestRefreshIdRef = useRef(0)
@@ -70,9 +63,7 @@ function useContentCatalog<T extends SynapseContentType>(
     setIsLoading(true)
 
     try {
-      const nextItems = (
-        contentType === "rule" ? await readRules() : await readSkills()
-      ) as SynapseContentItemsByType[T]
+      const nextItems = await listContent(contentType)
       const nextStats = buildCategoryStats(contentType, nextItems as SynapseContentMeta[])
 
       if (latestRefreshIdRef.current !== refreshId) {

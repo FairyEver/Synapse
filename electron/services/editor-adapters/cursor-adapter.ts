@@ -19,8 +19,7 @@ const cursorAdapter: EditorAdapter = {
   label: "Cursor",
   supportsGlobal: true,
   supportsProject: true,
-  supportsRule: true,
-  supportsSkill: true,
+  supportedContentTypes: ["rule", "skill"],
   async resolveGlobalTarget({ contentId, contentType }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
@@ -30,13 +29,18 @@ const cursorAdapter: EditorAdapter = {
       })
     }
 
-    if (contentType === "rule") {
-      return createUnsupportedTarget({
-        adapter: cursorAdapter,
-        contentType,
-        message: "Cursor 官方文档未公布固定的全局 Rule 磁盘路径。",
-        scope: "global",
-      })
+    switch (contentType) {
+      case "rule":
+        return createUnsupportedTarget({
+          adapter: cursorAdapter,
+          contentType,
+          message: "Cursor 官方文档未公布固定的全局 Rule 磁盘路径。",
+          scope: "global",
+        })
+      case "skill":
+        break
+      default:
+        throw new Error(`${cursorAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
 
     const cursorHomePath = getHomePath(".cursor")
@@ -78,33 +82,36 @@ const cursorAdapter: EditorAdapter = {
       })
     }
 
-    if (contentType === "rule") {
-      return createReadyTarget({
-        adapter: cursorAdapter,
-        contentType,
-        scope: "project",
-        targetKind: "file",
-        targetPath: path.join(
-          resolvedProjectPath,
-          ".cursor",
-          "rules",
-          getRuleFileName(contentId),
-        ),
-      })
+    switch (contentType) {
+      case "rule":
+        return createReadyTarget({
+          adapter: cursorAdapter,
+          contentType,
+          scope: "project",
+          targetKind: "file",
+          targetPath: path.join(
+            resolvedProjectPath,
+            ".cursor",
+            "rules",
+            getRuleFileName(contentId),
+          ),
+        })
+      case "skill":
+        return createReadyTarget({
+          adapter: cursorAdapter,
+          contentType,
+          scope: "project",
+          targetKind: "directory",
+          targetPath: path.join(
+            resolvedProjectPath,
+            ".cursor",
+            "skills",
+            getSkillDirectoryName(contentId),
+          ),
+        })
+      default:
+        throw new Error(`${cursorAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
-
-    return createReadyTarget({
-      adapter: cursorAdapter,
-      contentType,
-      scope: "project",
-      targetKind: "directory",
-      targetPath: path.join(
-        resolvedProjectPath,
-        ".cursor",
-        "skills",
-        getSkillDirectoryName(contentId),
-      ),
-    })
   },
 }
 

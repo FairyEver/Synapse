@@ -8,10 +8,10 @@ import {
 } from "lucide-react"
 import {
   deleteContent,
-  readSkillDetail,
-  readSkillHistory,
-  readSkillHistoryVersion,
-  updateSkill,
+  readDetail,
+  readHistory,
+  readHistoryVersion,
+  updateContent,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -203,11 +203,11 @@ function SkillDetailDialog({
     void (async () => {
       try {
         const [nextDetail, nextHistory] = await Promise.all([
-          readSkillDetail(item.id),
-          readSkillHistory(item.id),
+          readDetail(item.type, item.id),
+          readHistory(item.type, item.id),
         ])
 
-        if (nextDetail.type !== "skill") {
+        if (nextDetail.type !== item.type) {
           throw new Error("读取到的内容不是 Skill。")
         }
 
@@ -272,9 +272,9 @@ function SkillDetailDialog({
 
     void (async () => {
       try {
-        const nextVersion = await readSkillHistoryVersion(item.id, selectedHistoryDirname)
+        const nextVersion = await readHistoryVersion(item.type, item.id, selectedHistoryDirname)
 
-        if (nextVersion.type !== "skill") {
+        if (nextVersion.type !== item.type) {
           throw new Error("读取到的历史版本不是 Skill。")
         }
 
@@ -323,7 +323,7 @@ function SkillDetailDialog({
 
   const resolvedItem = detail ?? item
   const deleteTarget = detail ?? item
-  const categoryLabel = getCategoryLabel("skill", resolvedItem.category)
+  const categoryLabel = getCategoryLabel(item.type, resolvedItem.category)
   const iconOption = getContentIconOption(resolvedItem.icon)
   const historyEntries = detail
     ? history.length > 0
@@ -345,7 +345,7 @@ function SkillDetailDialog({
 
     void promise(
       async () => {
-        const result = await updateSkill({
+        const result = await updateContent(item.type, {
           ...payload,
           id: detail.id,
           baseHistoryDirname: detail.latestHistoryDirname,

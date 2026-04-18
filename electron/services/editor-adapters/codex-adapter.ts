@@ -28,8 +28,7 @@ const codexAdapter: EditorAdapter = {
   label: "Codex",
   supportsGlobal: true,
   supportsProject: true,
-  supportsRule: true,
-  supportsSkill: true,
+  supportedContentTypes: ["rule", "skill"],
   async resolveGlobalTarget({ contentId, contentType }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
@@ -50,23 +49,26 @@ const codexAdapter: EditorAdapter = {
       })
     }
 
-    if (contentType === "rule") {
-      return createReadyTarget({
-        adapter: codexAdapter,
-        contentType,
-        scope: "global",
-        targetKind: "file",
-        targetPath: path.join(codexHomePath, "AGENTS.md"),
-      })
+    switch (contentType) {
+      case "rule":
+        return createReadyTarget({
+          adapter: codexAdapter,
+          contentType,
+          scope: "global",
+          targetKind: "file",
+          targetPath: path.join(codexHomePath, "AGENTS.md"),
+        })
+      case "skill":
+        return createReadyTarget({
+          adapter: codexAdapter,
+          contentType,
+          scope: "global",
+          targetKind: "directory",
+          targetPath: path.join(getHomePath(".agents", "skills"), getSkillDirectoryName(contentId)),
+        })
+      default:
+        throw new Error(`${codexAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
-
-    return createReadyTarget({
-      adapter: codexAdapter,
-      contentType,
-      scope: "global",
-      targetKind: "directory",
-      targetPath: path.join(getHomePath(".agents", "skills"), getSkillDirectoryName(contentId)),
-    })
   },
   async resolveProjectTarget(projectPath, { contentId, contentType }) {
     if (!isSupportedEditorPlatform()) {
@@ -88,28 +90,31 @@ const codexAdapter: EditorAdapter = {
       })
     }
 
-    if (contentType === "rule") {
-      return createReadyTarget({
-        adapter: codexAdapter,
-        contentType,
-        scope: "project",
-        targetKind: "file",
-        targetPath: path.join(resolvedProjectPath, "AGENTS.md"),
-      })
+    switch (contentType) {
+      case "rule":
+        return createReadyTarget({
+          adapter: codexAdapter,
+          contentType,
+          scope: "project",
+          targetKind: "file",
+          targetPath: path.join(resolvedProjectPath, "AGENTS.md"),
+        })
+      case "skill":
+        return createReadyTarget({
+          adapter: codexAdapter,
+          contentType,
+          scope: "project",
+          targetKind: "directory",
+          targetPath: path.join(
+            resolvedProjectPath,
+            ".agents",
+            "skills",
+            getSkillDirectoryName(contentId),
+          ),
+        })
+      default:
+        throw new Error(`${codexAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
-
-    return createReadyTarget({
-      adapter: codexAdapter,
-      contentType,
-      scope: "project",
-      targetKind: "directory",
-      targetPath: path.join(
-        resolvedProjectPath,
-        ".agents",
-        "skills",
-        getSkillDirectoryName(contentId),
-      ),
-    })
   },
 }
 

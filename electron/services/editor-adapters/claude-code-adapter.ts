@@ -17,8 +17,7 @@ const claudeCodeAdapter: EditorAdapter = {
   label: "Claude Code",
   supportsGlobal: true,
   supportsProject: true,
-  supportsRule: true,
-  supportsSkill: true,
+  supportedContentTypes: ["rule", "skill"],
   async resolveGlobalTarget({ contentId, contentType }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
@@ -39,23 +38,26 @@ const claudeCodeAdapter: EditorAdapter = {
       })
     }
 
-    if (contentType === "rule") {
-      return createReadyTarget({
-        adapter: claudeCodeAdapter,
-        contentType,
-        scope: "global",
-        targetKind: "file",
-        targetPath: path.join(claudeHomePath, "CLAUDE.md"),
-      })
+    switch (contentType) {
+      case "rule":
+        return createReadyTarget({
+          adapter: claudeCodeAdapter,
+          contentType,
+          scope: "global",
+          targetKind: "file",
+          targetPath: path.join(claudeHomePath, "CLAUDE.md"),
+        })
+      case "skill":
+        return createReadyTarget({
+          adapter: claudeCodeAdapter,
+          contentType,
+          scope: "global",
+          targetKind: "directory",
+          targetPath: path.join(claudeHomePath, "skills", getSkillDirectoryName(contentId)),
+        })
+      default:
+        throw new Error(`${claudeCodeAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
-
-    return createReadyTarget({
-      adapter: claudeCodeAdapter,
-      contentType,
-      scope: "global",
-      targetKind: "directory",
-      targetPath: path.join(claudeHomePath, "skills", getSkillDirectoryName(contentId)),
-    })
   },
   async resolveProjectTarget(projectPath, { contentId, contentType }) {
     if (!isSupportedEditorPlatform()) {
@@ -77,28 +79,31 @@ const claudeCodeAdapter: EditorAdapter = {
       })
     }
 
-    if (contentType === "rule") {
-      return createReadyTarget({
-        adapter: claudeCodeAdapter,
-        contentType,
-        scope: "project",
-        targetKind: "file",
-        targetPath: path.join(resolvedProjectPath, "CLAUDE.md"),
-      })
+    switch (contentType) {
+      case "rule":
+        return createReadyTarget({
+          adapter: claudeCodeAdapter,
+          contentType,
+          scope: "project",
+          targetKind: "file",
+          targetPath: path.join(resolvedProjectPath, "CLAUDE.md"),
+        })
+      case "skill":
+        return createReadyTarget({
+          adapter: claudeCodeAdapter,
+          contentType,
+          scope: "project",
+          targetKind: "directory",
+          targetPath: path.join(
+            resolvedProjectPath,
+            ".claude",
+            "skills",
+            getSkillDirectoryName(contentId),
+          ),
+        })
+      default:
+        throw new Error(`${claudeCodeAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
-
-    return createReadyTarget({
-      adapter: claudeCodeAdapter,
-      contentType,
-      scope: "project",
-      targetKind: "directory",
-      targetPath: path.join(
-        resolvedProjectPath,
-        ".claude",
-        "skills",
-        getSkillDirectoryName(contentId),
-      ),
-    })
   },
 }
 

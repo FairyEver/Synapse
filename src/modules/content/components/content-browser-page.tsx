@@ -26,6 +26,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Badge } from "@/components/ui/badge"
+import { getContentTypeDefinition } from "@/config/content-types"
 import { getContentIconOption } from "@/lib/content-appearance"
 import {
   getCategoryLabel,
@@ -54,17 +55,12 @@ type ContentBrowserPageProps = {
   onInstallDialogOpenChange?: (open: boolean) => void
   refreshSignal?: number
   renderDetailDialog: (props: ContentBrowserDetailDialogProps) => ReactNode
-  title: string
 }
 
 type ContentState = {
   description: string
   icon: LucideIcon
   title: string
-}
-
-function getSingularLabel(contentType: SynapseContentType): string {
-  return contentType === "rule" ? "Rule" : "Skill"
 }
 
 function getRepositoryDescription(
@@ -112,7 +108,7 @@ function getContentState(params: {
   itemsInActiveCategory: SynapseContentMeta[]
   normalizedSearchQuery: string
   repositoryStatus: "checking" | "missing" | "ready"
-  title: string
+  contentType: SynapseContentType
 }): ContentState | null {
   const {
     activeCategoryId,
@@ -124,8 +120,10 @@ function getContentState(params: {
     itemsInActiveCategory,
     normalizedSearchQuery,
     repositoryStatus,
-    title,
+    contentType,
   } = params
+  const definition = getContentTypeDefinition(contentType)
+  const title = definition.pluralLabel
 
   if (repositoryStatus === "checking") {
     return {
@@ -161,7 +159,7 @@ function getContentState(params: {
 
   if (items.length === 0) {
     return {
-      title: `还没有 ${title}`,
+      title: `还没有 ${definition.emptyStateNoun}`,
       description: "当前目录下还没有可显示的内容。",
       icon: PackageOpen,
     }
@@ -276,8 +274,8 @@ function ContentBrowserPage({
   onInstallDialogOpenChange,
   refreshSignal = 0,
   renderDetailDialog,
-  title,
 }: ContentBrowserPageProps) {
+  const definition = getContentTypeDefinition(contentType)
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
   const { states } = useRepositoryManager()
@@ -377,7 +375,7 @@ function ContentBrowserPage({
       itemsInActiveCategory,
       normalizedSearchQuery,
       repositoryStatus,
-      title,
+      contentType,
     }),
     [
       activeCategoryId,
@@ -389,7 +387,7 @@ function ContentBrowserPage({
       itemsInActiveCategory,
       normalizedSearchQuery,
       repositoryStatus,
-      title,
+      contentType,
     ],
   )
 
@@ -408,7 +406,7 @@ function ContentBrowserPage({
         ? "当前目录不存在，不能新建"
         : !activeRepositoryState?.isGitRepository
           ? "当前目录不是 Git 仓库，不能新建"
-          : `新建 ${getSingularLabel(contentType)}`
+          : `新建 ${definition.singularLabel}`
 
   return (
     <>
@@ -420,7 +418,7 @@ function ContentBrowserPage({
               <ModuleSidebarHeader
                 searchValue={searchQuery}
                 onSearchChange={setSearchQuery}
-                searchPlaceholder={`搜索 ${title}`}
+                searchPlaceholder={`搜索 ${definition.pluralLabel}`}
                 searchDisabled={!canBrowseContent}
                 onAddClick={() => {
                   logger.info("Create entry requested from browser page.", {
@@ -428,9 +426,9 @@ function ContentBrowserPage({
                     repositoryUuid: activeRepository.uuid,
                   })
 
-                  if (onCreateClick) {
-                    onCreateClick()
-                    return
+                if (onCreateClick) {
+                  onCreateClick()
+                  return
                   }
 
                   logger.warn("Create entry requested without a registered handler.", {
@@ -467,7 +465,7 @@ function ContentBrowserPage({
           <div className="flex min-h-full flex-col gap-4 pb-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-medium text-foreground">{title}</h2>
+                <h2 className="text-base font-medium text-foreground">{definition.pluralLabel}</h2>
                 <p className="text-sm text-muted-foreground">
                   {getRepositoryDescription(
                     activeRepository.name,

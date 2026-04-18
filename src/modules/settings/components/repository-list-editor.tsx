@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseRepositoryConfig } from "@/types/config"
@@ -78,8 +79,7 @@ function RepositoryListEditor({
       uuid: crypto.randomUUID(),
       name: getRepositoryNameFromPath(nextLocalPath),
       localPath: nextLocalPath,
-      rulesDir: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir,
-      skillsDir: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir,
+      contentDirs: { ...DEFAULT_REPOSITORY_CONTENT_DIRECTORIES },
     }
     const nextRepositories = [...repositories, nextRepository]
     const nextActiveRepoUuid = activeRepoUuid ?? nextRepository.uuid
@@ -189,7 +189,12 @@ function RepositoryListEditor({
                     </div>
                     <p className="break-all text-sm text-muted-foreground">{repository.localPath}</p>
                     <p className="text-xs text-muted-foreground">
-                      Rules: {repository.rulesDir} · Skills: {repository.skillsDir}
+                      {CONTENT_TYPE_DEFINITIONS.map((definition) => (
+                        `${definition.pluralLabel}: ${
+                          repository.contentDirs[definition.id]
+                          ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id]
+                        }`
+                      )).join(" · ")}
                     </p>
                     {hasRepositoryBridge ? (
                       <p className="text-xs text-muted-foreground">

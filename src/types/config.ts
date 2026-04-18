@@ -1,3 +1,5 @@
+import type { SynapseContentType } from "./content"
+
 export const SYNAPSE_THEME_MODE_OPTIONS = ["light", "dark", "system"] as const
 
 export type SynapseThemeMode = (typeof SYNAPSE_THEME_MODE_OPTIONS)[number]
@@ -12,8 +14,9 @@ export type SynapseRepositoryConfig = {
   uuid: string
   name: string
   localPath: string
-  rulesDir: string
-  skillsDir: string
+  contentDirs: Partial<Record<SynapseContentType, string>>
+  rulesDir?: string
+  skillsDir?: string
 }
 
 export type SynapseGlobalConfig = {

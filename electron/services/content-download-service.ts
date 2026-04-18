@@ -2,7 +2,9 @@ import { spawn } from "node:child_process"
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
+import type { SynapseContentType } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import { configStore } from "./config-store"
@@ -150,27 +152,58 @@ async function withTemporaryOutput<T>(
 }
 
 class ContentDownloadService {
-  async downloadRule(ruleId: string, targetPath: string): Promise<void> {
-    const file = await contentService.getRuleContent(ruleId)
+  async download(contentType: SynapseContentType, id: string, targetPath: string): Promise<void> {
+    const definition = getContentTypeDefinition(contentType)
 
-    await withTemporaryOutput(".md", async (tempPath) => {
+    switch (definition.download.exporter) {
+      case "text-file":
+        return this.exportAsTextFile(contentType, id, targetPath)
+      case "zip-archive":
+        return this.exportAsZipArchive(contentType, id, targetPath)
+      default:
+        throw new Error(`不支持 ${definition.singularLabel} 的下载方式。`)
+    }
+  }
+
+  async downloadRule(ruleId: string, targetPath: string): Promise<void> {
+    return this.download("rule", ruleId, targetPath)
+  }
+
+  async downloadSkill(skillId: string, targetPath: string): Promise<void> {
+    return this.download("skill", skillId, targetPath)
+  }
+
+  private async exportAsTextFile(
+    contentType: SynapseContentType,
+    id: string,
+    targetPath: string,
+  ): Promise<void> {
+    const file = await contentService.getContent(contentType, id)
+    const definition = getContentTypeDefinition(contentType)
+
+    await withTemporaryOutput(definition.download.extension, async (tempPath) => {
       await writeFile(tempPath, file.content, "utf8")
       await copyFile(tempPath, targetPath)
     })
 
-    logger.info("Rule download export completed.", {
-      ruleId,
+    logger.info("Text content download export completed.", {
+      contentType,
+      id,
       targetPath,
     })
   }
 
-  async downloadSkill(skillId: string, targetPath: string): Promise<void> {
+  private async exportAsZipArchive(
+    contentType: SynapseContentType,
+    id: string,
+    targetPath: string,
+  ): Promise<void> {
     const repositoryRootPath = await getActiveRepositoryRootPath()
-    const detail = await contentService.getSkillDetail(skillId)
+    const detail = await contentService.getDetail(contentType, id)
 
     await withTemporaryOutput(".zip", async (tempPath) => {
       const stagingRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-export-"))
-      const stagingDirectoryPath = path.join(stagingRoot, skillId)
+      const stagingDirectoryPath = path.join(stagingRoot, id)
 
       try {
         await mkdir(stagingDirectoryPath, { recursive: true })
@@ -191,8 +224,9 @@ class ContentDownloadService {
       }
     })
 
-    logger.info("Skill download export completed.", {
-      skillId,
+    logger.info("Archive content download export completed.", {
+      contentType,
+      id,
       targetPath,
     })
   }

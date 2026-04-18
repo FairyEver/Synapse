@@ -1,5 +1,6 @@
 import { access, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type {
   SynapseContentInstallResult,
@@ -146,43 +147,52 @@ class ContentInstallService {
     payload: SynapseInstallToEditorPayload,
   ): Promise<SynapseContentInstallResult> {
     const target = await editorAdapterService.resolveTarget(payload)
+    const definition = getContentTypeDefinition(payload.contentType)
 
     if (target.status !== "ready") {
       throw new Error(target.message ?? "当前编辑器暂时不能安装到这个位置。")
     }
 
     try {
-      if (payload.contentType === "rule") {
-        if (target.targetKind !== "file") {
-          throw new Error("当前编辑器没有返回合法的 Rule 安装目标。")
-        }
-
-        const file = await contentService.getRuleContent(payload.contentId)
-
-        await replaceFileAtomically(target.targetPath, file.content)
-      } else {
-        if (target.targetKind !== "directory") {
-          throw new Error("当前编辑器没有返回合法的 Skill 安装目标。")
-        }
-
-        const repositoryRootPath = await getActiveRepositoryRootPath()
-        const detail = await contentService.getSkillDetail(payload.contentId)
-
-        await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
-          await writeFile(
-            path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
-            normalizeMarkdownContent(detail.content),
-            "utf8",
-          )
-
-          for (const attachment of detail.attachments) {
-            await attachmentsPoolService.copyAttachmentToPath(
-              repositoryRootPath,
-              attachment,
-              path.join(stagingDirectoryPath, attachment.originalName),
-            )
+      switch (definition.install.kind) {
+        case "none":
+          throw new Error(`${definition.singularLabel} 不支持安装到编辑器。`)
+        case "single-file": {
+          if (target.targetKind !== "file") {
+            throw new Error(`当前编辑器没有返回合法的 ${definition.singularLabel} 安装目标。`)
           }
-        })
+
+          const file = await contentService.getContent(payload.contentType, payload.contentId)
+          await replaceFileAtomically(target.targetPath, file.content)
+          break
+        }
+        case "directory-overwrite": {
+          if (target.targetKind !== "directory") {
+            throw new Error(`当前编辑器没有返回合法的 ${definition.singularLabel} 安装目标。`)
+          }
+
+          const repositoryRootPath = await getActiveRepositoryRootPath()
+          const detail = await contentService.getDetail(payload.contentType, payload.contentId)
+
+          await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
+            await writeFile(
+              path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
+              normalizeMarkdownContent(detail.content),
+              "utf8",
+            )
+
+            for (const attachment of detail.attachments) {
+              await attachmentsPoolService.copyAttachmentToPath(
+                repositoryRootPath,
+                attachment,
+                path.join(stagingDirectoryPath, attachment.originalName),
+              )
+            }
+          })
+          break
+        }
+        default:
+          throw new Error(`不支持 ${definition.singularLabel} 的安装方式。`)
       }
     } catch (error) {
       throw formatInstallFailure(error, target.targetPath)

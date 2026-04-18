@@ -36,8 +36,8 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
 import { ContentAppearanceFields } from "@/modules/content/components/content-appearance-fields"
 import type {
-  CreateSkillFilePayload,
   CreateSkillPayload,
+  SkillCreateFilePayloadDraft,
   SkillCreateFieldErrors,
 } from "@/modules/skills/types"
 import {
@@ -81,7 +81,7 @@ function isFileSystemDirectoryEntry(
   return entry.isDirectory
 }
 
-function toCreateSkillFiles(files: Iterable<File>): CreateSkillFilePayload[] {
+function toCreateSkillFiles(files: Iterable<File>): SkillCreateFilePayloadDraft[] {
   return Array.from(files, (file) => ({
     originalName: normalizeSkillAttachmentName(file.webkitRelativePath || file.name),
     size: file.size,
@@ -124,7 +124,7 @@ function readAllDirectoryEntries(
 
 async function collectCreateSkillFilesFromEntry(
   entry: FileSystemEntry,
-): Promise<CreateSkillFilePayload[]> {
+): Promise<SkillCreateFilePayloadDraft[]> {
   if (isFileSystemFileEntry(entry)) {
     const file = await readFileEntry(entry)
 
@@ -151,7 +151,7 @@ async function collectCreateSkillFilesFromEntry(
 
 async function collectCreateSkillFilesFromDataTransfer(
   dataTransfer: DataTransfer,
-): Promise<CreateSkillFilePayload[]> {
+): Promise<SkillCreateFilePayloadDraft[]> {
   const transferableItems = Array.from(dataTransfer.items).filter((item) => item.kind === "file")
   const transferableEntries = transferableItems
     .map((item) => (item as DataTransferItemWithEntry).webkitGetAsEntry?.() ?? null)
@@ -238,7 +238,7 @@ function SkillCreateDialog({
     }
   }
 
-  const updateFiles = (nextFiles: CreateSkillFilePayload[]) => {
+  const updateFiles = (nextFiles: SkillCreateFilePayloadDraft[]) => {
     const nextForm = {
       ...form,
       files: nextFiles,
@@ -252,7 +252,7 @@ function SkillCreateDialog({
     }
   }
 
-  const addFiles = (incomingFiles: CreateSkillFilePayload[]) => {
+  const addFiles = (incomingFiles: SkillCreateFilePayloadDraft[]) => {
     if (incomingFiles.length === 0) {
       return
     }

@@ -1,6 +1,6 @@
 import type {
-  CreateSkillFilePayload,
   CreateSkillPayload,
+  SkillCreateFilePayloadDraft,
   SkillCreateFieldErrors,
 } from "@/modules/skills/types"
 import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
@@ -35,7 +35,9 @@ function normalizeSkillAttachmentName(originalName: string): string {
   return normalizeContentAttachmentPath(originalName)
 }
 
-function normalizeCreateSkillFilePayload(file: CreateSkillFilePayload): CreateSkillFilePayload {
+function normalizeCreateSkillFilePayload(
+  file: SkillCreateFilePayloadDraft,
+): SkillCreateFilePayloadDraft {
   return {
     ...file,
     originalName: normalizeSkillAttachmentName(file.originalName),
@@ -44,8 +46,8 @@ function normalizeCreateSkillFilePayload(file: CreateSkillFilePayload): CreateSk
 }
 
 function compareCreateSkillFiles(
-  left: CreateSkillFilePayload,
-  right: CreateSkillFilePayload,
+  left: SkillCreateFilePayloadDraft,
+  right: SkillCreateFilePayloadDraft,
 ): number {
   return left.originalName.localeCompare(right.originalName, "zh-CN")
 }
@@ -161,9 +163,9 @@ function formatSkillAttachmentSize(size: number): string {
 }
 
 function mergeCreateSkillFiles(
-  currentFiles: CreateSkillFilePayload[],
-  incomingFiles: CreateSkillFilePayload[],
-): { files: CreateSkillFilePayload[]; rejectedMessages: string[] } {
+  currentFiles: SkillCreateFilePayloadDraft[],
+  incomingFiles: SkillCreateFilePayloadDraft[],
+): { files: SkillCreateFilePayloadDraft[]; rejectedMessages: string[] } {
   const normalizedCurrentFiles = currentFiles.map((file) => normalizeCreateSkillFilePayload(file))
   const nextFilesByPath = new Map(
     normalizedCurrentFiles.map((file) => [file.originalName, file] as const),
@@ -214,7 +216,7 @@ function mergeCreateSkillFiles(
 }
 
 async function serializeCreateSkillFiles(
-  files: CreateSkillFilePayload[],
+  files: SkillCreateFilePayloadDraft[],
 ): Promise<SynapseCreateSkillFilePayload[]> {
   return Promise.all(
     files.map(async (file) => ({

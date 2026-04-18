@@ -1,12 +1,14 @@
 import { app, dialog, type BrowserWindow } from "electron"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import type {
   SynapseConfigBackup,
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "../../src/types/backup"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
+import type { SynapseContentType } from "../../src/types/content"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
 import { normalizeUserId, userIdentityService } from "./user-identity-service"
@@ -102,8 +104,7 @@ function validateRepository(
   const uuid = readRequiredField(rawValue, "uuid", itemPath, errors)
   const name = readRequiredField(rawValue, "name", itemPath, errors)
   const localPath = readRequiredField(rawValue, "localPath", itemPath, errors)
-  const rulesDir = readRequiredField(rawValue, "rulesDir", itemPath, errors)
-  const skillsDir = readRequiredField(rawValue, "skillsDir", itemPath, errors)
+  const rawContentDirs = rawValue.contentDirs
 
   if (!isNonEmptyString(uuid)) {
     errors.push(`${itemPath}.uuid 必须是非空字符串。`)
@@ -117,30 +118,46 @@ function validateRepository(
     errors.push(`${itemPath}.localPath 必须是非空字符串。`)
   }
 
-  if (!isNonEmptyString(rulesDir)) {
-    errors.push(`${itemPath}.rulesDir 必须是非空字符串。`)
-  }
-
-  if (!isNonEmptyString(skillsDir)) {
-    errors.push(`${itemPath}.skillsDir 必须是非空字符串。`)
+  if (rawContentDirs !== undefined && !isRecord(rawContentDirs)) {
+    errors.push(`${itemPath}.contentDirs 必须是对象。`)
   }
 
   if (
     !isNonEmptyString(uuid)
     || !isNonEmptyString(name)
     || !isNonEmptyString(localPath)
-    || !isNonEmptyString(rulesDir)
-    || !isNonEmptyString(skillsDir)
   ) {
     return null
   }
+
+  const contentDirs = Object.fromEntries(
+    CONTENT_TYPE_DEFINITIONS.map((definition) => {
+      const fromMap = isRecord(rawContentDirs) ? rawContentDirs[definition.id] : undefined
+      const legacyKey = definition.repositoryDir.legacyConfigKey
+      const legacyValue = legacyKey ? rawValue[legacyKey] : undefined
+      const resolvedValue = isNonEmptyString(fromMap)
+        ? fromMap.trim()
+        : isNonEmptyString(legacyValue)
+          ? legacyValue.trim()
+          : definition.repositoryDir.defaultDirectoryName
+
+      if (fromMap !== undefined && !isNonEmptyString(fromMap)) {
+        errors.push(`${itemPath}.contentDirs.${definition.id} 必须是非空字符串。`)
+      }
+
+      if (legacyValue !== undefined && !isNonEmptyString(legacyValue)) {
+        errors.push(`${itemPath}.${legacyKey} 必须是非空字符串。`)
+      }
+
+      return [definition.id, resolvedValue]
+    }),
+  ) as Partial<Record<SynapseContentType, string>>
 
   return {
     uuid: uuid.trim(),
     name: name.trim(),
     localPath: localPath.trim(),
-    rulesDir: rulesDir.trim(),
-    skillsDir: skillsDir.trim(),
+    contentDirs,
   }
 }
 
@@ -368,10 +385,19 @@ class ConfigBackupService {
   async exportBackup(
     ownerWindow: BrowserWindow | null,
   ): Promise<SynapseConfigBackupExportResult | null> {
+    const config = await configStore.load()
     const backup: SynapseConfigBackup = {
       schemaVersion: BACKUP_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
-      config: await configStore.load(),
+      config: {
+        ...config,
+        repositories: config.repositories.map((repository) => ({
+          uuid: repository.uuid,
+          name: repository.name,
+          localPath: repository.localPath,
+          contentDirs: repository.contentDirs,
+        })),
+      },
       identity: await userIdentityService.exportIdentity(),
     }
     const defaultPath = path.join(app.getPath("downloads"), createBackupFileName())

@@ -24,7 +24,8 @@
       "WebFetch(domain:openai.github.io)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(npm run *)",
-      "Bash(xargs cat *)"
+      "Bash(xargs cat *)",
+      "Bash(node scripts/git-daily-stats.mjs 2026-04-18)"
     ]
   }
 }

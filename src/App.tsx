@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { type ComponentType, useCallback, useEffect, useMemo, useState } from "react"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
@@ -17,24 +17,47 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { SkillsModule } from "@/modules/skills"
+import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
 import { RulesModule } from "@/modules/rules"
+import { SkillsModule } from "@/modules/skills"
 import { SettingsModule } from "@/modules/settings"
+import type { SynapseContentType } from "@/types/content"
 
-type AppTabId = "rules" | "skills" | "settings"
+type AppTabId = SynapseContentType | "settings"
+type DialogKind = "create" | "detail" | "install"
+type ContentDialogState = Record<DialogKind, boolean>
+type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
+type ContentDialogHandlerMap = Record<SynapseContentType, Record<DialogKind, (open: boolean) => void>>
+
 const logger = createRendererLogger("app")
+
+function createEmptyDialogStateMap(): ContentDialogStateMap {
+  return Object.fromEntries(
+    getAllContentTypeIds().map((contentType) => [contentType, {
+      create: false,
+      detail: false,
+      install: false,
+    }]),
+  ) as ContentDialogStateMap
+}
+
+const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
+  onCreateDialogOpenChange?: (open: boolean) => void
+  onDetailDialogOpenChange?: (open: boolean) => void
+  onInstallDialogOpenChange?: (open: boolean) => void
+}>> = {
+  rule: RulesModule,
+  skill: SkillsModule,
+}
 
 function App() {
   const { activeRepository, isReady } = useAppConfig()
   const { promise } = useAppNotifications()
   const { flushPendingPushes, operations, pendingPushes, states, syncRepository } = useRepositoryManager()
-  const [activeTab, setActiveTab] = useState<AppTabId>("rules")
-  const [isRulesCreateOpen, setIsRulesCreateOpen] = useState(false)
-  const [isRulesDetailOpen, setIsRulesDetailOpen] = useState(false)
-  const [isRulesInstallOpen, setIsRulesInstallOpen] = useState(false)
-  const [isSkillsCreateOpen, setIsSkillsCreateOpen] = useState(false)
-  const [isSkillsDetailOpen, setIsSkillsDetailOpen] = useState(false)
-  const [isSkillsInstallOpen, setIsSkillsInstallOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<AppTabId>("rule")
+  const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
+    createEmptyDialogStateMap,
+  )
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
@@ -49,37 +72,35 @@ function App() {
       ? "正在整理"
       : "正在同步"
     : null
-  const hasBlockingModalOpen =
-    isRulesCreateOpen
-    || isRulesDetailOpen
-    || isRulesInstallOpen
-    || isSkillsCreateOpen
-    || isSkillsDetailOpen
-    || isSkillsInstallOpen
-    || isPendingPushDialogOpen
+  const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
+    state.create || state.detail || state.install
+  ))
+  const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
   const canSyncActiveRepository =
     activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
   const refreshTitle = activeRepositoryOperation?.isRunning
     ? activeRepositoryOperation.statusText ?? "正在同步..."
     : hasBlockingModalOpen
       ? "请先关闭当前弹窗"
-    : !isReady
-      ? "正在加载设置..."
-      : activeRepository === null
-        ? "还没有选择本地目录"
-        : !activeRepositoryState
-          ? "正在检查目录状态..."
-        : activeRepositoryState?.status !== "ready"
-          ? "当前目录不存在，无法同步"
-          : !activeRepositoryState.isGitRepository
-            ? "当前目录不是 Git 仓库，无法同步"
-            : "同步仓库"
+      : !isReady
+        ? "正在加载设置..."
+        : activeRepository === null
+          ? "还没有选择本地目录"
+          : !activeRepositoryState
+            ? "正在检查目录状态..."
+            : activeRepositoryState?.status !== "ready"
+              ? "当前目录不存在，无法同步"
+              : !activeRepositoryState.isGitRepository
+                ? "当前目录不是 Git 仓库，无法同步"
+                : "同步仓库"
 
   const tabs = useMemo(
     () => [
-      { id: "rules", label: "Rules" },
-      { id: "skills", label: "Skills" },
-      { id: "settings", label: "Settings" },
+      ...CONTENT_TYPE_DEFINITIONS.map((definition) => ({
+        id: definition.id,
+        label: definition.tabLabel,
+      })),
+      { id: "settings" as const, label: "Settings" },
     ],
     [],
   )
@@ -89,6 +110,37 @@ function App() {
       activeTab,
     })
   }, [])
+
+  const setContentDialogOpen = useCallback((
+    contentType: SynapseContentType,
+    kind: DialogKind,
+    open: boolean,
+  ) => {
+    setContentDialogStates((currentState) => {
+      if (currentState[contentType][kind] === open) {
+        return currentState
+      }
+
+      return {
+        ...currentState,
+        [contentType]: {
+          ...currentState[contentType],
+          [kind]: open,
+        },
+      }
+    })
+  }, [])
+
+  const contentDialogHandlers = useMemo(
+    () => Object.fromEntries(
+      getAllContentTypeIds().map((contentType) => [contentType, {
+        create: (open: boolean) => setContentDialogOpen(contentType, "create", open),
+        detail: (open: boolean) => setContentDialogOpen(contentType, "detail", open),
+        install: (open: boolean) => setContentDialogOpen(contentType, "install", open),
+      }]),
+    ) as ContentDialogHandlerMap,
+    [setContentDialogOpen],
+  )
 
   return (
     <IdentityGate>
@@ -193,20 +245,23 @@ function App() {
         }
       >
         <div className="flex h-full min-h-0 flex-col">
-          {activeTab === "rules" ? (
-            <RulesModule
-              onCreateDialogOpenChange={setIsRulesCreateOpen}
-              onDetailDialogOpenChange={setIsRulesDetailOpen}
-              onInstallDialogOpenChange={setIsRulesInstallOpen}
-            />
-          ) : null}
-          {activeTab === "skills" ? (
-            <SkillsModule
-              onCreateDialogOpenChange={setIsSkillsCreateOpen}
-              onDetailDialogOpenChange={setIsSkillsDetailOpen}
-              onInstallDialogOpenChange={setIsSkillsInstallOpen}
-            />
-          ) : null}
+          {CONTENT_TYPE_DEFINITIONS.map((definition) => {
+            if (activeTab !== definition.id) {
+              return null
+            }
+
+            const ModuleComponent = CONTENT_MODULE_COMPONENTS[definition.id]
+            const dialogHandlers = contentDialogHandlers[definition.id]
+
+            return (
+              <ModuleComponent
+                key={definition.id}
+                onCreateDialogOpenChange={dialogHandlers.create}
+                onDetailDialogOpenChange={dialogHandlers.detail}
+                onInstallDialogOpenChange={dialogHandlers.install}
+              />
+            )
+          })}
           {activeTab === "settings" ? <SettingsModule /> : null}
         </div>
       </AppShellLayout>

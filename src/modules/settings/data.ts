@@ -10,6 +10,7 @@ import {
   DEFAULT_GLOBAL_CONFIG,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
 } from "@/constants/defaults"
+import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
 
@@ -44,7 +45,7 @@ const settingsCategories: SettingsCategory[] = [
     id: "content",
     icon: FileText,
     label: "内容",
-    description: "Rules 和 Skills 目录。",
+    description: "内容目录与整理。",
   },
   {
     id: "projects",
@@ -65,6 +66,17 @@ const settingsCategories: SettingsCategory[] = [
     description: "版本与更新。",
   },
 ]
+
+const contentDirectoryItems: SettingItem[] = CONTENT_TYPE_DEFINITIONS.map((definition) => ({
+  key: `activeRepository.contentDirs.${definition.id}`,
+  label: `${definition.pluralLabel} 主目录名`,
+  category: "content",
+  type: "text",
+  defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id],
+  validation: validateRepositoryDirectoryName,
+  visible: ({ activeRepository }) => activeRepository !== null,
+  scope: "repo",
+}))
 
 const settingsItems: SettingItem[] = [
   {
@@ -92,26 +104,7 @@ const settingsItems: SettingItem[] = [
     defaultValue: [],
     scope: "global",
   },
-  {
-    key: "activeRepository.rulesDir",
-    label: "Rules 主目录名",
-    category: "content",
-    type: "text",
-    defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rulesDir,
-    validation: validateRepositoryDirectoryName,
-    visible: ({ activeRepository }) => activeRepository !== null,
-    scope: "repo",
-  },
-  {
-    key: "activeRepository.skillsDir",
-    label: "Skills 主目录名",
-    category: "content",
-    type: "text",
-    defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skillsDir,
-    validation: validateRepositoryDirectoryName,
-    visible: ({ activeRepository }) => activeRepository !== null,
-    scope: "repo",
-  },
+  ...contentDirectoryItems,
   {
     key: "global.projects",
     label: "本地项目",

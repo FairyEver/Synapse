@@ -8,15 +8,13 @@ import type {
   SynapseContentDetail,
   SynapseContentHistoryEntry,
   SynapseContentHistoryVersion,
-  SynapseCreateRulePayload,
-  SynapseCreateSkillPayload,
+  SynapseContentMeta,
+  SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
   SynapseContentMutationResult,
-  SynapseRuleMeta,
-  SynapseSkillMeta,
+  SynapseContentType,
   SynapseTextContentFile,
-  SynapseUpdateRulePayload,
-  SynapseUpdateSkillPayload,
+  SynapseUpdateContentRequest,
 } from "./content"
 import type { SynapseIdentityState } from "./identity"
 import type {
@@ -52,24 +50,28 @@ export type SynapseBridge = {
     node: string
   }
   content: {
-    createRule: (payload: SynapseCreateRulePayload) => Promise<SynapseContentMutationResult>
-    createSkill: (payload: SynapseCreateSkillPayload) => Promise<SynapseContentMutationResult>
-    updateRule: (payload: SynapseUpdateRulePayload) => Promise<SynapseContentMutationResult>
-    updateSkill: (payload: SynapseUpdateSkillPayload) => Promise<SynapseContentMutationResult>
+    list: <T extends SynapseContentType>(
+      args: { contentType: T },
+    ) => Promise<SynapseContentMeta<T>[]>
+    getContent: (
+      args: { contentType: SynapseContentType; id: string },
+    ) => Promise<SynapseTextContentFile>
+    getDetail: (
+      args: { contentType: SynapseContentType; id: string },
+    ) => Promise<SynapseContentDetail>
+    getHistory: (
+      args: { contentType: SynapseContentType; id: string },
+    ) => Promise<SynapseContentHistoryEntry[]>
+    getHistoryVersion: (
+      args: { contentType: SynapseContentType; id: string; historyDirname: string },
+    ) => Promise<SynapseContentHistoryVersion>
+    create: (request: SynapseCreateContentRequest) => Promise<SynapseContentMutationResult>
+    update: (request: SynapseUpdateContentRequest) => Promise<SynapseContentMutationResult>
     deleteContent: (payload: SynapseDeleteContentPayload) => Promise<SynapseContentMutationResult>
-    downloadRule: (ruleId: string) => Promise<SynapseContentDownloadResult>
-    downloadSkill: (skillId: string) => Promise<SynapseContentDownloadResult>
+    download: (
+      args: { contentType: SynapseContentType; id: string },
+    ) => Promise<SynapseContentDownloadResult>
     getEditorAdapters: () => Promise<SynapseEditorAdapterSummary[]>
-    getRuleContent: (ruleId: string) => Promise<SynapseTextContentFile>
-    getRuleDetail: (ruleId: string) => Promise<SynapseContentDetail>
-    getRuleHistory: (ruleId: string) => Promise<SynapseContentHistoryEntry[]>
-    getRuleHistoryVersion: (ruleId: string, historyDirname: string) => Promise<SynapseContentHistoryVersion>
-    getRules: () => Promise<SynapseRuleMeta[]>
-    getSkillContent: (skillId: string) => Promise<SynapseTextContentFile>
-    getSkillDetail: (skillId: string) => Promise<SynapseContentDetail>
-    getSkillHistory: (skillId: string) => Promise<SynapseContentHistoryEntry[]>
-    getSkillHistoryVersion: (skillId: string, historyDirname: string) => Promise<SynapseContentHistoryVersion>
-    getSkills: () => Promise<SynapseSkillMeta[]>
     installToEditor: (
       payload: SynapseInstallToEditorPayload,
     ) => Promise<SynapseContentInstallResult>

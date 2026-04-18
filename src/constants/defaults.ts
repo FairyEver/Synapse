@@ -1,20 +1,18 @@
 import type {
   SynapseConfig,
   SynapseGlobalConfig,
-  SynapseRepositoryConfig,
   SynapseThemeMode,
 } from "../types/config"
+import type { SynapseContentType } from "../types/content"
+import { CONTENT_TYPE_DEFINITIONS } from "../config/content-types"
 
-export const DEFAULT_RULES_DIRECTORY_NAME = "rules"
-export const DEFAULT_SKILLS_DIRECTORY_NAME = "skills"
-
-export const DEFAULT_REPOSITORY_CONTENT_DIRECTORIES: Pick<
-  SynapseRepositoryConfig,
-  "rulesDir" | "skillsDir"
-> = {
-  rulesDir: DEFAULT_RULES_DIRECTORY_NAME,
-  skillsDir: DEFAULT_SKILLS_DIRECTORY_NAME,
-}
+export const DEFAULT_REPOSITORY_CONTENT_DIRECTORIES: Record<SynapseContentType, string> =
+  Object.fromEntries(
+    CONTENT_TYPE_DEFINITIONS.map((definition) => [
+      definition.id,
+      definition.repositoryDir.defaultDirectoryName,
+    ]),
+  ) as Record<SynapseContentType, string>
 
 export const DEFAULT_WINDOW_BOUNDS = {
   width: 1000,

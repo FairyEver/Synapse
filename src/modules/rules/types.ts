@@ -1,11 +1,6 @@
-export type CreateRulePayload = {
-  title: string
-  description: string
-  category: string
-  icon: string
-  iconBg: string
-  content: string
-}
+import type { SynapseCreateRulePayload } from "@/types/content"
+
+export type CreateRulePayload = SynapseCreateRulePayload
 
 export type RuleCreateFieldName = keyof CreateRulePayload
 

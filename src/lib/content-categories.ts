@@ -1,4 +1,4 @@
-import { getBuiltInCategories } from "@/config/categories"
+import { getContentTypeDefinition } from "@/config/content-types"
 import type {
   SynapseCategoryDefinition,
   SynapseCategoryStatsResult,
@@ -21,11 +21,11 @@ function compareCategoryDefinitions(
 }
 
 function getContentTypeLabel(contentType: SynapseContentType): string {
-  return contentType === "rule" ? "Rules" : "Skills"
+  return getContentTypeDefinition(contentType).pluralLabel
 }
 
 function getSortedCategoryDefinitions(contentType: SynapseContentType): SynapseCategoryDefinition[] {
-  return [...getBuiltInCategories(contentType)].sort(compareCategoryDefinitions)
+  return [...getContentTypeDefinition(contentType).categories].sort(compareCategoryDefinitions)
 }
 
 function getCategoryDefinitionMap(

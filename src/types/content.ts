@@ -53,30 +53,24 @@ type SynapseContentSummaryBase = {
   attachmentCount: number
 }
 
-export type SynapseRuleMeta = SynapseContentSummaryBase & {
-  type: "rule"
-}
+export type SynapseContentMeta<T extends SynapseContentType = SynapseContentType> =
+  T extends SynapseContentType ? SynapseContentSummaryBase & { type: T } : never
 
-export type SynapseSkillMeta = SynapseContentSummaryBase & {
-  type: "skill"
-}
+export type SynapseRuleMeta = SynapseContentMeta<"rule">
 
-export type SynapseContentMeta = SynapseRuleMeta | SynapseSkillMeta
+export type SynapseSkillMeta = SynapseContentMeta<"skill">
 
 type SynapseContentDetailBase = SynapseContentSummaryBase & {
   content: string
   attachments: SynapseContentAttachmentRecord[]
 }
 
-export type SynapseRuleDetail = SynapseContentDetailBase & {
-  type: "rule"
-}
+export type SynapseContentDetail<T extends SynapseContentType = SynapseContentType> =
+  T extends SynapseContentType ? SynapseContentDetailBase & { type: T } : never
 
-export type SynapseSkillDetail = SynapseContentDetailBase & {
-  type: "skill"
-}
+export type SynapseRuleDetail = SynapseContentDetail<"rule">
 
-export type SynapseContentDetail = SynapseRuleDetail | SynapseSkillDetail
+export type SynapseSkillDetail = SynapseContentDetail<"skill">
 
 export type SynapseContentHistoryEntry = {
   dirname: string
@@ -118,8 +112,6 @@ type SynapseCreateContentPayloadBase = {
   content: string
 }
 
-export type SynapseCreateRulePayload = SynapseCreateContentPayloadBase
-
 export type SynapseCreateSkillFilePayload = {
   originalName: string
   size: number
@@ -127,9 +119,14 @@ export type SynapseCreateSkillFilePayload = {
   bytes?: Uint8Array
 }
 
-export type SynapseCreateSkillPayload = SynapseCreateContentPayloadBase & {
-  files: SynapseCreateSkillFilePayload[]
-}
+export type SynapseCreateContentPayload<T extends SynapseContentType = SynapseContentType> =
+  T extends "skill"
+    ? SynapseCreateContentPayloadBase & { files: SynapseCreateSkillFilePayload[] }
+    : SynapseCreateContentPayloadBase
+
+export type SynapseCreateRulePayload = SynapseCreateContentPayload<"rule">
+
+export type SynapseCreateSkillPayload = SynapseCreateContentPayload<"skill">
 
 type SynapseUpdateContentPayloadBase = SynapseCreateContentPayloadBase & {
   id: string
@@ -137,11 +134,26 @@ type SynapseUpdateContentPayloadBase = SynapseCreateContentPayloadBase & {
   force?: boolean
 }
 
-export type SynapseUpdateRulePayload = SynapseUpdateContentPayloadBase
+export type SynapseUpdateContentPayload<T extends SynapseContentType = SynapseContentType> =
+  T extends "skill"
+    ? SynapseUpdateContentPayloadBase & { files: SynapseCreateSkillFilePayload[] }
+    : SynapseUpdateContentPayloadBase
 
-export type SynapseUpdateSkillPayload = SynapseUpdateContentPayloadBase & {
-  files: SynapseCreateSkillFilePayload[]
-}
+export type SynapseUpdateRulePayload = SynapseUpdateContentPayload<"rule">
+
+export type SynapseUpdateSkillPayload = SynapseUpdateContentPayload<"skill">
+
+export type SynapseCreateContentRequest<T extends SynapseContentType = SynapseContentType> =
+  T extends SynapseContentType ? {
+    contentType: T
+    payload: SynapseCreateContentPayload<T>
+  } : never
+
+export type SynapseUpdateContentRequest<T extends SynapseContentType = SynapseContentType> =
+  T extends SynapseContentType ? {
+    contentType: T
+    payload: SynapseUpdateContentPayload<T>
+  } : never
 
 export type SynapseDeleteContentPayload = {
   id: string

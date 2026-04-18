@@ -6,11 +6,9 @@ import {
   LoaderCircle,
 } from "lucide-react"
 import {
-  downloadRule,
-  downloadSkill,
+  downloadContent,
   getEditorAdapters,
-  readRuleContent,
-  readSkillContent,
+  readContent,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -26,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
 import type { SynapseContentMeta } from "@/types/content"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
@@ -35,21 +34,11 @@ type ContentActionSplitButtonProps = {
   onInstallDialogOpenChange?: (open: boolean) => void
 }
 
-function canCopyContent(item: SynapseContentMeta): boolean {
-  return true
-}
-
-function supportsContentType(
-  adapter: SynapseEditorAdapterSummary,
-  item: SynapseContentMeta,
-): boolean {
-  return item.type === "rule" ? adapter.supportsRule : adapter.supportsSkill
-}
-
 function ContentActionSplitButton({
   item,
   onInstallDialogOpenChange,
 }: ContentActionSplitButtonProps) {
+  const definition = getContentTypeDefinition(item.type)
   const { config } = useAppConfig()
   const { promise } = useAppNotifications()
   const logger = useMemo(
@@ -64,17 +53,21 @@ function ContentActionSplitButton({
   const [isLoadingAdapters, setIsLoadingAdapters] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
-  const canCopy = canCopyContent(item)
+  const canCopy = definition.capabilities.canCopyContent
+  const canDownload = definition.capabilities.canDownload
+  const canInstall = definition.capabilities.canInstallToEditor
   const isBusy = isCopying || isDownloading
-  const filteredAdapters = (adapters ?? []).filter((adapter) => supportsContentType(adapter, item))
-  const contentLabel = item.type === "rule" ? "Rule" : "Skill"
+  const filteredAdapters = (adapters ?? []).filter((adapter) => (
+    adapter.supportedContentTypes.includes(item.type)
+  ))
+  const hasDropdown = canInstall || canCopy
 
   useEffect(() => {
     onInstallDialogOpenChange?.(isInstallDialogOpen)
   }, [isInstallDialogOpen, onInstallDialogOpenChange])
 
   useEffect(() => {
-    if (!isMenuOpen || adapters || adaptersError || isLoadingAdapters) {
+    if (!canInstall || !isMenuOpen || adapters || adaptersError || isLoadingAdapters) {
       return
     }
 
@@ -91,10 +84,10 @@ function ContentActionSplitButton({
       .finally(() => {
         setIsLoadingAdapters(false)
       })
-  }, [adapters, adaptersError, isLoadingAdapters, isMenuOpen])
+  }, [adapters, adaptersError, canInstall, isLoadingAdapters, isMenuOpen])
 
   const handleDownload = async () => {
-    if (isBusy) {
+    if (isBusy || !canDownload) {
       return
     }
 
@@ -103,10 +96,7 @@ function ContentActionSplitButton({
     try {
       await promise(
         async () => {
-          const result =
-            item.type === "rule"
-              ? await downloadRule(item.id)
-              : await downloadSkill(item.id)
+          const result = await downloadContent(item.type, item.id)
 
           logger.info("Content download requested.", {
             canceled: result.canceled,
@@ -118,7 +108,7 @@ function ContentActionSplitButton({
           return result
         },
         {
-          loading: `正在下载 ${contentLabel}...`,
+          loading: `正在下载 ${definition.singularLabel}...`,
           success: (result) => {
             if (result.canceled) {
               return {
@@ -157,10 +147,7 @@ function ContentActionSplitButton({
     try {
       await promise(
         async () => {
-          const file =
-            item.type === "rule"
-              ? await readRuleContent(item.id)
-              : await readSkillContent(item.id)
+          const file = await readContent(item.type, item.id)
 
           if (!navigator.clipboard?.writeText) {
             throw new Error("当前环境不支持复制到剪贴板。")
@@ -193,102 +180,106 @@ function ContentActionSplitButton({
   return (
     <>
       <ButtonGroup>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isBusy}
-          onClick={() => {
-            void handleDownload()
-          }}
-        >
-          {isDownloading ? (
-            <LoaderCircle className="animate-spin" data-icon="inline-start" />
-          ) : (
-            <Download data-icon="inline-start" />
-          )}
-          下载
-        </Button>
+        {canDownload ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy}
+            onClick={() => {
+              void handleDownload()
+            }}
+          >
+            {isDownloading ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Download data-icon="inline-start" />
+            )}
+            下载
+          </Button>
+        ) : null}
 
-        <DropdownMenu
-          open={isMenuOpen}
-          onOpenChange={(open) => {
-            setIsMenuOpen(open)
+        {hasDropdown ? (
+          <DropdownMenu
+            open={isMenuOpen}
+            onOpenChange={(open) => {
+              setIsMenuOpen(open)
 
-            if (open && adaptersError && !adapters) {
-              setAdaptersError(null)
-            }
-          }}
-        >
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={isBusy}
-              title="更多操作"
-            >
-              <ChevronDown />
-              <span className="sr-only">更多操作</span>
-            </Button>
-          </DropdownMenuTrigger>
+              if (open && adaptersError && !adapters) {
+                setAdaptersError(null)
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={isBusy}
+                title="更多操作"
+              >
+                <ChevronDown />
+                <span className="sr-only">更多操作</span>
+              </Button>
+            </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>安装</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              {isLoadingAdapters ? (
-                <DropdownMenuItem disabled>
-                  <LoaderCircle className="animate-spin" />
-                  正在读取编辑器
-                </DropdownMenuItem>
-              ) : adaptersError ? (
-                <DropdownMenuItem disabled>{adaptersError}</DropdownMenuItem>
-              ) : filteredAdapters.length > 0 ? (
-                filteredAdapters.map((adapter) => (
+            <DropdownMenuContent align="end" className="w-56">
+              {canInstall ? (
+                <>
+                  <DropdownMenuLabel>安装</DropdownMenuLabel>
+                  <DropdownMenuGroup>
+                    {isLoadingAdapters ? (
+                      <DropdownMenuItem disabled>
+                        <LoaderCircle className="animate-spin" />
+                        正在读取编辑器
+                      </DropdownMenuItem>
+                    ) : adaptersError ? (
+                      <DropdownMenuItem disabled>{adaptersError}</DropdownMenuItem>
+                    ) : filteredAdapters.length > 0 ? (
+                      filteredAdapters.map((adapter) => (
+                        <DropdownMenuItem
+                          key={adapter.id}
+                          onSelect={() => {
+                            setSelectedEditor(adapter)
+                            setIsInstallDialogOpen(true)
+                          }}
+                        >
+                          安装到 {adapter.label}
+                        </DropdownMenuItem>
+                      ))
+                    ) : (
+                      <DropdownMenuItem disabled>当前没有可用的安装目标</DropdownMenuItem>
+                    )}
+                  </DropdownMenuGroup>
+                </>
+              ) : null}
+
+              {canCopy ? (
+                <>
+                  {canInstall ? <DropdownMenuSeparator /> : null}
                   <DropdownMenuItem
-                    key={adapter.id}
+                    disabled={isBusy}
                     onSelect={() => {
-                      setSelectedEditor(adapter)
-                      setIsInstallDialogOpen(true)
+                      void handleCopy()
                     }}
                   >
-                    安装到 {adapter.label}
+                    {isCopying ? <LoaderCircle className="animate-spin" /> : <Copy />}
+                    复制正文
                   </DropdownMenuItem>
-                ))
-              ) : (
-                <DropdownMenuItem disabled>当前没有可用的安装目标</DropdownMenuItem>
-              )}
-            </DropdownMenuGroup>
-
-            {canCopy ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => {
-                    void handleCopy()
-                  }}
-                >
-                  {isCopying ? <LoaderCircle className="animate-spin" /> : <Copy />}
-                  复制正文
-                </DropdownMenuItem>
-              </>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </ButtonGroup>
 
-      <ContentInstallDialog
-        editor={selectedEditor}
-        item={item}
-        open={isInstallDialogOpen}
-        projects={config.global.projects}
-        onOpenChange={(open) => {
-          setIsInstallDialogOpen(open)
-
-          if (!open) {
-            setSelectedEditor(null)
-          }
-        }}
-      />
+      {canInstall ? (
+        <ContentInstallDialog
+          editor={selectedEditor}
+          item={item}
+          open={isInstallDialogOpen}
+          onOpenChange={setIsInstallDialogOpen}
+          projects={config.global.projects}
+        />
+      ) : null}
     </>
   )
 }

@@ -4,6 +4,8 @@ import type {
   SynapseRepositoryConfig,
   SynapseThemeMode,
 } from "@/types/config"
+import type { SynapseContentType } from "@/types/content"
+import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import type { SettingItem, SettingsContext } from "@/modules/settings/types"
 
 function updateActiveRepository(
@@ -35,14 +37,15 @@ function getRepositorySettingValue(key: string, context: SettingsContext, fallba
     return fallback
   }
 
-  switch (key) {
-    case "rulesDir":
-      return context.activeRepository.rulesDir
-    case "skillsDir":
-      return context.activeRepository.skillsDir
-    default:
-      return fallback
+  if (key.startsWith("contentDirs.")) {
+    const contentType = key.slice("contentDirs.".length) as SynapseContentType
+
+    return context.activeRepository.contentDirs[contentType]
+      ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[contentType]
+      ?? fallback
   }
+
+  return fallback
 }
 
 function createGlobalSettingPatch(key: string, value: unknown): SynapseConfigPatch | null {
@@ -57,26 +60,20 @@ function createGlobalSettingPatch(key: string, value: unknown): SynapseConfigPat
 }
 
 function createRepositorySettingPatch(key: string, value: unknown, context: SettingsContext): SynapseConfigPatch | null {
-  switch (key) {
-    case "rulesDir": {
-      const repositories = updateActiveRepository(context, (repository) => ({
-        ...repository,
-        rulesDir: String(value ?? ""),
-      }))
+  if (key.startsWith("contentDirs.")) {
+    const contentType = key.slice("contentDirs.".length) as SynapseContentType
+    const repositories = updateActiveRepository(context, (repository) => ({
+      ...repository,
+      contentDirs: {
+        ...repository.contentDirs,
+        [contentType]: String(value ?? ""),
+      },
+    }))
 
-      return repositories ? { repositories } : null
-    }
-    case "skillsDir": {
-      const repositories = updateActiveRepository(context, (repository) => ({
-        ...repository,
-        skillsDir: String(value ?? ""),
-      }))
-
-      return repositories ? { repositories } : null
-    }
-    default:
-      return null
+    return repositories ? { repositories } : null
   }
+
+  return null
 }
 
 function getSettingValue(item: SettingItem, context: SettingsContext): unknown {

@@ -1,18 +1,14 @@
-export type CreateSkillFilePayload = {
+import type { SynapseCreateSkillPayload } from "@/types/content"
+
+export type SkillCreateFilePayloadDraft = {
   originalName: string
   sha256?: string
   size: number
   file?: File
 }
 
-export type CreateSkillPayload = {
-  title: string
-  description: string
-  category: string
-  icon: string
-  iconBg: string
-  content: string
-  files: CreateSkillFilePayload[]
+export type CreateSkillPayload = Omit<SynapseCreateSkillPayload, "files"> & {
+  files: SkillCreateFilePayloadDraft[]
 }
 
 export type SkillCreateFieldName = keyof CreateSkillPayload

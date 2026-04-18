@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process"
+import { getAllContentTypeIds } from "../../src/config/content-types"
+import { getContentDir } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "../../src/types/content"
 import { contentHistoryService } from "./content-history-service"
@@ -35,9 +37,12 @@ function toDatabaseRow(summary: SynapseContentMeta) {
 }
 
 function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | null {
+  const contentTypeIds = getAllContentTypeIds()
+
   if (
     typeof row.id !== "string"
-    || (row.type !== "rule" && row.type !== "skill")
+    || typeof row.type !== "string"
+    || !contentTypeIds.includes(row.type as SynapseContentType)
     || typeof row.title !== "string"
     || typeof row.description !== "string"
     || typeof row.category !== "string"
@@ -108,7 +113,10 @@ function runGitText(cwd: string, args: string[]): Promise<string | null> {
   })
 }
 
-function collectChangedContentKeys(diffOutput: string): ChangedContentKey[] {
+function collectChangedContentKeys(
+  repository: SynapseRepositoryConfig,
+  diffOutput: string,
+): ChangedContentKey[] {
   const map = new Map<string, ChangedContentKey>()
 
   for (const line of diffOutput.split(/\r?\n/)) {
@@ -127,11 +135,16 @@ function collectChangedContentKeys(diffOutput: string): ChangedContentKey[] {
     const directoryName = segments[0]
     const contentId = segments[1]
 
-    if ((directoryName !== "rules" && directoryName !== "skills") || !contentId) {
+    if (!contentId) {
       continue
     }
 
-    const contentType = directoryName === "rules" ? "rule" : "skill"
+    const contentType = resolveContentTypeByDirectoryName(repository, directoryName)
+
+    if (!contentType) {
+      continue
+    }
+
     map.set(`${contentType}:${contentId}`, {
       contentId,
       contentType,
@@ -139,6 +152,19 @@ function collectChangedContentKeys(diffOutput: string): ChangedContentKey[] {
   }
 
   return Array.from(map.values())
+}
+
+function resolveContentTypeByDirectoryName(
+  repository: SynapseRepositoryConfig,
+  directoryName: string,
+): SynapseContentType | null {
+  for (const contentType of getAllContentTypeIds()) {
+    if (getContentDir(repository, contentType) === directoryName) {
+      return contentType
+    }
+  }
+
+  return null
 }
 
 class ContentIndexService {
@@ -178,8 +204,9 @@ class ContentIndexService {
   }
 
   async rebuildIndex(repository: SynapseRepositoryConfig): Promise<void> {
-    const allRules = await contentHistoryService.listContent(repository, "rule")
-    const allSkills = await contentHistoryService.listContent(repository, "skill")
+    const allContent = await Promise.all(
+      getAllContentTypeIds().map((contentType) => contentHistoryService.listContent(repository, contentType)),
+    )
     const currentHead = await this.readHeadSha(repository)
 
     await withRepositoryCacheDatabase(repository.uuid, (database) => {
@@ -208,7 +235,7 @@ class ContentIndexService {
           attachment_count = excluded.attachment_count
       `)
 
-      for (const item of [...allRules, ...allSkills]) {
+      for (const item of allContent.flat()) {
         const row = toDatabaseRow(item)
 
         upsertStatement.run(
@@ -278,7 +305,7 @@ class ContentIndexService {
         return
       }
 
-      const changedContentKeys = collectChangedContentKeys(diffOutput ?? "")
+      const changedContentKeys = collectChangedContentKeys(repository, diffOutput ?? "")
 
       if (changedContentKeys.length === 0) {
         database.prepare(`

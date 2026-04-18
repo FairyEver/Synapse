@@ -1,11 +1,14 @@
 import { spawn } from "node:child_process"
 import path from "node:path"
+import { getContentTypeDefinition } from "../../src/config/content-types"
 import type {
   SynapseContentMutationResult,
   SynapseContentType,
+  SynapseCreateContentRequest,
   SynapseCreateRulePayload,
   SynapseCreateSkillPayload,
   SynapseDeleteContentPayload,
+  SynapseUpdateContentRequest,
   SynapseUpdateRulePayload,
   SynapseUpdateSkillPayload,
 } from "../../src/types/content"
@@ -280,34 +283,47 @@ async function readRepositoryState(repository: SynapseRepositoryConfig) {
 class ContentSubmissionService {
   private pendingPushChains = new Map<string, Promise<void>>()
 
-  async createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentMutationResult> {
+  async createContent(request: SynapseCreateContentRequest): Promise<SynapseContentMutationResult> {
     const identity = await userIdentityService.requireReadyIdentity()
-    const writeResult = await contentWriteService.createRule(payload, identity)
+    const writeResult = await contentWriteService.createContent(request, identity)
 
     return this.commitAndMaybePush("create", writeResult, {
       deferPush: true,
+    })
+  }
+
+  async createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentMutationResult> {
+    return this.createContent({
+      contentType: "rule",
+      payload,
     })
   }
 
   async createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentMutationResult> {
-    const identity = await userIdentityService.requireReadyIdentity()
-    const writeResult = await contentWriteService.createSkill(payload, identity)
-
-    return this.commitAndMaybePush("create", writeResult, {
-      deferPush: true,
+    return this.createContent({
+      contentType: "skill",
+      payload,
     })
   }
 
-  async updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {
+  async updateContent(request: SynapseUpdateContentRequest): Promise<SynapseContentMutationResult> {
     const identity = await userIdentityService.requireReadyIdentity()
 
-    return this.updateContent("rule", payload, identity)
+    return this.updateContentWithConflictCheck(request.contentType, request.payload, identity)
+  }
+
+  async updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {
+    return this.updateContent({
+      contentType: "rule",
+      payload,
+    })
   }
 
   async updateSkill(payload: SynapseUpdateSkillPayload): Promise<SynapseContentMutationResult> {
-    const identity = await userIdentityService.requireReadyIdentity()
-
-    return this.updateContent("skill", payload, identity)
+    return this.updateContent({
+      contentType: "skill",
+      payload,
+    })
   }
 
   async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
@@ -352,7 +368,7 @@ class ContentSubmissionService {
     })
   }
 
-  private async updateContent(
+  private async updateContentWithConflictCheck(
     contentType: SynapseContentType,
     payload: SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
@@ -366,7 +382,7 @@ class ContentSubmissionService {
     )
 
     if (!latestDetail) {
-      throw new Error(contentType === "rule" ? "找不到对应的 Rule 内容。" : "找不到对应的 Skill 内容。")
+      throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
 
     if (!payload.force && latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
@@ -380,10 +396,13 @@ class ContentSubmissionService {
       }
     }
 
-    const writeResult =
-      contentType === "rule"
-        ? await contentWriteService.updateRule(payload as SynapseUpdateRulePayload, identity)
-        : await contentWriteService.updateSkill(payload as SynapseUpdateSkillPayload, identity)
+    const writeResult = await contentWriteService.updateContent(
+      {
+        contentType,
+        payload,
+      } as SynapseUpdateContentRequest,
+      identity,
+    )
 
     return this.commitAndMaybePush("update", writeResult, {
       deferPush: true,
@@ -406,7 +425,7 @@ class ContentSubmissionService {
     )
 
     if (!latestDetail) {
-      throw new Error(payload.type === "rule" ? "找不到对应的 Rule 内容。" : "找不到对应的 Skill 内容。")
+      throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
     }
 
     if (!payload.force && latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {

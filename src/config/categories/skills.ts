@@ -1,4 +1,4 @@
-import type { SynapseCategoryDefinition } from "@/types/category"
+import type { SynapseCategoryDefinition } from "../../types/category"
 
 export const skillsCategories = [
   {

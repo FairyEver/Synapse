@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto"
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
@@ -10,8 +11,12 @@ import type {
   SynapseContentMetaRecord,
   SynapseContentSnapshotRecord,
   SynapseContentType,
+  SynapseCreateContentRequest,
+  SynapseCreateContentPayload,
   SynapseCreateRulePayload,
   SynapseCreateSkillPayload,
+  SynapseUpdateContentPayload,
+  SynapseUpdateContentRequest,
   SynapseUpdateRulePayload,
   SynapseUpdateSkillPayload,
 } from "../../src/types/content"
@@ -48,8 +53,8 @@ type ContentWriteResult = {
   type: SynapseContentType
 }
 
-type ContentCreatePayload = SynapseCreateRulePayload | SynapseCreateSkillPayload
-type ContentUpdatePayload = SynapseUpdateRulePayload | SynapseUpdateSkillPayload
+type ContentCreatePayload = SynapseCreateContentPayload
+type ContentUpdatePayload = SynapseUpdateContentPayload
 
 function normalizeMarkdownContent(content: string): string {
   return content.endsWith("\n") ? content : `${content}\n`
@@ -204,7 +209,7 @@ async function resolveAttachmentRecords(
   attachments: SynapseContentAttachmentRecord[]
   createdPaths: string[]
 }> {
-  if (contentType === "rule") {
+  if (!getContentTypeDefinition(contentType).capabilities.hasAttachments) {
     return {
       attachments: baseline?.attachments ?? [],
       createdPaths: [],
@@ -268,36 +273,70 @@ async function resolveAttachmentRecords(
 }
 
 class ContentWriteService {
+  async createContent(
+    request: SynapseCreateContentRequest,
+    identity: SynapseUserIdentity,
+  ): Promise<ContentWriteResult> {
+    assertRequiredCreateFields(request.payload)
+
+    if (getContentTypeDefinition(request.contentType).requiresFilesInPayload && !("files" in request.payload)) {
+      throw new Error(`${getContentTypeDefinition(request.contentType).singularLabel} 创建必须带 files 字段。`)
+    }
+
+    return this.createContentInternal(request.contentType, request.payload, identity)
+  }
+
+  async updateContent(
+    request: SynapseUpdateContentRequest,
+    identity: SynapseUserIdentity,
+  ): Promise<ContentWriteResult> {
+    assertRequiredCreateFields(request.payload)
+
+    if (getContentTypeDefinition(request.contentType).requiresFilesInPayload && !("files" in request.payload)) {
+      throw new Error(`${getContentTypeDefinition(request.contentType).singularLabel} 更新必须带 files 字段。`)
+    }
+
+    return this.writeNextHistory(request.contentType, request.payload.id, request.payload, identity, false)
+  }
+
   async createRule(
     payload: SynapseCreateRulePayload,
     identity: SynapseUserIdentity,
   ): Promise<ContentWriteResult> {
-    assertRequiredCreateFields(payload)
-    return this.createContent("rule", payload, identity)
+    return this.createContent({
+      contentType: "rule",
+      payload,
+    }, identity)
   }
 
   async createSkill(
     payload: SynapseCreateSkillPayload,
     identity: SynapseUserIdentity,
   ): Promise<ContentWriteResult> {
-    assertRequiredCreateFields(payload)
-    return this.createContent("skill", payload, identity)
+    return this.createContent({
+      contentType: "skill",
+      payload,
+    }, identity)
   }
 
   async updateRule(
     payload: SynapseUpdateRulePayload,
     identity: SynapseUserIdentity,
   ): Promise<ContentWriteResult> {
-    assertRequiredCreateFields(payload)
-    return this.writeNextHistory("rule", payload.id, payload, identity, false)
+    return this.updateContent({
+      contentType: "rule",
+      payload,
+    }, identity)
   }
 
   async updateSkill(
     payload: SynapseUpdateSkillPayload,
     identity: SynapseUserIdentity,
   ): Promise<ContentWriteResult> {
-    assertRequiredCreateFields(payload)
-    return this.writeNextHistory("skill", payload.id, payload, identity, false)
+    return this.updateContent({
+      contentType: "skill",
+      payload,
+    }, identity)
   }
 
   async deleteContent(
@@ -313,7 +352,7 @@ class ContentWriteService {
     )
 
     if (!baseline) {
-      throw new Error(contentType === "rule" ? "找不到对应的 Rule 内容。" : "找不到对应的 Skill 内容。")
+      throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
 
     const modifiedAt = new Date().toISOString()
@@ -366,7 +405,7 @@ class ContentWriteService {
     return summary?.latestHistoryDirname ?? null
   }
 
-  private async createContent(
+  private async createContentInternal(
     contentType: SynapseContentType,
     payload: ContentCreatePayload,
     identity: SynapseUserIdentity,
@@ -437,7 +476,7 @@ class ContentWriteService {
     )
 
     if (!baseline) {
-      throw new Error(contentType === "rule" ? "找不到对应的 Rule 内容。" : "找不到对应的 Skill 内容。")
+      throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
 
     const modifiedAt = new Date().toISOString()

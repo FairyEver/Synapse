@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { getContentTypeDefinition } from "@/config/content-types"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseContentMeta } from "@/types/content"
 import type {
@@ -72,6 +73,7 @@ function ContentInstallDialog({
   open,
   projects,
 }: ContentInstallDialogProps) {
+  const definition = getContentTypeDefinition(item.type)
   const logger = useMemo(
     () => createRendererLogger(`content.install.${item.type}`),
     [item.type],
@@ -300,7 +302,7 @@ function ContentInstallDialog({
   }
 
   const handleInstall = async () => {
-    if (item.type === "skill") {
+    if (definition.install.kind === "directory-overwrite") {
       if (!activeTarget || activeTarget.status !== "ready") {
         setInstallError("当前还没有可用的安装目标。")
         return
@@ -324,7 +326,7 @@ function ContentInstallDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>确认覆盖目标目录？</AlertDialogTitle>
             <AlertDialogDescription>
-              Skill 安装会整体替换目标目录中的现有内容。
+              {definition.install.kind === "directory-overwrite" ? definition.install.confirmMessage : ""}
               {activeTarget?.status === "ready" ? ` 目标位置：${activeTarget.targetPath}` : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -347,9 +349,7 @@ function ContentInstallDialog({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>安装到 {editor.label}</DialogTitle>
-            <DialogDescription>
-              选择安装范围，然后确认写入目标位置。
-            </DialogDescription>
+            <DialogDescription>选择安装范围，然后确认写入目标位置。</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-5">
@@ -437,7 +437,9 @@ function ContentInstallDialog({
                   <>
                     <p className="break-all text-muted-foreground">{activeTarget.targetPath}</p>
                     <p className="text-xs text-muted-foreground">
-                      {activeTarget.targetKind === "file" ? "将写入单个文件。" : "将写入技能目录。"}
+                      {activeTarget.targetKind === "file"
+                        ? "将写入单个文件。"
+                        : `将写入 ${definition.singularLabel} 目录。`}
                     </p>
                   </>
                 ) : activeTarget ? (
@@ -450,10 +452,8 @@ function ContentInstallDialog({
               </div>
             </div>
 
-            {item.type === "skill" ? (
-              <p className="text-sm text-muted-foreground">
-                安装 Skill 时会整体替换目标目录中的现有内容。
-              </p>
+            {definition.install.kind === "directory-overwrite" ? (
+              <p className="text-sm text-muted-foreground">{definition.install.confirmMessage}</p>
             ) : null}
 
             {installError ? <p className="text-sm text-destructive">{installError}</p> : null}

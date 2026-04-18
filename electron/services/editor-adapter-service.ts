@@ -13,8 +13,7 @@ class EditorAdapterService {
       label: adapter.label,
       supportsGlobal: adapter.supportsGlobal,
       supportsProject: adapter.supportsProject,
-      supportsRule: adapter.supportsRule,
-      supportsSkill: adapter.supportsSkill,
+      supportedContentTypes: adapter.supportedContentTypes,
     }))
   }
 
@@ -30,11 +29,19 @@ class EditorAdapterService {
           label: payload.editorId,
           supportsGlobal: false,
           supportsProject: false,
-          supportsRule: false,
-          supportsSkill: false,
+          supportedContentTypes: [],
         },
         contentType: payload.contentType,
         message: "未找到对应的编辑器适配器。",
+        scope: payload.scope,
+      })
+    }
+
+    if (!adapter.supportedContentTypes.includes(payload.contentType)) {
+      return createUnsupportedTarget({
+        adapter,
+        contentType: payload.contentType,
+        message: `${adapter.label} 暂不支持 ${payload.contentType} 类型。`,
         scope: payload.scope,
       })
     }

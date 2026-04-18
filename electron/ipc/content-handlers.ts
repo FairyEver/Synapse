@@ -1,12 +1,12 @@
 import { app, BrowserWindow, dialog, type SaveDialogOptions, type WebContents } from "electron"
 import path from "node:path"
+import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type {
-  SynapseCreateRulePayload,
-  SynapseCreateSkillPayload,
+  SynapseContentType,
+  SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
-  SynapseUpdateRulePayload,
-  SynapseUpdateSkillPayload,
+  SynapseUpdateContentRequest,
 } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
@@ -161,26 +161,50 @@ function registerContentHandlers() {
     return
   }
 
-  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.content.getRules, async () => {
-    return contentService.getRules()
-  })
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.list,
+    async (_event, args: { contentType: SynapseContentType }) => contentService.listContent(args.contentType),
+  )
 
-  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.content.getSkills, async () => {
-    return contentService.getSkills()
-  })
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.getContent,
+    async (_event, args: { contentType: SynapseContentType; id: string }) =>
+      contentService.getContent(args.contentType, args.id),
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.getDetail,
+    async (_event, args: { contentType: SynapseContentType; id: string }) =>
+      contentService.getDetail(args.contentType, args.id),
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.getHistory,
+    async (_event, args: { contentType: SynapseContentType; id: string }) =>
+      contentService.getHistory(args.contentType, args.id),
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.getHistoryVersion,
+    async (
+      _event,
+      args: { contentType: SynapseContentType; id: string; historyDirname: string },
+    ) => contentService.getHistoryVersion(args.contentType, args.id, args.historyDirname),
+  )
 
   handleValidatedIpc(SYNAPSE_IPC_CHANNELS.content.getEditorAdapters, async () => {
     return editorAdapterService.listAdapters()
   })
 
   handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.createRule,
-    async (event, payload: SynapseCreateRulePayload) => {
-      logger.info("Handling content.createRule request.", {
-        title: payload.title,
+    SYNAPSE_IPC_CHANNELS.content.create,
+    async (event, request: SynapseCreateContentRequest) => {
+      logger.info("Handling content.create request.", {
+        contentType: request.contentType,
+        title: request.payload.title,
       })
 
-      const result = await contentSubmissionService.createRule(payload)
+      const result = await contentSubmissionService.createContent(request)
       const repository = await resolveActiveRepository()
 
       await notifyPendingPushesUpdated(event.sender, repository)
@@ -194,46 +218,9 @@ function registerContentHandlers() {
   )
 
   handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.createSkill,
-    async (event, payload: SynapseCreateSkillPayload) => {
-      logger.info("Handling content.createSkill request.", {
-        attachmentCount: payload.files.length,
-        title: payload.title,
-      })
-
-      const result = await contentSubmissionService.createSkill(payload)
-      const repository = await resolveActiveRepository()
-
-      await notifyPendingPushesUpdated(event.sender, repository)
-
-      if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-        scheduleBackgroundPush(event.sender, repository)
-      }
-
-      return result
-    },
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.updateRule,
-    async (event, payload: SynapseUpdateRulePayload) => {
-      const result = await contentSubmissionService.updateRule(payload)
-      const repository = await resolveActiveRepository()
-
-      await notifyPendingPushesUpdated(event.sender, repository)
-
-      if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-        scheduleBackgroundPush(event.sender, repository)
-      }
-
-      return result
-    },
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.updateSkill,
-    async (event, payload: SynapseUpdateSkillPayload) => {
-      const result = await contentSubmissionService.updateSkill(payload)
+    SYNAPSE_IPC_CHANNELS.content.update,
+    async (event, request: SynapseUpdateContentRequest) => {
+      const result = await contentSubmissionService.updateContent(request)
       const repository = await resolveActiveRepository()
 
       await notifyPendingPushesUpdated(event.sender, repository)
@@ -256,14 +243,18 @@ function registerContentHandlers() {
   )
 
   handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.downloadRule,
-    async (event, ruleId: string) => {
+    SYNAPSE_IPC_CHANNELS.content.download,
+    async (event, args: { contentType: SynapseContentType; id: string }) => {
+      const definition = getContentTypeDefinition(args.contentType)
       const ownerWindow = BrowserWindow.fromWebContents(event.sender)
       const filePath = await chooseDownloadPath(ownerWindow, {
         buttonLabel: "下载",
-        defaultPath: path.join(app.getPath("downloads"), `${ruleId}.md`),
+        defaultPath: path.join(app.getPath("downloads"), `${args.id}${definition.download.extension}`),
         filters: [
-          { extensions: ["md"], name: "Markdown" },
+          {
+            extensions: [definition.download.extension.replace(/^\./, "")],
+            name: definition.download.dialogFilterName,
+          },
         ],
       })
 
@@ -274,83 +265,13 @@ function registerContentHandlers() {
         }
       }
 
-      await contentDownloadService.downloadRule(ruleId, filePath)
+      await contentDownloadService.download(args.contentType, args.id, filePath)
 
       return {
         canceled: false,
         filePath,
       }
     },
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.downloadSkill,
-    async (event, skillId: string) => {
-      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
-      const filePath = await chooseDownloadPath(ownerWindow, {
-        buttonLabel: "下载",
-        defaultPath: path.join(app.getPath("downloads"), `${skillId}.zip`),
-        filters: [
-          { extensions: ["zip"], name: "Zip Archive" },
-        ],
-      })
-
-      if (!filePath) {
-        return {
-          canceled: true,
-          filePath: null,
-        }
-      }
-
-      await contentDownloadService.downloadSkill(skillId, filePath)
-
-      return {
-        canceled: false,
-        filePath,
-      }
-    },
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getRuleContent,
-    async (_event, ruleId: string) => contentService.getRuleContent(ruleId),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getSkillContent,
-    async (_event, skillId: string) => contentService.getSkillContent(skillId),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getRuleDetail,
-    async (_event, ruleId: string) => contentService.getRuleDetail(ruleId),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getSkillDetail,
-    async (_event, skillId: string) => contentService.getSkillDetail(skillId),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getRuleHistory,
-    async (_event, ruleId: string) => contentService.getRuleHistory(ruleId),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getSkillHistory,
-    async (_event, skillId: string) => contentService.getSkillHistory(skillId),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getRuleHistoryVersion,
-    async (_event, ruleId: string, historyDirname: string) =>
-      contentService.getRuleHistoryVersion(ruleId, historyDirname),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.getSkillHistoryVersion,
-    async (_event, skillId: string, historyDirname: string) =>
-      contentService.getSkillHistoryVersion(skillId, historyDirname),
   )
 
   handleValidatedIpc(

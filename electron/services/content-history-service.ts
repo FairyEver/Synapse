@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
+import { getContentDir } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -49,10 +50,7 @@ function resolveContentRootPath(
   repository: SynapseRepositoryConfig,
   contentType: SynapseContentType,
 ): string {
-  return path.join(
-    repository.localPath,
-    contentType === "rule" ? repository.rulesDir : repository.skillsDir,
-  )
+  return path.join(repository.localPath, getContentDir(repository, contentType))
 }
 
 function resolveContentDirectoryPath(

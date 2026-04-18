@@ -8,10 +8,10 @@ import {
 } from "lucide-react"
 import {
   deleteContent,
-  readRuleDetail,
-  readRuleHistory,
-  readRuleHistoryVersion,
-  updateRule,
+  readDetail,
+  readHistory,
+  readHistoryVersion,
+  updateContent,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -177,11 +177,11 @@ function RuleDetailDialog({
     void (async () => {
       try {
         const [nextDetail, nextHistory] = await Promise.all([
-          readRuleDetail(item.id),
-          readRuleHistory(item.id),
+          readDetail(item.type, item.id),
+          readHistory(item.type, item.id),
         ])
 
-        if (nextDetail.type !== "rule") {
+        if (nextDetail.type !== item.type) {
           throw new Error("读取到的内容不是规则。")
         }
 
@@ -246,9 +246,9 @@ function RuleDetailDialog({
 
     void (async () => {
       try {
-        const nextVersion = await readRuleHistoryVersion(item.id, selectedHistoryDirname)
+        const nextVersion = await readHistoryVersion(item.type, item.id, selectedHistoryDirname)
 
-        if (nextVersion.type !== "rule") {
+        if (nextVersion.type !== item.type) {
           throw new Error("读取到的历史版本不是规则。")
         }
 
@@ -297,7 +297,7 @@ function RuleDetailDialog({
 
   const resolvedItem = detail ?? item
   const deleteTarget = detail ?? item
-  const categoryLabel = getCategoryLabel("rule", resolvedItem.category)
+  const categoryLabel = getCategoryLabel(item.type, resolvedItem.category)
   const iconOption = getContentIconOption(resolvedItem.icon)
   const historyEntries = detail
     ? history.length > 0
@@ -319,7 +319,7 @@ function RuleDetailDialog({
 
     void promise(
       async () => {
-        const result = await updateRule({
+        const result = await updateContent(item.type, {
           ...payload,
           id: detail.id,
           baseHistoryDirname: detail.latestHistoryDirname,
