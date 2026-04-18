@@ -9,11 +9,13 @@ import type { CreateRulePayload } from "@/modules/rules/types"
 type RulesModuleProps = {
   onCreateDialogOpenChange?: (open: boolean) => void
   onDetailDialogOpenChange?: (open: boolean) => void
+  onInstallDialogOpenChange?: (open: boolean) => void
 }
 
 function RulesModule({
   onCreateDialogOpenChange,
   onDetailDialogOpenChange,
+  onInstallDialogOpenChange,
 }: RulesModuleProps) {
   const logger = useMemo(() => createRendererLogger("rules"), [])
   const { activeRepository, config } = useAppConfig()
@@ -57,6 +59,7 @@ function RulesModule({
         title="Rules"
         onCreateClick={() => setIsCreateDialogOpen(true)}
         onDetailDialogOpenChange={onDetailDialogOpenChange}
+        onInstallDialogOpenChange={onInstallDialogOpenChange}
       />
 
       <RuleCreateDialog

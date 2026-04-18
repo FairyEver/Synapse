@@ -9,11 +9,14 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     createSkill: "synapse:content:create-skill",
     downloadRule: "synapse:content:download-rule",
     downloadSkill: "synapse:content:download-skill",
+    getEditorAdapters: "synapse:content:get-editor-adapters",
     getRuleContent: "synapse:content:get-rule-content",
     getRules: "synapse:content:get-rules",
     getSkillContent: "synapse:content:get-skill-content",
     getSkillFiles: "synapse:content:get-skill-files",
     getSkills: "synapse:content:get-skills",
+    installToEditor: "synapse:content:install-to-editor",
+    resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },
   config: {
     get: "synapse:config:get",
@@ -59,12 +62,17 @@ const synapseBridge: SynapseBridge = {
     createSkill: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.createSkill, payload),
     downloadRule: (ruleId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.downloadRule, ruleId),
     downloadSkill: (skillId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.downloadSkill, skillId),
+    getEditorAdapters: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getEditorAdapters),
     getRuleContent: (ruleId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRuleContent, ruleId),
     getRules: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRules),
     getSkillContent: (skillId) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getSkillContent, skillId),
     getSkillFiles: (skillId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getSkillFiles, skillId),
     getSkills: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getSkills),
+    installToEditor: (payload) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.installToEditor, payload),
+    resolveEditorInstallTarget: (payload) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.resolveEditorInstallTarget, payload),
   },
   config: {
     get: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.get),

@@ -10,6 +10,13 @@ import type {
   SynapseTextContentFile,
 } from "./content"
 import type {
+  SynapseEditorAdapterSummary,
+  SynapseContentInstallResult,
+  SynapseEditorResolvedTarget,
+  SynapseInstallToEditorPayload,
+  SynapseResolveEditorTargetPayload,
+} from "./editor"
+import type {
   SynapseLogAppendedEvent,
   SynapseLogExportResult,
   SynapseLogListQuery,
@@ -36,11 +43,18 @@ export type SynapseBridge = {
     createSkill: (payload: SynapseCreateSkillPayload) => Promise<SynapseContentWriteResult>
     downloadRule: (ruleId: string) => Promise<SynapseContentDownloadResult>
     downloadSkill: (skillId: string) => Promise<SynapseContentDownloadResult>
+    getEditorAdapters: () => Promise<SynapseEditorAdapterSummary[]>
     getRuleContent: (ruleId: string) => Promise<SynapseTextContentFile>
     getRules: () => Promise<SynapseRuleMeta[]>
     getSkillContent: (skillId: string) => Promise<SynapseTextContentFile>
     getSkillFiles: (skillId: string) => Promise<SynapseContentFile[]>
     getSkills: () => Promise<SynapseSkillMeta[]>
+    installToEditor: (
+      payload: SynapseInstallToEditorPayload,
+    ) => Promise<SynapseContentInstallResult>
+    resolveEditorInstallTarget: (
+      payload: SynapseResolveEditorTargetPayload,
+    ) => Promise<SynapseEditorResolvedTarget>
   }
   config: {
     get: () => Promise<SynapseConfig>

@@ -9,6 +9,13 @@ import type {
   SynapseSkillMeta,
   SynapseTextContentFile,
 } from "@/types/content"
+import type {
+  SynapseEditorAdapterSummary,
+  SynapseContentInstallResult,
+  SynapseEditorResolvedTarget,
+  SynapseInstallToEditorPayload,
+  SynapseResolveEditorTargetPayload,
+} from "@/types/editor"
 
 const DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE =
   "当前页面没有加载 Synapse 的内容桥接。请确认你打开的是桌面应用窗口，而不是独立浏览器页面。"
@@ -73,6 +80,16 @@ function downloadSkill(skillId: string): Promise<SynapseContentDownloadResult> {
   return bridge.downloadSkill(skillId)
 }
 
+function getEditorAdapters(): Promise<SynapseEditorAdapterSummary[]> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.getEditorAdapters()
+}
+
 function readSkills(): Promise<SynapseSkillMeta[]> {
   const bridge = getContentBridge()
 
@@ -113,15 +130,42 @@ function readSkillFiles(skillId: string): Promise<SynapseContentFile[]> {
   return bridge.getSkillFiles(skillId)
 }
 
+function installToEditor(
+  payload: SynapseInstallToEditorPayload,
+): Promise<SynapseContentInstallResult> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.installToEditor(payload)
+}
+
+function resolveEditorInstallTarget(
+  payload: SynapseResolveEditorTargetPayload,
+): Promise<SynapseEditorResolvedTarget> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.resolveEditorInstallTarget(payload)
+}
+
 export {
   createRule,
   createSkill,
   downloadRule,
   downloadSkill,
+  getEditorAdapters,
   hasContentBridge,
+  installToEditor,
   readRuleContent,
   readRules,
   readSkillContent,
   readSkillFiles,
   readSkills,
+  resolveEditorInstallTarget,
 }

@@ -3,7 +3,13 @@ import path from "node:path"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
 import type { SynapseCreateRulePayload, SynapseCreateSkillPayload } from "../../src/types/content"
+import type {
+  SynapseInstallToEditorPayload,
+  SynapseResolveEditorTargetPayload,
+} from "../../src/types/editor"
 import { contentDownloadService } from "../services/content-download-service"
+import { contentInstallService } from "../services/content-install-service"
+import { editorAdapterService } from "../services/editor-adapter-service"
 import { contentSubmissionService } from "../services/content-submission-service"
 import { contentService } from "../services/content-service"
 import { createMainLogger } from "../services/log-store"
@@ -31,6 +37,12 @@ function registerContentHandlers() {
     logger.debug("Handling content.getRules request.")
 
     return contentService.getRules()
+  })
+
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.content.getEditorAdapters, async () => {
+    logger.debug("Handling content.getEditorAdapters request.")
+
+    return editorAdapterService.listAdapters()
   })
 
   handleValidatedIpc(
@@ -156,6 +168,34 @@ function registerContentHandlers() {
       })
 
       return contentService.getSkillFiles(skillId)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.resolveEditorInstallTarget,
+    async (_event, payload: SynapseResolveEditorTargetPayload) => {
+      logger.info("Handling content.resolveEditorInstallTarget request.", {
+        contentId: payload.contentId,
+        contentType: payload.contentType,
+        editorId: payload.editorId,
+        scope: payload.scope,
+      })
+
+      return editorAdapterService.resolveTarget(payload)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.installToEditor,
+    async (_event, payload: SynapseInstallToEditorPayload) => {
+      logger.info("Handling content.installToEditor request.", {
+        contentId: payload.contentId,
+        contentType: payload.contentType,
+        editorId: payload.editorId,
+        scope: payload.scope,
+      })
+
+      return contentInstallService.installToEditor(payload)
     },
   )
 

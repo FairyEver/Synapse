@@ -39,6 +39,7 @@ type ContentBrowserPageProps = {
   contentType: SynapseContentType
   onCreateClick?: () => void
   onDetailDialogOpenChange?: (open: boolean) => void
+  onInstallDialogOpenChange?: (open: boolean) => void
   refreshSignal?: number
   title: string
 }
@@ -203,10 +204,12 @@ function ContentStateView({ description, icon: Icon, title }: ContentState) {
 function ContentListCard({
   contentType,
   item,
+  onInstallDialogOpenChange,
   onOpen,
 }: {
   contentType: SynapseContentType
   item: SynapseContentMeta
+  onInstallDialogOpenChange?: (open: boolean) => void
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
@@ -261,7 +264,10 @@ function ContentListCard({
             event.stopPropagation()
           }}
         >
-          <ContentActionSplitButton item={item} />
+          <ContentActionSplitButton
+            item={item}
+            onInstallDialogOpenChange={onInstallDialogOpenChange}
+          />
         </div>
       </CardContent>
     </Card>
@@ -272,6 +278,7 @@ function ContentBrowserPage({
   contentType,
   onCreateClick,
   onDetailDialogOpenChange,
+  onInstallDialogOpenChange,
   refreshSignal = 0,
   title,
 }: ContentBrowserPageProps) {
@@ -468,6 +475,7 @@ function ContentBrowserPage({
                       key={item.id}
                       contentType={contentType}
                       item={item}
+                      onInstallDialogOpenChange={onInstallDialogOpenChange}
                       onOpen={() => {
                         logger.info("Content detail opened from browser page.", {
                           contentId: item.id,

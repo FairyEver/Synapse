@@ -1,19 +1,30 @@
 import { useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseProjectConfig } from "@/types/config"
 
+const logger = createRendererLogger("settings.projects")
+
 type ProjectListEditorProps = {
   projects: SynapseProjectConfig[]
   onSave: (projects: SynapseProjectConfig[]) => Promise<void>
+}
+
+function getProjectNameFromPath(projectPath: string): string {
+  const normalizedPath = projectPath.replace(/[\\/]+$/, "")
+  const segments = normalizedPath.split(/[\\/]/).filter((segment) => segment.length > 0)
+
+  return segments.at(-1) ?? projectPath
 }
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [draftName, setDraftName] = useState("")
   const [draftPath, setDraftPath] = useState("")
   const [formError, setFormError] = useState<string | null>(null)
+  const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const handleAddProject = async () => {
     const nextName = draftName.trim()
@@ -40,6 +51,26 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     ])
     setDraftName("")
     setDraftPath("")
+  }
+
+  const handleChooseProjectPath = async () => {
+    const bridge = window.synapse?.repository
+
+    if (!bridge) {
+      return
+    }
+
+    logger.info("Opening native directory picker from project settings.")
+    const selectedPath = await bridge.chooseDirectory()
+
+    if (!selectedPath) {
+      logger.info("Project directory picker was dismissed without selecting a directory.")
+      return
+    }
+
+    setDraftPath(selectedPath)
+    setDraftName((currentName) => (currentName.trim() ? currentName : getProjectNameFromPath(selectedPath)))
+    setFormError(null)
   }
 
   return (
@@ -80,11 +111,24 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="settings-project-path">项目路径</Label>
-            <Input
-              id="settings-project-path"
-              value={draftPath}
-              onChange={(event) => setDraftPath(event.target.value)}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="settings-project-path"
+                value={draftPath}
+                onChange={(event) => setDraftPath(event.target.value)}
+              />
+              {hasDirectoryPicker ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void handleChooseProjectPath()
+                  }}
+                >
+                  浏览
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
         {formError ? <p className="text-sm text-destructive">{formError}</p> : null}

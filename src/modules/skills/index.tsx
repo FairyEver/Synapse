@@ -9,11 +9,13 @@ import type { CreateSkillPayload } from "@/modules/skills/types"
 type SkillsModuleProps = {
   onCreateDialogOpenChange?: (open: boolean) => void
   onDetailDialogOpenChange?: (open: boolean) => void
+  onInstallDialogOpenChange?: (open: boolean) => void
 }
 
 function SkillsModule({
   onCreateDialogOpenChange,
   onDetailDialogOpenChange,
+  onInstallDialogOpenChange,
 }: SkillsModuleProps) {
   const logger = useMemo(() => createRendererLogger("skills"), [])
   const { activeRepository, config } = useAppConfig()
@@ -72,6 +74,7 @@ function SkillsModule({
         title="Skills"
         onCreateClick={() => setIsCreateDialogOpen(true)}
         onDetailDialogOpenChange={onDetailDialogOpenChange}
+        onInstallDialogOpenChange={onInstallDialogOpenChange}
       />
 
       <SkillCreateDialog
