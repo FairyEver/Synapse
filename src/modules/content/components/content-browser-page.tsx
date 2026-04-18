@@ -489,7 +489,7 @@ function ContentBrowserPage({
             {state ? (
               <ContentStateView {...state} />
             ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3">
                 {filteredItems.map((item) => (
                   <ContentListCard
                     key={item.id}
