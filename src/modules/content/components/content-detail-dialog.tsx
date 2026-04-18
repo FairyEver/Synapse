@@ -4,7 +4,6 @@ import {
   LoaderCircle,
   PackageOpen,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -23,6 +22,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getContentIconOption } from "@/lib/content-appearance"
 import { getCategoryLabel } from "@/lib/content-categories"
+import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { useContentDetail } from "@/modules/content/hooks/use-content-detail"
 import type {
   SynapseContentFile,
@@ -229,13 +229,8 @@ function ContentDetailDialog({
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
-              <Button size="sm" variant="secondary" disabled>
-                下载
-              </Button>
-              <Button size="sm" variant="outline" disabled>
-                安装
-              </Button>
+            <div className="flex shrink-0 items-center">
+              <ContentActionSplitButton item={item} />
             </div>
           </div>
         </DialogHeader>

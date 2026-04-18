@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react"
 import {
   Folders,
   LoaderCircle,
-  MoreHorizontal,
   PackageOpen,
   Plus,
   SearchX,
@@ -31,6 +30,7 @@ import {
 } from "@/lib/content-categories"
 import { cn } from "@/lib/utils"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
+import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentDetailDialog } from "@/modules/content/components/content-detail-dialog"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
@@ -203,12 +203,10 @@ function ContentStateView({ description, icon: Icon, title }: ContentState) {
 function ContentListCard({
   contentType,
   item,
-  onMoreActionsClick,
   onOpen,
 }: {
   contentType: SynapseContentType
   item: SynapseContentMeta
-  onMoreActionsClick: () => void
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
@@ -254,22 +252,16 @@ function ContentListCard({
           </div>
         </div>
 
-        <div className="shrink-0 self-center">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(event) => {
-              event.stopPropagation()
-              onMoreActionsClick()
-            }}
-            onKeyDown={(event) => {
-              event.stopPropagation()
-            }}
-            title="更多操作"
-          >
-            <MoreHorizontal />
-            <span className="sr-only">更多操作</span>
-          </Button>
+        <div
+          className="shrink-0 self-center"
+          onClick={(event) => {
+            event.stopPropagation()
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+          }}
+        >
+          <ContentActionSplitButton item={item} />
         </div>
       </CardContent>
     </Card>
@@ -476,12 +468,6 @@ function ContentBrowserPage({
                       key={item.id}
                       contentType={contentType}
                       item={item}
-                      onMoreActionsClick={() => {
-                        logger.info("Content card action requested.", {
-                          contentId: item.id,
-                          contentType: item.type,
-                        })
-                      }}
                       onOpen={() => {
                         logger.info("Content detail opened from browser page.", {
                           contentId: item.id,

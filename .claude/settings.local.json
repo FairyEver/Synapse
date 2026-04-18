@@ -20,7 +20,8 @@
       "WebSearch",
       "WebFetch(domain:antigravity.google)",
       "Skill(update-config)",
-      "Skill(update-config:*)"
+      "Skill(update-config:*)",
+      "WebFetch(domain:openai.github.io)"
     ]
   }
 }

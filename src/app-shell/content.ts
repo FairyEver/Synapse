@@ -1,5 +1,6 @@
 import { createMissingBridgeError, getSynapseBridge } from "@/lib/electron-bridge"
 import type {
+  SynapseContentDownloadResult,
   SynapseContentWriteResult,
   SynapseCreateRulePayload,
   SynapseCreateSkillPayload,
@@ -52,6 +53,26 @@ function createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContent
   return bridge.createSkill(payload)
 }
 
+function downloadRule(ruleId: string): Promise<SynapseContentDownloadResult> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.downloadRule(ruleId)
+}
+
+function downloadSkill(skillId: string): Promise<SynapseContentDownloadResult> {
+  const bridge = getContentBridge()
+
+  if (!bridge) {
+    return Promise.reject(createMissingBridgeError(DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE))
+  }
+
+  return bridge.downloadSkill(skillId)
+}
+
 function readSkills(): Promise<SynapseSkillMeta[]> {
   const bridge = getContentBridge()
 
@@ -95,6 +116,8 @@ function readSkillFiles(skillId: string): Promise<SynapseContentFile[]> {
 export {
   createRule,
   createSkill,
+  downloadRule,
+  downloadSkill,
   hasContentBridge,
   readRuleContent,
   readRules,

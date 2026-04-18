@@ -70,3 +70,8 @@ export type SynapseContentWriteResult = {
   targetBranch?: string
   message?: string
 }
+
+export type SynapseContentDownloadResult = {
+  canceled: boolean
+  filePath: string | null
+}

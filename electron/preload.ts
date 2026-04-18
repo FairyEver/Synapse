@@ -7,6 +7,8 @@ const SYNAPSE_PRELOAD_CHANNELS = {
   content: {
     createRule: "synapse:content:create-rule",
     createSkill: "synapse:content:create-skill",
+    downloadRule: "synapse:content:download-rule",
+    downloadSkill: "synapse:content:download-skill",
     getRuleContent: "synapse:content:get-rule-content",
     getRules: "synapse:content:get-rules",
     getSkillContent: "synapse:content:get-skill-content",
@@ -55,6 +57,8 @@ const synapseBridge: SynapseBridge = {
   content: {
     createRule: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.createRule, payload),
     createSkill: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.createSkill, payload),
+    downloadRule: (ruleId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.downloadRule, ruleId),
+    downloadSkill: (skillId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.downloadSkill, skillId),
     getRuleContent: (ruleId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRuleContent, ruleId),
     getRules: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRules),
     getSkillContent: (skillId) =>

@@ -1,12 +1,26 @@
+import { app, BrowserWindow, dialog, type SaveDialogOptions } from "electron"
+import path from "node:path"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
 import type { SynapseCreateRulePayload, SynapseCreateSkillPayload } from "../../src/types/content"
+import { contentDownloadService } from "../services/content-download-service"
 import { contentSubmissionService } from "../services/content-submission-service"
 import { contentService } from "../services/content-service"
 import { createMainLogger } from "../services/log-store"
 
 let handlersRegistered = false
 const logger = createMainLogger("ipc.content")
+
+async function chooseDownloadPath(
+  ownerWindow: BrowserWindow | null,
+  options: SaveDialogOptions,
+): Promise<string | null> {
+  const result = ownerWindow
+    ? await dialog.showSaveDialog(ownerWindow, options)
+    : await dialog.showSaveDialog(options)
+
+  return result.canceled ? null : result.filePath ?? null
+}
 
 function registerContentHandlers() {
   if (handlersRegistered) {
@@ -39,6 +53,70 @@ function registerContentHandlers() {
       })
 
       return contentSubmissionService.createSkill(payload)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.downloadRule,
+    async (event, ruleId: string) => {
+      logger.info("Handling content.downloadRule request.", {
+        ruleId,
+      })
+
+      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+      const filePath = await chooseDownloadPath(ownerWindow, {
+        buttonLabel: "下载",
+        defaultPath: path.join(app.getPath("downloads"), `${ruleId}.md`),
+        filters: [
+          { extensions: ["md"], name: "Markdown" },
+        ],
+      })
+
+      if (!filePath) {
+        return {
+          canceled: true,
+          filePath: null,
+        }
+      }
+
+      await contentDownloadService.downloadRule(ruleId, filePath)
+
+      return {
+        canceled: false,
+        filePath,
+      }
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.downloadSkill,
+    async (event, skillId: string) => {
+      logger.info("Handling content.downloadSkill request.", {
+        skillId,
+      })
+
+      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+      const filePath = await chooseDownloadPath(ownerWindow, {
+        buttonLabel: "下载",
+        defaultPath: path.join(app.getPath("downloads"), `${skillId}.zip`),
+        filters: [
+          { extensions: ["zip"], name: "Zip Archive" },
+        ],
+      })
+
+      if (!filePath) {
+        return {
+          canceled: true,
+          filePath: null,
+        }
+      }
+
+      await contentDownloadService.downloadSkill(skillId, filePath)
+
+      return {
+        canceled: false,
+        filePath,
+      }
     },
   )
 
