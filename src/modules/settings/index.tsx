@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { LogsModule } from "@/modules/logs"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
@@ -114,87 +115,83 @@ function SettingsModule() {
   )
 
   return (
-    <div className="flex h-full min-h-0">
-      <SettingsCategorySidebar
-        categories={settingsCategories}
-        activeCategory={activeCategory}
-        onCategoryChange={(nextCategory) => {
-          logger.info("Settings category changed.", {
-            nextCategory,
-          })
-          setActiveCategory(nextCategory)
-        }}
-      />
+    <SidebarContentLayout
+      contentClassName={cn(isLogsCategory ? "overflow-hidden" : "overflow-y-auto")}
+      sidebar={
+        <SettingsCategorySidebar
+          categories={settingsCategories}
+          activeCategory={activeCategory}
+          onCategoryChange={(nextCategory) => {
+            logger.info("Settings category changed.", {
+              nextCategory,
+            })
+            setActiveCategory(nextCategory)
+          }}
+        />
+      }
+    >
+      <div className={cn("flex flex-col gap-6", isLogsCategory ? "h-full min-h-0 p-4" : "p-6")}>
+        {activeCategory === "content" && activeRepository ? (
+          <p className="text-sm text-muted-foreground">
+            当前目录：{activeRepository.name}
+          </p>
+        ) : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
 
-      <div className={cn("min-h-0 min-w-0 flex-1", isLogsCategory ? "overflow-hidden" : "overflow-y-auto")}>
-        <div
-          className={cn(
-            "flex flex-col gap-6",
-            isLogsCategory ? "h-full min-h-0 p-4" : "mx-auto max-w-5xl p-6",
-          )}
-        >
-          {activeCategory === "content" && activeRepository ? (
-            <p className="text-sm text-muted-foreground">
-              当前目录：{activeRepository.name}
-            </p>
-          ) : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
+        {!isReady ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>加载中</CardTitle>
+              <CardDescription>正在读取设置。</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
 
-          {!isReady ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>加载中</CardTitle>
-                <CardDescription>正在读取设置。</CardDescription>
-              </CardHeader>
-            </Card>
-          ) : null}
+        {isReady && activeCategory === "content" && activeRepository === null ? (
+          <div className="flex min-h-60 items-center justify-center">
+            <p className="text-sm text-muted-foreground">先选择本地目录</p>
+          </div>
+        ) : null}
 
-          {isReady && activeCategory === "content" && activeRepository === null ? (
-            <div className="flex min-h-60 items-center justify-center">
-              <p className="text-sm text-muted-foreground">先选择本地目录</p>
-            </div>
-          ) : null}
+        {isReady && regularItems.length > 0 ? (
+          <SettingsGroup>
+            {regularItems.map((item) => (
+              <SettingItemRow
+                key={item.key}
+                item={item}
+                value={getSettingValue(item, context)}
+                context={context}
+                onSave={handleSaveItem}
+              />
+            ))}
+          </SettingsGroup>
+        ) : null}
 
-          {isReady && regularItems.length > 0 ? (
-            <SettingsGroup>
-              {regularItems.map((item) => (
-                <SettingItemRow
-                  key={item.key}
-                  item={item}
-                  value={getSettingValue(item, context)}
-                  context={context}
-                  onSave={handleSaveItem}
-                />
-              ))}
-            </SettingsGroup>
-          ) : null}
+        {isReady && hasRepositoriesItem ? (
+          <RepositoryListEditor
+            repositories={config.repositories}
+            activeRepoUuid={config.activeRepoUuid}
+            onSave={handleSaveRepositories}
+          />
+        ) : null}
 
-          {isReady && hasRepositoriesItem ? (
-            <RepositoryListEditor
-              repositories={config.repositories}
-              activeRepoUuid={config.activeRepoUuid}
-              onSave={handleSaveRepositories}
-            />
-          ) : null}
+        {isReady && hasProjectsItem ? (
+          <ProjectListEditor
+            projects={config.global.projects}
+            onSave={handleSaveProjects}
+          />
+        ) : null}
 
-          {isReady && hasProjectsItem ? (
-            <ProjectListEditor
-              projects={config.global.projects}
-              onSave={handleSaveProjects}
-            />
-          ) : null}
+        {isReady && activeCategory === "logs" ? (
+          <div className="min-h-0 flex-1">
+            <LogsModule />
+          </div>
+        ) : null}
 
-          {isReady && activeCategory === "logs" ? (
-            <div className="min-h-0 flex-1">
-              <LogsModule />
-            </div>
-          ) : null}
-
-          {isReady && activeCategory === "about" ? <AboutPanel /> : null}
-        </div>
+        {isReady && activeCategory === "about" ? <AboutPanel /> : null}
       </div>
-    </div>
+    </SidebarContentLayout>
   )
 }
 

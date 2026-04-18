@@ -3,7 +3,6 @@ import {
   Folders,
   LoaderCircle,
   PackageOpen,
-  Plus,
   SearchX,
   TriangleAlert,
   type LucideIcon,
@@ -12,7 +11,13 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { InlineNotice } from "@/components/inline-notice"
-import { Button } from "@/components/ui/button"
+import {
+  ModuleSidebar,
+  ModuleSidebarHeader,
+  ModuleSidebarItem,
+  ModuleSidebarList,
+} from "@/components/module-sidebar"
+import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Empty,
@@ -21,8 +26,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { getContentIconOption } from "@/lib/content-appearance"
 import {
   getCategoryLabel,
@@ -395,124 +398,109 @@ function ContentBrowserPage({
 
   return (
     <>
-      <div className="h-full overflow-hidden p-6">
-        <div className="mx-auto grid h-full max-w-6xl gap-6 md:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="min-h-0 rounded-lg border border-border/70 bg-background p-3">
-            <div className="flex h-full min-h-0 flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={searchQuery}
+      <SidebarContentLayout
+        sidebar={
+          <ModuleSidebar>
+            <ModuleSidebarHeader
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder={`搜索 ${title}`}
+              searchDisabled={!canBrowseContent}
+              onAddClick={() => {
+                logger.info("Create entry requested from browser page.", {
+                  contentType,
+                  repositoryUuid: activeRepository.uuid,
+                })
+
+                if (onCreateClick) {
+                  onCreateClick()
+                  return
+                }
+
+                logger.warn("Create entry requested without a registered handler.", {
+                  contentType,
+                  repositoryUuid: activeRepository.uuid,
+                })
+              }}
+              addDisabled={!canCreateContent}
+              addTitle={createButtonTitle}
+            />
+            <ModuleSidebarList>
+              {categories.map((category) => (
+                <ModuleSidebarItem
+                  key={category.id}
+                  active={category.id === activeCategoryId}
                   disabled={!canBrowseContent}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder={`搜索 ${title}`}
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  disabled={!canCreateContent}
-                  onClick={() => {
-                    logger.info("Create entry requested from browser page.", {
-                      contentType,
-                      repositoryUuid: activeRepository.uuid,
-                    })
-
-                    if (onCreateClick) {
-                      onCreateClick()
-                      return
-                    }
-
-                    logger.warn("Create entry requested without a registered handler.", {
-                      contentType,
-                      repositoryUuid: activeRepository.uuid,
-                    })
-                  }}
-                  title={createButtonTitle}
+                  onClick={() => setActiveCategoryId(category.id)}
+                  trailing={
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {category.count}
+                    </span>
+                  }
                 >
-                  <Plus />
-                  <span className="sr-only">{createButtonTitle}</span>
-                </Button>
+                  {category.label}
+                </ModuleSidebarItem>
+              ))}
+            </ModuleSidebarList>
+          </ModuleSidebar>
+        }
+      >
+        <section className="h-full min-h-0 overflow-y-auto">
+          <div className="flex min-h-full flex-col gap-4">
+            {notice ? (
+              <InlineNotice message={notice.message} onDismiss={notice.onDismiss} />
+            ) : null}
+
+            {actionNotice ? (
+              <InlineNotice
+                message={actionNotice.message}
+                tone={actionNotice.tone}
+                onDismiss={() => setActionNotice(null)}
+              />
+            ) : null}
+
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-medium text-foreground">{title}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {getRepositoryDescription(
+                    activeRepository.name,
+                    activeRepositoryState?.isGitRepository ?? null,
+                    repositoryStatus === "checking" ? null : repositoryStatus === "ready",
+                  )}
+                </p>
               </div>
 
-              <Separator />
-
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="flex flex-col gap-1">
-                  {categories.map((category) => (
-                    <Button
-                      key={category.id}
-                      variant={category.id === activeCategoryId ? "secondary" : "ghost"}
-                      className="w-full justify-between"
-                      disabled={!canBrowseContent}
-                      onClick={() => setActiveCategoryId(category.id)}
-                    >
-                      <span className="truncate">{category.label}</span>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {category.count}
-                      </span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              <p className="shrink-0 text-sm text-muted-foreground">{summaryLabel}</p>
             </div>
-          </aside>
 
-          <section className="min-h-0 overflow-y-auto">
-            <div className="flex min-h-full flex-col gap-4">
-              {notice ? (
-                <InlineNotice message={notice.message} onDismiss={notice.onDismiss} />
-              ) : null}
-
-              {actionNotice ? (
-                <InlineNotice
-                  message={actionNotice.message}
-                  tone={actionNotice.tone}
-                  onDismiss={() => setActionNotice(null)}
-                />
-              ) : null}
-
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="text-base font-medium text-foreground">{title}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {getRepositoryDescription(
-                      activeRepository.name,
-                      activeRepositoryState?.isGitRepository ?? null,
-                      repositoryStatus === "checking" ? null : repositoryStatus === "ready",
-                    )}
-                  </p>
-                </div>
-
-                <p className="shrink-0 text-sm text-muted-foreground">{summaryLabel}</p>
+            {state ? (
+              <ContentStateView {...state} />
+            ) : (
+              <div className="grid gap-3 xl:grid-cols-2">
+                {filteredItems.map((item) => (
+                  <ContentListCard
+                    key={item.id}
+                    contentType={contentType}
+                    item={item}
+                    onInstallDialogOpenChange={onInstallDialogOpenChange}
+                    onStatusChange={(message, tone = "default") => {
+                      setActionNotice(message ? { message, tone } : null)
+                    }}
+                    onOpen={() => {
+                      logger.info("Content detail opened from browser page.", {
+                        contentId: item.id,
+                        contentType: item.type,
+                      })
+                      setSelectedItem(item)
+                    }}
+                  />
+                ))}
               </div>
-
-              {state ? (
-                <ContentStateView {...state} />
-              ) : (
-                <div className="grid gap-3 xl:grid-cols-2">
-                  {filteredItems.map((item) => (
-                    <ContentListCard
-                      key={item.id}
-                      contentType={contentType}
-                      item={item}
-                      onInstallDialogOpenChange={onInstallDialogOpenChange}
-                      onStatusChange={(message, tone = "default") => {
-                        setActionNotice(message ? { message, tone } : null)
-                      }}
-                      onOpen={() => {
-                        logger.info("Content detail opened from browser page.", {
-                          contentId: item.id,
-                          contentType: item.type,
-                        })
-                        setSelectedItem(item)
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-      </div>
+            )}
+          </div>
+        </section>
+      </SidebarContentLayout>
 
       <ContentDetailDialog
         item={selectedItem}

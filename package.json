@@ -19,6 +19,9 @@
     "package": "pnpm exec electron-builder --publish never",
     "package:mac": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",
     "package:win": "pnpm exec electron-builder --win nsis --x64 --publish never",
+    "release:plan": "node scripts/release.mjs plan",
+    "release:apply": "node scripts/release.mjs apply",
+    "release:notes": "node scripts/release.mjs notes",
     "release": "pnpm exec electron-builder --publish always",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"

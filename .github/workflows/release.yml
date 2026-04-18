@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - CHANGELOG.md
+      - package.json
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -91,6 +94,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
       - name: Download packaged artifacts
         uses: actions/download-artifact@v7
         with:
@@ -102,6 +110,33 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        run: |
+          node scripts/release.mjs notes "${{ steps.version.outputs.version }}" > release-notes.md
+          test -s release-notes.md
+
+      - name: Verify release tag target
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          tag_ref="repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}"
+          tag_object="$(gh api "$tag_ref" --jq '.object.type + " " + .object.sha' 2>/dev/null || true)"
+
+          if [ -z "$tag_object" ]; then
+            exit 0
+          fi
+
+          read -r tag_type tag_sha <<<"$tag_object"
+
+          if [ "$tag_type" = "tag" ]; then
+            tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}" --jq '.object.sha')"
+          fi
+
+          if [ "$tag_sha" != "$GITHUB_SHA" ]; then
+            echo "Release tag ${RELEASE_TAG} already points to ${tag_sha}, not ${GITHUB_SHA}."
+            exit 1
+          fi
 
       - name: Create or update GitHub Release
         env:
@@ -116,7 +151,8 @@ jobs:
           fi
 
           if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_NAME" --notes-file release-notes.md
             gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
           else
-            gh release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_NAME" --generate-notes
+            gh release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_NAME" --notes-file release-notes.md --target "$GITHUB_SHA"
           fi

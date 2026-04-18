@@ -20,6 +20,7 @@ These rules apply to all renderer-side work under `src/`.
 - Keep renderer styling simple and consistent rather than introducing a separate shell-specific brand layer.
 - Do not import renderer primitives from `@base-ui/react` or introduce another primitive layer when `src/components/ui/` already covers the need.
 - When a primitive is missing, add it through the existing shadcn setup and keep the project on the Radix base.
+- Do not start Vite, Electron, or any other development server for verification unless the user explicitly asks. After renderer changes, leave runtime validation to the user.
 
 ## User-facing copy
 

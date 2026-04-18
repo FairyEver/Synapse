@@ -53,6 +53,8 @@ function createBaseState(): SynapseAppUpdateState {
   return {
     currentVersion: app.getVersion(),
     releaseVersion: null,
+    releaseNotes: [],
+    releasePublishedAt: null,
     status: isSupported ? "idle" : "unsupported",
     message: isSupported ? "可以检查新版本。" : createUnsupportedMessage(),
     error: null,
@@ -128,6 +130,47 @@ function getPreferredArtifactExtensions(): string[] {
   return []
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&nbsp;/g, " ")
+}
+
+function normalizeReleaseNoteText(value: string): string[] {
+  const normalized = decodeHtmlEntities(
+    value
+      .replace(/<li[^>]*>/gi, "\n- ")
+      .replace(/<\/li>/gi, "")
+      .replace(/<(br|br\/)\s*>/gi, "\n")
+      .replace(/<\/(p|div|h1|h2|h3|h4|h5|h6)>/gi, "\n")
+      .replace(/<[^>]+>/g, ""),
+  )
+
+  return normalized
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
+    .filter(Boolean)
+}
+
+function extractReleaseNotes(updateInfo: UpdateInfo): string[] {
+  const rawNotes = updateInfo.releaseNotes
+
+  if (!rawNotes) {
+    return []
+  }
+
+  const notes = Array.isArray(rawNotes)
+    ? rawNotes.flatMap((releaseNote) => normalizeReleaseNoteText(releaseNote.note ?? ""))
+    : normalizeReleaseNoteText(rawNotes)
+
+  return [...new Set(notes)]
+}
+
 function pickInstallerFile(files: ResolvedUpdateFileInfo[]): ResolvedUpdateFileInfo | null {
   const preferredExtensions = getPreferredArtifactExtensions()
 
@@ -174,6 +217,8 @@ class UpdateService {
         message: "正在检查更新...",
         error: null,
         releaseVersion: null,
+        releaseNotes: [],
+        releasePublishedAt: null,
         downloadPercent: null,
         bytesPerSecond: null,
         transferredBytes: null,
@@ -199,6 +244,8 @@ class UpdateService {
         message: "当前已经是最新版本。",
         error: null,
         releaseVersion: updateInfo.version,
+        releaseNotes: [],
+        releasePublishedAt: updateInfo.releaseDate ?? null,
         downloadPercent: null,
         bytesPerSecond: null,
         transferredBytes: null,
@@ -251,6 +298,8 @@ class UpdateService {
       message: `发现新版本 v${updateInfo.version}，正在下载到下载目录...`,
       error: null,
       releaseVersion: updateInfo.version,
+      releaseNotes: extractReleaseNotes(updateInfo),
+      releasePublishedAt: updateInfo.releaseDate ?? null,
       lastCheckedAt: new Date().toISOString(),
       downloadPercent: 0,
       bytesPerSecond: null,

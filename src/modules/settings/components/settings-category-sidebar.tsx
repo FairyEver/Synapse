@@ -1,4 +1,8 @@
-import { Button } from "@/components/ui/button"
+import {
+  ModuleSidebar,
+  ModuleSidebarItem,
+  ModuleSidebarList,
+} from "@/components/module-sidebar"
 import type { SettingsCategory, SettingsCategoryId } from "@/modules/settings/types"
 
 type SettingsCategorySidebarProps = {
@@ -13,20 +17,19 @@ function SettingsCategorySidebar({
   onCategoryChange,
 }: SettingsCategorySidebarProps) {
   return (
-    <aside className="w-56 shrink-0 border-r bg-muted/20">
-      <nav className="flex h-full flex-col gap-1 p-4">
+    <ModuleSidebar>
+      <ModuleSidebarList>
         {categories.map((category) => (
-          <Button
+          <ModuleSidebarItem
             key={category.id}
-            variant={category.id === activeCategory ? "secondary" : "ghost"}
-            className="justify-start"
+            active={category.id === activeCategory}
             onClick={() => onCategoryChange(category.id)}
           >
             {category.label}
-          </Button>
+          </ModuleSidebarItem>
         ))}
-      </nav>
-    </aside>
+      </ModuleSidebarList>
+    </ModuleSidebar>
   )
 }
 

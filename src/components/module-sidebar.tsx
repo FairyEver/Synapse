@@ -1,0 +1,126 @@
+import type { ReactNode } from "react"
+import { Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+
+type ModuleSidebarProps = {
+  children: ReactNode
+  className?: string
+}
+
+function ModuleSidebar({ children, className }: ModuleSidebarProps) {
+  return (
+    <aside
+      className={cn(
+        "flex h-full min-h-0 flex-col gap-2 rounded-2xl bg-muted/30 p-2",
+        className,
+      )}
+    >
+      {children}
+    </aside>
+  )
+}
+
+type ModuleSidebarHeaderProps = {
+  searchValue?: string
+  onSearchChange?: (value: string) => void
+  searchPlaceholder?: string
+  searchDisabled?: boolean
+  onAddClick?: () => void
+  addDisabled?: boolean
+  addTitle?: string
+}
+
+function ModuleSidebarHeader({
+  searchValue,
+  onSearchChange,
+  searchPlaceholder,
+  searchDisabled,
+  onAddClick,
+  addDisabled,
+  addTitle,
+}: ModuleSidebarHeaderProps) {
+  const showSearch = onSearchChange !== undefined
+
+  return (
+    <div className="flex items-center gap-2">
+      {showSearch ? (
+        <Input
+          value={searchValue ?? ""}
+          disabled={searchDisabled}
+          onChange={(event) => onSearchChange?.(event.target.value)}
+          placeholder={searchPlaceholder}
+        />
+      ) : null}
+      {onAddClick ? (
+        <Button
+          variant="outline"
+          size="icon"
+          disabled={addDisabled}
+          onClick={onAddClick}
+          title={addTitle}
+        >
+          <Plus />
+          <span className="sr-only">{addTitle}</span>
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+type ModuleSidebarListProps = {
+  children: ReactNode
+  className?: string
+}
+
+function ModuleSidebarList({ children, className }: ModuleSidebarListProps) {
+  return (
+    <div className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
+      <div className="flex flex-col">{children}</div>
+    </div>
+  )
+}
+
+type ModuleSidebarItemProps = {
+  active?: boolean
+  disabled?: boolean
+  onClick?: () => void
+  trailing?: ReactNode
+  children: ReactNode
+}
+
+function ModuleSidebarItem({
+  active,
+  disabled,
+  onClick,
+  trailing,
+  children,
+}: ModuleSidebarItemProps) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex h-9 w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "hover:bg-muted hover:text-foreground",
+        "focus-visible:ring-3 focus-visible:ring-ring/50",
+        "disabled:pointer-events-none disabled:opacity-50",
+        active &&
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      )}
+    >
+      <span className="truncate text-left">{children}</span>
+      {trailing ? <span className="ml-2 shrink-0">{trailing}</span> : null}
+    </button>
+  )
+}
+
+export {
+  ModuleSidebar,
+  ModuleSidebarHeader,
+  ModuleSidebarItem,
+  ModuleSidebarList,
+}

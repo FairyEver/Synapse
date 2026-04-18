@@ -22,7 +22,8 @@
       "Skill(update-config)",
       "Skill(update-config:*)",
       "WebFetch(domain:openai.github.io)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npm run *)"
     ]
   }
 }
