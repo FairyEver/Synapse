@@ -157,6 +157,7 @@ function AboutPanel() {
     ? "text-sm text-destructive"
     : "text-sm text-muted-foreground"
   const downloadDetails = getDownloadDetails(updateState)
+  const progressWidth = `${Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))}%`
 
   const handleAction = async () => {
     const bridge = window.synapse?.updater
@@ -192,8 +193,8 @@ function AboutPanel() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex flex-1 flex-col gap-3">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+        <div className="flex min-w-0 flex-col gap-3">
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">软件更新</p>
             <p className={statusClassName}>{actionError ?? updateState.message}</p>
@@ -205,23 +206,6 @@ function AboutPanel() {
             ) : null}
           </div>
 
-          {updateState.status === "downloading" || updateState.status === "downloaded" ? (
-            <div className="flex max-w-md flex-col gap-2">
-              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span>{updateState.status === "downloaded" ? "下载完成" : "下载进度"}</span>
-                {updateState.downloadPercent !== null ? (
-                  <span>{Math.round(updateState.downloadPercent)}%</span>
-                ) : null}
-              </div>
-              <div className="h-2 rounded bg-muted">
-                <div
-                  className="h-full rounded bg-primary transition-[width] duration-200"
-                  style={{ width: `${updateState.downloadPercent ?? 0}%` }}
-                />
-              </div>
-              {downloadDetails ? <p className="text-xs text-muted-foreground">{downloadDetails}</p> : null}
-            </div>
-          ) : null}
         </div>
 
         <div className="flex justify-start md:justify-end">
@@ -235,6 +219,24 @@ function AboutPanel() {
             {actionLabel}
           </Button>
         </div>
+
+        {updateState.status === "downloading" || updateState.status === "downloaded" ? (
+          <div className="flex min-w-0 flex-col gap-2 md:col-span-2">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>{updateState.status === "downloaded" ? "下载完成" : "下载进度"}</span>
+              {updateState.downloadPercent !== null ? (
+                <span>{Math.round(updateState.downloadPercent)}%</span>
+              ) : null}
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded bg-muted">
+              <div
+                className="h-full rounded bg-primary transition-[width] duration-200"
+                style={{ width: progressWidth }}
+              />
+            </div>
+            {downloadDetails ? <p className="text-xs text-muted-foreground">{downloadDetails}</p> : null}
+          </div>
+        ) : null}
       </div>
     </SettingsGroup>
   )

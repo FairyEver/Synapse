@@ -17,7 +17,7 @@ type LogWriteInput = {
   source: SynapseLogSource
   level: SynapseLogLevel
   category: string
-  message: string
+  message: unknown
   details?: unknown
 }
 
@@ -42,6 +42,47 @@ function formatDetails(details: unknown): string | null {
     maxArrayLength: 50,
     sorted: true,
   })
+}
+
+function normalizeLogInput(message: unknown, details: unknown): { message: string; details?: unknown } {
+  if (typeof message === "string") {
+    return {
+      message: message.trim() || "(empty message)",
+      details,
+    }
+  }
+
+  if (message instanceof Error) {
+    return {
+      message: message.message.trim() || message.name || "(error)",
+      details: details ?? message,
+    }
+  }
+
+  if (message === undefined || message === null) {
+    return {
+      message: "(empty message)",
+      details,
+    }
+  }
+
+  if (typeof message === "number" || typeof message === "boolean" || typeof message === "bigint") {
+    return {
+      message: String(message),
+      details,
+    }
+  }
+
+  return {
+    message:
+      inspect(message, {
+        breakLength: 120,
+        depth: 1,
+        maxArrayLength: 10,
+        sorted: true,
+      }).trim() || "(empty message)",
+    details: details ?? message,
+  }
 }
 
 function formatLogLine(entry: SynapseLogEntry): string {
@@ -77,14 +118,16 @@ class LogStore {
   private readonly maxEntries = 50000
 
   write(input: LogWriteInput): SynapseLogEntry {
+    const normalizedInput = normalizeLogInput(input.message, input.details)
+
     const entry: SynapseLogEntry = {
       id: this.nextId,
       createdAt: new Date().toISOString(),
       level: input.level,
       source: input.source,
       category: input.category.trim() || "app",
-      message: input.message.trim() || "(empty message)",
-      details: formatDetails(input.details),
+      message: normalizedInput.message,
+      details: formatDetails(normalizedInput.details),
     }
 
     this.nextId += 1
@@ -108,13 +151,13 @@ class LogStore {
 
   createLogger(source: SynapseLogSource, category: string) {
     return {
-      debug: (message: string, details?: unknown) =>
+      debug: (message: unknown, details?: unknown) =>
         this.write({ source, level: "debug", category, message, details }),
-      info: (message: string, details?: unknown) =>
+      info: (message: unknown, details?: unknown) =>
         this.write({ source, level: "info", category, message, details }),
-      warn: (message: string, details?: unknown) =>
+      warn: (message: unknown, details?: unknown) =>
         this.write({ source, level: "warn", category, message, details }),
-      error: (message: string, details?: unknown) =>
+      error: (message: unknown, details?: unknown) =>
         this.write({ source, level: "error", category, message, details }),
     }
   }
