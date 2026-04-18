@@ -66,4 +66,7 @@ export type SynapseContentWriteResult = {
   type: SynapseContentType
   title: string
   createdAt: string
+  branchName?: string
+  targetBranch?: string
+  message?: string
 }

@@ -18,8 +18,6 @@ function SkillsModule({
   const logger = useMemo(() => createRendererLogger("skills"), [])
   const { activeRepository, config } = useAppConfig()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [refreshSignal, setRefreshSignal] = useState(0)
-
   useEffect(() => {
     onCreateDialogOpenChange?.(isCreateDialogOpen)
   }, [isCreateDialogOpen, onCreateDialogOpenChange])
@@ -54,19 +52,23 @@ function SkillsModule({
       ),
     })
 
-    logger.info("Skill content written to repository.", {
+    logger.info("Skill submitted for review.", {
       attachmentCount: payload.files.length,
+      branchName: result.branchName ?? null,
       contentId: result.id,
       repositoryUuid: activeRepository?.uuid ?? null,
+      targetBranch: result.targetBranch ?? null,
     })
-    setRefreshSignal((currentValue) => currentValue + 1)
+
+    window.setTimeout(() => {
+      window.alert(result.message ?? "提交成功，等待审核。")
+    }, 0)
   }
 
   return (
     <>
       <ContentBrowserPage
         contentType="skill"
-        refreshSignal={refreshSignal}
         title="Skills"
         onCreateClick={() => setIsCreateDialogOpen(true)}
         onDetailDialogOpenChange={onDetailDialogOpenChange}

@@ -18,7 +18,9 @@
       "WebFetch(domain:docs.claude.com)",
       "WebFetch(domain:codelabs.developers.google.com)",
       "WebSearch",
-      "WebFetch(domain:antigravity.google)"
+      "WebFetch(domain:antigravity.google)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ]
   }
 }

@@ -120,7 +120,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
       await onSubmit(normalizeCreateRulePayload(form))
       onOpenChange(false)
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "创建 Rule 失败。")
+      setSubmitError(error instanceof Error ? error.message : "提交 Rule 失败。")
     } finally {
       setIsSubmitting(false)
     }
@@ -133,7 +133,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
           <DialogHeader className="px-5 pt-5">
             <DialogTitle>新建 Rule</DialogTitle>
             <DialogDescription>
-              填好标题、分类和正文后，就可以继续下一步。
+              提交后会自动创建分支并进入审核流程。
             </DialogDescription>
           </DialogHeader>
 
@@ -319,7 +319,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
               取消
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "正在创建..." : "创建"}
+              {isSubmitting ? "正在提交..." : "提交审核"}
             </Button>
           </DialogFooter>
         </form>

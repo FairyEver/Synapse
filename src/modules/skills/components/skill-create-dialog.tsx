@@ -323,7 +323,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
       await onSubmit(normalizeCreateSkillPayload(form))
       onOpenChange(false)
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "创建 Skill 失败。")
+      setSubmitError(error instanceof Error ? error.message : "提交 Skill 失败。")
     } finally {
       setIsSubmitting(false)
     }
@@ -336,7 +336,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
           <DialogHeader className="px-5 pt-5">
             <DialogTitle>新建 Skill</DialogTitle>
             <DialogDescription>
-              主说明会自动生成说明文件，附件会保留原始目录结构。
+              提交后会自动创建分支，主说明和附件一起进入审核流程。
             </DialogDescription>
           </DialogHeader>
 
@@ -701,7 +701,7 @@ function SkillCreateDialog({ onOpenChange, onSubmit, open }: SkillCreateDialogPr
               取消
             </Button>
             <Button type="submit" disabled={isSubmitting || isCollectingFiles}>
-              {isSubmitting ? "正在创建..." : "创建"}
+              {isSubmitting ? "正在提交..." : "提交审核"}
             </Button>
           </DialogFooter>
         </form>

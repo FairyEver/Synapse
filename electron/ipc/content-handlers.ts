@@ -1,7 +1,7 @@
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
 import type { SynapseCreateRulePayload, SynapseCreateSkillPayload } from "../../src/types/content"
-import { contentCreateService } from "../services/content-create-service"
+import { contentSubmissionService } from "../services/content-submission-service"
 import { contentService } from "../services/content-service"
 import { createMainLogger } from "../services/log-store"
 
@@ -26,7 +26,7 @@ function registerContentHandlers() {
         title: payload.title,
       })
 
-      return contentCreateService.createRule(payload)
+      return contentSubmissionService.createRule(payload)
     },
   )
 
@@ -38,7 +38,7 @@ function registerContentHandlers() {
         title: payload.title,
       })
 
-      return contentCreateService.createSkill(payload)
+      return contentSubmissionService.createSkill(payload)
     },
   )
 

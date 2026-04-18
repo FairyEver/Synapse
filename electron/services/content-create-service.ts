@@ -24,6 +24,7 @@ const logger = createMainLogger("service.content-create")
 type ActiveRepositoryWriteContext = {
   author: string
   gitUser: string
+  gitRootPath: string
   repository: SynapseRepositoryConfig
 }
 
@@ -31,6 +32,16 @@ type SkillAttachmentWriteTarget = {
   relativePath: string
   size: number
   bytes: Uint8Array
+}
+
+type WrittenContentArtifact = SynapseContentWriteResult & {
+  directoryPath: string
+}
+
+type WriteContentOptions = {
+  baseLocalPath?: string
+  createdAt?: string
+  id?: string
 }
 
 function isNonEmptyString(value: string): boolean {
@@ -91,10 +102,11 @@ function assertRequiredCreateFields(
 }
 
 function resolveContentRootPath(
+  baseLocalPath: string,
   repository: SynapseRepositoryConfig,
   contentType: SynapseContentType,
 ): string {
-  const repositoryRootPath = path.resolve(repository.localPath)
+  const repositoryRootPath = path.resolve(baseLocalPath)
   const configuredRoot = contentType === "rule" ? repository.rulesDir : repository.skillsDir
   const contentRootPath = path.resolve(repositoryRootPath, configuredRoot)
 
@@ -224,6 +236,10 @@ async function getActiveRepositoryWriteContext(): Promise<ActiveRepositoryWriteC
     throw new Error("当前目录不是 Git 仓库，不能创建内容。")
   }
 
+  if (!repositoryState.gitRootPath) {
+    throw new Error("当前目录缺少 Git 根目录信息，请先重新检查仓库状态。")
+  }
+
   const author = config.global.displayName.trim()
 
   if (!author) {
@@ -235,6 +251,7 @@ async function getActiveRepositoryWriteContext(): Promise<ActiveRepositoryWriteC
   return {
     author,
     gitUser,
+    gitRootPath: repositoryState.gitRootPath,
     repository,
   }
 }
@@ -245,7 +262,7 @@ async function stageContentDirectory(
   meta: SynapseRuleMeta | SynapseSkillMeta,
   mainContent: string,
   attachments: SkillAttachmentWriteTarget[] = [],
-): Promise<void> {
+): Promise<string> {
   await mkdir(rootPath, { recursive: true })
 
   const targetPath = path.join(rootPath, contentId)
@@ -280,6 +297,7 @@ async function stageContentDirectory(
     }
 
     await rename(tempDirectoryPath, targetPath)
+    return targetPath
   } catch (error) {
     await rm(tempDirectoryPath, { recursive: true, force: true })
     throw error
@@ -290,8 +308,38 @@ class ContentCreateService {
   async createRule(payload: SynapseCreateRulePayload): Promise<SynapseContentWriteResult> {
     assertRequiredCreateFields(payload)
     const context = await getActiveRepositoryWriteContext()
-    const createdAt = new Date().toISOString()
-    const id = createContentId()
+    const artifact = await this.writeRuleToRepository(payload, context)
+
+    return {
+      id: artifact.id,
+      type: artifact.type,
+      title: artifact.title,
+      createdAt: artifact.createdAt,
+    }
+  }
+
+  async createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentWriteResult> {
+    assertRequiredCreateFields(payload)
+    const context = await getActiveRepositoryWriteContext()
+    const artifact = await this.writeSkillToRepository(payload, context)
+
+    return {
+      id: artifact.id,
+      type: artifact.type,
+      title: artifact.title,
+      createdAt: artifact.createdAt,
+    }
+  }
+
+  async writeRuleToRepository(
+    payload: SynapseCreateRulePayload,
+    context: ActiveRepositoryWriteContext,
+    options: WriteContentOptions = {},
+  ): Promise<WrittenContentArtifact> {
+    assertRequiredCreateFields(payload)
+    const createdAt = options.createdAt ?? new Date().toISOString()
+    const id = options.id ?? createContentId()
+    const baseLocalPath = path.resolve(options.baseLocalPath ?? context.repository.localPath)
     const meta: SynapseRuleMeta = {
       id,
       type: "rule",
@@ -304,7 +352,7 @@ class ContentCreateService {
       gitUser: context.gitUser,
       createdAt,
     }
-    const rootPath = resolveContentRootPath(context.repository, "rule")
+    const rootPath = resolveContentRootPath(baseLocalPath, context.repository, "rule")
 
     logger.info("Creating rule content on disk.", {
       id,
@@ -312,9 +360,10 @@ class ContentCreateService {
       rootPath,
     })
 
-    await stageContentDirectory(rootPath, id, meta, payload.content)
+    const directoryPath = await stageContentDirectory(rootPath, id, meta, payload.content)
 
     return {
+      directoryPath,
       id,
       type: "rule",
       title: meta.title,
@@ -322,12 +371,16 @@ class ContentCreateService {
     }
   }
 
-  async createSkill(payload: SynapseCreateSkillPayload): Promise<SynapseContentWriteResult> {
+  async writeSkillToRepository(
+    payload: SynapseCreateSkillPayload,
+    context: ActiveRepositoryWriteContext,
+    options: WriteContentOptions = {},
+  ): Promise<WrittenContentArtifact> {
     assertRequiredCreateFields(payload)
-    const context = await getActiveRepositoryWriteContext()
-    const createdAt = new Date().toISOString()
-    const id = createContentId()
-    const rootPath = resolveContentRootPath(context.repository, "skill")
+    const createdAt = options.createdAt ?? new Date().toISOString()
+    const id = options.id ?? createContentId()
+    const baseLocalPath = path.resolve(options.baseLocalPath ?? context.repository.localPath)
+    const rootPath = resolveContentRootPath(baseLocalPath, context.repository, "skill")
     const seenRelativePaths = new Set<string>()
     const attachments = payload.files.map((file) => {
       const target = resolveSkillAttachmentTarget(file)
@@ -361,9 +414,10 @@ class ContentCreateService {
       rootPath,
     })
 
-    await stageContentDirectory(rootPath, id, meta, payload.content, attachments)
+    const directoryPath = await stageContentDirectory(rootPath, id, meta, payload.content, attachments)
 
     return {
+      directoryPath,
       id,
       type: "skill",
       title: meta.title,
@@ -373,3 +427,10 @@ class ContentCreateService {
 }
 
 export const contentCreateService = new ContentCreateService()
+export {
+  CONTENT_MAIN_FILE_NAME,
+  CONTENT_META_FILE_NAME,
+  getActiveRepositoryWriteContext,
+  type ActiveRepositoryWriteContext,
+  type WrittenContentArtifact,
+}
