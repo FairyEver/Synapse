@@ -1,5 +1,8 @@
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
+  SynapseContentWriteResult,
+  SynapseCreateRulePayload,
+  SynapseCreateSkillPayload,
   SynapseContentFile,
   SynapseRuleMeta,
   SynapseSkillMeta,
@@ -28,6 +31,8 @@ export type SynapseBridge = {
     node: string
   }
   content: {
+    createRule: (payload: SynapseCreateRulePayload) => Promise<SynapseContentWriteResult>
+    createSkill: (payload: SynapseCreateSkillPayload) => Promise<SynapseContentWriteResult>
     getRuleContent: (ruleId: string) => Promise<SynapseTextContentFile>
     getRules: () => Promise<SynapseRuleMeta[]>
     getSkillContent: (skillId: string) => Promise<SynapseTextContentFile>

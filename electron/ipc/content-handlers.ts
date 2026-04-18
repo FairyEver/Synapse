@@ -1,5 +1,7 @@
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
+import type { SynapseCreateRulePayload, SynapseCreateSkillPayload } from "../../src/types/content"
+import { contentCreateService } from "../services/content-create-service"
 import { contentService } from "../services/content-service"
 import { createMainLogger } from "../services/log-store"
 
@@ -16,6 +18,29 @@ function registerContentHandlers() {
 
     return contentService.getRules()
   })
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.createRule,
+    async (_event, payload: SynapseCreateRulePayload) => {
+      logger.info("Handling content.createRule request.", {
+        title: payload.title,
+      })
+
+      return contentCreateService.createRule(payload)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.createSkill,
+    async (_event, payload: SynapseCreateSkillPayload) => {
+      logger.info("Handling content.createSkill request.", {
+        attachmentCount: payload.files.length,
+        title: payload.title,
+      })
+
+      return contentCreateService.createSkill(payload)
+    },
+  )
 
   handleValidatedIpc(SYNAPSE_IPC_CHANNELS.content.getSkills, async () => {
     logger.debug("Handling content.getSkills request.")

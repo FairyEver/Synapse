@@ -37,7 +37,7 @@ import {
 
 type RuleCreateDialogProps = {
   onOpenChange: (open: boolean) => void
-  onSubmit: (payload: CreateRulePayload) => void
+  onSubmit: (payload: CreateRulePayload) => Promise<void> | void
   open: boolean
 }
 
@@ -53,11 +53,15 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
   const categoryOptions = useMemo(() => getCategoryDefinitions("rule"), [])
   const [form, setForm] = useState<CreateRulePayload>(() => createEmptyRulePayload())
   const [errors, setErrors] = useState<RuleCreateFieldErrors>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
       setForm(createEmptyRulePayload())
       setErrors({})
+      setIsSubmitting(false)
+      setSubmitError(null)
     }
   }, [open])
 
@@ -72,6 +76,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
     }
 
     setForm(nextForm)
+    setSubmitError(null)
 
     if (Object.keys(errors).length > 0) {
       setErrors(validateCreateRulePayload(nextForm))
@@ -81,6 +86,10 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       onOpenChange(true)
+      return
+    }
+
+    if (isSubmitting) {
       return
     }
 
@@ -94,7 +103,7 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
     onOpenChange(false)
   }
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     const nextErrors = validateCreateRulePayload(form)
@@ -104,8 +113,17 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
       return
     }
 
-    onSubmit(normalizeCreateRulePayload(form))
-    onOpenChange(false)
+    setIsSubmitting(true)
+    setSubmitError(null)
+
+    try {
+      await onSubmit(normalizeCreateRulePayload(form))
+      onOpenChange(false)
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "创建 Rule 失败。")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -289,10 +307,20 @@ function RuleCreateDialog({ onOpenChange, onSubmit, open }: RuleCreateDialogProp
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
+            {submitError ? (
+              <p className="mr-auto text-sm text-destructive">{submitError}</p>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => handleDialogOpenChange(false)}
+            >
               取消
             </Button>
-            <Button type="submit">创建</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "正在创建..." : "创建"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

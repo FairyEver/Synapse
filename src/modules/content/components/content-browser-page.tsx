@@ -39,6 +39,7 @@ type ContentBrowserPageProps = {
   contentType: SynapseContentType
   onCreateClick?: () => void
   onDetailDialogOpenChange?: (open: boolean) => void
+  refreshSignal?: number
   title: string
 }
 
@@ -279,12 +280,13 @@ function ContentBrowserPage({
   contentType,
   onCreateClick,
   onDetailDialogOpenChange,
+  refreshSignal = 0,
   title,
 }: ContentBrowserPageProps) {
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
   const { states } = useRepositoryManager()
-  const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType)
+  const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType, refreshSignal)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)

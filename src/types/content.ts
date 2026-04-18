@@ -39,3 +39,31 @@ export type SynapseBinaryContentFile = SynapseContentFileBase & {
 }
 
 export type SynapseContentFile = SynapseTextContentFile | SynapseBinaryContentFile
+
+type SynapseCreateContentPayloadBase = {
+  title: string
+  description: string
+  category: string
+  icon: string
+  iconBg: string
+  content: string
+}
+
+export type SynapseCreateRulePayload = SynapseCreateContentPayloadBase
+
+export type SynapseCreateSkillFilePayload = {
+  relativePath: string
+  size: number
+  bytes: Uint8Array
+}
+
+export type SynapseCreateSkillPayload = SynapseCreateContentPayloadBase & {
+  files: SynapseCreateSkillFilePayload[]
+}
+
+export type SynapseContentWriteResult = {
+  id: string
+  type: SynapseContentType
+  title: string
+  createdAt: string
+}

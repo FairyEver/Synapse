@@ -32,6 +32,7 @@ function createEmptyItems<T extends SynapseContentType>(): SynapseContentItemsBy
 
 function useContentCatalog<T extends SynapseContentType>(
   contentType: T,
+  refreshSignal = 0,
 ): UseContentCatalogResult<T> {
   const logger = useMemo(() => createRendererLogger(`content.catalog.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
@@ -93,6 +94,7 @@ function useContentCatalog<T extends SynapseContentType>(
     activeRepositoryOperation?.completedAt,
     activeRepositoryState?.status,
     logger,
+    refreshSignal,
     refresh,
   ])
 

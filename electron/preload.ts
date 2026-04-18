@@ -5,6 +5,8 @@ import type { SynapseBridge } from "../src/types/bridge"
 // names used here must stay inline instead of importing ./ipc/channels.
 const SYNAPSE_PRELOAD_CHANNELS = {
   content: {
+    createRule: "synapse:content:create-rule",
+    createSkill: "synapse:content:create-skill",
     getRuleContent: "synapse:content:get-rule-content",
     getRules: "synapse:content:get-rules",
     getSkillContent: "synapse:content:get-skill-content",
@@ -51,6 +53,8 @@ const synapseBridge: SynapseBridge = {
     node: process.versions.node,
   },
   content: {
+    createRule: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.createRule, payload),
+    createSkill: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.createSkill, payload),
     getRuleContent: (ruleId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRuleContent, ruleId),
     getRules: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getRules),
     getSkillContent: (skillId) =>

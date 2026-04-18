@@ -1,5 +1,7 @@
 export const SYNAPSE_IPC_CHANNELS = {
   content: {
+    createRule: "synapse:content:create-rule",
+    createSkill: "synapse:content:create-skill",
     getRuleContent: "synapse:content:get-rule-content",
     getRules: "synapse:content:get-rules",
     getSkillContent: "synapse:content:get-skill-content",
