@@ -79,6 +79,5 @@ export type SynapseBridge = {
     checkForUpdates: () => Promise<SynapseAppUpdateState>
     getState: () => Promise<SynapseAppUpdateState>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
-    quitAndInstall: () => Promise<void>
   }
 }

@@ -39,7 +39,6 @@ const SYNAPSE_PRELOAD_CHANNELS = {
   update: {
     checkForUpdates: "synapse:update:check-for-updates",
     getState: "synapse:update:get-state",
-    quitAndInstall: "synapse:update:quit-and-install",
     stateChanged: "synapse:update:state-changed",
   },
 } as const
@@ -104,7 +103,6 @@ const synapseBridge: SynapseBridge = {
     getState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.getState),
     onStateChanged: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.stateChanged, listener),
-    quitAndInstall: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.quitAndInstall),
   },
 }
 

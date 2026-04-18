@@ -18,7 +18,7 @@ const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   totalBytes: null,
   lastCheckedAt: null,
   canCheck: false,
-  canRestartToInstall: false,
+  downloadedFilePath: null,
 }
 
 function formatBytes(value: number | null): string | null {
@@ -59,6 +59,10 @@ function formatDuration(totalSeconds: number): string {
 }
 
 function getDownloadDetails(updateState: SynapseAppUpdateState): string | null {
+  if (updateState.status === "downloaded") {
+    return "已保存到下载目录"
+  }
+
   if (updateState.status !== "downloading") {
     return null
   }
@@ -140,19 +144,11 @@ function AboutPanel() {
     }
   }, [])
 
-  const isRestartAction = updateState.canRestartToInstall
   const isChecking = updateState.status === "checking"
   const isDownloading = updateState.status === "downloading"
-  const actionLabel = isRestartAction
-    ? "立即重启并安装"
-    : isChecking
-      ? "检查中..."
-      : isDownloading
-        ? "下载中..."
-        : "检查更新"
-  const actionDisabled = isRestartAction
-    ? false
-    : !updateState.canCheck || isChecking || isDownloading
+  const isDownloaded = updateState.status === "downloaded"
+  const actionLabel = isChecking ? "检查中..." : isDownloading ? "下载中..." : "检查更新"
+  const actionDisabled = !updateState.canCheck || isChecking || isDownloading
   const statusClassName = updateState.status === "error" || actionError
     ? "text-sm text-destructive"
     : "text-sm text-muted-foreground"
@@ -169,11 +165,6 @@ function AboutPanel() {
     setActionError(null)
 
     try {
-      if (isRestartAction) {
-        await bridge.quitAndInstall()
-        return
-      }
-
       const nextState = await bridge.checkForUpdates()
       setUpdateState(nextState)
     } catch (error) {
@@ -201,8 +192,15 @@ function AboutPanel() {
             {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
               <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
             ) : null}
-            {updateState.canRestartToInstall ? (
-              <p className="text-xs text-muted-foreground">安装时会重启 Synapse，请先保存正在进行的操作。</p>
+            {isDownloaded ? (
+              <p className="text-xs text-muted-foreground">
+                请先完全退出 Synapse，再打开下载好的安装包重新安装。
+              </p>
+            ) : null}
+            {updateState.downloadedFilePath ? (
+              <p className="text-xs break-all text-muted-foreground">
+                下载位置：{updateState.downloadedFilePath}
+              </p>
             ) : null}
           </div>
 
@@ -210,7 +208,7 @@ function AboutPanel() {
 
         <div className="flex justify-start md:justify-end">
           <Button
-            variant={isRestartAction ? "default" : "outline"}
+            variant="outline"
             disabled={actionDisabled}
             onClick={() => {
               void handleAction()

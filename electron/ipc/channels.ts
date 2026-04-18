@@ -34,7 +34,6 @@ export const SYNAPSE_IPC_CHANNELS = {
   update: {
     checkForUpdates: "synapse:update:check-for-updates",
     getState: "synapse:update:get-state",
-    quitAndInstall: "synapse:update:quit-and-install",
     stateChanged: "synapse:update:state-changed",
   },
 } as const

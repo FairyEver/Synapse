@@ -21,11 +21,6 @@ function registerUpdateHandlers(): void {
     return updateService.checkForUpdates()
   })
 
-  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.update.quitAndInstall, async () => {
-    logger.info("Handling update.quitAndInstall request.")
-    await updateService.quitAndInstall()
-  })
-
   handlersRegistered = true
 }
 

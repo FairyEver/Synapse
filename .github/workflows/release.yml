@@ -37,6 +37,11 @@ jobs:
             package_script: package:win
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -61,8 +66,36 @@ jobs:
       - name: Build Electron process
         run: pnpm build:electron
 
+      - name: Validate macOS signing secrets
+        if: runner.os == 'macOS'
+        run: |
+          for secret_name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!secret_name:-}" ]; then
+              echo "Missing required macOS release secret: $secret_name"
+              exit 1
+            fi
+          done
+
       - name: Package installer
         run: pnpm ${{ matrix.package_script }}
+
+      - name: Verify macOS app signature
+        if: runner.os == 'macOS'
+        run: |
+          APP_PATH="$(find release -path '*/Synapse.app' -type d | head -n 1)"
+
+          if [ -z "$APP_PATH" ]; then
+            echo "Built app bundle not found."
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee /tmp/synapse-codesign.txt
+
+          if ! grep -q "^Authority=Developer ID Application:" /tmp/synapse-codesign.txt; then
+            echo "Expected a Developer ID Application signature for macOS release builds."
+            exit 1
+          fi
 
       - name: Collect release artifacts
         run: |
