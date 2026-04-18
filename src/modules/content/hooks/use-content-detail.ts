@@ -117,12 +117,16 @@ function useContentDetail(
           isCurrent: true,
         })
       }
+
+      setPreviewError(null)
+      setIsLoading(false)
       return
     }
 
     let cancelled = false
 
     setIsLoading(true)
+    setPreviewError(null)
 
     void (async () => {
       try {

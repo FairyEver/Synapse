@@ -6,6 +6,7 @@ import { ContentBrowserPage } from "@/modules/content/components/content-browser
 import { useContentCreationState } from "@/modules/content/hooks/use-content-creation-state"
 import { SkillCreateDialog } from "@/modules/skills/components/skill-create-dialog"
 import type { CreateSkillPayload } from "@/modules/skills/types"
+import { serializeCreateSkillFiles } from "@/modules/skills/utils"
 
 type SkillsModuleProps = {
   onCreateDialogOpenChange?: (open: boolean) => void
@@ -42,14 +43,7 @@ function SkillsModule({
 
     const result = await createSkill({
       ...payload,
-      files: await Promise.all(
-        payload.files.map(async (file) => ({
-          originalName: file.originalName,
-          sha256: file.sha256,
-          size: file.size,
-          bytes: file.file ? new Uint8Array(await file.file.arrayBuffer()) : undefined,
-        })),
-      ),
+      files: await serializeCreateSkillFiles(payload.files),
     })
 
     logger.info("Skill saved.", {

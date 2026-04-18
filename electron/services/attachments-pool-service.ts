@@ -6,6 +6,7 @@ import type {
   SynapseContentAttachmentRecord,
   SynapseContentFile,
 } from "../../src/types/content"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import { createMainLogger } from "./log-store"
 
 const ATTACHMENTS_POOL_DIRECTORY_NAME = "attachments-pool"
@@ -18,7 +19,7 @@ type AttachmentWriteInput = {
 }
 
 function normalizeOriginalName(originalName: string): string {
-  return path.basename(originalName.trim())
+  return normalizeContentAttachmentPath(originalName)
 }
 
 function createAttachmentPoolPath(repositoryRootPath: string, sha256: string): string {

@@ -189,23 +189,21 @@ function App() {
         }
       >
         <div className="flex h-full min-h-0 flex-col">
-          <div className={activeTab === "rules" ? "h-full" : "hidden h-full"}>
+          {activeTab === "rules" ? (
             <RulesModule
               onCreateDialogOpenChange={setIsRulesCreateOpen}
               onDetailDialogOpenChange={setIsRulesDetailOpen}
               onInstallDialogOpenChange={setIsRulesInstallOpen}
             />
-          </div>
-          <div className={activeTab === "skills" ? "h-full" : "hidden h-full"}>
+          ) : null}
+          {activeTab === "skills" ? (
             <SkillsModule
               onCreateDialogOpenChange={setIsSkillsCreateOpen}
               onDetailDialogOpenChange={setIsSkillsDetailOpen}
               onInstallDialogOpenChange={setIsSkillsInstallOpen}
             />
-          </div>
-          <div className={activeTab === "settings" ? "h-full" : "hidden h-full"}>
-            <SettingsModule />
-          </div>
+          ) : null}
+          {activeTab === "settings" ? <SettingsModule /> : null}
         </div>
       </AppShellLayout>
     </IdentityGate>

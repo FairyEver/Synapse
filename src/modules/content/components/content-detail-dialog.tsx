@@ -51,6 +51,7 @@ import { RuleCreateDialog } from "@/modules/rules/components/rule-create-dialog"
 import type { CreateRulePayload } from "@/modules/rules/types"
 import { SkillCreateDialog } from "@/modules/skills/components/skill-create-dialog"
 import type { CreateSkillPayload } from "@/modules/skills/types"
+import { serializeCreateSkillFiles } from "@/modules/skills/utils"
 import type {
   SynapseContentMeta,
   SynapseDeleteContentPayload,
@@ -166,7 +167,7 @@ function ContentVersionView({
             <ul className="divide-y divide-border">
               {version.attachments.map((attachment) => (
                 <li key={`${attachment.sha256}:${attachment.originalName}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                  <span className="truncate text-foreground">{attachment.originalName}</span>
+                  <span className="min-w-0 break-all text-foreground">{attachment.originalName}</span>
                   <span className="shrink-0 text-muted-foreground">
                     {attachment.size} B
                   </span>
@@ -340,21 +341,12 @@ function ContentDetailDialog({
       return
     }
 
-    const files = await Promise.all(
-      payload.files.map(async (file) => ({
-        originalName: file.originalName,
-        sha256: file.sha256,
-        size: file.size,
-        bytes: file.file ? new Uint8Array(await file.file.arrayBuffer()) : undefined,
-      })),
-    )
-
     const result = await updateSkill({
       ...payload,
       id: detail.id,
       baseHistoryDirname: detail.latestHistoryDirname,
       force,
-      files,
+      files: await serializeCreateSkillFiles(payload.files),
     })
 
     if (result.status === "conflict") {

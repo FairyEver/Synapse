@@ -3,6 +3,8 @@ import type {
   CreateSkillPayload,
   SkillCreateFieldErrors,
 } from "@/modules/skills/types"
+import { normalizeContentAttachmentPath } from "@/lib/content-attachments"
+import type { SynapseCreateSkillFilePayload } from "@/types/content"
 
 const MAX_SKILL_ATTACHMENT_SIZE = 10 * 1024 * 1024
 
@@ -29,12 +31,7 @@ function formatAttachmentList(paths: string[]): string {
 }
 
 function normalizeSkillAttachmentName(originalName: string): string {
-  return originalName
-    .replace(/\\/g, "/")
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .at(-1)
-    ?.trim() ?? ""
+  return normalizeContentAttachmentPath(originalName)
 }
 
 function normalizeCreateSkillFilePayload(file: CreateSkillFilePayload): CreateSkillFilePayload {
@@ -214,6 +211,19 @@ function mergeCreateSkillFiles(
   }
 }
 
+async function serializeCreateSkillFiles(
+  files: CreateSkillFilePayload[],
+): Promise<SynapseCreateSkillFilePayload[]> {
+  return Promise.all(
+    files.map(async (file) => ({
+      originalName: file.originalName,
+      sha256: file.sha256,
+      size: file.size,
+      bytes: file.file ? new Uint8Array(await file.file.arrayBuffer()) : undefined,
+    })),
+  )
+}
+
 export {
   createEmptySkillPayload,
   formatSkillAttachmentSize,
@@ -222,5 +232,6 @@ export {
   mergeCreateSkillFiles,
   normalizeCreateSkillPayload,
   normalizeSkillAttachmentName,
+  serializeCreateSkillFiles,
   validateCreateSkillPayload,
 }
