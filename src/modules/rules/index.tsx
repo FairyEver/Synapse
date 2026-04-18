@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { createRule } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
+import { useContentCreationState } from "@/modules/content/hooks/use-content-creation-state"
 import { RuleCreateDialog } from "@/modules/rules/components/rule-create-dialog"
 import type { CreateRulePayload } from "@/modules/rules/types"
 
@@ -19,19 +20,14 @@ function RulesModule({
 }: RulesModuleProps) {
   const logger = useMemo(() => createRendererLogger("rules"), [])
   const { activeRepository, config } = useAppConfig()
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [refreshSignal, setRefreshSignal] = useState(0)
-
-  useEffect(() => {
-    onCreateDialogOpenChange?.(isCreateDialogOpen)
-  }, [isCreateDialogOpen, onCreateDialogOpenChange])
-
-  useEffect(() => {
-    return () => {
-      onCreateDialogOpenChange?.(false)
-    }
-  }, [onCreateDialogOpenChange])
+  const {
+    dismissNotice,
+    handleCreated,
+    isCreateDialogOpen,
+    notice,
+    refreshSignal,
+    setIsCreateDialogOpen,
+  } = useContentCreationState(onCreateDialogOpenChange)
 
   const handleSubmit = async (payload: CreateRulePayload) => {
     logger.info("Rule create payload prepared.", {
@@ -48,15 +44,14 @@ function RulesModule({
       repositoryUuid: activeRepository?.uuid ?? null,
       targetBranch: result.targetBranch ?? null,
     })
-    setRefreshSignal((currentSignal) => currentSignal + 1)
-    setNotice(result.message ?? "已提交审核，列表已刷新。")
+    handleCreated(result.message)
   }
 
   return (
     <>
       <ContentBrowserPage
         contentType="rule"
-        notice={notice ? { message: notice, onDismiss: () => setNotice(null) } : undefined}
+        notice={notice ? { message: notice, onDismiss: dismissNotice } : undefined}
         refreshSignal={refreshSignal}
         title="Rules"
         onCreateClick={() => setIsCreateDialogOpen(true)}

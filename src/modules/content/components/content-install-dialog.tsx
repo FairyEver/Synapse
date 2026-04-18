@@ -7,6 +7,16 @@ import {
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -41,6 +51,7 @@ type InstallTargetState = {
 type ContentInstallDialogProps = {
   editor: SynapseEditorAdapterSummary | null
   item: SynapseContentMeta
+  onInstallComplete?: (message: string) => void
   onOpenChange: (open: boolean) => void
   open: boolean
   projects: SynapseProjectConfig[]
@@ -57,6 +68,7 @@ function createIdleTargetState(): InstallTargetState {
 function ContentInstallDialog({
   editor,
   item,
+  onInstallComplete,
   onOpenChange,
   open,
   projects,
@@ -72,6 +84,7 @@ function ContentInstallDialog({
   const [projectTargetState, setProjectTargetState] = useState<InstallTargetState>(createIdleTargetState)
   const [installError, setInstallError] = useState<string | null>(null)
   const [isInstalling, setIsInstalling] = useState(false)
+  const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const selectedProject = projects.find((project) => project.id === projectSelection) ?? null
@@ -96,6 +109,7 @@ function ContentInstallDialog({
     setProjectTargetState(createIdleTargetState())
     setInstallError(null)
     setIsInstalling(false)
+    setIsOverwriteConfirmOpen(false)
   }, [editor?.id, open, projects])
 
   useEffect(() => {
@@ -227,7 +241,7 @@ function ContentInstallDialog({
     setCustomProjectPath(selectedPath)
   }
 
-  const handleInstall = async () => {
+  const runInstall = async () => {
     if (!editor) {
       return
     }
@@ -240,16 +254,6 @@ function ContentInstallDialog({
     if (!activeTarget || activeTarget.status !== "ready") {
       setInstallError("当前还没有可用的安装目标。")
       return
-    }
-
-    if (item.type === "skill") {
-      const confirmed = window.confirm(
-        `安装 Skill 会整体替换目标目录中的现有内容。\n\n目标位置：${activeTarget.targetPath}\n\n确认继续吗？`,
-      )
-
-      if (!confirmed) {
-        return
-      }
     }
 
     setInstallError(null)
@@ -271,10 +275,7 @@ function ContentInstallDialog({
         scope,
         targetPath: result.targetPath,
       })
-
-      window.setTimeout(() => {
-        window.alert(`安装成功。\n已写入目标位置：\n${result.targetPath}`)
-      }, 0)
+      onInstallComplete?.(`已写入 ${result.targetPath}`)
       onOpenChange(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : "安装失败。"
@@ -292,144 +293,184 @@ function ContentInstallDialog({
     }
   }
 
+  const handleInstall = async () => {
+    if (item.type === "skill") {
+      if (!activeTarget || activeTarget.status !== "ready") {
+        setInstallError("当前还没有可用的安装目标。")
+        return
+      }
+
+      setIsOverwriteConfirmOpen(true)
+      return
+    }
+
+    await runInstall()
+  }
+
   if (!editor) {
     return null
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>安装到 {editor.label}</DialogTitle>
-          <DialogDescription>
-            选择安装范围，然后确认写入目标位置。
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-col gap-5">
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant={scope === "global" ? "secondary" : "outline"}
-              disabled={globalScopeDisabled}
-              onClick={() => setScope("global")}
+    <>
+      <AlertDialog open={isOverwriteConfirmOpen} onOpenChange={setIsOverwriteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认覆盖目标目录？</AlertDialogTitle>
+            <AlertDialogDescription>
+              Skill 安装会整体替换目标目录中的现有内容。
+              {activeTarget?.status === "ready" ? ` 目标位置：${activeTarget.targetPath}` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isInstalling}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isInstalling}
+              onClick={() => {
+                setIsOverwriteConfirmOpen(false)
+                void runInstall()
+              }}
             >
-              安装到全局
-            </Button>
-            <Button
-              type="button"
-              variant={scope === "project" ? "secondary" : "outline"}
-              disabled={projectScopeDisabled}
-              onClick={() => setScope("project")}
-            >
-              安装到项目
-            </Button>
-          </div>
+              继续安装
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-          {scope === "project" ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="content-install-project">项目目录</Label>
-                <Select value={projectSelection} onValueChange={setProjectSelection}>
-                  <SelectTrigger id="content-install-project" className="w-full">
-                    <SelectValue placeholder="选择一个项目" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={CUSTOM_PROJECT_OPTION}>浏览其他目录</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>安装到 {editor.label}</DialogTitle>
+            <DialogDescription>
+              选择安装范围，然后确认写入目标位置。
+            </DialogDescription>
+          </DialogHeader>
 
-              {projectSelection === CUSTOM_PROJECT_OPTION ? (
+          <div className="flex flex-col gap-5">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={scope === "global" ? "secondary" : "outline"}
+                disabled={globalScopeDisabled}
+                onClick={() => setScope("global")}
+              >
+                安装到全局
+              </Button>
+              <Button
+                type="button"
+                variant={scope === "project" ? "secondary" : "outline"}
+                disabled={projectScopeDisabled}
+                onClick={() => setScope("project")}
+              >
+                安装到项目
+              </Button>
+            </div>
+
+            {scope === "project" ? (
+              <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="content-install-project-path">目录路径</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="content-install-project-path"
-                      value={customProjectPath}
-                      onChange={(event) => setCustomProjectPath(event.target.value)}
-                      placeholder="/path/to/project"
-                    />
-                    {hasDirectoryPicker ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          void handleBrowseDirectory()
-                        }}
-                      >
-                        <FolderOpen data-icon="inline-start" />
-                        浏览
-                      </Button>
-                    ) : null}
-                  </div>
+                  <Label htmlFor="content-install-project">项目目录</Label>
+                  <Select value={projectSelection} onValueChange={setProjectSelection}>
+                    <SelectTrigger id="content-install-project" className="w-full">
+                      <SelectValue placeholder="选择一个项目" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={CUSTOM_PROJECT_OPTION}>浏览其他目录</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              ) : selectedProject ? (
-                <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                  {selectedProject.path}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
 
-          <div className="rounded-lg border border-border bg-muted/20 px-3 py-3">
-            <div className="flex flex-col gap-1 text-sm">
-              <p className="font-medium text-foreground">目标位置</p>
-              {activeTargetState.isLoading ? (
-                <p className="flex items-center gap-2 text-muted-foreground">
-                  <LoaderCircle className="size-4 animate-spin" />
-                  正在解析安装路径
-                </p>
-              ) : activeTargetState.error ? (
-                <p className="text-destructive">{activeTargetState.error}</p>
-              ) : activeTarget?.status === "ready" ? (
-                <>
-                  <p className="break-all text-muted-foreground">{activeTarget.targetPath}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {activeTarget.targetKind === "file" ? "将写入单个文件。" : "将写入技能目录。"}
+                {projectSelection === CUSTOM_PROJECT_OPTION ? (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="content-install-project-path">目录路径</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="content-install-project-path"
+                        value={customProjectPath}
+                        onChange={(event) => setCustomProjectPath(event.target.value)}
+                        placeholder="/path/to/project"
+                      />
+                      {hasDirectoryPicker ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            void handleBrowseDirectory()
+                          }}
+                        >
+                          <FolderOpen data-icon="inline-start" />
+                          浏览
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : selectedProject ? (
+                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                    {selectedProject.path}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="rounded-lg border border-border bg-muted/20 px-3 py-3">
+              <div className="flex flex-col gap-1 text-sm">
+                <p className="font-medium text-foreground">目标位置</p>
+                {activeTargetState.isLoading ? (
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <LoaderCircle className="size-4 animate-spin" />
+                    正在解析安装路径
                   </p>
-                </>
-              ) : activeTarget ? (
-                <p className="text-muted-foreground">
-                  {activeTarget.message ?? "当前环境暂时不能安装到这个位置。"}
-                </p>
-              ) : (
-                <p className="text-muted-foreground">先选择一个可用的安装范围。</p>
-              )}
+                ) : activeTargetState.error ? (
+                  <p className="text-destructive">{activeTargetState.error}</p>
+                ) : activeTarget?.status === "ready" ? (
+                  <>
+                    <p className="break-all text-muted-foreground">{activeTarget.targetPath}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {activeTarget.targetKind === "file" ? "将写入单个文件。" : "将写入技能目录。"}
+                    </p>
+                  </>
+                ) : activeTarget ? (
+                  <p className="text-muted-foreground">
+                    {activeTarget.message ?? "当前环境暂时不能安装到这个位置。"}
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">先选择一个可用的安装范围。</p>
+                )}
+              </div>
             </div>
+
+            {item.type === "skill" ? (
+              <p className="text-sm text-muted-foreground">
+                安装 Skill 时会整体替换目标目录中的现有内容。
+              </p>
+            ) : null}
+
+            {installError ? <p className="text-sm text-destructive">{installError}</p> : null}
           </div>
 
-          {item.type === "skill" ? (
-            <p className="text-sm text-muted-foreground">
-              安装 Skill 时会整体替换目标目录中的现有内容。
-            </p>
-          ) : null}
-
-          {installError ? <p className="text-sm text-destructive">{installError}</p> : null}
-        </div>
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button
-            type="button"
-            disabled={!canInstall}
-            onClick={() => {
-              void handleInstall()
-            }}
-          >
-            {isInstalling ? <LoaderCircle className="animate-spin" /> : null}
-            安装
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={!canInstall}
+              onClick={() => {
+                void handleInstall()
+              }}
+            >
+              {isInstalling ? <LoaderCircle className="animate-spin" /> : null}
+              安装
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

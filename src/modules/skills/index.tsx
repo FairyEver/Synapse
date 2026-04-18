@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { createSkill } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
+import { useContentCreationState } from "@/modules/content/hooks/use-content-creation-state"
 import { SkillCreateDialog } from "@/modules/skills/components/skill-create-dialog"
 import type { CreateSkillPayload } from "@/modules/skills/types"
 
@@ -19,18 +20,14 @@ function SkillsModule({
 }: SkillsModuleProps) {
   const logger = useMemo(() => createRendererLogger("skills"), [])
   const { activeRepository, config } = useAppConfig()
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [refreshSignal, setRefreshSignal] = useState(0)
-  useEffect(() => {
-    onCreateDialogOpenChange?.(isCreateDialogOpen)
-  }, [isCreateDialogOpen, onCreateDialogOpenChange])
-
-  useEffect(() => {
-    return () => {
-      onCreateDialogOpenChange?.(false)
-    }
-  }, [onCreateDialogOpenChange])
+  const {
+    dismissNotice,
+    handleCreated,
+    isCreateDialogOpen,
+    notice,
+    refreshSignal,
+    setIsCreateDialogOpen,
+  } = useContentCreationState(onCreateDialogOpenChange)
 
   const handleSubmit = async (payload: CreateSkillPayload) => {
     logger.info("Skill create payload prepared.", {
@@ -63,15 +60,14 @@ function SkillsModule({
       repositoryUuid: activeRepository?.uuid ?? null,
       targetBranch: result.targetBranch ?? null,
     })
-    setRefreshSignal((currentSignal) => currentSignal + 1)
-    setNotice(result.message ?? "已提交审核，列表已刷新。")
+    handleCreated(result.message)
   }
 
   return (
     <>
       <ContentBrowserPage
         contentType="skill"
-        notice={notice ? { message: notice, onDismiss: () => setNotice(null) } : undefined}
+        notice={notice ? { message: notice, onDismiss: dismissNotice } : undefined}
         refreshSignal={refreshSignal}
         title="Skills"
         onCreateClick={() => setIsCreateDialogOpen(true)}

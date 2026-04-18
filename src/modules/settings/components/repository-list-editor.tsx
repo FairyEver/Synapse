@@ -1,6 +1,16 @@
 import { useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
@@ -47,6 +57,7 @@ function RepositoryListEditor({
   const { hasRepositoryBridge, operations, states, syncRepository } = useRepositoryManager()
   const [formError, setFormError] = useState<string | null>(null)
   const [manualPath, setManualPath] = useState("")
+  const [pendingRemovalUuid, setPendingRemovalUuid] = useState<string | null>(null)
 
   const saveRepository = async (localPath: string) => {
     const nextLocalPath = localPath.trim()
@@ -110,12 +121,6 @@ function RepositoryListEditor({
       return
     }
 
-    const shouldDelete = window.confirm(`确认删除仓库“${repository.name}”的本地配置吗？这不会删除你的本地目录。`)
-
-    if (!shouldDelete) {
-      return
-    }
-
     const nextRepositories = repositories.filter((itemValue) => itemValue.uuid !== repositoryUuid)
     const removedActiveRepository = repositoryUuid === activeRepoUuid
     const nextActiveRepoUuid = removedActiveRepository ? nextRepositories[0]?.uuid ?? null : activeRepoUuid
@@ -128,128 +133,162 @@ function RepositoryListEditor({
   }
 
   return (
-    <SettingsGroup>
-      {repositories.length > 0 ? (
-        <div className="flex flex-col divide-y divide-border/60">
-          {repositories.map((repository) => {
-            const isActive = repository.uuid === activeRepoUuid
-            const operation = operations[repository.uuid]
-            const repositoryState = states[repository.uuid]
-            const isBusy = Boolean(operation?.isRunning)
-            const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
+    <>
+      <AlertDialog
+        open={pendingRemovalUuid !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingRemovalUuid(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除这个本地配置？</AlertDialogTitle>
+            <AlertDialogDescription>
+              这只会移除 Synapse 里的仓库记录，不会删除你的本地目录。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRemovalUuid) {
+                  void handleRemoveRepository(pendingRemovalUuid)
+                }
 
-            return (
-              <div key={repository.uuid} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium">{repository.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {isActive ? "当前激活目录" : "已保存"}
-                    </p>
-                  </div>
-                  <p className="break-all text-sm text-muted-foreground">{repository.localPath}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Rules: {repository.rulesDir} · Skills: {repository.skillsDir}
-                  </p>
-                  {hasRepositoryBridge ? (
-                    <p className="text-xs text-muted-foreground">
-                      {getRepositoryStatusLabel(repositoryState)}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">目录状态和同步暂不可用</p>
-                  )}
-                  {repositoryState?.gitRootPath && repositoryState.gitRootPath !== repository.localPath ? (
-                    <p className="break-all text-xs text-muted-foreground">
-                      Git 根目录：{repositoryState.gitRootPath}
-                    </p>
-                  ) : null}
-                  {operation?.isRunning ? (
-                    <div className="flex flex-col gap-2 pt-1">
-                      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                        <span>{operation.statusText ?? "正在执行 Git 操作..."}</span>
-                        {operation.percent !== null ? <span>{operation.percent}%</span> : null}
-                      </div>
-                      <div className="h-2 rounded bg-muted">
-                        <div
-                          className="h-full rounded bg-primary transition-[width] duration-200"
-                          style={{ width: `${operation.percent ?? 24}%` }}
-                        />
-                      </div>
+                setPendingRemovalUuid(null)
+              }}
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <SettingsGroup>
+        {repositories.length > 0 ? (
+          <div className="flex flex-col divide-y divide-border/60">
+            {repositories.map((repository) => {
+              const isActive = repository.uuid === activeRepoUuid
+              const operation = operations[repository.uuid]
+              const repositoryState = states[repository.uuid]
+              const isBusy = Boolean(operation?.isRunning)
+              const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
+
+              return (
+                <div key={repository.uuid} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium">{repository.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isActive ? "当前激活目录" : "已保存"}
+                      </p>
                     </div>
-                  ) : null}
-                  {operation?.error ? (
-                    <p className="text-sm text-destructive">{operation.error}</p>
-                  ) : null}
-                  {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
+                    <p className="break-all text-sm text-muted-foreground">{repository.localPath}</p>
                     <p className="text-xs text-muted-foreground">
-                      当前目录不是 Git 仓库，不能同步。
+                      Rules: {repository.rulesDir} · Skills: {repository.skillsDir}
                     </p>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {hasRepositoryBridge ? (
+                    {hasRepositoryBridge ? (
+                      <p className="text-xs text-muted-foreground">
+                        {getRepositoryStatusLabel(repositoryState)}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">目录状态和同步暂不可用</p>
+                    )}
+                    {repositoryState?.gitRootPath && repositoryState.gitRootPath !== repository.localPath ? (
+                      <p className="break-all text-xs text-muted-foreground">
+                        Git 根目录：{repositoryState.gitRootPath}
+                      </p>
+                    ) : null}
+                    {operation?.isRunning ? (
+                      <div className="flex flex-col gap-2 pt-1">
+                        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                          <span>{operation.statusText ?? "正在执行 Git 操作..."}</span>
+                          {operation.percent !== null ? <span>{operation.percent}%</span> : null}
+                        </div>
+                        <div className="h-2 rounded bg-muted">
+                          <div
+                            className="h-full rounded bg-primary transition-[width] duration-200"
+                            style={{ width: `${operation.percent ?? 24}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                    {operation?.error ? (
+                      <p className="text-sm text-destructive">{operation.error}</p>
+                    ) : null}
+                    {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
+                      <p className="text-xs text-muted-foreground">
+                        当前目录不是 Git 仓库，不能同步。
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {hasRepositoryBridge ? (
+                      <Button
+                        size="sm"
+                        disabled={isBusy || !canSync}
+                        onClick={() => {
+                          void syncRepository(repository.uuid).catch((error) => {
+                            setFormError(error instanceof Error ? error.message : "Git 仓库操作失败。")
+                          })
+                        }}
+                      >
+                        {isBusy ? "同步中..." : "同步仓库"}
+                      </Button>
+                    ) : null}
                     <Button
+                      variant={isActive ? "secondary" : "outline"}
                       size="sm"
-                      disabled={isBusy || !canSync}
+                      disabled={isActive || isBusy}
                       onClick={() => {
-                        void syncRepository(repository.uuid).catch((error) => {
-                          setFormError(error instanceof Error ? error.message : "Git 仓库操作失败。")
-                        })
+                        if (!isActive) {
+                          void onSave(repositories, repository.uuid, true)
+                        }
                       }}
                     >
-                      {isBusy ? "同步中..." : "同步仓库"}
+                      {isActive ? "当前目录" : "切换为当前目录"}
                     </Button>
-                  ) : null}
-                  <Button
-                    variant={isActive ? "secondary" : "outline"}
-                    size="sm"
-                    disabled={isActive || isBusy}
-                    onClick={() => {
-                      if (!isActive) {
-                        void onSave(repositories, repository.uuid, true)
-                      }
-                    }}
-                  >
-                    {isActive ? "当前目录" : "切换为当前目录"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={isBusy}
-                    onClick={() => {
-                      void handleRemoveRepository(repository.uuid)
-                    }}
-                  >
-                    删除
-                  </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={isBusy}
+                      onClick={() => {
+                        setPendingRemovalUuid(repository.uuid)
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-4">
-        {!hasRepositoryBridge ? (
-          <Input
-            value={manualPath}
-            onChange={(event) => setManualPath(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void handleAddRepository()
-              }
-            }}
-            placeholder="/path/to/project"
-          />
+              )
+            })}
+          </div>
         ) : null}
-        {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-        <div>
-          <Button onClick={() => void handleAddRepository()}>
-            {hasRepositoryBridge ? "选择文件夹" : "添加目录"}
-          </Button>
+
+        <div className="flex flex-col gap-4">
+          {!hasRepositoryBridge ? (
+            <Input
+              value={manualPath}
+              onChange={(event) => setManualPath(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void handleAddRepository()
+                }
+              }}
+              placeholder="/path/to/project"
+            />
+          ) : null}
+          {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+          <div>
+            <Button onClick={() => void handleAddRepository()}>
+              {hasRepositoryBridge ? "选择文件夹" : "添加目录"}
+            </Button>
+          </div>
         </div>
-      </div>
-    </SettingsGroup>
+      </SettingsGroup>
+    </>
   )
 }
 

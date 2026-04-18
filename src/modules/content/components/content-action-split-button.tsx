@@ -31,6 +31,7 @@ import type { SynapseEditorAdapterSummary } from "@/types/editor"
 type ContentActionSplitButtonProps = {
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
+  onStatusChange?: (message: string | null, tone?: "default" | "destructive") => void
 }
 
 function canCopyContent(item: SynapseContentMeta): boolean {
@@ -47,6 +48,7 @@ function supportsContentType(
 function ContentActionSplitButton({
   item,
   onInstallDialogOpenChange,
+  onStatusChange,
 }: ContentActionSplitButtonProps) {
   const { config } = useAppConfig()
   const logger = useMemo(
@@ -108,6 +110,12 @@ function ContentActionSplitButton({
         contentType: item.type,
         filePath: result.filePath,
       })
+
+      if (result.canceled) {
+        onStatusChange?.("已取消下载。")
+      } else if (result.filePath) {
+        onStatusChange?.(`已保存到 ${result.filePath}`)
+      }
     } catch (error) {
       logger.error("Content download failed.", {
         contentId: item.id,
@@ -115,10 +123,7 @@ function ContentActionSplitButton({
         error,
       })
 
-      const message = error instanceof Error ? error.message : "下载失败。"
-      window.setTimeout(() => {
-        window.alert(message)
-      }, 0)
+      onStatusChange?.(error instanceof Error ? error.message : "下载失败。", "destructive")
     } finally {
       setIsDownloading(false)
     }
@@ -147,10 +152,7 @@ function ContentActionSplitButton({
         contentId: item.id,
         contentType: item.type,
       })
-
-      window.setTimeout(() => {
-        window.alert("正文已复制。")
-      }, 0)
+      onStatusChange?.("正文已复制。")
     } catch (error) {
       logger.error("Copy to clipboard failed.", {
         contentId: item.id,
@@ -158,10 +160,7 @@ function ContentActionSplitButton({
         error,
       })
 
-      const message = error instanceof Error ? error.message : "复制失败。"
-      window.setTimeout(() => {
-        window.alert(message)
-      }, 0)
+      onStatusChange?.(error instanceof Error ? error.message : "复制失败。", "destructive")
     } finally {
       setIsCopying(false)
     }
@@ -258,6 +257,7 @@ function ContentActionSplitButton({
       <ContentInstallDialog
         editor={selectedEditor}
         item={item}
+        onInstallComplete={(message) => onStatusChange?.(message)}
         open={isInstallDialogOpen}
         projects={config.global.projects}
         onOpenChange={(open) => {

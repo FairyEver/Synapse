@@ -33,6 +33,7 @@ import type {
 type ContentDetailDialogProps = {
   item: SynapseContentMeta | null
   onOpenChange: (open: boolean) => void
+  onStatusChange?: (message: string | null, tone?: "default" | "destructive") => void
   open: boolean
 }
 
@@ -189,6 +190,7 @@ function ContentPreviewArea({
 function ContentDetailDialog({
   item,
   onOpenChange,
+  onStatusChange,
   open,
 }: ContentDetailDialogProps) {
   const { activeFilePath, files, isLoading, previewError, setActiveFilePath } = useContentDetail(item, open)
@@ -226,7 +228,7 @@ function ContentDetailDialog({
             </div>
 
             <div className="flex shrink-0 items-center">
-              <ContentActionSplitButton item={item} />
+              <ContentActionSplitButton item={item} onStatusChange={onStatusChange} />
             </div>
           </div>
         </DialogHeader>

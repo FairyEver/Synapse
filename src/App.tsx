@@ -6,6 +6,7 @@ import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
+import { InlineNotice } from "@/components/inline-notice"
 import { SkillsModule } from "@/modules/skills"
 import { RulesModule } from "@/modules/rules"
 import { SettingsModule } from "@/modules/settings"
@@ -23,6 +24,7 @@ function App() {
   const [isSkillsCreateOpen, setIsSkillsCreateOpen] = useState(false)
   const [isSkillsDetailOpen, setIsSkillsDetailOpen] = useState(false)
   const [isSkillsInstallOpen, setIsSkillsInstallOpen] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
   const hasBlockingModalOpen =
@@ -97,17 +99,22 @@ function App() {
             logger.info("Manual repository sync requested from app shell.", {
               repositoryUuid: activeRepository.uuid,
             })
+            setSyncError(null)
             void syncRepository(activeRepository.uuid).catch((error) => {
               logger.error("Manual repository sync failed from app shell.", error)
-              const message = error instanceof Error ? error.message : "仓库同步失败。"
-              window.alert(message)
+              setSyncError(error instanceof Error ? error.message : "仓库同步失败。")
             })
           }}
           title={refreshTitle}
         />
       }
     >
-      <div className="h-full min-h-0">
+      <div className="flex h-full min-h-0 flex-col">
+        {syncError ? (
+          <div className="shrink-0 px-6 pt-6">
+            <InlineNotice message={syncError} tone="destructive" onDismiss={() => setSyncError(null)} />
+          </div>
+        ) : null}
         <div className={activeTab === "rules" ? "h-full" : "hidden h-full"}>
           <RulesModule
             onCreateDialogOpenChange={setIsRulesCreateOpen}

@@ -11,6 +11,7 @@ import {
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
+import { InlineNotice } from "@/components/inline-notice"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -210,51 +211,47 @@ function ContentListCard({
   contentType,
   item,
   onInstallDialogOpenChange,
+  onStatusChange,
   onOpen,
 }: {
   contentType: SynapseContentType
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
+  onStatusChange?: (message: string | null, tone?: "default" | "destructive") => void
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
   const iconOption = getContentIconOption(item.icon)
 
   return (
-    <Card
-      size="sm"
-      className="cursor-pointer border border-border/70 transition-colors hover:bg-muted/20"
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault()
-          onOpen()
-        }
-      }}
-      role="button"
-      tabIndex={0}
-    >
+    <Card size="sm" className="border border-border/70">
       <CardContent className="flex items-center gap-4">
-        <ContentIconBadge size="md" tone={item.iconBg} title={item.title}>
-          {iconOption ? (
-            <iconOption.icon className="size-5" />
-          ) : (
-            <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
-          )}
-        </ContentIconBadge>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 rounded-lg px-1 py-1 text-left outline-none transition-colors hover:bg-muted/20 focus-visible:bg-muted/20 focus-visible:ring-3 focus-visible:ring-ring/50"
+          onClick={onOpen}
+        >
+          <ContentIconBadge size="md" tone={item.iconBg} title={item.title}>
+            {iconOption ? (
+              <iconOption.icon className="size-5" />
+            ) : (
+              <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
+            )}
+          </ContentIconBadge>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
-            <p className="line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
-          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+              <p className="line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
+            </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>{categoryLabel}</span>
-            <span>{item.author}</span>
-            <span>{formatCreatedAt(item.createdAt)}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>{categoryLabel}</span>
+              <span>{item.author}</span>
+              <span>{formatCreatedAt(item.createdAt)}</span>
+            </div>
           </div>
-        </div>
+        </button>
 
         <div
           className="shrink-0 self-center"
@@ -268,6 +265,7 @@ function ContentListCard({
           <ContentActionSplitButton
             item={item}
             onInstallDialogOpenChange={onInstallDialogOpenChange}
+            onStatusChange={onStatusChange}
           />
         </div>
       </CardContent>
@@ -291,6 +289,10 @@ function ContentBrowserPage({
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
+  const [actionNotice, setActionNotice] = useState<{
+    message: string
+    tone: "default" | "destructive"
+  } | null>(null)
 
   const activeRepositoryState = activeRepository ? (states[activeRepository.uuid] ?? null) : null
   const repositoryStatus =
@@ -457,14 +459,15 @@ function ContentBrowserPage({
           <section className="min-h-0 overflow-y-auto">
             <div className="flex min-h-full flex-col gap-4">
               {notice ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
-                  <p className="text-sm text-foreground">{notice.message}</p>
-                  {notice.onDismiss ? (
-                    <Button type="button" variant="ghost" size="sm" onClick={notice.onDismiss}>
-                      关闭
-                    </Button>
-                  ) : null}
-                </div>
+                <InlineNotice message={notice.message} onDismiss={notice.onDismiss} />
+              ) : null}
+
+              {actionNotice ? (
+                <InlineNotice
+                  message={actionNotice.message}
+                  tone={actionNotice.tone}
+                  onDismiss={() => setActionNotice(null)}
+                />
               ) : null}
 
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -492,6 +495,9 @@ function ContentBrowserPage({
                       contentType={contentType}
                       item={item}
                       onInstallDialogOpenChange={onInstallDialogOpenChange}
+                      onStatusChange={(message, tone = "default") => {
+                        setActionNotice(message ? { message, tone } : null)
+                      }}
                       onOpen={() => {
                         logger.info("Content detail opened from browser page.", {
                           contentId: item.id,
@@ -511,6 +517,9 @@ function ContentBrowserPage({
       <ContentDetailDialog
         item={selectedItem}
         open={selectedItem !== null}
+        onStatusChange={(message, tone = "default") => {
+          setActionNotice(message ? { message, tone } : null)
+        }}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedItem(null)
