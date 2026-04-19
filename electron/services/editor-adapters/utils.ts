@@ -131,7 +131,7 @@ function getSkillDirectoryName(contentId: string): string {
 }
 
 function getRuleFileName(contentId: string): string {
-  return `${contentId.trim()}.md`
+  return `${contentId.trim()}.mdc`
 }
 
 function isSupportedEditorPlatform(): boolean {

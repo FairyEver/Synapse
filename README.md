@@ -59,13 +59,13 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | 类型 | 范围 | 目标路径 |
 | --- | --- | --- |
 | 规则 | 全局 | 不支持（Cursor 全局规则只能通过其设置界面管理） |
-| 规则 | 项目 | `{projectPath}/.cursor/rules/{contentId}.md` |
+| 规则 | 项目 | `{projectPath}/.cursor/rules/{contentId}.mdc` |
 | 技能 | 全局 | `~/.cursor/skills/{contentId}/` |
 | 技能 | 项目 | `{projectPath}/.cursor/skills/{contentId}/` |
 
 ### 规则与技能的写入形式
 
-- **规则**：写入单个 Markdown 文件。文件名依编辑器而定 —— Claude Code 用 `CLAUDE.md`，Codex 用 `AGENTS.md`，Cursor 用 `{contentId}.md`。
+- **规则**：写入单个 Markdown 文件。文件名依编辑器而定 —— Claude Code 用 `CLAUDE.md`，Codex 用 `AGENTS.md`，Cursor 用 `{contentId}.mdc`（Cursor 原生 MDC 规则格式）。
 - **技能**：写入一个完整目录，目录中包含 `SKILL.md` 主文件和全部附件（附件保留原文件名）。
 
 所有写入都是原子操作：新内容先写入临时位置，就绪后再整体替换目标；失败会自动回滚，不会留下半坏的文件或目录。
