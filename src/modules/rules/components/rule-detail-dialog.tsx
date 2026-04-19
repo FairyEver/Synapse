@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Star, Trash2 } from "lucide-react"
 import {
   deleteContent,
   openContentDetailWindow,
@@ -31,12 +31,14 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { formatDateTime } from "@/lib/date-time"
 import { getCategoryLabel } from "@/lib/content-categories"
+import { cn } from "@/lib/utils"
 import { resolveDisplayName } from "@/lib/display-name"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
+import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
 import type { ConflictState } from "@/modules/content/types/conflict"
 import { RuleCreateDialog } from "@/modules/rules/components/rule-create-dialog"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
@@ -100,6 +102,8 @@ function RuleDetailDialog({
     open,
     refreshSignal,
   })
+  const { isFavorite, toggleFavorite } = useContentFavorites()
+  const isItemFavorite = item ? isFavorite("rule", item.id) : false
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] ?? null : null
   const isRepositoryInitializing =
     activeRepositoryOperation?.isRunning
@@ -365,6 +369,16 @@ function RuleDetailDialog({
                   >
                     <Trash2 />
                     删除
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!item || isRepositoryInitializing}
+                    onClick={() => item && void toggleFavorite("rule", item.id)}
+                    className={cn(isItemFavorite && "text-yellow-500 hover:text-yellow-600")}
+                  >
+                    <Star className={cn("size-4", isItemFavorite && "fill-current")} />
+                    {isItemFavorite ? "已收藏" : "收藏"}
                   </Button>
                   <ContentActionSplitButton item={resolvedItem} />
                 </div>

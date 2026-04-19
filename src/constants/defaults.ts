@@ -1,5 +1,6 @@
 import type {
   SynapseConfig,
+  SynapseFavorites,
   SynapseGlobalConfig,
   SynapseThemeMode,
 } from "../types/config"
@@ -23,9 +24,15 @@ export const DEFAULT_WINDOW_BOUNDS = {
 
 export const DEFAULT_THEME_MODE: SynapseThemeMode = "light"
 
+export const DEFAULT_FAVORITES = {
+  rule: [],
+  skill: [],
+} as const satisfies SynapseFavorites
+
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
   projects: [],
+  favorites: DEFAULT_FAVORITES,
 }
 
 export const DEFAULT_CONFIG: SynapseConfig = {

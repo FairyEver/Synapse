@@ -10,6 +10,11 @@ export type SynapseProjectConfig = {
   path: string
 }
 
+export type SynapseFavorites = {
+  rule: string[]
+  skill: string[]
+}
+
 export type SynapseRepositoryConfig = {
   uuid: string
   name: string
@@ -22,6 +27,7 @@ export type SynapseRepositoryConfig = {
 export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
   projects: SynapseProjectConfig[]
+  favorites: SynapseFavorites
 }
 
 export type SynapseConfig = {

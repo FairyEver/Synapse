@@ -1,5 +1,6 @@
 import {
   DEFAULT_CONFIG,
+  DEFAULT_FAVORITES,
   DEFAULT_GLOBAL_CONFIG,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
   DEFAULT_THEME_MODE,
@@ -13,6 +14,7 @@ import type { SynapseContentType } from "../types/content"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
+  SynapseFavorites,
   SynapseGlobalConfig,
   SynapseProjectConfig,
   SynapseRepositoryConfig,
@@ -136,12 +138,32 @@ function hasRepositoryConfigFormatError(value: unknown): boolean {
   return false
 }
 
+function hasFavoritesFormatError(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "rule") && !Array.isArray(value.rule)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "skill") && !Array.isArray(value.skill)) {
+    return true
+  }
+
+  return false
+}
+
 function hasGlobalConfigFormatError(value: unknown): boolean {
   if (!isRecord(value)) {
     return true
   }
 
   if (hasOwnKey(value, "themeMode") && typeof value.themeMode !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "favorites") && hasFavoritesFormatError(value.favorites)) {
     return true
   }
 
@@ -274,6 +296,20 @@ function normalizeRepositories(value: unknown): SynapseRepositoryConfig[] {
   )
 }
 
+function normalizeFavorites(value: unknown): SynapseFavorites {
+  if (!isRecord(value)) {
+    return structuredClone(DEFAULT_FAVORITES)
+  }
+
+  const ruleIds = Array.isArray(value.rule) ? value.rule.filter((id): id is string => typeof id === "string") : []
+  const skillIds = Array.isArray(value.skill) ? value.skill.filter((id): id is string => typeof id === "string") : []
+
+  return {
+    rule: ruleIds,
+    skill: skillIds,
+  }
+}
+
 function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   if (!isRecord(value)) {
     return structuredClone(DEFAULT_GLOBAL_CONFIG)
@@ -282,6 +318,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   return {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
     projects: normalizeProjects(value.projects),
+    favorites: normalizeFavorites(value.favorites),
   }
 }
 

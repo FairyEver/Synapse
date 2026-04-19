@@ -8,6 +8,7 @@ import type {
   SynapseConfigBackupImportResult,
 } from "../../src/types/backup"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
+import type { SynapseFavorites } from "../../src/types/config"
 import type { SynapseContentType } from "../../src/types/content"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
@@ -273,6 +274,10 @@ function validateConfig(
     global: {
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
       projects: normalizedProjects,
+      favorites: {
+        rule: [],
+        skill: [],
+      } satisfies SynapseFavorites,
     },
   }
 }

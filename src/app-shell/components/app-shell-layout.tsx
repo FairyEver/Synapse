@@ -24,7 +24,7 @@ function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) 
       <QuickRepositorySwitchDialog />
       <SwitchRepositoryOnboardingDialog />
       <div className="flex h-full flex-col">
-        <header className="shrink-0">
+        <header className="shrink-0 border-b border-sidebar-border/50">
           <div
             className={cn(
               "grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4",

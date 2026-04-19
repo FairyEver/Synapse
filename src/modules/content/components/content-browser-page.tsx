@@ -31,6 +31,7 @@ import {
   getCategoryLabel,
   resolveCategoryViewId,
   SYNAPSE_ALL_CATEGORY_ID,
+  SYNAPSE_FAVORITES_CATEGORY_ID,
 } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
@@ -38,6 +39,7 @@ import { ContentActionSplitButton } from "@/modules/content/components/content-a
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
+import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
@@ -257,6 +259,7 @@ function ContentBrowserPage({
     contentType,
     catalogRefreshSignal,
   )
+  const { favoriteIds } = useContentFavorites(contentType)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
@@ -280,10 +283,21 @@ function ContentBrowserPage({
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
 
   useEffect(() => {
+    // 如果当前是"我的收藏"但没有收藏了，重置到"全部"
+    if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID && favoriteIds.length === 0) {
+      setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
+      return
+    }
+
+    // "我的收藏"是特殊分类，不在 categories 数组中，不需要检查
+    if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID) {
+      return
+    }
+
     if (!categories.some((item) => item.id === activeCategoryId)) {
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
     }
-  }, [activeCategoryId, categories])
+  }, [activeCategoryId, categories, favoriteIds])
 
   useEffect(() => {
     if (selectedItem && !items.some((item) => item.id === selectedItem.id)) {
@@ -314,11 +328,17 @@ function ContentBrowserPage({
   }, [onDetailDialogOpenChange])
 
   const itemsInActiveCategory = useMemo(
-    () => items.filter((item) => (
-      activeCategoryId === SYNAPSE_ALL_CATEGORY_ID
-      || resolveCategoryViewId(contentType, item.category) === activeCategoryId
-    )),
-    [activeCategoryId, contentType, items],
+    () => {
+      if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID) {
+        return items.filter((item) => favoriteIds.includes(item.id))
+      }
+
+      return items.filter((item) => (
+        activeCategoryId === SYNAPSE_ALL_CATEGORY_ID
+        || resolveCategoryViewId(contentType, item.category) === activeCategoryId
+      ))
+    },
+    [activeCategoryId, contentType, items, favoriteIds],
   )
   const contentSearch = useMemo(
     () => new Fuse(itemsInActiveCategory, contentSearchOptions),
@@ -421,7 +441,41 @@ function ContentBrowserPage({
               />
             </div>
             <ModuleSidebarList>
-              {categories.map((category) => (
+              {/* 全部分类 */}
+              {categories[0] && (
+                <ModuleSidebarItem
+                  key={categories[0].id}
+                  active={categories[0].id === activeCategoryId}
+                  disabled={!canBrowseContent}
+                  onClick={() => setActiveCategoryId(categories[0].id)}
+                  className="h-10 px-4"
+                  trailing={
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {categories[0].count}
+                    </span>
+                  }
+                >
+                  {categories[0].label}
+                </ModuleSidebarItem>
+              )}
+
+              {/* 我的收藏 */}
+              <ModuleSidebarItem
+                active={activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID}
+                disabled={!canBrowseContent}
+                onClick={() => setActiveCategoryId(SYNAPSE_FAVORITES_CATEGORY_ID)}
+                className="h-10 px-4"
+                trailing={
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {favoriteIds.length}
+                  </span>
+                }
+              >
+                我的收藏
+              </ModuleSidebarItem>
+
+              {/* 其余分类 */}
+              {categories.slice(1).map((category) => (
                 <ModuleSidebarItem
                   key={category.id}
                   active={category.id === activeCategoryId}
