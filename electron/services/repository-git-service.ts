@@ -6,6 +6,7 @@ import type {
 } from "../../src/types/repository"
 import { runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
+import { formatGitFailureMessage } from "./git-error-utils"
 import { repositoryStore } from "./repository-store"
 
 type ProgressListener = (event: SynapseRepositoryProgressEvent) => void
@@ -128,62 +129,6 @@ function parseGitProgressLine(
   }
 }
 
-function formatGitFailureMessage(output: string): string {
-  const normalizedOutput = output.trim()
-  const firstLine = normalizedOutput
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-  const loweredOutput = normalizedOutput.toLowerCase()
-
-  if (
-    loweredOutput.includes("authentication failed")
-    || loweredOutput.includes("could not read username")
-    || loweredOutput.includes("permission denied (publickey)")
-    || loweredOutput.includes("permission denied")
-    || loweredOutput.includes("fatal: could not read from remote repository")
-  ) {
-    return "Git 认证失败。请检查系统凭证、SSH Key 或 credential.helper 配置。"
-  }
-
-  if (
-    loweredOutput.includes("repository not found")
-    || loweredOutput.includes("not found")
-    || loweredOutput.includes("no such remote")
-  ) {
-    return "当前仓库没有可用的远程配置，或当前账号没有访问权限。"
-  }
-
-  if (
-    loweredOutput.includes("there is no tracking information for the current branch")
-    || loweredOutput.includes("no upstream configured for branch")
-    || loweredOutput.includes("has no upstream branch")
-  ) {
-    return "当前分支还没有配置上游分支，暂时无法在 Synapse 中执行同步。"
-  }
-
-  if (
-    loweredOutput.includes("could not resolve host")
-    || loweredOutput.includes("failed to connect")
-    || loweredOutput.includes("connection timed out")
-    || loweredOutput.includes("network is unreachable")
-    || loweredOutput.includes("connection reset")
-  ) {
-    return "无法连接到远程仓库。请检查网络连接、代理设置或仓库域名。"
-  }
-
-  if (loweredOutput.includes("not possible to fast-forward")) {
-    return "当前仓库无法快进同步，请先在你常用的 Git 工具里处理分支分叉。"
-  }
-
-  if (loweredOutput.includes("not a git repository")) {
-    return "当前目录不是 Git 仓库，无法执行同步。"
-  }
-
-  const fallbackMessage = "仓库同步失败。请检查网络、访问权限、远程配置或当前分支状态后重试。"
-
-  return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
-}
 
 async function runRepositoryGitCommand(
   repositoryUuid: string,
@@ -198,7 +143,7 @@ async function runRepositoryGitCommand(
     args,
     cwd: options.cwd,
     fallbackMessage: "仓库同步失败。请检查网络、访问权限、远程配置或当前分支状态后重试。",
-    formatFailureMessage: (output) => formatGitFailureMessage(output),
+    formatFailureMessage: formatGitFailureMessage,
     onLine: (line) => {
       const progressEvent = parseGitProgressLine(repositoryUuid, operation, line)
 

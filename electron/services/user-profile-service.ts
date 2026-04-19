@@ -9,6 +9,7 @@ import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { configStore } from "./config-store"
 import { runGitTextCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
+import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryStore } from "./repository-store"
 import {
@@ -35,23 +36,6 @@ function createUserProfile(userId: string, displayName: string): SynapseUserProf
   }
 }
 
-function formatGitFailureMessage(output: string, fallbackMessage: string): string {
-  const normalizedOutput = output.trim().toLowerCase()
-
-  if (
-    normalizedOutput.includes("authentication failed")
-    || normalizedOutput.includes("could not read username")
-    || normalizedOutput.includes("permission denied")
-    || normalizedOutput.includes("could not read from remote repository")
-    || normalizedOutput.includes("could not resolve host")
-    || normalizedOutput.includes("failed to connect")
-    || normalizedOutput.includes("network is unreachable")
-  ) {
-    return "无法同步仓库，请检查网络后重试。"
-  }
-
-  return fallbackMessage
-}
 
 function runProfileGitCommand(
   cwd: string,

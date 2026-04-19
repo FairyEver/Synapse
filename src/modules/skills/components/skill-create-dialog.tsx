@@ -203,16 +203,6 @@ function SkillCreateDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const folderInput = folderInputRef.current
-
-    if (!folderInput) {
-      return
-    }
-
-    folderInput.setAttribute("webkitdirectory", "")
-    folderInput.setAttribute("directory", "")
-  }, [])
 
   useEffect(() => {
     setForm(baseline)
@@ -566,10 +556,11 @@ function SkillCreateDialog({
                       单个附件最大 {formatSkillAttachmentSize(MAX_SKILL_ATTACHMENT_SIZE)}
                     </p>
                   </div>
-                  <div className="flex flex-wrap justify-center gap-2">
+                  <div className="flex flex-wrap justify-center">
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="outline"
+                      className="rounded-r-none border-r-0"
                       disabled={isCollectingFiles || isSubmitting}
                       onClick={() => fileInputRef.current?.click()}
                     >
@@ -579,6 +570,7 @@ function SkillCreateDialog({
                     <Button
                       type="button"
                       variant="outline"
+                      className="rounded-l-none"
                       disabled={isCollectingFiles || isSubmitting}
                       onClick={() => folderInputRef.current?.click()}
                     >
@@ -603,6 +595,8 @@ function SkillCreateDialog({
                 ref={folderInputRef}
                 className="hidden"
                 type="file"
+                webkitdirectory=""
+                directory=""
                 multiple
                 onChange={(event) => {
                   handleHiddenInputFiles(event.target.files)

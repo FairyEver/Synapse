@@ -45,7 +45,28 @@
       "Bash(curl -sL \"https://api.github.com/search/code?q=%22.agents/skills%22+repo:openai/codex\" -H \"Accept: application/vnd.github.v3+json\")",
       "Bash(grep -E '^\\(tsx|ts-node|vitest\\)$')",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,'->',v\\) for k,v in d['scripts'].items\\(\\)]\")",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(head -39 electron/services/content-submission-service.ts)",
+      "Bash(tail -n +93 electron/services/content-submission-service.ts)",
+      "Bash(mv /tmp/css1.ts electron/services/content-submission-service.ts)",
+      "Bash(head -20 electron/services/content-submission-service.ts)",
+      "Bash(echo 'import { formatGitFailureMessage } from \"./git-error-utils\"')",
+      "Bash(head -130 electron/services/repository-git-service.ts)",
+      "Bash(tail -n +187 electron/services/repository-git-service.ts)",
+      "Bash(mv /tmp/rgs1.ts electron/services/repository-git-service.ts)",
+      "Bash(head -8 electron/services/repository-git-service.ts)",
+      "Bash(tail -n +9 electron/services/repository-git-service.ts)",
+      "Bash(mv /tmp/rgs2.ts electron/services/repository-git-service.ts)",
+      "Bash(head -132 electron/services/repository-maintenance-service.ts)",
+      "Bash(tail -n +178 electron/services/repository-maintenance-service.ts)",
+      "Bash(mv /tmp/rms1.ts electron/services/repository-maintenance-service.ts)",
+      "Bash(head -19 electron/services/repository-maintenance-service.ts)",
+      "Bash(tail -n +20 electron/services/repository-maintenance-service.ts)",
+      "Bash(head -91 electron/services/repository-structure-service.ts)",
+      "Bash(tail -n +109 electron/services/repository-structure-service.ts)",
+      "Bash(mv /tmp/rss1.ts electron/services/repository-structure-service.ts)",
+      "Bash(head -31 electron/services/repository-structure-service.ts)",
+      "Bash(tail -n +32 electron/services/repository-structure-service.ts)"
     ]
   }
 }

@@ -17,6 +17,7 @@ import {
   resolveContentRootPath,
 } from "./content-history-service"
 import { createMainLogger } from "./log-store"
+import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
 import { runGitCommand, type GitCommandResult } from "./git-command"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
@@ -130,51 +131,6 @@ function createMaintenanceMessage(
     : `${fragments.join("，")}，等待同步。`
 }
 
-function formatGitFailureMessage(output: string, fallbackMessage: string): string {
-  const normalizedOutput = output.trim()
-  const firstLine = normalizedOutput
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-  const loweredOutput = normalizedOutput.toLowerCase()
-
-  if (
-    loweredOutput.includes("authentication failed")
-    || loweredOutput.includes("could not read username")
-    || loweredOutput.includes("permission denied (publickey)")
-    || loweredOutput.includes("permission denied")
-    || loweredOutput.includes("fatal: could not read from remote repository")
-  ) {
-    return "无法连接仓库，请检查网络。"
-  }
-
-  if (
-    loweredOutput.includes("repository not found")
-    || loweredOutput.includes("not found")
-    || loweredOutput.includes("no such remote")
-  ) {
-    return "当前仓库没有可用的远程配置，或当前账号没有访问权限。"
-  }
-
-  if (
-    loweredOutput.includes("could not resolve host")
-    || loweredOutput.includes("failed to connect")
-    || loweredOutput.includes("connection timed out")
-    || loweredOutput.includes("network is unreachable")
-    || loweredOutput.includes("connection reset")
-  ) {
-    return "无法连接仓库，请检查网络。"
-  }
-
-  if (
-    loweredOutput.includes("nothing to commit")
-    || loweredOutput.includes("no changes added to commit")
-  ) {
-    return "当前没有可提交的改动。"
-  }
-
-  return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
-}
 
 function isNonFastForwardError(errorMessage: string): boolean {
   const loweredMessage = errorMessage.toLowerCase()
