@@ -1,7 +1,16 @@
 import { useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -76,14 +85,16 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   return (
     <SettingsGroup>
       {projects.length > 0 ? (
-        <div className="flex flex-col divide-y divide-border/60">
+        <ItemGroup>
           {projects.map((project) => (
-            <div key={project.id} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
-              <div className="flex flex-col gap-1">
-                <p className="font-medium">{project.name}</p>
-                <p className="break-all text-sm text-muted-foreground">{project.path}</p>
-              </div>
-              <div>
+            <Item key={project.id} variant="outline" className="items-start">
+              <ItemContent className="min-w-0">
+                <ItemTitle className="w-full">{project.name}</ItemTitle>
+                <ItemDescription className="line-clamp-none break-all">
+                  {project.path}
+                </ItemDescription>
+              </ItemContent>
+              <ItemActions className="w-full justify-end sm:w-auto sm:self-start">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -93,10 +104,10 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                 >
                   删除
                 </Button>
-              </div>
-            </div>
+              </ItemActions>
+            </Item>
           ))}
-        </div>
+        </ItemGroup>
       ) : null}
 
       <div className="flex flex-col gap-4">
@@ -131,7 +142,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
             </div>
           </div>
         </div>
-        {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+        <FieldError>{formError}</FieldError>
         <div>
           <Button onClick={() => void handleAddProject()}>添加项目</Button>
         </div>

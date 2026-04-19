@@ -3,15 +3,15 @@ import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useAppConfig } from "@/app-shell/config"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 
 function QuickRepositorySwitchDialog() {
   const { config } = useAppConfig()
@@ -30,45 +30,34 @@ function QuickRepositorySwitchDialog() {
   )
 
   return (
-    <Dialog
+    <CommandDialog
       open={isRepositorySwitchDialogOpen}
       onOpenChange={(open) => {
         if (!open) {
           closeRepositorySwitchDialog()
         }
       }}
+      title="切换仓库"
+      className="sm:max-w-lg"
     >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>切换仓库</DialogTitle>
-          <DialogDescription>选择要切到的本地目录。</DialogDescription>
-        </DialogHeader>
+      <Command>
+        <CommandInput placeholder="搜索仓库..." />
+        <CommandList>
+          <CommandEmpty>没有找到匹配的仓库。</CommandEmpty>
+          <CommandGroup heading="仓库">
+            {config.repositories.map((repository) => {
+              const isActive = repository.uuid === config.activeRepoUuid
+              const isSwitchingCurrentRepository = switchingRepositoryUuid === repository.uuid
+              const isDisabled = isActive || hasRunningRepositoryOperation || isSwitchingRepository
 
-        <div className="flex max-h-80 flex-col divide-y divide-border overflow-y-auto rounded-xl border">
-          {config.repositories.map((repository) => {
-            const isActive = repository.uuid === config.activeRepoUuid
-            const isDisabled = isActive || hasRunningRepositoryOperation || isSwitchingRepository
-
-            return (
-              <div
-                key={repository.uuid}
-                className="flex items-start justify-between gap-3 px-4 py-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate font-medium">{repository.name}</p>
-                    {isActive ? <Badge variant="secondary">当前</Badge> : null}
-                  </div>
-                  <p className="mt-1 break-all text-sm text-muted-foreground">
-                    {repository.localPath}
-                  </p>
-                </div>
-
-                <Button
-                  variant={isActive ? "secondary" : "outline"}
-                  size="sm"
+              return (
+                <CommandItem
+                  key={repository.uuid}
+                  value={`${repository.name} ${repository.localPath}`}
+                  data-checked={isActive ? true : undefined}
                   disabled={isDisabled}
-                  onClick={() => {
+                  className="items-start"
+                  onSelect={() => {
                     if (isDisabled) {
                       return
                     }
@@ -80,16 +69,25 @@ function QuickRepositorySwitchDialog() {
                     })
                   }}
                 >
-                  {switchingRepositoryUuid === repository.uuid ? "切换中..." : isActive ? "当前目录" : "切换"}
-                </Button>
-              </div>
-            )
-          })}
-        </div>
-
-        <DialogFooter showCloseButton />
-      </DialogContent>
-    </Dialog>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-medium">{repository.name}</span>
+                      {isActive ? <Badge variant="secondary">当前</Badge> : null}
+                      {isSwitchingCurrentRepository ? (
+                        <Badge variant="outline">切换中</Badge>
+                      ) : null}
+                    </div>
+                    <span className="break-all text-muted-foreground">
+                      {repository.localPath}
+                    </span>
+                  </div>
+                </CommandItem>
+              )
+            })}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </CommandDialog>
   )
 }
 

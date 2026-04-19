@@ -1,3 +1,10 @@
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldTitle,
+} from "@/components/ui/field"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
@@ -21,22 +28,18 @@ function SettingsFieldRow({
   label,
 }: SettingsFieldRowProps) {
   return (
-    <div
-      className={cn(
-        "grid gap-x-6 gap-y-2 md:grid-cols-[minmax(0,1fr)_200px] md:items-center",
-        className,
-      )}
+    <Field
+      orientation="responsive"
+      data-invalid={error ? true : undefined}
+      className={className}
     >
-      <p className="text-sm font-medium text-foreground">{label}</p>
-      <div className={cn("w-full md:justify-self-end", controlClassName)}>{children}</div>
-
-      {description || error ? (
-        <div className="flex flex-col gap-1">
-          {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        </div>
-      ) : null}
-    </div>
+      <FieldTitle>{label}</FieldTitle>
+      <FieldContent className="w-full md:max-w-[200px]">
+        <div className={cn("w-full", controlClassName)}>{children}</div>
+        {description ? <FieldDescription>{description}</FieldDescription> : null}
+        <FieldError>{error}</FieldError>
+      </FieldContent>
+    </Field>
   )
 }
 

@@ -12,8 +12,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import {
+  Field,
+  FieldContent,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 
 function RepoOnboardingDialog() {
   const { activeRepository, config } = useAppConfig()
@@ -83,44 +89,43 @@ function RepoOnboardingDialog() {
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>设置你在“{activeRepository.name}”里的显示名</DialogTitle>
-          <DialogDescription>
-            这是你在当前目录里的显示名。不同目录可以使用不同名字。
-          </DialogDescription>
+          <DialogTitle>设置你在”{activeRepository.name}”里的显示名</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="repo-onboarding-user-id">用户 ID</Label>
+        <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="repo-onboarding-user-id">用户 ID</FieldLabel>
             <Input
               id="repo-onboarding-user-id"
               readOnly
               value={currentRepoProfileState.userId}
               className="font-mono"
             />
-          </div>
+          </Field>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="repo-onboarding-display-name">显示名称</Label>
-            <Input
-              id="repo-onboarding-display-name"
-              value={displayName}
-              aria-invalid={error ? true : undefined}
-              autoFocus
-              onChange={(event) => {
-                setDisplayName(event.target.value)
-                setError(null)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault()
-                  handleSubmit()
-                }
-              }}
-            />
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          </div>
-        </div>
+          <Field data-invalid={error ? true : undefined}>
+            <FieldLabel htmlFor="repo-onboarding-display-name">显示名称</FieldLabel>
+            <FieldContent>
+              <Input
+                id="repo-onboarding-display-name"
+                value={displayName}
+                aria-invalid={error ? true : undefined}
+                autoFocus
+                onChange={(event) => {
+                  setDisplayName(event.target.value)
+                  setError(null)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
+                    handleSubmit()
+                  }
+                }}
+              />
+              <FieldError>{error}</FieldError>
+            </FieldContent>
+          </Field>
+        </FieldGroup>
 
         <DialogFooter className="sm:justify-between">
           {hasOtherRepositories ? (

@@ -1,6 +1,5 @@
-import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { useEffect, useId } from "react"
+import { toast } from "sonner"
 
 type InlineNoticeProps = {
   message: string
@@ -8,31 +7,34 @@ type InlineNoticeProps = {
   tone?: "default" | "destructive"
 }
 
+function showInlineNoticeToast(
+  id: string,
+  message: string,
+  tone: InlineNoticeProps["tone"],
+  onDismiss?: () => void,
+) {
+  const options = {
+    duration: tone === "destructive" ? 6000 : 4500,
+    id,
+    onDismiss,
+  }
+
+  if (tone === "destructive") {
+    toast.error(message, options)
+    return
+  }
+
+  toast(message, options)
+}
+
 function InlineNotice({ message, onDismiss, tone = "default" }: InlineNoticeProps) {
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2",
-        tone === "destructive"
-          ? "border-destructive/40 bg-destructive/5 text-destructive"
-          : "border-border bg-muted/20 text-foreground",
-      )}
-    >
-      <p className="text-sm">{message}</p>
-      {onDismiss ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={tone === "destructive" ? "text-destructive hover:text-destructive" : undefined}
-          onClick={onDismiss}
-        >
-          <X />
-          关闭
-        </Button>
-      ) : null}
-    </div>
-  )
+  const toastId = useId()
+
+  useEffect(() => {
+    showInlineNoticeToast(toastId, message, tone, onDismiss)
+  }, [message, onDismiss, toastId, tone])
+
+  return null
 }
 
 export { InlineNotice }

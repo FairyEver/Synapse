@@ -12,6 +12,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type {
+  SynapseCreateLocalRepositoryResult,
   SynapseRepositoryInitializationPreview,
   SynapseRepositoryInitializationResult,
   SynapsePendingPushState,
@@ -33,6 +34,11 @@ type RepositoryManagerContextValue = {
   checkInitializationPreview: (
     repositoryUuid: string,
   ) => Promise<SynapseRepositoryInitializationPreview>
+  chooseDirectory: () => Promise<string | null>
+  createLocalRepository: (options: {
+    name: string
+    parentPath: string
+  }) => Promise<SynapseCreateLocalRepositoryResult>
   initializeStructure: (
     repositoryUuid: string,
   ) => Promise<SynapseRepositoryInitializationResult>
@@ -294,6 +300,29 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
     [refreshPendingPushes],
   )
 
+  const chooseDirectory = useCallback(async () => {
+    const bridge = getSynapseBridge()
+
+    if (!bridge) {
+      return null
+    }
+
+    return bridge.repository.chooseDirectory()
+  }, [])
+
+  const createLocalRepository = useCallback(
+    async (options: { name: string; parentPath: string }) => {
+      const bridge = getSynapseBridge()
+
+      if (!bridge) {
+        throw new Error("当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。")
+      }
+
+      return bridge.repository.createLocalRepository(options)
+    },
+    [],
+  )
+
   useEffect(() => {
     if (!config.activeRepoUuid) {
       return
@@ -487,6 +516,8 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<RepositoryManagerContextValue>(
     () => ({
       checkInitializationPreview,
+      chooseDirectory,
+      createLocalRepository,
       initializeStructure,
       hasRepositoryBridge,
       operations,
@@ -501,6 +532,8 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
     }),
     [
       checkInitializationPreview,
+      chooseDirectory,
+      createLocalRepository,
       hasRepositoryBridge,
       initializeStructure,
       operations,

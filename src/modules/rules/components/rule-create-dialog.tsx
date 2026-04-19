@@ -12,8 +12,14 @@ import {
 import { FormDialog } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import {
+  Field,
+  FieldContent,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Tooltip,
   TooltipContent,
@@ -47,14 +53,6 @@ type RuleCreateDialogProps = {
   open: boolean
   submitDisabled?: boolean
   submitDisabledReason?: string | null
-}
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) {
-    return null
-  }
-
-  return <p className="text-sm text-destructive">{message}</p>
 }
 
 function RuleCreateDialog({
@@ -167,13 +165,10 @@ function RuleCreateDialog({
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <FormDialog
           title={mode === "create" ? "新建 Rule" : "编辑 Rule"}
-          description={mode === "create" ? "填好内容后保存。" : "修改后保存。"}
           contentClassName="sm:max-w-[600px]"
           footer={(
             <>
-              {submitError ? (
-                <p className="text-sm text-destructive sm:mr-auto">{submitError}</p>
-              ) : null}
+              <FieldError className="sm:mr-auto">{submitError}</FieldError>
               <div className="flex flex-col-reverse gap-2 sm:flex-row">
                 <Button
                   type="button"
@@ -202,57 +197,63 @@ function RuleCreateDialog({
           )}
           onSubmit={handleSubmit}
         >
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="rule-create-title">标题</Label>
-              <Input
-                id="rule-create-title"
-                value={form.title}
-                aria-invalid={errors.title ? "true" : undefined}
-                onChange={(event) => updateField("title", event.target.value)}
-                placeholder="例如：PR 评审规范"
-              />
-              <FieldError message={errors.title} />
-            </div>
+          <FieldGroup className="gap-5">
+            <Field data-invalid={errors.title ? true : undefined}>
+              <FieldLabel htmlFor="rule-create-title">标题</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="rule-create-title"
+                  value={form.title}
+                  aria-invalid={errors.title ? "true" : undefined}
+                  onChange={(event) => updateField("title", event.target.value)}
+                  placeholder="例如：PR 评审规范"
+                />
+                <FieldError>{errors.title}</FieldError>
+              </FieldContent>
+            </Field>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="rule-create-description">简介</Label>
-              <Textarea
-                id="rule-create-description"
-                value={form.description}
-                aria-invalid={errors.description ? "true" : undefined}
-                className="min-h-24"
-                onChange={(event) => updateField("description", event.target.value)}
-                placeholder="例如：适用于 PR 评审的提交要求。"
-              />
-              <FieldError message={errors.description} />
-            </div>
+            <Field data-invalid={errors.description ? true : undefined}>
+              <FieldLabel htmlFor="rule-create-description">简介</FieldLabel>
+              <FieldContent>
+                <Textarea
+                  id="rule-create-description"
+                  value={form.description}
+                  aria-invalid={errors.description ? "true" : undefined}
+                  className="min-h-24"
+                  onChange={(event) => updateField("description", event.target.value)}
+                  placeholder="例如：适用于 PR 评审的提交要求。"
+                />
+                <FieldError>{errors.description}</FieldError>
+              </FieldContent>
+            </Field>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="rule-create-category">分类</Label>
-              <Select
-                value={form.category || undefined}
-                onValueChange={(value) => updateField("category", value)}
-              >
-                <SelectTrigger
-                  id="rule-create-category"
-                  aria-invalid={errors.category ? "true" : undefined}
-                  className="w-full"
+            <Field data-invalid={errors.category ? true : undefined}>
+              <FieldLabel htmlFor="rule-create-category">分类</FieldLabel>
+              <FieldContent>
+                <Select
+                  value={form.category || undefined}
+                  onValueChange={(value) => updateField("category", value)}
                 >
-                  <SelectValue placeholder="选择分类" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {categoryOptions.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldError message={errors.category} />
-            </div>
+                  <SelectTrigger
+                    id="rule-create-category"
+                    aria-invalid={errors.category ? "true" : undefined}
+                    className="w-full"
+                  >
+                    <SelectValue placeholder="选择分类" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {categoryOptions.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldError>{errors.category}</FieldError>
+              </FieldContent>
+            </Field>
 
             <ContentAppearanceFields
               backgroundValue={form.iconBg}
@@ -263,19 +264,21 @@ function RuleCreateDialog({
               onIconValueChange={(value) => updateField("icon", value)}
             />
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="rule-create-content">正文</Label>
-              <Textarea
-                id="rule-create-content"
-                value={form.content}
-                aria-invalid={errors.content ? "true" : undefined}
-                className="min-h-56"
-                onChange={(event) => updateField("content", event.target.value)}
-                placeholder="输入或粘贴 Rule 正文。"
-              />
-              <FieldError message={errors.content} />
-            </div>
-          </div>
+            <Field data-invalid={errors.content ? true : undefined}>
+              <FieldLabel htmlFor="rule-create-content">正文</FieldLabel>
+              <FieldContent>
+                <Textarea
+                  id="rule-create-content"
+                  value={form.content}
+                  aria-invalid={errors.content ? "true" : undefined}
+                  className="min-h-56"
+                  onChange={(event) => updateField("content", event.target.value)}
+                  placeholder="输入或粘贴 Rule 正文。"
+                />
+                <FieldError>{errors.content}</FieldError>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
         </FormDialog>
       </Dialog>
     </>

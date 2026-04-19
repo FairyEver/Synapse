@@ -1,4 +1,11 @@
-import { Label } from "@/components/ui/label"
+import {
+  Field,
+  FieldContent,
+  FieldError,
+  FieldLegend,
+  FieldSet,
+  FieldTitle,
+} from "@/components/ui/field"
 import { ContentBackgroundPicker } from "@/modules/content/components/content-background-picker"
 import { ContentIconPicker } from "@/modules/content/components/content-icon-picker"
 
@@ -13,14 +20,6 @@ type ContentAppearanceFieldsProps = {
   onIconValueChange: (value: string) => void
 }
 
-function FieldError({ message }: { message?: string }) {
-  if (!message) {
-    return null
-  }
-
-  return <p className="text-sm text-destructive">{message}</p>
-}
-
 function ContentAppearanceFields({
   backgroundError,
   backgroundLabel = "背景色",
@@ -32,26 +31,31 @@ function ContentAppearanceFields({
   onIconValueChange,
 }: ContentAppearanceFieldsProps) {
   return (
-    <>
-      <div className="flex flex-col gap-3">
-        <Label>{backgroundLabel}</Label>
-        <ContentBackgroundPicker
-          value={backgroundValue}
-          onValueChange={onBackgroundValueChange}
-        />
-        <FieldError message={backgroundError} />
-      </div>
+    <FieldSet className="gap-5">
+      <FieldLegend className="sr-only">外观设置</FieldLegend>
+      <Field data-invalid={backgroundError ? true : undefined}>
+        <FieldTitle>{backgroundLabel}</FieldTitle>
+        <FieldContent>
+          <ContentBackgroundPicker
+            value={backgroundValue}
+            onValueChange={onBackgroundValueChange}
+          />
+          <FieldError>{backgroundError}</FieldError>
+        </FieldContent>
+      </Field>
 
-      <div className="flex flex-col gap-3">
-        <Label>{iconLabel}</Label>
-        <ContentIconPicker
-          tone={backgroundValue}
-          value={iconValue}
-          onValueChange={onIconValueChange}
-        />
-        <FieldError message={iconError} />
-      </div>
-    </>
+      <Field data-invalid={iconError ? true : undefined}>
+        <FieldTitle>{iconLabel}</FieldTitle>
+        <FieldContent>
+          <ContentIconPicker
+            tone={backgroundValue}
+            value={iconValue}
+            onValueChange={onIconValueChange}
+          />
+          <FieldError>{iconError}</FieldError>
+        </FieldContent>
+      </Field>
+    </FieldSet>
   )
 }
 

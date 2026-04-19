@@ -16,10 +16,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
+import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { RepositoryDisplayNameField } from "@/modules/settings/components/repository-display-name-field"
@@ -86,6 +97,8 @@ function RepositoryListEditor({
 }: RepositoryListEditorProps) {
   const {
     checkInitializationPreview,
+    chooseDirectory,
+    createLocalRepository,
     hasRepositoryBridge,
     initializeStructure,
     operations,
@@ -151,16 +164,14 @@ function RepositoryListEditor({
   }
 
   const handleAddRepository = async () => {
-    const bridge = window.synapse?.repository
-
-    if (!bridge) {
+    if (!hasRepositoryBridge) {
       logger.warn("Repository bridge unavailable while adding repository.")
       await saveRepository(manualPath)
       return
     }
 
     logger.info("Opening native directory picker from repository settings.")
-    const localPath = await bridge.chooseDirectory()
+    const localPath = await chooseDirectory()
 
     if (!localPath) {
       logger.info("Native directory picker was dismissed without selecting a directory.")
@@ -190,14 +201,12 @@ function RepositoryListEditor({
   }
 
   const handleChooseCreateParentPath = async () => {
-    const bridge = window.synapse?.repository
-
-    if (!bridge) {
+    if (!hasRepositoryBridge) {
       setCreateRepositoryError("当前运行实例还没有加载仓库能力桥接。")
       return
     }
 
-    const selectedPath = await bridge.chooseDirectory()
+    const selectedPath = await chooseDirectory()
 
     if (!selectedPath) {
       return
@@ -224,9 +233,7 @@ function RepositoryListEditor({
       return
     }
 
-    const bridge = window.synapse?.repository
-
-    if (!bridge) {
+    if (!hasRepositoryBridge) {
       setCreateRepositoryError("当前运行实例还没有加载仓库能力桥接。")
       return
     }
@@ -235,7 +242,7 @@ function RepositoryListEditor({
     setCreateRepositoryError(null)
 
     try {
-      const result = await bridge.createLocalRepository({
+      const result = await createLocalRepository({
         name: newRepositoryName.trim(),
         parentPath,
       })
@@ -407,9 +414,7 @@ function RepositoryListEditor({
           contentClassName="sm:max-w-[560px]"
           footer={(
             <>
-              {createRepositoryError ? (
-                <p className="text-sm text-destructive sm:mr-auto">{createRepositoryError}</p>
-              ) : null}
+              <FieldError className="sm:mr-auto">{createRepositoryError}</FieldError>
               <div className="flex flex-col-reverse gap-2 sm:flex-row">
                 <Button
                   type="button"
@@ -467,7 +472,7 @@ function RepositoryListEditor({
 
       <SettingsGroup>
         {repositories.length > 0 ? (
-          <div className="flex flex-col divide-y divide-border/60">
+          <ItemGroup>
             {repositories.map((repository) => {
               const isActive = repository.uuid === activeRepoUuid
               const operation = operations[repository.uuid]
@@ -477,66 +482,56 @@ function RepositoryListEditor({
               const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
 
               return (
-                <div key={repository.uuid} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium">{repository.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {isActive ? "当前激活目录" : "已保存"}
-                      </p>
+                <Item key={repository.uuid} variant="outline" className="items-start">
+                  <ItemContent className="min-w-0 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <ItemTitle className="w-full flex-wrap justify-between">
+                        <span className="min-w-0 flex-1 truncate">{repository.name}</span>
+                        <Badge variant={isActive ? "secondary" : "outline"}>
+                          {isActive ? "当前目录" : "已保存"}
+                        </Badge>
+                      </ItemTitle>
+                      <ItemDescription className="line-clamp-none break-all">
+                        {repository.localPath}
+                      </ItemDescription>
+                      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                        <p>
+                          {CONTENT_TYPE_DEFINITIONS.map((definition) => (
+                            `${definition.pluralLabel}: ${
+                              repository.contentDirs[definition.id]
+                              ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id]
+                            }`
+                          )).join(" · ")}
+                        </p>
+                        {hasRepositoryBridge ? <p>{getRepositoryStatusLabel(repositoryState)}</p> : null}
+                        {repositoryState?.gitRootPath
+                        && repositoryState.gitRootPath !== repository.localPath ? (
+                          <p className="break-all">Git 根目录：{repositoryState.gitRootPath}</p>
+                        ) : null}
+                        {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
+                          <p>当前目录不是 Git 仓库，内容只保存在本地。</p>
+                        ) : null}
+                      </div>
                     </div>
-                    <p className="break-all text-sm text-muted-foreground">{repository.localPath}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {CONTENT_TYPE_DEFINITIONS.map((definition) => (
-                        `${definition.pluralLabel}: ${
-                          repository.contentDirs[definition.id]
-                          ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id]
-                        }`
-                      )).join(" · ")}
-                    </p>
-                    {hasRepositoryBridge ? (
-                      <p className="text-xs text-muted-foreground">
-                        {getRepositoryStatusLabel(repositoryState)}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">目录状态和同步暂不可用</p>
-                    )}
-                    {repositoryState?.gitRootPath && repositoryState.gitRootPath !== repository.localPath ? (
-                      <p className="break-all text-xs text-muted-foreground">
-                        Git 根目录：{repositoryState.gitRootPath}
-                      </p>
-                    ) : null}
                     {operation?.isRunning ? (
-                      <div className="flex flex-col gap-2 pt-1">
+                      <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                           <span>{operation.statusText ?? "正在执行 Git 操作..."}</span>
                           {operation.percent !== null ? <span>{operation.percent}%</span> : null}
                         </div>
-                        <div className="h-2 rounded bg-muted">
-                          <div
-                            className="h-full rounded bg-primary transition-[width] duration-200"
-                            style={{ width: `${operation.percent ?? 24}%` }}
-                          />
-                        </div>
+                        <Progress value={operation.percent ?? 24} />
                       </div>
                     ) : null}
-                    {operation?.error ? (
-                      <p className="text-sm text-destructive">{operation.error}</p>
+                    <FieldError>{operation?.error}</FieldError>
+                    {repositoryState?.status === "ready" ? (
+                      <RepositoryDisplayNameField
+                        repositoryUuid={repository.uuid}
+                        isActiveRepository={isActive}
+                        disabled={isBusy}
+                      />
                     ) : null}
-                    {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
-                      <p className="text-xs text-muted-foreground">
-                        当前目录不是 Git 仓库，内容只保存在本地。
-                      </p>
-                    ) : null}
-                  </div>
-                  {repositoryState?.status === "ready" ? (
-                    <RepositoryDisplayNameField
-                      repositoryUuid={repository.uuid}
-                      isActiveRepository={isActive}
-                      disabled={isBusy}
-                    />
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
+                  </ItemContent>
+                  <ItemActions className="w-full flex-wrap justify-end sm:w-auto sm:self-start">
                     {hasRepositoryBridge ? (
                       <Button
                         size="sm"
@@ -594,11 +589,11 @@ function RepositoryListEditor({
                     >
                       删除
                     </Button>
-                  </div>
-                </div>
+                  </ItemActions>
+                </Item>
               )
             })}
-          </div>
+          </ItemGroup>
         ) : null}
 
         <div className="flex flex-col gap-4">
@@ -614,7 +609,7 @@ function RepositoryListEditor({
               placeholder="/path/to/project"
             />
           ) : null}
-          {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+          <FieldError>{formError}</FieldError>
           <div className="flex flex-wrap gap-2">
             <Button variant={hasRepositoryBridge ? "outline" : "default"} onClick={() => void handleAddRepository()}>
               {hasRepositoryBridge ? "选择现有文件夹" : "添加目录"}
