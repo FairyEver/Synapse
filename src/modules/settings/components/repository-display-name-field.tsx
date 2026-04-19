@@ -181,9 +181,6 @@ function RepositoryDisplayNameField({
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>设置作者署名</DialogTitle>
-            <DialogDescription>
-              设置你在这个仓库中提交内容时显示的名称。
-            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-4">
             <div className="flex flex-col gap-2">

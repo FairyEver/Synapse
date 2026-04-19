@@ -147,7 +147,7 @@ function SettingsModule() {
       <div className={cn("flex flex-col gap-6", isLogsCategory ? "h-full min-h-0 pb-4" : "pb-6")}>
         {activeCategory === "content" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
-            当前目录：{activeRepository.name}
+            {activeRepository.name}
           </p>
         ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}

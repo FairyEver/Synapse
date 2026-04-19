@@ -19,9 +19,6 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-foreground">整理历史记录</p>
-          <p className="text-sm text-muted-foreground">
-            会优化较早历史版本的存储，并清理不再被任何版本引用的附件。
-          </p>
         </div>
 
         {isBusy && operation?.statusText ? (

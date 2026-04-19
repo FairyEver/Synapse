@@ -19,7 +19,7 @@ function SettingsGroup({ children, className, sectionClassName }: SettingsGroupP
     <div className={cn("overflow-hidden rounded-xl bg-background", className)}>
       {sections.map((section, index) => (
         <Fragment key={index}>
-          {index > 0 ? <Separator className="bg-muted/30" /> : null}
+          {index > 0 ? <Separator /> : null}
           <div className={cn("px-4 py-4", sectionClassName)}>{section}</div>
         </Fragment>
       ))}

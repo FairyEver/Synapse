@@ -422,9 +422,7 @@ function SkillCreateDialog({
                 onChange={(event) => updateField("name", event.target.value)}
                 placeholder="my-skill-name"
               />
-              <p className="text-xs text-muted-foreground">
-                用于 Claude Code / Codex / Cursor 的 skill 目录名。小写字母、数字、连字符，首尾必须是字母或数字。
-              </p>
+              <p className="text-xs text-muted-foreground">小写字母、数字、连字符，3-50 字符。</p>
               <FieldError message={errors.name} />
             </div>
 

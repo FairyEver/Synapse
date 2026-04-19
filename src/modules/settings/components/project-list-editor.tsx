@@ -144,9 +144,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>添加项目</DialogTitle>
-            <DialogDescription>
-              填写项目名称和路径，将项目添加到列表中。
-            </DialogDescription>
           </DialogHeader>
           <FieldGroup className="gap-4">
             <Field>

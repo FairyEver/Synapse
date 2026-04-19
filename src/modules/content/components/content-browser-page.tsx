@@ -61,7 +61,7 @@ type ContentBrowserPageProps = {
 }
 
 type ContentState = {
-  description: string
+  description: string | null
   icon: LucideIcon
   title: string
 }
@@ -143,7 +143,7 @@ function getContentState(params: {
   if (items.length === 0) {
     return {
       title: `还没有 ${definition.emptyStateNoun}`,
-      description: "当前目录下还没有可显示的内容。",
+      description: null,
       icon: PackageOpen,
     }
   }
@@ -153,7 +153,7 @@ function getContentState(params: {
 
     return {
       title: `${categoryLabel} 里还没有内容`,
-      description: "换一个分类看看。",
+      description: null,
       icon: Folders,
     }
   }
@@ -177,7 +177,7 @@ function ContentStateView({ description, icon: Icon, title }: ContentState) {
           <Icon className={cn(title.startsWith("正在加载") ? "animate-spin" : undefined)} />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
+        {description ? <EmptyDescription>{description}</EmptyDescription> : null}
       </EmptyHeader>
     </Empty>
   )

@@ -59,9 +59,6 @@ function AdoptIdentityDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>接续已有身份</DialogTitle>
-          <DialogDescription>
-            只在当前目录里校验这个 ID。Git 仓库会先检查远端连通性；如果这个 ID 是刚同步过来的，先手动同步仓库再试。
-          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-2">

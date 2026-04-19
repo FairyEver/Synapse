@@ -49,9 +49,7 @@ function IdentityPanel() {
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
-            <p className="text-sm text-muted-foreground">
-              这是你在 Synapse 里的唯一身份凭证。请尽快备份到安全位置。各个仓库的提交署名可在下方"仓库"板块分别设置。
-            </p>
+            <p className="text-sm text-muted-foreground">请备份到安全位置。</p>
           </div>
 
           <div className="flex justify-start">

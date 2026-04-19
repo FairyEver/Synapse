@@ -1,6 +1,9 @@
 import MarkdownIt from "markdown-it"
 import markdownItContainer from "markdown-it-container"
 import hljs from "highlight.js"
+import { createRendererLogger } from "@/app-shell/logging"
+
+const logger = createRendererLogger("lib.markdown")
 
 // 注册常用语言
 import bash from "highlight.js/lib/languages/bash"
@@ -76,7 +79,7 @@ function highlightCode(code: string, language: string | undefined): string {
       const result = hljs.highlight(code, { language, ignoreIllegals: true })
       return result.value
     } catch {
-      // 高亮失败，返回普通转义
+      logger.warn("Failed to highlight code.", { language })
     }
   }
   return escapeHTML(code)
