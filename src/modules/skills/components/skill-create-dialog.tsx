@@ -23,6 +23,12 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -57,6 +63,8 @@ type SkillCreateDialogProps = {
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: CreateSkillPayload) => Promise<void> | void
   open: boolean
+  submitDisabled?: boolean
+  submitDisabledReason?: string | null
 }
 
 type DataTransferItemWithEntry = DataTransferItem & {
@@ -174,6 +182,8 @@ function SkillCreateDialog({
   onOpenChange,
   onSubmit,
   open,
+  submitDisabled = false,
+  submitDisabledReason = null,
 }: SkillCreateDialogProps) {
   const logger = useMemo(() => createRendererLogger("skills.create"), [])
   const categoryOptions = useMemo(() => getCategoryDefinitions("skill"), [])
@@ -380,9 +390,20 @@ function SkillCreateDialog({
                 >
                   取消
                 </Button>
-                <Button type="submit" disabled={isSubmitting || isCollectingFiles}>
-                  {isSubmitting ? "正在保存..." : mode === "create" ? "保存" : "保存修改"}
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button type="submit" disabled={isSubmitting || isCollectingFiles || submitDisabled}>
+                          {isSubmitting ? "正在保存..." : mode === "create" ? "保存" : "保存修改"}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {submitDisabled && submitDisabledReason ? (
+                      <TooltipContent>{submitDisabledReason}</TooltipContent>
+                    ) : null}
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </>
           )}

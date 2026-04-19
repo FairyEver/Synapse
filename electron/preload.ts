@@ -26,10 +26,14 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     update: "synapse:config:update",
   },
   identity: {
+    adoptExistingUserId: "synapse:identity:adopt-existing-user-id",
     generateNewId: "synapse:identity:generate-new-id",
-    getState: "synapse:identity:get-state",
-    replaceUserId: "synapse:identity:replace-user-id",
-    updateDisplayName: "synapse:identity:update-display-name",
+    getLocalState: "synapse:identity:get-local-state",
+  },
+  userProfile: {
+    getRepoState: "synapse:user-profile:get-repo-state",
+    listRepoProfiles: "synapse:user-profile:list-repo-profiles",
+    updateDisplayName: "synapse:user-profile:update-display-name",
   },
   log: {
     appended: "synapse:log:appended",
@@ -39,10 +43,12 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     write: "synapse:log:write",
   },
   repository: {
+    checkInitializationPreview: "synapse:repository:check-initialization-preview",
     chooseDirectory: "synapse:repository:choose-directory",
     flushPendingPushes: "synapse:repository:flush-pending-pushes",
     getPendingPushes: "synapse:repository:get-pending-pushes",
     getStates: "synapse:repository:get-states",
+    initializeStructure: "synapse:repository:initialize-structure",
     pendingPushesUpdated: "synapse:repository:pending-pushes-updated",
     runMaintenance: "synapse:repository:run-maintenance",
     sync: "synapse:repository:sync",
@@ -101,11 +107,21 @@ const synapseBridge: SynapseBridge = {
     update: (patch) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.update, patch),
   },
   identity: {
+    adoptExistingUserId: (userId, repoId) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.adoptExistingUserId, { repoId, userId }),
     generateNewId: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.generateNewId),
-    getState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.getState),
-    replaceUserId: (userId) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.replaceUserId, userId),
-    updateDisplayName: (displayName) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.updateDisplayName, displayName),
+    getLocalState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.getLocalState),
+  },
+  userProfile: {
+    getRepoState: (repoId) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.userProfile.getRepoState, { repoId }),
+    listRepoProfiles: (repoId) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.userProfile.listRepoProfiles, { repoId }),
+    updateDisplayName: (repoId, displayName) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.userProfile.updateDisplayName, {
+        displayName,
+        repoId,
+      }),
   },
   log: {
     export: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.export),
@@ -115,12 +131,19 @@ const synapseBridge: SynapseBridge = {
     write: (payload) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.log.write, payload),
   },
   repository: {
+    checkInitializationPreview: (repositoryUuid) =>
+      ipcRenderer.invoke(
+        SYNAPSE_PRELOAD_CHANNELS.repository.checkInitializationPreview,
+        repositoryUuid,
+      ),
     chooseDirectory: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.chooseDirectory),
     flushPendingPushes: (repositoryUuid) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.flushPendingPushes, repositoryUuid),
     getPendingPushes: (repositoryUuid) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.getPendingPushes, repositoryUuid),
     getStates: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.getStates),
+    initializeStructure: (repositoryUuid) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.initializeStructure, repositoryUuid),
     onPendingPushesUpdated: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.pendingPushesUpdated, listener),
     runMaintenance: (repositoryUuid) =>

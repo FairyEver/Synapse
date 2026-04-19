@@ -1,6 +1,7 @@
 import { type ReactNode, useMemo, useState } from "react"
-import { Copy, LoaderCircle } from "lucide-react"
-import { useIdentity } from "@/app-shell/identity-context"
+import { LoaderCircle } from "lucide-react"
+import { useAppConfig } from "@/app-shell/config"
+import { useLocalIdentity } from "@/app-shell/identity-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -32,16 +33,14 @@ function IdentityScreenShell({ children }: { children: ReactNode }) {
 }
 
 function IdentityGate({ children }: { children: ReactNode }) {
+  const { activeRepository } = useAppConfig()
   const {
+    adoptExistingUserId,
     error,
     generateNewId,
-    identityState,
+    localIdentityState,
     isReady,
-    replaceUserId,
-    updateDisplayName,
-  } = useIdentity()
-  const [draftDisplayName, setDraftDisplayName] = useState("")
-  const [hasCopied, setHasCopied] = useState(false)
+  } = useLocalIdentity()
   const [recoveryValue, setRecoveryValue] = useState("")
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -73,14 +72,14 @@ function IdentityGate({ children }: { children: ReactNode }) {
     )
   }
 
-  if (identityState?.status === "needs-recovery") {
+  if (localIdentityState?.status === "needs-recovery") {
     return (
       <IdentityScreenShell>
         <div className="flex flex-col gap-4">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <h1 className="text-xl font-medium text-foreground">身份 ID 无法读取</h1>
             <p className="text-sm text-muted-foreground">
-              检测到本地身份 ID 损坏。如果你之前备份过 ID，现在可以手动填回；否则可以生成一个新 ID 继续使用。
+              如果你备份过旧 ID，可以在当前目录里接续；否则可以生成一个新 ID。
             </p>
           </div>
 
@@ -117,8 +116,13 @@ function IdentityGate({ children }: { children: ReactNode }) {
               type="button"
               disabled={isSubmitting || Boolean(validateUserIdInput(recoveryValue))}
               onClick={() => {
+                if (!activeRepository) {
+                  setRecoveryError("先选择当前目录，再接续已有身份。")
+                  return
+                }
+
                 setIsSubmitting(true)
-                void replaceUserId(normalizedRecoveryValue)
+                void adoptExistingUserId(normalizedRecoveryValue, activeRepository.uuid)
                   .catch((recoveryFailure) => {
                     setRecoveryError(recoveryFailure instanceof Error ? recoveryFailure.message : "恢复身份失败。")
                   })
@@ -127,73 +131,13 @@ function IdentityGate({ children }: { children: ReactNode }) {
                   })
               }}
             >
-              手动填入
+              接续已有身份
             </Button>
           </div>
-        </div>
-      </IdentityScreenShell>
-    )
-  }
 
-  if (identityState?.status === "needs-onboarding") {
-    return (
-      <IdentityScreenShell>
-        <div className="flex flex-col gap-5">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-medium text-foreground">欢迎使用 Synapse</h1>
-            <p className="text-sm text-muted-foreground">这是你唯一的身份凭证，丢失后无法找回。</p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="identity-user-id">身份 ID</Label>
-            <div className="flex gap-2">
-              <Input
-                id="identity-user-id"
-                readOnly
-                value={identityState.identity.userId}
-                className="font-mono"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  void navigator.clipboard.writeText(identityState.identity.userId).then(() => {
-                    setHasCopied(true)
-                  })
-                }}
-              >
-                <Copy />
-                复制
-              </Button>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              请现在复制并备份到密码管理器或安全位置。
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="identity-display-name">显示名称</Label>
-            <Input
-              id="identity-display-name"
-              value={draftDisplayName}
-              onChange={(event) => setDraftDisplayName(event.target.value)}
-            />
-          </div>
-
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              disabled={!hasCopied || !draftDisplayName.trim() || isSubmitting}
-              onClick={() => {
-                setIsSubmitting(true)
-                void updateDisplayName(draftDisplayName).finally(() => {
-                  setIsSubmitting(false)
-                })
-              }}
-            >
-              我已经备份好了，继续使用
-            </Button>
-          </div>
+          {!activeRepository ? (
+            <p className="text-sm text-muted-foreground">当前没有激活目录，只能先生成新 ID。</p>
+          ) : null}
         </div>
       </IdentityScreenShell>
     )

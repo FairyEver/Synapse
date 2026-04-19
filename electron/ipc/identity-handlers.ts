@@ -9,18 +9,14 @@ function registerIdentityHandlers() {
     return
   }
 
-  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.identity.getState, async () => {
-    return userIdentityService.loadState()
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.identity.getLocalState, async () => {
+    return userIdentityService.loadLocalIdentity()
   })
 
   handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.identity.updateDisplayName,
-    async (_event, displayName: string) => userIdentityService.updateDisplayName(displayName),
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.identity.replaceUserId,
-    async (_event, userId: string) => userIdentityService.replaceUserId(userId),
+    SYNAPSE_IPC_CHANNELS.identity.adoptExistingUserId,
+    async (_event, args: { repoId: string; userId: string }) =>
+      userIdentityService.adoptExistingUserId(args.userId, args.repoId),
   )
 
   handleValidatedIpc(SYNAPSE_IPC_CHANNELS.identity.generateNewId, async () => {

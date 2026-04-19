@@ -1,5 +1,5 @@
 import { createMissingBridgeError, getSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseIdentityState } from "@/types/identity"
+import type { SynapseLocalIdentityState } from "@/types/identity"
 
 const DEFAULT_IDENTITY_BRIDGE_ERROR_MESSAGE =
   "当前页面没有加载 Synapse 的身份桥接。请确认你打开的是桌面应用窗口，而不是独立浏览器页面。"
@@ -10,37 +10,30 @@ function getIdentityBridge(): RendererIdentityBridge | undefined {
   return getSynapseBridge()?.identity
 }
 
-function readIdentityState(): Promise<SynapseIdentityState> {
+function readLocalIdentityState(): Promise<SynapseLocalIdentityState> {
   const bridge = getIdentityBridge()
 
   if (!bridge) {
     return Promise.reject(createMissingBridgeError(DEFAULT_IDENTITY_BRIDGE_ERROR_MESSAGE))
   }
 
-  return bridge.getState()
+  return bridge.getLocalState()
 }
 
-function updateIdentityDisplayName(displayName: string): Promise<SynapseIdentityState> {
+function adoptExistingIdentityUserId(
+  userId: string,
+  repoId: string,
+): Promise<SynapseLocalIdentityState> {
   const bridge = getIdentityBridge()
 
   if (!bridge) {
     return Promise.reject(createMissingBridgeError(DEFAULT_IDENTITY_BRIDGE_ERROR_MESSAGE))
   }
 
-  return bridge.updateDisplayName(displayName)
+  return bridge.adoptExistingUserId(userId, repoId)
 }
 
-function replaceIdentityUserId(userId: string): Promise<SynapseIdentityState> {
-  const bridge = getIdentityBridge()
-
-  if (!bridge) {
-    return Promise.reject(createMissingBridgeError(DEFAULT_IDENTITY_BRIDGE_ERROR_MESSAGE))
-  }
-
-  return bridge.replaceUserId(userId)
-}
-
-function generateNewIdentity(): Promise<SynapseIdentityState> {
+function generateNewIdentity(): Promise<SynapseLocalIdentityState> {
   const bridge = getIdentityBridge()
 
   if (!bridge) {
@@ -51,8 +44,7 @@ function generateNewIdentity(): Promise<SynapseIdentityState> {
 }
 
 export {
+  adoptExistingIdentityUserId,
   generateNewIdentity,
-  readIdentityState,
-  replaceIdentityUserId,
-  updateIdentityDisplayName,
+  readLocalIdentityState,
 }

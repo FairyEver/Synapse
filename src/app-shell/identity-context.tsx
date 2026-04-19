@@ -8,53 +8,99 @@ import {
   useRef,
   useState,
 } from "react"
+import { useAppConfig } from "@/app-shell/config"
 import {
+  adoptExistingIdentityUserId,
   generateNewIdentity,
-  readIdentityState,
-  replaceIdentityUserId,
-  updateIdentityDisplayName,
+  readLocalIdentityState,
 } from "@/app-shell/identity"
 import { createRendererLogger } from "@/app-shell/logging"
-import type { SynapseIdentityState } from "@/types/identity"
+import { useRepositoryManager } from "@/app-shell/repository"
+import {
+  listRepoProfiles,
+  readRepoProfileState,
+  updateRepoDisplayName,
+} from "@/app-shell/user-profile"
+import type {
+  SynapseLocalIdentityState,
+  SynapseRepoProfileState,
+  SynapseUserProfile,
+} from "@/types/identity"
 
 type IdentityContextValue = {
+  currentRepoProfileState: SynapseRepoProfileState | null
   error: string | null
-  identityState: SynapseIdentityState | null
   isReady: boolean
-  generateNewId: () => Promise<SynapseIdentityState>
-  refreshIdentity: () => Promise<SynapseIdentityState>
-  replaceUserId: (userId: string) => Promise<SynapseIdentityState>
-  updateDisplayName: (displayName: string) => Promise<SynapseIdentityState>
+  localIdentityState: SynapseLocalIdentityState | null
+  repoProfileMap: ReadonlyMap<string, SynapseUserProfile>
+  adoptExistingUserId: (userId: string, repoId: string) => Promise<SynapseLocalIdentityState>
+  generateNewId: () => Promise<SynapseLocalIdentityState>
+  refreshIdentity: () => Promise<SynapseLocalIdentityState>
+  refreshRepoProfileState: () => Promise<void>
+  updateCurrentRepoDisplayName: (displayName: string) => Promise<SynapseUserProfile>
 }
 
 const IdentityContext = createContext<IdentityContextValue | null>(null)
 const logger = createRendererLogger("app.identity")
+const EMPTY_PROFILE_MAP = new Map<string, SynapseUserProfile>()
 
 function IdentityProvider({ children }: { children: ReactNode }) {
-  const [identityState, setIdentityState] = useState<SynapseIdentityState | null>(null)
+  const { activeRepository } = useAppConfig()
+  const { operations, states } = useRepositoryManager()
+  const [localIdentityState, setLocalIdentityState] = useState<SynapseLocalIdentityState | null>(null)
+  const [currentRepoProfileState, setCurrentRepoProfileState] = useState<SynapseRepoProfileState | null>(null)
+  const [repoProfileMap, setRepoProfileMap] =
+    useState<ReadonlyMap<string, SynapseUserProfile>>(EMPTY_PROFILE_MAP)
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hasLoadedRef = useRef(false)
+  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] ?? null : null
+  const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] ?? null : null
 
   const refreshIdentity = useCallback(async () => {
-    const nextState = await readIdentityState()
+    const nextState = await readLocalIdentityState()
 
-    setIdentityState(nextState)
+    setLocalIdentityState(nextState)
     setError(null)
     setIsReady(true)
 
     return nextState
   }, [])
 
+  const refreshRepoProfileState = useCallback(async () => {
+    if (
+      !activeRepository
+      || activeRepositoryState?.status !== "ready"
+      || localIdentityState?.status !== "ready"
+    ) {
+      setCurrentRepoProfileState(null)
+      setRepoProfileMap(EMPTY_PROFILE_MAP)
+      return
+    }
+
+    const [nextRepoProfileState, nextRepoProfileMap] = await Promise.all([
+      readRepoProfileState(activeRepository.uuid),
+      listRepoProfiles(activeRepository.uuid),
+    ])
+
+    setCurrentRepoProfileState(nextRepoProfileState)
+    setRepoProfileMap(nextRepoProfileMap)
+    setError(null)
+  }, [
+    activeRepository,
+    activeRepositoryState?.status,
+    localIdentityState,
+  ])
+
   const applyIdentityUpdate = useCallback(
     async (
-      action: () => Promise<SynapseIdentityState>,
+      action: () => Promise<SynapseLocalIdentityState>,
       errorMessage: string,
     ) => {
       try {
         const nextState = await action()
 
-        setIdentityState(nextState)
+        setLocalIdentityState(nextState)
         setError(null)
         setIsReady(true)
 
@@ -82,20 +128,70 @@ function IdentityProvider({ children }: { children: ReactNode }) {
     })
   }, [refreshIdentity])
 
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    void refreshRepoProfileState().catch((loadError: unknown) => {
+      logger.error("Failed to refresh repository profile state.", loadError)
+      setError(loadError instanceof Error ? loadError.message : "加载仓库身份失败。")
+    })
+  }, [
+    activeRepository?.uuid,
+    activeRepositoryOperation?.completedAt,
+    activeRepositoryState?.status,
+    isReady,
+    localIdentityState?.status,
+    refreshRepoProfileState,
+  ])
+
+  const updateCurrentRepoDisplayName = useCallback(
+    async (displayName: string) => {
+      if (!activeRepository) {
+        throw new Error("当前还没有激活的本地目录。")
+      }
+
+      const nextProfile = await updateRepoDisplayName(activeRepository.uuid, displayName)
+
+      await refreshRepoProfileState()
+      return nextProfile
+    },
+    [activeRepository, refreshRepoProfileState],
+  )
+
   const value = useMemo<IdentityContextValue>(
     () => ({
+      currentRepoProfileState,
       error,
-      identityState,
       isReady,
+      localIdentityState,
+      repoProfileMap,
+      adoptExistingUserId: (userId, repoId) =>
+        applyIdentityUpdate(
+          () => adoptExistingIdentityUserId(userId, repoId),
+          "接续身份失败。",
+        ).then(async (nextState) => {
+          await refreshRepoProfileState()
+          return nextState
+        }),
       generateNewId: () =>
         applyIdentityUpdate(() => generateNewIdentity(), "生成新身份失败。"),
       refreshIdentity,
-      replaceUserId: (userId) =>
-        applyIdentityUpdate(() => replaceIdentityUserId(userId), "恢复身份失败。"),
-      updateDisplayName: (displayName) =>
-        applyIdentityUpdate(() => updateIdentityDisplayName(displayName), "保存显示名称失败。"),
+      refreshRepoProfileState,
+      updateCurrentRepoDisplayName,
     }),
-    [applyIdentityUpdate, error, identityState, isReady, refreshIdentity],
+    [
+      applyIdentityUpdate,
+      currentRepoProfileState,
+      error,
+      isReady,
+      localIdentityState,
+      refreshIdentity,
+      refreshRepoProfileState,
+      repoProfileMap,
+      updateCurrentRepoDisplayName,
+    ],
   )
 
   return <IdentityContext.Provider value={value}>{children}</IdentityContext.Provider>
@@ -111,4 +207,48 @@ function useIdentity(): IdentityContextValue {
   return context
 }
 
-export { IdentityProvider, useIdentity }
+function useLocalIdentity() {
+  const {
+    adoptExistingUserId,
+    error,
+    generateNewId,
+    isReady,
+    localIdentityState,
+    refreshIdentity,
+  } = useIdentity()
+
+  return {
+    adoptExistingUserId,
+    error,
+    generateNewId,
+    isReady,
+    localIdentityState,
+    refreshIdentity,
+  }
+}
+
+function useCurrentRepoProfile() {
+  const {
+    currentRepoProfileState,
+    refreshRepoProfileState,
+    updateCurrentRepoDisplayName,
+  } = useIdentity()
+
+  return {
+    currentRepoProfileState,
+    refreshRepoProfileState,
+    updateCurrentRepoDisplayName,
+  }
+}
+
+function useRepoProfileMap(): ReadonlyMap<string, SynapseUserProfile> {
+  return useIdentity().repoProfileMap
+}
+
+export {
+  IdentityProvider,
+  useCurrentRepoProfile,
+  useIdentity,
+  useLocalIdentity,
+  useRepoProfileMap,
+}

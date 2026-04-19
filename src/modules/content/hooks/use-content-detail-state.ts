@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { readDetail, readHistory, readHistoryVersion } from "@/app-shell/content"
+import { useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
+import { resolveDisplayName } from "@/lib/display-name"
 import type {
   SynapseContentDetail,
   SynapseContentHistoryEntry,
@@ -49,6 +51,7 @@ function useContentDetailState<T extends SynapseContentType>({
   refreshSignal = 0,
 }: UseContentDetailStateArgs<T>) {
   const logger = useMemo(() => createRendererLogger(logCategory), [logCategory])
+  const repoProfileMap = useRepoProfileMap()
   const contentId = item?.id ?? null
   const contentType = item?.type ?? null
   const [detail, setDetail] = useState<SynapseContentDetail<T> | null>(null)
@@ -220,17 +223,28 @@ function useContentDetailState<T extends SynapseContentType>({
   const historyEntries = useMemo(
     () => detail
       ? history.length > 0
-        ? history
+        ? history.map((entry) => ({
+            ...entry,
+            modifiedByDisplayName: resolveDisplayName(
+              entry.modifiedBy,
+              repoProfileMap,
+              entry.modifiedByDisplayName,
+            ),
+          }))
         : [{
             dirname: detail.latestHistoryDirname,
             modifiedAt: detail.modifiedAt,
             modifiedBy: detail.modifiedBy,
-            modifiedByDisplayName: detail.modifiedByDisplayName,
+            modifiedByDisplayName: resolveDisplayName(
+              detail.modifiedBy,
+              repoProfileMap,
+              detail.modifiedByDisplayName,
+            ),
             deleted: detail.deleted,
             isCurrent: true,
           }]
       : [],
-    [detail, history],
+    [detail, history, repoProfileMap],
   )
 
   return {

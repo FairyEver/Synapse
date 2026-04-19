@@ -1,7 +1,9 @@
 import { useState } from "react"
+import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
+import { DelayedConfirmAlertDialog } from "@/components/delayed-confirm-alert-dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +20,10 @@ import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseRepositoryConfig } from "@/types/config"
-import type { SynapseRepositoryLocalState } from "@/types/repository"
+import type {
+  SynapseRepositoryInitializationPreview,
+  SynapseRepositoryLocalState,
+} from "@/types/repository"
 
 const logger = createRendererLogger("settings.repositories")
 
@@ -56,11 +61,24 @@ function RepositoryListEditor({
   activeRepoUuid,
   onSave,
 }: RepositoryListEditorProps) {
-  const { hasRepositoryBridge, operations, states, syncRepository } = useRepositoryManager()
+  const {
+    checkInitializationPreview,
+    hasRepositoryBridge,
+    initializeStructure,
+    operations,
+    states,
+    syncRepository,
+  } = useRepositoryManager()
+  const { currentRepoProfileState } = useCurrentRepoProfile()
   const { promise } = useAppNotifications()
   const [formError, setFormError] = useState<string | null>(null)
   const [manualPath, setManualPath] = useState("")
   const [pendingRemovalUuid, setPendingRemovalUuid] = useState<string | null>(null)
+  const [initializingUuid, setInitializingUuid] = useState<string | null>(null)
+  const [initializationTarget, setInitializationTarget] = useState<{
+    preview: SynapseRepositoryInitializationPreview
+    repository: SynapseRepositoryConfig
+  } | null>(null)
 
   const saveRepository = async (localPath: string) => {
     const nextLocalPath = localPath.trim()
@@ -134,6 +152,56 @@ function RepositoryListEditor({
     await onSave(nextRepositories, nextActiveRepoUuid, removedActiveRepository)
   }
 
+  const runInitialization = async (repository: SynapseRepositoryConfig) => {
+    setInitializingUuid(repository.uuid)
+
+    try {
+      await promise(
+        () => initializeStructure(repository.uuid),
+        {
+          loading: "正在初始化目录...",
+          success: (result) => result.message ?? "初始化完成。",
+          error: (error) => error instanceof Error ? error.message : "初始化失败。",
+        },
+      )
+    } catch (error) {
+      logger.error("Repository initialization failed from settings.", {
+        error,
+        repositoryUuid: repository.uuid,
+      })
+    } finally {
+      setInitializingUuid(null)
+      setInitializationTarget(null)
+    }
+  }
+
+  const handleInitializeRepository = async (repository: SynapseRepositoryConfig) => {
+    try {
+      const preview = await checkInitializationPreview(repository.uuid)
+
+      if (preview.isEmpty) {
+        await runInitialization(repository)
+        return
+      }
+
+      setInitializationTarget({
+        preview,
+        repository,
+      })
+    } catch (error) {
+      logger.error("Failed to load repository initialization preview.", {
+        error,
+        repositoryUuid: repository.uuid,
+      })
+      setFormError(error instanceof Error ? error.message : "读取初始化预览失败。")
+    }
+  }
+
+  const previewEntries = initializationTarget?.preview.nonGitEntries ?? []
+  const previewList = previewEntries.slice(0, 5)
+  const remainingPreviewCount = Math.max(previewEntries.length - previewList.length, 0)
+  const isOnboardingBlocked = currentRepoProfileState?.status === "needs-onboarding"
+
   return (
     <>
       <AlertDialog
@@ -168,6 +236,43 @@ function RepositoryListEditor({
         </AlertDialogContent>
       </AlertDialog>
 
+      <DelayedConfirmAlertDialog
+        open={initializationTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInitializationTarget(null)
+          }
+        }}
+        title="警告"
+        description={(
+          <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+            <p>
+              初始化会清空该目录下除 <code>.git/</code> 目录之外的所有内容，包括
+              <code>.gitignore</code> 等 Git 配置文件，且无法撤销。
+            </p>
+            <p className="break-all">
+              目录：{initializationTarget?.repository.localPath}
+            </p>
+            <div className="flex flex-col gap-1">
+              <p>检测到目录中存在以下内容：</p>
+              {previewList.map((entryName) => (
+                <p key={entryName}>· {entryName}</p>
+              ))}
+              {remainingPreviewCount > 0 ? (
+                <p>... 等 {remainingPreviewCount} 项</p>
+              ) : null}
+            </div>
+          </div>
+        )}
+        confirmLabel="确定初始化"
+        delaySeconds={3}
+        onConfirm={() => {
+          if (initializationTarget) {
+            void runInitialization(initializationTarget.repository)
+          }
+        }}
+      />
+
       <SettingsGroup>
         {repositories.length > 0 ? (
           <div className="flex flex-col divide-y divide-border/60">
@@ -175,8 +280,9 @@ function RepositoryListEditor({
               const isActive = repository.uuid === activeRepoUuid
               const operation = operations[repository.uuid]
               const repositoryState = states[repository.uuid]
-              const isBusy = Boolean(operation?.isRunning)
+              const isBusy = Boolean(operation?.isRunning) || initializingUuid === repository.uuid
               const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
+              const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
 
               return (
                 <div key={repository.uuid} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
@@ -267,6 +373,18 @@ function RepositoryListEditor({
                     >
                       {isActive ? "当前目录" : "切换为当前目录"}
                     </Button>
+                    {canInitialize ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isBusy}
+                        onClick={() => {
+                          void handleInitializeRepository(repository)
+                        }}
+                      >
+                        {initializingUuid === repository.uuid ? "初始化中..." : "初始化"}
+                      </Button>
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="sm"

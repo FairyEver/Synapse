@@ -1,20 +1,33 @@
-export type SynapseUserIdentity = {
-  schemaVersion: 1
+export type SynapseLocalIdentity = {
+  schemaVersion: 2
   userId: string
-  displayName: string
   generatedAt: string
 }
 
-export type SynapseIdentityState =
+export type SynapseLocalIdentityState =
   | {
       status: "ready"
-      identity: SynapseUserIdentity
-    }
-  | {
-      status: "needs-onboarding"
-      identity: SynapseUserIdentity
+      identity: SynapseLocalIdentity
     }
   | {
       status: "needs-recovery"
       invalidUserId: string | null
+    }
+
+export type SynapseUserProfile = {
+  schemaVersion: 1
+  userId: string
+  displayName: string
+  updatedAt: string
+}
+
+export type SynapseRepoProfileState =
+  | {
+      status: "ready"
+      profile: SynapseUserProfile
+    }
+  | {
+      status: "needs-onboarding"
+      repoId: string
+      userId: string
     }

@@ -21,10 +21,14 @@ export const SYNAPSE_IPC_CHANNELS = {
     update: "synapse:config:update",
   },
   identity: {
+    adoptExistingUserId: "synapse:identity:adopt-existing-user-id",
     generateNewId: "synapse:identity:generate-new-id",
-    getState: "synapse:identity:get-state",
-    replaceUserId: "synapse:identity:replace-user-id",
-    updateDisplayName: "synapse:identity:update-display-name",
+    getLocalState: "synapse:identity:get-local-state",
+  },
+  userProfile: {
+    getRepoState: "synapse:user-profile:get-repo-state",
+    listRepoProfiles: "synapse:user-profile:list-repo-profiles",
+    updateDisplayName: "synapse:user-profile:update-display-name",
   },
   log: {
     appended: "synapse:log:appended",
@@ -34,10 +38,12 @@ export const SYNAPSE_IPC_CHANNELS = {
     write: "synapse:log:write",
   },
   repository: {
+    checkInitializationPreview: "synapse:repository:check-initialization-preview",
     chooseDirectory: "synapse:repository:choose-directory",
     flushPendingPushes: "synapse:repository:flush-pending-pushes",
     getPendingPushes: "synapse:repository:get-pending-pushes",
     getStates: "synapse:repository:get-states",
+    initializeStructure: "synapse:repository:initialize-structure",
     pendingPushesUpdated: "synapse:repository:pending-pushes-updated",
     runMaintenance: "synapse:repository:run-maintenance",
     sync: "synapse:repository:sync",

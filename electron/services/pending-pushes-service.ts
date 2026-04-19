@@ -1,6 +1,7 @@
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapsePendingPushEntry, SynapsePendingPushState } from "../../src/types/repository"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
+import { repositoryStore } from "./repository-store"
 
 type PendingPushInsertParams = {
   action: string
@@ -41,7 +42,20 @@ function mapPendingPushRow(row: Record<string, unknown>): SynapsePendingPushEntr
 }
 
 class PendingPushesService {
+  private async canUsePendingPushes(repository: SynapseRepositoryConfig): Promise<boolean> {
+    const repositoryState = await repositoryStore.getRepositoryState(repository)
+
+    return repositoryState.status === "ready" && repositoryState.isGitRepository
+  }
+
   async readState(repository: SynapseRepositoryConfig): Promise<SynapsePendingPushState> {
+    if (!(await this.canUsePendingPushes(repository))) {
+      return {
+        count: 0,
+        items: [],
+      }
+    }
+
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
       const rows = database.prepare(`
         SELECT *
@@ -56,6 +70,8 @@ class PendingPushesService {
         count: items.length,
         items,
       }
+    }, {
+      includePendingPushes: true,
     })
   }
 
@@ -63,6 +79,13 @@ class PendingPushesService {
     repository: SynapseRepositoryConfig,
     params: PendingPushInsertParams,
   ): Promise<SynapsePendingPushState> {
+    if (!(await this.canUsePendingPushes(repository))) {
+      return {
+        count: 0,
+        items: [],
+      }
+    }
+
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
       database.prepare(`
         INSERT INTO pending_pushes (
@@ -95,11 +118,20 @@ class PendingPushesService {
         count: items.length,
         items,
       }
+    }, {
+      includePendingPushes: true,
     })
   }
 
   async clear(repository: SynapseRepositoryConfig, ids?: number[]): Promise<SynapsePendingPushState> {
     const targetIds = getTargetIds(ids)
+
+    if (!(await this.canUsePendingPushes(repository))) {
+      return {
+        count: 0,
+        items: [],
+      }
+    }
 
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
       if (!targetIds) {
@@ -126,6 +158,8 @@ class PendingPushesService {
         count: items.length,
         items,
       }
+    }, {
+      includePendingPushes: true,
     })
   }
 
@@ -135,6 +169,13 @@ class PendingPushesService {
     ids?: number[],
   ): Promise<SynapsePendingPushState> {
     const targetIds = getTargetIds(ids)
+
+    if (!(await this.canUsePendingPushes(repository))) {
+      return {
+        count: 0,
+        items: [],
+      }
+    }
 
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
       const placeholders = targetIds?.map(() => "?").join(", ")
@@ -164,6 +205,8 @@ class PendingPushesService {
         count: items.length,
         items,
       }
+    }, {
+      includePendingPushes: true,
     })
   }
 

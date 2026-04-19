@@ -1,4 +1,4 @@
-export type SynapseRepositoryOperationKind = "sync" | "push" | "maintenance"
+export type SynapseRepositoryOperationKind = "sync" | "push" | "maintenance" | "initialize"
 
 export type SynapseRepositoryLocalStatus = "missing" | "ready"
 
@@ -31,6 +31,18 @@ export type SynapseRepositoryOperationResult = {
   completedAt: string
   message?: string
   pendingPushCount?: number
+}
+
+export type SynapseRepositoryInitializationPreview = {
+  isEmpty: boolean
+  nonGitEntries: string[]
+}
+
+export type SynapseRepositoryInitializationResult = {
+  initializedAt: string
+  message?: string
+  pendingPushCount?: number
+  repository: SynapseRepositoryLocalState
 }
 
 export type SynapsePendingPushEntry = {

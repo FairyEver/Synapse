@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process"
 import { getAllContentTypeIds } from "../../src/config/content-types"
+import { resolveDisplayName } from "../../src/lib/display-name"
 import { getContentDir } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "../../src/types/content"
 import { contentHistoryService } from "./content-history-service"
 import { createMainLogger } from "./log-store"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
+import { userProfileService } from "./user-profile-service"
 
 const LAST_SYNCED_GIT_SHA_KEY = "last_synced_git_sha"
 const logger = createMainLogger("service.content-index")
@@ -15,13 +17,20 @@ type ChangedContentKey = {
   contentType: SynapseContentType
 }
 
-function toDatabaseRow(summary: SynapseContentMeta) {
+function toDatabaseRow(
+  summary: SynapseContentMeta,
+  profileMap: Awaited<ReturnType<typeof userProfileService.listRepoProfiles>>,
+) {
   return {
     attachmentCount: summary.attachmentCount,
     category: summary.category,
     createdAt: summary.createdAt,
     createdBy: summary.createdBy,
-    createdByDisplayName: summary.createdByDisplayName,
+    createdByDisplayName: resolveDisplayName(
+      summary.createdBy,
+      profileMap,
+      summary.createdByDisplayName,
+    ),
     deleted: summary.deleted ? 1 : 0,
     description: summary.description,
     icon: summary.icon,
@@ -30,7 +39,11 @@ function toDatabaseRow(summary: SynapseContentMeta) {
     latestHistoryDirname: summary.latestHistoryDirname,
     modifiedAt: summary.modifiedAt,
     modifiedBy: summary.modifiedBy,
-    modifiedByDisplayName: summary.modifiedByDisplayName,
+    modifiedByDisplayName: resolveDisplayName(
+      summary.modifiedBy,
+      profileMap,
+      summary.modifiedByDisplayName,
+    ),
     title: summary.title,
     type: summary.type,
   }
@@ -154,6 +167,12 @@ function collectChangedContentKeys(
   return Array.from(map.values())
 }
 
+function hasUserProfileChanges(diffOutput: string): boolean {
+  return diffOutput
+    .split(/\r?\n/)
+    .some((line) => line.trim().startsWith("users/"))
+}
+
 function resolveContentTypeByDirectoryName(
   repository: SynapseRepositoryConfig,
   directoryName: string,
@@ -208,6 +227,7 @@ class ContentIndexService {
       getAllContentTypeIds().map((contentType) => contentHistoryService.listContent(repository, contentType)),
     )
     const currentHead = await this.readHeadSha(repository)
+    const profileMap = await userProfileService.listRepoProfiles(repository.uuid)
 
     await withRepositoryCacheDatabase(repository.uuid, (database) => {
       database.exec("DELETE FROM content_index")
@@ -236,7 +256,7 @@ class ContentIndexService {
       `)
 
       for (const item of allContent.flat()) {
-        const row = toDatabaseRow(item)
+        const row = toDatabaseRow(item, profileMap)
 
         upsertStatement.run(
           row.id,
@@ -263,6 +283,15 @@ class ContentIndexService {
         VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(LAST_SYNCED_GIT_SHA_KEY, currentHead ?? "")
+    })
+  }
+
+  async clearIndex(repository: SynapseRepositoryConfig): Promise<void> {
+    await withRepositoryCacheDatabase(repository.uuid, (database) => {
+      database.exec(`
+        DELETE FROM content_index;
+        DELETE FROM index_meta;
+      `)
     })
   }
 
@@ -305,7 +334,13 @@ class ContentIndexService {
         return
       }
 
+      if (hasUserProfileChanges(diffOutput ?? "")) {
+        shouldRebuild = true
+        return
+      }
+
       const changedContentKeys = collectChangedContentKeys(repository, diffOutput ?? "")
+      const profileMap = await userProfileService.listRepoProfiles(repository.uuid)
 
       if (changedContentKeys.length === 0) {
         database.prepare(`
@@ -356,7 +391,7 @@ class ContentIndexService {
           continue
         }
 
-        const row = toDatabaseRow(summary)
+        const row = toDatabaseRow(summary, profileMap)
 
         upsertStatement.run(
           row.id,

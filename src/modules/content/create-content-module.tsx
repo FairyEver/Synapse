@@ -1,6 +1,7 @@
 import { type ComponentType, useMemo } from "react"
 import { createContent } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
+import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
@@ -15,6 +16,8 @@ type ContentModuleConfig<T extends SynapseContentType> = {
     open: boolean
     onOpenChange: (open: boolean) => void
     onSubmit: (payload: SynapseCreateContentPayload<T>) => void
+    submitDisabled?: boolean
+    submitDisabledReason?: string | null
   }>
   DetailDialog: ComponentType<{
     item: SynapseContentMeta<T> | null
@@ -44,6 +47,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
   }: ContentModuleProps) {
     const logger = useMemo(() => createRendererLogger(config.contentType), [config.contentType])
     const { activeRepository } = useAppConfig()
+    const { currentRepoProfileState } = useCurrentRepoProfile()
     const { promise } = useAppNotifications()
     const { waitForBackgroundPush } = useRepositoryManager()
     const {
@@ -92,6 +96,11 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       })
     }
 
+    const submitDisabledReason =
+      currentRepoProfileState?.status === "needs-onboarding"
+        ? "请先完成当前目录的身份设置"
+        : null
+
     return (
       <>
         <ContentBrowserPage
@@ -115,6 +124,8 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           open={isCreateDialogOpen}
           onOpenChange={setIsCreateDialogOpen}
           onSubmit={handleSubmit}
+          submitDisabled={submitDisabledReason !== null}
+          submitDisabledReason={submitDisabledReason}
         />
       </>
     )

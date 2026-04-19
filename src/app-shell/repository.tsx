@@ -12,6 +12,8 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type {
+  SynapseRepositoryInitializationPreview,
+  SynapseRepositoryInitializationResult,
   SynapsePendingPushState,
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationKind,
@@ -28,6 +30,12 @@ type RepositoryOperationState = {
 }
 
 type RepositoryManagerContextValue = {
+  checkInitializationPreview: (
+    repositoryUuid: string,
+  ) => Promise<SynapseRepositoryInitializationPreview>
+  initializeStructure: (
+    repositoryUuid: string,
+  ) => Promise<SynapseRepositoryInitializationResult>
   hasRepositoryBridge: boolean
   operations: Record<string, RepositoryOperationState>
   pendingPushes: Record<string, SynapsePendingPushState>
@@ -72,6 +80,8 @@ function getPreparingStatusText(operation: SynapseRepositoryOperationKind): stri
   switch (operation) {
     case "push":
       return "正在准备推送..."
+    case "initialize":
+      return "正在准备初始化..."
     case "maintenance":
       return "正在准备整理..."
     default:
@@ -83,6 +93,8 @@ function getCompletedStatusText(operation: SynapseRepositoryOperationKind): stri
   switch (operation) {
     case "push":
       return "同步完成。"
+    case "initialize":
+      return "初始化完成。"
     case "maintenance":
       return "整理完成。"
     default:
@@ -233,6 +245,53 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       }))
     },
     [],
+  )
+
+  const checkInitializationPreview = useCallback(
+    async (repositoryUuid: string) => {
+      const bridge = getSynapseBridge()
+
+      if (!bridge) {
+        throw new Error("当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。")
+      }
+
+      return bridge.repository.checkInitializationPreview(repositoryUuid)
+    },
+    [],
+  )
+
+  const initializeStructure = useCallback(
+    async (repositoryUuid: string) => {
+      const bridge = getSynapseBridge()
+
+      if (!bridge) {
+        throw new Error("当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。")
+      }
+
+      const result = await bridge.repository.initializeStructure(repositoryUuid)
+
+      setStates((currentStates) => ({
+        ...currentStates,
+        [repositoryUuid]: result.repository,
+      }))
+      setOperations((currentOperations) => ({
+        ...currentOperations,
+        [repositoryUuid]: createOperationState({
+          ...currentOperations[repositoryUuid],
+          operation: "initialize",
+          isRunning: false,
+          statusText: result.message ?? "初始化完成。",
+          percent: 100,
+          error: null,
+          completedAt: result.initializedAt,
+        }),
+      }))
+
+      await refreshPendingPushes(repositoryUuid)
+
+      return result
+    },
+    [refreshPendingPushes],
   )
 
   useEffect(() => {
@@ -427,6 +486,8 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<RepositoryManagerContextValue>(
     () => ({
+      checkInitializationPreview,
+      initializeStructure,
       hasRepositoryBridge,
       operations,
       pendingPushes,
@@ -439,7 +500,9 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       refreshRepositoryStates,
     }),
     [
+      checkInitializationPreview,
       hasRepositoryBridge,
+      initializeStructure,
       operations,
       pendingPushes,
       refreshPendingPushes,

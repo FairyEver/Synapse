@@ -7,6 +7,7 @@ import { registerIdentityHandlers } from "./ipc/identity-handlers"
 import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
 import { registerUpdateHandlers } from "./ipc/update-handlers"
+import { registerUserProfileHandlers } from "./ipc/user-profile-handlers"
 import { configStore } from "./services/config-store"
 import { contentSubmissionService } from "./services/content-submission-service"
 import { createMainLogger } from "./services/log-store"
@@ -99,6 +100,7 @@ if (!gotSingleInstanceLock) {
     registerLogHandlers()
     registerConfigHandlers()
     registerIdentityHandlers()
+    registerUserProfileHandlers()
     registerRepositoryHandlers()
     registerUpdateHandlers()
     await configStore.load()

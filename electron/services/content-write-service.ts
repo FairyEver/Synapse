@@ -20,7 +20,6 @@ import type {
   SynapseUpdateRulePayload,
   SynapseUpdateSkillPayload,
 } from "../../src/types/content"
-import type { SynapseUserIdentity } from "../../src/types/identity"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import {
   CONTENT_ATTACHMENTS_FILE_NAME,
@@ -38,9 +37,14 @@ import { repositoryStore } from "./repository-store"
 const SNAPSHOT_FILE_NAME = "snapshot.json"
 const logger = createMainLogger("service.content-write")
 
+type SynapseContentAuthor = {
+  displayName: string
+  userId: string
+}
+
 type ActiveRepositoryWriteContext = {
   gitRootPath: string
-  identity: SynapseUserIdentity
+  identity: SynapseContentAuthor
   repository: SynapseRepositoryConfig
 }
 
@@ -89,7 +93,7 @@ function buildHistoryDirname(userId: string, at: Date): string {
 function createMetaRecord(
   contentId: string,
   contentType: SynapseContentType,
-  identity: SynapseUserIdentity,
+  identity: SynapseContentAuthor,
   createdAt: string,
 ): SynapseContentMetaRecord {
   return {
@@ -104,7 +108,7 @@ function createMetaRecord(
 
 function createSnapshotRecord(
   payload: ContentCreatePayload | ContentUpdatePayload,
-  identity: SynapseUserIdentity,
+  identity: SynapseContentAuthor,
   modifiedAt: string,
   deleted: boolean,
 ): SynapseContentSnapshotRecord {
@@ -174,7 +178,7 @@ async function stageHistoryDirectory(
 }
 
 async function getActiveRepositoryWriteContext(
-  identity: SynapseUserIdentity,
+  identity: SynapseContentAuthor,
 ): Promise<ActiveRepositoryWriteContext> {
   const config = await configStore.load()
   const repository = getActiveRepositoryConfig(config)
@@ -275,7 +279,7 @@ async function resolveAttachmentRecords(
 class ContentWriteService {
   async createContent(
     request: SynapseCreateContentRequest,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     assertRequiredCreateFields(request.payload)
 
@@ -288,7 +292,7 @@ class ContentWriteService {
 
   async updateContent(
     request: SynapseUpdateContentRequest,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     assertRequiredCreateFields(request.payload)
 
@@ -301,7 +305,7 @@ class ContentWriteService {
 
   async createRule(
     payload: SynapseCreateRulePayload,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     return this.createContent({
       contentType: "rule",
@@ -311,7 +315,7 @@ class ContentWriteService {
 
   async createSkill(
     payload: SynapseCreateSkillPayload,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     return this.createContent({
       contentType: "skill",
@@ -321,7 +325,7 @@ class ContentWriteService {
 
   async updateRule(
     payload: SynapseUpdateRulePayload,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     return this.updateContent({
       contentType: "rule",
@@ -331,7 +335,7 @@ class ContentWriteService {
 
   async updateSkill(
     payload: SynapseUpdateSkillPayload,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     return this.updateContent({
       contentType: "skill",
@@ -342,7 +346,7 @@ class ContentWriteService {
   async deleteContent(
     contentType: SynapseContentType,
     contentId: string,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     const context = await getActiveRepositoryWriteContext(identity)
     const baseline = await contentHistoryService.readCurrentDetail(
@@ -393,7 +397,7 @@ class ContentWriteService {
   async readLatestHistoryDirname(
     contentType: SynapseContentType,
     contentId: string,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<string | null> {
     const context = await getActiveRepositoryWriteContext(identity)
     const summary = await contentHistoryService.readCurrentSummary(
@@ -408,7 +412,7 @@ class ContentWriteService {
   private async createContentInternal(
     contentType: SynapseContentType,
     payload: ContentCreatePayload,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
   ): Promise<ContentWriteResult> {
     const context = await getActiveRepositoryWriteContext(identity)
     const contentId = randomUUID().replace(/-/g, "")
@@ -465,7 +469,7 @@ class ContentWriteService {
     contentType: SynapseContentType,
     contentId: string,
     payload: ContentUpdatePayload,
-    identity: SynapseUserIdentity,
+    identity: SynapseContentAuthor,
     deleted: boolean,
   ): Promise<ContentWriteResult> {
     const context = await getActiveRepositoryWriteContext(identity)

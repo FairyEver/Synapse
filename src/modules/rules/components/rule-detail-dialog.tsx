@@ -6,6 +6,7 @@ import {
   updateContent,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
+import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { getCategoryLabel } from "@/lib/content-categories"
+import { resolveDisplayName } from "@/lib/display-name"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
@@ -103,6 +105,8 @@ function RuleDetailDialog({
   refreshSignal = 0,
 }: RuleDetailDialogProps) {
   const logger = useMemo(() => createRendererLogger("rules.detail"), [])
+  const { currentRepoProfileState } = useCurrentRepoProfile()
+  const repoProfileMap = useRepoProfileMap()
   const { activeRepository } = useAppConfig()
   const { error, promise } = useAppNotifications()
   const { waitForBackgroundPush } = useRepositoryManager()
@@ -146,6 +150,11 @@ function RuleDetailDialog({
   const resolvedItem = detail ?? item
   const deleteTarget = detail ?? item
   const categoryLabel = getCategoryLabel(item.type, resolvedItem.category)
+  const authorLabel = resolveDisplayName(
+    resolvedItem.createdBy,
+    repoProfileMap,
+    resolvedItem.createdByDisplayName,
+  )
 
   const handleSave = (payload: CreateRulePayload, force = false) => {
     if (!detail) {
@@ -346,7 +355,7 @@ function RuleDetailDialog({
 
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <ContentItemMeta
-                  author={resolvedItem.createdByDisplayName || "未命名用户"}
+                  author={authorLabel}
                   category={categoryLabel}
                   description={resolvedItem.description}
                   title={resolvedItem.title}
@@ -422,6 +431,12 @@ function RuleDetailDialog({
           open={isEditOpen}
           onOpenChange={setIsEditOpen}
           onSubmit={(payload) => handleSave(payload)}
+          submitDisabled={currentRepoProfileState?.status === "needs-onboarding"}
+          submitDisabledReason={
+            currentRepoProfileState?.status === "needs-onboarding"
+              ? "请先完成当前目录的身份设置"
+              : null
+          }
         />
       ) : null}
     </>

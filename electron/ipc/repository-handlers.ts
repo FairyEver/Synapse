@@ -9,6 +9,7 @@ import { contentSubmissionService } from "../services/content-submission-service
 import { repositoryGitService } from "../services/repository-git-service"
 import { createMainLogger } from "../services/log-store"
 import { repositoryStore } from "../services/repository-store"
+import { repositoryStructureService } from "../services/repository-structure-service"
 
 let handlersRegistered = false
 const logger = createMainLogger("ipc.repository")
@@ -51,10 +52,48 @@ function registerRepositoryHandlers() {
   })
 
   handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.repository.checkInitializationPreview,
+    async (_event, repositoryUuid: string) => {
+      const repository = await resolveRepositoryConfig(repositoryUuid)
+      return repositoryStructureService.checkInitializationPreview(repository)
+    },
+  )
+
+  handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.repository.getPendingPushes,
     async (_event, repositoryUuid: string) => {
       const repository = await resolveRepositoryConfig(repositoryUuid)
       return contentSubmissionService.readPendingPushState(repository)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.repository.initializeStructure,
+    async (event, repositoryUuid: string) => {
+      const repository = await resolveRepositoryConfig(repositoryUuid)
+
+      sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.progress, {
+        repositoryUuid,
+        operation: "initialize",
+        statusText: "正在初始化仓库...",
+        percent: 0,
+      })
+
+      const result = await repositoryStructureService.initializeStructure(repository)
+      const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
+
+      sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.updated, {
+        repositoryUuid,
+        operation: "initialize",
+        completedAt: result.initializedAt,
+        message: result.message,
+      })
+      sendToRenderer(event.sender, SYNAPSE_IPC_CHANNELS.repository.pendingPushesUpdated, {
+        repositoryUuid,
+        pendingPushes,
+      })
+
+      return result
     },
   )
 

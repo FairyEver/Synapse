@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { RepoOnboardingDialog } from "@/app-shell/components/repo-onboarding-dialog"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
 
@@ -17,6 +18,7 @@ function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) 
       data-window-drag-context={isMacDesktop ? "true" : undefined}
       className="h-screen overflow-hidden bg-muted/30"
     >
+      <RepoOnboardingDialog />
       <div className="flex h-full flex-col">
         <header className="shrink-0">
           <div

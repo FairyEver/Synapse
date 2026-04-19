@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
+import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
 import {
@@ -31,6 +32,7 @@ import {
   resolveCategoryViewId,
   SYNAPSE_ALL_CATEGORY_ID,
 } from "@/lib/content-categories"
+import { resolveDisplayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
@@ -211,7 +213,12 @@ function ContentListCard({
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
-  const authorLabel = item.createdByDisplayName || "未命名用户"
+  const repoProfileMap = useRepoProfileMap()
+  const authorLabel = resolveDisplayName(
+    item.createdBy,
+    repoProfileMap,
+    item.createdByDisplayName,
+  )
 
   return (
     <div
@@ -262,6 +269,7 @@ function ContentBrowserPage({
   const definition = getContentTypeDefinition(contentType)
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
+  const { currentRepoProfileState } = useCurrentRepoProfile()
   const { states } = useRepositoryManager()
   const [contentRefreshSignal, setContentRefreshSignal] = useState(0)
   const catalogRefreshSignal = refreshSignal + contentRefreshSignal
@@ -282,7 +290,9 @@ function ContentBrowserPage({
         : "missing"
   const canBrowseContent = repositoryStatus === "ready"
   const canCreateContent =
-    canBrowseContent && Boolean(activeRepositoryState?.isGitRepository)
+    canBrowseContent
+    && Boolean(activeRepositoryState?.isGitRepository)
+    && currentRepoProfileState?.status !== "needs-onboarding"
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
 
   useEffect(() => {
@@ -388,6 +398,8 @@ function ContentBrowserPage({
       ? "正在检查目录状态..."
       : repositoryStatus === "missing"
         ? "当前目录不存在，不能新建"
+        : currentRepoProfileState?.status === "needs-onboarding"
+          ? "请先完成当前目录的身份设置"
         : !activeRepositoryState?.isGitRepository
           ? "当前目录不是 Git 仓库，不能新建"
           : `新建 ${definition.singularLabel}`

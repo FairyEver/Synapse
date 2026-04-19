@@ -15,14 +15,14 @@ installRendererLogForwarding()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <IdentityProvider>
-      <AppConfigProvider>
-        <RepositoryManagerProvider>
+    <AppConfigProvider>
+      <RepositoryManagerProvider>
+        <IdentityProvider>
           <AppNotificationsProvider>
             <App />
           </AppNotificationsProvider>
-        </RepositoryManagerProvider>
-      </AppConfigProvider>
-    </IdentityProvider>
+        </IdentityProvider>
+      </RepositoryManagerProvider>
+    </AppConfigProvider>
   </StrictMode>,
 )

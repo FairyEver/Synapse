@@ -7,9 +7,14 @@ function getRepositoryCacheDatabasePath(repositoryUuid: string): string {
   return path.join(app.getPath("userData"), "content-index", `${repositoryUuid}.db`)
 }
 
+type RepositoryCacheSchemaOptions = {
+  includePendingPushes?: boolean
+}
+
 async function withRepositoryCacheDatabase<T>(
   repositoryUuid: string,
   callback: (database: DatabaseSync) => Promise<T> | T,
+  options: RepositoryCacheSchemaOptions = {},
 ): Promise<T> {
   const databasePath = getRepositoryCacheDatabasePath(repositoryUuid)
 
@@ -18,14 +23,17 @@ async function withRepositoryCacheDatabase<T>(
   const database = new DatabaseSync(databasePath)
 
   try {
-    ensureRepositoryCacheSchema(database)
+    ensureRepositoryCacheSchema(database, options)
     return await callback(database)
   } finally {
     database.close()
   }
 }
 
-function ensureRepositoryCacheSchema(database: DatabaseSync): void {
+function ensureRepositoryCacheSchema(
+  database: DatabaseSync,
+  options: RepositoryCacheSchemaOptions,
+): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS content_index (
       id TEXT PRIMARY KEY,
@@ -52,22 +60,26 @@ function ensureRepositoryCacheSchema(database: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_content_index_type_deleted
       ON content_index(type, deleted);
 
-    CREATE TABLE IF NOT EXISTS pending_pushes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      commit_hash TEXT,
-      action TEXT,
-      target_id TEXT,
-      title TEXT,
-      created_at TEXT,
-      retry_count INTEGER DEFAULT 0,
-      last_error TEXT
-    );
-
     CREATE TABLE IF NOT EXISTS index_meta (
       key TEXT PRIMARY KEY,
       value TEXT
     );
   `)
+
+  if (options.includePendingPushes) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS pending_pushes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        commit_hash TEXT,
+        action TEXT,
+        target_id TEXT,
+        title TEXT,
+        created_at TEXT,
+        retry_count INTEGER DEFAULT 0,
+        last_error TEXT
+      );
+    `)
+  }
 }
 
 export {

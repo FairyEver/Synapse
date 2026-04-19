@@ -284,7 +284,8 @@ class ContentSubmissionService {
   private pendingPushChains = new Map<string, Promise<void>>()
 
   async createContent(request: SynapseCreateContentRequest): Promise<SynapseContentMutationResult> {
-    const identity = await userIdentityService.requireReadyIdentity()
+    const repository = await this.resolveActiveRepository()
+    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
     const writeResult = await contentWriteService.createContent(request, identity)
 
     return this.commitAndMaybePush("create", writeResult, {
@@ -307,7 +308,8 @@ class ContentSubmissionService {
   }
 
   async updateContent(request: SynapseUpdateContentRequest): Promise<SynapseContentMutationResult> {
-    const identity = await userIdentityService.requireReadyIdentity()
+    const repository = await this.resolveActiveRepository()
+    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
 
     return this.updateContentWithConflictCheck(request.contentType, request.payload, identity)
   }
@@ -327,7 +329,8 @@ class ContentSubmissionService {
   }
 
   async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
-    const identity = await userIdentityService.requireReadyIdentity()
+    const repository = await this.resolveActiveRepository()
+    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
     return this.deleteWithConflictCheck(payload, identity)
   }
 
@@ -340,6 +343,16 @@ class ContentSubmissionService {
     onProgress?: PushProgressListener,
   ): Promise<void> {
     return this.runPushExclusive(repository.uuid, async () => {
+      const repositoryState = await repositoryStore.getRepositoryState(repository)
+
+      if (repositoryState.status !== "ready") {
+        throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
+      }
+
+      if (!repositoryState.isGitRepository) {
+        return
+      }
+
       const pendingState = await pendingPushesService.readState(repository)
       const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
 
@@ -371,7 +384,7 @@ class ContentSubmissionService {
   private async updateContentWithConflictCheck(
     contentType: SynapseContentType,
     payload: SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
-    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
+    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
     const repositoryConfig = await this.resolveActiveRepository()
 
@@ -411,7 +424,7 @@ class ContentSubmissionService {
 
   private async deleteWithConflictCheck(
     payload: SynapseDeleteContentPayload,
-    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyIdentity>>,
+    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
 

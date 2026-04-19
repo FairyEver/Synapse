@@ -288,11 +288,10 @@ function validateIdentity(
 
   const schemaVersion = readRequiredField(rawValue, "schemaVersion", "identity", errors)
   const userId = readRequiredField(rawValue, "userId", "identity", errors)
-  const displayName = readRequiredField(rawValue, "displayName", "identity", errors)
   const generatedAt = readRequiredField(rawValue, "generatedAt", "identity", errors)
 
-  if (schemaVersion !== 1) {
-    errors.push("identity.schemaVersion 必须是 1。")
+  if (schemaVersion !== 2) {
+    errors.push("identity.schemaVersion 必须是 2。")
   }
 
   const normalizedUserId = typeof userId === "string" ? normalizeUserId(userId) : null
@@ -301,27 +300,21 @@ function validateIdentity(
     errors.push("identity.userId 必须是 32 位十六进制字符串。")
   }
 
-  if (typeof displayName !== "string") {
-    errors.push("identity.displayName 必须是字符串。")
-  }
-
   if (!isIsoDateString(generatedAt)) {
     errors.push("identity.generatedAt 必须是有效时间字符串。")
   }
 
   if (
-    schemaVersion !== 1
+    schemaVersion !== 2
     || !normalizedUserId
-    || typeof displayName !== "string"
     || !isIsoDateString(generatedAt)
   ) {
     return null
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     userId: normalizedUserId,
-    displayName: displayName.trim(),
     generatedAt: generatedAt.trim(),
   }
 }

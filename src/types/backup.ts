@@ -1,11 +1,11 @@
 import type { SynapseConfig } from "./config"
-import type { SynapseUserIdentity } from "./identity"
+import type { SynapseLocalIdentity } from "./identity"
 
 export type SynapseConfigBackup = {
   schemaVersion: 1
   exportedAt: string
   config: SynapseConfig
-  identity: SynapseUserIdentity
+  identity: SynapseLocalIdentity
 }
 
 export type SynapseConfigBackupExportResult = {

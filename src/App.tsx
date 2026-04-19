@@ -5,6 +5,7 @@ import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { publishActiveAppTab, subscribeOpenSettingsTab } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
 import {
@@ -70,7 +71,9 @@ function MainApp() {
   const isSyncOperationRunning =
     activeRepositoryOperation?.operation === "sync" && Boolean(activeRepositoryOperation.isRunning)
   const repositoryActivityLabel = isRepositoryTaskRunning
-    ? activeRepositoryOperation?.operation === "maintenance"
+    ? activeRepositoryOperation?.operation === "initialize"
+      ? "正在初始化"
+      : activeRepositoryOperation?.operation === "maintenance"
       ? "正在整理"
       : "正在同步"
     : null
@@ -88,12 +91,10 @@ function MainApp() {
         ? "正在加载设置..."
         : activeRepository === null
           ? "还没有选择本地目录"
-          : !activeRepositoryState
-            ? "正在检查目录状态..."
-            : activeRepositoryState?.status !== "ready"
-              ? "当前目录不存在，无法同步"
-              : !activeRepositoryState.isGitRepository
-                ? "当前目录不是 Git 仓库，无法同步"
+            : !activeRepositoryState
+              ? "正在检查目录状态..."
+              : activeRepositoryState?.status !== "ready"
+                ? "当前目录不存在，无法同步"
                 : "同步仓库"
 
   const tabs = useMemo(
@@ -110,6 +111,16 @@ function MainApp() {
   useEffect(() => {
     logger.info("App mounted.", {
       activeTab,
+    })
+  }, [])
+
+  useEffect(() => {
+    publishActiveAppTab(activeTab)
+  }, [activeTab])
+
+  useEffect(() => {
+    return subscribeOpenSettingsTab(() => {
+      setActiveTab("settings")
     })
   }, [])
 
@@ -221,7 +232,10 @@ function MainApp() {
               || Boolean(activeRepositoryOperation?.isRunning)
               || hasBlockingModalOpen
             }
-            showRefresh={!isPushOperationRunning}
+            showRefresh={
+              Boolean(activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository)
+              && !isPushOperationRunning
+            }
             onPush={() => setIsPendingPushDialogOpen(true)}
             onRefresh={() => {
               if (!activeRepository) {

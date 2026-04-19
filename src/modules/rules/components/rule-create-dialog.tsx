@@ -15,6 +15,12 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -39,6 +45,8 @@ type RuleCreateDialogProps = {
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: CreateRulePayload) => Promise<void> | void
   open: boolean
+  submitDisabled?: boolean
+  submitDisabledReason?: string | null
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -55,6 +63,8 @@ function RuleCreateDialog({
   onOpenChange,
   onSubmit,
   open,
+  submitDisabled = false,
+  submitDisabledReason = null,
 }: RuleCreateDialogProps) {
   const categoryOptions = useMemo(() => getCategoryDefinitions("rule"), [])
   const baseline = useMemo(
@@ -173,9 +183,20 @@ function RuleCreateDialog({
                 >
                   取消
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "正在保存..." : mode === "create" ? "保存" : "保存修改"}
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button type="submit" disabled={isSubmitting || submitDisabled}>
+                          {isSubmitting ? "正在保存..." : mode === "create" ? "保存" : "保存修改"}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {submitDisabled && submitDisabledReason ? (
+                      <TooltipContent>{submitDisabledReason}</TooltipContent>
+                    ) : null}
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </>
           )}

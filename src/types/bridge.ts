@@ -17,7 +17,11 @@ import type {
   SynapseTextContentFile,
   SynapseUpdateContentRequest,
 } from "./content"
-import type { SynapseIdentityState } from "./identity"
+import type {
+  SynapseLocalIdentityState,
+  SynapseRepoProfileState,
+  SynapseUserProfile,
+} from "./identity"
 import type {
   SynapseEditorAdapterSummary,
   SynapseContentInstallResult,
@@ -34,6 +38,8 @@ import type {
   SynapseRendererLogPayload,
 } from "./log"
 import type {
+  SynapseRepositoryInitializationPreview,
+  SynapseRepositoryInitializationResult,
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationResult,
   SynapsePendingPushState,
@@ -88,10 +94,14 @@ export type SynapseBridge = {
     update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
   }
   identity: {
-    generateNewId: () => Promise<SynapseIdentityState>
-    getState: () => Promise<SynapseIdentityState>
-    replaceUserId: (userId: string) => Promise<SynapseIdentityState>
-    updateDisplayName: (displayName: string) => Promise<SynapseIdentityState>
+    adoptExistingUserId: (userId: string, repoId: string) => Promise<SynapseLocalIdentityState>
+    generateNewId: () => Promise<SynapseLocalIdentityState>
+    getLocalState: () => Promise<SynapseLocalIdentityState>
+  }
+  userProfile: {
+    getRepoState: (repoId: string) => Promise<SynapseRepoProfileState>
+    listRepoProfiles: (repoId: string) => Promise<ReadonlyMap<string, SynapseUserProfile>>
+    updateDisplayName: (repoId: string, displayName: string) => Promise<SynapseUserProfile>
   }
   log: {
     export: () => Promise<SynapseLogExportResult>
@@ -101,10 +111,16 @@ export type SynapseBridge = {
     write: (payload: SynapseRendererLogPayload) => void
   }
   repository: {
+    checkInitializationPreview: (
+      repositoryUuid: string,
+    ) => Promise<SynapseRepositoryInitializationPreview>
     chooseDirectory: () => Promise<string | null>
     flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     getPendingPushes: (repositoryUuid: string) => Promise<SynapsePendingPushState>
     getStates: () => Promise<SynapseRepositoryLocalState[]>
+    initializeStructure: (
+      repositoryUuid: string,
+    ) => Promise<SynapseRepositoryInitializationResult>
     onPendingPushesUpdated: (listener: (payload: SynapsePendingPushUpdatedEvent) => void) => () => void
     runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
