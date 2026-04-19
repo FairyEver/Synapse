@@ -4,6 +4,9 @@ import { CodeIcon, EyeIcon } from "lucide-react"
 import { renderMarkdown } from "@/lib/markdown"
 import { cn } from "@/lib/utils"
 
+// highlight.js 基础样式（颜色变量由下面的 CSS 定义）
+import "highlight.js/styles/github.css"
+
 type MarkdownViewerMode = "rendered" | "source"
 
 type MarkdownViewerProps = {
@@ -26,14 +29,54 @@ const MARKDOWN_BODY_CLASSNAME = cn(
   "[&_li>p]:my-1",
   "[&_ol]:list-decimal [&_ol]:pl-5",
   "[&_p]:break-words",
-  "[&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-muted/40 [&_pre]:p-4",
-  "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
+  "[&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-muted/40 [&_pre]:p-0",
+  "[&_pre_code]:bg-transparent [&_pre_code]:p-4",
   "[&_table]:w-full [&_table]:border-collapse",
   "[&_tbody_tr]:border-t [&_tbody_tr]:border-border",
   "[&_td]:align-top [&_td]:px-3 [&_td]:py-2",
   "[&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-medium",
   "[&_ul]:list-disc [&_ul]:pl-5",
   "[&_*+blockquote]:mt-4 [&_*+h1]:mt-6 [&_*+h2]:mt-6 [&_*+h3]:mt-5 [&_*+hr]:mt-6 [&_*+ol]:mt-3 [&_*+p]:mt-3 [&_*+pre]:mt-4 [&_*+table]:mt-4 [&_*+ul]:mt-3",
+  // 代码块样式 - 使用 github 主题作为基础
+  "[&_.hljs]:bg-transparent",
+  "[&_pre.hljs]:bg-muted/40",
+  // 暗色模式覆盖 - 使用 CSS 变量
+  "dark:[&_.hljs]:text-[var(--hljs-text)]",
+  "dark:[&_.hljs-doctag]:text-[var(--hljs-keyword)]",
+  "dark:[&_.hljs-keyword]:text-[var(--hljs-keyword)]",
+  "dark:[&_.hljs-literal]:text-[var(--hljs-literal)]",
+  "dark:[&_.hljs-number]:text-[var(--hljs-number)]",
+  "dark:[&_.hljs-operator]:text-[var(--hljs-operator)]",
+  "dark:[&_.hljs-selector]:text-[var(--hljs-selector)]",
+  "dark:[&_.hljs-regexp]:text-[var(--hljs-regexp)]",
+  "dark:[&_.hljs-string]:text-[var(--hljs-string)]",
+  "dark:[&_.hljs-title]:text-[var(--hljs-title)]",
+  "dark:[&_.hljs-variable]:text-[var(--hljs-variable)]",
+  "dark:[&_.hljs-attr]:text-[var(--hljs-attr)]",
+  "dark:[&_.hljs-attribute]:text-[var(--hljs-attribute)]",
+  "dark:[&_.hljs-built_in]:text-[var(--hljs-built_in)]",
+  "dark:[&_.hljs-bullet]:text-[var(--hljs-bullet)]",
+  "dark:[&_.hljs-class]:text-[var(--hljs-class)]",
+  "dark:[&_.hljs-code]:text-[var(--hljs-code)]",
+  "dark:[&_.hljs-comment]:text-[var(--hljs-comment)]",
+  "dark:[&_.hljs-formula]:text-[var(--hljs-formula)]",
+  "dark:[&_.hljs-function]:text-[var(--hljs-function)]",
+  "dark:[&_.hljs-name]:text-[var(--hljs-name)]",
+  "dark:[&_.hljs-tag]:text-[var(--hljs-tag)]",
+  "dark:[&_.hljs-quote]:text-[var(--hljs-quote)]",
+  "dark:[&_.hljs-section]:text-[var(--hljs-section)]",
+  "dark:[&_.hljs-params]:text-[var(--hljs-text)]",
+  "dark:[&_.hljs-punctuation]:text-[var(--hljs-text)]",
+  "dark:[&_.hljs-link]:text-[var(--hljs-link)]",
+  "dark:[&_.hljs-template-variable]:text-[var(--hljs-template-variable)]",
+  "dark:[&_.hljs-type]:text-[var(--hljs-type)]",
+  "dark:[&_.hljs-addition]:text-[var(--hljs-addition)] dark:[&_.hljs-addition]:bg-[var(--hljs-addition-bg)]",
+  "dark:[&_.hljs-deletion]:text-[var(--hljs-deletion)] dark:[&_.hljs-deletion]:bg-[var(--hljs-deletion-bg)]",
+  "dark:[&_.hljs-meta]:text-[var(--hljs-meta)]",
+  "dark:[&_.hljs-subst]:text-[var(--hljs-subst)]",
+  "dark:[&_.hljs-symbol]:text-[var(--hljs-symbol)]",
+  "dark:[&_.hljs-emphasis]:italic",
+  "dark:[&_.hljs-strong]:font-bold",
 )
 
 function MarkdownViewer({
@@ -63,7 +106,7 @@ function MarkdownViewer({
   const renderedContent = (
     <div
       data-allow-select="true"
-      className="rounded-lg border border-border bg-muted/20 px-4 py-4"
+      className="markdown-viewer rounded-lg border border-border bg-muted/20 px-4 py-4"
       onClickCapture={handleRenderedClickCapture}
     >
       <div

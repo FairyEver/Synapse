@@ -1,5 +1,35 @@
 import MarkdownIt from "markdown-it"
 import markdownItContainer from "markdown-it-container"
+import hljs from "highlight.js"
+
+// 注册常用语言
+import bash from "highlight.js/lib/languages/bash"
+import css from "highlight.js/lib/languages/css"
+import java from "highlight.js/lib/languages/java"
+import javascript from "highlight.js/lib/languages/javascript"
+import json from "highlight.js/lib/languages/json"
+import python from "highlight.js/lib/languages/python"
+import shell from "highlight.js/lib/languages/shell"
+import typescript from "highlight.js/lib/languages/typescript"
+import xml from "highlight.js/lib/languages/xml"
+import yaml from "highlight.js/lib/languages/yaml"
+
+hljs.registerLanguage("bash", bash)
+hljs.registerLanguage("css", css)
+hljs.registerLanguage("html", xml)
+hljs.registerLanguage("java", java)
+hljs.registerLanguage("javascript", javascript)
+hljs.registerLanguage("js", javascript)
+hljs.registerLanguage("json", json)
+hljs.registerLanguage("python", python)
+hljs.registerLanguage("py", python)
+hljs.registerLanguage("shell", shell)
+hljs.registerLanguage("sh", shell)
+hljs.registerLanguage("typescript", typescript)
+hljs.registerLanguage("ts", typescript)
+hljs.registerLanguage("xml", xml)
+hljs.registerLanguage("yaml", yaml)
+hljs.registerLanguage("yml", yaml)
 
 type MarkdownContainerToken = {
   info: string
@@ -31,10 +61,36 @@ function createContainerConfig(name: string, tag = "div") {
   }
 }
 
+function escapeHTML(code: string): string {
+  return code
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+}
+
+function highlightCode(code: string, language: string | undefined): string {
+  if (language && hljs.getLanguage(language)) {
+    try {
+      const result = hljs.highlight(code, { language, ignoreIllegals: true })
+      return result.value
+    } catch {
+      // 高亮失败，返回普通转义
+    }
+  }
+  return escapeHTML(code)
+}
+
 const markdownRenderer = new MarkdownIt({
   breaks: true,
   html: false,
   linkify: true,
+  highlight: (code, lang) => {
+    const highlighted = highlightCode(code, lang || undefined)
+    const langClass = lang ? ` language-${lang}` : ""
+    return `<pre class="hljs${langClass}"><code class="hljs${langClass}">${highlighted}</code></pre>`
+  },
 }).use(markdownItContainer, "md", createContainerConfig("md"))
 
 function renderMarkdown(markdown: string): string {

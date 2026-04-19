@@ -16,25 +16,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
-} from "@/components/ui/item"
+import { ItemGroup } from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
-import { RepositoryDisplayNameField } from "@/modules/settings/components/repository-display-name-field"
+import { RepositoryListItem } from "@/modules/settings/components/repository-list-item"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type {
@@ -52,18 +43,6 @@ type RepositoryListEditorProps = {
     activeRepoUuid: string | null,
     reloadAfterUpdate: boolean,
   ) => Promise<boolean>
-}
-
-function getRepositoryStatusLabel(repositoryState?: SynapseRepositoryLocalState): string {
-  if (!repositoryState) {
-    return "正在检查目录状态..."
-  }
-
-  if (repositoryState.status !== "ready") {
-    return "本地目录不存在"
-  }
-
-  return repositoryState.isGitRepository ? "Git 仓库已连接" : "本地目录已连接（非 Git 仓库）"
 }
 
 function validateLocalRepositoryName(value: string): string | null {
@@ -97,12 +76,8 @@ function RepositoryListEditor({
     initializeStructure,
     operations,
     states,
-    syncRepository,
   } = useRepositoryManager()
-  const {
-    isSwitchingRepository,
-    switchActiveRepository,
-  } = useActiveRepositorySwitch()
+  const { isSwitchingRepository } = useActiveRepositorySwitch()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const { promise } = useAppNotifications()
   const [formError, setFormError] = useState<string | null>(null)
@@ -134,7 +109,13 @@ function RepositoryListEditor({
       repositoryUuid: nextRepository.uuid,
     })
 
-    return onSave(nextRepositories, nextActiveRepoUuid, false)
+    try {
+      return await onSave(nextRepositories, nextActiveRepoUuid, false)
+    } catch (error) {
+      logger.error("Failed to save repository config.", { error, repositoryUuid: nextRepository.uuid })
+      setFormError(error instanceof Error ? error.message : "保存失败。")
+      return false
+    }
   }
 
   const saveRepository = async (localPath: string) => {
@@ -276,7 +257,13 @@ function RepositoryListEditor({
       repositoryUuid,
       removedActiveRepository,
     })
-    await onSave(nextRepositories, nextActiveRepoUuid, removedActiveRepository)
+
+    try {
+      await onSave(nextRepositories, nextActiveRepoUuid, removedActiveRepository)
+    } catch (error) {
+      logger.error("Failed to remove repository.", { error, repositoryUuid })
+      setFormError(error instanceof Error ? error.message : "删除失败。")
+    }
   }
 
   const runInitialization = async (repository: SynapseRepositoryConfig) => {
@@ -476,115 +463,24 @@ function RepositoryListEditor({
               const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
 
               return (
-                <Item key={repository.uuid} variant="outline" className="items-start">
-                  <ItemContent className="min-w-0 gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <ItemTitle className="w-full flex-wrap justify-between">
-                        <span className="min-w-0 flex-1 truncate">{repository.name}</span>
-                        <Badge variant={isActive ? "secondary" : "outline"}>
-                          {isActive ? "当前目录" : "已保存"}
-                        </Badge>
-                      </ItemTitle>
-                      <ItemDescription className="line-clamp-none break-all">
-                        {repository.localPath}
-                      </ItemDescription>
-                      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                        <p>
-                          {CONTENT_TYPE_DEFINITIONS.map((definition) => (
-                            `${definition.pluralLabel}: ${
-                              repository.contentDirs[definition.id]
-                              ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id]
-                            }`
-                          )).join(" · ")}
-                        </p>
-                        {hasRepositoryBridge ? <p>{getRepositoryStatusLabel(repositoryState)}</p> : null}
-                        {repositoryState?.gitRootPath
-                        && repositoryState.gitRootPath !== repository.localPath ? (
-                          <p className="break-all">Git 根目录：{repositoryState.gitRootPath}</p>
-                        ) : null}
-                        {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
-                          <p>当前目录不是 Git 仓库，内容只保存在本地。</p>
-                        ) : null}
-                      </div>
-                    </div>
-                    {operation?.isRunning ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                          <span>{operation.statusText ?? "正在执行 Git 操作..."}</span>
-                          {operation.percent !== null ? <span>{operation.percent}%</span> : null}
-                        </div>
-                        <Progress value={operation.percent ?? 24} />
-                      </div>
-                    ) : null}
-                    <FieldError>{operation?.error}</FieldError>
-                    {repositoryState?.status === "ready" ? (
-                      <RepositoryDisplayNameField
-                        repositoryUuid={repository.uuid}
-                        isActiveRepository={isActive}
-                        disabled={isBusy}
-                      />
-                    ) : null}
-                  </ItemContent>
-                  <ItemActions className="w-full flex-wrap justify-end sm:w-auto sm:self-start">
-                    {hasRepositoryBridge ? (
-                      <Button
-                        size="sm"
-                        disabled={isBusy || !canSync}
-                        onClick={() => {
-                          void promise(
-                            () => syncRepository(repository.uuid),
-                            {
-                              loading: "正在同步仓库...",
-                              success: (result) => result.message ?? "仓库同步完成。",
-                              error: (error) => error instanceof Error ? error.message : "Git 仓库操作失败。",
-                            },
-                          ).catch((error) => {
-                            logger.error("Repository sync failed from settings.", {
-                              error,
-                              repositoryUuid: repository.uuid,
-                            })
-                          })
-                        }}
-                      >
-                        {isBusy ? "同步中..." : "同步仓库"}
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant={isActive ? "secondary" : "outline"}
-                      size="sm"
-                      disabled={isActive || isBusy || hasRunningRepositoryOperation || isSwitchingRepository}
-                      onClick={() => {
-                        if (!isActive) {
-                          void switchActiveRepository(repository.uuid)
-                        }
-                      }}
-                    >
-                      {isActive ? "当前目录" : "切换为当前目录"}
-                    </Button>
-                    {canInitialize ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isBusy}
-                        onClick={() => {
-                          void handleInitializeRepository(repository)
-                        }}
-                      >
-                        {initializingUuid === repository.uuid ? "初始化中..." : "初始化"}
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => {
-                        setPendingRemovalUuid(repository.uuid)
-                      }}
-                    >
-                      删除
-                    </Button>
-                  </ItemActions>
-                </Item>
+                <RepositoryListItem
+                  key={repository.uuid}
+                  repository={repository}
+                  isActive={isActive}
+                  isBusy={isBusy}
+                  canSync={canSync}
+                  canInitialize={canInitialize}
+                  hasRepositoryBridge={hasRepositoryBridge}
+                  hasRunningRepositoryOperation={hasRunningRepositoryOperation}
+                  isSwitchingRepository={isSwitchingRepository}
+                  isOnboardingBlocked={isOnboardingBlocked}
+                  repositoryState={repositoryState}
+                  operation={operation}
+                  initializingUuid={initializingUuid}
+                  activeRepoUuid={activeRepoUuid}
+                  onInitialize={handleInitializeRepository}
+                  onRemove={setPendingRemovalUuid}
+                />
               )
             })}
           </ItemGroup>

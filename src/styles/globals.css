@@ -115,6 +115,40 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* 代码高亮颜色 - github-dark 主题 */
+  --hljs-text: #c9d1d9;
+  --hljs-keyword: #ff7b72;
+  --hljs-literal: #ff7b72;
+  --hljs-number: #79c0ff;
+  --hljs-operator: #ff7b72;
+  --hljs-selector: #ff7b72;
+  --hljs-regexp: #a5d6ff;
+  --hljs-string: #a5d6ff;
+  --hljs-title: #d2a8ff;
+  --hljs-variable: #ffa657;
+  --hljs-attr: #79c0ff;
+  --hljs-attribute: #79c0ff;
+  --hljs-built-in: #ffa657;
+  --hljs-bullet: #79c0ff;
+  --hljs-class: #ffa657;
+  --hljs-code: #a5d6ff;
+  --hljs-comment: #8b949e;
+  --hljs-formula: #8b949e;
+  --hljs-function: #d2a8ff;
+  --hljs-name: #7ee787;
+  --hljs-tag: #7ee787;
+  --hljs-quote: #a5d6ff;
+  --hljs-section: #ff7b72;
+  --hljs-link: #a5d6ff;
+  --hljs-template-variable: #ffa657;
+  --hljs-type: #ffa657;
+  --hljs-addition: #aff5b4;
+  --hljs-addition-bg: #033a16;
+  --hljs-deletion: #ffdcd7;
+  --hljs-deletion-bg: #67060c;
+  --hljs-meta: #ffa657;
+  --hljs-subst: #c9d1d9;
+  --hljs-symbol: #ffa657;
 }
 
 @layer base {

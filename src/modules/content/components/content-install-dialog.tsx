@@ -21,7 +21,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -435,7 +434,6 @@ function ContentInstallDialog({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>安装到 {editor.label}</DialogTitle>
-            <DialogDescription>选择安装范围，然后确认写入目标位置。</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-5">

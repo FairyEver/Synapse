@@ -26,7 +26,6 @@ type RepositoryOperationState = {
   isRunning: boolean
   statusText: string | null
   percent: number | null
-  error: string | null
   completedAt: string | null
 }
 
@@ -76,7 +75,6 @@ function createOperationState(
     isRunning: false,
     statusText: null,
     percent: null,
-    error: null,
     completedAt: null,
     ...value,
   }
@@ -197,7 +195,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           isRunning: true,
           statusText: progressEvent.statusText,
           percent: progressEvent.percent,
-          error: null,
         }),
       }))
     })
@@ -220,7 +217,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
             ? (updatedEvent.message ?? null)
             : (updatedEvent.message ?? getCompletedStatusText(updatedEvent.operation)),
           percent: updatedEvent.error ? null : 100,
-          error: updatedEvent.error ?? null,
           completedAt: updatedEvent.completedAt,
         }),
       }))
@@ -288,7 +284,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           isRunning: false,
           statusText: result.message ?? "初始化完成。",
           percent: 100,
-          error: null,
           completedAt: result.initializedAt,
         }),
       }))
@@ -365,7 +360,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
             isRunning: false,
             statusText: null,
             percent: null,
-            error: errorMessage,
           }),
         }))
 
@@ -380,7 +374,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           isRunning: true,
           statusText: getPreparingStatusText(operation),
           percent: 0,
-          error: null,
         }),
       }))
 
@@ -409,7 +402,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
             isRunning: false,
             statusText: result.message ?? getCompletedStatusText(result.operation),
             percent: 100,
-            error: null,
             completedAt: result.completedAt,
           }),
         }))
@@ -436,7 +428,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
             isRunning: false,
             statusText: null,
             percent: null,
-            error: message,
           }),
         }))
 
