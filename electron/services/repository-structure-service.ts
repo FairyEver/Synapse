@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto"
-import { spawn } from "node:child_process"
 import type { Dirent } from "node:fs"
 import { access, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises"
 import { constants as fsConstants } from "node:fs"
@@ -11,6 +10,7 @@ import type {
   SynapseRepositoryInitializationResult,
 } from "../../src/types/repository"
 import { contentIndexService } from "./content-index-service"
+import { runGitTextCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryStore } from "./repository-store"
@@ -36,14 +36,6 @@ function getNonGitEntries(entries: Dirent[]): Dirent[] {
   return entries.filter((entry) => !isGitDirectory(entry))
 }
 
-function formatGitSpawnError(error: unknown): string {
-  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-    return "当前系统没有可用的 git 命令，请先安装 Git 并确保命令行可访问。"
-  }
-
-  return error instanceof Error ? error.message : "启动 Git 命令失败。"
-}
-
 function formatGitFailureMessage(output: string, fallbackMessage: string): string {
   const normalizedOutput = output.trim().toLowerCase()
 
@@ -62,55 +54,26 @@ function formatGitFailureMessage(output: string, fallbackMessage: string): strin
   return fallbackMessage
 }
 
-function runGitCommand(
+function runStructureGitCommand(
   cwd: string,
   args: string[],
   fallbackMessage: string,
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn("git", args, {
-      cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        LANG: "C",
-        LC_ALL: "C",
-      },
-    })
-
-    let stdout = ""
-    let stderr = ""
-
-    childProcess.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8")
-    })
-
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8")
-    })
-
-    childProcess.on("error", (error) => {
-      reject(new Error(formatGitSpawnError(error)))
-    })
-
-    childProcess.on("close", (code) => {
-      if (code === 0) {
-        resolve(stdout.trim())
-        return
-      }
-
-      reject(new Error(formatGitFailureMessage(`${stdout}\n${stderr}`, fallbackMessage)))
-    })
+  return runGitTextCommand({
+    args,
+    cwd,
+    fallbackMessage,
+    formatFailureMessage: formatGitFailureMessage,
   })
 }
 
 async function ensureBotIdentity(gitRootPath: string): Promise<void> {
-  await runGitCommand(
+  await runStructureGitCommand(
     gitRootPath,
     ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
     "无法初始化 Synapse 提交身份。",
   )
-  await runGitCommand(
+  await runStructureGitCommand(
     gitRootPath,
     ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
     "无法初始化 Synapse 提交身份。",
@@ -124,7 +87,7 @@ async function stageRepositoryScope(
   const relativePath = path.relative(gitRootPath, repository.localPath) || "."
   const normalizedRelativePath = relativePath.split(path.sep).join("/")
 
-  await runGitCommand(
+  await runStructureGitCommand(
     gitRootPath,
     ["add", "-A", "--", normalizedRelativePath],
     "暂存仓库结构改动失败。",
@@ -132,17 +95,17 @@ async function stageRepositoryScope(
 }
 
 async function commitInitialization(gitRootPath: string): Promise<string> {
-  await runGitCommand(
+  await runStructureGitCommand(
     gitRootPath,
     ["commit", "-m", "[synapse] initialize repository structure"],
     "提交仓库结构改动失败。",
   )
 
-  return runGitCommand(gitRootPath, ["rev-parse", "HEAD"], "读取最新提交失败。")
+  return runStructureGitCommand(gitRootPath, ["rev-parse", "HEAD"], "读取最新提交失败。")
 }
 
 async function pushRepository(repository: SynapseRepositoryConfig): Promise<void> {
-  await runGitCommand(
+  await runStructureGitCommand(
     repository.localPath,
     ["push"],
     "推送到仓库失败。",

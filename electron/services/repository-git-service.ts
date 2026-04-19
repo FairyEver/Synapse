@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
 } from "../../src/types/repository"
+import { runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
@@ -185,40 +185,7 @@ function formatGitFailureMessage(output: string): string {
   return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
 }
 
-function formatGitSpawnError(error: unknown): string {
-  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-    return "当前系统没有可用的 git 命令，请先安装 Git 并确保命令行可访问。"
-  }
-
-  return error instanceof Error ? error.message : "启动 Git 命令失败。"
-}
-
-function createLineProcessor(onLine: (line: string) => void) {
-  let buffer = ""
-
-  return {
-    push(chunk: string) {
-      buffer += chunk.replace(/\r/g, "\n")
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-
-      for (const line of lines) {
-        if (line.trim()) {
-          onLine(line)
-        }
-      }
-    },
-    flush() {
-      if (buffer.trim()) {
-        onLine(buffer)
-      }
-
-      buffer = ""
-    },
-  }
-}
-
-async function runGitCommand(
+async function runRepositoryGitCommand(
   repositoryUuid: string,
   operation: SynapseRepositoryOperationKind,
   args: string[],
@@ -227,58 +194,18 @@ async function runGitCommand(
     onProgress: ProgressListener
   },
 ): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const childProcess = spawn("git", args, {
-      cwd: options.cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        LANG: "C",
-        LC_ALL: "C",
-      },
-    })
-
-    let combinedOutput = ""
-    const stdoutProcessor = createLineProcessor((line) => {
-      combinedOutput += `${line}\n`
+  await runGitCommand({
+    args,
+    cwd: options.cwd,
+    fallbackMessage: "仓库同步失败。请检查网络、访问权限、远程配置或当前分支状态后重试。",
+    formatFailureMessage: (output) => formatGitFailureMessage(output),
+    onLine: (line) => {
       const progressEvent = parseGitProgressLine(repositoryUuid, operation, line)
 
       if (progressEvent) {
         options.onProgress(progressEvent)
       }
-    })
-    const stderrProcessor = createLineProcessor((line) => {
-      combinedOutput += `${line}\n`
-      const progressEvent = parseGitProgressLine(repositoryUuid, operation, line)
-
-      if (progressEvent) {
-        options.onProgress(progressEvent)
-      }
-    })
-
-    childProcess.stdout.on("data", (chunk: Buffer) => {
-      stdoutProcessor.push(chunk.toString("utf8"))
-    })
-
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      stderrProcessor.push(chunk.toString("utf8"))
-    })
-
-    childProcess.on("error", (error) => {
-      reject(new Error(formatGitSpawnError(error)))
-    })
-
-    childProcess.on("close", (code) => {
-      stdoutProcessor.flush()
-      stderrProcessor.flush()
-
-      if (code === 0) {
-        resolve()
-        return
-      }
-
-      reject(new Error(formatGitFailureMessage(combinedOutput)))
-    })
+    },
   })
 }
 
@@ -319,7 +246,7 @@ class RepositoryGitService {
         percent: 0,
       })
 
-      await runGitCommand(repository.uuid, "sync", [
+      await runRepositoryGitCommand(repository.uuid, "sync", [
         "pull",
         "--ff-only",
         "--progress",

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   ChevronDown,
-  Copy,
   Download,
   LoaderCircle,
 } from "lucide-react"
@@ -221,16 +220,13 @@ function ContentActionSplitButton({
               </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-max">
               {canInstall ? (
                 <>
                   <DropdownMenuLabel>安装</DropdownMenuLabel>
                   <DropdownMenuGroup>
                     {isLoadingAdapters ? (
-                      <DropdownMenuItem disabled>
-                        <LoaderCircle className="animate-spin" />
-                        正在读取编辑器
-                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled>正在读取编辑器</DropdownMenuItem>
                     ) : adaptersError ? (
                       <DropdownMenuItem disabled>{adaptersError}</DropdownMenuItem>
                     ) : filteredAdapters.length > 0 ? (
@@ -261,7 +257,6 @@ function ContentActionSplitButton({
                       void handleCopy()
                     }}
                   >
-                    {isCopying ? <LoaderCircle className="animate-spin" /> : <Copy />}
                     复制正文
                   </DropdownMenuItem>
                 </>

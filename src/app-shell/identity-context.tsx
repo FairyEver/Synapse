@@ -18,7 +18,6 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
 import {
   listRepoProfiles,
-  readRepoProfileState,
   updateRepoDisplayName,
 } from "@/app-shell/user-profile"
 import type {
@@ -78,10 +77,19 @@ function IdentityProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const [nextRepoProfileState, nextRepoProfileMap] = await Promise.all([
-      readRepoProfileState(activeRepository.uuid),
-      listRepoProfiles(activeRepository.uuid),
-    ])
+    const nextRepoProfileMap = await listRepoProfiles(activeRepository.uuid)
+    const nextProfile = nextRepoProfileMap.get(localIdentityState.identity.userId)
+    const nextRepoProfileState: SynapseRepoProfileState =
+      nextProfile && nextProfile.displayName.trim().length > 0
+        ? {
+            status: "ready",
+            profile: nextProfile,
+          }
+        : {
+            status: "needs-onboarding",
+            repoId: activeRepository.uuid,
+            userId: localIdentityState.identity.userId,
+          }
 
     setCurrentRepoProfileState(nextRepoProfileState)
     setRepoProfileMap(nextRepoProfileMap)

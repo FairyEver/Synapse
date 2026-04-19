@@ -13,26 +13,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { normalizeUserIdInput, validateUserIdInput } from "@/lib/user-id-input"
 
 type AdoptIdentityDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-}
-
-function normalizeUserIdInput(value: string): string {
-  return value.trim().toLowerCase().replace(/-/g, "")
-}
-
-function validateUserIdInput(value: string): string | null {
-  const normalizedValue = normalizeUserIdInput(value)
-
-  if (!normalizedValue) {
-    return "ID 格式不对，应为 32 位十六进制字符。"
-  }
-
-  return /^[0-9a-f]{32}$/.test(normalizedValue)
-    ? null
-    : "ID 格式不对，应为 32 位十六进制字符。"
 }
 
 function AdoptIdentityDialog({
@@ -75,7 +60,7 @@ function AdoptIdentityDialog({
         <DialogHeader>
           <DialogTitle>接续已有身份</DialogTitle>
           <DialogDescription>
-            只在当前目录里校验这个 ID。Git 仓库会先同步一次再检查。
+            只在当前目录里校验这个 ID。Git 仓库会先检查远端连通性；如果这个 ID 是刚同步过来的，先手动同步仓库再试。
           </DialogDescription>
         </DialogHeader>
 

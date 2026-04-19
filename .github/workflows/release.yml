@@ -120,3 +120,16 @@ jobs:
           else
             gh release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_NAME" --generate-notes
           fi
+
+      - name: Notify package completion
+        env:
+          BARK_PUSH_URL: https://api.day.app/B3H8T6rF2p5Mj6z6oha82K
+        run: |
+          PRODUCT_NAME="$(node -p "require('./package.json').productName || require('./package.json').name")"
+          TIMESTAMP="$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S %Z')"
+
+          curl --fail --silent --show-error \
+            -X POST "$BARK_PUSH_URL" \
+            --data-urlencode "title=$PRODUCT_NAME" \
+            --data-urlencode "subtitle=$TIMESTAMP" \
+            --data-urlencode "body=打包完成"

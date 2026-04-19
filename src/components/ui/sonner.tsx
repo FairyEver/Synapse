@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react"
+import { useEffect, useState, type CSSProperties } from "react"
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -18,9 +18,31 @@ function resolveTheme(): ToasterProps["theme"] {
 }
 
 function Toaster({ className, icons, style, theme, toastOptions, ...props }: ToasterProps) {
+  const [resolvedTheme, setResolvedTheme] = useState<ToasterProps["theme"]>(() => resolveTheme())
+
+  useEffect(() => {
+    if (theme || typeof document === "undefined") {
+      return
+    }
+
+    const root = document.documentElement
+    const observer = new MutationObserver(() => {
+      setResolvedTheme(resolveTheme())
+    })
+
+    observer.observe(root, {
+      attributeFilter: ["class"],
+      attributes: true,
+    })
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [theme])
+
   return (
     <Sonner
-      theme={theme ?? resolveTheme()}
+      theme={theme ?? resolvedTheme}
       className={cn("toaster group", className)}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
@@ -41,6 +63,10 @@ function Toaster({ className, icons, style, theme, toastOptions, ...props }: Toa
         ...toastOptions,
         classNames: {
           toast: "cn-toast",
+          closeButton: cn(
+            "border-border bg-popover text-popover-foreground hover:border-border hover:bg-muted hover:text-popover-foreground",
+            toastOptions?.classNames?.closeButton,
+          ),
           ...toastOptions?.classNames,
         },
       }}

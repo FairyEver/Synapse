@@ -109,7 +109,7 @@ function RuleDetailDialog({
   const repoProfileMap = useRepoProfileMap()
   const { activeRepository } = useAppConfig()
   const { error, promise } = useAppNotifications()
-  const { waitForBackgroundPush } = useRepositoryManager()
+  const { operations, waitForBackgroundPush } = useRepositoryManager()
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [conflictState, setConflictState] = useState<ConflictState | null>(null)
@@ -132,6 +132,16 @@ function RuleDetailDialog({
     open,
     refreshSignal,
   })
+  const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] ?? null : null
+  const isRepositoryInitializing =
+    activeRepositoryOperation?.isRunning
+    && activeRepositoryOperation.operation === "initialize"
+  const submitDisabledReason =
+    currentRepoProfileState?.status === "needs-onboarding"
+      ? "请先完成当前目录的身份设置"
+      : isRepositoryInitializing
+        ? "当前目录正在初始化，请稍后。"
+      : null
 
   useEffect(() => {
     if (!open) {
@@ -302,7 +312,10 @@ function RuleDetailDialog({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleDelete()}>
+            <AlertDialogAction
+              disabled={isRepositoryInitializing}
+              onClick={() => void handleDelete()}
+            >
               删除
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -333,7 +346,10 @@ function RuleDetailDialog({
             >
               查看对方修改了什么
             </AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleConflictContinue()}>
+            <AlertDialogAction
+              disabled={isRepositoryInitializing}
+              onClick={() => void handleConflictContinue()}
+            >
               继续保存
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -365,7 +381,7 @@ function RuleDetailDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!detail}
+                    disabled={!detail || isRepositoryInitializing}
                     onClick={() => {
                       setIsEditOpen(true)
                     }}
@@ -376,6 +392,7 @@ function RuleDetailDialog({
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={isRepositoryInitializing}
                     onClick={() => setIsDeleteConfirmOpen(true)}
                   >
                     <Trash2 />
@@ -431,12 +448,8 @@ function RuleDetailDialog({
           open={isEditOpen}
           onOpenChange={setIsEditOpen}
           onSubmit={(payload) => handleSave(payload)}
-          submitDisabled={currentRepoProfileState?.status === "needs-onboarding"}
-          submitDisabledReason={
-            currentRepoProfileState?.status === "needs-onboarding"
-              ? "请先完成当前目录的身份设置"
-              : null
-          }
+          submitDisabled={submitDisabledReason !== null}
+          submitDisabledReason={submitDisabledReason}
         />
       ) : null}
     </>

@@ -49,13 +49,17 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const { activeRepository } = useAppConfig()
     const { currentRepoProfileState } = useCurrentRepoProfile()
     const { promise } = useAppNotifications()
-    const { waitForBackgroundPush } = useRepositoryManager()
+    const { operations, waitForBackgroundPush } = useRepositoryManager()
     const {
       handleCreated,
       isCreateDialogOpen,
       refreshSignal,
       setIsCreateDialogOpen,
     } = useContentCreationState(onCreateDialogOpenChange)
+    const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
+    const isRepositoryInitializing =
+      activeRepositoryOperation?.isRunning
+      && activeRepositoryOperation.operation === "initialize"
 
     const handleSubmit = (payload: SynapseCreateContentPayload<T>) => {
       void promise(
@@ -99,6 +103,8 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const submitDisabledReason =
       currentRepoProfileState?.status === "needs-onboarding"
         ? "请先完成当前目录的身份设置"
+        : isRepositoryInitializing
+          ? "当前目录正在初始化，请稍后。"
         : null
 
     return (

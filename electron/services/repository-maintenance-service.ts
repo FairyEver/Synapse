@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process"
 import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
@@ -19,6 +18,7 @@ import {
 } from "./content-history-service"
 import { createMainLogger } from "./log-store"
 import { pendingPushesService } from "./pending-pushes-service"
+import { runGitCommand, type GitCommandResult } from "./git-command"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
 import { repositoryStore } from "./repository-store"
 
@@ -34,11 +34,6 @@ const COMPACTION_KEEP_RECENT = 5
 const SOFT_DELETE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
 const ATTACHMENT_GC_WINDOW_MS = 24 * 60 * 60 * 1000
 const logger = createMainLogger("service.repository-maintenance")
-
-type GitCommandResult = {
-  stderr: string
-  stdout: string
-}
 
 type MaintenanceProgressListener = (statusText: string) => void
 
@@ -133,14 +128,6 @@ function createMaintenanceMessage(
   return pendingPushCount > 1
     ? `${fragments.join("，")}，等待同步 ${pendingPushCount} 条变更。`
     : `${fragments.join("，")}，等待同步。`
-}
-
-function formatGitSpawnError(error: unknown): string {
-  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-    return "当前系统没有可用的 git 命令，请先安装 Git 并确保命令行可访问。"
-  }
-
-  return error instanceof Error ? error.message : "启动 Git 命令失败。"
 }
 
 function formatGitFailureMessage(output: string, fallbackMessage: string): string {
@@ -351,74 +338,30 @@ function writeMaintenanceMetaValue(repositoryUuid: string, key: string, value: s
   })
 }
 
-function runGitCommand(
+function runMaintenanceGitCommand(
   cwd: string,
   args: string[],
   fallbackMessage: string,
   onOutput?: (line: string) => void,
 ): Promise<GitCommandResult> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn("git", args, {
-      cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        LANG: "C",
-        LC_ALL: "C",
-      },
-    })
-
-    let stdout = ""
-    let stderr = ""
-
-    const handleChunk = (chunk: Buffer) => {
-      const text = chunk.toString("utf8")
-
-      stdout += text
-      text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .forEach((line) => onOutput?.(line))
-    }
-
-    childProcess.stdout.on("data", handleChunk)
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8")
-
-      stderr += text
-      text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .forEach((line) => onOutput?.(line))
-    })
-
-    childProcess.on("error", (error) => {
-      reject(new Error(formatGitSpawnError(error)))
-    })
-
-    childProcess.on("close", (code) => {
-      if (code === 0) {
-        resolve({
-          stderr,
-          stdout,
-        })
-        return
-      }
-
-      reject(new Error(formatGitFailureMessage(`${stdout}\n${stderr}`, fallbackMessage)))
-    })
+  return runGitCommand({
+    args,
+    cwd,
+    fallbackMessage,
+    formatFailureMessage: formatGitFailureMessage,
+    onLine: (line) => {
+      onOutput?.(line)
+    },
   })
 }
 
 async function ensureBotIdentity(gitRootPath: string): Promise<void> {
-  await runGitCommand(
+  await runMaintenanceGitCommand(
     gitRootPath,
     ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
     "无法初始化 Synapse 提交身份。",
   )
-  await runGitCommand(
+  await runMaintenanceGitCommand(
     gitRootPath,
     ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
     "无法初始化 Synapse 提交身份。",
@@ -430,7 +373,7 @@ async function pullWithRebase(
   onProgress?: MaintenanceProgressListener,
 ): Promise<void> {
   onProgress?.("正在拉取最新内容...")
-  await runGitCommand(
+  await runMaintenanceGitCommand(
     repository.localPath,
     ["pull", "--rebase"],
     "同步仓库失败，请检查网络或仓库状态后重试。",
@@ -452,7 +395,7 @@ async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<voi
     throw new Error("当前没有可提交的改动。")
   }
 
-  await runGitCommand(
+  await runMaintenanceGitCommand(
     gitRootPath,
     ["add", "--", ...relativePaths],
     "暂存本地改动失败。",
@@ -464,13 +407,13 @@ async function commitChanges(
   action: "compaction" | "gc",
   count: number,
 ): Promise<string> {
-  await runGitCommand(
+  await runMaintenanceGitCommand(
     gitRootPath,
     ["commit", "-m", toCommitMessage(action, count)],
     "提交整理结果失败。",
   )
 
-  const headCommit = await runGitCommand(
+  const headCommit = await runMaintenanceGitCommand(
     gitRootPath,
     ["rev-parse", "HEAD"],
     "读取最新提交失败。",
@@ -484,7 +427,7 @@ async function pushRepository(
   onProgress?: MaintenanceProgressListener,
 ): Promise<void> {
   onProgress?.("正在推送到仓库...")
-  await runGitCommand(
+  await runMaintenanceGitCommand(
     repository.localPath,
     ["push"],
     "推送到仓库失败。",

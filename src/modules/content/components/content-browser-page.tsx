@@ -64,26 +64,6 @@ type ContentState = {
   title: string
 }
 
-function getRepositoryDescription(
-  repositoryName: string,
-  isGitRepository: boolean | null,
-  isReady: boolean | null,
-): string {
-  if (isReady === null) {
-    return `当前目录：${repositoryName}。正在检查目录状态。`
-  }
-
-  if (!isReady) {
-    return `当前目录：${repositoryName}。未找到本地目录，请重新选择。`
-  }
-
-  if (!isGitRepository) {
-    return `当前目录：${repositoryName}。当前目录不是 Git 仓库。`
-  }
-
-  return `当前目录：${repositoryName}`
-}
-
 function normalizeSearchQuery(value: string): string {
   return value.trim()
 }
@@ -270,7 +250,7 @@ function ContentBrowserPage({
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
   const { currentRepoProfileState } = useCurrentRepoProfile()
-  const { states } = useRepositoryManager()
+  const { operations, states } = useRepositoryManager()
   const [contentRefreshSignal, setContentRefreshSignal] = useState(0)
   const catalogRefreshSignal = refreshSignal + contentRefreshSignal
   const { categories, error, isLoading, items, totalCount } = useContentCatalog(
@@ -282,17 +262,22 @@ function ContentBrowserPage({
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
 
   const activeRepositoryState = activeRepository ? (states[activeRepository.uuid] ?? null) : null
+  const activeRepositoryOperation = activeRepository ? (operations[activeRepository.uuid] ?? null) : null
   const repositoryStatus =
     activeRepositoryState === null
       ? "checking"
       : activeRepositoryState.status === "ready"
         ? "ready"
         : "missing"
+  const isRepositoryInitializing =
+    activeRepositoryOperation?.isRunning
+    && activeRepositoryOperation.operation === "initialize"
   const canBrowseContent = repositoryStatus === "ready"
   const canCreateContent =
     canBrowseContent
     && Boolean(activeRepositoryState?.isGitRepository)
     && currentRepoProfileState?.status !== "needs-onboarding"
+    && !isRepositoryInitializing
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
 
   useEffect(() => {
@@ -400,6 +385,8 @@ function ContentBrowserPage({
         ? "当前目录不存在，不能新建"
         : currentRepoProfileState?.status === "needs-onboarding"
           ? "请先完成当前目录的身份设置"
+        : isRepositoryInitializing
+          ? "当前目录正在初始化，请稍后。"
         : !activeRepositoryState?.isGitRepository
           ? "当前目录不是 Git 仓库，不能新建"
           : `新建 ${definition.singularLabel}`
@@ -465,13 +452,6 @@ function ContentBrowserPage({
             >
               <div className="min-w-0">
                 <h2 className="text-base font-medium text-foreground">{definition.pluralLabel}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {getRepositoryDescription(
-                    activeRepository.name,
-                    activeRepositoryState?.isGitRepository ?? null,
-                    repositoryStatus === "checking" ? null : repositoryStatus === "ready",
-                  )}
-                </p>
               </div>
 
               <p className="shrink-0 text-sm text-muted-foreground">{summaryLabel}</p>

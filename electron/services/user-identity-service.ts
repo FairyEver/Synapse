@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto"
-import { spawn } from "node:child_process"
 import { app } from "electron"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -8,6 +7,7 @@ import type {
   SynapseLocalIdentityState,
 } from "../../src/types/identity"
 import { configStore } from "./config-store"
+import { runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { userProfileService } from "./user-profile-service"
 import {
@@ -73,50 +73,12 @@ function normalizeIdentity(rawValue: unknown): SynapseLocalIdentity | null {
   }
 }
 
-function formatGitSpawnError(error: unknown): string {
-  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-    return "当前系统没有可用的 git 命令，请先安装 Git 并确保命令行可访问。"
-  }
-
-  return error instanceof Error ? error.message : "启动 Git 命令失败。"
-}
-
-function runGitCommand(cwd: string, args: string[], fallbackMessage: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn("git", args, {
-      cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        LANG: "C",
-        LC_ALL: "C",
-      },
-    })
-
-    let stdout = ""
-    let stderr = ""
-
-    childProcess.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8")
-    })
-
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8")
-    })
-
-    childProcess.on("error", (error) => {
-      reject(new Error(formatGitSpawnError(error)))
-    })
-
-    childProcess.on("close", (code) => {
-      if (code === 0) {
-        resolve()
-        return
-      }
-
-      reject(new Error((stderr.trim() || stdout.trim()) || fallbackMessage))
-    })
-  })
+function runIdentityGitCommand(cwd: string, args: string[], fallbackMessage: string): Promise<void> {
+  return runGitCommand({
+    args,
+    cwd,
+    fallbackMessage,
+  }).then(() => undefined)
 }
 
 class UserIdentityService {
@@ -237,15 +199,19 @@ class UserIdentityService {
 
     if (repositoryState.isGitRepository) {
       try {
-        await runGitCommand(
-          repository.localPath,
-          ["fetch"],
-          "无法同步仓库，请检查网络后重试。",
+          await runIdentityGitCommand(
+            repository.localPath,
+            ["fetch"],
+            "无法同步仓库，请检查网络后重试。",
         )
       } catch {
         throw new Error("无法同步仓库，请检查网络后重试。")
       }
     }
+
+    const missingProfileErrorMessage = repositoryState.isGitRepository
+      ? "这个 ID 还没有出现在当前仓库的本地副本里。先同步仓库后再试。"
+      : "这个 ID 在当前仓库里不存在，无法接续。"
 
     const profilePath = resolveUserProfilePath(repository.localPath, nextUserId)
 
@@ -254,18 +220,18 @@ class UserIdentityService {
       const profile = parseUserProfile(rawProfile, nextUserId)
 
       if (!profile) {
-        throw new Error("这个 ID 在当前仓库里不存在，无法接续。")
+        throw new Error(missingProfileErrorMessage)
       }
     } catch (error) {
       if (isFileNotFoundError(error) || error instanceof SyntaxError) {
-        throw new Error("这个 ID 在当前仓库里不存在，无法接续。")
+        throw new Error(missingProfileErrorMessage)
       }
 
       if (error instanceof Error && error.message) {
         throw error
       }
 
-      throw new Error("这个 ID 在当前仓库里不存在，无法接续。")
+      throw new Error(missingProfileErrorMessage)
     }
 
     const nextIdentity: SynapseLocalIdentity = {

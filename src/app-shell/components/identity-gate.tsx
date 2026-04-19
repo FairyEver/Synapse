@@ -5,22 +5,7 @@ import { useLocalIdentity } from "@/app-shell/identity-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-
-function normalizeUserIdInput(value: string): string {
-  return value.trim().toLowerCase().replace(/-/g, "")
-}
-
-function validateUserIdInput(value: string): string | null {
-  const normalizedValue = normalizeUserIdInput(value)
-
-  if (!normalizedValue) {
-    return "ID 格式不对，应为 32 位十六进制字符。"
-  }
-
-  return /^[0-9a-f]{32}$/.test(normalizedValue)
-    ? null
-    : "ID 格式不对，应为 32 位十六进制字符。"
-}
+import { normalizeUserIdInput, validateUserIdInput } from "@/lib/user-id-input"
 
 function IdentityScreenShell({ children }: { children: ReactNode }) {
   return (

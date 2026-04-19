@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import type {
@@ -17,6 +16,7 @@ import { contentHistoryService } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { contentWriteService, type ContentWriteResult } from "./content-write-service"
 import { configStore } from "./config-store"
+import { runGitCommand, type GitCommandResult } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryMaintenanceService } from "./repository-maintenance-service"
@@ -27,11 +27,6 @@ const SYNAPSE_BOT_NAME = "Synapse Bot"
 const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const logger = createMainLogger("service.content-submit")
 
-type GitCommandResult = {
-  stderr: string
-  stdout: string
-}
-
 type PushProgressListener = (statusText: string) => void
 
 function toGitPath(filePath: string): string {
@@ -40,14 +35,6 @@ function toGitPath(filePath: string): string {
 
 function toCommitMessage(action: "create" | "update" | "delete", result: ContentWriteResult): string {
   return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
-}
-
-function formatGitSpawnError(error: unknown): string {
-  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-    return "当前系统没有可用的 git 命令，请先安装 Git 并确保命令行可访问。"
-  }
-
-  return error instanceof Error ? error.message : "启动 Git 命令失败。"
 }
 
 function formatGitFailureMessage(output: string, fallbackMessage: string): string {
@@ -125,74 +112,30 @@ function createDeferredMutationMessage(): string {
   return "已保存。"
 }
 
-function runGitCommand(
+function runRepositoryGitCommand(
   cwd: string,
   args: string[],
   fallbackMessage: string,
   onOutput?: (line: string) => void,
 ): Promise<GitCommandResult> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn("git", args, {
-      cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        LANG: "C",
-        LC_ALL: "C",
-      },
-    })
-
-    let stdout = ""
-    let stderr = ""
-
-    const handleChunk = (chunk: Buffer) => {
-      const text = chunk.toString("utf8")
-
-      stdout += text
-      text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .forEach((line) => onOutput?.(line))
-    }
-
-    childProcess.stdout.on("data", handleChunk)
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8")
-
-      stderr += text
-      text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .forEach((line) => onOutput?.(line))
-    })
-
-    childProcess.on("error", (error) => {
-      reject(new Error(formatGitSpawnError(error)))
-    })
-
-    childProcess.on("close", (code) => {
-      if (code === 0) {
-        resolve({
-          stderr,
-          stdout,
-        })
-        return
-      }
-
-      reject(new Error(formatGitFailureMessage(`${stdout}\n${stderr}`, fallbackMessage)))
-    })
+  return runGitCommand({
+    args,
+    cwd,
+    fallbackMessage,
+    formatFailureMessage: formatGitFailureMessage,
+    onLine: (line) => {
+      onOutput?.(line)
+    },
   })
 }
 
 async function ensureBotIdentity(gitRootPath: string): Promise<void> {
-  await runGitCommand(
+  await runRepositoryGitCommand(
     gitRootPath,
     ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
     "无法初始化 Synapse 提交身份。",
   )
-  await runGitCommand(
+  await runRepositoryGitCommand(
     gitRootPath,
     ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
     "无法初始化 Synapse 提交身份。",
@@ -204,7 +147,7 @@ async function pullWithRebase(
   onProgress?: PushProgressListener,
 ): Promise<void> {
   onProgress?.("正在拉取最新内容...")
-  await runGitCommand(
+  await runRepositoryGitCommand(
     repository.localPath,
     ["pull", "--rebase"],
     "同步仓库失败，请检查网络或仓库状态后重试。",
@@ -224,7 +167,7 @@ async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<voi
     throw new Error("当前没有可提交的改动。")
   }
 
-  await runGitCommand(
+  await runRepositoryGitCommand(
     gitRootPath,
     ["add", "--", ...relativePaths],
     "暂存本地改动失败。",
@@ -236,13 +179,13 @@ async function commitChanges(
   action: "create" | "update" | "delete",
   result: ContentWriteResult,
 ): Promise<string> {
-  await runGitCommand(
+  await runRepositoryGitCommand(
     gitRootPath,
     ["commit", "-m", toCommitMessage(action, result)],
     "提交内容失败。",
   )
 
-  const headCommit = await runGitCommand(
+  const headCommit = await runRepositoryGitCommand(
     gitRootPath,
     ["rev-parse", "HEAD"],
     "读取最新提交失败。",
@@ -256,7 +199,7 @@ async function pushRepository(
   onProgress?: PushProgressListener,
 ): Promise<void> {
   onProgress?.("正在推送到仓库...")
-  await runGitCommand(
+  await runRepositoryGitCommand(
     repository.localPath,
     ["push"],
     "推送到仓库失败。",
