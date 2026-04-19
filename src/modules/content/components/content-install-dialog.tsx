@@ -141,6 +141,8 @@ function ContentInstallDialog({
       scope: "global",
       contentId: item.id,
       contentType: item.type,
+      skillName: item.type === "skill" ? item.name : undefined,
+      skillTitle: item.type === "skill" ? item.title : undefined,
     })
       .then((value) => {
         if (cancelled) {
@@ -194,6 +196,8 @@ function ContentInstallDialog({
       contentId: item.id,
       contentType: item.type,
       projectPath,
+      skillName: item.type === "skill" ? item.name : undefined,
+      skillTitle: item.type === "skill" ? item.title : undefined,
     })
       .then((value) => {
         if (cancelled) {
@@ -278,6 +282,8 @@ function ContentInstallDialog({
           contentId: item.id,
           contentType: item.type,
           projectPath: scope === "project" ? projectPath : undefined,
+          skillName: item.type === "skill" ? item.name : undefined,
+          skillTitle: item.type === "skill" ? item.title : undefined,
           cursorFrontmatter,
         }),
         {
@@ -403,8 +409,12 @@ function ContentInstallDialog({
             <AlertDialogTitle>确认覆盖目标目录？</AlertDialogTitle>
             <AlertDialogDescription>
               {definition.install.kind === "directory-overwrite" ? definition.install.confirmMessage : ""}
-              {activeTarget?.status === "ready" ? ` 目标位置：${activeTarget.targetPath}` : ""}
             </AlertDialogDescription>
+            {activeTarget?.status === "ready" ? (
+              <div className="mt-1 rounded-md bg-muted/40 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
+                {activeTarget.targetPath}
+              </div>
+            ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isInstalling}>取消</AlertDialogCancel>

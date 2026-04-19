@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
+import { QuickRepositorySwitchDialog } from "@/app-shell/components/quick-repository-switch-dialog"
 import { RepoOnboardingDialog } from "@/app-shell/components/repo-onboarding-dialog"
+import { SwitchRepositoryOnboardingDialog } from "@/app-shell/components/switch-repository-onboarding-dialog"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
 
@@ -19,6 +21,8 @@ function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) 
       className="h-screen overflow-hidden bg-muted/30"
     >
       <RepoOnboardingDialog />
+      <QuickRepositorySwitchDialog />
+      <SwitchRepositoryOnboardingDialog />
       <div className="flex h-full flex-col">
         <header className="shrink-0">
           <div

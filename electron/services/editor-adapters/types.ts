@@ -7,6 +7,8 @@ import type {
 export type EditorAdapterResolveContext = {
   contentId: string
   contentType: SynapseContentType
+  skillName?: string
+  skillTitle?: string
 }
 
 export interface EditorAdapter extends SynapseEditorAdapterSummary {

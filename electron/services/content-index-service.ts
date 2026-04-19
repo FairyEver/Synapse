@@ -44,6 +44,7 @@ function toDatabaseRow(
       profileMap,
       summary.modifiedByDisplayName,
     ),
+    name: summary.name ?? null,
     title: summary.title,
     type: summary.type,
   }
@@ -70,10 +71,14 @@ function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | nul
     return null
   }
 
+  const rawName = row.name
+  const trimmedName = typeof rawName === "string" ? rawName.trim() : ""
+
   return {
     id: row.id,
     type: row.type,
     title: row.title,
+    ...(trimmedName.length > 0 ? { name: trimmedName } : {}),
     description: row.description,
     category: row.category,
     icon: row.icon,
@@ -233,13 +238,14 @@ class ContentIndexService {
       database.exec("DELETE FROM content_index")
       const upsertStatement = database.prepare(`
         INSERT INTO content_index (
-          id, type, title, description, category, icon, icon_bg,
+          id, type, title, name, description, category, icon, icon_bg,
           modified_by, modified_by_name, modified_at, created_by, created_by_name,
           created_at, deleted, latest_history_dirname, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type = excluded.type,
           title = excluded.title,
+          name = excluded.name,
           description = excluded.description,
           category = excluded.category,
           icon = excluded.icon,
@@ -262,6 +268,7 @@ class ContentIndexService {
           row.id,
           row.type,
           row.title,
+          row.name,
           row.description,
           row.category,
           row.icon,
@@ -353,13 +360,14 @@ class ContentIndexService {
 
       const upsertStatement = database.prepare(`
         INSERT INTO content_index (
-          id, type, title, description, category, icon, icon_bg,
+          id, type, title, name, description, category, icon, icon_bg,
           modified_by, modified_by_name, modified_at, created_by, created_by_name,
           created_at, deleted, latest_history_dirname, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type = excluded.type,
           title = excluded.title,
+          name = excluded.name,
           description = excluded.description,
           category = excluded.category,
           icon = excluded.icon,
@@ -397,6 +405,7 @@ class ContentIndexService {
           row.id,
           row.type,
           row.title,
+          row.name,
           row.description,
           row.category,
           row.icon,

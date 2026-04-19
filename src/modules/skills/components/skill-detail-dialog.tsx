@@ -90,6 +90,7 @@ function formatDateTime(value: string): string {
 function buildSkillInitialValue(detail: SynapseSkillDetail): CreateSkillPayload {
   return {
     title: detail.title,
+    name: detail.name ?? "",
     description: detail.description,
     category: detail.category,
     icon: detail.icon,

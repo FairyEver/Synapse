@@ -5,12 +5,14 @@ import type {
 } from "@/modules/skills/types"
 import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 import { normalizeContentAttachmentPath } from "@/lib/content-attachments"
+import { normalizeSkillNameInput, validateSkillNameInput } from "@/lib/skill-name-input"
 import type { SynapseCreateSkillFilePayload } from "@/types/content"
 
 const MAX_SKILL_ATTACHMENT_SIZE = 10 * 1024 * 1024
 
 const EMPTY_CREATE_SKILL_PAYLOAD: CreateSkillPayload = {
   title: "",
+  name: "",
   description: "",
   category: "",
   icon: "",
@@ -64,6 +66,7 @@ function normalizeCreateSkillPayload(payload: CreateSkillPayload): CreateSkillPa
     ...payload,
     iconBg: payload.iconBg || DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
     title: payload.title.trim(),
+    name: normalizeSkillNameInput(payload.name),
     description: payload.description.trim(),
     content: payload.content.trim(),
     files: payload.files
@@ -80,7 +83,12 @@ function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFie
   const oversizedNames: string[] = []
 
   if (!normalizedPayload.title) {
-    errors.title = "请输入标题。"
+    errors.title = "请输入中文名称。"
+  }
+
+  const nameError = validateSkillNameInput(normalizedPayload.name)
+  if (nameError) {
+    errors.name = nameError
   }
 
   if (!normalizedPayload.description) {
@@ -141,6 +149,7 @@ function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFie
 function isCreateSkillPayloadDirty(payload: CreateSkillPayload): boolean {
   return (
     payload.title !== ""
+    || payload.name !== ""
     || payload.description !== ""
     || payload.category !== ""
     || payload.icon !== ""

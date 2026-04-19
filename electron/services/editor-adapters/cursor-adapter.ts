@@ -1,5 +1,7 @@
 import path from "node:path"
 import type { EditorAdapter } from "./types"
+import { resolveSkillSlug } from "./skill-slug"
+import { resolveSkillTargetPath } from "./skill-identity"
 import {
   createReadyTarget,
   createUnavailableTarget,
@@ -7,7 +9,6 @@ import {
   createUnsupportedTarget,
   getHomePath,
   getRuleFileName,
-  getSkillDirectoryName,
   isSupportedEditorPlatform,
   pathExists,
   resolveExistingProjectPath,
@@ -20,7 +21,7 @@ const cursorAdapter: EditorAdapter = {
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],
-  async resolveGlobalTarget({ contentId, contentType }) {
+  async resolveGlobalTarget({ contentId, contentType, skillName, skillTitle }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
         adapter: cursorAdapter,
@@ -54,15 +55,23 @@ const cursorAdapter: EditorAdapter = {
       })
     }
 
+    const parentDirectoryPath = path.join(cursorHomePath, "skills")
+    const slug = resolveSkillSlug(skillName, skillTitle, contentId)
+    const targetPath = await resolveSkillTargetPath({
+      contentId,
+      parentDirectoryPath,
+      slug,
+    })
+
     return createReadyTarget({
       adapter: cursorAdapter,
       contentType,
       scope: "global",
       targetKind: "directory",
-      targetPath: path.join(cursorHomePath, "skills", getSkillDirectoryName(contentId)),
+      targetPath,
     })
   },
-  async resolveProjectTarget(projectPath, { contentId, contentType }) {
+  async resolveProjectTarget(projectPath, { contentId, contentType, skillName, skillTitle }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
         adapter: cursorAdapter,
@@ -96,19 +105,22 @@ const cursorAdapter: EditorAdapter = {
             getRuleFileName(contentId),
           ),
         })
-      case "skill":
+      case "skill": {
+        const parentDirectoryPath = path.join(resolvedProjectPath, ".cursor", "skills")
+        const slug = resolveSkillSlug(skillName, skillTitle, contentId)
+        const targetPath = await resolveSkillTargetPath({
+          contentId,
+          parentDirectoryPath,
+          slug,
+        })
         return createReadyTarget({
           adapter: cursorAdapter,
           contentType,
           scope: "project",
           targetKind: "directory",
-          targetPath: path.join(
-            resolvedProjectPath,
-            ".cursor",
-            "skills",
-            getSkillDirectoryName(contentId),
-          ),
+          targetPath,
         })
+      }
       default:
         throw new Error(`${cursorAdapter.label} 暂不支持 ${contentType} 类型。`)
     }

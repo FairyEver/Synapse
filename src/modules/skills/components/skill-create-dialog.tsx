@@ -411,7 +411,7 @@ function SkillCreateDialog({
         >
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="skill-create-title">标题</Label>
+              <Label htmlFor="skill-create-title">中文名称</Label>
               <Input
                 id="skill-create-title"
                 value={form.title}
@@ -420,6 +420,22 @@ function SkillCreateDialog({
                 placeholder="例如：API 文档生成助手"
               />
               <FieldError message={errors.title} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="skill-create-name">名称</Label>
+              <Input
+                id="skill-create-name"
+                value={form.name}
+                aria-invalid={errors.name ? "true" : undefined}
+                className="font-mono"
+                onChange={(event) => updateField("name", event.target.value)}
+                placeholder="my-skill-name"
+              />
+              <p className="text-xs text-muted-foreground">
+                用于 Claude Code / Codex / Cursor 的 skill 目录名。小写字母、数字、连字符，首尾必须是字母或数字。
+              </p>
+              <FieldError message={errors.name} />
             </div>
 
             <div className="flex flex-col gap-2">

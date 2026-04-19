@@ -39,6 +39,7 @@ function ensureRepositoryCacheSchema(
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
       title TEXT,
+      name TEXT,
       description TEXT,
       category TEXT,
       icon TEXT,
@@ -65,6 +66,16 @@ function ensureRepositoryCacheSchema(
       value TEXT
     );
   `)
+
+  // Migrate older DBs that predate the Skill `name` column.
+  try {
+    database.exec(`ALTER TABLE content_index ADD COLUMN name TEXT`)
+  } catch (error) {
+    const message = (error as Error).message ?? ""
+    if (!message.includes("duplicate column")) {
+      throw error
+    }
+  }
 
   if (options.includePendingPushes) {
     database.exec(`

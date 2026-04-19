@@ -152,9 +152,13 @@ function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | 
     return null
   }
 
+  const rawName = rawValue.name
+  const trimmedName = typeof rawName === "string" ? rawName.trim() : ""
+
   return {
     schemaVersion: 1,
     title: rawValue.title.trim(),
+    ...(trimmedName.length > 0 ? { name: trimmedName } : {}),
     description: rawValue.description.trim(),
     category: rawValue.category.trim(),
     icon: rawValue.icon.trim(),
@@ -208,6 +212,7 @@ function buildSummary(
   const baseSummary = {
     id: meta.id,
     title: snapshot.title,
+    ...(snapshot.name ? { name: snapshot.name } : {}),
     description: snapshot.description,
     category: snapshot.category,
     icon: snapshot.icon,

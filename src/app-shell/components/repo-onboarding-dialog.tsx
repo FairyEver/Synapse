@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react"
+import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useLocalIdentity } from "@/app-shell/identity-context"
-import {
-  readCurrentAppTab,
-  requestOpenSettingsTab,
-  subscribeActiveAppTab,
-} from "@/app-shell/navigation"
 import { useRepositoryManager } from "@/app-shell/repository"
 import {
   Dialog,
@@ -20,30 +16,28 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 function RepoOnboardingDialog() {
-  const { activeRepository } = useAppConfig()
+  const { activeRepository, config } = useAppConfig()
   const { currentRepoProfileState, updateCurrentRepoDisplayName } = useCurrentRepoProfile()
   const { localIdentityState } = useLocalIdentity()
   const { refreshPendingPushes, states } = useRepositoryManager()
-  const [activeTab, setActiveTab] = useState(() => readCurrentAppTab())
+  const {
+    isRepositorySwitchDialogOpen,
+    openRepositorySwitchDialog,
+    pendingSwitchOnboarding,
+  } = useActiveRepositorySwitch()
   const [displayName, setDisplayName] = useState("")
-  const [suspendedRepoId, setSuspendedRepoId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const activeRepositoryState = activeRepository ? states[activeRepository.uuid] ?? null : null
-  const isSuspendedForCurrentRepository =
-    activeRepository !== null
-    && activeTab === "settings"
-    && suspendedRepoId === activeRepository.uuid
+  const hasOtherRepositories = config.repositories.length > 1
+  const isBlockedByOtherSwitchUi =
+    isRepositorySwitchDialogOpen || pendingSwitchOnboarding !== null
   const isOpen =
     localIdentityState?.status === "ready"
     && activeRepository !== null
     && activeRepositoryState?.status === "ready"
     && currentRepoProfileState?.status === "needs-onboarding"
-    && !isSuspendedForCurrentRepository
-
-  useEffect(() => {
-    return subscribeActiveAppTab(setActiveTab)
-  }, [])
+    && !isBlockedByOtherSwitchUi
 
   useEffect(() => {
     if (!isOpen) {
@@ -53,28 +47,7 @@ function RepoOnboardingDialog() {
     }
   }, [isOpen])
 
-  useEffect(() => {
-    if (currentRepoProfileState?.status === "ready") {
-      setSuspendedRepoId(null)
-      return
-    }
-
-    if (!activeRepository) {
-      setSuspendedRepoId(null)
-      return
-    }
-
-    if (suspendedRepoId && suspendedRepoId !== activeRepository.uuid) {
-      setSuspendedRepoId(null)
-      return
-    }
-
-    if (activeTab !== "settings" && suspendedRepoId === activeRepository.uuid) {
-      setSuspendedRepoId(null)
-    }
-  }, [activeRepository, activeTab, currentRepoProfileState, suspendedRepoId])
-
-  if (!isOpen || !activeRepository || currentRepoProfileState.status !== "needs-onboarding") {
+  if (!isOpen || !activeRepository || currentRepoProfileState?.status !== "needs-onboarding") {
     return null
   }
 
@@ -133,9 +106,16 @@ function RepoOnboardingDialog() {
               id="repo-onboarding-display-name"
               value={displayName}
               aria-invalid={error ? true : undefined}
+              autoFocus
               onChange={(event) => {
                 setDisplayName(event.target.value)
                 setError(null)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  handleSubmit()
+                }
               }}
             />
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -143,17 +123,16 @@ function RepoOnboardingDialog() {
         </div>
 
         <DialogFooter className="sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={() => {
-              setSuspendedRepoId(activeRepository.uuid)
-              requestOpenSettingsTab()
-            }}
-          >
-            切换仓库
-          </Button>
+          {hasOtherRepositories ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => openRepositorySwitchDialog()}
+            >
+              切换仓库
+            </Button>
+          ) : <span />}
           <Button
             type="button"
             disabled={isSubmitting || displayName.trim().length === 0}

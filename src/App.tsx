@@ -1,5 +1,4 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useState } from "react"
-import { QuickRepositorySwitchDialog } from "@/app-shell/components/quick-repository-switch-dialog"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
@@ -58,7 +57,10 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
 
 function MainApp() {
   const { activeRepository } = useAppConfig()
-  const { isSwitchingRepository } = useActiveRepositorySwitch()
+  const {
+    isSwitchingRepository,
+    openRepositorySwitchDialog,
+  } = useActiveRepositorySwitch()
   const { promise } = useAppNotifications()
   const { flushPendingPushes, pendingPushes, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rule")
@@ -66,7 +68,6 @@ function MainApp() {
     createEmptyDialogStateMap,
   )
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
-  const [isRepositorySwitchDialogOpen, setIsRepositorySwitchDialogOpen] = useState(false)
   const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
   const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
     state.create || state.detail || state.install
@@ -103,12 +104,6 @@ function MainApp() {
     })
   }, [])
 
-  useEffect(() => {
-    if (!toolbarState.showRepositorySwitch && isRepositorySwitchDialogOpen) {
-      setIsRepositorySwitchDialogOpen(false)
-    }
-  }, [isRepositorySwitchDialogOpen, toolbarState.showRepositorySwitch])
-
   const setContentDialogOpen = useCallback((
     contentType: SynapseContentType,
     kind: DialogKind,
@@ -142,11 +137,6 @@ function MainApp() {
 
   return (
     <IdentityGate>
-      <QuickRepositorySwitchDialog
-        open={isRepositorySwitchDialogOpen}
-        onOpenChange={setIsRepositorySwitchDialogOpen}
-      />
-
       <AlertDialog open={isPendingPushDialogOpen} onOpenChange={setIsPendingPushDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -243,7 +233,7 @@ function MainApp() {
                 return
               }
 
-              setIsRepositorySwitchDialogOpen(true)
+              openRepositorySwitchDialog()
             }}
           />
         }

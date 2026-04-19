@@ -15,7 +15,11 @@ import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { parseMdcFrontmatter, serializeMdcFrontmatter } from "./editor-adapters/cursor-mdc"
 import { applyRuleSection } from "./editor-adapters/rule-section"
-import { serializeSkillFrontmatter, slugifySkillName } from "./editor-adapters/skill-frontmatter"
+import {
+  SYNAPSE_SKILL_ID_FILE_NAME,
+  findSkillDirectoryByContentId,
+} from "./editor-adapters/skill-identity"
+import { serializeSkillFrontmatter } from "./editor-adapters/skill-frontmatter"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
@@ -210,11 +214,15 @@ class ContentInstallService {
 
           const repositoryRootPath = await getActiveRepositoryRootPath()
           const detail = await contentService.getDetail(payload.contentType, payload.contentId)
+          const parentDirectoryPath = path.dirname(target.targetPath)
+          const previousSkillDirectoryPath = payload.contentType === "skill"
+            ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
+            : null
 
           const skillMainContent = payload.contentType === "skill"
             ? serializeSkillFrontmatter({
                 description: detail.description,
-                name: slugifySkillName(detail.title, detail.id),
+                name: path.basename(target.targetPath),
               }) + detail.content
             : detail.content
 
@@ -225,6 +233,14 @@ class ContentInstallService {
               "utf8",
             )
 
+            if (payload.contentType === "skill") {
+              await writeFile(
+                path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME),
+                payload.contentId,
+                "utf8",
+              )
+            }
+
             for (const attachment of detail.attachments) {
               await attachmentsPoolService.copyAttachmentToPath(
                 repositoryRootPath,
@@ -233,6 +249,14 @@ class ContentInstallService {
               )
             }
           })
+
+          if (
+            previousSkillDirectoryPath
+            && previousSkillDirectoryPath !== target.targetPath
+          ) {
+            await rm(previousSkillDirectoryPath, { recursive: true, force: true }).catch(() => {})
+          }
+
           break
         }
         default:

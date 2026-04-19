@@ -126,10 +126,6 @@ function getHomePath(...segments: string[]): string {
   return path.join(os.homedir(), ...segments)
 }
 
-function getSkillDirectoryName(contentId: string): string {
-  return contentId.trim()
-}
-
 function getRuleFileName(contentId: string): string {
   return `${contentId.trim()}.mdc`
 }
@@ -165,7 +161,6 @@ export {
   expandHomeDirectory,
   getHomePath,
   getRuleFileName,
-  getSkillDirectoryName,
   isSupportedEditorPlatform,
   pathExists,
   resolveExistingProjectPath,

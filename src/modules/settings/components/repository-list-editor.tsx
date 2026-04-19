@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
+import { RepositoryDisplayNameField } from "@/modules/settings/components/repository-display-name-field"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type {
@@ -528,6 +529,13 @@ function RepositoryListEditor({
                       </p>
                     ) : null}
                   </div>
+                  {repositoryState?.status === "ready" ? (
+                    <RepositoryDisplayNameField
+                      repositoryUuid={repository.uuid}
+                      isActiveRepository={isActive}
+                      disabled={isBusy}
+                    />
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     {hasRepositoryBridge ? (
                       <Button

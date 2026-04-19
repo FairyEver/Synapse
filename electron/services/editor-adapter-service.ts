@@ -61,6 +61,8 @@ class EditorAdapterService {
       return adapter.resolveGlobalTarget({
         contentId: trimmedContentId,
         contentType: payload.contentType,
+        skillName: payload.skillName,
+        skillTitle: payload.skillTitle,
       })
     }
 
@@ -76,6 +78,8 @@ class EditorAdapterService {
     return adapter.resolveProjectTarget(payload.projectPath, {
       contentId: trimmedContentId,
       contentType: payload.contentType,
+      skillName: payload.skillName,
+      skillTitle: payload.skillTitle,
     })
   }
 }

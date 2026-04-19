@@ -112,9 +112,13 @@ function createSnapshotRecord(
   modifiedAt: string,
   deleted: boolean,
 ): SynapseContentSnapshotRecord {
+  const payloadName = (payload as { name?: unknown }).name
+  const trimmedName = typeof payloadName === "string" ? payloadName.trim() : ""
+
   return {
     schemaVersion: 1,
     title: payload.title.trim(),
+    ...(trimmedName.length > 0 ? { name: trimmedName } : {}),
     description: payload.description.trim(),
     category: payload.category.trim(),
     icon: payload.icon.trim(),
@@ -361,12 +365,13 @@ class ContentWriteService {
     const snapshot = createSnapshotRecord(
       {
         title: baseline.title,
+        ...(baseline.name ? { name: baseline.name } : {}),
         description: baseline.description,
         category: baseline.category,
         icon: baseline.icon,
         iconBg: baseline.iconBg,
         content: baseline.content,
-      },
+      } as ContentCreatePayload,
       identity,
       modifiedAt,
       true,

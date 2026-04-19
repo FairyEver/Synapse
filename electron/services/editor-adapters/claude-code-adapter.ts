@@ -1,11 +1,12 @@
 import path from "node:path"
 import type { EditorAdapter } from "./types"
+import { resolveSkillSlug } from "./skill-slug"
+import { resolveSkillTargetPath } from "./skill-identity"
 import {
   createReadyTarget,
   createUnavailableTarget,
   createUnsupportedPlatformTarget,
   getHomePath,
-  getSkillDirectoryName,
   isSupportedEditorPlatform,
   pathExists,
   resolveExistingProjectPath,
@@ -18,7 +19,7 @@ const claudeCodeAdapter: EditorAdapter = {
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],
-  async resolveGlobalTarget({ contentId, contentType }) {
+  async resolveGlobalTarget({ contentId, contentType, skillName, skillTitle }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
         adapter: claudeCodeAdapter,
@@ -47,19 +48,27 @@ const claudeCodeAdapter: EditorAdapter = {
           targetKind: "file",
           targetPath: path.join(claudeHomePath, "CLAUDE.md"),
         })
-      case "skill":
+      case "skill": {
+        const parentDirectoryPath = path.join(claudeHomePath, "skills")
+        const slug = resolveSkillSlug(skillName, skillTitle, contentId)
+        const targetPath = await resolveSkillTargetPath({
+          contentId,
+          parentDirectoryPath,
+          slug,
+        })
         return createReadyTarget({
           adapter: claudeCodeAdapter,
           contentType,
           scope: "global",
           targetKind: "directory",
-          targetPath: path.join(claudeHomePath, "skills", getSkillDirectoryName(contentId)),
+          targetPath,
         })
+      }
       default:
         throw new Error(`${claudeCodeAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
   },
-  async resolveProjectTarget(projectPath, { contentId, contentType }) {
+  async resolveProjectTarget(projectPath, { contentId, contentType, skillName, skillTitle }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
         adapter: claudeCodeAdapter,
@@ -88,19 +97,22 @@ const claudeCodeAdapter: EditorAdapter = {
           targetKind: "file",
           targetPath: path.join(resolvedProjectPath, "CLAUDE.md"),
         })
-      case "skill":
+      case "skill": {
+        const parentDirectoryPath = path.join(resolvedProjectPath, ".claude", "skills")
+        const slug = resolveSkillSlug(skillName, skillTitle, contentId)
+        const targetPath = await resolveSkillTargetPath({
+          contentId,
+          parentDirectoryPath,
+          slug,
+        })
         return createReadyTarget({
           adapter: claudeCodeAdapter,
           contentType,
           scope: "project",
           targetKind: "directory",
-          targetPath: path.join(
-            resolvedProjectPath,
-            ".claude",
-            "skills",
-            getSkillDirectoryName(contentId),
-          ),
+          targetPath,
         })
+      }
       default:
         throw new Error(`${claudeCodeAdapter.label} 暂不支持 ${contentType} 类型。`)
     }

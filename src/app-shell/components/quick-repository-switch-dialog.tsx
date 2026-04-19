@@ -13,18 +13,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-type QuickRepositorySwitchDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
-
-function QuickRepositorySwitchDialog({
-  open,
-  onOpenChange,
-}: QuickRepositorySwitchDialogProps) {
+function QuickRepositorySwitchDialog() {
   const { config } = useAppConfig()
   const { operations } = useRepositoryManager()
   const {
+    closeRepositorySwitchDialog,
+    isRepositorySwitchDialogOpen,
     isSwitchingRepository,
     switchingRepositoryUuid,
     switchActiveRepository,
@@ -36,7 +30,14 @@ function QuickRepositorySwitchDialog({
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={isRepositorySwitchDialogOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          closeRepositorySwitchDialog()
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>切换仓库</DialogTitle>
@@ -74,7 +75,7 @@ function QuickRepositorySwitchDialog({
 
                     void switchActiveRepository(repository.uuid).then((didSwitch) => {
                       if (didSwitch) {
-                        onOpenChange(false)
+                        closeRepositorySwitchDialog()
                       }
                     })
                   }}

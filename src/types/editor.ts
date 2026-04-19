@@ -24,6 +24,16 @@ export type SynapseResolveEditorTargetPayload = {
   contentType: SynapseContentType
   contentId: string
   projectPath?: string
+  /**
+   * Skill's explicit ASCII identifier (the new `name` field). When present, it
+   * is used verbatim as the skill directory name. Rules ignore it.
+   */
+  skillName?: string
+  /**
+   * Skill title hint — fallback used only for legacy Skills that have no
+   * `name` yet. Slugified to produce a directory name.
+   */
+  skillTitle?: string
 }
 
 export type CursorRuleFrontmatter = {
