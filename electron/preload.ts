@@ -37,10 +37,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     updateDisplayName: "synapse:user-profile:update-display-name",
   },
   log: {
-    appended: "synapse:log:appended",
     export: "synapse:log:export",
-    list: "synapse:log:list",
-    summary: "synapse:log:summary",
     write: "synapse:log:write",
   },
   repository: {
@@ -56,6 +53,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     sync: "synapse:repository:sync",
     progress: "synapse:repository:progress",
     updated: "synapse:repository:updated",
+    validateDirectory: "synapse:repository:validate-directory",
   },
   update: {
     checkForUpdates: "synapse:update:check-for-updates",
@@ -129,9 +127,6 @@ const synapseBridge: SynapseBridge = {
   },
   log: {
     export: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.export),
-    list: (query) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.list, query),
-    onAppended: (listener) => subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.log.appended, listener),
-    summary: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.summary),
     write: (payload) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.log.write, payload),
   },
   repository: {
@@ -158,6 +153,7 @@ const synapseBridge: SynapseBridge = {
     onProgress: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.progress, listener),
     onUpdated: (listener) => subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.updated, listener),
+    validateDirectory: (targetPath) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.validateDirectory, targetPath),
   },
   updater: {
     checkForUpdates: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.checkForUpdates),

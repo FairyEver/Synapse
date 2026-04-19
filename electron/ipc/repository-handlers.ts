@@ -11,6 +11,7 @@ import { repositoryGitService } from "../services/repository-git-service"
 import { createMainLogger } from "../services/log-store"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryStructureService } from "../services/repository-structure-service"
+import type { SynapseRepositoryValidationResult } from "../../src/types/repository"
 
 let handlersRegistered = false
 const logger = createMainLogger("ipc.repository")
@@ -130,6 +131,14 @@ function registerRepositoryHandlers() {
       })
 
       return selectedPath
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.repository.validateDirectory,
+    async (_event, targetPath: string): Promise<SynapseRepositoryValidationResult> => {
+      logger.info("Validating directory structure.", { targetPath })
+      return repositoryStructureService.validateDirectoryStructure(targetPath)
     },
   )
 

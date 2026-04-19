@@ -5,12 +5,12 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { LogsModule } from "@/modules/logs"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
+import { LogExportPanel } from "@/modules/settings/components/log-export-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
 import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
 import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
@@ -19,7 +19,6 @@ import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
-import { cn } from "@/lib/utils"
 
 const logger = createRendererLogger("settings")
 
@@ -58,7 +57,6 @@ function SettingsModule() {
   const regularItems = categoryItems.filter((item) => item.type !== "list" && activeCategory !== "about")
   const hasRepositoriesItem = categoryItems.some((item) => item.key === "repositories")
   const hasProjectsItem = categoryItems.some((item) => item.key === "global.projects")
-  const isLogsCategory = activeCategory === "logs"
 
   const applyPatch = useCallback(
     async (patch: Parameters<typeof updateConfig>[0], reset = false) => {
@@ -136,7 +134,6 @@ function SettingsModule() {
   return (
     <SidebarContentLayout
       contentClassName="bg-muted/30"
-      contentScrollable={!isLogsCategory}
       sidebar={
         <SettingsCategorySidebar
           categories={visibleCategories}
@@ -150,7 +147,7 @@ function SettingsModule() {
         />
       }
     >
-      <div className={cn("flex flex-col gap-6", isLogsCategory ? "h-full min-h-0 pb-4" : "pb-6")}>
+      <div className="flex flex-col gap-6 pb-6">
         {activeCategory === "content" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
             {activeRepository.name}
@@ -195,6 +192,7 @@ function SettingsModule() {
 
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
+        {isReady && activeCategory === "general" ? <LogExportPanel /> : null}
 
         {isReady && activeCategory === "content" && activeRepository ? (
           <RepositoryMaintenancePanel repositoryUuid={activeRepository.uuid} />
@@ -213,12 +211,6 @@ function SettingsModule() {
             projects={config.global.projects}
             onSave={handleSaveProjects}
           />
-        ) : null}
-
-        {isReady && activeCategory === "logs" ? (
-          <div className="min-h-0 flex-1">
-            <LogsModule />
-          </div>
         ) : null}
 
         {isReady && activeCategory === "about" ? (

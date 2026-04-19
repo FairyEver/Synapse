@@ -1,8 +1,9 @@
 import path from "node:path"
 import type { EditorAdapter } from "./types"
 import { resolveSkillSlug } from "./skill-slug"
-import { resolveSkillTargetPath } from "./skill-identity"
+import { checkSkillNameConflict, resolveSkillTargetPath } from "./skill-identity"
 import {
+  createConflictTarget,
   createReadyTarget,
   createUnavailableTarget,
   createUnsupportedPlatformTarget,
@@ -61,13 +62,37 @@ const codexAdapter: EditorAdapter = {
         })
       }
       case "skill": {
-        const parentDirectoryPath = getHomePath(".agents", "skills")
+        const agentsHomePath = getHomePath(".agents")
+
+        if (!(await pathExists(agentsHomePath))) {
+          return createUnavailableTarget({
+            adapter: codexAdapter,
+            contentType,
+            message: "未检测到 Codex 的 Skills 目录，暂时不能解析全局安装位置。",
+            scope: "global",
+          })
+        }
+
+        const parentDirectoryPath = path.join(agentsHomePath, "skills")
         const slug = resolveSkillSlug(skillName, skillTitle, contentId)
-        const targetPath = await resolveSkillTargetPath({
-          contentId,
-          parentDirectoryPath,
-          slug,
-        })
+
+        // Check for conflict before resolving target path
+        const conflict = await checkSkillNameConflict(parentDirectoryPath, slug, contentId)
+
+        if (conflict.hasConflict) {
+          return createConflictTarget({
+            adapter: codexAdapter,
+            contentType,
+            scope: "global",
+            targetKind: "directory",
+            targetPath: conflict.existingPath,
+            conflictContentId: conflict.existingContentId,
+            message: `该位置已存在名为 "${slug}" 的 Skill，是否替换？`,
+          })
+        }
+
+        const targetPath = path.join(parentDirectoryPath, slug)
+
         return createReadyTarget({
           adapter: codexAdapter,
           contentType,
@@ -112,11 +137,24 @@ const codexAdapter: EditorAdapter = {
       case "skill": {
         const parentDirectoryPath = path.join(resolvedProjectPath, ".agents", "skills")
         const slug = resolveSkillSlug(skillName, skillTitle, contentId)
-        const targetPath = await resolveSkillTargetPath({
-          contentId,
-          parentDirectoryPath,
-          slug,
-        })
+
+        // Check for conflict before resolving target path
+        const conflict = await checkSkillNameConflict(parentDirectoryPath, slug, contentId)
+
+        if (conflict.hasConflict) {
+          return createConflictTarget({
+            adapter: codexAdapter,
+            contentType,
+            scope: "project",
+            targetKind: "directory",
+            targetPath: conflict.existingPath,
+            conflictContentId: conflict.existingContentId,
+            message: `该位置已存在名为 "${slug}" 的 Skill，是否替换？`,
+          })
+        }
+
+        const targetPath = path.join(parentDirectoryPath, slug)
+
         return createReadyTarget({
           adapter: codexAdapter,
           contentType,

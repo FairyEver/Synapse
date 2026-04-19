@@ -1,12 +1,5 @@
-import type {
-  SynapseLogAppendedEvent,
-  SynapseLogExportResult,
-  SynapseLogLevel,
-  SynapseLogListQuery,
-  SynapseLogListResult,
-  SynapseLogSummary,
-} from "@/types/log"
-import { createMissingBridgeError, getSynapseBridge } from "@/lib/electron-bridge"
+import type { SynapseLogLevel } from "@/types/log"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 
 type RendererLogger = {
   debug: (message: string, details?: unknown) => void
@@ -19,10 +12,6 @@ type RendererLogBridge = NonNullable<Window["synapse"]>["log"]
 
 function getLogBridge(): RendererLogBridge | undefined {
   return getSynapseBridge()?.log
-}
-
-function hasLogBridge(): boolean {
-  return Boolean(getLogBridge())
 }
 
 async function writeRendererLog(
@@ -67,45 +56,6 @@ function createRendererLogger(category: string): RendererLogger {
   }
 }
 
-function readLogSummary(): Promise<SynapseLogSummary> {
-  const bridge = getLogBridge()
-
-  if (!bridge) {
-    return Promise.resolve({ total: 0 })
-  }
-
-  return bridge.summary()
-}
-
-function readLogList(query: SynapseLogListQuery): Promise<SynapseLogListResult> {
-  const bridge = getLogBridge()
-
-  if (!bridge) {
-    return Promise.resolve({
-      total: 0,
-      entries: [],
-    })
-  }
-
-  return bridge.list(query)
-}
-
-function exportLogs(): Promise<SynapseLogExportResult> {
-  const bridge = getLogBridge()
-
-  if (!bridge) {
-    return Promise.reject(createMissingBridgeError())
-  }
-
-  return bridge.export()
-}
-
-function subscribeToLogAppends(
-  listener: (event: SynapseLogAppendedEvent) => void,
-): () => void {
-  return getLogBridge()?.onAppended(listener) ?? (() => {})
-}
-
 function installRendererLogForwarding(): () => void {
   const logger = createRendererLogger("renderer.runtime")
 
@@ -133,10 +83,5 @@ function installRendererLogForwarding(): () => void {
 
 export {
   createRendererLogger,
-  exportLogs,
-  hasLogBridge,
   installRendererLogForwarding,
-  readLogList,
-  readLogSummary,
-  subscribeToLogAppends,
 }

@@ -3,6 +3,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import {
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { useRepositoryManager } from "@/app-shell/repository"
 import { readRepoProfileState, updateRepoDisplayName } from "@/app-shell/user-profile"
 
 type PendingSwitchOnboarding = {
@@ -38,11 +40,47 @@ const logger = createRendererLogger("app.active-repository-switch")
 function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
   const { config, updateConfig } = useAppConfig()
   const { promise } = useAppNotifications()
+  const { states, validateDirectory } = useRepositoryManager()
   const [switchingRepositoryUuid, setSwitchingRepositoryUuid] = useState<string | null>(null)
   const [isRepositorySwitchDialogOpen, setIsRepositorySwitchDialogOpen] = useState(false)
   const [pendingSwitchOnboarding, setPendingSwitchOnboarding] =
     useState<PendingSwitchOnboarding | null>(null)
+  const [isValidatingOnStartup, setIsValidatingOnStartup] = useState(false)
   const pendingResolverRef = useRef<((didSwitch: boolean) => void) | null>(null)
+
+  // 启动时验证当前激活仓库的目录结构
+  useEffect(() => {
+    if (!config.activeRepoUuid || isValidatingOnStartup) return
+
+    const activeRepo = config.repositories.find(r => r.uuid === config.activeRepoUuid)
+    if (!activeRepo) return
+
+    const repoState = states[config.activeRepoUuid]
+    if (repoState?.status !== "ready") return
+
+    setIsValidatingOnStartup(true)
+
+    void (async () => {
+      try {
+        const result = await validateDirectory(activeRepo.localPath)
+        if (!result.isValid) {
+          logger.warn("Active repository failed validation on startup.", {
+            repositoryUuid: config.activeRepoUuid,
+            missingDirs: result.missingDirectories,
+          })
+          // 清除无效的激活仓库配置
+          await updateConfig({ activeRepoUuid: null })
+        }
+      } catch (error) {
+        logger.error("Failed to validate repository on startup.", {
+          error,
+          repositoryUuid: config.activeRepoUuid,
+        })
+      } finally {
+        setIsValidatingOnStartup(false)
+      }
+    })()
+  }, [config.activeRepoUuid, config.repositories, states, validateDirectory, updateConfig])
 
   const runActiveRepoUpdateWithReload = useCallback(
     async (repositoryUuid: string) => {
@@ -127,6 +165,12 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
       setSwitchingRepositoryUuid(repositoryUuid)
 
       try {
+        // 先验证仓库目录结构是否合法
+        const validationResult = await validateDirectory(targetRepository.localPath)
+        if (!validationResult.isValid) {
+          throw new Error(validationResult.message)
+        }
+
         let repoProfileState: Awaited<ReturnType<typeof readRepoProfileState>>
 
         try {
@@ -158,12 +202,12 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
           error,
           repositoryUuid,
         })
-        return false
+        throw error
       } finally {
         setSwitchingRepositoryUuid(null)
       }
     },
-    [config.activeRepoUuid, config.repositories, runActiveRepoUpdateWithReload],
+    [config.activeRepoUuid, config.repositories, runActiveRepoUpdateWithReload, validateDirectory],
   )
 
   const value = useMemo<ActiveRepositorySwitchContextValue>(

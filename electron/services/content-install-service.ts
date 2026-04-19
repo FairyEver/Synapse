@@ -219,6 +219,17 @@ class ContentInstallService {
             ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
             : null
 
+          // Handle Skill replacement: backup existing directory if replace confirmed
+          if (payload.contentType === "skill" && payload.replaceConfirmed) {
+            const targetExists = await pathExists(target.targetPath)
+            if (targetExists && target.targetPath !== previousSkillDirectoryPath) {
+              const backupPath = `${target.targetPath}-backup`
+              await rename(target.targetPath, backupPath).catch((err) => {
+                logger.warn("Failed to backup existing skill directory", { targetPath: target.targetPath, error: err })
+              })
+            }
+          }
+
           const skillMainContent = payload.contentType === "skill"
             ? serializeSkillFrontmatter({
                 description: detail.description,

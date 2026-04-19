@@ -19,6 +19,7 @@ import type {
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
+  SynapseRepositoryValidationResult,
 } from "@/types/repository"
 
 type RepositoryOperationState = {
@@ -49,6 +50,7 @@ type RepositoryManagerContextValue = {
   refreshPendingPushes: (repositoryUuid: string) => Promise<void>
   runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
   syncRepository: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+  validateDirectory: (targetPath: string) => Promise<SynapseRepositoryValidationResult>
   waitForBackgroundPush: (repositoryUuid: string, timeoutMs?: number) => Promise<void>
   refreshRepositoryStates: () => Promise<void>
 }
@@ -318,6 +320,16 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const validateDirectory = useCallback(async (targetPath: string): Promise<SynapseRepositoryValidationResult> => {
+    const bridge = getSynapseBridge()
+
+    if (!bridge) {
+      throw new Error("当前运行实例还没有加载仓库能力桥接。请重新加载窗口或重启 Synapse 后再试。")
+    }
+
+    return bridge.repository.validateDirectory(targetPath)
+  }, [])
+
   useEffect(() => {
     if (!config.activeRepoUuid) {
       return
@@ -518,6 +530,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       refreshPendingPushes,
       runMaintenance: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "maintenance"),
       syncRepository: (repositoryUuid: string) => runRepositoryOperation(repositoryUuid, "sync"),
+      validateDirectory,
       waitForBackgroundPush,
       refreshRepositoryStates,
     }),
@@ -533,6 +546,7 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
       refreshRepositoryStates,
       runRepositoryOperation,
       states,
+      validateDirectory,
       waitForBackgroundPush,
     ],
   )

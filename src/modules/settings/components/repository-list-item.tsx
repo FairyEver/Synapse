@@ -31,6 +31,7 @@ type RepositoryListItemProps = {
   activeRepoUuid: string | null
   onInitialize: (repository: SynapseRepositoryConfig) => void
   onRemove: (repositoryUuid: string) => void
+  onEdit: (repository: SynapseRepositoryConfig) => void
 }
 
 const logger = createRendererLogger("settings")
@@ -63,6 +64,7 @@ function RepositoryListItem({
   activeRepoUuid,
   onInitialize,
   onRemove,
+  onEdit,
 }: RepositoryListItemProps) {
   const { syncRepository } = useRepositoryManager()
   const { switchActiveRepository } = useActiveRepositorySwitch()
@@ -187,6 +189,14 @@ function RepositoryListItem({
             {initializingUuid === repository.uuid ? "初始化中..." : "初始化"}
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isBusy}
+          onClick={() => onEdit(repository)}
+        >
+          修改
+        </Button>
         <Button
           variant="ghost"
           size="sm"

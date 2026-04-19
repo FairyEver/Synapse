@@ -90,12 +90,15 @@ function ContentInstallDialog({
   const [installError, setInstallError] = useState<string | null>(null)
   const [isInstalling, setIsInstalling] = useState(false)
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false)
+  const [isConflictConfirmOpen, setIsConflictConfirmOpen] = useState(false)
   const [isCursorFrontmatterOpen, setIsCursorFrontmatterOpen] = useState(false)
   const [cursorFrontmatterDefaults, setCursorFrontmatterDefaults] =
     useState<CursorRuleFrontmatter | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const selectedProject = projects.find((project) => project.id === projectSelection) ?? null
+  const selectedProjectLabel =
+    selectedProject ? `${selectedProject.name} ${selectedProject.path}` : null
   const projectPath =
     projectSelection === CUSTOM_PROJECT_OPTION ? customProjectPath.trim() : selectedProject?.path ?? ""
   const activeTargetState = scope === "global" ? globalTargetState : projectTargetState
@@ -103,7 +106,7 @@ function ContentInstallDialog({
   const globalScopeDisabled =
     !editor?.supportsGlobal || globalTargetState.value?.status === "unsupported"
   const projectScopeDisabled = !editor?.supportsProject
-  const canInstall = activeTarget?.status === "ready" && !isInstalling
+  const canInstall = (activeTarget?.status === "ready" || (activeTarget?.status === "conflict" && item.type === "skill")) && !isInstalling
 
   useEffect(() => {
     if (!open) {
@@ -118,6 +121,7 @@ function ContentInstallDialog({
     setInstallError(null)
     setIsInstalling(false)
     setIsOverwriteConfirmOpen(false)
+    setIsConflictConfirmOpen(false)
     setIsCursorFrontmatterOpen(false)
     setCursorFrontmatterDefaults(null)
   }, [editor?.id, open, projects])
@@ -255,7 +259,7 @@ function ContentInstallDialog({
     setCustomProjectPath(selectedPath)
   }
 
-  const runInstall = async (cursorFrontmatter?: CursorRuleFrontmatter) => {
+  const runInstall = async (cursorFrontmatter?: CursorRuleFrontmatter, replaceConfirmed?: boolean) => {
     if (!editor) {
       return
     }
@@ -265,7 +269,7 @@ function ContentInstallDialog({
       return
     }
 
-    if (!activeTarget || activeTarget.status !== "ready") {
+    if (!activeTarget || (activeTarget.status !== "ready" && activeTarget.status !== "conflict")) {
       setInstallError("当前还没有可用的安装目标。")
       return
     }
@@ -284,10 +288,11 @@ function ContentInstallDialog({
           skillName: item.type === "skill" ? item.name : undefined,
           skillTitle: item.type === "skill" ? item.title : undefined,
           cursorFrontmatter,
+          replaceConfirmed,
         }),
         {
           loading: `正在安装到 ${editor.label}...`,
-          success: (value) => `已写入 ${value.targetPath}`,
+          success: (value) => `已写入 ${value.targetPath}${replaceConfirmed ? "（旧 Skill 已备份为 -backup）" : ""}`,
           error: (error) => error instanceof Error ? error.message : "安装失败。",
         },
       )
@@ -365,6 +370,12 @@ function ContentInstallDialog({
       return
     }
 
+    // Check for Skill name conflict
+    if (activeTarget?.status === "conflict" && item.type === "skill") {
+      setIsConflictConfirmOpen(true)
+      return
+    }
+
     if (
       editor?.id === "cursor"
       && item.type === "rule"
@@ -430,6 +441,34 @@ function ContentInstallDialog({
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={isConflictConfirmOpen} onOpenChange={setIsConflictConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认替换 Skill？</AlertDialogTitle>
+            <AlertDialogDescription>
+              该位置已存在同名 Skill，替换后旧 Skill 将被备份为 <code className="text-xs bg-muted px-1 rounded">-backup</code> 目录，如需删除请手动清理。
+            </AlertDialogDescription>
+            {activeTarget?.status === "conflict" ? (
+              <div className="mt-1 rounded-md bg-muted/40 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
+                {activeTarget.targetPath}
+              </div>
+            ) : null}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isInstalling} autoFocus>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isInstalling}
+              onClick={() => {
+                setIsConflictConfirmOpen(false)
+                void runInstall(undefined, true)
+              }}
+            >
+              替换
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -468,7 +507,7 @@ function ContentInstallDialog({
                     <SelectContent>
                       {projects.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
-                          {project.name}
+                          {project.name} {project.path}
                         </SelectItem>
                       ))}
                       <SelectItem value={CUSTOM_PROJECT_OPTION}>浏览其他目录</SelectItem>
@@ -500,10 +539,6 @@ function ContentInstallDialog({
                       ) : null}
                     </div>
                   </div>
-                ) : selectedProject ? (
-                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                    {selectedProject.path}
-                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -525,6 +560,13 @@ function ContentInstallDialog({
                       {activeTarget.targetKind === "file"
                         ? "将写入单个文件。"
                         : `将写入 ${definition.singularLabel} 目录。`}
+                    </p>
+                  </>
+                ) : activeTarget?.status === "conflict" ? (
+                  <>
+                    <p className="break-all text-muted-foreground">{activeTarget.targetPath}</p>
+                    <p className="text-xs text-destructive">
+                      该位置已存在同名 Skill，安装将替换旧 Skill（旧 Skill 会被备份）。
                     </p>
                   </>
                 ) : activeTarget ? (

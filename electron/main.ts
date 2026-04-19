@@ -10,7 +10,7 @@ import { registerUpdateHandlers } from "./ipc/update-handlers"
 import { registerUserProfileHandlers } from "./ipc/user-profile-handlers"
 import { configStore } from "./services/config-store"
 import { contentSubmissionService } from "./services/content-submission-service"
-import { createMainLogger } from "./services/log-store"
+import { createMainLogger, logStore } from "./services/log-store"
 import { pendingPushesService } from "./services/pending-pushes-service"
 import { repositoryMaintenanceService } from "./services/repository-maintenance-service"
 import { updateService } from "./services/update-service"
@@ -143,8 +143,10 @@ app.on("window-all-closed", () => {
   }
 })
 
-app.on("before-quit", (event) => {
+app.on("before-quit", async (event) => {
   if (allowAppQuit) {
+    // 确保日志被刷新
+    await logStore.dispose()
     return
   }
 
@@ -152,6 +154,9 @@ app.on("before-quit", (event) => {
 
   void (async () => {
     try {
+      // 先刷新日志
+      await logStore.dispose()
+
       const config = await configStore.load()
       const pendingPushCount = await pendingPushesService.countAll(config.repositories)
 

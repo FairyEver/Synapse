@@ -78,3 +78,9 @@ export type SynapsePendingPushUpdatedEvent = {
   repositoryUuid: string
   pendingPushes: SynapsePendingPushState
 }
+
+export type SynapseRepositoryValidationResult = {
+  isValid: boolean
+  missingDirectories: string[]
+  message: string
+}

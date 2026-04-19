@@ -89,6 +89,38 @@ async function resolveUniqueSkillDirectoryPath(idealPath: string): Promise<strin
   throw new Error(`无法在 ${parent} 下找到可用的 Skill 目录名。`)
 }
 
+type SkillConflictCheckResult =
+  | { hasConflict: false }
+  | { hasConflict: true; existingContentId: string; existingPath: string }
+
+async function checkSkillNameConflict(
+  parentDirectoryPath: string,
+  slug: string,
+  contentId: string,
+): Promise<SkillConflictCheckResult> {
+  const targetPath = path.join(parentDirectoryPath, slug)
+
+  // Check if the exact path exists
+  if (!(await pathExists(targetPath))) {
+    return { hasConflict: false }
+  }
+
+  // Path exists, check if it's the same skill
+  const existingContentId = await readSkillIdFile(targetPath)
+
+  if (existingContentId === contentId) {
+    // Same skill, no conflict
+    return { hasConflict: false }
+  }
+
+  // Different skill with same name - conflict
+  return {
+    hasConflict: true,
+    existingContentId: existingContentId ?? "unknown",
+    existingPath: targetPath,
+  }
+}
+
 async function resolveSkillTargetPath({
   parentDirectoryPath,
   contentId,
@@ -106,11 +138,20 @@ async function resolveSkillTargetPath({
 
   const ideal = path.join(parentDirectoryPath, slug)
 
-  return resolveUniqueSkillDirectoryPath(ideal)
+  // Check for conflict instead of auto-renaming
+  const conflict = await checkSkillNameConflict(parentDirectoryPath, slug, contentId)
+
+  if (conflict.hasConflict) {
+    // Return the conflicting path - the caller will handle the conflict
+    return conflict.existingPath
+  }
+
+  return ideal
 }
 
 export {
   SYNAPSE_SKILL_ID_FILE_NAME,
+  checkSkillNameConflict,
   findSkillDirectoryByContentId,
   resolveSkillTargetPath,
 }

@@ -375,6 +375,40 @@ function getRepositorySkeletonDirectories(repository: SynapseRepositoryConfig): 
 }
 
 class RepositoryStructureService {
+  async validateDirectoryStructure(localPath: string): Promise<{
+    isValid: boolean
+    missingDirectories: string[]
+    message: string
+  }> {
+    const requiredDirs = ["rules", "skills", "users", "attachments-pool"]
+    const missingDirectories: string[] = []
+
+    for (const dir of requiredDirs) {
+      const dirPath = path.join(localPath, dir)
+      const exists = await pathExists(dirPath)
+      if (!exists) {
+        missingDirectories.push(dir)
+      }
+    }
+
+    const isValid = missingDirectories.length === 0
+
+    let message: string
+    if (isValid) {
+      message = "目录结构验证通过。"
+    } else if (missingDirectories.length === requiredDirs.length) {
+      message = `该目录不是有效的 Synapse 仓库，缺少必要的目录结构（rules, skills, users, attachments-pool）。`
+    } else {
+      message = `该目录缺少以下必要目录：${missingDirectories.join(", ")}`
+    }
+
+    return {
+      isValid,
+      missingDirectories,
+      message,
+    }
+  }
+
   async createLocalRepository(
     payload: SynapseCreateLocalRepositoryPayload,
   ): Promise<SynapseCreateLocalRepositoryResult> {
@@ -382,19 +416,19 @@ class RepositoryStructureService {
     const parentPath = payload.parentPath.trim()
 
     if (!parentPath) {
-      throw new Error("先选择保存位置。")
+      throw new Error("请先选择保存位置。")
     }
 
     const parentStats = await stat(parentPath).catch((error: unknown) => {
       if (isFileNotFoundError(error)) {
-        throw new Error("保存位置不存在，请重新选择。")
+        throw new Error(`保存位置 "${parentPath}" 不存在，请重新选择。`)
       }
 
       throw error
     })
 
     if (!parentStats.isDirectory()) {
-      throw new Error("保存位置不是文件夹，请重新选择。")
+      throw new Error(`"${parentPath}" 不是文件夹，请选择一个目录。`)
     }
 
     await access(parentPath, fsConstants.W_OK)
@@ -402,7 +436,7 @@ class RepositoryStructureService {
     const targetPath = path.join(parentPath, repositoryName)
 
     if (await pathExists(targetPath)) {
-      throw new Error("目标目录已存在，请换个名称或位置。")
+      throw new Error(`文件夹 "${repositoryName}" 在 "${parentPath}" 下已存在，请更换仓库名称或选择其他位置。`)
     }
 
     const stagingPath = await mkdtemp(path.join(parentPath, ".synapse-local-repository-"))

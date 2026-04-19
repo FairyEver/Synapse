@@ -108,6 +108,36 @@ function createUnsupportedPlatformTarget(
   })
 }
 
+type CreateConflictTargetOptions = CreateTargetBaseOptions & {
+  targetKind: SynapseEditorInstallTargetKind
+  targetPath: string
+  conflictContentId: string
+  message: string
+}
+
+function createConflictTarget({
+  adapter,
+  contentType,
+  scope,
+  targetKind,
+  targetPath,
+  conflictContentId,
+  message,
+}: CreateConflictTargetOptions): SynapseEditorResolvedTarget {
+  return {
+    ...createTargetBase({
+      adapter,
+      contentType,
+      scope,
+    }),
+    status: "conflict",
+    targetKind,
+    targetPath,
+    conflictContentId,
+    message,
+  }
+}
+
 function expandHomeDirectory(value: string): string {
   const trimmedValue = value.trim()
 
@@ -154,6 +184,7 @@ async function resolveExistingProjectPath(projectPath: string): Promise<string |
 }
 
 export {
+  createConflictTarget,
   createReadyTarget,
   createUnavailableTarget,
   createUnsupportedPlatformTarget,

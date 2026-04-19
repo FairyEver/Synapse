@@ -13,7 +13,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
     peekCursorFrontmatter: "synapse:content:peek-cursor-frontmatter",
-    resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
+    resolveEditorInstallTarget: "synapse:content:resolve-editor-target",
   },
   config: {
     exportBackup: "synapse:config:export-backup",
@@ -32,10 +32,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     updateDisplayName: "synapse:user-profile:update-display-name",
   },
   log: {
-    appended: "synapse:log:appended",
     export: "synapse:log:export",
-    list: "synapse:log:list",
-    summary: "synapse:log:summary",
     write: "synapse:log:write",
   },
   repository: {
@@ -51,6 +48,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     sync: "synapse:repository:sync",
     progress: "synapse:repository:progress",
     updated: "synapse:repository:updated",
+    validateDirectory: "synapse:repository:validate-directory",
   },
   update: {
     checkForUpdates: "synapse:update:check-for-updates",

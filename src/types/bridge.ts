@@ -31,14 +31,7 @@ import type {
   SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
 } from "./editor"
-import type {
-  SynapseLogAppendedEvent,
-  SynapseLogExportResult,
-  SynapseLogListQuery,
-  SynapseLogListResult,
-  SynapseLogSummary,
-  SynapseRendererLogPayload,
-} from "./log"
+import type { SynapseLogExportResult, SynapseRendererLogPayload } from "./log"
 import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
@@ -50,6 +43,7 @@ import type {
   SynapsePendingPushUpdatedEvent,
   SynapseRepositoryProgressEvent,
   SynapseRepositoryUpdatedEvent,
+  SynapseRepositoryValidationResult,
 } from "./repository"
 import type { SynapseAppUpdateState } from "./update"
 
@@ -112,9 +106,6 @@ export type SynapseBridge = {
   }
   log: {
     export: () => Promise<SynapseLogExportResult>
-    list: (query: SynapseLogListQuery) => Promise<SynapseLogListResult>
-    onAppended: (listener: (payload: SynapseLogAppendedEvent) => void) => () => void
-    summary: () => Promise<SynapseLogSummary>
     write: (payload: SynapseRendererLogPayload) => void
   }
   repository: {
@@ -136,6 +127,7 @@ export type SynapseBridge = {
     sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
     onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void
+    validateDirectory: (targetPath: string) => Promise<SynapseRepositoryValidationResult>
   }
   updater: {
     checkForUpdates: () => Promise<SynapseAppUpdateState>

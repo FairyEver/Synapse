@@ -1,28 +1,26 @@
 import { app } from "electron"
-import { mkdir, writeFile } from "node:fs/promises"
+import { createWriteStream, mkdir, readdir, stat, unlink, WriteStream } from "node:fs"
 import path from "node:path"
+import { promisify } from "node:util"
 import { inspect } from "node:util"
-import { formatLogExportText } from "../../src/lib/log-export"
 import type {
-  SynapseLogAppendedEvent,
   SynapseLogEntry,
   SynapseLogExportResult,
   SynapseLogLevel,
-  SynapseLogListQuery,
-  SynapseLogListResult,
   SynapseLogSource,
-  SynapseLogSummary,
 } from "../../src/types/log"
 
-type LogWriteInput = {
+const LOG_DIR_NAME = "logs"
+const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_LOG_FILES = 30 // 保留最近30个日志文件
+
+interface LogWriteInput {
   source: SynapseLogSource
   level: SynapseLogLevel
   category: string
   message: unknown
   details?: unknown
 }
-
-type LogListener = (event: SynapseLogAppendedEvent) => void
 
 function formatDetails(details: unknown): string | null {
   if (details === undefined || details === null) {
@@ -86,27 +84,170 @@ function normalizeLogInput(message: unknown, details: unknown): { message: strin
   }
 }
 
-function createLogFileName(): string {
-  const now = new Date()
-  const date = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("")
-  const time = [
-    String(now.getHours()).padStart(2, "0"),
-    String(now.getMinutes()).padStart(2, "0"),
-    String(now.getSeconds()).padStart(2, "0"),
-  ].join("")
+function formatLogEntry(entry: SynapseLogEntry): string {
+  const timestamp = new Date(entry.createdAt).toISOString()
+  const level = entry.level.toUpperCase().padEnd(5, " ")
+  const head = `[${timestamp}] [${level}] [${entry.source}:${entry.category}] ${entry.message}`
 
-  return `synapse-log-${date}-${time}.txt`
+  if (!entry.details) {
+    return head
+  }
+
+  return `${head}\n${entry.details}`
 }
 
+function createLogFileName(date: Date): string {
+  const d = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("")
+  const t = [
+    String(date.getHours()).padStart(2, "0"),
+    String(date.getMinutes()).padStart(2, "0"),
+    String(date.getSeconds()).padStart(2, "0"),
+  ].join("")
+
+  return `synapse-${d}-${t}.log`
+}
+
+const mkdirAsync = promisify(mkdir)
+const readdirAsync = promisify(readdir)
+const statAsync = promisify(stat)
+const unlinkAsync = promisify(unlink)
+
 class LogStore {
-  private readonly entries: SynapseLogEntry[] = []
-  private readonly listeners = new Set<LogListener>()
+  private currentStream: WriteStream | null = null
+  private currentFilePath: string | null = null
+  private currentFileSize = 0
   private nextId = 1
-  private readonly maxEntries = 50000
+  private logDirPath: string | null = null
+  private buffer: string[] = []
+  private flushTimer: NodeJS.Timeout | null = null
+  private readonly bufferFlushInterval = 1000 // 1秒刷新一次
+  private readonly maxBufferSize = 100 // 缓冲区最大条目数
+
+  constructor() {
+    this.initializeLogDirectory()
+    this.startFlushTimer()
+  }
+
+  private async initializeLogDirectory(): Promise<void> {
+    try {
+      this.logDirPath = path.join(app.getPath("userData"), LOG_DIR_NAME)
+      await mkdirAsync(this.logDirPath, { recursive: true })
+      await this.rotateToNewFile()
+      await this.cleanOldLogFiles()
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to initialize log directory:", error)
+    }
+  }
+
+  private startFlushTimer(): void {
+    this.flushTimer = setInterval(() => {
+      void this.flushBuffer()
+    }, this.bufferFlushInterval)
+  }
+
+  private async rotateToNewFile(): Promise<void> {
+    // 关闭当前文件流
+    if (this.currentStream) {
+      await new Promise<void>((resolve) => {
+        this.currentStream?.end(() => resolve())
+      })
+      this.currentStream = null
+    }
+
+    if (!this.logDirPath) {
+      return
+    }
+
+    const fileName = createLogFileName(new Date())
+    this.currentFilePath = path.join(this.logDirPath, fileName)
+    this.currentFileSize = 0
+
+    this.currentStream = createWriteStream(this.currentFilePath, { flags: "a" })
+
+    // 监听流错误
+    this.currentStream.on("error", (error) => {
+      // eslint-disable-next-line no-console
+      console.error("Log stream error:", error)
+    })
+  }
+
+  private async checkRotation(): Promise<void> {
+    if (this.currentFileSize >= MAX_LOG_FILE_SIZE) {
+      await this.flushBuffer()
+      await this.rotateToNewFile()
+      await this.cleanOldLogFiles()
+    }
+  }
+
+  private async cleanOldLogFiles(): Promise<void> {
+    if (!this.logDirPath) {
+      return
+    }
+
+    try {
+      const files = await readdirAsync(this.logDirPath)
+      const logFiles: { name: string; path: string; mtime: Date }[] = []
+
+      for (const file of files) {
+        if (!file.endsWith(".log")) {
+          continue
+        }
+
+        const filePath = path.join(this.logDirPath, file)
+        try {
+          const stats = await statAsync(filePath)
+          logFiles.push({ name: file, path: filePath, mtime: stats.mtime })
+        } catch {
+          // 忽略无法读取的文件
+        }
+      }
+
+      // 按修改时间排序，保留最新的
+      logFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+
+      // 删除旧文件
+      const filesToDelete = logFiles.slice(MAX_LOG_FILES)
+      for (const file of filesToDelete) {
+        try {
+          await unlinkAsync(file.path)
+        } catch {
+          // 忽略删除失败
+        }
+      }
+    } catch {
+      // 忽略清理失败
+    }
+  }
+
+  private async flushBuffer(): Promise<void> {
+    if (this.buffer.length === 0 || !this.currentStream) {
+      return
+    }
+
+    const linesToWrite = this.buffer.join("\n") + "\n"
+    this.buffer = []
+
+    return new Promise((resolve, reject) => {
+      if (!this.currentStream) {
+        resolve()
+        return
+      }
+
+      this.currentStream.write(linesToWrite, (error) => {
+        if (error) {
+          reject(error)
+        } else {
+          this.currentFileSize += Buffer.byteLength(linesToWrite, "utf8")
+          resolve()
+        }
+      })
+    })
+  }
 
   write(input: LogWriteInput): SynapseLogEntry {
     const normalizedInput = normalizeLogInput(input.message, input.details)
@@ -122,22 +263,22 @@ class LogStore {
     }
 
     this.nextId += 1
-    this.entries.push(entry)
 
-    if (this.entries.length > this.maxEntries) {
-      this.entries.splice(0, this.entries.length - this.maxEntries)
+    // 格式化为单行并加入缓冲区
+    const formattedLine = formatLogEntry(entry)
+    this.buffer.push(formattedLine)
+
+    // 如果缓冲区满了，立即刷新
+    if (this.buffer.length >= this.maxBufferSize) {
+      void this.flushBuffer().then(() => {
+        void this.checkRotation()
+      })
+    } else {
+      // 否则定期检查文件大小
+      void this.checkRotation()
     }
 
-    const event: SynapseLogAppendedEvent = {
-      entry,
-      total: this.entries.length,
-    }
-
-    for (const listener of this.listeners) {
-      listener(event)
-    }
-
-    return structuredClone(entry)
+    return entry
   }
 
   createLogger(source: SynapseLogSource, category: string) {
@@ -153,41 +294,99 @@ class LogStore {
     }
   }
 
-  getSummary(): SynapseLogSummary {
-    return {
-      total: this.entries.length,
+  async exportAllLogs(): Promise<SynapseLogExportResult> {
+    if (!this.logDirPath) {
+      throw new Error("Log directory not initialized")
     }
-  }
 
-  list(query: SynapseLogListQuery): SynapseLogListResult {
-    const offset = Math.max(0, Math.min(query.offset, this.entries.length))
-    const limit = Math.max(0, query.limit)
+    // 先刷新缓冲区确保所有日志都写入文件
+    await this.flushBuffer()
 
-    return {
-      total: this.entries.length,
-      entries: structuredClone(this.entries.slice(offset, offset + limit)),
-    }
-  }
-
-  onAppended(listener: LogListener): () => void {
-    this.listeners.add(listener)
-
-    return () => {
-      this.listeners.delete(listener)
-    }
-  }
-
-  async exportToDownloads(): Promise<SynapseLogExportResult> {
     const downloadsDir = app.getPath("downloads")
-    const filePath = path.join(downloadsDir, createLogFileName())
-    const content = formatLogExportText(this.entries)
+    const exportFileName = `synapse-logs-export-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`
+    const exportFilePath = path.join(downloadsDir, exportFileName)
 
-    await mkdir(downloadsDir, { recursive: true })
-    await writeFile(filePath, content, "utf8")
+    const { pipeline } = await import("node:stream/promises")
+    const { createReadStream } = await import("node:fs")
+    const { createWriteStream } = await import("node:fs")
+
+    // 读取所有日志文件并按时间顺序合并
+    const files = await readdirAsync(this.logDirPath)
+    const logFiles: { name: string; path: string; mtime: Date }[] = []
+
+    for (const file of files) {
+      if (!file.endsWith(".log")) {
+        continue
+      }
+
+      const filePath = path.join(this.logDirPath, file)
+      try {
+        const stats = await statAsync(filePath)
+        logFiles.push({ name: file, path: filePath, mtime: stats.mtime })
+      } catch {
+        // 忽略无法读取的文件
+      }
+    }
+
+    // 按修改时间排序（从早到晚）
+    logFiles.sort((a, b) => a.mtime.getTime() - b.mtime.getTime())
+
+    // 合并所有日志文件
+    const outputStream = createWriteStream(exportFilePath)
+
+    let totalEntries = 0
+
+    for (const file of logFiles) {
+      await new Promise<void>((resolve, reject) => {
+        const inputStream = createReadStream(file.path, { encoding: "utf8" })
+        let fileEntryCount = 0
+
+        inputStream.on("data", (chunk: string) => {
+          // 统计条目数（每行一个条目）
+          fileEntryCount += (chunk.match(/\n/g) || []).length
+        })
+
+        inputStream.on("end", () => {
+          totalEntries += fileEntryCount
+        })
+
+        inputStream.pipe(outputStream, { end: false })
+        inputStream.on("end", () => resolve())
+        inputStream.on("error", reject)
+      })
+    }
+
+    // 添加缓冲区中的日志
+    if (this.buffer.length > 0) {
+      const bufferContent = this.buffer.join("\n") + "\n"
+      outputStream.write(bufferContent)
+      totalEntries += this.buffer.length
+    }
+
+    // 关闭输出流
+    await new Promise<void>((resolve) => {
+      outputStream.end(() => resolve())
+    })
 
     return {
-      entryCount: this.entries.length,
-      filePath,
+      entryCount: totalEntries,
+      filePath: exportFilePath,
+    }
+  }
+
+  async dispose(): Promise<void> {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer)
+      this.flushTimer = null
+    }
+
+    await this.flushBuffer()
+
+    if (this.currentStream) {
+      await new Promise<void>((resolve) => {
+        this.currentStream?.end(() => resolve())
+      })
+      this.currentStream = null
     }
   }
 }

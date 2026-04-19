@@ -251,9 +251,16 @@ function registerContentHandlers() {
     async (event, args: { contentType: SynapseContentType; id: string }) => {
       const definition = getContentTypeDefinition(args.contentType)
       const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+
+      // Get content detail to use title/name for the filename
+      const detail = await contentService.getDetail(args.contentType, args.id)
+      const fileNameBase = detail.title?.trim() || args.id
+      // Sanitize filename: remove/replace characters that are invalid in filenames
+      const sanitizedFileName = fileNameBase.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100)
+
       const filePath = await chooseDownloadPath(ownerWindow, {
         buttonLabel: "下载",
-        defaultPath: path.join(app.getPath("downloads"), `${args.id}${definition.download.extension}`),
+        defaultPath: path.join(app.getPath("downloads"), `${sanitizedFileName}${definition.download.extension}`),
         filters: [
           {
             extensions: [definition.download.extension.replace(/^\./, "")],

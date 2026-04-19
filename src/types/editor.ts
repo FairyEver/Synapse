@@ -8,7 +8,7 @@ export type SynapseEditorInstallScope = "global" | "project"
 
 export type SynapseEditorInstallTargetKind = "file" | "directory"
 
-export type SynapseEditorResolvedTargetStatus = "ready" | "unsupported" | "unavailable"
+export type SynapseEditorResolvedTargetStatus = "ready" | "unsupported" | "unavailable" | "conflict"
 
 export type SynapseEditorAdapterSummary = {
   id: SynapseEditorId
@@ -44,6 +44,11 @@ export type CursorRuleFrontmatter = {
 
 export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & {
   cursorFrontmatter?: CursorRuleFrontmatter
+  /**
+   * When true, indicates user has confirmed replacing an existing Skill.
+   * The existing Skill directory will be backed up before installation.
+   */
+  replaceConfirmed?: boolean
 }
 
 export type SynapsePeekCursorFrontmatterPayload = {
@@ -72,6 +77,12 @@ export type SynapseEditorResolvedTarget =
       status: "unsupported" | "unavailable"
       targetKind: null
       targetPath: null
+    })
+  | (SynapseEditorResolvedTargetBase & {
+      status: "conflict"
+      targetKind: SynapseEditorInstallTargetKind
+      targetPath: string
+      conflictContentId: string
     })
 
 export type SynapseContentInstallResult = {

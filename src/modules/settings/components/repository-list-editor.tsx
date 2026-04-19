@@ -74,6 +74,7 @@ function RepositoryListEditor({
     initializeStructure,
     operations,
     states,
+    validateDirectory,
   } = useRepositoryManager()
   const { isSwitchingRepository } = useActiveRepositorySwitch()
   const { currentRepoProfileState } = useCurrentRepoProfile()
@@ -86,6 +87,11 @@ function RepositoryListEditor({
   const [createRepositoryError, setCreateRepositoryError] = useState<string | null>(null)
   const [isCreatingRepository, setIsCreatingRepository] = useState(false)
   const [pendingRemovalUuid, setPendingRemovalUuid] = useState<string | null>(null)
+  const [editingRepository, setEditingRepository] = useState<SynapseRepositoryConfig | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editPath, setEditPath] = useState("")
+  const [editError, setEditError] = useState<string | null>(null)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [initializingUuid, setInitializingUuid] = useState<string | null>(null)
   const [initializationTarget, setInitializationTarget] = useState<{
     preview: SynapseRepositoryInitializationPreview
@@ -148,6 +154,12 @@ function RepositoryListEditor({
 
     if (!localPath) {
       logger.info("Native directory picker was dismissed without selecting a directory.")
+      return
+    }
+
+    const validationResult = await validateDirectory(localPath)
+    if (!validationResult.isValid) {
+      setFormError(validationResult.message)
       return
     }
 
@@ -237,6 +249,97 @@ function RepositoryListEditor({
       setCreateRepositoryError(error instanceof Error ? error.message : "创建本地仓库失败。")
     } finally {
       setIsCreatingRepository(false)
+    }
+  }
+
+  const handleEditRepository = (repository: SynapseRepositoryConfig) => {
+    setEditingRepository(repository)
+    setEditName(repository.name)
+    setEditPath(repository.localPath)
+    setEditError(null)
+  }
+
+  const handleEditDialogClose = () => {
+    if (isSavingEdit) {
+      return
+    }
+    setEditingRepository(null)
+    setEditName("")
+    setEditPath("")
+    setEditError(null)
+  }
+
+  const handleChooseEditPath = async () => {
+    if (!hasRepositoryBridge) {
+      setEditError("功能暂不可用，请重启应用。")
+      return
+    }
+
+    const selectedPath = await chooseDirectory()
+
+    if (!selectedPath) {
+      return
+    }
+
+    setEditPath(selectedPath)
+    setEditError(null)
+  }
+
+  const handleSaveEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!editingRepository) {
+      return
+    }
+
+    const trimmedName = editName.trim()
+    const trimmedPath = editPath.trim()
+
+    if (!trimmedName) {
+      setEditError("请输入仓库名称。")
+      return
+    }
+
+    if (!trimmedPath) {
+      setEditError("请输入仓库路径。")
+      return
+    }
+
+    // Check for duplicate path (excluding current repository)
+    const duplicatePath = repositories.some(
+      (repo) => repo.localPath === trimmedPath && repo.uuid !== editingRepository.uuid
+    )
+    if (duplicatePath) {
+      setEditError("该路径已被其他仓库使用。")
+      return
+    }
+
+    setIsSavingEdit(true)
+    setEditError(null)
+
+    try {
+      const updatedRepository: SynapseRepositoryConfig = {
+        ...editingRepository,
+        name: trimmedName,
+        localPath: trimmedPath,
+      }
+
+      const nextRepositories = repositories.map((repo) =>
+        repo.uuid === editingRepository.uuid ? updatedRepository : repo
+      )
+
+      const saved = await onSave(nextRepositories, activeRepoUuid, false)
+
+      if (saved) {
+        setEditingRepository(null)
+        setEditName("")
+        setEditPath("")
+      }
+    } catch (error) {
+      logger.error("Failed to update repository.", { error, repositoryUuid: editingRepository.uuid })
+      setEditError(error instanceof Error ? error.message : "保存失败。")
+    } finally {
+      setIsSavingEdit(false)
     }
   }
 
@@ -451,6 +554,66 @@ function RepositoryListEditor({
         </FormDialog>
       </Dialog>
 
+      <Dialog open={editingRepository !== null} onOpenChange={(open) => { if (!open) handleEditDialogClose() }}>
+        <FormDialog
+          title="修改仓库"
+          contentClassName="sm:max-w-[560px]"
+          footer={(
+            <>
+              <FieldError className="sm:mr-auto">{editError}</FieldError>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingEdit}
+                  onClick={() => handleEditDialogClose()}
+                >
+                  取消
+                </Button>
+                <Button type="submit" disabled={isSavingEdit}>
+                  {isSavingEdit ? "保存中..." : "保存"}
+                </Button>
+              </div>
+            </>
+          )}
+          onSubmit={handleSaveEdit}
+        >
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="edit-repository-name">仓库名称</Label>
+              <Input
+                id="edit-repository-name"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+                placeholder="仓库名称"
+                disabled={isSavingEdit}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="edit-repository-path">仓库路径</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="edit-repository-path"
+                  value={editPath}
+                  onChange={(event) => setEditPath(event.target.value)}
+                  placeholder="/path/to/repository"
+                  disabled={isSavingEdit}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingEdit || !hasRepositoryBridge}
+                  onClick={() => void handleChooseEditPath()}
+                >
+                  选择文件夹
+                </Button>
+              </div>
+            </div>
+          </div>
+        </FormDialog>
+      </Dialog>
+
       {repositories.length > 0 && (
         <div className="flex flex-col gap-3">
           {repositories.map((repository) => {
@@ -479,6 +642,7 @@ function RepositoryListEditor({
                 activeRepoUuid={activeRepoUuid}
                 onInitialize={handleInitializeRepository}
                 onRemove={setPendingRemovalUuid}
+                onEdit={handleEditRepository}
               />
             )
           })}

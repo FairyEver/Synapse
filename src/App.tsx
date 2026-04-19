@@ -1,5 +1,6 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useState } from "react"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
+import { EmptyRepositoryState } from "@/app-shell/components/empty-repository-state"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
@@ -56,26 +57,23 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
 }
 
 function MainApp() {
-  const { activeRepository } = useAppConfig()
+  const { activeRepository, config } = useAppConfig()
   const {
     isSwitchingRepository,
     openRepositorySwitchDialog,
   } = useActiveRepositorySwitch()
   const { promise } = useAppNotifications()
-  const { flushPendingPushes, pendingPushes, syncRepository } = useRepositoryManager()
+  const { flushPendingPushes, pendingPushes, syncRepository, refreshRepositoryStates, states } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rule")
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
   )
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
-  const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
-  const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
-    state.create || state.detail || state.install
-  ))
-  const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
-  const toolbarState = useAppShellToolbarState({
-    hasBlockingModalOpen,
-  })
+
+  // 检查是否需要显示空状态页面
+  const hasNoRepositories = config.repositories.length === 0
+  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
+  const isActiveRepositoryMissing = activeRepositoryState?.status === "missing"
 
   const tabs = useMemo(
     () => [
@@ -87,22 +85,6 @@ function MainApp() {
     ],
     [],
   )
-
-  useEffect(() => {
-    logger.info("App mounted.", {
-      activeTab,
-    })
-  }, [])
-
-  useEffect(() => {
-    publishActiveAppTab(activeTab)
-  }, [activeTab])
-
-  useEffect(() => {
-    return subscribeOpenSettingsTab(() => {
-      setActiveTab("settings")
-    })
-  }, [])
 
   const setContentDialogOpen = useCallback((
     contentType: SynapseContentType,
@@ -134,6 +116,65 @@ function MainApp() {
     ) as ContentDialogHandlerMap,
     [setContentDialogOpen],
   )
+
+  // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
+  useEffect(() => {
+    // 如果已经显示空状态页面，不需要再轮询
+    if (hasNoRepositories || isActiveRepositoryMissing) {
+      return
+    }
+
+    // 每 5 秒检测一次仓库状态
+    const intervalId = window.setInterval(() => {
+      void refreshRepositoryStates()
+    }, 5000)
+
+    // 当用户重新聚焦窗口时也检测一次
+    const handleFocus = () => {
+      void refreshRepositoryStates()
+    }
+
+    window.addEventListener("focus", handleFocus)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener("focus", handleFocus)
+    }
+  }, [hasNoRepositories, isActiveRepositoryMissing, refreshRepositoryStates])
+
+  useEffect(() => {
+    logger.info("App mounted.", {
+      activeTab,
+    })
+  }, [])
+
+  useEffect(() => {
+    publishActiveAppTab(activeTab)
+  }, [activeTab])
+
+  useEffect(() => {
+    return subscribeOpenSettingsTab(() => {
+      setActiveTab("settings")
+    })
+  }, [])
+
+  const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
+  const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
+    state.create || state.detail || state.install
+  ))
+  const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
+  const toolbarState = useAppShellToolbarState({
+    hasBlockingModalOpen,
+  })
+
+  // 如果没有仓库或当前仓库缺失，显示空状态页面
+  if (hasNoRepositories) {
+    return <EmptyRepositoryState reason="no-repositories" />
+  }
+
+  if (isActiveRepositoryMissing) {
+    return <EmptyRepositoryState reason="active-repository-missing" />
+  }
 
   return (
     <IdentityGate>

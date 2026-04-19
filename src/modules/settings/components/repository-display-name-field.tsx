@@ -175,7 +175,7 @@ function RepositoryDisplayNameField({
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogTrigger asChild>
           <Button variant="outline" size="sm" disabled={isFieldDisabled}>
-            {needsOnboarding ? "设置名称" : "修改名称"}
+            {needsOnboarding ? "设置" : "修改"}
           </Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-sm">
