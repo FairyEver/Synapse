@@ -359,7 +359,7 @@ class UpdateService {
         downloadedFilePath: destinationPath,
       })
     } catch (error) {
-      await rm(tempPath, { force: true }).catch(() => {})
+      await rm(tempPath, { force: true }).catch((err) => logger.warn("Failed to clean up temp file", err))
       throw error
     }
   }

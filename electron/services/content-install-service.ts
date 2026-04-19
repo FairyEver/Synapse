@@ -93,13 +93,13 @@ async function swapPathAtomically(replacementPath: string, targetPath: string): 
     movedReplacement = true
   } catch (error) {
     if (movedExistingTarget && !movedReplacement) {
-      await rename(backupPath, targetPath).catch(() => {})
+      await rename(backupPath, targetPath).catch((err) => logger.warn("Failed to restore backup", err))
     }
 
     throw error
   } finally {
     if (movedExistingTarget && movedReplacement) {
-      await rm(backupPath, { recursive: true, force: true }).catch(() => {})
+      await rm(backupPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up backup", err))
     }
   }
 }
@@ -128,7 +128,7 @@ async function replaceFileAtomically(targetPath: string, content: string): Promi
     await writeFile(tempFilePath, normalizeMarkdownContent(content), "utf8")
     await swapPathAtomically(tempFilePath, targetPath)
   } finally {
-    await rm(tempDirectoryPath, { recursive: true, force: true }).catch(() => {})
+    await rm(tempDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up temp directory", err))
   }
 }
 
@@ -146,7 +146,7 @@ async function replaceDirectoryAtomically(
     await populate(stagingDirectoryPath)
     await swapPathAtomically(stagingDirectoryPath, targetPath)
   } catch (error) {
-    await rm(stagingDirectoryPath, { recursive: true, force: true }).catch(() => {})
+    await rm(stagingDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging directory", err))
     throw error
   }
 }
@@ -254,7 +254,7 @@ class ContentInstallService {
             previousSkillDirectoryPath
             && previousSkillDirectoryPath !== target.targetPath
           ) {
-            await rm(previousSkillDirectoryPath, { recursive: true, force: true }).catch(() => {})
+            await rm(previousSkillDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up previous skill directory", err))
           }
 
           break

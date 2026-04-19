@@ -83,7 +83,7 @@ function MainApp() {
         id: definition.id,
         label: definition.tabLabel,
       })),
-      { id: "settings" as const, label: "Settings" },
+      { id: "settings" as const, label: "设置" },
     ],
     [],
   )

@@ -1,10 +1,11 @@
+import { Folder, FolderGit2 } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
@@ -100,56 +101,74 @@ function RepositoryListItem({
   }
 
   return (
-    <Item variant="outline" className="items-start">
-      <ItemContent className="min-w-0 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <ItemTitle className="w-full flex-wrap justify-between">
-            <span className="min-w-0 flex-1 truncate">{repository.name}</span>
-            <Badge variant={isActive ? "secondary" : "outline"}>
-              {isActive ? "当前目录" : "已保存"}
-            </Badge>
-          </ItemTitle>
-          <ItemDescription className="line-clamp-none break-all">
-            {repository.localPath}
-          </ItemDescription>
-          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-            <p>
-              {CONTENT_TYPE_DEFINITIONS.map((definition) => (
-                `${definition.pluralLabel}: ${
-                  repository.contentDirs[definition.id]
-                  ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id]
-                }`
-              )).join(" · ")}
-            </p>
-            {hasRepositoryBridge ? <p>{getRepositoryStatusLabel(repositoryState)}</p> : null}
-            {repositoryState?.gitRootPath
-            && repositoryState.gitRootPath !== repository.localPath ? (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          {repositoryState?.isGitRepository ? (
+            <FolderGit2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="min-w-0 truncate">{repository.name}</span>
+          {isActive && <Badge variant="secondary">当前目录</Badge>}
+        </CardTitle>
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground break-all">
+          {repository.localPath}
+        </p>
+
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <p>
+            {CONTENT_TYPE_DEFINITIONS.map((definition) => (
+              `${definition.pluralLabel}: ${
+                repository.contentDirs[definition.id]
+                ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id]
+              }`
+            )).join(" · ")}
+          </p>
+          {hasRepositoryBridge && <p>{getRepositoryStatusLabel(repositoryState)}</p>}
+          {repositoryState?.gitRootPath
+            && repositoryState.gitRootPath !== repository.localPath && (
               <p className="break-all">Git 根目录：{repositoryState.gitRootPath}</p>
-            ) : null}
-            {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
-              <p>当前目录不是 Git 仓库，内容只保存在本地。</p>
-            ) : null}
-          </div>
+            )}
+          {repositoryState?.status === "ready" && !repositoryState.isGitRepository && (
+            <p>当前目录不是 Git 仓库，内容只保存在本地。</p>
+          )}
         </div>
-        {operation?.isRunning ? (
+
+        {operation?.isRunning && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <span>{operation.statusText ?? "正在执行 Git 操作..."}</span>
-              {operation.percent !== null ? <span>{operation.percent}%</span> : null}
+              {operation.percent !== null && <span>{operation.percent}%</span>}
             </div>
             <Progress value={operation.percent ?? 24} />
           </div>
-        ) : null}
-        {repositoryState?.status === "ready" ? (
+        )}
+
+        {repositoryState?.status === "ready" && (
           <RepositoryDisplayNameField
             repositoryUuid={repository.uuid}
             isActiveRepository={isActive}
             disabled={isBusy}
           />
-        ) : null}
-      </ItemContent>
-      <ItemActions className="w-full flex-wrap justify-end sm:w-auto sm:self-start">
-        {hasRepositoryBridge ? (
+        )}
+      </CardContent>
+
+      <CardFooter className="justify-end gap-2">
+        {!isActive && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy || hasRunningRepositoryOperation || isSwitchingRepository}
+            onClick={() => void handleSwitch()}
+          >
+            切换为当前目录
+          </Button>
+        )}
+        {hasRepositoryBridge && (
           <Button
             size="sm"
             disabled={isBusy || !canSync}
@@ -157,16 +176,8 @@ function RepositoryListItem({
           >
             {isBusy ? "同步中..." : "同步仓库"}
           </Button>
-        ) : null}
-        <Button
-          variant={isActive ? "secondary" : "outline"}
-          size="sm"
-          disabled={isActive || isBusy || hasRunningRepositoryOperation || isSwitchingRepository}
-          onClick={() => void handleSwitch()}
-        >
-          {isActive ? "当前目录" : "切换为当前目录"}
-        </Button>
-        {canInitialize ? (
+        )}
+        {canInitialize && (
           <Button
             variant="outline"
             size="sm"
@@ -175,7 +186,7 @@ function RepositoryListItem({
           >
             {initializingUuid === repository.uuid ? "初始化中..." : "初始化"}
           </Button>
-        ) : null}
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -184,8 +195,8 @@ function RepositoryListItem({
         >
           删除
         </Button>
-      </ItemActions>
-    </Item>
+      </CardFooter>
+    </Card>
   )
 }
 

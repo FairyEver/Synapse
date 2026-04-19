@@ -64,7 +64,7 @@ function useContentCatalog<T extends SynapseContentType>(
 
     try {
       const nextItems = await listContent(contentType)
-      const nextStats = buildCategoryStats(contentType, nextItems as SynapseContentMeta[])
+      const nextStats = buildCategoryStats(contentType, nextItems)
 
       if (latestRefreshIdRef.current !== refreshId) {
         return
@@ -109,7 +109,7 @@ function useContentCatalog<T extends SynapseContentType>(
   ])
 
   const stats = useMemo(
-    () => buildCategoryStats(contentType, items as SynapseContentMeta[]),
+    () => buildCategoryStats(contentType, items),
     [contentType, items],
   )
 

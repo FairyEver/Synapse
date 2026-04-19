@@ -438,7 +438,7 @@ class RepositoryStructureService {
         },
       }
     } catch (error) {
-      await rm(stagingPath, { recursive: true, force: true }).catch(() => {})
+      await rm(stagingPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging path", err))
       logger.error("Failed to create local repository scaffold.", {
         error,
         parentPath,

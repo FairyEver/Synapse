@@ -374,7 +374,7 @@ function SkillCreateDialog({
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <FormDialog
           title={mode === "create" ? "新建 Skill" : "编辑 Skill"}
-          description={mode === "create" ? "填好主说明和附件后保存。" : "修改后保存。"}
+          
           contentClassName="sm:max-w-[600px]"
           footer={(
             <>

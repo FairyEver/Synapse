@@ -20,13 +20,11 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { ItemGroup } from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
 import { RepositoryListItem } from "@/modules/settings/components/repository-list-item"
-import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type {
   SynapseRepositoryInitializationPreview,
@@ -391,7 +389,7 @@ function RepositoryListEditor({
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
         <FormDialog
           title="新建本地仓库"
-          description="会创建默认目录结构，并写入示例 Rule 和 Skill。"
+          
           contentClassName="sm:max-w-[560px]"
           footer={(
             <>
@@ -451,72 +449,70 @@ function RepositoryListEditor({
         </FormDialog>
       </Dialog>
 
-      <SettingsGroup>
-        {repositories.length > 0 ? (
-          <ItemGroup>
-            {repositories.map((repository) => {
-              const isActive = repository.uuid === activeRepoUuid
-              const operation = operations[repository.uuid]
-              const repositoryState = states[repository.uuid]
-              const isBusy = Boolean(operation?.isRunning) || initializingUuid === repository.uuid
-              const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
-              const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
+      {repositories.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {repositories.map((repository) => {
+            const isActive = repository.uuid === activeRepoUuid
+            const operation = operations[repository.uuid]
+            const repositoryState = states[repository.uuid]
+            const isBusy = Boolean(operation?.isRunning) || initializingUuid === repository.uuid
+            const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
+            const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
 
-              return (
-                <RepositoryListItem
-                  key={repository.uuid}
-                  repository={repository}
-                  isActive={isActive}
-                  isBusy={isBusy}
-                  canSync={canSync}
-                  canInitialize={canInitialize}
-                  hasRepositoryBridge={hasRepositoryBridge}
-                  hasRunningRepositoryOperation={hasRunningRepositoryOperation}
-                  isSwitchingRepository={isSwitchingRepository}
-                  isOnboardingBlocked={isOnboardingBlocked}
-                  repositoryState={repositoryState}
-                  operation={operation}
-                  initializingUuid={initializingUuid}
-                  activeRepoUuid={activeRepoUuid}
-                  onInitialize={handleInitializeRepository}
-                  onRemove={setPendingRemovalUuid}
-                />
-              )
-            })}
-          </ItemGroup>
-        ) : null}
-
-        <div className="flex flex-col gap-4">
-          {!hasRepositoryBridge ? (
-            <Input
-              value={manualPath}
-              onChange={(event) => setManualPath(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  void handleAddRepository()
-                }
-              }}
-              placeholder="/path/to/project"
-            />
-          ) : null}
-          <FieldError>{formError}</FieldError>
-          <div className="flex flex-wrap gap-2">
-            <Button variant={hasRepositoryBridge ? "outline" : "default"} onClick={() => void handleAddRepository()}>
-              {hasRepositoryBridge ? "选择现有文件夹" : "添加目录"}
-            </Button>
-            {hasRepositoryBridge ? (
-              <Button
-                onClick={() => {
-                  setCreateRepositoryError(null)
-                  setIsCreateDialogOpen(true)
-                }}
-              >
-                新建本地仓库
-              </Button>
-            ) : null}
-          </div>
+            return (
+              <RepositoryListItem
+                key={repository.uuid}
+                repository={repository}
+                isActive={isActive}
+                isBusy={isBusy}
+                canSync={canSync}
+                canInitialize={canInitialize}
+                hasRepositoryBridge={hasRepositoryBridge}
+                hasRunningRepositoryOperation={hasRunningRepositoryOperation}
+                isSwitchingRepository={isSwitchingRepository}
+                isOnboardingBlocked={isOnboardingBlocked}
+                repositoryState={repositoryState}
+                operation={operation}
+                initializingUuid={initializingUuid}
+                activeRepoUuid={activeRepoUuid}
+                onInitialize={handleInitializeRepository}
+                onRemove={setPendingRemovalUuid}
+              />
+            )
+          })}
         </div>
-      </SettingsGroup>
+      )}
+
+      <div className="flex flex-col gap-4">
+        {!hasRepositoryBridge ? (
+          <Input
+            value={manualPath}
+            onChange={(event) => setManualPath(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void handleAddRepository()
+              }
+            }}
+            placeholder="/path/to/project"
+          />
+        ) : null}
+        <FieldError>{formError}</FieldError>
+        <div className="flex flex-wrap gap-2">
+          <Button variant={hasRepositoryBridge ? "outline" : "default"} onClick={() => void handleAddRepository()}>
+            {hasRepositoryBridge ? "选择现有文件夹" : "添加目录"}
+          </Button>
+          {hasRepositoryBridge ? (
+            <Button
+              onClick={() => {
+                setCreateRepositoryError(null)
+                setIsCreateDialogOpen(true)
+              }}
+            >
+              新建本地仓库
+            </Button>
+          ) : null}
+        </div>
+      </div>
     </>
   )
 }

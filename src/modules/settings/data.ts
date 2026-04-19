@@ -14,20 +14,6 @@ import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
 
-function validateRepositoryDirectoryName(value: unknown): string | null {
-  const nextValue = typeof value === "string" ? value.trim() : ""
-
-  if (!nextValue) {
-    return "目录名不能为空。"
-  }
-
-  if (/[\\/]/.test(nextValue)) {
-    return "目录名只能是单层目录，不能包含斜杠。"
-  }
-
-  return null
-}
-
 const settingsCategories: SettingsCategory[] = [
   {
     id: "general",
@@ -70,10 +56,11 @@ const settingsCategories: SettingsCategory[] = [
 const contentDirectoryItems: SettingItem[] = CONTENT_TYPE_DEFINITIONS.map((definition) => ({
   key: `activeRepository.contentDirs.${definition.id}`,
   label: `${definition.pluralLabel} 主目录名`,
+  description: `当前 ${definition.pluralLabel} 内容存储的目录名称`,
   category: "content",
   type: "text",
   defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id],
-  validation: validateRepositoryDirectoryName,
+  readOnly: true,
   visible: ({ activeRepository }) => activeRepository !== null,
   scope: "repo",
 }))

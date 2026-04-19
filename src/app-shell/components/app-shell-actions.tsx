@@ -49,7 +49,7 @@ function AppShellActions({
         >
           {isPushBusy ? <LoaderCircle className="animate-spin" /> : <Upload />}
           {pendingPushCount > 0 ? (
-            <span className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full border border-background bg-foreground px-1 text-[10px] leading-4 text-background">
+            <span className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full border border-background bg-foreground px-1 text-xs leading-4 text-background">
               {pendingPushCount > 9 ? "9+" : pendingPushCount}
             </span>
           ) : null}
@@ -77,7 +77,6 @@ function AppShellActions({
       {showRepositorySwitch ? (
         <Button
           variant="secondary"
-          size="sm"
           disabled={repositorySwitchDisabled}
           onClick={onRepositorySwitch}
           title={repositorySwitchTitle}

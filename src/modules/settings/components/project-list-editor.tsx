@@ -1,7 +1,16 @@
 import { useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
-import { FieldError } from "@/components/ui/field"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Field, FieldError, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Item,
@@ -24,10 +33,26 @@ type ProjectListEditorProps = {
 }
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [draftName, setDraftName] = useState("")
   const [draftPath, setDraftPath] = useState("")
   const [formError, setFormError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
+
+  const resetForm = () => {
+    setDraftName("")
+    setDraftPath("")
+    setFormError(null)
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    if (isSubmitting) return
+    setIsDialogOpen(open)
+    if (!open) {
+      resetForm()
+    }
+  }
 
   const handleAddProject = async () => {
     const nextName = draftName.trim()
@@ -43,17 +68,25 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       return
     }
 
+    setIsSubmitting(true)
     setFormError(null)
-    await onSave([
-      ...projects,
-      {
-        id: crypto.randomUUID(),
-        name: nextName,
-        path: nextPath,
-      },
-    ])
-    setDraftName("")
-    setDraftPath("")
+
+    try {
+      await onSave([
+        ...projects,
+        {
+          id: crypto.randomUUID(),
+          name: nextName,
+          path: nextPath,
+        },
+      ])
+      setIsDialogOpen(false)
+      resetForm()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "添加失败。")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleChooseProjectPath = async () => {
@@ -104,43 +137,69 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         </ItemGroup>
       ) : null}
 
-      <div className="flex flex-col gap-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="settings-project-name">项目名称</Label>
-            <Input
-              id="settings-project-name"
-              value={draftName}
-              onChange={(event) => setDraftName(event.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="settings-project-path">项目路径</Label>
-            <div className="flex gap-2">
+      <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
+        <DialogTrigger asChild>
+          <Button variant="outline">添加项目</Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>添加项目</DialogTitle>
+            <DialogDescription>
+              填写项目名称和路径，将项目添加到列表中。
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup className="gap-4">
+            <Field>
+              <Label htmlFor="dialog-project-name">项目名称</Label>
               <Input
-                id="settings-project-path"
-                value={draftPath}
-                onChange={(event) => setDraftPath(event.target.value)}
+                id="dialog-project-name"
+                value={draftName}
+                onChange={(event) => setDraftName(event.target.value)}
+                placeholder="例如：我的项目"
+                disabled={isSubmitting}
               />
-              {hasDirectoryPicker ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    void handleChooseProjectPath()
-                  }}
-                >
-                  浏览
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <FieldError>{formError}</FieldError>
-        <div>
-          <Button onClick={() => void handleAddProject()}>添加项目</Button>
-        </div>
-      </div>
+            </Field>
+            <Field>
+              <Label htmlFor="dialog-project-path">项目路径</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="dialog-project-path"
+                  value={draftPath}
+                  onChange={(event) => setDraftPath(event.target.value)}
+                  placeholder="/path/to/project"
+                  disabled={isSubmitting}
+                />
+                {hasDirectoryPicker ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleChooseProjectPath()}
+                    disabled={isSubmitting}
+                  >
+                    浏览
+                  </Button>
+                ) : null}
+              </div>
+            </Field>
+            <FieldError>{formError}</FieldError>
+          </FieldGroup>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => void handleAddProject()}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "添加中..." : "添加"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SettingsGroup>
   )
 }

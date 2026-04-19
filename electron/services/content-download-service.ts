@@ -147,7 +147,7 @@ async function withTemporaryOutput<T>(
   try {
     return await writeOutput(outputPath)
   } finally {
-    await rm(tempDirectoryPath, { recursive: true, force: true }).catch(() => {})
+    await rm(tempDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up temp directory", err))
   }
 }
 
@@ -220,7 +220,7 @@ class ContentDownloadService {
         await createSkillArchive(stagingDirectoryPath, tempPath)
         await copyFile(tempPath, targetPath)
       } finally {
-        await rm(stagingRoot, { recursive: true, force: true }).catch(() => {})
+        await rm(stagingRoot, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging root", err))
       }
     })
 

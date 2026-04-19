@@ -93,9 +93,9 @@ function getCategoryLabel(
   return definition?.label ?? createFallbackCategoryItem(contentType, 0).label
 }
 
-function buildCategoryStats(
-  contentType: SynapseContentType,
-  items: SynapseContentMeta[],
+function buildCategoryStats<T extends SynapseContentType>(
+  contentType: T,
+  items: SynapseContentMeta<T>[],
 ): SynapseCategoryStatsResult {
   const categoryDefinitions = getCategoryDefinitions(contentType)
   const categoryDefinitionMap = getCategoryDefinitionMap(contentType)

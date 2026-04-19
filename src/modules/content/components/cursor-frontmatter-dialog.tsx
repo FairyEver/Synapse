@@ -3,7 +3,6 @@ import { LoaderCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -81,9 +80,6 @@ function CursorFrontmatterDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Cursor 规则元数据</DialogTitle>
-          <DialogDescription>
-            Cursor 按这三项 frontmatter 决定何时加载这条规则。可直接点确定使用默认值。
-          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">

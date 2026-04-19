@@ -5,7 +5,7 @@ export const ruleContentTypeDefinition: ContentTypeDefinition = {
   id: "rule",
   singularLabel: "Rule",
   pluralLabel: "Rules",
-  tabLabel: "Rules",
+  tabLabel: "规则",
   emptyStateNoun: "Rule",
   capabilities: {
     hasAttachments: false,
