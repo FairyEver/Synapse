@@ -145,6 +145,47 @@ function pickInstallerFile(files: ResolvedUpdateFileInfo[]): ResolvedUpdateFileI
 class UpdateService {
   private initialized = false
   private state: SynapseAppUpdateState = createBaseState()
+  private downloadAbortController: AbortController | null = null
+  private currentTempPath: string | null = null
+
+  private resetDownloadState(): void {
+    this.downloadAbortController = null
+    this.currentTempPath = null
+  }
+
+  private async cleanupTempFile(): Promise<void> {
+    if (this.currentTempPath) {
+      const tempPath = this.currentTempPath
+      this.currentTempPath = null
+      try {
+        await rm(tempPath, { force: true })
+        logger.info("Cleaned up temp download file.", { tempPath })
+      } catch (err) {
+        logger.warn("Failed to clean up temp file", err)
+      }
+    }
+  }
+
+  async cancelDownload(): Promise<void> {
+    if (this.downloadAbortController) {
+      logger.info("Cancelling download.")
+      this.downloadAbortController.abort()
+    }
+    await this.cleanupTempFile()
+    if (this.state.status === "downloading" || this.state.status === "available") {
+      this.setState({
+        status: "idle",
+        message: "下载已取消。",
+        error: null,
+        downloadPercent: null,
+        bytesPerSecond: null,
+        transferredBytes: null,
+        totalBytes: null,
+        canCheck: isUpdateSupportedInCurrentEnvironment(),
+        downloadedFilePath: null,
+      })
+    }
+  }
 
   initialize(): void {
     if (this.initialized) {
@@ -267,6 +308,8 @@ class UpdateService {
   }
 
   private async downloadLatestUpdatePackage(updateInfo: UpdateInfo): Promise<void> {
+    this.downloadAbortController = new AbortController()
+
     const fileInfo = this.resolveInstallerFile(updateInfo)
     const fileName = getResolvedFileName(fileInfo, updateInfo.version)
     const downloadsDir = app.getPath("downloads")
@@ -275,6 +318,8 @@ class UpdateService {
 
     const destinationPath = await this.createUniqueDownloadPath(downloadsDir, fileName)
     const tempPath = `${destinationPath}.download`
+    this.currentTempPath = tempPath
+
     const expectedSize = this.getExpectedTotalBytes(fileInfo)
     const startedAt = Date.now()
     const hash = createHash("sha512")
@@ -295,6 +340,7 @@ class UpdateService {
       const response = await fetch(fileInfo.url, {
         headers: toFetchHeaders(autoUpdater.requestHeaders),
         redirect: "follow",
+        signal: this.downloadAbortController.signal,
       })
 
       if (!response.ok || !response.body) {
@@ -307,6 +353,11 @@ class UpdateService {
 
       const progressStream = new Transform({
         transform: (chunk, _encoding, callback) => {
+          if (this.downloadAbortController?.signal.aborted) {
+            callback(new Error("下载已取消"))
+            return
+          }
+
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
 
           transferredBytes += buffer.length
@@ -338,6 +389,8 @@ class UpdateService {
       this.updateDownloadProgress(updateInfo, transferredBytes, totalBytes, startedAt)
 
       await rename(tempPath, destinationPath)
+      this.currentTempPath = null
+      this.downloadAbortController = null
 
       logger.info("Update package downloaded to downloads directory.", {
         version: updateInfo.version,
@@ -359,7 +412,13 @@ class UpdateService {
         downloadedFilePath: destinationPath,
       })
     } catch (error) {
-      await rm(tempPath, { force: true }).catch((err) => logger.warn("Failed to clean up temp file", err))
+      await this.cleanupTempFile()
+      this.resetDownloadState()
+
+      if (error instanceof Error && error.message === "下载已取消") {
+        return
+      }
+
       throw error
     }
   }

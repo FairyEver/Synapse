@@ -51,6 +51,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     validateDirectory: "synapse:repository:validate-directory",
   },
   update: {
+    cancelDownload: "synapse:update:cancel-download",
     checkForUpdates: "synapse:update:check-for-updates",
     getState: "synapse:update:get-state",
     stateChanged: "synapse:update:state-changed",

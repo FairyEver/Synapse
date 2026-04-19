@@ -219,6 +219,20 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     }
   }
 
+  const handleCancelDownload = async () => {
+    const bridge = window.synapse?.updater
+
+    if (!bridge) {
+      return
+    }
+
+    try {
+      await bridge.cancelDownload()
+    } catch (error) {
+      logger.error("Failed to cancel download.", error)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-center">
@@ -262,15 +276,26 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           </div>
 
           <div className="flex justify-start md:justify-end">
-            <Button
-              variant="outline"
-              disabled={actionDisabled}
-              onClick={() => {
-                void handleAction()
-              }}
-            >
-              {actionLabel}
-            </Button>
+            {isDownloading ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void handleCancelDownload()
+                }}
+              >
+                取消下载
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                disabled={actionDisabled}
+                onClick={() => {
+                  void handleAction()
+                }}
+              >
+                {actionLabel}
+              </Button>
+            )}
           </div>
 
           {updateState.status === "downloading" || updateState.status === "downloaded" ? (

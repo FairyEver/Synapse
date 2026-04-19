@@ -130,6 +130,7 @@ export type SynapseBridge = {
     validateDirectory: (targetPath: string) => Promise<SynapseRepositoryValidationResult>
   }
   updater: {
+    cancelDownload: () => Promise<void>
     checkForUpdates: () => Promise<SynapseAppUpdateState>
     getState: () => Promise<SynapseAppUpdateState>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void

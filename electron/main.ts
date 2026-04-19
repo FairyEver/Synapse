@@ -144,6 +144,9 @@ app.on("window-all-closed", () => {
 })
 
 app.on("before-quit", async (event) => {
+  // 取消正在进行的下载并清理临时文件
+  await updateService.cancelDownload()
+
   if (allowAppQuit) {
     // 确保日志被刷新
     await logStore.dispose()

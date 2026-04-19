@@ -56,6 +56,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     validateDirectory: "synapse:repository:validate-directory",
   },
   update: {
+    cancelDownload: "synapse:update:cancel-download",
     checkForUpdates: "synapse:update:check-for-updates",
     getState: "synapse:update:get-state",
     stateChanged: "synapse:update:state-changed",
@@ -156,6 +157,7 @@ const synapseBridge: SynapseBridge = {
     validateDirectory: (targetPath) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.validateDirectory, targetPath),
   },
   updater: {
+    cancelDownload: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.cancelDownload),
     checkForUpdates: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.checkForUpdates),
     getState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.getState),
     onStateChanged: (listener) =>
