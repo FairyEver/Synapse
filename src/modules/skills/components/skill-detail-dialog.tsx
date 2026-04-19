@@ -1,16 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
-import {
-  AlertTriangle,
-  LoaderCircle,
-  PackageOpen,
-  Pencil,
-  Trash2,
-} from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 import {
   deleteContent,
-  readDetail,
-  readHistory,
-  readHistoryVersion,
+  openContentDetailWindow,
   updateContent,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
@@ -27,7 +19,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -36,35 +27,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import { InlineNotice } from "@/components/inline-notice"
-import { MarkdownViewer } from "@/components/markdown-viewer"
 import { Separator } from "@/components/ui/separator"
-import { getContentIconOption } from "@/lib/content-appearance"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
-import { ContentHistorySelect } from "@/modules/content/components/content-history-select"
-import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
+import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
+import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
+import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
+import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
 import { SkillCreateDialog } from "@/modules/skills/components/skill-create-dialog"
+import { SkillVersionView } from "@/modules/skills/components/skill-version-view"
 import type { CreateSkillPayload } from "@/modules/skills/types"
 import { serializeCreateSkillFiles } from "@/modules/skills/utils"
 import type {
-  SynapseContentHistoryEntry,
   SynapseDeleteContentPayload,
   SynapseSkillDetail,
   SynapseSkillMeta,
 } from "@/types/content"
-
-type SkillHistoryVersion = SynapseSkillDetail & {
-  historyDirname: string
-  isCurrent: boolean
-}
 
 type SkillDetailDialogProps = {
   item: SynapseSkillMeta | null
@@ -123,42 +101,6 @@ function buildSkillInitialValue(detail: SynapseSkillDetail): CreateSkillPayload 
   }
 }
 
-function SkillVersionView({
-  version,
-}: {
-  version: SkillHistoryVersion
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      {version.deleted ? (
-        <InlineNotice message="该 Skill 已被删除。" tone="destructive" />
-      ) : null}
-
-      <MarkdownViewer content={version.content} />
-
-      <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium text-foreground">附件</p>
-        {version.attachments.length > 0 ? (
-          <div className="rounded-lg border border-border">
-            <ul className="divide-y divide-border">
-              {version.attachments.map((attachment) => (
-                <li key={`${attachment.sha256}:${attachment.originalName}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                  <span className="min-w-0 break-all text-foreground">{attachment.originalName}</span>
-                  <span className="shrink-0 text-muted-foreground">
-                    {attachment.size} B
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">没有附件。</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function SkillDetailDialog({
   item,
   onContentChanged,
@@ -168,148 +110,34 @@ function SkillDetailDialog({
 }: SkillDetailDialogProps) {
   const logger = useMemo(() => createRendererLogger("skills.detail"), [])
   const { activeRepository } = useAppConfig()
-  const { promise } = useAppNotifications()
+  const { error, promise } = useAppNotifications()
   const { waitForBackgroundPush } = useRepositoryManager()
-  const [detail, setDetail] = useState<SynapseSkillDetail | null>(null)
-  const [displayedVersion, setDisplayedVersion] = useState<SkillHistoryVersion | null>(null)
-  const [history, setHistory] = useState<SynapseContentHistoryEntry[]>([])
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [selectedHistoryDirname, setSelectedHistoryDirname] = useState<string | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [conflictState, setConflictState] = useState<ConflictState | null>(null)
-
-  useEffect(() => {
-    if (!open || item === null) {
-      setDetail(null)
-      setDisplayedVersion(null)
-      setHistory([])
-      setPreviewError(null)
-      setIsLoading(false)
-      setSelectedHistoryDirname(null)
-      return
-    }
-
-    let cancelled = false
-
-    setDetail(null)
-    setDisplayedVersion(null)
-    setHistory([])
-    setPreviewError(null)
-    setIsLoading(true)
-    setSelectedHistoryDirname(null)
-
-    void (async () => {
-      try {
-        const [nextDetail, nextHistory] = await Promise.all([
-          readDetail(item.type, item.id),
-          readHistory(item.type, item.id),
-        ])
-
-        if (nextDetail.type !== item.type) {
-          throw new Error("读取到的内容不是 Skill。")
-        }
-
-        if (cancelled) {
-          return
-        }
-
-        setDetail(nextDetail)
-        setDisplayedVersion({
-          ...nextDetail,
-          historyDirname: nextDetail.latestHistoryDirname,
-          isCurrent: true,
-        })
-        setHistory(nextHistory)
-        setSelectedHistoryDirname(nextDetail.latestHistoryDirname)
-        setPreviewError(null)
-      } catch (loadError) {
-        logger.error("Failed to load skill detail.", {
-          contentId: item.id,
-          loadError,
-        })
-
-        if (cancelled) {
-          return
-        }
-
-        setDetail(null)
-        setDisplayedVersion(null)
-        setHistory([])
-        setPreviewError(loadError instanceof Error ? loadError.message : "读取 Skill 详情失败。")
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [item, logger, open, refreshSignal])
-
-  useEffect(() => {
-    if (!open || !item || !detail || !selectedHistoryDirname || selectedHistoryDirname === detail.latestHistoryDirname) {
-      if (detail) {
-        setDisplayedVersion({
-          ...detail,
-          historyDirname: detail.latestHistoryDirname,
-          isCurrent: true,
-        })
-      }
-
-      setPreviewError(null)
-      setIsLoading(false)
-      return
-    }
-
-    let cancelled = false
-
-    setIsLoading(true)
-    setPreviewError(null)
-
-    void (async () => {
-      try {
-        const nextVersion = await readHistoryVersion(item.type, item.id, selectedHistoryDirname)
-
-        if (nextVersion.type !== item.type) {
-          throw new Error("读取到的历史版本不是 Skill。")
-        }
-
-        if (cancelled) {
-          return
-        }
-
-        setDisplayedVersion(nextVersion)
-        setPreviewError(null)
-      } catch (loadError) {
-        logger.error("Failed to load skill history version.", {
-          contentId: item.id,
-          historyDirname: selectedHistoryDirname,
-          loadError,
-        })
-
-        if (cancelled) {
-          return
-        }
-
-        setPreviewError(loadError instanceof Error ? loadError.message : "读取 Skill 历史失败。")
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [detail, item, logger, open, selectedHistoryDirname])
+  const {
+    detail,
+    displayedVersion,
+    historyEntries,
+    isLoading,
+    previewError,
+    selectedHistoryDirname,
+    setSelectedHistoryDirname,
+    setViewMode,
+    viewMode,
+  } = useContentDetailState<"skill">({
+    invalidTypeMessage: "读取到的内容不是 Skill。",
+    item,
+    loadDetailErrorMessage: "读取 Skill 详情失败。",
+    loadHistoryErrorMessage: "读取 Skill 历史失败。",
+    logCategory: "skills.detail",
+    open,
+    refreshSignal,
+  })
 
   useEffect(() => {
     if (!open) {
+      setViewMode("rendered")
       setSelectedHistoryDirname(null)
       setIsEditOpen(false)
       setIsDeleteConfirmOpen(false)
@@ -324,24 +152,14 @@ function SkillDetailDialog({
   const resolvedItem = detail ?? item
   const deleteTarget = detail ?? item
   const categoryLabel = getCategoryLabel(item.type, resolvedItem.category)
-  const iconOption = getContentIconOption(resolvedItem.icon)
-  const historyEntries = detail
-    ? history.length > 0
-      ? history
-      : [{
-          dirname: detail.latestHistoryDirname,
-          modifiedAt: detail.modifiedAt,
-          modifiedBy: detail.modifiedBy,
-          modifiedByDisplayName: detail.modifiedByDisplayName,
-          deleted: detail.deleted,
-          isCurrent: true,
-        }]
-    : []
 
   const handleSave = (payload: CreateSkillPayload, force = false) => {
     if (!detail) {
       return
     }
+
+    setIsEditOpen(false)
+    onOpenChange(false)
 
     void promise(
       async () => {
@@ -353,7 +171,13 @@ function SkillDetailDialog({
           files: await serializeCreateSkillFiles(payload.files),
         })
 
-        if (result.status === "saved" && result.pendingPushCount > 0 && activeRepository) {
+        if (result.status !== "saved") {
+          return result
+        }
+
+        onContentChanged?.()
+
+        if (result.pendingPushCount > 0 && activeRepository) {
           await waitForBackgroundPush(activeRepository.uuid)
         }
 
@@ -373,9 +197,7 @@ function SkillDetailDialog({
             return null
           }
 
-          setIsEditOpen(false)
-          onContentChanged?.()
-          return "保存成功。"
+          return result.pendingPushCount > 0 ? "已保存并同步。" : "保存成功。"
         },
         error: (error) => error instanceof Error ? error.message : "保存失败。",
       },
@@ -436,12 +258,34 @@ function SkillDetailDialog({
       return
     }
 
-    handleSave(
-      {
-        ...nextConflictState.payload,
-      },
-      true,
-    )
+    try {
+      await handleSave(
+        {
+          ...nextConflictState.payload,
+        },
+        true,
+      )
+    } catch {
+      return
+    }
+  }
+
+  const handleOpenInNewWindow = async () => {
+    try {
+      await openContentDetailWindow({
+        contentType: item.type,
+        id: item.id,
+        title: resolvedItem.title,
+        viewMode,
+        historyDirname: selectedHistoryDirname ?? displayedVersion?.historyDirname,
+      })
+    } catch (openWindowError) {
+      logger.error("Failed to open skill detail window.", {
+        contentId: item.id,
+        error: openWindowError,
+      })
+      error(openWindowError instanceof Error ? openWindowError.message : "打开新窗口失败。")
+    }
   }
 
   return (
@@ -497,113 +341,83 @@ function SkillDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
           <DialogHeader className="px-5 pt-5">
-            <div className="flex min-w-0 items-start gap-4 pr-8">
-                <ContentIconBadge size="lg" tone={resolvedItem.iconBg} title={resolvedItem.title}>
-                  {iconOption ? (
-                    <iconOption.icon className="size-6" />
-                  ) : (
-                    <span className="block max-w-full truncate px-1 leading-none">{resolvedItem.icon}</span>
-                  )}
-                </ContentIconBadge>
+            <DialogTitle className="sr-only">{resolvedItem.title}</DialogTitle>
+            <DialogDescription className="sr-only">{resolvedItem.description}</DialogDescription>
 
-                <div className="flex min-w-0 flex-col gap-3">
-                  <DialogTitle className="truncate">{resolvedItem.title}</DialogTitle>
-                  <DialogDescription className="text-sm">{resolvedItem.description}</DialogDescription>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="max-w-full truncate">
-                      @{resolvedItem.createdByDisplayName || "未命名用户"}
-                    </Badge>
-                    <Badge variant="secondary">{categoryLabel}</Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!detail}
-                      onClick={() => {
-                        setIsEditOpen(true)
-                      }}
-                    >
-                      <Pencil />
-                      编辑
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsDeleteConfirmOpen(true)}
-                    >
-                      <Trash2 />
-                      删除
-                    </Button>
-                    <ContentActionSplitButton item={resolvedItem} />
-                  </div>
+            <div className="flex min-w-0 items-start gap-3 pr-8">
+              <ContentItemIcon
+                icon={resolvedItem.icon}
+                title={resolvedItem.title}
+                tone={resolvedItem.iconBg}
+              />
+
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <ContentItemMeta
+                  author={resolvedItem.createdByDisplayName || "未命名用户"}
+                  category={categoryLabel}
+                  description={resolvedItem.description}
+                  title={resolvedItem.title}
+                />
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!detail}
+                    onClick={() => {
+                      setIsEditOpen(true)
+                    }}
+                  >
+                    <Pencil />
+                    编辑
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsDeleteConfirmOpen(true)}
+                  >
+                    <Trash2 />
+                    删除
+                  </Button>
+                  <ContentActionSplitButton item={resolvedItem} />
                 </div>
+              </div>
             </div>
           </DialogHeader>
 
           <Separator className="mt-5" />
 
           <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
-            {isLoading && !displayedVersion ? (
-              <Empty className="min-h-[360px] rounded-lg border border-border bg-muted/20">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <LoaderCircle className="animate-spin" />
-                  </EmptyMedia>
-                  <EmptyTitle>正在读取 Skill</EmptyTitle>
-                  <EmptyDescription>请稍等一下。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : displayedVersion ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                {selectedHistoryDirname ? (
-                  <ContentHistorySelect
-                    history={historyEntries}
-                    latestHistoryDirname={detail?.latestHistoryDirname ?? displayedVersion.historyDirname}
-                    selectedHistoryDirname={selectedHistoryDirname}
-                    onSelectedHistoryDirnameChange={setSelectedHistoryDirname}
-                  />
-                ) : null}
-
-                <div className="mt-4 min-h-0 overflow-auto">
-                  {previewError ? (
-                    <Empty className="min-h-[360px] rounded-lg border border-border bg-muted/20">
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <AlertTriangle />
-                        </EmptyMedia>
-                        <EmptyTitle>无法显示 Skill</EmptyTitle>
-                        <EmptyDescription>{previewError}</EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  ) : (
-                    <SkillVersionView
-                      version={displayedVersion}
-                    />
-                  )}
-                </div>
-              </div>
-            ) : previewError ? (
-              <Empty className="min-h-[360px] rounded-lg border border-border bg-muted/20">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <AlertTriangle />
-                  </EmptyMedia>
-                  <EmptyTitle>无法显示 Skill</EmptyTitle>
-                  <EmptyDescription>{previewError}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <Empty className="min-h-[360px] rounded-lg border border-border bg-muted/20">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <PackageOpen />
-                  </EmptyMedia>
-                  <EmptyTitle>找不到这条 Skill</EmptyTitle>
-                  <EmptyDescription>它可能已经被删除。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
+            <ContentDetailPanel
+              detail={detail}
+              displayedVersion={displayedVersion}
+              emptyDescription="它可能已经被删除。"
+              emptyTitle="找不到这条 Skill"
+              errorTitle="无法显示 Skill"
+              history={historyEntries}
+              isLoading={isLoading}
+              loadingTitle="正在读取 Skill"
+              onSelectedHistoryDirnameChange={setSelectedHistoryDirname}
+              onViewModeChange={setViewMode}
+              previewError={previewError}
+              renderVersion={({ mode, version }) => (
+                <SkillVersionView mode={mode} version={version} />
+              )}
+              selectedHistoryDirname={selectedHistoryDirname}
+              toolbarAction={(
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!displayedVersion}
+                  onClick={() => {
+                    void handleOpenInNewWindow()
+                  }}
+                >
+                  新窗口
+                </Button>
+              )}
+              viewMode={viewMode}
+            />
           </div>
         </DialogContent>
       </Dialog>

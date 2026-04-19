@@ -9,6 +9,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     update: "synapse:content:update",
     deleteContent: "synapse:content:delete-content",
     download: "synapse:content:download",
+    openDetailWindow: "synapse:content:open-detail-window",
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",

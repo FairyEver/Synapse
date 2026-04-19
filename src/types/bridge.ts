@@ -12,6 +12,7 @@ import type {
   SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
   SynapseContentMutationResult,
+  SynapseOpenContentWindowPayload,
   SynapseContentType,
   SynapseTextContentFile,
   SynapseUpdateContentRequest,
@@ -71,6 +72,7 @@ export type SynapseBridge = {
     download: (
       args: { contentType: SynapseContentType; id: string },
     ) => Promise<SynapseContentDownloadResult>
+    openDetailWindow: (payload: SynapseOpenContentWindowPayload) => Promise<void>
     getEditorAdapters: () => Promise<SynapseEditorAdapterSummary[]>
     installToEditor: (
       payload: SynapseInstallToEditorPayload,

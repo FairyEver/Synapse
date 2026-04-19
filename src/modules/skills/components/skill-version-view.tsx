@@ -1,0 +1,48 @@
+import { InlineNotice } from "@/components/inline-notice"
+import { MarkdownViewer } from "@/components/markdown-viewer"
+import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
+import type { SynapseContentViewMode } from "@/types/content"
+
+type SkillVersionViewProps = {
+  mode: SynapseContentViewMode
+  version: SynapseLoadedContentVersion<"skill">
+}
+
+function SkillVersionView({ mode, version }: SkillVersionViewProps) {
+  return (
+    <div className="flex flex-col gap-4">
+      {version.deleted ? (
+        <InlineNotice message="该 Skill 已被删除。" tone="destructive" />
+      ) : null}
+
+      <MarkdownViewer content={version.content} mode={mode} showTabs={false} />
+
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium text-foreground">附件</p>
+        {version.attachments.length > 0 ? (
+          <div className="rounded-lg border border-border">
+            <ul className="divide-y divide-border">
+              {version.attachments.map((attachment) => (
+                <li
+                  key={`${attachment.sha256}:${attachment.originalName}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                >
+                  <span className="min-w-0 break-all text-foreground">
+                    {attachment.originalName}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {attachment.size} B
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">没有附件。</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export { SkillVersionView }

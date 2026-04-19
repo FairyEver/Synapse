@@ -10,24 +10,37 @@ type AppShellLayoutProps = {
 
 function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) {
   const isMacDesktop = getSynapseBridge()?.platform === "darwin"
+  const noDragClassName = isMacDesktop ? "[-webkit-app-region:no-drag]" : undefined
 
   return (
-    <main className="h-screen overflow-hidden bg-muted/30">
+    <main
+      data-window-drag-context={isMacDesktop ? "true" : undefined}
+      className="h-screen overflow-hidden bg-muted/30"
+    >
       <div className="flex h-full flex-col">
         <header className="shrink-0">
           <div
             className={cn(
-              "flex min-h-14 items-center gap-4",
+              "grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4",
               isMacDesktop ? "pr-4 pl-20 [-webkit-app-region:drag]" : "px-4",
             )}
           >
-            <div className="flex min-w-0 flex-1 justify-center">
-              <div className={cn("min-w-0", isMacDesktop && "[-webkit-app-region:no-drag]")}>
+            <div aria-hidden="true" className="min-w-0 justify-self-start invisible pointer-events-none">
+              {actions ? (
+                <div className={cn("shrink-0", noDragClassName)}>
+                  {actions}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex min-w-0 justify-center">
+              <div className={cn("min-w-0", noDragClassName)}>
                 {navigation}
               </div>
             </div>
+
             {actions ? (
-              <div className={cn("shrink-0", isMacDesktop && "[-webkit-app-region:no-drag]")}>
+              <div className={cn("min-w-0 justify-self-end", noDragClassName)}>
                 {actions}
               </div>
             ) : null}

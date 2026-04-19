@@ -6,6 +6,7 @@ import type {
   SynapseContentType,
   SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
+  SynapseOpenContentWindowPayload,
   SynapseUpdateContentRequest,
 } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
@@ -20,6 +21,7 @@ import { contentDownloadService } from "../services/content-download-service"
 import { contentInstallService } from "../services/content-install-service"
 import { contentService } from "../services/content-service"
 import { contentSubmissionService } from "../services/content-submission-service"
+import { contentWindowService } from "../services/content-window-service"
 import { editorAdapterService } from "../services/editor-adapter-service"
 import { createMainLogger } from "../services/log-store"
 
@@ -271,6 +273,13 @@ function registerContentHandlers() {
         canceled: false,
         filePath,
       }
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.openDetailWindow,
+    async (_event, payload: SynapseOpenContentWindowPayload) => {
+      await contentWindowService.openDetailWindow(payload)
     },
   )
 

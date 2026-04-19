@@ -61,7 +61,13 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
             : payload
           const result = await createContent(config.contentType, finalPayload)
 
-          if (result.status === "saved" && result.pendingPushCount > 0 && activeRepository) {
+          if (result.status !== "saved") {
+            return result
+          }
+
+          handleCreated()
+
+          if (result.pendingPushCount > 0 && activeRepository) {
             await waitForBackgroundPush(activeRepository.uuid)
           }
 
@@ -71,8 +77,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           loading: "正在保存...",
           success: (result) => {
             if (result.status === "saved") {
-              handleCreated()
-              return "保存成功。"
+              return result.pendingPushCount > 0 ? "已保存并同步。" : "保存成功。"
             }
 
             return null

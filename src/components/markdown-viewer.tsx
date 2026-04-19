@@ -4,9 +4,13 @@ import { CodeIcon, EyeIcon } from "lucide-react"
 import { renderMarkdown } from "@/lib/markdown"
 import { cn } from "@/lib/utils"
 
+type MarkdownViewerMode = "rendered" | "source"
+
 type MarkdownViewerProps = {
   className?: string
   content: string
+  mode?: MarkdownViewerMode
+  showTabs?: boolean
 }
 
 const MARKDOWN_BODY_CLASSNAME = cn(
@@ -32,7 +36,12 @@ const MARKDOWN_BODY_CLASSNAME = cn(
   "[&_*+blockquote]:mt-4 [&_*+h1]:mt-6 [&_*+h2]:mt-6 [&_*+h3]:mt-5 [&_*+hr]:mt-6 [&_*+ol]:mt-3 [&_*+p]:mt-3 [&_*+pre]:mt-4 [&_*+table]:mt-4 [&_*+ul]:mt-3",
 )
 
-function MarkdownViewer({ className, content }: MarkdownViewerProps) {
+function MarkdownViewer({
+  className,
+  content,
+  mode = "rendered",
+  showTabs = true,
+}: MarkdownViewerProps) {
   const renderedHtml = useMemo(() => renderMarkdown(content), [content])
 
   const handleRenderedClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -51,6 +60,34 @@ function MarkdownViewer({ className, content }: MarkdownViewerProps) {
     event.preventDefault()
   }
 
+  const renderedContent = (
+    <div
+      data-allow-select="true"
+      className="rounded-lg border border-border bg-muted/20 px-4 py-4"
+      onClickCapture={handleRenderedClickCapture}
+    >
+      <div
+        className={MARKDOWN_BODY_CLASSNAME}
+        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+      />
+    </div>
+  )
+
+  const sourceContent = (
+    <div
+      data-allow-select="true"
+      className="rounded-lg border border-border bg-muted/20 px-4 py-4"
+    >
+      <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground">
+        {content}
+      </pre>
+    </div>
+  )
+
+  if (!showTabs) {
+    return mode === "source" ? sourceContent : renderedContent
+  }
+
   return (
     <Tabs defaultValue="rendered" className={cn("gap-4", className)}>
       <TabsList className="mx-auto">
@@ -65,30 +102,15 @@ function MarkdownViewer({ className, content }: MarkdownViewerProps) {
       </TabsList>
 
       <TabsContent value="rendered" className="mt-0">
-        <div
-          data-allow-select="true"
-          className="rounded-lg border border-border bg-muted/20 px-4 py-4"
-          onClickCapture={handleRenderedClickCapture}
-        >
-          <div
-            className={MARKDOWN_BODY_CLASSNAME}
-            dangerouslySetInnerHTML={{ __html: renderedHtml }}
-          />
-        </div>
+        {renderedContent}
       </TabsContent>
 
       <TabsContent value="source" className="mt-0">
-        <div
-          data-allow-select="true"
-          className="rounded-lg border border-border bg-muted/20 px-4 py-4"
-        >
-          <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground">
-            {content}
-          </pre>
-        </div>
+        {sourceContent}
       </TabsContent>
     </Tabs>
   )
 }
 
 export { MarkdownViewer }
+export type { MarkdownViewerMode }

@@ -16,8 +16,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
 type ContentHistorySelectProps = {
+  className?: string
   history: SynapseContentHistoryEntry[]
   latestHistoryDirname: string
   selectedHistoryDirname: string
@@ -63,10 +65,11 @@ function buildHistoryLabel(
   const authorLabel = entry.modifiedByDisplayName || "未命名用户"
   const tagLabel = tags.length > 0 ? ` · ${tags.join(" / ")}` : ""
 
-  return `${formatDateTime(entry.modifiedAt)} · ${authorLabel} #${entry.modifiedBy.slice(0, 8)}${tagLabel}`
+  return `${formatDateTime(entry.modifiedAt)} · ${authorLabel}${tagLabel}`
 }
 
 function ContentHistorySelect({
+  className,
   history,
   latestHistoryDirname,
   selectedHistoryDirname,
@@ -81,12 +84,12 @@ function ContentHistorySelect({
       : null
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn("flex w-full items-center gap-2 sm:w-[250px] sm:flex-none", className)}>
       <Select value={selectedHistoryDirname} onValueChange={onSelectedHistoryDirnameChange}>
-        <SelectTrigger aria-label="历史版本" className="min-w-0 flex-1 sm:max-w-80">
+        <SelectTrigger aria-label="历史版本" className="min-w-0 flex-1">
           <SelectValue placeholder="选择历史版本" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="sm:w-[250px]">
           <SelectGroup>
             <SelectLabel>历史版本</SelectLabel>
             {history.map((entry) => (

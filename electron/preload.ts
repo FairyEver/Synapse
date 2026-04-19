@@ -14,6 +14,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     update: "synapse:content:update",
     deleteContent: "synapse:content:delete-content",
     download: "synapse:content:download",
+    openDetailWindow: "synapse:content:open-detail-window",
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
@@ -85,6 +86,8 @@ const synapseBridge: SynapseBridge = {
     update: (request) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.update, request),
     deleteContent: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.deleteContent, payload),
     download: (args) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.download, args),
+    openDetailWindow: (payload) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.openDetailWindow, payload),
     getEditorAdapters: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getEditorAdapters),
     installToEditor: (payload) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.installToEditor, payload),

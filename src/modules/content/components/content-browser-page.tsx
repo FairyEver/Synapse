@@ -25,18 +25,17 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Badge } from "@/components/ui/badge"
 import { getContentTypeDefinition } from "@/config/content-types"
-import { getContentIconOption } from "@/lib/content-appearance"
 import {
   getCategoryLabel,
   resolveCategoryViewId,
   SYNAPSE_ALL_CATEGORY_ID,
 } from "@/lib/content-categories"
 import { cn } from "@/lib/utils"
-import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
-import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
+import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
+import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
+import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
@@ -212,41 +211,26 @@ function ContentListCard({
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
-  const iconOption = getContentIconOption(item.icon)
   const authorLabel = item.createdByDisplayName || "未命名用户"
+
   return (
-    <div className="flex items-start gap-3 rounded-xl bg-background px-3 py-3">
+    <div
+      data-window-no-drag="true"
+      className="flex items-start gap-3 rounded-xl bg-background px-3 py-3"
+    >
       <button
         type="button"
         className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={onOpen}
       >
-        <ContentIconBadge
-          size="md"
-          tone={item.iconBg}
+        <ContentItemIcon icon={item.icon} title={item.title} tone={item.iconBg} />
+        <ContentItemMeta
+          author={authorLabel}
+          category={categoryLabel}
+          className="flex-1"
+          description={item.description}
           title={item.title}
-          className="size-10"
-        >
-          {iconOption ? (
-            <iconOption.icon className="size-6" />
-          ) : (
-            <span className="block max-w-full truncate px-1 leading-none">{item.icon}</span>
-          )}
-        </ContentIconBadge>
-
-        <div className="min-w-0 flex-1 pt-0.5">
-          <div className="min-w-0 flex flex-col gap-1">
-            <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
-            <p className="truncate text-sm text-muted-foreground">{item.description}</p>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <Badge variant="outline" className="max-w-full truncate">
-              @{authorLabel}
-            </Badge>
-            <Badge variant="secondary">{categoryLabel}</Badge>
-          </div>
-        </div>
+        />
       </button>
 
       <div
@@ -463,7 +447,10 @@ function ContentBrowserPage({
       >
         <section className="h-full min-h-0">
           <div className="flex min-h-full flex-col gap-4 pb-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div
+              data-window-no-drag="true"
+              className="flex flex-wrap items-start justify-between gap-3"
+            >
               <div className="min-w-0">
                 <h2 className="text-base font-medium text-foreground">{definition.pluralLabel}</h2>
                 <p className="text-sm text-muted-foreground">

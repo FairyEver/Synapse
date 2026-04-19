@@ -167,4 +167,22 @@
   #root {
     min-height: 100vh;
   }
+
+  [data-window-drag-context="true"] [data-window-drag="true"] {
+    -webkit-app-region: drag;
+  }
+
+  [data-window-drag-context="true"] [data-window-no-drag="true"],
+  [data-window-drag-context="true"] a[href],
+  [data-window-drag-context="true"] button,
+  [data-window-drag-context="true"] input,
+  [data-window-drag-context="true"] label[for],
+  [data-window-drag-context="true"] select,
+  [data-window-drag-context="true"] summary,
+  [data-window-drag-context="true"] textarea,
+  [data-window-drag-context="true"] [contenteditable="true"],
+  [data-window-drag-context="true"] [data-slot="resizable-handle"],
+  [data-window-drag-context="true"] [role="button"] {
+    -webkit-app-region: no-drag;
+  }
 }

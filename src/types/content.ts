@@ -1,4 +1,5 @@
 export type SynapseContentType = "rule" | "skill"
+export type SynapseContentViewMode = "rendered" | "source"
 
 export type SynapseContentSchemaVersion = 1
 
@@ -191,4 +192,15 @@ export type SynapseContentMutationResult =
 export type SynapseContentDownloadResult = {
   canceled: boolean
   filePath: string | null
+}
+
+export type SynapseContentWindowRequest = {
+  contentType: SynapseContentType
+  id: string
+  viewMode: SynapseContentViewMode
+  historyDirname?: string
+}
+
+export type SynapseOpenContentWindowPayload = SynapseContentWindowRequest & {
+  title: string
 }

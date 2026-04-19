@@ -18,6 +18,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
+import { parseContentWindowRequest } from "@/lib/content-window"
+import { ContentDetailWindowPage } from "@/modules/content/components/content-detail-window-page"
 import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { SettingsModule } from "@/modules/settings"
@@ -50,7 +52,7 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
   skill: SkillsModule,
 }
 
-function App() {
+function MainApp() {
   const { activeRepository, isReady } = useAppConfig()
   const { promise } = useAppNotifications()
   const { flushPendingPushes, operations, pendingPushes, states, syncRepository } = useRepositoryManager()
@@ -267,6 +269,23 @@ function App() {
       </AppShellLayout>
     </IdentityGate>
   )
+}
+
+function App() {
+  const standaloneContentWindowRequest = useMemo(
+    () => parseContentWindowRequest(window.location.search),
+    [],
+  )
+
+  if (standaloneContentWindowRequest) {
+    return (
+      <IdentityGate>
+        <ContentDetailWindowPage request={standaloneContentWindowRequest} />
+      </IdentityGate>
+    )
+  }
+
+  return <MainApp />
 }
 
 export default App

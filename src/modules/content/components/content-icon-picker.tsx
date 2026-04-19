@@ -32,7 +32,7 @@ function ContentIconPicker({
             aria-pressed={isSelected}
             aria-label={option.label}
             className={cn(
-              "flex size-10 items-center justify-center rounded-md ring-1 ring-inset ring-zinc-700/20 transition-shadow focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none [&_svg]:size-4",
+              "flex size-10 items-center justify-center rounded-md ring-1 ring-border/60 transition-shadow focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none [&_svg]:size-4",
               colorOption
                 ? [colorOption.backgroundClassName, colorOption.foregroundClassName]
                 : "bg-muted text-muted-foreground",

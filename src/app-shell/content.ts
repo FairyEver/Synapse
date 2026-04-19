@@ -6,6 +6,7 @@ import type {
   SynapseContentHistoryVersion,
   SynapseContentMeta,
   SynapseContentMutationResult,
+  SynapseOpenContentWindowPayload,
   SynapseContentType,
   SynapseCreateContentRequest,
   SynapseCreateContentPayload,
@@ -115,6 +116,10 @@ async function downloadContent(
   return requireContentBridge().download({ contentType, id })
 }
 
+async function openContentDetailWindow(payload: SynapseOpenContentWindowPayload): Promise<void> {
+  return requireContentBridge().openDetailWindow(payload)
+}
+
 async function getEditorAdapters(): Promise<SynapseEditorAdapterSummary[]> {
   return requireContentBridge().getEditorAdapters()
 }
@@ -162,6 +167,7 @@ export {
   hasContentBridge,
   installToEditor,
   listContent,
+  openContentDetailWindow,
   readContent,
   readDetail,
   readHistory,
