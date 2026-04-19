@@ -24,6 +24,8 @@ import type {
   SynapseContentInstallResult,
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
+  SynapsePeekCursorFrontmatterPayload,
+  SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
 } from "@/types/editor"
 
@@ -136,6 +138,12 @@ async function resolveEditorInstallTarget(
   return requireContentBridge().resolveEditorInstallTarget(payload)
 }
 
+async function peekCursorFrontmatter(
+  payload: SynapsePeekCursorFrontmatterPayload,
+): Promise<SynapsePeekCursorFrontmatterResult> {
+  return requireContentBridge().peekCursorFrontmatter(payload)
+}
+
 const createRule = (payload: SynapseCreateRulePayload) => createContent("rule", payload)
 const createSkill = (payload: SynapseCreateSkillPayload) => createContent("skill", payload)
 const updateRule = (payload: SynapseUpdateRulePayload) => updateContent("rule", payload)
@@ -168,6 +176,7 @@ export {
   installToEditor,
   listContent,
   openContentDetailWindow,
+  peekCursorFrontmatter,
   readContent,
   readDetail,
   readHistory,

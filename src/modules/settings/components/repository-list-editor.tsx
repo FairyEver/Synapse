@@ -1,9 +1,11 @@
-import { useState } from "react"
+import { type FormEvent, useState } from "react"
+import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { DelayedConfirmAlertDialog } from "@/components/delayed-confirm-alert-dialog"
+import { FormDialog } from "@/components/form-dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +17,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
@@ -56,6 +60,24 @@ function getRepositoryNameFromPath(localPath: string): string {
   return segments.at(-1) ?? localPath
 }
 
+function validateLocalRepositoryName(value: string): string | null {
+  const nextValue = value.trim()
+
+  if (!nextValue) {
+    return "先输入本地仓库名称。"
+  }
+
+  if (nextValue === "." || nextValue === "..") {
+    return "本地仓库名称不能是 . 或 ..。"
+  }
+
+  if (/[\\/]/.test(nextValue)) {
+    return "本地仓库名称不能包含斜杠。"
+  }
+
+  return null
+}
+
 function RepositoryListEditor({
   repositories,
   activeRepoUuid,
@@ -69,16 +91,43 @@ function RepositoryListEditor({
     states,
     syncRepository,
   } = useRepositoryManager()
+  const {
+    isSwitchingRepository,
+    switchActiveRepository,
+  } = useActiveRepositorySwitch()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const { promise } = useAppNotifications()
   const [formError, setFormError] = useState<string | null>(null)
   const [manualPath, setManualPath] = useState("")
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [newRepositoryName, setNewRepositoryName] = useState("")
+  const [newRepositoryParentPath, setNewRepositoryParentPath] = useState("")
+  const [createRepositoryError, setCreateRepositoryError] = useState<string | null>(null)
+  const [isCreatingRepository, setIsCreatingRepository] = useState(false)
   const [pendingRemovalUuid, setPendingRemovalUuid] = useState<string | null>(null)
   const [initializingUuid, setInitializingUuid] = useState<string | null>(null)
   const [initializationTarget, setInitializationTarget] = useState<{
     preview: SynapseRepositoryInitializationPreview
     repository: SynapseRepositoryConfig
   } | null>(null)
+
+  const saveRepositoryConfig = async (nextRepository: SynapseRepositoryConfig) => {
+    if (repositories.some((repository) => repository.localPath === nextRepository.localPath)) {
+      setFormError("这个本地目录已经存在了。")
+      return false
+    }
+
+    const nextRepositories = [...repositories, nextRepository]
+    const nextActiveRepoUuid = activeRepoUuid ?? nextRepository.uuid
+
+    setFormError(null)
+    logger.info("Saving new repository from settings.", {
+      localPath: nextRepository.localPath,
+      repositoryUuid: nextRepository.uuid,
+    })
+
+    return onSave(nextRepositories, nextActiveRepoUuid, false)
+  }
 
   const saveRepository = async (localPath: string) => {
     const nextLocalPath = localPath.trim()
@@ -88,26 +137,12 @@ function RepositoryListEditor({
       return
     }
 
-    if (repositories.some((repository) => repository.localPath === nextLocalPath)) {
-      setFormError("这个本地目录已经存在了。")
-      return
-    }
-
-    const nextRepository: SynapseRepositoryConfig = {
+    const saved = await saveRepositoryConfig({
       uuid: crypto.randomUUID(),
       name: getRepositoryNameFromPath(nextLocalPath),
       localPath: nextLocalPath,
       contentDirs: { ...DEFAULT_REPOSITORY_CONTENT_DIRECTORIES },
-    }
-    const nextRepositories = [...repositories, nextRepository]
-    const nextActiveRepoUuid = activeRepoUuid ?? nextRepository.uuid
-
-    setFormError(null)
-    logger.info("Saving new repository from settings.", {
-      localPath: nextLocalPath,
-      repositoryUuid: nextRepository.uuid,
     })
-    const saved = await onSave(nextRepositories, nextActiveRepoUuid, false)
 
     if (saved) {
       setManualPath("")
@@ -132,6 +167,96 @@ function RepositoryListEditor({
     }
 
     await saveRepository(localPath)
+  }
+
+  const resetCreateRepositoryForm = () => {
+    setNewRepositoryName("")
+    setNewRepositoryParentPath("")
+    setCreateRepositoryError(null)
+    setIsCreatingRepository(false)
+  }
+
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    if (isCreatingRepository) {
+      return
+    }
+
+    setIsCreateDialogOpen(open)
+
+    if (!open) {
+      resetCreateRepositoryForm()
+    }
+  }
+
+  const handleChooseCreateParentPath = async () => {
+    const bridge = window.synapse?.repository
+
+    if (!bridge) {
+      setCreateRepositoryError("当前运行实例还没有加载仓库能力桥接。")
+      return
+    }
+
+    const selectedPath = await bridge.chooseDirectory()
+
+    if (!selectedPath) {
+      return
+    }
+
+    setNewRepositoryParentPath(selectedPath)
+    setCreateRepositoryError(null)
+  }
+
+  const handleCreateLocalRepository = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const nameError = validateLocalRepositoryName(newRepositoryName)
+
+    if (nameError) {
+      setCreateRepositoryError(nameError)
+      return
+    }
+
+    const parentPath = newRepositoryParentPath.trim()
+
+    if (!parentPath) {
+      setCreateRepositoryError("先选择保存位置。")
+      return
+    }
+
+    const bridge = window.synapse?.repository
+
+    if (!bridge) {
+      setCreateRepositoryError("当前运行实例还没有加载仓库能力桥接。")
+      return
+    }
+
+    setIsCreatingRepository(true)
+    setCreateRepositoryError(null)
+
+    try {
+      const result = await bridge.createLocalRepository({
+        name: newRepositoryName.trim(),
+        parentPath,
+      })
+      const saved = await saveRepositoryConfig(result.repository)
+
+      if (!saved) {
+        setCreateRepositoryError("本地仓库已创建，但写入设置失败。稍后可以再把这个目录加回来。")
+        return
+      }
+
+      logger.info("Created local repository from settings.", {
+        localPath: result.repository.localPath,
+        repositoryUuid: result.repository.uuid,
+      })
+      setIsCreateDialogOpen(false)
+      resetCreateRepositoryForm()
+    } catch (error) {
+      logger.error("Failed to create local repository from settings.", error)
+      setCreateRepositoryError(error instanceof Error ? error.message : "创建本地仓库失败。")
+    } finally {
+      setIsCreatingRepository(false)
+    }
   }
 
   const handleRemoveRepository = async (repositoryUuid: string) => {
@@ -201,6 +326,7 @@ function RepositoryListEditor({
   const previewList = previewEntries.slice(0, 5)
   const remainingPreviewCount = Math.max(previewEntries.length - previewList.length, 0)
   const isOnboardingBlocked = currentRepoProfileState?.status === "needs-onboarding"
+  const hasRunningRepositoryOperation = Object.values(operations).some((operation) => operation.isRunning)
 
   return (
     <>
@@ -272,6 +398,71 @@ function RepositoryListEditor({
           }
         }}
       />
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
+        <FormDialog
+          title="新建本地仓库"
+          description="会创建默认目录结构，并写入示例 Rule 和 Skill。"
+          contentClassName="sm:max-w-[560px]"
+          footer={(
+            <>
+              {createRepositoryError ? (
+                <p className="text-sm text-destructive sm:mr-auto">{createRepositoryError}</p>
+              ) : null}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isCreatingRepository}
+                  onClick={() => handleCreateDialogOpenChange(false)}
+                >
+                  取消
+                </Button>
+                <Button type="submit" disabled={isCreatingRepository}>
+                  {isCreatingRepository ? "创建中..." : "创建"}
+                </Button>
+              </div>
+            </>
+          )}
+          onSubmit={handleCreateLocalRepository}
+        >
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="create-local-repository-name">仓库名称</Label>
+              <Input
+                id="create-local-repository-name"
+                value={newRepositoryName}
+                onChange={(event) => setNewRepositoryName(event.target.value)}
+                placeholder="例如：团队规则仓库"
+                disabled={isCreatingRepository}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="create-local-repository-parent-path">保存位置</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="create-local-repository-parent-path"
+                  value={newRepositoryParentPath}
+                  onChange={(event) => setNewRepositoryParentPath(event.target.value)}
+                  placeholder="/path/to/folder"
+                  disabled={isCreatingRepository}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isCreatingRepository}
+                  onClick={() => {
+                    void handleChooseCreateParentPath()
+                  }}
+                >
+                  选择文件夹
+                </Button>
+              </div>
+            </div>
+          </div>
+        </FormDialog>
+      </Dialog>
 
       <SettingsGroup>
         {repositories.length > 0 ? (
@@ -364,10 +555,10 @@ function RepositoryListEditor({
                     <Button
                       variant={isActive ? "secondary" : "outline"}
                       size="sm"
-                      disabled={isActive || isBusy}
+                      disabled={isActive || isBusy || hasRunningRepositoryOperation || isSwitchingRepository}
                       onClick={() => {
                         if (!isActive) {
-                          void onSave(repositories, repository.uuid, true)
+                          void switchActiveRepository(repository.uuid)
                         }
                       }}
                     >
@@ -416,10 +607,20 @@ function RepositoryListEditor({
             />
           ) : null}
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-          <div>
-            <Button onClick={() => void handleAddRepository()}>
-              {hasRepositoryBridge ? "选择文件夹" : "添加目录"}
+          <div className="flex flex-wrap gap-2">
+            <Button variant={hasRepositoryBridge ? "outline" : "default"} onClick={() => void handleAddRepository()}>
+              {hasRepositoryBridge ? "选择现有文件夹" : "添加目录"}
             </Button>
+            {hasRepositoryBridge ? (
+              <Button
+                onClick={() => {
+                  setCreateRepositoryError(null)
+                  setIsCreateDialogOpen(true)
+                }}
+              >
+                新建本地仓库
+              </Button>
+            ) : null}
           </div>
         </div>
       </SettingsGroup>

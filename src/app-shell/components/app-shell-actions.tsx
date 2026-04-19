@@ -1,4 +1,4 @@
-import { LoaderCircle, RefreshCw, Upload } from "lucide-react"
+import { ArrowLeftRight, LoaderCircle, RefreshCw, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 type AppShellActionsProps = {
@@ -8,9 +8,13 @@ type AppShellActionsProps = {
   pushDisabled?: boolean
   refreshBusy?: boolean
   refreshDisabled?: boolean
+  repositorySwitchDisabled?: boolean
+  repositorySwitchTitle?: string
   showRefresh?: boolean
+  showRepositorySwitch?: boolean
   onPush?: () => void
   onRefresh?: () => void
+  onRepositorySwitch?: () => void
   pushTitle?: string
   refreshTitle?: string
 }
@@ -22,9 +26,13 @@ function AppShellActions({
   pushDisabled = false,
   refreshBusy = false,
   refreshDisabled = false,
+  repositorySwitchDisabled = false,
+  repositorySwitchTitle = "切换仓库",
   showRefresh = true,
+  showRepositorySwitch = false,
   onPush,
   onRefresh,
+  onRepositorySwitch,
   pushTitle = "同步待推送内容",
   refreshTitle = "同步仓库",
 }: AppShellActionsProps) {
@@ -63,6 +71,19 @@ function AppShellActions({
         >
           <RefreshCw className={refreshBusy ? "animate-spin" : undefined} />
           <span className="sr-only">{refreshTitle}</span>
+        </Button>
+      ) : null}
+
+      {showRepositorySwitch ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={repositorySwitchDisabled}
+          onClick={onRepositorySwitch}
+          title={repositorySwitchTitle}
+        >
+          <ArrowLeftRight data-icon="inline-start" />
+          切换仓库
         </Button>
       ) : null}
     </div>

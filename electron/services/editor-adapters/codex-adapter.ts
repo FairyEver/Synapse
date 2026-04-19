@@ -38,19 +38,19 @@ const codexAdapter: EditorAdapter = {
       })
     }
 
-    const codexHomePath = resolveCodexHomePath()
-
-    if (!(await pathExists(codexHomePath))) {
-      return createUnavailableTarget({
-        adapter: codexAdapter,
-        contentType,
-        message: "未检测到 Codex 的用户目录，暂时不能解析全局安装位置。",
-        scope: "global",
-      })
-    }
-
     switch (contentType) {
-      case "rule":
+      case "rule": {
+        const codexHomePath = resolveCodexHomePath()
+
+        if (!(await pathExists(codexHomePath))) {
+          return createUnavailableTarget({
+            adapter: codexAdapter,
+            contentType,
+            message: "未检测到 Codex 的用户目录，暂时不能解析全局安装位置。",
+            scope: "global",
+          })
+        }
+
         return createReadyTarget({
           adapter: codexAdapter,
           contentType,
@@ -58,6 +58,7 @@ const codexAdapter: EditorAdapter = {
           targetKind: "file",
           targetPath: path.join(codexHomePath, "AGENTS.md"),
         })
+      }
       case "skill":
         return createReadyTarget({
           adapter: codexAdapter,

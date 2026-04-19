@@ -26,7 +26,23 @@ export type SynapseResolveEditorTargetPayload = {
   projectPath?: string
 }
 
-export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload
+export type CursorRuleFrontmatter = {
+  description: string
+  globs: string
+  alwaysApply: boolean
+}
+
+export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & {
+  cursorFrontmatter?: CursorRuleFrontmatter
+}
+
+export type SynapsePeekCursorFrontmatterPayload = {
+  targetPath: string
+}
+
+export type SynapsePeekCursorFrontmatterResult = {
+  frontmatter: CursorRuleFrontmatter | null
+}
 
 type SynapseEditorResolvedTargetBase = {
   editorId: SynapseEditorId

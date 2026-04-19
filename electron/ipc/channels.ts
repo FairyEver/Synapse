@@ -12,6 +12,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     openDetailWindow: "synapse:content:open-detail-window",
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
+    peekCursorFrontmatter: "synapse:content:peek-cursor-frontmatter",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },
   config: {
@@ -39,6 +40,7 @@ export const SYNAPSE_IPC_CHANNELS = {
   },
   repository: {
     checkInitializationPreview: "synapse:repository:check-initialization-preview",
+    createLocalRepository: "synapse:repository:create-local-repository",
     chooseDirectory: "synapse:repository:choose-directory",
     flushPendingPushes: "synapse:repository:flush-pending-pushes",
     getPendingPushes: "synapse:repository:get-pending-pushes",

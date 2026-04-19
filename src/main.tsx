@@ -1,6 +1,7 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import App from "@/App"
+import { ActiveRepositorySwitchProvider } from "@/app-shell/active-repository-switch"
 import { AppConfigProvider } from "@/app-shell/config"
 import { IdentityProvider } from "@/app-shell/identity-context"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
@@ -19,7 +20,9 @@ createRoot(document.getElementById("root")!).render(
       <RepositoryManagerProvider>
         <IdentityProvider>
           <AppNotificationsProvider>
-            <App />
+            <ActiveRepositorySwitchProvider>
+              <App />
+            </ActiveRepositorySwitchProvider>
           </AppNotificationsProvider>
         </IdentityProvider>
       </RepositoryManagerProvider>

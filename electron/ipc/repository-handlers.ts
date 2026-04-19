@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, type OpenDialogOptions, type WebContents } from "electron"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
+import type { SynapseCreateLocalRepositoryPayload } from "../../src/types/repository"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
 import { configStore } from "../services/config-store"
@@ -56,6 +57,18 @@ function registerRepositoryHandlers() {
     async (_event, repositoryUuid: string) => {
       const repository = await resolveRepositoryConfig(repositoryUuid)
       return repositoryStructureService.checkInitializationPreview(repository)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.repository.createLocalRepository,
+    async (_event, payload: SynapseCreateLocalRepositoryPayload) => {
+      logger.info("Handling repository.createLocalRepository request.", {
+        name: payload.name,
+        parentPath: payload.parentPath,
+      })
+
+      return repositoryStructureService.createLocalRepository(payload)
     },
   )
 

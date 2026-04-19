@@ -1,16 +1,21 @@
-import { access, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type {
   SynapseContentInstallResult,
   SynapseInstallToEditorPayload,
+  SynapsePeekCursorFrontmatterPayload,
+  SynapsePeekCursorFrontmatterResult,
 } from "../../src/types/editor"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
+import { parseMdcFrontmatter, serializeMdcFrontmatter } from "./editor-adapters/cursor-mdc"
+import { applyRuleSection } from "./editor-adapters/rule-section"
+import { serializeSkillFrontmatter, slugifySkillName } from "./editor-adapters/skill-frontmatter"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
@@ -95,6 +100,18 @@ async function swapPathAtomically(replacementPath: string, targetPath: string): 
   }
 }
 
+async function readExistingTextFile(targetPath: string): Promise<string> {
+  try {
+    return await readFile(targetPath, "utf8")
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return ""
+    }
+
+    throw error
+  }
+}
+
 async function replaceFileAtomically(targetPath: string, content: string): Promise<void> {
   const parentDirectoryPath = path.dirname(targetPath)
 
@@ -163,7 +180,27 @@ class ContentInstallService {
           }
 
           const file = await contentService.getContent(payload.contentType, payload.contentId)
-          await replaceFileAtomically(target.targetPath, file.content)
+          const ruleBody = file.content
+
+          if (
+            payload.editorId === "cursor"
+            && payload.contentType === "rule"
+          ) {
+            const wrapped = payload.cursorFrontmatter
+              ? serializeMdcFrontmatter(payload.cursorFrontmatter) + ruleBody
+              : ruleBody
+            await replaceFileAtomically(target.targetPath, wrapped)
+          } else if (
+            payload.contentType === "rule"
+            && (payload.editorId === "claude-code" || payload.editorId === "codex")
+          ) {
+            const existing = await readExistingTextFile(target.targetPath)
+            const merged = applyRuleSection(existing, payload.contentId, ruleBody)
+            await replaceFileAtomically(target.targetPath, merged)
+          } else {
+            await replaceFileAtomically(target.targetPath, ruleBody)
+          }
+
           break
         }
         case "directory-overwrite": {
@@ -174,10 +211,17 @@ class ContentInstallService {
           const repositoryRootPath = await getActiveRepositoryRootPath()
           const detail = await contentService.getDetail(payload.contentType, payload.contentId)
 
+          const skillMainContent = payload.contentType === "skill"
+            ? serializeSkillFrontmatter({
+                description: detail.description,
+                name: slugifySkillName(detail.title, detail.id),
+              }) + detail.content
+            : detail.content
+
           await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
             await writeFile(
               path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
-              normalizeMarkdownContent(detail.content),
+              normalizeMarkdownContent(skillMainContent),
               "utf8",
             )
 
@@ -215,6 +259,21 @@ class ContentInstallService {
       contentId: payload.contentId,
       targetKind: target.targetKind,
       targetPath: target.targetPath,
+    }
+  }
+
+  async peekCursorFrontmatter(
+    payload: SynapsePeekCursorFrontmatterPayload,
+  ): Promise<SynapsePeekCursorFrontmatterResult> {
+    try {
+      const existing = await readFile(payload.targetPath, "utf8")
+      return { frontmatter: parseMdcFrontmatter(existing) }
+    } catch (error) {
+      if (isFileNotFoundError(error)) {
+        return { frontmatter: null }
+      }
+
+      throw error
     }
   }
 }

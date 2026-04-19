@@ -17,6 +17,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     openDetailWindow: "synapse:content:open-detail-window",
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
+    peekCursorFrontmatter: "synapse:content:peek-cursor-frontmatter",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },
   config: {
@@ -44,6 +45,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
   },
   repository: {
     checkInitializationPreview: "synapse:repository:check-initialization-preview",
+    createLocalRepository: "synapse:repository:create-local-repository",
     chooseDirectory: "synapse:repository:choose-directory",
     flushPendingPushes: "synapse:repository:flush-pending-pushes",
     getPendingPushes: "synapse:repository:get-pending-pushes",
@@ -97,6 +99,8 @@ const synapseBridge: SynapseBridge = {
     getEditorAdapters: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getEditorAdapters),
     installToEditor: (payload) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.installToEditor, payload),
+    peekCursorFrontmatter: (payload) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.peekCursorFrontmatter, payload),
     resolveEditorInstallTarget: (payload) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.resolveEditorInstallTarget, payload),
   },
@@ -136,6 +140,8 @@ const synapseBridge: SynapseBridge = {
         SYNAPSE_PRELOAD_CHANNELS.repository.checkInitializationPreview,
         repositoryUuid,
       ),
+    createLocalRepository: (payload) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.createLocalRepository, payload),
     chooseDirectory: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.chooseDirectory),
     flushPendingPushes: (repositoryUuid) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.flushPendingPushes, repositoryUuid),

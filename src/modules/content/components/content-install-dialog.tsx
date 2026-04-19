@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { FolderOpen, LoaderCircle } from "lucide-react"
 import {
   installToEditor,
+  peekCursorFrontmatter,
   resolveEditorInstallTarget,
 } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -34,13 +35,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getContentTypeDefinition } from "@/config/content-types"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseContentMeta } from "@/types/content"
 import type {
+  CursorRuleFrontmatter,
   SynapseEditorAdapterSummary,
   SynapseEditorResolvedTarget,
 } from "@/types/editor"
+import { CursorFrontmatterDialog } from "./cursor-frontmatter-dialog"
 
 const CUSTOM_PROJECT_OPTION = "__custom__"
 
@@ -87,6 +91,9 @@ function ContentInstallDialog({
   const [installError, setInstallError] = useState<string | null>(null)
   const [isInstalling, setIsInstalling] = useState(false)
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false)
+  const [isCursorFrontmatterOpen, setIsCursorFrontmatterOpen] = useState(false)
+  const [cursorFrontmatterDefaults, setCursorFrontmatterDefaults] =
+    useState<CursorRuleFrontmatter | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const selectedProject = projects.find((project) => project.id === projectSelection) ?? null
@@ -112,6 +119,8 @@ function ContentInstallDialog({
     setInstallError(null)
     setIsInstalling(false)
     setIsOverwriteConfirmOpen(false)
+    setIsCursorFrontmatterOpen(false)
+    setCursorFrontmatterDefaults(null)
   }, [editor?.id, open, projects])
 
   useEffect(() => {
@@ -243,7 +252,7 @@ function ContentInstallDialog({
     setCustomProjectPath(selectedPath)
   }
 
-  const runInstall = async () => {
+  const runInstall = async (cursorFrontmatter?: CursorRuleFrontmatter) => {
     if (!editor) {
       return
     }
@@ -269,6 +278,7 @@ function ContentInstallDialog({
           contentId: item.id,
           contentType: item.type,
           projectPath: scope === "project" ? projectPath : undefined,
+          cursorFrontmatter,
         }),
         {
           loading: `正在安装到 ${editor.label}...`,
@@ -284,6 +294,7 @@ function ContentInstallDialog({
         scope,
         targetPath: result.targetPath,
       })
+      setIsCursorFrontmatterOpen(false)
       onOpenChange(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : "安装失败。"
@@ -293,6 +304,43 @@ function ContentInstallDialog({
         contentType: item.type,
         editorId: editor.id,
         error,
+      })
+
+      setInstallError(message)
+    } finally {
+      setIsInstalling(false)
+    }
+  }
+
+  const openCursorFrontmatterDialog = async () => {
+    if (!activeTarget || activeTarget.status !== "ready") {
+      setInstallError("当前还没有可用的安装目标。")
+      return
+    }
+
+    setInstallError(null)
+    setIsInstalling(true)
+
+    try {
+      const { frontmatter: existing } = await peekCursorFrontmatter({
+        targetPath: activeTarget.targetPath,
+      })
+
+      setCursorFrontmatterDefaults(
+        existing ?? {
+          alwaysApply: false,
+          description: item.description ?? "",
+          globs: "",
+        },
+      )
+      setIsCursorFrontmatterOpen(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "读取现有规则元数据失败。"
+
+      logger.error("Failed to peek Cursor frontmatter.", {
+        contentId: item.id,
+        error,
+        targetPath: activeTarget.targetPath,
       })
 
       setInstallError(message)
@@ -312,6 +360,15 @@ function ContentInstallDialog({
       return
     }
 
+    if (
+      editor?.id === "cursor"
+      && item.type === "rule"
+      && scope === "project"
+    ) {
+      await openCursorFrontmatterDialog()
+      return
+    }
+
     await runInstall()
   }
 
@@ -321,6 +378,25 @@ function ContentInstallDialog({
 
   return (
     <>
+      {cursorFrontmatterDefaults ? (
+        <CursorFrontmatterDialog
+          defaults={cursorFrontmatterDefaults}
+          isSubmitting={isInstalling}
+          onConfirm={(frontmatter) => {
+            void runInstall(frontmatter)
+          }}
+          onOpenChange={(next) => {
+            if (isInstalling) {
+              return
+            }
+
+            setIsCursorFrontmatterOpen(next)
+          }}
+          open={isCursorFrontmatterOpen}
+          targetPath={activeTarget?.status === "ready" ? activeTarget.targetPath : null}
+        />
+      ) : null}
+
       <AlertDialog open={isOverwriteConfirmOpen} onOpenChange={setIsOverwriteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -353,23 +429,24 @@ function ContentInstallDialog({
           </DialogHeader>
 
           <div className="flex flex-col gap-5">
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={scope === "global" ? "secondary" : "outline"}
-                disabled={globalScopeDisabled}
-                onClick={() => setScope("global")}
+            <div className="flex justify-center">
+              <Tabs
+                value={scope}
+                onValueChange={(value) => {
+                  if (value === "global" || value === "project") {
+                    setScope(value)
+                  }
+                }}
               >
-                安装到全局
-              </Button>
-              <Button
-                type="button"
-                variant={scope === "project" ? "secondary" : "outline"}
-                disabled={projectScopeDisabled}
-                onClick={() => setScope("project")}
-              >
-                安装到项目
-              </Button>
+                <TabsList>
+                  <TabsTrigger value="global" disabled={globalScopeDisabled}>
+                    全局
+                  </TabsTrigger>
+                  <TabsTrigger value="project" disabled={projectScopeDisabled}>
+                    项目
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
 
             {scope === "project" ? (

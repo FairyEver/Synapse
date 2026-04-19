@@ -1,3 +1,5 @@
+import type { SynapseRepositoryConfig } from "./config"
+
 export type SynapseRepositoryOperationKind = "sync" | "push" | "maintenance" | "initialize"
 
 export type SynapseRepositoryLocalStatus = "missing" | "ready"
@@ -43,6 +45,17 @@ export type SynapseRepositoryInitializationResult = {
   message?: string
   pendingPushCount?: number
   repository: SynapseRepositoryLocalState
+}
+
+export type SynapseCreateLocalRepositoryPayload = {
+  name: string
+  parentPath: string
+}
+
+export type SynapseCreateLocalRepositoryResult = {
+  createdAt: string
+  message?: string
+  repository: SynapseRepositoryConfig
 }
 
 export type SynapsePendingPushEntry = {

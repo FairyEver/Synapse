@@ -12,6 +12,8 @@ import type {
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseInstallToEditorPayload,
+  SynapsePeekCursorFrontmatterPayload,
+  SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
@@ -294,6 +296,16 @@ function registerContentHandlers() {
     SYNAPSE_IPC_CHANNELS.content.installToEditor,
     async (_event, payload: SynapseInstallToEditorPayload) => {
       return contentInstallService.installToEditor(payload)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.peekCursorFrontmatter,
+    async (
+      _event,
+      payload: SynapsePeekCursorFrontmatterPayload,
+    ): Promise<SynapsePeekCursorFrontmatterResult> => {
+      return contentInstallService.peekCursorFrontmatter(payload)
     },
   )
 

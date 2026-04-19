@@ -1,8 +1,11 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useState } from "react"
+import { QuickRepositorySwitchDialog } from "@/app-shell/components/quick-repository-switch-dialog"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
+import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
+import { useAppShellToolbarState } from "@/app-shell/use-app-shell-toolbar-state"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { publishActiveAppTab, subscribeOpenSettingsTab } from "@/app-shell/navigation"
@@ -54,48 +57,24 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
 }
 
 function MainApp() {
-  const { activeRepository, isReady } = useAppConfig()
+  const { activeRepository } = useAppConfig()
+  const { isSwitchingRepository } = useActiveRepositorySwitch()
   const { promise } = useAppNotifications()
-  const { flushPendingPushes, operations, pendingPushes, states, syncRepository } = useRepositoryManager()
+  const { flushPendingPushes, pendingPushes, syncRepository } = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rule")
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
   )
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
-  const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
-  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
+  const [isRepositorySwitchDialogOpen, setIsRepositorySwitchDialogOpen] = useState(false)
   const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
-  const isRepositoryTaskRunning = Boolean(activeRepositoryOperation?.isRunning)
-  const isPushOperationRunning =
-    activeRepositoryOperation?.operation === "push" && Boolean(activeRepositoryOperation.isRunning)
-  const isSyncOperationRunning =
-    activeRepositoryOperation?.operation === "sync" && Boolean(activeRepositoryOperation.isRunning)
-  const repositoryActivityLabel = isRepositoryTaskRunning
-    ? activeRepositoryOperation?.operation === "initialize"
-      ? "正在初始化"
-      : activeRepositoryOperation?.operation === "maintenance"
-      ? "正在整理"
-      : "正在同步"
-    : null
   const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
     state.create || state.detail || state.install
   ))
   const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
-  const canSyncActiveRepository =
-    activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
-  const refreshTitle = activeRepositoryOperation?.isRunning
-    ? activeRepositoryOperation.statusText ?? "正在同步..."
-    : hasBlockingModalOpen
-      ? "请先关闭当前弹窗"
-      : !isReady
-        ? "正在加载设置..."
-        : activeRepository === null
-          ? "还没有选择本地目录"
-            : !activeRepositoryState
-              ? "正在检查目录状态..."
-              : activeRepositoryState?.status !== "ready"
-                ? "当前目录不存在，无法同步"
-                : "同步仓库"
+  const toolbarState = useAppShellToolbarState({
+    hasBlockingModalOpen,
+  })
 
   const tabs = useMemo(
     () => [
@@ -123,6 +102,12 @@ function MainApp() {
       setActiveTab("settings")
     })
   }, [])
+
+  useEffect(() => {
+    if (!toolbarState.showRepositorySwitch && isRepositorySwitchDialogOpen) {
+      setIsRepositorySwitchDialogOpen(false)
+    }
+  }, [isRepositorySwitchDialogOpen, toolbarState.showRepositorySwitch])
 
   const setContentDialogOpen = useCallback((
     contentType: SynapseContentType,
@@ -157,6 +142,11 @@ function MainApp() {
 
   return (
     <IdentityGate>
+      <QuickRepositorySwitchDialog
+        open={isRepositorySwitchDialogOpen}
+        onOpenChange={setIsRepositorySwitchDialogOpen}
+      />
+
       <AlertDialog open={isPendingPushDialogOpen} onOpenChange={setIsPendingPushDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -217,25 +207,17 @@ function MainApp() {
         }
         actions={
           <AppShellActions
-            activityLabel={repositoryActivityLabel}
-            isPushBusy={isPushOperationRunning}
-            pendingPushCount={activePendingPushState?.count ?? 0}
-            pushDisabled={
-              !isReady
-              || !canSyncActiveRepository
-              || Boolean(activeRepositoryOperation?.isRunning)
-            }
-            refreshBusy={isSyncOperationRunning}
-            refreshDisabled={
-              !isReady
-              || !canSyncActiveRepository
-              || Boolean(activeRepositoryOperation?.isRunning)
-              || hasBlockingModalOpen
-            }
-            showRefresh={
-              Boolean(activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository)
-              && !isPushOperationRunning
-            }
+            activityLabel={toolbarState.activityLabel}
+            isPushBusy={toolbarState.isPushBusy}
+            pendingPushCount={toolbarState.pendingPushCount}
+            pushDisabled={toolbarState.pushDisabled}
+            refreshBusy={toolbarState.refreshBusy}
+            refreshDisabled={toolbarState.refreshDisabled}
+            refreshTitle={toolbarState.refreshTitle}
+            repositorySwitchDisabled={toolbarState.repositorySwitchDisabled}
+            repositorySwitchTitle={toolbarState.repositorySwitchTitle}
+            showRefresh={toolbarState.showRefresh}
+            showRepositorySwitch={toolbarState.showRepositorySwitch}
             onPush={() => setIsPendingPushDialogOpen(true)}
             onRefresh={() => {
               if (!activeRepository) {
@@ -256,7 +238,13 @@ function MainApp() {
                 logger.error("Manual repository sync failed from app shell.", error)
               })
             }}
-            refreshTitle={refreshTitle}
+            onRepositorySwitch={() => {
+              if (toolbarState.repositorySwitchDisabled || isSwitchingRepository) {
+                return
+              }
+
+              setIsRepositorySwitchDialogOpen(true)
+            }}
           />
         }
       >

@@ -27,6 +27,8 @@ import type {
   SynapseContentInstallResult,
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
+  SynapsePeekCursorFrontmatterPayload,
+  SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
 } from "./editor"
 import type {
@@ -38,6 +40,8 @@ import type {
   SynapseRendererLogPayload,
 } from "./log"
 import type {
+  SynapseCreateLocalRepositoryPayload,
+  SynapseCreateLocalRepositoryResult,
   SynapseRepositoryInitializationPreview,
   SynapseRepositoryInitializationResult,
   SynapseRepositoryLocalState,
@@ -83,6 +87,9 @@ export type SynapseBridge = {
     installToEditor: (
       payload: SynapseInstallToEditorPayload,
     ) => Promise<SynapseContentInstallResult>
+    peekCursorFrontmatter: (
+      payload: SynapsePeekCursorFrontmatterPayload,
+    ) => Promise<SynapsePeekCursorFrontmatterResult>
     resolveEditorInstallTarget: (
       payload: SynapseResolveEditorTargetPayload,
     ) => Promise<SynapseEditorResolvedTarget>
@@ -114,6 +121,9 @@ export type SynapseBridge = {
     checkInitializationPreview: (
       repositoryUuid: string,
     ) => Promise<SynapseRepositoryInitializationPreview>
+    createLocalRepository: (
+      payload: SynapseCreateLocalRepositoryPayload,
+    ) => Promise<SynapseCreateLocalRepositoryResult>
     chooseDirectory: () => Promise<string | null>
     flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     getPendingPushes: (repositoryUuid: string) => Promise<SynapsePendingPushState>

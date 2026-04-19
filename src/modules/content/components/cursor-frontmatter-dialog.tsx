@@ -1,0 +1,165 @@
+import { useEffect, useState } from "react"
+import { LoaderCircle } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import type { CursorRuleFrontmatter } from "@/types/editor"
+
+type CursorFrontmatterDialogProps = {
+  defaults: CursorRuleFrontmatter
+  isSubmitting: boolean
+  onConfirm: (frontmatter: CursorRuleFrontmatter) => void
+  onOpenChange: (open: boolean) => void
+  open: boolean
+  targetPath?: string | null
+}
+
+function describeRuleType(frontmatter: CursorRuleFrontmatter): string {
+  const hasDescription = frontmatter.description.trim().length > 0
+  const hasGlobs = frontmatter.globs.trim().length > 0
+
+  if (frontmatter.alwaysApply) {
+    return "Always — 每次对话都注入，最省心但最耗 context。"
+  }
+
+  if (hasGlobs) {
+    return "Auto Attached — 匹配到 globs 的文件进入 context 时自动加载。"
+  }
+
+  if (hasDescription) {
+    return "Agent Requested — 由 Cursor 根据 description 判断何时加载。"
+  }
+
+  return "Manual — 仅在你主动 @ 引用时加载。"
+}
+
+function CursorFrontmatterDialog({
+  defaults,
+  isSubmitting,
+  onConfirm,
+  onOpenChange,
+  open,
+  targetPath,
+}: CursorFrontmatterDialogProps) {
+  const [description, setDescription] = useState(defaults.description)
+  const [globs, setGlobs] = useState(defaults.globs)
+  const [alwaysApply, setAlwaysApply] = useState(defaults.alwaysApply)
+
+  useEffect(() => {
+    if (open) {
+      setDescription(defaults.description)
+      setGlobs(defaults.globs)
+      setAlwaysApply(defaults.alwaysApply)
+    }
+  }, [open, defaults.description, defaults.globs, defaults.alwaysApply])
+
+  const currentValues: CursorRuleFrontmatter = {
+    alwaysApply,
+    description,
+    globs,
+  }
+
+  const handleConfirm = () => {
+    onConfirm({
+      alwaysApply,
+      description: description.trim(),
+      globs: globs.trim(),
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Cursor 规则元数据</DialogTitle>
+          <DialogDescription>
+            Cursor 按这三项 frontmatter 决定何时加载这条规则。可直接点确定使用默认值。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cursor-frontmatter-description">description</Label>
+            <Input
+              id="cursor-frontmatter-description"
+              value={description}
+              placeholder="一句话描述这条规则的用途"
+              onChange={(event) => setDescription(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              让 Cursor 的 agent 判断何时需要这条规则。
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cursor-frontmatter-globs">globs</Label>
+            <Input
+              id="cursor-frontmatter-globs"
+              value={globs}
+              placeholder="src/**/*.ts, *.tsx"
+              onChange={(event) => setGlobs(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              多个模式用逗号分隔；留空即不按文件匹配。
+            </p>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/20 px-3 py-3">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="cursor-frontmatter-always-apply" className="cursor-pointer">
+                alwaysApply
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                开启后每次对话都注入这条规则。
+              </p>
+            </div>
+            <Switch
+              id="cursor-frontmatter-always-apply"
+              checked={alwaysApply}
+              onCheckedChange={setAlwaysApply}
+            />
+          </div>
+
+          <div className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+            <p>当前组合：{describeRuleType(currentValues)}</p>
+            {targetPath ? (
+              <p className="mt-1 break-all">目标文件：{targetPath}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={() => onOpenChange(false)}
+          >
+            取消
+          </Button>
+          <Button type="button" disabled={isSubmitting} onClick={handleConfirm}>
+            {isSubmitting ? (
+              <>
+                <LoaderCircle className="animate-spin" />
+                安装中...
+              </>
+            ) : (
+              "确定并安装"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export { CursorFrontmatterDialog }
