@@ -2,7 +2,7 @@
   "name": "synapse",
   "productName": "Synapse",
   "private": true,
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Synapse desktop scaffold built with Electron, Vite, React, Tailwind CSS, and shadcn/ui.",
   "author": "FairyEver",
   "homepage": "https://github.com/FairyEver/Synapse",
@@ -20,6 +20,7 @@
     "package": "pnpm exec electron-builder --publish never",
     "package:mac": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",
     "package:win": "pnpm exec electron-builder --win nsis --x64 --publish never",
+    "bump:commit:push": "sh scripts/bump-version-commit-push.sh",
     "release": "pnpm exec electron-builder --publish always",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"
