@@ -234,9 +234,10 @@ class ContentInstallService {
             )
 
             if (payload.contentType === "skill") {
+              const meta = { id: payload.contentId }
               await writeFile(
                 path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME),
-                payload.contentId,
+                JSON.stringify(meta, null, 2),
                 "utf8",
               )
             }

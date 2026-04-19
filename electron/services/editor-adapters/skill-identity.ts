@@ -1,7 +1,11 @@
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 
-const SYNAPSE_SKILL_ID_FILE_NAME = ".synapse-id"
+const SYNAPSE_SKILL_ID_FILE_NAME = ".synapse.json"
+
+interface SynapseSkillMeta {
+  id: string
+}
 const UNIQUE_SUFFIX_LIMIT = 999
 
 function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
@@ -11,8 +15,8 @@ function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
 async function readSkillIdFile(skillDirectoryPath: string): Promise<string | null> {
   try {
     const raw = await readFile(path.join(skillDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME), "utf8")
-    const trimmed = raw.trim()
-    return trimmed.length > 0 ? trimmed : null
+    const meta: SynapseSkillMeta = JSON.parse(raw)
+    return meta.id ?? null
   } catch (error) {
     if (isFileNotFoundError(error)) {
       return null
