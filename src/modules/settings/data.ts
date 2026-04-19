@@ -5,6 +5,7 @@ import {
   Info,
   Logs,
   Settings2,
+  Shield,
 } from "lucide-react"
 import {
   DEFAULT_GLOBAL_CONFIG,
@@ -50,6 +51,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Info,
     label: "关于",
     description: "版本与更新。",
+  },
+  {
+    id: "admin",
+    icon: Shield,
+    label: "管理员",
+    description: "高级设置。",
   },
 ]
 

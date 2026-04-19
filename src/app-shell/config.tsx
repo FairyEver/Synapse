@@ -24,7 +24,8 @@ type AppConfigContextValue = {
   error: string | null
   isReady: boolean
   refreshConfig: () => Promise<SynapseConfig>
-  updateConfig: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
+  updateConfig: (patch: SynapseConfigPatch, reset?: boolean) => Promise<SynapseConfig>
+  resetKey: number
 }
 
 const AppConfigContext = createContext<AppConfigContextValue | null>(null)
@@ -62,6 +63,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<SynapseConfig>(() => createDefaultConfig())
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resetKey, setResetKey] = useState(0)
   const hasLoadedRef = useRef(false)
 
   const refreshConfig = useCallback(async () => {
@@ -81,13 +83,17 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const updateConfig = useCallback(
-    async (patch: SynapseConfigPatch) => {
-      logger.info("Updating app config from renderer.", patch)
+    async (patch: SynapseConfigPatch, reset = false) => {
+      logger.info("Updating app config from renderer.", { patch, reset })
       const nextConfig = await updateConfigThroughBridge(patch)
 
       setConfig(nextConfig)
       setError(null)
       setIsReady(true)
+
+      if (reset) {
+        setResetKey((prev) => prev + 1)
+      }
 
       logger.info("App config update applied in renderer.", {
         activeRepoUuid: nextConfig.activeRepoUuid,
@@ -143,8 +149,9 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
       isReady,
       refreshConfig,
       updateConfig,
+      resetKey,
     }),
-    [config, error, isReady, refreshConfig, updateConfig],
+    [config, error, isReady, refreshConfig, updateConfig, resetKey],
   )
 
   return <AppConfigContext.Provider value={value}>{children}</AppConfigContext.Provider>

@@ -264,10 +264,12 @@ function MainApp() {
 }
 
 function App() {
-  const standaloneContentWindowRequest = useMemo(
-    () => parseContentWindowRequest(window.location.search),
-    [],
-  )
+  const { resetKey } = useAppConfig()
+  const [standaloneContentWindowRequest, setStandaloneContentWindowRequest] = useState<ReturnType<typeof parseContentWindowRequest>>(null)
+
+  useEffect(() => {
+    setStandaloneContentWindowRequest(parseContentWindowRequest(window.location.search))
+  }, [])
 
   if (standaloneContentWindowRequest) {
     return (
@@ -277,7 +279,7 @@ function App() {
     )
   }
 
-  return <MainApp />
+  return <MainApp key={resetKey} />
 }
 
 export default App

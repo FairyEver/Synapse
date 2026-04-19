@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { Pencil, Star, Trash2 } from "lucide-react"
 import {
   deleteContent,
   openContentDetailWindow,
@@ -20,7 +19,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -32,8 +30,7 @@ import { Separator } from "@/components/ui/separator"
 import { formatDateTime } from "@/lib/date-time"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
-import { cn } from "@/lib/utils"
-import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
+import { ContentDetailMenubar } from "@/modules/content/components/content-detail-menubar"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
@@ -179,15 +176,13 @@ function ContentDetailDialog<TPayload>({
 
     void promise(
       async () => {
-        const result = await updateContent(
-          item.type,
-          {
-            ...serializedPayload,
-            id: detail.id,
-            baseHistoryDirname: detail.latestHistoryDirname,
-            force,
-          } as unknown as SynapseUpdateContentPayload<SynapseContentType>,
-        )
+        const updatePayload: SynapseUpdateContentPayload<typeof item.type> = {
+          ...serializedPayload as SynapseUpdateContentPayload<typeof item.type>,
+          id: detail.id,
+          baseHistoryDirname: detail.latestHistoryDirname,
+          force,
+        }
+        const result = await updateContent(item.type, updatePayload)
 
         if (result.status !== "saved") {
           return result
@@ -380,37 +375,21 @@ function ContentDetailDialog<TPayload>({
                 />
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!detail || isRepositoryInitializing}
-                    onClick={() => {
+                  <ContentDetailMenubar
+                    canEdit={Boolean(detail) && !isRepositoryInitializing}
+                    canOpenInNewWindow={Boolean(displayedVersion)}
+                    isFavorite={isItemFavorite}
+                    isRepositoryInitializing={Boolean(isRepositoryInitializing)}
+                    item={resolvedItem}
+                    onDelete={() => setIsDeleteConfirmOpen(true)}
+                    onEdit={() => {
                       setIsEditOpen(true)
                     }}
-                  >
-                    <Pencil />
-                    编辑
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isRepositoryInitializing}
-                    onClick={() => setIsDeleteConfirmOpen(true)}
-                  >
-                    <Trash2 />
-                    删除
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!item || isRepositoryInitializing}
-                    onClick={() => item && void toggleFavorite(contentType, item.id)}
-                    className={cn(isItemFavorite && "text-yellow-500 hover:text-yellow-600")}
-                  >
-                    <Star className={cn("size-4", isItemFavorite && "fill-current")} />
-                    {isItemFavorite ? "已收藏" : "收藏"}
-                  </Button>
-                  <ContentActionSplitButton item={resolvedItem} />
+                    onOpenInNewWindow={() => {
+                      void handleOpenInNewWindow()
+                    }}
+                    onToggleFavorite={() => toggleFavorite(contentType, item.id)}
+                  />
                 </div>
               </div>
             </div>
@@ -433,18 +412,6 @@ function ContentDetailDialog<TPayload>({
               previewError={previewError}
               renderVersion={renderVersionView}
               selectedHistoryDirname={selectedHistoryDirname}
-              toolbarAction={(
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!displayedVersion}
-                  onClick={() => {
-                    void handleOpenInNewWindow()
-                  }}
-                >
-                  新窗口
-                </Button>
-              )}
               viewMode={viewMode}
             />
           </div>

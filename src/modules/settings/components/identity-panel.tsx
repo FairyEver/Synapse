@@ -41,7 +41,7 @@ function IdentityPanel() {
                         success: "已复制到剪贴板。",
                         error: (error) => error instanceof Error ? error.message : "复制失败。",
                       },
-                    ).catch(() => {})
+                    )
                   }}
                 >
                   <Copy data-icon="inline-start" />
@@ -49,7 +49,6 @@ function IdentityPanel() {
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
-            <p className="text-sm text-muted-foreground">请备份到安全位置。</p>
           </div>
 
           <div className="flex justify-start">

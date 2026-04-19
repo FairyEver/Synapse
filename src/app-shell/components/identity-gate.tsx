@@ -63,9 +63,6 @@ function IdentityGate({ children }: { children: ReactNode }) {
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <h1 className="text-xl font-medium text-foreground">身份 ID 无法读取</h1>
-            <p className="text-sm text-muted-foreground">
-              如果你备份过旧 ID，可以在当前目录里接续；否则可以生成一个新 ID。
-            </p>
           </div>
 
           <div className="flex flex-col gap-2">

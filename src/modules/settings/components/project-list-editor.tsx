@@ -152,7 +152,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                 id="dialog-project-name"
                 value={draftName}
                 onChange={(event) => setDraftName(event.target.value)}
-                placeholder="例如：我的项目"
+                placeholder="我的项目"
                 disabled={isSubmitting}
               />
             </Field>

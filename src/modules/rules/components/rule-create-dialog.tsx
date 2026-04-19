@@ -55,6 +55,26 @@ type RuleCreateDialogProps = {
   submitDisabledReason?: string | null
 }
 
+function isDeepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== 'object' || typeof b !== 'object') return false
+  if (a === null || b === null) return false
+
+  const aObj = a as Record<string, unknown>
+  const bObj = b as Record<string, unknown>
+  const aKeys = Object.keys(aObj)
+  const bKeys = Object.keys(bObj)
+
+  if (aKeys.length !== bKeys.length) return false
+
+  for (const key of aKeys) {
+    if (!bKeys.includes(key)) return false
+    if (!isDeepEqual(aObj[key], bObj[key])) return false
+  }
+
+  return true
+}
+
 function RuleCreateDialog({
   initialValue = null,
   mode = "create",
@@ -107,7 +127,7 @@ function RuleCreateDialog({
       return
     }
 
-    if (JSON.stringify(normalizeCreateRulePayload(form)) !== JSON.stringify(baseline)) {
+    if (!isDeepEqual(normalizeCreateRulePayload(form), baseline)) {
       setIsDiscardConfirmOpen(true)
       return
     }
@@ -206,7 +226,7 @@ function RuleCreateDialog({
                   value={form.title}
                   aria-invalid={errors.title ? "true" : undefined}
                   onChange={(event) => updateField("title", event.target.value)}
-                  placeholder="例如：PR 评审规范"
+                  placeholder="PR 评审规范"
                 />
                 <FieldError>{errors.title}</FieldError>
               </FieldContent>
@@ -221,7 +241,7 @@ function RuleCreateDialog({
                   aria-invalid={errors.description ? "true" : undefined}
                   className="min-h-24"
                   onChange={(event) => updateField("description", event.target.value)}
-                  placeholder="例如：适用于 PR 评审的提交要求。"
+                  placeholder="PR 评审的提交要求"
                 />
                 <FieldError>{errors.description}</FieldError>
               </FieldContent>

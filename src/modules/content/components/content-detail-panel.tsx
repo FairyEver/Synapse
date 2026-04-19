@@ -74,19 +74,6 @@ function ContentDetailPanel<T extends SynapseContentType>({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-3">
-          <Tabs
-            value={viewMode}
-            onValueChange={(value) => onViewModeChange(value === "source" ? "source" : "rendered")}
-            className="shrink-0 gap-0"
-          >
-            <TabsList>
-              <TabsTrigger value="rendered">预览</TabsTrigger>
-              <TabsTrigger value="source">源码</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {toolbarAction ? <div className="shrink-0">{toolbarAction}</div> : null}
-
           {selectedHistoryDirname ? (
             <ContentHistorySelect
               className="min-w-0 flex-1"
@@ -96,6 +83,21 @@ function ContentDetailPanel<T extends SynapseContentType>({
               onSelectedHistoryDirnameChange={onSelectedHistoryDirnameChange}
             />
           ) : null}
+
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            {toolbarAction ? <div className="shrink-0">{toolbarAction}</div> : null}
+
+            <Tabs
+              value={viewMode}
+              onValueChange={(value) => onViewModeChange(value === "source" ? "source" : "rendered")}
+              className="shrink-0 gap-0"
+            >
+              <TabsList>
+                <TabsTrigger value="rendered">预览</TabsTrigger>
+                <TabsTrigger value="source">源码</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
 
         <div className="mt-4 min-h-0 flex-1 overflow-auto">

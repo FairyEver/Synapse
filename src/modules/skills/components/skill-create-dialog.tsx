@@ -71,6 +71,26 @@ type DataTransferItemWithEntry = DataTransferItem & {
   webkitGetAsEntry?: () => FileSystemEntry | null
 }
 
+function isDeepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== 'object' || typeof b !== 'object') return false
+  if (a === null || b === null) return false
+
+  const aObj = a as Record<string, unknown>
+  const bObj = b as Record<string, unknown>
+  const aKeys = Object.keys(aObj)
+  const bKeys = Object.keys(bObj)
+
+  if (aKeys.length !== bKeys.length) return false
+
+  for (const key of aKeys) {
+    if (!bKeys.includes(key)) return false
+    if (!isDeepEqual(aObj[key], bObj[key])) return false
+  }
+
+  return true
+}
+
 function FieldError({ message }: { message?: string }) {
   if (!message) {
     return null
@@ -273,7 +293,7 @@ function SkillCreateDialog({
       return
     }
 
-    if (JSON.stringify(normalizeCreateSkillPayload(form)) !== JSON.stringify(baseline)) {
+    if (!isDeepEqual(normalizeCreateSkillPayload(form), baseline)) {
       setIsDiscardConfirmOpen(true)
       return
     }
@@ -407,7 +427,7 @@ function SkillCreateDialog({
                 value={form.title}
                 aria-invalid={errors.title ? "true" : undefined}
                 onChange={(event) => updateField("title", event.target.value)}
-                placeholder="例如：API 文档生成助手"
+                placeholder="API 文档生成助手"
               />
               <FieldError message={errors.title} />
             </div>
@@ -434,7 +454,7 @@ function SkillCreateDialog({
                 aria-invalid={errors.description ? "true" : undefined}
                 className="min-h-24"
                 onChange={(event) => updateField("description", event.target.value)}
-                placeholder="例如：自动整理 API 文档。"
+                placeholder="自动整理 API 文档"
               />
               <FieldError message={errors.description} />
             </div>
@@ -513,8 +533,8 @@ function SkillCreateDialog({
 
               <div
                 className={cn(
-                  "rounded-lg border border-dashed border-border/80 bg-muted/10 p-5 transition-colors",
-                  isDraggingFiles && "border-primary bg-muted/30",
+                  "rounded-lg border border-dashed border-border bg-muted p-5 transition-colors",
+                  isDraggingFiles && "border-primary",
                 )}
                 onDragEnter={(event) => {
                   event.preventDefault()
@@ -608,8 +628,8 @@ function SkillCreateDialog({
               <FieldError message={errors.files} />
 
               {form.files.length > 0 ? (
-                <div className="overflow-hidden rounded-lg border border-border/70">
-                  <div className="flex items-center justify-between border-b border-border/70 bg-muted/20 px-3 py-2 text-sm">
+                <div className="overflow-hidden rounded-lg border">
+                  <div className="flex items-center justify-between border-b bg-muted px-3 py-2 text-sm">
                     <span className="font-medium text-foreground">
                       已选 {form.files.length} 个附件
                     </span>
@@ -621,7 +641,7 @@ function SkillCreateDialog({
                     {form.files.map((file) => (
                       <div
                         key={file.originalName}
-                        className="flex items-start justify-between gap-3 border-b border-border/70 px-3 py-3 last:border-b-0"
+                        className="flex items-start justify-between gap-3 border-b px-3 py-3 last:border-b-0"
                       >
                         <div className="min-w-0">
                           <p className="break-all text-sm font-medium text-foreground">

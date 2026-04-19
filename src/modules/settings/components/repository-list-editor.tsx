@@ -39,7 +39,7 @@ type RepositoryListEditorProps = {
   onSave: (
     repositories: SynapseRepositoryConfig[],
     activeRepoUuid: string | null,
-    reloadAfterUpdate: boolean,
+    reset: boolean,
   ) => Promise<boolean>
 }
 
@@ -175,7 +175,7 @@ function RepositoryListEditor({
 
   const handleChooseCreateParentPath = async () => {
     if (!hasRepositoryBridge) {
-      setCreateRepositoryError("当前运行实例还没有加载仓库能力桥接。")
+      setCreateRepositoryError("功能暂不可用，请重启应用。")
       return
     }
 
@@ -207,7 +207,7 @@ function RepositoryListEditor({
     }
 
     if (!hasRepositoryBridge) {
-      setCreateRepositoryError("当前运行实例还没有加载仓库能力桥接。")
+      setCreateRepositoryError("功能暂不可用，请重启应用。")
       return
     }
 
@@ -268,7 +268,7 @@ function RepositoryListEditor({
     setInitializingUuid(repository.uuid)
 
     try {
-      await promise(
+      const result = await promise(
         () => initializeStructure(repository.uuid),
         {
           loading: "正在初始化目录...",
@@ -276,11 +276,13 @@ function RepositoryListEditor({
           error: (error) => error instanceof Error ? error.message : "初始化失败。",
         },
       )
+      return result
     } catch (error) {
       logger.error("Repository initialization failed from settings.", {
         error,
         repositoryUuid: repository.uuid,
       })
+      throw error
     } finally {
       setInitializingUuid(null)
       setInitializationTarget(null)
@@ -418,7 +420,7 @@ function RepositoryListEditor({
                 id="create-local-repository-name"
                 value={newRepositoryName}
                 onChange={(event) => setNewRepositoryName(event.target.value)}
-                placeholder="例如：团队规则仓库"
+                placeholder="团队规则仓库"
                 disabled={isCreatingRepository}
               />
             </div>

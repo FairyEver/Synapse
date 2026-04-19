@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Copy, Download, LoaderCircle } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
@@ -135,18 +135,14 @@ function LogsPanel() {
     listElement.scrollTop = Math.max(0, total * LOG_ROW_HEIGHT - listElement.clientHeight)
   }, [total, viewportHeight])
 
-  const visibleRows = useMemo(() => {
-    const rows: Array<{ entry: SynapseLogEntry | null; index: number }> = []
+  const visibleRows: Array<{ entry: SynapseLogEntry | null; index: number }> = []
 
-    for (let entryIndex = visibleStartIndex; entryIndex <= visibleEndIndex; entryIndex += 1) {
-      rows.push({
-        entry: getEntryAtIndex(entryIndex),
-        index: entryIndex,
-      })
-    }
-
-    return rows
-  }, [getEntryAtIndex, visibleEndIndex, visibleStartIndex])
+  for (let entryIndex = visibleStartIndex; entryIndex <= visibleEndIndex; entryIndex += 1) {
+    visibleRows.push({
+      entry: getEntryAtIndex(entryIndex),
+      index: entryIndex,
+    })
+  }
 
   const measureRowContent = useCallback((node: HTMLDivElement | null) => {
     if (!node) {

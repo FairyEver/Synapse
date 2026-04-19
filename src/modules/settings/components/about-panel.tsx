@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -7,6 +7,9 @@ import type { SynapseAppUpdateState } from "@/types/update"
 import synapseLogo from "@/modules/settings/assets/synapse-logo.png"
 
 const logger = createRendererLogger("settings.about")
+
+const ADMIN_CLICK_THRESHOLD = 10
+const ADMIN_CLICK_RESET_DELAY = 2000
 
 const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   currentVersion: "0.0.0",
@@ -99,9 +102,16 @@ function getDownloadDetails(updateState: SynapseAppUpdateState): string | null {
   return parts.length > 0 ? parts.join(" · ") : null
 }
 
-function AboutPanel() {
+type AboutPanelProps = {
+  isAdminMode: boolean
+  onAdminModeChange: (enabled: boolean) => void
+}
+
+function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [updateState, setUpdateState] = useState<SynapseAppUpdateState>(INITIAL_UPDATE_STATE)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [clickCount, setClickCount] = useState(0)
+  const [resetTimer, setResetTimer] = useState<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const bridge = window.synapse?.updater
@@ -110,7 +120,7 @@ function AboutPanel() {
       setUpdateState({
         ...INITIAL_UPDATE_STATE,
         status: "unsupported",
-        message: "当前实例没有可用的更新能力。",
+        message: "当前环境不支持自动更新。",
       })
       return
     }
@@ -157,6 +167,38 @@ function AboutPanel() {
   const downloadDetails = getDownloadDetails(updateState)
   const downloadProgressValue = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
 
+  const handleLogoClick = useCallback(() => {
+    if (isAdminMode) {
+      return
+    }
+
+    if (resetTimer) {
+      clearTimeout(resetTimer)
+    }
+
+    const nextCount = clickCount + 1
+    setClickCount(nextCount)
+
+    if (nextCount >= ADMIN_CLICK_THRESHOLD) {
+      logger.info("Admin mode activated via logo clicks.")
+      onAdminModeChange(true)
+      setClickCount(0)
+    } else {
+      const timer = setTimeout(() => {
+        setClickCount(0)
+      }, ADMIN_CLICK_RESET_DELAY)
+      setResetTimer(timer)
+    }
+  }, [clickCount, isAdminMode, onAdminModeChange, resetTimer])
+
+  useEffect(() => {
+    return () => {
+      if (resetTimer) {
+        clearTimeout(resetTimer)
+      }
+    }
+  }, [resetTimer])
+
   const handleAction = async () => {
     const bridge = window.synapse?.updater
 
@@ -180,11 +222,14 @@ function AboutPanel() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-center">
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
         <img
           src={synapseLogo}
           alt="Synapse"
           draggable={false}
-          className="size-24 shrink-0 object-contain"
+          onClick={handleLogoClick}
+          className="size-24 shrink-0 cursor-pointer object-contain select-none"
+          title={isAdminMode ? "管理员模式已开启" : undefined}
         />
       </div>
 
@@ -205,9 +250,7 @@ function AboutPanel() {
                 <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
               ) : null}
               {isDownloaded ? (
-                <p className="text-xs text-muted-foreground">
-                  请先完全退出 Synapse，再打开下载好的安装包重新安装。
-                </p>
+                <p className="text-xs text-muted-foreground">退出后运行安装包。</p>
               ) : null}
               {updateState.downloadedFilePath ? (
                 <p className="text-xs break-all text-muted-foreground">
@@ -248,4 +291,4 @@ function AboutPanel() {
   )
 }
 
-export { AboutPanel }
+export { AboutPanel, type AboutPanelProps }

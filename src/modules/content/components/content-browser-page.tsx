@@ -111,7 +111,7 @@ function getContentState(params: {
   if (repositoryStatus === "checking") {
     return {
       title: `正在加载 ${title}`,
-      description: "正在读取当前目录里的内容。",
+      description: null,
       icon: LoaderCircle,
     }
   }
@@ -119,7 +119,7 @@ function getContentState(params: {
   if (repositoryStatus === "missing") {
     return {
       title: "本地目录不存在",
-      description: "请回到 Settings 重新选择本地目录。",
+      description: "前往设置重新选择本地目录。",
       icon: TriangleAlert,
     }
   }
@@ -135,7 +135,7 @@ function getContentState(params: {
   if (isLoading && items.length === 0) {
     return {
       title: `正在加载 ${title}`,
-      description: "正在读取当前目录里的内容。",
+      description: null,
       icon: LoaderCircle,
     }
   }
@@ -171,7 +171,7 @@ function getContentState(params: {
 
 function ContentStateView({ description, icon: Icon, title }: ContentState) {
   return (
-    <Empty className="min-h-[320px] rounded-lg border border-border bg-background">
+    <Empty className="min-h-80 rounded-lg border border-border bg-background">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Icon className={cn(title.startsWith("正在加载") ? "animate-spin" : undefined)} />
@@ -205,7 +205,7 @@ function ContentListCard({
   return (
     <div
       data-window-no-drag="true"
-      className="flex items-start gap-3 rounded-xl bg-background px-3 py-3"
+      className="flex items-start gap-3 rounded-lg bg-background px-3 py-3"
     >
       <button
         type="button"
@@ -300,32 +300,24 @@ function ContentBrowserPage({
   }, [activeCategoryId, categories, favoriteIds])
 
   useEffect(() => {
-    if (selectedItem && !items.some((item) => item.id === selectedItem.id)) {
-      setSelectedItem(null)
-    }
-  }, [items, selectedItem])
-
-  useEffect(() => {
     if (!selectedItem) {
+      onDetailDialogOpenChange?.(false)
+      return
+    }
+
+    const itemExists = items.some((item) => item.id === selectedItem.id)
+    if (!itemExists) {
+      setSelectedItem(null)
       return
     }
 
     const nextSelectedItem = items.find((item) => item.id === selectedItem.id) ?? null
-
     if (nextSelectedItem && nextSelectedItem !== selectedItem) {
       setSelectedItem(nextSelectedItem)
     }
-  }, [items, selectedItem])
 
-  useEffect(() => {
-    onDetailDialogOpenChange?.(selectedItem !== null)
-  }, [onDetailDialogOpenChange, selectedItem])
-
-  useEffect(() => {
-    return () => {
-      onDetailDialogOpenChange?.(false)
-    }
-  }, [onDetailDialogOpenChange])
+    onDetailDialogOpenChange?.(true)
+  }, [items, onDetailDialogOpenChange, selectedItem])
 
   const itemsInActiveCategory = useMemo(
     () => {
@@ -403,9 +395,9 @@ function ContentBrowserPage({
       : repositoryStatus === "missing"
         ? "当前目录不存在，不能新建"
         : currentRepoProfileState?.status === "needs-onboarding"
-          ? "请先完成当前目录的身份设置"
+          ? "先完成当前目录的身份设置"
         : isRepositoryInitializing
-          ? "当前目录正在初始化，请稍后。"
+          ? "当前目录正在初始化，稍后。"
           : `新建 ${definition.singularLabel}`
 
   return (

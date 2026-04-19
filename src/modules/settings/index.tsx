@@ -8,6 +8,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { LogsModule } from "@/modules/logs"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
+import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
@@ -23,15 +24,27 @@ import { cn } from "@/lib/utils"
 const logger = createRendererLogger("settings")
 
 function SettingsModule() {
-  const { activeRepository, config, error, isReady, updateConfig } = useAppConfig()
+  const { activeRepository, config, error, isReady, updateConfig, resetKey } = useAppConfig()
   const { promise } = useAppNotifications()
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general")
+  const [isAdminMode, setIsAdminMode] = useState(false)
   const context = useMemo(
     () => ({
       config,
       activeRepository,
     }),
     [activeRepository, config],
+  )
+
+  const visibleCategories = useMemo<SettingsCategory[]>(
+    () =>
+      settingsCategories.filter((category) => {
+        if (category.id === "admin") {
+          return isAdminMode
+        }
+        return true
+      }),
+    [isAdminMode],
   )
 
   const categoryItems = useMemo(
@@ -41,31 +54,24 @@ function SettingsModule() {
       ),
     [activeCategory, context],
   )
+
   const regularItems = categoryItems.filter((item) => item.type !== "list" && activeCategory !== "about")
   const hasRepositoriesItem = categoryItems.some((item) => item.key === "repositories")
   const hasProjectsItem = categoryItems.some((item) => item.key === "global.projects")
   const isLogsCategory = activeCategory === "logs"
 
   const applyPatch = useCallback(
-    async (patch: Parameters<typeof updateConfig>[0], reloadAfterUpdate = false) => {
+    async (patch: Parameters<typeof updateConfig>[0], reset = false) => {
       try {
         logger.info("Applying settings patch.", {
           patch,
-          reloadAfterUpdate,
+          reset,
         })
         await promise(
-          () => updateConfig(patch),
+          () => updateConfig(patch, reset),
           {
-            loading: reloadAfterUpdate ? "正在保存并刷新..." : "正在保存设置...",
-            success: () => {
-              if (reloadAfterUpdate && window.synapse?.config) {
-                logger.info("Reloading window after settings patch.")
-                window.location.reload()
-                return null
-              }
-
-              return "设置已保存。"
-            },
+            loading: reset ? "正在保存并重置..." : "正在保存设置...",
+            success: () => "设置已保存。",
             error: (updateError) => updateError instanceof Error ? updateError.message : "保存设置失败。",
           },
         )
@@ -96,10 +102,10 @@ function SettingsModule() {
   )
 
   const handleSaveRepositories = useCallback(
-    async (repositories: typeof config.repositories, activeRepoUuid: string | null, reloadAfterUpdate: boolean) => {
+    async (repositories: typeof config.repositories, activeRepoUuid: string | null, reset: boolean) => {
       logger.info("Saving repository list from settings.", {
         activeRepoUuid,
-        reloadAfterUpdate,
+        reset,
         repositoryCount: repositories.length,
       })
       return applyPatch(
@@ -107,7 +113,7 @@ function SettingsModule() {
           repositories,
           activeRepoUuid,
         },
-        reloadAfterUpdate,
+        reset,
       )
     },
     [applyPatch],
@@ -133,7 +139,7 @@ function SettingsModule() {
       contentScrollable={!isLogsCategory}
       sidebar={
         <SettingsCategorySidebar
-          categories={settingsCategories}
+          categories={visibleCategories}
           activeCategory={activeCategory}
           onCategoryChange={(nextCategory) => {
             logger.info("Settings category changed.", {
@@ -215,7 +221,12 @@ function SettingsModule() {
           </div>
         ) : null}
 
-        {isReady && activeCategory === "about" ? <AboutPanel /> : null}
+        {isReady && activeCategory === "about" ? (
+          <AboutPanel
+            isAdminMode={isAdminMode}
+            onAdminModeChange={setIsAdminMode}
+          />
+        ) : null}
       </div>
     </SidebarContentLayout>
   )
