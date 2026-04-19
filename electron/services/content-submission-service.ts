@@ -112,6 +112,10 @@ function createDeferredMutationMessage(): string {
   return "已保存。"
 }
 
+function createLocalMutationMessage(): string {
+  return "本地目录已更新。"
+}
+
 function runRepositoryGitCommand(
   cwd: string,
   args: string[],
@@ -209,15 +213,11 @@ async function pushRepository(
   )
 }
 
-async function readRepositoryState(repository: SynapseRepositoryConfig) {
+async function readReadyRepositoryState(repository: SynapseRepositoryConfig) {
   const repositoryState = await repositoryStore.getRepositoryState(repository)
 
   if (repositoryState.status !== "ready") {
     throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
-  }
-
-  if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
-    throw new Error("当前目录不是 Git 仓库，无法提交内容。")
   }
 
   return repositoryState
@@ -370,8 +370,12 @@ class ContentSubmissionService {
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
+    const repositoryState = await readReadyRepositoryState(repository)
 
-    await pullWithRebase(repository)
+    if (repositoryState.isGitRepository) {
+      await pullWithRebase(repository)
+    }
+
     await contentIndexService.syncIndex(repository)
 
     const latestDetail = await contentHistoryService.readCurrentDetail(
@@ -408,7 +412,23 @@ class ContentSubmissionService {
     } = {},
   ): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
-    const repositoryState = await readRepositoryState(repository)
+    const repositoryState = await readReadyRepositoryState(repository)
+
+    if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
+      await contentIndexService.syncIndex(repository)
+
+      return {
+        id: writeResult.id,
+        type: writeResult.type,
+        status: "saved",
+        title: writeResult.title,
+        latestHistoryDirname: writeResult.latestHistoryDirname,
+        modifiedAt: writeResult.modifiedAt,
+        pushed: false,
+        pendingPushCount: 0,
+        message: createLocalMutationMessage(),
+      }
+    }
 
     await ensureBotIdentity(repositoryState.gitRootPath ?? repository.localPath)
     await stagePaths(repositoryState.gitRootPath ?? repository.localPath, writeResult.gitPaths)

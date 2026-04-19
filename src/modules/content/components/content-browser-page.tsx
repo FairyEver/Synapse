@@ -275,7 +275,6 @@ function ContentBrowserPage({
   const canBrowseContent = repositoryStatus === "ready"
   const canCreateContent =
     canBrowseContent
-    && Boolean(activeRepositoryState?.isGitRepository)
     && currentRepoProfileState?.status !== "needs-onboarding"
     && !isRepositoryInitializing
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
@@ -387,8 +386,6 @@ function ContentBrowserPage({
           ? "请先完成当前目录的身份设置"
         : isRepositoryInitializing
           ? "当前目录正在初始化，请稍后。"
-        : !activeRepositoryState?.isGitRepository
-          ? "当前目录不是 Git 仓库，不能新建"
           : `新建 ${definition.singularLabel}`
 
   return (

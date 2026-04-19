@@ -231,11 +231,16 @@ class RepositoryGitService {
     }
 
     if (!currentState.isGitRepository) {
-      logger.warn("Repository sync aborted because directory is not a Git repository.", {
+      logger.info("Repository sync resolved as a local-only refresh.", {
         repositoryUuid: repository.uuid,
         localPath: repository.localPath,
       })
-      throw new Error("当前目录不是 Git 仓库，无法执行同步。")
+      return {
+        operation: "sync" as const,
+        repository: currentState,
+        completedAt: new Date().toISOString(),
+        message: "本地目录已刷新。",
+      }
     }
 
     return this.runExclusive(repository.uuid, "sync", async () => {

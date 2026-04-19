@@ -333,7 +333,7 @@ function RepositoryListEditor({
                     ) : null}
                     {repositoryState?.status === "ready" && !repositoryState.isGitRepository ? (
                       <p className="text-xs text-muted-foreground">
-                        当前目录不是 Git 仓库，不能同步。
+                        当前目录不是 Git 仓库，内容只保存在本地。
                       </p>
                     ) : null}
                   </div>

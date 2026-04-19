@@ -43,7 +43,7 @@ type SynapseContentAuthor = {
 }
 
 type ActiveRepositoryWriteContext = {
-  gitRootPath: string
+  repositoryRootPath: string
   identity: SynapseContentAuthor
   repository: SynapseRepositoryConfig
 }
@@ -193,12 +193,8 @@ async function getActiveRepositoryWriteContext(
     throw new Error("当前目录不存在，不能写入内容。")
   }
 
-  if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
-    throw new Error("当前目录不是 Git 仓库，不能写入内容。")
-  }
-
   return {
-    gitRootPath: repositoryState.gitRootPath,
+    repositoryRootPath: repositoryState.gitRootPath ?? repository.localPath,
     identity,
     repository,
   }
@@ -227,7 +223,7 @@ async function resolveAttachmentRecords(
   const nextAttachments: SynapseContentAttachmentRecord[] = []
   const pendingWrites = skillPayload.files.filter((file) => !file.sha256 || file.bytes)
   const written = await attachmentsPoolService.writeAttachments(
-    context.gitRootPath,
+    context.repositoryRootPath,
     pendingWrites
       .map((file) => {
         if (!file.bytes) {
