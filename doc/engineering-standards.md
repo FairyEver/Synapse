@@ -123,10 +123,13 @@ Synapse 必须坚持三层边界：
 ### 5.1 顶层建议
 
 - `electron/`：主进程与 preload
+  - `ipc/`：IPC 处理器
+  - `services/`：主进程服务
 - `src/App.tsx`：应用壳层编排与一级模块切换
 - `src/app-shell/`：顶层状态与共享上下文
 - `src/components/`：共享 UI 组件
 - `src/components/ui/`：shadcn/ui 组件
+- `src/hooks/`：共享自定义 hooks
 - `src/modules/`：业务模块
 - `src/lib/`：纯工具函数
 - `src/types/`：共享类型
@@ -220,12 +223,13 @@ renderer 负责：
 - JSX 中不要塞复杂数据转换或长条件树
 - 超过明显可读范围时及时拆组件
 
-### 7.3 组件边界
+### 7.3 组件与 Hooks 边界
 
-共享组件应尽量与业务解耦：
+共享组件和 hooks 应尽量与业务解耦：
 
 - `src/components/` 不应依赖具体业务模块实现
-- 业务模块可以依赖共享组件
+- `src/hooks/` 不应依赖具体业务模块逻辑
+- 业务模块可以依赖共享组件和 hooks
 - 业务模块之间不要直接耦合实现细节
 
 ## 8. Tailwind 与 shadcn/ui 规范
@@ -265,9 +269,9 @@ Tailwind 主要用于：
 
 - 优先复用现有 shadcn/ui 组件
 - 默认保留 shadcn/ui 的基础视觉风格
-- 当前项目的组件底座是 Radix，当前 style preset 是 `radix-nova`
+- 视觉基线以 `doc/DESIGN.md` 为准（当前为 `radix-nova` preset、Radix primitive）
 - 业务 UI 优先通过组合已有组件完成
-- 不要为了“更好看”随意改组件内部实现
+- 不要为了”更好看”随意改组件内部实现
 - 需要新 UI 原子组件时，优先新增到 `src/components/ui/`，不要先在 `src/components/` 手搓一个平行版本
 - 不要重新引入 `@base-ui/react` 或把项目切回 Base UI 路线，除非任务是用户明确要求的迁移
 - 新增或重装 shadcn 组件时，必须保留当前 Radix 基线；如果需要重新初始化或批量重装，显式使用 `--base radix`

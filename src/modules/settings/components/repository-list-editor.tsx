@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
+import { getRepositoryNameFromPath } from "@/lib/path-utils"
 import { RepositoryDisplayNameField } from "@/modules/settings/components/repository-display-name-field"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseRepositoryConfig } from "@/types/config"
@@ -63,13 +64,6 @@ function getRepositoryStatusLabel(repositoryState?: SynapseRepositoryLocalState)
   }
 
   return repositoryState.isGitRepository ? "Git 仓库已连接" : "本地目录已连接（非 Git 仓库）"
-}
-
-function getRepositoryNameFromPath(localPath: string): string {
-  const normalizedPath = localPath.replace(/[\\/]+$/, "")
-  const segments = normalizedPath.split(/[\\/]/).filter((segment) => segment.length > 0)
-
-  return segments.at(-1) ?? localPath
 }
 
 function validateLocalRepositoryName(value: string): string | null {

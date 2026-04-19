@@ -6,6 +6,11 @@
 electron/
   main.ts
   preload.ts
+  ipc/              # IPC 处理器
+    channels.ts
+    *-handlers.ts
+  services/         # 主进程服务
+    *.service.ts
 
 src/
   App.tsx
@@ -13,14 +18,17 @@ src/
   app-shell/
   components/
     ui/
+  hooks/            # 共享 hooks
   lib/
   styles/
   types/
-  modules/              (业务模块落地时新增)
-    <module>/
+  modules/          # 业务模块
+    content/
+    logs/
+    rules/
+    settings/
+    skills/
 ```
-
-这份结构是当前 Synapse 的真实基础。当前代码已经有 `src/app-shell/`，后续业务模块落地时应放进 `src/modules/`，而不是引入新的平行架构。
 
 ## 2. 各目录职责
 
@@ -30,14 +38,8 @@ src/
 
 - `main.ts`：窗口、生命周期、主进程入口
 - `preload.ts`：桥接渲染层可用的受控 API
-
-后续如果 Electron 逻辑变多，应考虑拆出例如：
-
-- `electron/services/`
-- `electron/ipc/`
-- `electron/types/`
-
-但前提是确实带来更清晰的边界，而不是为了“结构好看”硬拆。
+- `ipc/`：IPC 处理器，按业务域拆分（config-handlers.ts, content-handlers.ts 等）
+- `services/`：主进程业务服务，如文件系统、Git、下载安装等
 
 ### `src/App.tsx`
 
@@ -78,6 +80,15 @@ src/
 - 若确需调整，优先通过组合而不是直接改内部实现
 - 缺少的基础组件优先通过 shadcn CLI 新增到这里，而不是在 `src/components/` 里自定义平行 primitive
 
+### `src/hooks/`
+
+放跨模块共享的自定义 hooks。
+
+适合：
+
+- 响应式逻辑（如 use-mobile.ts）
+- 跨模块复用的交互模式
+
 ### `src/lib/`
 
 放纯工具函数与无业务归属的轻量辅助逻辑。
@@ -105,9 +116,15 @@ src/
 
 ### `src/modules/`
 
-这是 Synapse 未来业务模块的标准根目录。
+这是 Synapse 业务模块的标准根目录。
 
-当前仓库里该目录尚未落地时，不要因为文档里提到它就虚构一个别的平行目录；真正需要新增业务域时，再按这里的结构创建。
+当前已有模块：
+
+- `content/`：内容管理
+- `logs/`：日志查看
+- `rules/`：规则管理
+- `settings/`：设置
+- `skills/`：技能管理
 
 重要约束：
 
@@ -144,9 +161,10 @@ src/modules/<module>/
 
 推荐遵守以下方向：
 
-- `src/modules/*` 可以依赖 `src/components/`、`src/components/ui/`、`src/lib/`、`src/types/`、`src/app-shell/`
+- `src/modules/*` 可以依赖 `src/components/`、`src/components/ui/`、`src/lib/`、`src/types/`、`src/hooks/`、`src/app-shell/`
 - `src/components/` 不应依赖 `src/modules/*` 的具体实现
 - `src/lib/` 不应依赖具体模块 UI
+- `src/hooks/` 不应依赖具体模块业务逻辑
 - renderer 代码不应 import `electron/*`
 - preload 不应引用 renderer 组件代码
 
@@ -163,7 +181,9 @@ src/modules/<module>/
 4. 是多个模块都复用的纯展示组件吗？
    放到 `src/components/`。
    如果它本质上是按钮、输入框、弹窗、标签、滚动区等基础 primitive，优先检查 `src/components/ui/` 或先新增 shadcn 组件，而不是直接新建共享自定义组件。
-5. 是纯工具函数或共享类型吗？
+5. 是多个模块都复用的交互逻辑吗？
+   放到 `src/hooks/`。
+6. 是纯工具函数或共享类型吗？
    分别放到 `src/lib/` 或 `src/types/`。
 
 ## 6. 明确禁止

@@ -65,7 +65,7 @@ function ContentDetailPanel<T extends SynapseContentType>({
             <LoaderCircle className="animate-spin" />
           </EmptyMedia>
           <EmptyTitle>{loadingTitle}</EmptyTitle>
-          <EmptyDescription>请稍等一下。</EmptyDescription>
+          <EmptyDescription>正在加载...</EmptyDescription>
         </EmptyHeader>
       </Empty>
     )

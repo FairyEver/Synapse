@@ -14,19 +14,13 @@ import {
 import { Label } from "@/components/ui/label"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseProjectConfig } from "@/types/config"
+import { getProjectNameFromPath } from "@/lib/path-utils"
 
 const logger = createRendererLogger("settings.projects")
 
 type ProjectListEditorProps = {
   projects: SynapseProjectConfig[]
   onSave: (projects: SynapseProjectConfig[]) => Promise<void>
-}
-
-function getProjectNameFromPath(projectPath: string): string {
-  const normalizedPath = projectPath.replace(/[\\/]+$/, "")
-  const segments = normalizedPath.split(/[\\/]/).filter((segment) => segment.length > 0)
-
-  return segments.at(-1) ?? projectPath
 }
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {

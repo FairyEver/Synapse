@@ -8,7 +8,7 @@ import {
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
-const SETTINGS_FIELD_CONTROL_CLASSNAME = "w-full md:w-[200px]"
+const SETTINGS_FIELD_CONTROL_CLASSNAME = "w-full md:w-full md:max-w-sm"
 
 type SettingsFieldRowProps = {
   children: ReactNode
@@ -34,7 +34,7 @@ function SettingsFieldRow({
       className={className}
     >
       <FieldTitle>{label}</FieldTitle>
-      <FieldContent className="w-full md:max-w-[200px]">
+      <FieldContent className="w-full md:max-w-sm">
         <div className={cn("w-full", controlClassName)}>{children}</div>
         {description ? <FieldDescription>{description}</FieldDescription> : null}
         <FieldError>{error}</FieldError>

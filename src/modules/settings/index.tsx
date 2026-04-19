@@ -3,6 +3,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
+import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { LogsModule } from "@/modules/logs"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
@@ -161,8 +162,14 @@ function SettingsModule() {
         ) : null}
 
         {isReady && activeCategory === "content" && activeRepository === null ? (
-          <div className="flex min-h-60 items-center justify-center">
-            <p className="text-sm text-muted-foreground">先选择本地目录</p>
+          <div className="flex min-h-60 flex-col items-center justify-center gap-4">
+            <p className="text-sm text-muted-foreground">请先添加本地目录</p>
+            <Button
+              variant="outline"
+              onClick={() => setActiveCategory("repositories")}
+            >
+              前往添加目录
+            </Button>
           </div>
         ) : null}
 

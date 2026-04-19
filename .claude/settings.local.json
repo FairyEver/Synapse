@@ -44,7 +44,8 @@
       "Bash(curl -sL \"https://raw.githubusercontent.com/openai/codex/main/codex-rs/core-skills/src/manager.rs\" -o /tmp/manager.rs)",
       "Bash(curl -sL \"https://api.github.com/search/code?q=%22.agents/skills%22+repo:openai/codex\" -H \"Accept: application/vnd.github.v3+json\")",
       "Bash(grep -E '^\\(tsx|ts-node|vitest\\)$')",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,'->',v\\) for k,v in d['scripts'].items\\(\\)]\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,'->',v\\) for k,v in d['scripts'].items\\(\\)]\")",
+      "Bash(git *)"
     ]
   }
 }

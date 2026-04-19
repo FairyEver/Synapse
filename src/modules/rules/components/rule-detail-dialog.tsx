@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { formatDateTime } from "@/lib/date-time"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
@@ -36,11 +37,11 @@ import { ContentDetailPanel } from "@/modules/content/components/content-detail-
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
+import type { ConflictState } from "@/modules/content/types/conflict"
 import { RuleCreateDialog } from "@/modules/rules/components/rule-create-dialog"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
 import type { CreateRulePayload } from "@/modules/rules/types"
 import type {
-  SynapseDeleteContentPayload,
   SynapseRuleDetail,
   SynapseRuleMeta,
 } from "@/types/content"
@@ -51,39 +52,6 @@ type RuleDetailDialogProps = {
   onOpenChange: (open: boolean) => void
   open: boolean
   refreshSignal?: number
-}
-
-type ConflictState =
-  | {
-      latestHistoryDirname: string
-      latestModifiedByDisplayName: string
-      latestModifiedAt: string
-      mode: "delete"
-      payload: SynapseDeleteContentPayload
-    }
-  | {
-      latestHistoryDirname: string
-      latestModifiedByDisplayName: string
-      latestModifiedAt: string
-      mode: "save"
-      payload: CreateRulePayload
-    }
-
-function formatDateTime(value: string): string {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date)
 }
 
 function buildRuleInitialValue(detail: SynapseRuleDetail): CreateRulePayload {
@@ -112,7 +80,7 @@ function RuleDetailDialog({
   const { operations, waitForBackgroundPush } = useRepositoryManager()
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
-  const [conflictState, setConflictState] = useState<ConflictState | null>(null)
+  const [conflictState, setConflictState] = useState<ConflictState<CreateRulePayload> | null>(null)
   const {
     detail,
     displayedVersion,

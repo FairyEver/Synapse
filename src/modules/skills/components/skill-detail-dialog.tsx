@@ -29,8 +29,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { formatDateTime } from "@/lib/date-time"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
+import type { ConflictState } from "@/modules/content/types/conflict"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
@@ -41,7 +43,6 @@ import { SkillVersionView } from "@/modules/skills/components/skill-version-view
 import type { CreateSkillPayload } from "@/modules/skills/types"
 import { serializeCreateSkillFiles } from "@/modules/skills/utils"
 import type {
-  SynapseDeleteContentPayload,
   SynapseSkillDetail,
   SynapseSkillMeta,
 } from "@/types/content"
@@ -52,39 +53,6 @@ type SkillDetailDialogProps = {
   onOpenChange: (open: boolean) => void
   open: boolean
   refreshSignal?: number
-}
-
-type ConflictState =
-  | {
-      latestHistoryDirname: string
-      latestModifiedByDisplayName: string
-      latestModifiedAt: string
-      mode: "delete"
-      payload: SynapseDeleteContentPayload
-    }
-  | {
-      latestHistoryDirname: string
-      latestModifiedByDisplayName: string
-      latestModifiedAt: string
-      mode: "save"
-      payload: CreateSkillPayload
-    }
-
-function formatDateTime(value: string): string {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date)
 }
 
 function buildSkillInitialValue(detail: SynapseSkillDetail): CreateSkillPayload {
@@ -119,7 +87,7 @@ function SkillDetailDialog({
   const { operations, waitForBackgroundPush } = useRepositoryManager()
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
-  const [conflictState, setConflictState] = useState<ConflictState | null>(null)
+  const [conflictState, setConflictState] = useState<ConflictState<CreateSkillPayload> | null>(null)
   const {
     detail,
     displayedVersion,

@@ -2,7 +2,7 @@
 
 ## 0. 规范优先级
 
-`doc/DESIGN.md` 是 Synapse 当前视觉与样式规范的最高优先级来源。
+`doc/DESIGN.md` 是视觉与样式规范的最高优先级来源。
 
 只要任务涉及以下任一内容，都必须先遵守 `doc/DESIGN.md`：
 
@@ -17,8 +17,6 @@
 - 页面结构
 - 深浅主题切换
 
-如果本文件与 `doc/DESIGN.md` 有冲突，以 `doc/DESIGN.md` 为准。
-
 ## 1. 目标
 
 Synapse 的 UI 代码默认追求：
@@ -30,73 +28,64 @@ Synapse 的 UI 代码默认追求：
 
 默认基线是 shadcn/ui 当前 preset，而不是额外的品牌化视觉系统。
 
-## 2. 当前视觉基线
+## 2. 颜色使用规则
 
-当前仓库应统一落在同一套 shadcn 基线上：
+优先使用 token 类：
 
-- 以 `components.json` 中声明的 style preset 为准
-- 当前 style preset 是 `radix-nova`
-- 当前 primitive base 是 Radix，不是 Base UI
-- 以 `src/styles/globals.css` 中的 token 与字体导入为准
-- app shell 与业务模块使用同一套颜色、边框、圆角、阴影与 focus 规则
-- 不再维护独立的壳层品牌样式
+```
+bg-background      text-foreground
+bg-card            text-muted-foreground
+bg-muted           border-border
+```
 
-如果任务没有明确要求重新设计，就不要主动添加新的视觉风格。
+禁止：
 
-## 3. 组件优先级
+- 为单个页面引入硬编码品牌色
+- 额外维护一套 shell 专用配色
+- 大量硬编码颜色
 
-优先级从高到低应为：
+## 3. 字体使用规则
 
-1. 已存在且确实匹配需求的业务组合组件
-2. `src/components/ui/` 中的 shadcn/ui 组件
-3. 新增到 `src/components/ui/` 的官方 shadcn 组件
-4. 通过 shadcn 组件组合得到的模块内薄业务组件
-5. 最后才是必要的轻量自定义结构或 primitive
-
-能用现有组件完成，就不要手搓一套平行 UI。
-如果本质上只是缺少一个基础组件，不要先在 `src/components/` 造自定义通用组件。
+- 文本层级优先用 shadcn 组件默认字号和 Tailwind 常规排版类
+- 需要强调时优先用 `font-medium`、`font-semibold`
+- 不要额外创建大段自定义 tracking、display、editorial typography 类
 
 ## 4. Tailwind 使用边界
 
 Tailwind 主要用于：
 
-- 布局
-- 间距
-- 尺寸
-- 响应式
-- 溢出控制
-- 轻量排版
-
-推荐优先使用：
-
-- `flex` `grid` `block` `hidden`
-- `gap-*` `p-*` `px-*` `py-*` `m-*`
-- `w-*` `h-*` `min-h-*` `max-w-*`
-- `items-*` `justify-*`
-- `overflow-*`
-- `rounded-*`
-- `text-sm` `text-base` `text-lg` `font-medium` `font-semibold`
-- `bg-background` `text-foreground` `bg-card` `border-border` `bg-muted` `text-muted-foreground`
-- `sm:` `md:` `lg:` `xl:`
+- 布局：`flex` `grid` `block` `hidden`
+- 间距：`gap-*` `p-*` `px-*` `py-*` `m-*`
+- 尺寸：`w-*` `h-*` `min-h-*` `max-w-*`
+- 对齐：`items-*` `justify-*`
+- 溢出：`overflow-*`
+- 响应式：`sm:` `md:` `lg:` `xl:`
+- 轻量排版：`text-sm` `text-base` `text-lg` `font-medium` `font-semibold`
+- Token 引用：`bg-background` `text-foreground` `bg-card` `border-border` `bg-muted` `text-muted-foreground`
 
 默认避免：
 
 - 与 shadcn preset 无关的硬编码颜色
-- 大量任意阴影与圆角
+- 大量任意阴影、圆角
 - 渐变类
-- 装饰性动画
+- 动画类
 - 装饰性 absolute/fixed 定位
 - 很长的 `className` 串
 - 用 Tailwind 大面积重写组件库已有的表面视觉
 
-补充要求：
-
-- Tailwind 在本仓库中优先承担边距、间距、布局、尺寸和响应式职责
-- 颜色、边框、圆角、阴影、focus ring 和交互状态优先沿用 shadcn 默认样式与 token
+核心原则：Tailwind 是布局和节奏工具，不是主要视觉系统。按钮、输入框、卡片等表面视觉应交给 shadcn 组件自身和主题 token。
 
 ## 5. shadcn/ui 使用规则
 
-优先复用以下类型的组件：
+- 默认保留组件基础视觉风格
+- 先组合，再定制
+- 不为了"更好看"随意改内部源码
+- 需要新增组件时，优先通过 shadcn CLI 生成或严格对齐 CLI 输出
+- 需要定制时，优先调整主题 token 或共享组件层，而不是在页面里零散覆盖
+- 新建共享 UI 前，先确认现有 `src/components/ui/` 是否可直接使用或是否应先补一个 shadcn 组件
+- 不要为了单个页面或单个模块，在 `src/components/` 新建与 shadcn 等价的按钮、输入框、卡片、弹窗、标签等基础组件
+
+优先使用的组件包括：
 
 - `Button`
 - `Card`
@@ -112,20 +101,9 @@ Tailwind 主要用于：
 - `ScrollArea`
 - `Separator`
 
-规则：
-
-- 默认保留组件基础视觉风格
-- 先组合，再定制
-- 不为了“更好看”随意改内部源码
-- 需要新增组件时，优先通过 shadcn CLI 生成或严格对齐 CLI 输出
-- 保持当前 Radix 基线，不要重新引入 `@base-ui/react` 或切回 Base UI
-- 需要定制时，优先调整主题 token 或共享组件层，而不是在页面里零散覆盖
-- 新建共享 UI 前，先确认现有 `src/components/ui/` 是否可直接使用或是否应先补一个 shadcn 组件
-- 不要为了单个页面或单个模块，在 `src/components/` 新建与 shadcn 等价的按钮、输入框、卡片、弹窗、标签等基础组件
-
 ## 6. 页面结构顺序
 
-实现页面时优先顺序应为：
+实现页面时优先顺序：
 
 1. 页面骨架
 2. 状态流
@@ -168,32 +146,22 @@ Tailwind 主要用于：
 - 复杂动效
 - 纯展示型排版
 
-## 9. 什么时候可以突破这些限制
-
-仅在以下情况下，可以适度加入额外视觉处理：
-
-- 用户明确要求重新设计
-- 需要统一切换 preset 或主题
-- 该样式直接服务于功能理解，而不是纯装饰
-
-即使需要突破，也应保持克制，并优先复用已有 shadcn 基线。
-
-## 10. 用户文案规则
+## 9. 用户文案规则
 
 所有界面文案默认都是写给用户看的，不是写给开发者看的。
 
 必须遵守：
 
-- 不要把“后续会接入”“当前先保留入口”“为了稳定状态边界”“步骤 X 才支持”“这个样式为什么更好”这类实现说明写进界面
+- 不要把"后续会接入""当前先保留入口""为了稳定状态边界""步骤 X 才支持"这类实现说明写进界面
 - 不要在 UI 里解释架构、模块边界、技术选型、开发阶段、预留位或重构原因
 - 空状态、加载态、禁用说明、帮助文案都要短、直接、可操作
 - 优先告诉用户现在能做什么，而不是内部还有什么没做
 - 能用一句话说清的，不要写成两三句说明
 - 如果删掉一段文案后，不影响用户完成当前任务，就应该删掉
 
-默认判断标准：
+判断标准：
 
-- 这是用户现在完成操作必须知道的信息吗
-- 这句话是在帮助用户，还是在解释实现过程
+- 这是用户现在完成操作必须知道的信息吗？
+- 这句话是在帮助用户，还是在解释实现过程？
 
 如果更像开发备注，就不要显示在界面里。
