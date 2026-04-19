@@ -1,71 +1,33 @@
-import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
+import {
+  createEmptyContentPayload,
+  isContentPayloadDirty as isContentPayloadDirtyBase,
+  normalizeContentPayload,
+  validateContentPayload,
+} from "@/modules/content/lib/content-payload"
 import type { CreateRulePayload, RuleCreateFieldErrors } from "@/modules/rules/types"
 
-const EMPTY_CREATE_RULE_PAYLOAD: CreateRulePayload = {
-  title: "",
-  description: "",
-  category: "",
-  icon: "",
-  iconBg: DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
-  content: "",
+const RULE_CONFIG = {
+  labels: {
+    title: "请输入标题。",
+    description: "请输入简介。",
+    content: "请输入正文。",
+  },
 }
 
 function createEmptyRulePayload(): CreateRulePayload {
-  return {
-    ...EMPTY_CREATE_RULE_PAYLOAD,
-  }
+  return createEmptyContentPayload<CreateRulePayload>()
 }
 
 function normalizeCreateRulePayload(payload: CreateRulePayload): CreateRulePayload {
-  return {
-    ...payload,
-    iconBg: payload.iconBg || DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
-    title: payload.title.trim(),
-    description: payload.description.trim(),
-    content: payload.content.trim(),
-  }
+  return normalizeContentPayload(payload)
 }
 
 function validateCreateRulePayload(payload: CreateRulePayload): RuleCreateFieldErrors {
-  const normalizedPayload = normalizeCreateRulePayload(payload)
-  const errors: RuleCreateFieldErrors = {}
-
-  if (!normalizedPayload.title) {
-    errors.title = "请输入标题。"
-  }
-
-  if (!normalizedPayload.description) {
-    errors.description = "请输入简介。"
-  }
-
-  if (!normalizedPayload.category) {
-    errors.category = "请选择分类。"
-  }
-
-  if (!normalizedPayload.icon) {
-    errors.icon = "请选择图标。"
-  }
-
-  if (!normalizedPayload.iconBg) {
-    errors.iconBg = "请选择背景色。"
-  }
-
-  if (!normalizedPayload.content) {
-    errors.content = "请输入正文。"
-  }
-
-  return errors
+  return validateContentPayload(payload, RULE_CONFIG)
 }
 
 function isCreateRulePayloadDirty(payload: CreateRulePayload): boolean {
-  return (
-    payload.title !== ""
-    || payload.description !== ""
-    || payload.category !== ""
-    || payload.icon !== ""
-    || payload.iconBg !== DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE
-    || payload.content !== ""
-  )
+  return isContentPayloadDirtyBase(payload)
 }
 
 export {

@@ -90,7 +90,7 @@ const SYNAPSE_CONTENT_COLOR_OPTIONS: SynapseContentColorOption[] = [
     value: "graphite",
     label: "银灰",
     backgroundClassName: "bg-linear-to-br from-zinc-200 to-zinc-400",
-    foregroundClassName: "text-zinc-800",
+    foregroundClassName: "text-foreground",
   },
   {
     value: "stone",

@@ -51,8 +51,10 @@ function emitRendererLog(
   message: string,
   details?: unknown,
 ): void {
-  void writeRendererLog(level, category, message, details).catch(() => {
-    // Logging should never break the user flow.
+  void writeRendererLog(level, category, message, details).catch((error) => {
+    // Logging should never break the user flow, but we log to console in development.
+    // eslint-disable-next-line no-console
+    console.error("Failed to write renderer log.", { level, category, message, error })
   })
 }
 

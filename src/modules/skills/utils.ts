@@ -7,18 +7,21 @@ import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 import { normalizeContentAttachmentPath } from "@/lib/content-attachments"
 import { normalizeSkillNameInput, validateSkillNameInput } from "@/lib/skill-name-input"
 import type { SynapseCreateSkillFilePayload } from "@/types/content"
+import {
+  createEmptyContentPayload,
+  isContentPayloadDirty as isContentPayloadDirtyBase,
+  normalizeContentPayload,
+  validateContentPayload,
+} from "@/modules/content/lib/content-payload"
 
 const MAX_SKILL_ATTACHMENT_SIZE = 10 * 1024 * 1024
 
-const EMPTY_CREATE_SKILL_PAYLOAD: CreateSkillPayload = {
-  title: "",
-  name: "",
-  description: "",
-  category: "",
-  icon: "",
-  iconBg: DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
-  content: "",
-  files: [],
+const SKILL_CONFIG = {
+  labels: {
+    title: "请输入中文名称。",
+    description: "请输入简介。",
+    content: "请输入主说明。",
+  },
 }
 
 function appendErrorMessage(current: string | undefined, next: string): string {
@@ -55,20 +58,17 @@ function compareCreateSkillFiles(
 }
 
 function createEmptySkillPayload(): CreateSkillPayload {
-  return {
-    ...EMPTY_CREATE_SKILL_PAYLOAD,
+  return createEmptyContentPayload<CreateSkillPayload>({
+    name: "",
     files: [],
-  }
+  })
 }
 
 function normalizeCreateSkillPayload(payload: CreateSkillPayload): CreateSkillPayload {
+  const base = normalizeContentPayload(payload)
   return {
-    ...payload,
-    iconBg: payload.iconBg || DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
-    title: payload.title.trim(),
+    ...base,
     name: normalizeSkillNameInput(payload.name),
-    description: payload.description.trim(),
-    content: payload.content.trim(),
     files: payload.files
       .map((file) => normalizeCreateSkillFilePayload(file))
       .sort(compareCreateSkillFiles),
@@ -76,39 +76,16 @@ function normalizeCreateSkillPayload(payload: CreateSkillPayload): CreateSkillPa
 }
 
 function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFieldErrors {
+  const baseErrors = validateContentPayload(payload, SKILL_CONFIG)
+  const errors: SkillCreateFieldErrors = baseErrors
   const normalizedPayload = normalizeCreateSkillPayload(payload)
-  const errors: SkillCreateFieldErrors = {}
   const seenOriginalNames = new Set<string>()
   const duplicatedNames: string[] = []
   const oversizedNames: string[] = []
 
-  if (!normalizedPayload.title) {
-    errors.title = "请输入中文名称。"
-  }
-
   const nameError = validateSkillNameInput(normalizedPayload.name)
   if (nameError) {
     errors.name = nameError
-  }
-
-  if (!normalizedPayload.description) {
-    errors.description = "请输入简介。"
-  }
-
-  if (!normalizedPayload.category) {
-    errors.category = "请选择分类。"
-  }
-
-  if (!normalizedPayload.icon) {
-    errors.icon = "请选择图标。"
-  }
-
-  if (!normalizedPayload.iconBg) {
-    errors.iconBg = "请选择背景色。"
-  }
-
-  if (!normalizedPayload.content) {
-    errors.content = "请输入主说明。"
   }
 
   for (const file of normalizedPayload.files) {
@@ -147,15 +124,8 @@ function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFie
 }
 
 function isCreateSkillPayloadDirty(payload: CreateSkillPayload): boolean {
-  return (
-    payload.title !== ""
-    || payload.name !== ""
-    || payload.description !== ""
-    || payload.category !== ""
-    || payload.icon !== ""
-    || payload.iconBg !== DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE
-    || payload.content !== ""
-    || payload.files.length > 0
+  return isContentPayloadDirtyBase(payload, (p) =>
+    p.name !== "" || p.files.length > 0,
   )
 }
 

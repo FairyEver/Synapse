@@ -426,15 +426,15 @@ function ContentBrowserPage({
                     repositoryUuid: activeRepository.uuid,
                   })
 
-                if (onCreateClick) {
-                  onCreateClick()
-                  return
-                  }
-
+                if (!onCreateClick) {
                   logger.warn("Create entry requested without a registered handler.", {
                     contentType,
                     repositoryUuid: activeRepository.uuid,
                   })
+                  return
+                }
+
+                onCreateClick()
                 }}
                 addDisabled={!canCreateContent}
                 addTitle={createButtonTitle}
