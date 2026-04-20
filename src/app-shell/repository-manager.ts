@@ -45,6 +45,8 @@ type ContentSubscriber = () => void
 type RepositorySubscriber = () => void
 type OperationSubscriber = (state: RepositoryOperationState) => void
 
+const EMPTY_REPOSITORIES: SynapseRepositoryConfig[] = []
+
 class RepositoryManager {
   // ===== 配置状态 =====
   private config: SynapseConfig | null = null
@@ -113,7 +115,7 @@ class RepositoryManager {
   }
 
   getRepositories(): SynapseRepositoryConfig[] {
-    return this.config?.repositories ?? []
+    return this.config?.repositories ?? EMPTY_REPOSITORIES
   }
 
   hasRepositories(): boolean {
@@ -186,11 +188,17 @@ class RepositoryManager {
     repository: SynapseRepositoryConfig,
     options: RepositoryAddOptions = {},
   ): Promise<void> {
+    const currentActiveRepositoryUuid = this.getActiveRepositoryUuid()
     const repos = [...(this.config?.repositories ?? []), repository]
     const nextActiveRepositoryUuid =
-      options.activate === true || !this.getActiveRepositoryUuid()
+      options.activate === true || !currentActiveRepositoryUuid
         ? repository.uuid
-        : this.getActiveRepositoryUuid()
+        : currentActiveRepositoryUuid
+    const activeRepositoryChanged = currentActiveRepositoryUuid !== nextActiveRepositoryUuid
+
+    if (activeRepositoryChanged) {
+      this.resetContentForRepositoryChange()
+    }
 
     await this.updateConfig({
       repositories: repos,
@@ -198,6 +206,10 @@ class RepositoryManager {
     })
     await this.refreshRepositoryStates()
     await this.refreshPendingPushes(repository.uuid)
+
+    if (activeRepositoryChanged) {
+      await this.refreshAllContent()
+    }
   }
 
   async removeRepository(uuid: string): Promise<void> {

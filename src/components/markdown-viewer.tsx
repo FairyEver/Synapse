@@ -8,12 +8,14 @@ import { cn } from "@/lib/utils"
 import "highlight.js/styles/github.css"
 
 type MarkdownViewerMode = "rendered" | "source"
+type MarkdownViewerSurface = "default" | "plain"
 
 type MarkdownViewerProps = {
   className?: string
   content: string
   mode?: MarkdownViewerMode
   showTabs?: boolean
+  surface?: MarkdownViewerSurface
 }
 
 const MARKDOWN_BODY_CLASSNAME = cn(
@@ -84,8 +86,12 @@ function MarkdownViewer({
   content,
   mode = "rendered",
   showTabs = true,
+  surface = "default",
 }: MarkdownViewerProps) {
   const renderedHtml = useMemo(() => renderMarkdown(content), [content])
+  const surfaceClassName = surface === "plain"
+    ? "border-0 rounded-none bg-transparent p-0"
+    : "rounded-lg border border-border bg-muted/20 px-4 py-4"
 
   const handleRenderedClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target
@@ -106,7 +112,7 @@ function MarkdownViewer({
   const renderedContent = (
     <div
       data-allow-select="true"
-      className="markdown-viewer rounded-lg border border-border bg-muted/20 px-4 py-4"
+      className={cn("markdown-viewer", surfaceClassName)}
       onClickCapture={handleRenderedClickCapture}
     >
       <div
@@ -119,7 +125,7 @@ function MarkdownViewer({
   const sourceContent = (
     <div
       data-allow-select="true"
-      className="rounded-lg border border-border bg-muted/20 px-4 py-4"
+      className={surfaceClassName}
     >
       <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground">
         {content}
@@ -156,4 +162,4 @@ function MarkdownViewer({
 }
 
 export { MarkdownViewer }
-export type { MarkdownViewerMode }
+export type { MarkdownViewerMode, MarkdownViewerSurface }

@@ -52,6 +52,7 @@ function RuleDetailDialog({
       renderVersionView={({ mode, version }) => (
         <RuleVersionView
           mode={mode}
+          surface="plain"
           version={version as unknown as SynapseLoadedContentVersion<"rule">}
         />
       )}

@@ -13,7 +13,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
     peekCursorFrontmatter: "synapse:content:peek-cursor-frontmatter",
-    resolveEditorInstallTarget: "synapse:content:resolve-editor-target",
+    resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },
   config: {
     exportBackup: "synapse:config:export-backup",

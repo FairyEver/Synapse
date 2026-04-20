@@ -53,6 +53,7 @@ function SkillDetailDialog({
       renderVersionView={({ mode, version }) => (
         <SkillVersionView
           mode={mode}
+          surface="plain"
           version={version as unknown as SynapseLoadedContentVersion<"skill">}
         />
       )}

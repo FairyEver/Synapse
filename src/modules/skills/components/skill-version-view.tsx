@@ -1,21 +1,22 @@
 import { InlineNotice } from "@/components/inline-notice"
-import { MarkdownViewer } from "@/components/markdown-viewer"
+import { MarkdownViewer, type MarkdownViewerSurface } from "@/components/markdown-viewer"
 import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
 import type { SynapseContentViewMode } from "@/types/content"
 
 type SkillVersionViewProps = {
   mode: SynapseContentViewMode
+  surface?: MarkdownViewerSurface
   version: SynapseLoadedContentVersion<"skill">
 }
 
-function SkillVersionView({ mode, version }: SkillVersionViewProps) {
+function SkillVersionView({ mode, surface, version }: SkillVersionViewProps) {
   return (
     <div className="flex flex-col gap-4">
       {version.deleted ? (
         <InlineNotice message="该 Skill 已被删除。" tone="destructive" />
       ) : null}
 
-      <MarkdownViewer content={version.content} mode={mode} showTabs={false} />
+      <MarkdownViewer content={version.content} mode={mode} showTabs={false} surface={surface} />
 
       <div className="flex flex-col gap-2">
         <p className="text-sm font-medium text-foreground">附件</p>
