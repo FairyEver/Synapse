@@ -74,6 +74,13 @@ if (waitCode !== 0) {
   process.exit(waitCode)
 }
 
+// 等待 tsc --watch 完成所有文件的初始编译
+await new Promise((resolve) => setTimeout(resolve, 2000))
+
+if (isStopping) {
+  process.exit(0)
+}
+
 const nodemon = spawn(pnpmCommand, ["exec", "nodemon"], {
   stdio: "inherit",
   env: {

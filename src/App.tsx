@@ -117,10 +117,14 @@ function MainApp() {
     [setContentDialogOpen],
   )
 
+  const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
+    state.create || state.detail || state.install
+  ))
+
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
-    // 如果已经显示空状态页面，不需要再轮询
-    if (hasNoRepositories || isActiveRepositoryMissing) {
+    // 如果已经显示空状态页面，或有内容对话框打开（避免重置用户编辑状态），不需要再轮询
+    if (hasNoRepositories || isActiveRepositoryMissing || hasContentDialogOpen) {
       return
     }
 
@@ -140,7 +144,7 @@ function MainApp() {
       window.clearInterval(intervalId)
       window.removeEventListener("focus", handleFocus)
     }
-  }, [hasNoRepositories, isActiveRepositoryMissing, refreshRepositoryStates])
+  }, [hasNoRepositories, isActiveRepositoryMissing, hasContentDialogOpen, refreshRepositoryStates])
 
   useEffect(() => {
     logger.info("App mounted.", {
@@ -159,9 +163,6 @@ function MainApp() {
   }, [])
 
   const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
-  const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
-    state.create || state.detail || state.install
-  ))
   const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
   const toolbarState = useAppShellToolbarState({
     hasBlockingModalOpen,

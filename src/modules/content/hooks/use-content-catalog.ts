@@ -29,8 +29,7 @@ function useContentCatalog<T extends SynapseContentType>(
 ): UseContentCatalogResult<T> {
   const logger = useMemo(() => createRendererLogger(`content.catalog.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
-  const { operations, states } = useRepositoryManager()
-  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
+  const { operations } = useRepositoryManager()
   const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
   const [items, setItems] = useState<SynapseContentMeta<T>[]>(() => createEmptyItems<T>())
   const [isLoading, setIsLoading] = useState(false)
@@ -100,9 +99,9 @@ function useContentCatalog<T extends SynapseContentType>(
       logger.error("Unexpected content catalog refresh failure.", loadError)
     })
   }, [
+    // 只在这些时机刷新内容：切换仓库、操作完成（新建/删除/更新）、手动刷新信号
     activeRepository?.uuid,
     activeRepositoryOperation?.completedAt,
-    activeRepositoryState?.status,
     logger,
     refreshSignal,
     refresh,
