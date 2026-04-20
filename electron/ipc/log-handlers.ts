@@ -32,6 +32,14 @@ function registerLogHandlers() {
     return result
   })
 
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.log.clear, async () => {
+    logger.warn("Clearing all local log files.")
+    const result = await logStore.clearAllLogs()
+    logger.info("Local log files cleared.", result)
+
+    return result
+  })
+
   handlersRegistered = true
 }
 

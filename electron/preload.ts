@@ -37,6 +37,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     updateDisplayName: "synapse:user-profile:update-display-name",
   },
   log: {
+    clear: "synapse:log:clear",
     export: "synapse:log:export",
     write: "synapse:log:write",
   },
@@ -127,6 +128,7 @@ const synapseBridge: SynapseBridge = {
       }),
   },
   log: {
+    clear: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.clear),
     export: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.export),
     write: (payload) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.log.write, payload),
   },

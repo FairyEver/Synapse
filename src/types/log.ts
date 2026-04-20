@@ -20,6 +20,10 @@ export type SynapseRendererLogPayload = {
 }
 
 export type SynapseLogExportResult = {
-  entryCount: number
+  fileCount: number
   filePath: string
+}
+
+export type SynapseLogClearResult = {
+  fileCount: number
 }

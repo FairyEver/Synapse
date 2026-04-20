@@ -31,7 +31,11 @@ import type {
   SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
 } from "./editor"
-import type { SynapseLogExportResult, SynapseRendererLogPayload } from "./log"
+import type {
+  SynapseLogClearResult,
+  SynapseLogExportResult,
+  SynapseRendererLogPayload,
+} from "./log"
 import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
@@ -105,6 +109,7 @@ export type SynapseBridge = {
     updateDisplayName: (repoId: string, displayName: string) => Promise<SynapseUserProfile>
   }
   log: {
+    clear: () => Promise<SynapseLogClearResult>
     export: () => Promise<SynapseLogExportResult>
     write: (payload: SynapseRendererLogPayload) => void
   }

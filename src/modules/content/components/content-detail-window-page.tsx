@@ -49,7 +49,7 @@ function RuleDetailWindowPage({
         onViewModeChange={detailState.setViewMode}
         previewError={detailState.previewError}
         renderVersion={({ mode, version }) => (
-          <RuleVersionView mode={mode} version={version} />
+          <RuleVersionView mode={mode} surface="plain" version={version} />
         )}
         selectedHistoryDirname={detailState.selectedHistoryDirname}
         stateContainerClassName="min-h-full rounded-none border-0 bg-transparent p-0"
@@ -99,7 +99,7 @@ function SkillDetailWindowPage({
         onViewModeChange={detailState.setViewMode}
         previewError={detailState.previewError}
         renderVersion={({ mode, version }) => (
-          <SkillVersionView mode={mode} version={version} />
+          <SkillVersionView mode={mode} surface="plain" version={version} />
         )}
         selectedHistoryDirname={detailState.selectedHistoryDirname}
         stateContainerClassName="min-h-full rounded-none border-0 bg-transparent p-0"

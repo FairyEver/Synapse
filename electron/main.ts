@@ -157,8 +157,7 @@ app.on("before-quit", async (event) => {
 
   void (async () => {
     try {
-      // 先刷新日志
-      await logStore.dispose()
+      await logStore.flush()
 
       const config = await configStore.load()
       const pendingPushCount = await pendingPushesService.countAll(config.repositories)

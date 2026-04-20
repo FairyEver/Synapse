@@ -68,12 +68,12 @@ function ContentHistorySelect({
       : null
 
   return (
-    <div className={cn("flex w-full items-center gap-2 sm:w-[250px] sm:flex-none", className)}>
+    <div className={cn("flex w-full items-center gap-2 sm:w-[300px] sm:flex-none", className)}>
       <Select value={selectedHistoryDirname} onValueChange={onSelectedHistoryDirnameChange}>
         <SelectTrigger aria-label="历史版本" className="min-w-0 flex-1">
           <SelectValue placeholder="选择历史版本" />
         </SelectTrigger>
-        <SelectContent className="sm:w-[250px]">
+        <SelectContent className="sm:w-[300px]">
           <SelectGroup>
             <SelectLabel>历史版本</SelectLabel>
             {history.map((entry) => (

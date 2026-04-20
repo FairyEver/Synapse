@@ -32,6 +32,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     updateDisplayName: "synapse:user-profile:update-display-name",
   },
   log: {
+    clear: "synapse:log:clear",
     export: "synapse:log:export",
     write: "synapse:log:write",
   },
