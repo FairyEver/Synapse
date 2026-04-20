@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process"
 import { access } from "node:fs/promises"
+import { watch, type FSWatcher } from "node:fs"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseRepositoryLocalState } from "../../src/types/repository"
 import { createMainLogger } from "./log-store"
@@ -77,6 +78,72 @@ function runGitProbe(cwd: string, args: string[]): Promise<string | null> {
 }
 
 class RepositoryStore {
+  private watchers = new Map<string, FSWatcher>()
+  private disappearedListeners = new Set<(repositoryUuid: string) => void>()
+
+  onRepositoryDisappeared(listener: (repositoryUuid: string) => void): () => void {
+    this.disappearedListeners.add(listener)
+    return () => { this.disappearedListeners.delete(listener) }
+  }
+
+  watchRepository(repository: SynapseRepositoryConfig): void {
+    if (this.watchers.has(repository.uuid)) {
+      return
+    }
+
+    try {
+      const watcher = watch(repository.localPath, { persistent: false }, () => {
+        void this.checkDirectoryExists(repository)
+      })
+
+      watcher.on("error", () => {
+        // Directory likely deleted — verify and notify
+        void this.checkDirectoryExists(repository)
+      })
+
+      this.watchers.set(repository.uuid, watcher)
+      logger.debug("Started watching repository directory.", {
+        repositoryUuid: repository.uuid,
+        localPath: repository.localPath,
+      })
+    } catch {
+      // Directory may already be gone at watch time
+      void this.checkDirectoryExists(repository)
+    }
+  }
+
+  unwatchRepository(uuid: string): void {
+    const watcher = this.watchers.get(uuid)
+
+    if (watcher) {
+      watcher.close()
+      this.watchers.delete(uuid)
+    }
+  }
+
+  unwatchAll(): void {
+    for (const [uuid, watcher] of this.watchers) {
+      watcher.close()
+      this.watchers.delete(uuid)
+    }
+  }
+
+  private async checkDirectoryExists(repository: SynapseRepositoryConfig): Promise<void> {
+    const exists = await pathExists(repository.localPath)
+
+    if (!exists) {
+      logger.warn("Watched repository directory disappeared.", {
+        repositoryUuid: repository.uuid,
+        localPath: repository.localPath,
+      })
+      this.unwatchRepository(repository.uuid)
+
+      for (const listener of this.disappearedListeners) {
+        listener(repository.uuid)
+      }
+    }
+  }
+
   async getRepositoryState(repository: SynapseRepositoryConfig): Promise<SynapseRepositoryLocalState> {
     const localPath = repository.localPath
     logger.debug("Checking repository state.", {

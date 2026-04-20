@@ -13,6 +13,7 @@ export type SynapseProjectConfig = {
 export type SynapseFavorites = {
   rule: string[]
   skill: string[]
+  prompt: string[]
 }
 
 export type SynapseRepositoryConfig = {

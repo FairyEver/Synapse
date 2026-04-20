@@ -2,7 +2,7 @@ import { type ComponentType, useMemo, useState } from "react"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useActiveRepository, useContentList } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, useContentList, usePendingPushes } from "@/app-shell/use-repository-manager"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import type { SynapseContentMeta, SynapseContentType, SynapseCreateContentPayload } from "@/types/content"
@@ -47,6 +47,8 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const { currentRepoProfileState } = useCurrentRepoProfile()
     const { promise } = useAppNotifications()
     const { createContent } = useContentList<T>(config.contentType)
+    const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
+    const isSyncing = (pendingPushState?.count ?? 0) > 0
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
     const handleSubmit = (payload: SynapseCreateContentPayload<T>) => {
@@ -84,7 +86,9 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const submitDisabledReason =
       currentRepoProfileState?.status === "needs-onboarding"
         ? "请先完成当前目录的身份设置"
-        : null
+        : isSyncing
+          ? "正在同步变更，请稍后。"
+          : null
 
     return (
       <>

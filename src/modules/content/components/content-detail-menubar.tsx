@@ -10,6 +10,7 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar"
+import { getContentTypeDefinition } from "@/config/content-types"
 import { useContentDownloadActions } from "@/modules/content/hooks/use-content-download-actions"
 import type { SynapseContentMeta } from "@/types/content"
 
@@ -18,6 +19,7 @@ type ContentDetailMenubarProps = {
   canOpenInNewWindow: boolean
   isFavorite: boolean
   isRepositoryInitializing: boolean
+  isSyncing?: boolean
   item: SynapseContentMeta
   onDelete: () => void
   onEdit: () => void
@@ -30,6 +32,7 @@ function ContentDetailMenubar({
   canOpenInNewWindow,
   isFavorite,
   isRepositoryInitializing,
+  isSyncing = false,
   item,
   onDelete,
   onEdit,
@@ -38,9 +41,17 @@ function ContentDetailMenubar({
 }: ContentDetailMenubarProps) {
   const {
     allMenuSections,
+    canCopy,
+    canDownload,
+    downloadAction,
+    handleCopy,
     installDialog,
+    isBusy,
     loadInstallTargets,
   } = useContentDownloadActions({ item })
+
+  const definition = getContentTypeDefinition(item.type)
+  const primaryAction = definition.listPrimaryAction ?? "download"
 
   return (
     <>
@@ -56,7 +67,38 @@ function ContentDetailMenubar({
           编辑
         </Button>
 
-        {allMenuSections.length > 0 ? (
+        {primaryAction === "copy" ? (
+          <>
+            {canCopy ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-sm px-1.5"
+                disabled={isBusy}
+                onClick={() => {
+                  void handleCopy()
+                }}
+              >
+                复制
+              </Button>
+            ) : null}
+            {canDownload ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-sm px-1.5"
+                disabled={isBusy}
+                onClick={() => {
+                  downloadAction?.onSelect?.()
+                }}
+              >
+                下载
+              </Button>
+            ) : null}
+          </>
+        ) : allMenuSections.length > 0 ? (
           <MenubarMenu>
             <MenubarTrigger
               onFocus={() => {
@@ -95,7 +137,7 @@ function ContentDetailMenubar({
           variant="ghost"
           size="sm"
           className="rounded-sm px-1.5"
-          disabled={isRepositoryInitializing}
+          disabled={isRepositoryInitializing || isSyncing}
           onClick={onDelete}
         >
           删除
@@ -117,7 +159,7 @@ function ContentDetailMenubar({
           variant="ghost"
           size="sm"
           className="rounded-sm px-1.5"
-          disabled={isRepositoryInitializing}
+          disabled={isRepositoryInitializing || isSyncing}
           onClick={() => {
             void onToggleFavorite()
           }}

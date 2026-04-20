@@ -147,10 +147,12 @@ class UpdateService {
   private state: SynapseAppUpdateState = createBaseState()
   private downloadAbortController: AbortController | null = null
   private currentTempPath: string | null = null
+  private stallTimedOut = false
 
   private resetDownloadState(): void {
     this.downloadAbortController = null
     this.currentTempPath = null
+    this.stallTimedOut = false
   }
 
   private async cleanupTempFile(): Promise<void> {
@@ -350,6 +352,16 @@ class UpdateService {
       const totalBytes = this.resolveResponseTotalBytes(response, fileInfo)
       let transferredBytes = 0
       let lastProgressAt = 0
+      let lastDataReceivedAt = Date.now()
+
+      const STALL_TIMEOUT_MS = 30_000
+      const stallCheckInterval = setInterval(() => {
+        if (Date.now() - lastDataReceivedAt > STALL_TIMEOUT_MS) {
+          logger.warn("Download stalled, aborting.", { transferredBytes, totalBytes })
+          this.stallTimedOut = true
+          this.downloadAbortController?.abort()
+        }
+      }, 5_000)
 
       const progressStream = new Transform({
         transform: (chunk, _encoding, callback) => {
@@ -361,6 +373,7 @@ class UpdateService {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
 
           transferredBytes += buffer.length
+          lastDataReceivedAt = Date.now()
           hash.update(buffer)
 
           const now = Date.now()
@@ -374,11 +387,15 @@ class UpdateService {
         },
       })
 
-      await pipeline(
-        Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
-        progressStream,
-        createWriteStream(tempPath),
-      )
+      try {
+        await pipeline(
+          Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
+          progressStream,
+          createWriteStream(tempPath),
+        )
+      } finally {
+        clearInterval(stallCheckInterval)
+      }
 
       const actualSha512 = hash.digest("base64")
 
@@ -413,9 +430,15 @@ class UpdateService {
       })
     } catch (error) {
       await this.cleanupTempFile()
+
+      const wasStallTimeout = this.stallTimedOut
       this.resetDownloadState()
 
       if (error instanceof Error && error.message === "下载已取消") {
+        if (wasStallTimeout) {
+          throw new Error("下载超时，请检查网络连接后重试。")
+        }
+
         return
       }
 

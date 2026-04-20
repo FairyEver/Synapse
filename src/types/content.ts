@@ -1,4 +1,4 @@
-export type SynapseContentType = "rule" | "skill"
+export type SynapseContentType = "rule" | "skill" | "prompt"
 export type SynapseContentViewMode = "rendered" | "source"
 
 export type SynapseContentSchemaVersion = 1
@@ -69,6 +69,8 @@ export type SynapseRuleMeta = SynapseContentMeta<"rule">
 
 export type SynapseSkillMeta = SynapseContentMeta<"skill">
 
+export type SynapsePromptMeta = SynapseContentMeta<"prompt">
+
 type SynapseContentDetailBase = SynapseContentSummaryBase & {
   content: string
   attachments: SynapseContentAttachmentRecord[]
@@ -80,6 +82,8 @@ export type SynapseContentDetail<T extends SynapseContentType = SynapseContentTy
 export type SynapseRuleDetail = SynapseContentDetail<"rule">
 
 export type SynapseSkillDetail = SynapseContentDetail<"skill">
+
+export type SynapsePromptDetail = SynapseContentDetail<"prompt">
 
 export type SynapseContentHistoryEntry = {
   dirname: string
@@ -140,6 +144,8 @@ export type SynapseCreateRulePayload = SynapseCreateContentPayload<"rule">
 
 export type SynapseCreateSkillPayload = SynapseCreateContentPayload<"skill">
 
+export type SynapseCreatePromptPayload = SynapseCreateContentPayload<"prompt">
+
 type SynapseUpdateContentPayloadBase = SynapseCreateContentPayloadBase & {
   id: string
   baseHistoryDirname: string
@@ -157,6 +163,8 @@ export type SynapseUpdateContentPayload<T extends SynapseContentType = SynapseCo
 export type SynapseUpdateRulePayload = SynapseUpdateContentPayload<"rule">
 
 export type SynapseUpdateSkillPayload = SynapseUpdateContentPayload<"skill">
+
+export type SynapseUpdatePromptPayload = SynapseUpdateContentPayload<"prompt">
 
 export type SynapseCreateContentRequest<T extends SynapseContentType = SynapseContentType> =
   T extends SynapseContentType ? {

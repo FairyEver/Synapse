@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
-  deleteContent,
   openContentDetailWindow,
-  updateContent,
 } from "@/app-shell/content"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
+  usePendingPushes,
   useRepositoryManager,
   useRepositoryOperation,
 } from "@/app-shell/use-repository-manager"
@@ -132,6 +131,8 @@ function ContentDetailDialog<TPayload>({
   const { isFavorite, toggleFavorite } = useContentFavorites()
   const isItemFavorite = item ? isFavorite(contentType, item.id) : false
   const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
+  const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
+  const isSyncing = (pendingPushState?.count ?? 0) > 0
   const isRepositoryInitializing =
     activeRepositoryOperation?.isRunning
     && activeRepositoryOperation.operation === "initialize"
@@ -140,7 +141,9 @@ function ContentDetailDialog<TPayload>({
       ? "请先完成当前目录的身份设置"
       : isRepositoryInitializing
         ? "当前目录正在初始化，请稍后。"
-      : null
+        : isSyncing
+          ? "正在同步变更，请稍后。"
+          : null
 
   useEffect(() => {
     if (!open) {
@@ -185,7 +188,7 @@ function ContentDetailDialog<TPayload>({
           baseHistoryDirname: detail.latestHistoryDirname,
           force,
         }
-        const result = await updateContent(item.type, updatePayload)
+        const result = await manager.updateContent(contentType, updatePayload)
 
         if (result.status !== "saved") {
           return result
@@ -227,7 +230,7 @@ function ContentDetailDialog<TPayload>({
 
   const handleDelete = async (force = false) => {
     await promise(
-      () => deleteContent({
+      () => manager.deleteContent({
         id: deleteTarget.id,
         type: deleteTarget.type,
         baseHistoryDirname: deleteTarget.latestHistoryDirname,
@@ -310,7 +313,7 @@ function ContentDetailDialog<TPayload>({
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
-              disabled={isRepositoryInitializing}
+              disabled={isRepositoryInitializing || isSyncing}
               onClick={() => void handleDelete()}
             >
               删除
@@ -347,7 +350,7 @@ function ContentDetailDialog<TPayload>({
               查看对方修改了什么
             </AlertDialogCancel>
             <AlertDialogAction
-              disabled={isRepositoryInitializing}
+              disabled={isRepositoryInitializing || isSyncing}
               onClick={() => void handleConflictContinue()}
             >
               继续保存
@@ -379,10 +382,11 @@ function ContentDetailDialog<TPayload>({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <ContentDetailMenubar
-                    canEdit={Boolean(detail) && !isRepositoryInitializing}
+                    canEdit={Boolean(detail) && !isRepositoryInitializing && !isSyncing}
                     canOpenInNewWindow={Boolean(displayedVersion)}
                     isFavorite={isItemFavorite}
                     isRepositoryInitializing={Boolean(isRepositoryInitializing)}
+                    isSyncing={isSyncing}
                     item={resolvedItem}
                     onDelete={() => setIsDeleteConfirmOpen(true)}
                     onEdit={() => {

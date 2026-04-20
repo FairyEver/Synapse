@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react"
+import { type ReactNode, useDeferredValue, useEffect, useMemo, useState } from "react"
 import Fuse, { type IFuseOptions } from "fuse.js"
 import {
   Folders,
@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useActiveRepository, useRepositoryState } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, usePendingPushes, useRepositoryState } from "@/app-shell/use-repository-manager"
 import {
   ModuleSidebar,
   ModuleSidebarHeader,
@@ -35,6 +35,7 @@ import {
 import { resolveDisplayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
+import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
@@ -182,11 +183,13 @@ function ContentStateView({ description, icon: Icon, title }: ContentState) {
 
 function ContentListCard({
   contentType,
+  isPendingPush,
   item,
   onInstallDialogOpenChange,
   onOpen,
 }: {
   contentType: SynapseContentType
+  isPendingPush: boolean
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
   onOpen: () => void
@@ -202,14 +205,20 @@ function ContentListCard({
   return (
     <div
       data-window-no-drag="true"
-      className="flex items-start gap-3 rounded-lg bg-background px-3 py-3"
+      className="flex items-start gap-3 rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
     >
       <button
         type="button"
         className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={onOpen}
       >
-        <ContentItemIcon icon={item.icon} title={item.title} tone={item.iconBg} />
+        {isPendingPush ? (
+          <ContentIconBadge className="size-10 [&_svg]:size-5" size="md" title="正在同步...">
+            <LoaderCircle className="animate-spin" aria-hidden="true" />
+          </ContentIconBadge>
+        ) : (
+          <ContentItemIcon icon={item.icon} title={item.title} tone={item.iconBg} />
+        )}
         <ContentItemMeta
           author={authorLabel}
           category={categoryLabel}
@@ -252,6 +261,12 @@ function ContentBrowserPage({
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType)
   const { favoriteIds } = useContentFavorites(contentType)
+  const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
+  const isSyncing = (pendingPushState?.count ?? 0) > 0
+  const pendingTargetIds = useMemo(
+    () => new Set(pendingPushState?.items.map((entry) => entry.targetId) ?? []),
+    [pendingPushState?.items],
+  )
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
@@ -261,7 +276,9 @@ function ContentBrowserPage({
   const canCreateContent =
     canBrowseContent
     && currentRepoProfileState?.status !== "needs-onboarding"
+    && !isSyncing
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
+  const deferredSearchQuery = useDeferredValue(normalizedSearchQuery)
 
   useEffect(() => {
     onCreateDialogOpenChange?.(false)
@@ -324,20 +341,20 @@ function ContentBrowserPage({
 
   const filteredItems = useMemo(
     () => (
-      normalizedSearchQuery
-        ? contentSearch.search(normalizedSearchQuery).map((result) => result.item)
+      deferredSearchQuery
+        ? contentSearch.search(deferredSearchQuery).map((result) => result.item)
         : itemsInActiveCategory
     ),
-    [contentSearch, itemsInActiveCategory, normalizedSearchQuery],
+    [contentSearch, itemsInActiveCategory, deferredSearchQuery],
   )
 
   const summaryLabel = useMemo(() => {
-    if (activeCategoryId === SYNAPSE_ALL_CATEGORY_ID && !normalizedSearchQuery) {
+    if (activeCategoryId === SYNAPSE_ALL_CATEGORY_ID && !deferredSearchQuery) {
       return `共 ${totalCount} 项`
     }
 
     return `显示 ${filteredItems.length} / ${totalCount} 项`
-  }, [activeCategoryId, filteredItems.length, normalizedSearchQuery, totalCount])
+  }, [activeCategoryId, filteredItems.length, deferredSearchQuery, totalCount])
 
   const state = useMemo(
     () => getContentState({
@@ -348,7 +365,7 @@ function ContentBrowserPage({
       isLoading,
       items,
       itemsInActiveCategory,
-      normalizedSearchQuery,
+      normalizedSearchQuery: deferredSearchQuery,
       repositoryStatus,
       contentType,
     }),
@@ -360,7 +377,7 @@ function ContentBrowserPage({
       isLoading,
       items,
       itemsInActiveCategory,
-      normalizedSearchQuery,
+      deferredSearchQuery,
       repositoryStatus,
       contentType,
     ],
@@ -381,7 +398,9 @@ function ContentBrowserPage({
         ? "当前目录不存在，不能新建"
         : currentRepoProfileState?.status === "needs-onboarding"
           ? "先完成当前目录的身份设置"
-        : `新建 ${definition.singularLabel}`
+          : isSyncing
+            ? "正在同步变更，请稍后"
+          : `新建 ${definition.singularLabel}`
 
   return (
     <>
@@ -491,6 +510,7 @@ function ContentBrowserPage({
                   <ContentListCard
                     key={item.id}
                     contentType={contentType}
+                    isPendingPush={pendingTargetIds.has(item.id)}
                     item={item}
                     onInstallDialogOpenChange={onInstallDialogOpenChange}
                     onOpen={() => {

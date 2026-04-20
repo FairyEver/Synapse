@@ -3,10 +3,10 @@ import type { ContentTypeDefinition } from "./types"
 
 export const ruleContentTypeDefinition: ContentTypeDefinition = {
   id: "rule",
-  singularLabel: "Rule",
-  pluralLabel: "Rules",
+  singularLabel: "规则",
+  pluralLabel: "规则",
   tabLabel: "规则",
-  emptyStateNoun: "Rule",
+  emptyStateNoun: "规则",
   capabilities: {
     hasAttachments: false,
     canInstallToEditor: true,

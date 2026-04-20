@@ -1,5 +1,5 @@
-import { Download, LoaderCircle, Trash2 } from "lucide-react"
-import { useCallback, useState } from "react"
+import { ClipboardCopy, Download, LoaderCircle, Trash2 } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,7 +13,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import type { SynapseLogFileInfo } from "@/types/log"
+import { Badge } from "@/components/ui/badge"
 
 const LOG_ACTION_TIMEOUT_MS = 15000
 
@@ -36,12 +48,30 @@ function withTimeout<T>(promise: Promise<T>, timeoutMessage: string): Promise<T>
   })
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function LogExportPanel() {
   const { promise } = useAppNotifications()
-  const [activeAction, setActiveAction] = useState<"clear" | "export" | null>(null)
+  const [activeAction, setActiveAction] = useState<"clear" | "copy" | "export" | null>(null)
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false)
+  const [logFilePickerState, setLogFilePickerState] = useState<{
+    files: SynapseLogFileInfo[]
+    selected: Set<string>
+  } | null>(null)
+  const [totalLogSize, setTotalLogSize] = useState<number | null>(null)
+
+  useEffect(() => {
+    requireSynapseBridge().log.listFiles().then((files) => {
+      setTotalLogSize(files.reduce((sum, f) => sum + f.sizeBytes, 0))
+    }).catch(() => undefined)
+  }, [])
 
   const isExporting = activeAction === "export"
+  const isCopying = activeAction === "copy"
   const isClearing = activeAction === "clear"
   const isBusy = activeAction !== null
 
@@ -49,15 +79,73 @@ function LogExportPanel() {
     setActiveAction("export")
     try {
       await promise(
-        () =>
-          withTimeout(
+        async () => {
+          const result = await withTimeout(
             requireSynapseBridge().log.export(),
             "导出日志超时，请稍后重试。",
-          ),
+          )
+          window.synapse?.shell.showItemInFolder(result.filePath)
+          return result
+        },
         {
           loading: "正在导出日志...",
           success: (result) => `已导出 ${result.fileCount} 个日志文件到 ${result.filePath}`,
           error: (error) => error instanceof Error ? error.message : "导出日志失败",
+        },
+      )
+    } finally {
+      setActiveAction(null)
+    }
+  }, [promise])
+
+  const handleCopyToClipboard = useCallback(async () => {
+    setActiveAction("copy")
+    try {
+      const files = await withTimeout(
+        requireSynapseBridge().log.listFiles(),
+        "读取日志文件列表超时。",
+      )
+
+      if (files.length === 0) {
+        await promise(async () => {
+          await navigator.clipboard.writeText("")
+        }, {
+          loading: "正在复制日志...",
+          success: () => "当前没有日志文件",
+          error: (error) => error instanceof Error ? error.message : "复制日志失败",
+        })
+        return
+      }
+
+      if (files.length === 1) {
+        await promise(
+          async () => {
+            const content = await withTimeout(
+              requireSynapseBridge().log.readFiles([files[0].name]),
+              "读取日志超时，请稍后重试。",
+            )
+            await navigator.clipboard.writeText(content)
+            return content
+          },
+          {
+            loading: "正在复制日志...",
+            success: () => "已复制日志到剪切板",
+            error: (error) => error instanceof Error ? error.message : "复制日志失败",
+          },
+        )
+        return
+      }
+
+      setLogFilePickerState({
+        files,
+        selected: new Set([files[0].name]),
+      })
+    } catch (error) {
+      await promise(
+        () => Promise.reject(error),
+        {
+          loading: "正在复制日志...",
+          error: (e) => e instanceof Error ? e.message : "复制日志失败",
         },
       )
     } finally {
@@ -86,6 +174,35 @@ function LogExportPanel() {
     }
   }, [promise])
 
+  const handleCopySelectedFiles = useCallback(async () => {
+    if (!logFilePickerState) return
+
+    const selectedNames = Array.from(logFilePickerState.selected)
+    if (selectedNames.length === 0) return
+
+    setActiveAction("copy")
+    try {
+      await promise(
+        async () => {
+          const content = await withTimeout(
+            requireSynapseBridge().log.readFiles(selectedNames),
+            "读取日志超时，请稍后重试。",
+          )
+          await navigator.clipboard.writeText(content)
+          return content
+        },
+        {
+          loading: "正在复制日志...",
+          success: () => `已复制 ${selectedNames.length} 个日志文件到剪切板`,
+          error: (error) => error instanceof Error ? error.message : "复制日志失败",
+        },
+      )
+      setLogFilePickerState(null)
+    } finally {
+      setActiveAction(null)
+    }
+  }, [logFilePickerState, promise])
+
   return (
     <>
       <Card className="bg-background">
@@ -106,6 +223,23 @@ function LogExportPanel() {
               <Download data-icon="inline-start" />
             )}
             {isExporting ? "导出中..." : "导出全部日志"}
+            {!isExporting && totalLogSize !== null && (
+              <span className="text-muted-foreground">({formatFileSize(totalLogSize)})</span>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy}
+            onClick={handleCopyToClipboard}
+          >
+            {isCopying ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <ClipboardCopy data-icon="inline-start" />
+            )}
+            {isCopying ? "复制中..." : "复制到剪切板"}
           </Button>
 
           <Button
@@ -146,6 +280,74 @@ function LogExportPanel() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={logFilePickerState !== null}
+        onOpenChange={(open) => {
+          if (!open) setLogFilePickerState(null)
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>选择要复制的日志文件</DialogTitle>
+            <DialogDescription>
+              共 {logFilePickerState?.files.length ?? 0} 个日志文件，已选中 {logFilePickerState?.selected.size ?? 0} 个。
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-64">
+            <div className="flex flex-col gap-1">
+              {logFilePickerState?.files.map((file, index) => {
+                const isChecked = logFilePickerState.selected.has(file.name)
+                return (
+                  <label
+                    key={file.name}
+                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent"
+                  >
+                    <Checkbox
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        setLogFilePickerState((prev) => {
+                          if (!prev) return prev
+                          const next = new Set(prev.selected)
+                          if (checked) {
+                            next.add(file.name)
+                          } else {
+                            next.delete(file.name)
+                          }
+                          return { ...prev, selected: next }
+                        })
+                      }}
+                    />
+                    <span className="flex-1 truncate text-sm">{file.name}</span>
+                    {index === 0 && (
+                      <Badge variant="secondary" className="shrink-0">最新</Badge>
+                    )}
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatFileSize(file.sizeBytes)}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLogFilePickerState(null)}>
+              取消
+            </Button>
+            <Button
+              disabled={isCopying || !logFilePickerState?.selected.size}
+              onClick={() => void handleCopySelectedFiles()}
+            >
+              {isCopying ? (
+                <LoaderCircle className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <ClipboardCopy data-icon="inline-start" />
+              )}
+              {isCopying ? "复制中..." : `复制选中的 ${logFilePickerState?.selected.size ?? 0} 个文件`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

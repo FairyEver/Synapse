@@ -40,6 +40,22 @@ function registerLogHandlers() {
     return result
   })
 
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.log.readAll, async () => {
+    logger.info("Reading all log files for clipboard copy.")
+    return logStore.readAllLogs()
+  })
+
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.log.listFiles, async () => {
+    return logStore.listLogFilesInfo()
+  })
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.log.readFiles,
+    async (_event, fileNames: string[]) => {
+      return logStore.readLogsByNames(fileNames)
+    },
+  )
+
   handlersRegistered = true
 }
 

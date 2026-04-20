@@ -6,6 +6,7 @@ import {
   mkdir,
   mkdtemp,
   readdir,
+  readFile,
   rm,
   stat,
   unlink,
@@ -17,6 +18,7 @@ import type {
   SynapseLogClearResult,
   SynapseLogEntry,
   SynapseLogExportResult,
+  SynapseLogFileInfo,
   SynapseLogLevel,
   SynapseLogSource,
 } from "../../src/types/log"
@@ -516,6 +518,61 @@ class LogService {
         fileCount: logFiles.length,
         filePath: exportFilePath,
       }
+    })
+  }
+
+  async readAllLogs(): Promise<string> {
+    return this.enqueue(async () => {
+      await this.flushBuffer()
+
+      const logFiles = await this.listLogFiles()
+      const parts: string[] = []
+
+      for (const logFile of logFiles) {
+        const content = await readFile(logFile.path, "utf-8")
+        parts.push(content)
+      }
+
+      return parts.join("\n")
+    })
+  }
+
+  async listLogFilesInfo(): Promise<SynapseLogFileInfo[]> {
+    return this.enqueue(async () => {
+      await this.flushBuffer()
+
+      const logFiles = await this.listLogFiles({ newestFirst: true })
+      const result: SynapseLogFileInfo[] = []
+
+      for (const logFile of logFiles) {
+        const fileStats = await stat(logFile.path).catch(() => null)
+        result.push({
+          name: logFile.name,
+          sizeBytes: fileStats?.size ?? 0,
+        })
+      }
+
+      return result
+    })
+  }
+
+  async readLogsByNames(fileNames: string[]): Promise<string> {
+    return this.enqueue(async () => {
+      await this.flushBuffer()
+
+      const allowedNames = new Set(fileNames)
+      const logFiles = await this.listLogFiles()
+      const parts: string[] = []
+
+      for (const logFile of logFiles) {
+        if (!allowedNames.has(logFile.name)) {
+          continue
+        }
+        const content = await readFile(logFile.path, "utf-8")
+        parts.push(content)
+      }
+
+      return parts.join("\n")
     })
   }
 

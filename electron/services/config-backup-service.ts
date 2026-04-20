@@ -277,6 +277,7 @@ function validateConfig(
       favorites: {
         rule: [],
         skill: [],
+        prompt: [],
       } satisfies SynapseFavorites,
     },
   }

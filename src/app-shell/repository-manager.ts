@@ -81,7 +81,7 @@ class RepositoryManager {
     await this.refreshPendingPushesForRepositories(this.getRepositories().map((repository) => repository.uuid))
 
     // 初始化内容订阅者 Map
-    for (const contentType of ["rule", "skill"] as SynapseContentType[]) {
+    for (const contentType of ["rule", "skill", "prompt"] as SynapseContentType[]) {
       this.contentSubscribers.set(contentType, new Set())
       this.contentLoading.set(contentType, false)
       this.contentErrors.set(contentType, null)
@@ -624,6 +624,7 @@ class RepositoryManager {
     await Promise.all([
       this.refreshContentList("rule"),
       this.refreshContentList("skill"),
+      this.refreshContentList("prompt"),
     ])
   }
 
@@ -876,7 +877,7 @@ class RepositoryManager {
   }
 
   private resetContentForRepositoryChange(): void {
-    for (const contentType of ["rule", "skill"] as SynapseContentType[]) {
+    for (const contentType of ["rule", "skill", "prompt"] as SynapseContentType[]) {
       this.contentCache.set(contentType, [])
       this.contentLoading.set(contentType, false)
       this.contentErrors.set(contentType, null)

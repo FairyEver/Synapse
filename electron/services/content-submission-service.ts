@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import type {
@@ -94,19 +95,56 @@ async function ensureBotIdentity(gitRootPath: string): Promise<void> {
   )
 }
 
+async function isRebaseInProgress(localPath: string): Promise<boolean> {
+  const gitDir = path.join(localPath, ".git")
+
+  try {
+    await access(path.join(gitDir, "rebase-merge"))
+    return true
+  } catch {
+    // not in rebase-merge
+  }
+
+  try {
+    await access(path.join(gitDir, "rebase-apply"))
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function abortRebaseIfNeeded(localPath: string): Promise<void> {
+  if (!(await isRebaseInProgress(localPath))) {
+    return
+  }
+
+  logger.warn("Rebase in progress detected. Aborting rebase to recover repository state.", { localPath })
+  await runRepositoryGitCommand(
+    localPath,
+    ["rebase", "--abort"],
+    "无法中止 rebase，请手动检查仓库状态。",
+  )
+}
+
 async function pullWithRebase(
   repository: SynapseRepositoryConfig,
   onProgress?: PushProgressListener,
 ): Promise<void> {
   onProgress?.("正在拉取最新内容...")
-  await runRepositoryGitCommand(
-    repository.localPath,
-    ["pull", "--rebase"],
-    "同步仓库失败，请检查网络或仓库状态后重试。",
-    (line) => {
-      onProgress?.(line)
-    },
-  )
+
+  try {
+    await runRepositoryGitCommand(
+      repository.localPath,
+      ["pull", "--rebase"],
+      "同步仓库失败，请检查网络或仓库状态后重试。",
+      (line) => {
+        onProgress?.(line)
+      },
+    )
+  } catch (error) {
+    await abortRebaseIfNeeded(repository.localPath)
+    throw error
+  }
 }
 
 async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
@@ -408,10 +446,24 @@ class ContentSubmissionService {
       }
     }
 
+    // Optimistic enqueue: record pending push before attempting push so that
+    // if the process is killed between commit and push completion, the record
+    // survives and can be retried on next launch.
+    const optimisticState = await pendingPushesService.enqueue(repository, {
+      action,
+      commitHash,
+      targetId: writeResult.id,
+      title: writeResult.title,
+    })
+    const optimisticIds = optimisticState.items
+      .filter((item) => item.commitHash === commitHash && item.targetId === writeResult.id)
+      .map((item) => item.id)
+
     let pushed = true
 
     try {
       await pushRepository(repository)
+      await pendingPushesService.clear(repository, optimisticIds)
     } catch (error) {
       const message = error instanceof Error ? error.message : "推送到仓库失败。"
 
@@ -419,14 +471,9 @@ class ContentSubmissionService {
         try {
           await pullWithRebase(repository)
           await pushRepository(repository)
+          await pendingPushesService.clear(repository, optimisticIds)
         } catch (retryError) {
           pushed = false
-          await pendingPushesService.enqueue(repository, {
-            action,
-            commitHash,
-            targetId: writeResult.id,
-            title: writeResult.title,
-          })
           logger.warn("Deferred push after non-fast-forward retry failed.", {
             action,
             error: retryError,
@@ -436,12 +483,6 @@ class ContentSubmissionService {
         }
       } else {
         pushed = false
-        await pendingPushesService.enqueue(repository, {
-          action,
-          commitHash,
-          targetId: writeResult.id,
-          title: writeResult.title,
-        })
         logger.warn("Deferred push after push failure.", {
           action,
           error,

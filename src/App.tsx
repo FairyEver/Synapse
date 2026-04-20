@@ -33,6 +33,7 @@ import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentDetailWindowPage } from "@/modules/content/components/content-detail-window-page"
 import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
+import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
 import type { SynapseContentType } from "@/types/content"
 import type { SynapsePendingPushEntry } from "@/types/repository"
@@ -62,6 +63,7 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
 }>> = {
   rule: RulesModule,
   skill: SkillsModule,
+  prompt: PromptsModule,
 }
 
 function MainApp() {

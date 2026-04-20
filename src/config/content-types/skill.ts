@@ -3,10 +3,10 @@ import type { ContentTypeDefinition } from "./types"
 
 export const skillContentTypeDefinition: ContentTypeDefinition = {
   id: "skill",
-  singularLabel: "Skill",
-  pluralLabel: "Skills",
+  singularLabel: "技能",
+  pluralLabel: "技能",
   tabLabel: "技能",
-  emptyStateNoun: "Skill",
+  emptyStateNoun: "技能",
   capabilities: {
     hasAttachments: true,
     canInstallToEditor: true,

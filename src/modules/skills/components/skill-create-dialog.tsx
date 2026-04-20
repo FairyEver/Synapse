@@ -278,9 +278,16 @@ function SkillCreateDialog({
     }
 
     const { files, rejectedMessages } = mergeCreateSkillFiles(form.files, incomingFiles)
+    const acceptedCount = files.length - form.files.length
 
     updateFiles(files)
-    setAttachmentMessage(rejectedMessages.length > 0 ? rejectedMessages.join(" ") : null)
+
+    if (rejectedMessages.length > 0) {
+      const prefix = acceptedCount > 0 ? `已添加 ${acceptedCount} 个文件。` : ""
+      setAttachmentMessage(`${prefix}${rejectedMessages.join(" ")}`)
+    } else {
+      setAttachmentMessage(null)
+    }
   }
 
   const handleDialogOpenChange = (nextOpen: boolean) => {

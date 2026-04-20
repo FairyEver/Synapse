@@ -1,6 +1,7 @@
-import { Fragment, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import {
   ChevronDown,
+  Copy,
   Download,
   LoaderCircle,
 } from "lucide-react"
@@ -15,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { getContentTypeDefinition } from "@/config/content-types"
 import { useContentDownloadActions } from "@/modules/content/hooks/use-content-download-actions"
 import type { SynapseContentMeta } from "@/types/content"
 
@@ -30,22 +32,52 @@ function ContentActionSplitButton({
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const {
     auxiliaryMenuSections,
+    canCopy,
     canDownload,
     downloadAction,
+    handleCopy,
     installDialog,
     isBusy,
+    isCopying,
     isDownloading,
     loadInstallTargets,
   } = useContentDownloadActions({
     item,
     onInstallDialogOpenChange,
   })
-  const hasDropdown = auxiliaryMenuSections.length > 0
+
+  const definition = getContentTypeDefinition(item.type)
+  const primaryAction = definition.listPrimaryAction ?? "download"
+
+  const dropdownSections = useMemo(() => {
+    if (primaryAction === "copy") {
+      return downloadAction ? [{ key: "download", items: [downloadAction] }] : []
+    }
+    return auxiliaryMenuSections
+  }, [primaryAction, downloadAction, auxiliaryMenuSections])
+
+  const hasDropdown = dropdownSections.length > 0
 
   return (
     <>
       <ButtonGroup>
-        {canDownload ? (
+        {primaryAction === "copy" && canCopy ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy}
+            onClick={() => {
+              void handleCopy()
+            }}
+          >
+            {isCopying ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Copy data-icon="inline-start" />
+            )}
+            复制
+          </Button>
+        ) : canDownload ? (
           <Button
             variant="outline"
             size="sm"
@@ -87,7 +119,7 @@ function ContentActionSplitButton({
             </DropdownMenuTrigger>
 
             <DropdownMenuContent align="end" className="w-max">
-              {auxiliaryMenuSections.map((section, index) => (
+              {dropdownSections.map((section, index) => (
                 <Fragment key={section.key}>
                   {section.label ? <DropdownMenuLabel>{section.label}</DropdownMenuLabel> : null}
                   <DropdownMenuGroup>
@@ -101,7 +133,7 @@ function ContentActionSplitButton({
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuGroup>
-                  {index < auxiliaryMenuSections.length - 1 ? <DropdownMenuSeparator /> : null}
+                  {index < dropdownSections.length - 1 ? <DropdownMenuSeparator /> : null}
                 </Fragment>
               ))}
             </DropdownMenuContent>

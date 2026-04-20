@@ -47,22 +47,22 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
   const manager = useRepositoryManager()
   const repositories = useRepositoryList()
   const activeRepository = useActiveRepository()
-  const { clearActiveRepository, switchActiveRepository: switchRepository } = useRepositoryActions()
+  const { clearActiveRepository, switchActiveRepository: switchRepository, syncRepository } = useRepositoryActions()
   const [switchingRepositoryUuid, setSwitchingRepositoryUuid] = useState<string | null>(null)
   const [isRepositorySwitchDialogOpen, setIsRepositorySwitchDialogOpen] = useState(false)
   const [pendingSwitchOnboarding, setPendingSwitchOnboarding] =
     useState<PendingSwitchOnboarding | null>(null)
-  const [isValidatingOnStartup, setIsValidatingOnStartup] = useState(false)
+  const isValidatingOnStartupRef = useRef(false)
   const pendingResolverRef = useRef<((didSwitch: boolean) => void) | null>(null)
 
   const activeRepoState = useRepositoryState(activeRepository?.uuid ?? "")
 
   useEffect(() => {
-    if (!activeRepository || isValidatingOnStartup || activeRepoState?.status !== "ready") {
+    if (!activeRepository || isValidatingOnStartupRef.current || activeRepoState?.status !== "ready") {
       return
     }
 
-    setIsValidatingOnStartup(true)
+    isValidatingOnStartupRef.current = true
 
     void (async () => {
       try {
@@ -79,11 +79,9 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
           error,
           repositoryUuid: activeRepository.uuid,
         })
-      } finally {
-        setIsValidatingOnStartup(false)
       }
     })()
-  }, [activeRepoState?.status, activeRepository, clearActiveRepository, manager, isValidatingOnStartup])
+  }, [activeRepoState?.status, activeRepository, clearActiveRepository, manager])
 
   const runActiveRepositorySwitch = useCallback(
     async (repositoryUuid: string) => {
@@ -95,8 +93,21 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
           error: (error) => error instanceof Error ? error.message : "切换仓库失败。",
         },
       )
+
+      // Attempt background sync — don't block the switch
+      void syncRepository(repositoryUuid).catch((syncError) => {
+        logger.warn("Post-switch sync failed.", { repositoryUuid, error: syncError })
+        void promise(
+          () => Promise.reject(syncError),
+          {
+            loading: "",
+            success: () => null,
+            error: () => "仓库同步失败，显示的内容可能不是最新版本。",
+          },
+        ).catch(() => { /* notification handled */ })
+      })
     },
-    [promise, switchRepository],
+    [promise, switchRepository, syncRepository],
   )
 
   const openRepositorySwitchDialog = useCallback(() => {

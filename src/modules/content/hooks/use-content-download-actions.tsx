@@ -64,7 +64,7 @@ function useContentDownloadActions({
   }, [isInstallDialogOpen])
 
   const loadInstallTargets = useCallback(() => {
-    if (!canInstall || adapters || isLoadingAdapters) {
+    if (!canInstall || isLoadingAdapters) {
       return
     }
 
@@ -81,7 +81,7 @@ function useContentDownloadActions({
       .finally(() => {
         setIsLoadingAdapters(false)
       })
-  }, [adapters, canInstall, isLoadingAdapters])
+  }, [canInstall, isLoadingAdapters])
 
   const handleDownload = useCallback(async () => {
     if (isBusy || !canDownload) {
@@ -101,6 +101,10 @@ function useContentDownloadActions({
             contentType: item.type,
             filePath: result.filePath,
           })
+
+          if (!result.canceled && result.filePath) {
+            window.synapse?.shell.showItemInFolder(result.filePath)
+          }
 
           return result
         },
@@ -242,8 +246,10 @@ function useContentDownloadActions({
   return {
     allMenuSections,
     auxiliaryMenuSections,
+    canCopy,
     canDownload,
     downloadAction,
+    handleCopy,
     installDialog: canInstall ? (
       <ContentInstallDialog
         editor={selectedEditor}
@@ -254,6 +260,7 @@ function useContentDownloadActions({
       />
     ) : null,
     isBusy,
+    isCopying,
     isDownloading,
     loadInstallTargets,
   }

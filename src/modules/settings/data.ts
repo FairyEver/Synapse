@@ -28,16 +28,16 @@ const settingsCategories: SettingsCategory[] = [
     description: "本地目录。",
   },
   {
-    id: "content",
-    icon: FileText,
-    label: "内容",
-    description: "内容目录与整理。",
-  },
-  {
     id: "projects",
     icon: FolderKanban,
     label: "项目",
     description: "项目路径。",
+  },
+  {
+    id: "content",
+    icon: FileText,
+    label: "内容",
+    description: "内容目录与整理。",
   },
   {
     id: "about",

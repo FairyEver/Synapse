@@ -1,4 +1,5 @@
 import type { SynapseContentType } from "../../types/content"
+import { promptContentTypeDefinition } from "./prompt"
 import { ruleContentTypeDefinition } from "./rule"
 import { skillContentTypeDefinition } from "./skill"
 import type { ContentTypeDefinition } from "./types"
@@ -6,6 +7,7 @@ import type { ContentTypeDefinition } from "./types"
 export const CONTENT_TYPE_REGISTRY = {
   rule: ruleContentTypeDefinition,
   skill: skillContentTypeDefinition,
+  prompt: promptContentTypeDefinition,
 } as const satisfies Record<SynapseContentType, ContentTypeDefinition>
 
 export const CONTENT_TYPE_DEFINITIONS: readonly ContentTypeDefinition[] =

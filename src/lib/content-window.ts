@@ -9,7 +9,7 @@ const CONTENT_WINDOW_KIND = "content-detail"
 const CONTENT_WINDOW_KIND_PARAM = "synapseWindow"
 
 function isContentType(value: string | null): value is SynapseContentType {
-  return value === "rule" || value === "skill"
+  return value === "rule" || value === "skill" || value === "prompt"
 }
 
 function normalizeViewMode(value: string | null): SynapseContentViewMode {

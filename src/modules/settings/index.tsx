@@ -27,6 +27,8 @@ import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 
 const logger = createRendererLogger("settings")
 
+let sessionAdminMode = false
+
 function SettingsModule() {
   const { config, error, isReady, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
@@ -34,7 +36,12 @@ function SettingsModule() {
   const { replaceRepositories } = useRepositoryActions()
   const { promise } = useAppNotifications()
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general")
-  const [isAdminMode, setIsAdminMode] = useState(false)
+  const [isAdminMode, setIsAdminModeState] = useState(sessionAdminMode)
+
+  const setIsAdminMode = useCallback((enabled: boolean) => {
+    sessionAdminMode = enabled
+    setIsAdminModeState(enabled)
+  }, [])
   const context = useMemo(
     () => ({
       config,

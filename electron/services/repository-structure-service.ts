@@ -4,6 +4,7 @@ import { access, mkdir, mkdtemp, readdir, rename, rm, stat, writeFile } from "no
 import { constants as fsConstants } from "node:fs"
 import path from "node:path"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "../../src/constants/defaults"
+import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -369,18 +370,34 @@ function getRepositorySkeletonDirectories(repository: SynapseRepositoryConfig): 
   return [
     repository.contentDirs.rule ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rule,
     repository.contentDirs.skill ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skill,
+    repository.contentDirs.prompt ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.prompt,
     "users",
     "attachments-pool",
   ]
 }
 
 class RepositoryStructureService {
+  async ensureContentDirectories(localPath: string): Promise<void> {
+    const coreMarkers = ["users", "attachments-pool"]
+    const hasCoreStructure = (await Promise.all(
+      coreMarkers.map((dir) => pathExists(path.join(localPath, dir))),
+    )).some(Boolean)
+
+    if (!hasCoreStructure) {
+      return
+    }
+
+    for (const definition of CONTENT_TYPE_DEFINITIONS) {
+      await mkdir(path.join(localPath, definition.repositoryDir.defaultDirectoryName), { recursive: true })
+    }
+  }
+
   async validateDirectoryStructure(localPath: string): Promise<{
     isValid: boolean
     missingDirectories: string[]
     message: string
   }> {
-    const requiredDirs = ["rules", "skills", "users", "attachments-pool"]
+    const requiredDirs = ["rules", "skills", "prompts", "users", "attachments-pool"]
     const missingDirectories: string[] = []
 
     for (const dir of requiredDirs) {

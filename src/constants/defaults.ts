@@ -27,6 +27,7 @@ export const DEFAULT_THEME_MODE: SynapseThemeMode = "light"
 export const DEFAULT_FAVORITES = {
   rule: [],
   skill: [],
+  prompt: [],
 } as const satisfies SynapseFavorites
 
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {

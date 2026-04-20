@@ -151,6 +151,10 @@ function hasFavoritesFormatError(value: unknown): boolean {
     return true
   }
 
+  if (hasOwnKey(value, "prompt") && !Array.isArray(value.prompt)) {
+    return true
+  }
+
   return false
 }
 
@@ -303,10 +307,12 @@ function normalizeFavorites(value: unknown): SynapseFavorites {
 
   const ruleIds = Array.isArray(value.rule) ? value.rule.filter((id): id is string => typeof id === "string") : []
   const skillIds = Array.isArray(value.skill) ? value.skill.filter((id): id is string => typeof id === "string") : []
+  const promptIds = Array.isArray(value.prompt) ? value.prompt.filter((id): id is string => typeof id === "string") : []
 
   return {
     rule: ruleIds,
     skill: skillIds,
+    prompt: promptIds,
   }
 }
 

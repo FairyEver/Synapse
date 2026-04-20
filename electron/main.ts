@@ -1,11 +1,13 @@
 import { app, BrowserWindow, dialog } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
+import { SYNAPSE_IPC_CHANNELS } from "./ipc/channels"
 import { registerContentHandlers } from "./ipc/content-handlers"
 import { registerConfigHandlers } from "./ipc/config-handlers"
 import { registerIdentityHandlers } from "./ipc/identity-handlers"
 import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
+import { registerShellHandlers } from "./ipc/shell-handlers"
 import { registerUpdateHandlers } from "./ipc/update-handlers"
 import { registerUserProfileHandlers } from "./ipc/user-profile-handlers"
 import { getWindowIconPath, initializeAppIcon } from "./services/app-icon-service"
@@ -14,6 +16,7 @@ import { contentSubmissionService } from "./services/content-submission-service"
 import { createMainLogger, logStore } from "./services/log-store"
 import { pendingPushesService } from "./services/pending-pushes-service"
 import { repositoryMaintenanceService } from "./services/repository-maintenance-service"
+import { repositoryStore } from "./services/repository-store"
 import { updateService } from "./services/update-service"
 
 let mainWindow: BrowserWindow | null = null
@@ -104,6 +107,7 @@ if (!gotSingleInstanceLock) {
     registerLogHandlers()
     registerConfigHandlers()
     registerIdentityHandlers()
+    registerShellHandlers()
     registerUserProfileHandlers()
     registerRepositoryHandlers()
     registerUpdateHandlers()
@@ -117,6 +121,8 @@ if (!gotSingleInstanceLock) {
       const config = await configStore.load()
 
       for (const repository of config.repositories) {
+        repositoryStore.watchRepository(repository)
+
         try {
           await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
         } catch (error) {
@@ -127,6 +133,12 @@ if (!gotSingleInstanceLock) {
         }
       }
     })()
+
+    repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(SYNAPSE_IPC_CHANNELS.repository.updated, repositoryUuid)
+      }
+    })
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

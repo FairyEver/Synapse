@@ -138,6 +138,7 @@ function registerRepositoryHandlers() {
     SYNAPSE_IPC_CHANNELS.repository.validateDirectory,
     async (_event, targetPath: string): Promise<SynapseRepositoryValidationResult> => {
       logger.info("Validating directory structure.", { targetPath })
+      await repositoryStructureService.ensureContentDirectories(targetPath)
       return repositoryStructureService.validateDirectoryStructure(targetPath)
     },
   )

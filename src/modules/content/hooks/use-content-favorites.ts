@@ -5,7 +5,7 @@ import type { SynapseContentType } from "@/types/content"
 export function useContentFavorites(contentType?: SynapseContentType) {
   const { config, updateConfig } = useAppConfig()
 
-  const favorites = config?.global.favorites ?? { rule: [], skill: [] }
+  const favorites = config?.global.favorites ?? { rule: [], skill: [], prompt: [] }
 
   const favoriteIds = useMemo(() => {
     if (!contentType) return []

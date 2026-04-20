@@ -34,6 +34,7 @@ import type {
 import type {
   SynapseLogClearResult,
   SynapseLogExportResult,
+  SynapseLogFileInfo,
   SynapseRendererLogPayload,
 } from "./log"
 import type {
@@ -111,7 +112,13 @@ export type SynapseBridge = {
   log: {
     clear: () => Promise<SynapseLogClearResult>
     export: () => Promise<SynapseLogExportResult>
+    listFiles: () => Promise<SynapseLogFileInfo[]>
+    readAll: () => Promise<string>
+    readFiles: (fileNames: string[]) => Promise<string>
     write: (payload: SynapseRendererLogPayload) => void
+  }
+  shell: {
+    showItemInFolder: (filePath: string) => void
   }
   repository: {
     checkInitializationPreview: (

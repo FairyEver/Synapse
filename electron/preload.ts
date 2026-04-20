@@ -39,6 +39,9 @@ const SYNAPSE_PRELOAD_CHANNELS = {
   log: {
     clear: "synapse:log:clear",
     export: "synapse:log:export",
+    listFiles: "synapse:log:list-files",
+    readAll: "synapse:log:read-all",
+    readFiles: "synapse:log:read-files",
     write: "synapse:log:write",
   },
   repository: {
@@ -55,6 +58,9 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     progress: "synapse:repository:progress",
     updated: "synapse:repository:updated",
     validateDirectory: "synapse:repository:validate-directory",
+  },
+  shell: {
+    showItemInFolder: "synapse:shell:show-item-in-folder",
   },
   update: {
     cancelDownload: "synapse:update:cancel-download",
@@ -130,7 +136,13 @@ const synapseBridge: SynapseBridge = {
   log: {
     clear: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.clear),
     export: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.export),
+    listFiles: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.listFiles),
+    readAll: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.readAll),
+    readFiles: (fileNames: string[]) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.readFiles, fileNames),
     write: (payload) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.log.write, payload),
+  },
+  shell: {
+    showItemInFolder: (filePath: string) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.shell.showItemInFolder, filePath),
   },
   repository: {
     checkInitializationPreview: (repositoryUuid) =>

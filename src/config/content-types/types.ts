@@ -33,6 +33,7 @@ export type ContentTypeDefinition = {
   capabilities: ContentTypeCapabilities
   download: ContentDownloadSpec
   install: ContentInstallSpec
+  listPrimaryAction?: "download" | "copy"
   repositoryDir: ContentRepositoryDirMapping
   categories: readonly SynapseCategoryDefinition[]
   requiresFilesInPayload: boolean

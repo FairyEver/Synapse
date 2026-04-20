@@ -27,3 +27,8 @@ export type SynapseLogExportResult = {
 export type SynapseLogClearResult = {
   fileCount: number
 }
+
+export type SynapseLogFileInfo = {
+  name: string
+  sizeBytes: number
+}
