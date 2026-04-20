@@ -4,6 +4,16 @@ import { cn } from "@/lib/utils"
 import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import type { SynapseContentIconType, SynapseContentType } from "@/types/content"
 
+const iconImageCache = new Map<string, string>()
+
+function buildCacheKey(contentType: string, contentId: string): string {
+  return `${contentType}:${contentId}`
+}
+
+function invalidateIconImageCache(contentType: string, contentId: string): void {
+  iconImageCache.delete(buildCacheKey(contentType, contentId))
+}
+
 type ContentItemIconProps = {
   className?: string
   contentId?: string
@@ -33,12 +43,20 @@ function ContentItemIcon({
       return
     }
 
+    const key = buildCacheKey(contentType, contentId)
+    const cached = iconImageCache.get(key)
+    if (cached) {
+      setImageDataUrl(cached)
+      return
+    }
+
     let canceled = false
 
     window.synapse?.content
       .readIconImage({ contentType, id: contentId })
       .then((dataUrl) => {
         if (!canceled && dataUrl) {
+          iconImageCache.set(key, dataUrl)
           setImageDataUrl(dataUrl)
         }
       })
@@ -77,4 +95,4 @@ function ContentItemIcon({
   )
 }
 
-export { ContentItemIcon }
+export { ContentItemIcon, invalidateIconImageCache }

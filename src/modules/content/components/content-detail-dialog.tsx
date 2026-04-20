@@ -34,7 +34,10 @@ import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
 import { ContentDetailMenubar } from "@/modules/content/components/content-detail-menubar"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
-import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
+import {
+  ContentItemIcon,
+  invalidateIconImageCache,
+} from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
 import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
@@ -195,6 +198,7 @@ function ContentDetailDialog<TPayload>({
           return result
         }
 
+        invalidateIconImageCache(contentType, detail.id)
         onContentChanged?.()
 
         if (result.pendingPushCount > 0 && activeRepository) {

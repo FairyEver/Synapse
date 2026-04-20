@@ -99,7 +99,7 @@ function ContentAppearanceFields({
                   <img
                     src={iconImagePreview}
                     alt="图标预览"
-                    className="size-16 rounded-lg object-cover"
+                    className="size-20 rounded-lg object-cover"
                   />
                   <div className="flex gap-2">
                     <ImageCropDialog onCropped={onIconImageChange}>
@@ -108,7 +108,7 @@ function ContentAppearanceFields({
                       </Button>
                     </ImageCropDialog>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       type="button"
                       onClick={onIconImageRemove}

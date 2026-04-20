@@ -78,37 +78,20 @@ function PromptCreateDialog({
 
   const {
     iconImagePreview,
-    iconImageBytes,
-    handleIconImageChange: baseHandleIconImageChange,
-    handleIconImageRemove: baseHandleIconImageRemove,
+    handleIconImageChange,
+    handleIconImageRemove,
+    prepareFormForSubmit,
   } = useContentIconImage({
     contentType: "prompt",
     contentId: editingId,
     iconType: form.iconType,
     iconImage: form.iconImage,
+    setErrors,
+    updateField,
   })
 
-  const handleIconImageChange = (blob: Blob) => {
-    baseHandleIconImageChange(blob)
-    setErrors((prev) => {
-      if (!prev.iconImage) return prev
-      const { iconImage: _, ...rest } = prev
-      return rest
-    })
-  }
-
-  const handleIconImageRemove = () => {
-    baseHandleIconImageRemove()
-    updateField("iconImage", "")
-  }
-
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    const finalForm = { ...form }
-    if (iconImageBytes) {
-      finalForm.iconImageBytes = iconImageBytes as unknown as SynapseCreatePromptPayload["iconImageBytes"]
-      finalForm.iconImage = "icon.png"
-    }
-    handleSubmit(event, finalForm)
+    handleSubmit(event, prepareFormForSubmit(form))
   }
 
   return (
