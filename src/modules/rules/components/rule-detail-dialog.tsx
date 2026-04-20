@@ -2,10 +2,10 @@ import {
   ContentDetailDialog,
   type ContentDetailDialogLabels,
 } from "@/modules/content/components/content-detail-dialog"
+import { buildBaseContentInitialValue } from "@/modules/content/lib/content-payload"
 import { RuleCreateDialog } from "@/modules/rules/components/rule-create-dialog"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
-import type { CreateRulePayload } from "@/modules/rules/types"
-import type { SynapseContentDetail, SynapseRuleMeta } from "@/types/content"
+import type { SynapseCreateRulePayload, SynapseRuleMeta } from "@/types/content"
 import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
 
 type RuleDetailDialogProps = {
@@ -39,7 +39,7 @@ function RuleDetailDialog({
   refreshSignal = 0,
 }: RuleDetailDialogProps) {
   return (
-    <ContentDetailDialog<CreateRulePayload>
+    <ContentDetailDialog<SynapseCreateRulePayload>
       contentType="rule"
       item={item}
       labels={RULE_LABELS}
@@ -56,14 +56,7 @@ function RuleDetailDialog({
           version={version as unknown as SynapseLoadedContentVersion<"rule">}
         />
       )}
-      buildInitialValue={(detail: SynapseContentDetail): CreateRulePayload => ({
-        title: detail.title,
-        description: detail.description,
-        category: detail.category,
-        icon: detail.icon,
-        iconBg: detail.iconBg,
-        content: detail.content,
-      })}
+      buildInitialValue={buildBaseContentInitialValue}
     />
   )
 }

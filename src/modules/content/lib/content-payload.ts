@@ -1,6 +1,6 @@
 import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 
-interface ContentPayload {
+type ContentPayload = {
   title: string
   description: string
   category: string
@@ -9,7 +9,7 @@ interface ContentPayload {
   content: string
 }
 
-interface ContentFieldErrors {
+type ContentFieldErrors = {
   title?: string
   description?: string
   category?: string
@@ -18,7 +18,7 @@ interface ContentFieldErrors {
   content?: string
 }
 
-interface ContentPayloadConfig {
+type ContentPayloadConfig = {
   labels: {
     title: string
     description: string
@@ -99,7 +99,19 @@ function isContentPayloadDirty<T extends ContentPayload>(
   )
 }
 
+function buildBaseContentInitialValue(detail: ContentPayload): ContentPayload {
+  return {
+    title: detail.title,
+    description: detail.description,
+    category: detail.category,
+    icon: detail.icon,
+    iconBg: detail.iconBg,
+    content: detail.content,
+  }
+}
+
 export {
+  buildBaseContentInitialValue,
   createEmptyContentPayload,
   isContentPayloadDirty,
   normalizeContentPayload,

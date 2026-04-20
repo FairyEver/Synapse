@@ -1,6 +1,6 @@
-import { InlineNotice } from "@/components/inline-notice"
-import { MarkdownViewer, type MarkdownViewerSurface } from "@/components/markdown-viewer"
+import { ContentVersionView } from "@/modules/content/components/content-version-view"
 import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
+import type { MarkdownViewerSurface } from "@/components/markdown-viewer"
 import type { SynapseContentViewMode } from "@/types/content"
 
 type PromptVersionViewProps = {
@@ -11,13 +11,12 @@ type PromptVersionViewProps = {
 
 function PromptVersionView({ mode, surface, version }: PromptVersionViewProps) {
   return (
-    <div className="flex flex-col gap-4">
-      {version.deleted ? (
-        <InlineNotice message="该提示词已被删除。" tone="destructive" />
-      ) : null}
-
-      <MarkdownViewer content={version.content} mode={mode} showTabs={false} surface={surface} />
-    </div>
+    <ContentVersionView
+      deletedMessage="该提示词已被删除。"
+      mode={mode}
+      surface={surface}
+      version={version}
+    />
   )
 }
 
