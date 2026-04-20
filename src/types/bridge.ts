@@ -89,6 +89,9 @@ export type SynapseBridge = {
     peekCursorFrontmatter: (
       payload: SynapsePeekCursorFrontmatterPayload,
     ) => Promise<SynapsePeekCursorFrontmatterResult>
+    readIconImage: (
+      args: { contentType: SynapseContentType; id: string },
+    ) => Promise<string | null>
     resolveEditorInstallTarget: (
       payload: SynapseResolveEditorTargetPayload,
     ) => Promise<SynapseEditorResolvedTarget>

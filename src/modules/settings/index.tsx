@@ -175,6 +175,11 @@ function SettingsModule() {
             {activeRepository.name}
           </p>
         ) : null}
+        {activeCategory === "admin" && activeRepository ? (
+          <p className="text-sm text-muted-foreground">
+            {activeRepository.name}
+          </p>
+        ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         {!isReady ? (
@@ -187,6 +192,18 @@ function SettingsModule() {
         ) : null}
 
         {isReady && activeCategory === "content" && activeRepository === null ? (
+          <div className="flex min-h-60 flex-col items-center justify-center gap-4">
+            <p className="text-sm text-muted-foreground">请先添加本地目录</p>
+            <Button
+              variant="outline"
+              onClick={() => setActiveCategory("repositories")}
+            >
+              前往添加目录
+            </Button>
+          </div>
+        ) : null}
+
+        {isReady && activeCategory === "admin" && activeRepository === null ? (
           <div className="flex min-h-60 flex-col items-center justify-center gap-4">
             <p className="text-sm text-muted-foreground">请先添加本地目录</p>
             <Button
@@ -216,7 +233,7 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <LogExportPanel /> : null}
 
-        {isReady && activeCategory === "content" && activeRepository ? (
+        {isReady && activeCategory === "admin" && activeRepository ? (
           <RepositoryMaintenancePanel repositoryUuid={activeRepository.uuid} />
         ) : null}
 

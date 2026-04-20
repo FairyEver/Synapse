@@ -286,6 +286,13 @@ function registerContentHandlers() {
   )
 
   handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.readIconImage,
+    async (_event, args: { contentType: SynapseContentType; id: string }) => {
+      return contentService.readIconImage(args.contentType, args.id)
+    },
+  )
+
+  handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.content.openDetailWindow,
     async (_event, payload: SynapseOpenContentWindowPayload) => {
       await contentWindowService.openDetailWindow(payload)

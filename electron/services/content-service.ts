@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
@@ -10,7 +11,7 @@ import type {
   SynapseContentType,
   SynapseTextContentFile,
 } from "../../src/types/content"
-import { contentHistoryService } from "./content-history-service"
+import { contentHistoryService, resolveContentDirectoryPath } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { configStore } from "./config-store"
 
@@ -168,6 +169,27 @@ class ContentService {
     historyDirname: string,
   ): Promise<SynapseContentHistoryVersion> {
     return this.getHistoryVersion("skill", skillId, historyDirname)
+  }
+
+  async readIconImage(
+    contentType: SynapseContentType,
+    contentId: string,
+  ): Promise<string | null> {
+    const context = await getActiveRepositoryContext()
+
+    if (!context) {
+      return null
+    }
+
+    const contentDir = resolveContentDirectoryPath(context.repository, contentType, contentId)
+    const iconPath = path.join(contentDir, "icon.png")
+
+    try {
+      const buffer = await readFile(iconPath)
+      return `data:image/png;base64,${buffer.toString("base64")}`
+    } catch {
+      return null
+    }
   }
 }
 

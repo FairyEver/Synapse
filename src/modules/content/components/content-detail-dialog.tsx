@@ -70,6 +70,7 @@ type ContentDetailDialogProps<TPayload> = {
   open: boolean
   refreshSignal?: number
   renderCreateDialog: (props: {
+    editingId: string | null
     initialValue: TPayload
     mode: "edit"
     open: boolean
@@ -367,7 +368,11 @@ function ContentDetailDialog<TPayload>({
 
             <div className="flex min-w-0 items-start gap-3 pr-8">
               <ContentItemIcon
+                contentId={item.id}
+                contentType={item.type}
                 icon={resolvedItem.icon}
+                iconType={resolvedItem.iconType}
+                iconImage={resolvedItem.iconImage}
                 title={resolvedItem.title}
                 tone={resolvedItem.iconBg}
               />
@@ -426,6 +431,7 @@ function ContentDetailDialog<TPayload>({
       </Dialog>
 
       {detail ? renderCreateDialog({
+        editingId: item?.id ?? null,
         initialValue: buildInitialValue(detail),
         mode: "edit",
         open: isEditOpen,

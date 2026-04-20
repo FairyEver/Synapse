@@ -633,7 +633,7 @@ class RepositoryMaintenanceService {
       }
     }
 
-    for (const contentType of ["rule", "skill"] as const) {
+    for (const contentType of ["rule", "skill", "prompt"] as const) {
       const contentIds = await this.listContentIds(
         repository,
         contentType,
@@ -641,7 +641,9 @@ class RepositoryMaintenanceService {
       )
 
       for (const contentId of contentIds) {
-        onProgress?.(`正在整理 ${contentType === "rule" ? "Rule" : "Skill"} ${contentId.slice(0, 8)}...`)
+        const typeLabel = contentType === "rule" ? "Rule" : contentType === "skill" ? "Skill" : "Prompt"
+
+        onProgress?.(`正在整理 ${typeLabel} ${contentId.slice(0, 8)}...`)
         const historyVersions = await this.readHistoryVersions(repository, contentType, contentId)
 
         if (historyVersions.length === 0) {
@@ -838,7 +840,7 @@ class RepositoryMaintenanceService {
   ): Promise<Set<string>> {
     const referencedShaSet = new Set<string>()
 
-    for (const contentType of ["rule", "skill"] as const) {
+    for (const contentType of ["rule", "skill", "prompt"] as const) {
       const contentIds = await this.listContentIds(repository, contentType, null)
 
       for (const contentId of contentIds) {

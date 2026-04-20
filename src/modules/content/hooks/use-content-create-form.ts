@@ -20,7 +20,7 @@ type ContentCreateFormReturn<T> = {
   errors: Partial<Record<string, string>>
   form: T
   handleDialogOpenChange: (nextOpen: boolean) => void
-  handleSubmit: (event: React.FormEvent<HTMLFormElement>) => void
+  handleSubmit: (event: React.FormEvent<HTMLFormElement>, payloadOverride?: T) => void
   isDiscardConfirmOpen: boolean
   isSubmitting: boolean
   setErrors: Dispatch<SetStateAction<Partial<Record<string, string>>>>
@@ -60,7 +60,9 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     setForm(nextForm)
     setSubmitError(null)
 
-    if (Object.keys(errors).length > 0) {
+    if (field === "iconType") {
+      setErrors({})
+    } else if (Object.keys(errors).length > 0) {
       setErrors(validate(nextForm))
     }
   }
@@ -83,10 +85,11 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     onOpenChange(false)
   }
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>, payloadOverride?: T) => {
     event.preventDefault()
 
-    const nextErrors = validate(form)
+    const target = payloadOverride ?? form
+    const nextErrors = validate(target)
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
@@ -97,7 +100,7 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     setSubmitError(null)
 
     try {
-      await onSubmit(normalize(form))
+      await onSubmit(normalize(target))
       onOpenChange(false)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : errorFallbackMessage)

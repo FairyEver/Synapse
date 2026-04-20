@@ -1,3 +1,4 @@
+import type { SynapseContentIconType } from "@/types/content"
 import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 
 type ContentPayload = {
@@ -6,6 +7,8 @@ type ContentPayload = {
   category: string
   icon: string
   iconBg: string
+  iconType: SynapseContentIconType
+  iconImage: string
   content: string
 }
 
@@ -15,6 +18,7 @@ type ContentFieldErrors = {
   category?: string
   icon?: string
   iconBg?: string
+  iconImage?: string
   content?: string
 }
 
@@ -35,6 +39,8 @@ function createEmptyContentPayload<T extends ContentPayload>(
     category: "",
     icon: "",
     iconBg: DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
+    iconType: "icon",
+    iconImage: "",
     content: "",
     ...defaults,
   } as T
@@ -44,6 +50,7 @@ function normalizeContentPayload<T extends ContentPayload>(payload: T): T {
   return {
     ...payload,
     iconBg: payload.iconBg || DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
+    iconType: payload.iconType || "icon",
     title: payload.title.trim(),
     description: payload.description.trim(),
     content: payload.content.trim(),
@@ -69,12 +76,18 @@ function validateContentPayload<T extends ContentPayload>(
     errors.category = "请选择分类。"
   }
 
-  if (!normalizedPayload.icon) {
-    errors.icon = "请选择图标。"
-  }
+  if (normalizedPayload.iconType === "image") {
+    if (!normalizedPayload.iconImage) {
+      errors.iconImage = "请上传图片。"
+    }
+  } else {
+    if (!normalizedPayload.icon) {
+      errors.icon = "请选择图标。"
+    }
 
-  if (!normalizedPayload.iconBg) {
-    errors.iconBg = "请选择背景色。"
+    if (!normalizedPayload.iconBg) {
+      errors.iconBg = "请选择背景色。"
+    }
   }
 
   if (!normalizedPayload.content) {
@@ -94,18 +107,21 @@ function isContentPayloadDirty<T extends ContentPayload>(
     || payload.category !== ""
     || payload.icon !== ""
     || payload.iconBg !== DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE
+    || payload.iconImage !== ""
     || payload.content !== ""
     || extraChecks(payload)
   )
 }
 
-function buildBaseContentInitialValue(detail: ContentPayload): ContentPayload {
+function buildBaseContentInitialValue(detail: Partial<Pick<ContentPayload, "iconType" | "iconImage">> & Omit<ContentPayload, "iconType" | "iconImage">): ContentPayload {
   return {
     title: detail.title,
     description: detail.description,
     category: detail.category,
     icon: detail.icon,
     iconBg: detail.iconBg,
+    iconType: detail.iconType || "icon",
+    iconImage: detail.iconImage || "",
     content: detail.content,
   }
 }

@@ -64,6 +64,8 @@ function SkillDetailDialog({
         category: detail.category,
         icon: detail.icon,
         iconBg: detail.iconBg,
+        iconType: detail.iconType || "icon",
+        iconImage: detail.iconImage || "",
         content: detail.content,
         files: detail.attachments.map((attachment) => ({
           originalName: attachment.originalName,

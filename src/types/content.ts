@@ -12,6 +12,8 @@ export type SynapseContentMetaRecord = {
   createdAt: string
 }
 
+export type SynapseContentIconType = "icon" | "image"
+
 export type SynapseContentSnapshotRecord = {
   schemaVersion: SynapseContentSchemaVersion
   title: string
@@ -25,6 +27,8 @@ export type SynapseContentSnapshotRecord = {
   category: string
   icon: string
   iconBg: string
+  iconType?: SynapseContentIconType
+  iconImage?: string
   modifiedBy: string
   modifiedByDisplayName: string
   modifiedAt: string
@@ -51,6 +55,8 @@ type SynapseContentSummaryBase = {
   category: string
   icon: string
   iconBg: string
+  iconType?: SynapseContentIconType
+  iconImage?: string
   createdBy: string
   createdByDisplayName: string
   createdAt: string
@@ -122,6 +128,9 @@ type SynapseCreateContentPayloadBase = {
   category: string
   icon: string
   iconBg: string
+  iconType: SynapseContentIconType
+  iconImage: string
+  iconImageBytes?: Uint8Array
   content: string
 }
 

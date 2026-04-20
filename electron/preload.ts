@@ -18,6 +18,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
     peekCursorFrontmatter: "synapse:content:peek-cursor-frontmatter",
+    readIconImage: "synapse:content:read-icon-image",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },
   config: {
@@ -107,6 +108,8 @@ const synapseBridge: SynapseBridge = {
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.installToEditor, payload),
     peekCursorFrontmatter: (payload) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.peekCursorFrontmatter, payload),
+    readIconImage: (args) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.readIconImage, args),
     resolveEditorInstallTarget: (payload) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.resolveEditorInstallTarget, payload),
   },

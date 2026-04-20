@@ -35,6 +35,7 @@ import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
 const SNAPSHOT_FILE_NAME = "snapshot.json"
+const ICON_IMAGE_FILE_NAME = "icon.png"
 const logger = createMainLogger("service.content-write")
 
 type SynapseContentAuthor = {
@@ -69,17 +70,27 @@ function isNonEmptyString(value: string): boolean {
 }
 
 function assertRequiredCreateFields(payload: ContentCreatePayload | ContentUpdatePayload): void {
-  const requiredFields = [
+  const baseFields = [
     payload.title,
     payload.description,
     payload.category,
-    payload.icon,
-    payload.iconBg,
     payload.content,
   ]
 
-  if (requiredFields.some((value) => !isNonEmptyString(value))) {
-    throw new Error("创建内容缺少必要字段，请先补全表单。")
+  if (payload.iconType === "image") {
+    if (baseFields.some((value) => !isNonEmptyString(value))) {
+      throw new Error("创建内容缺少必要字段，请先补全表单。")
+    }
+  } else {
+    const requiredFields = [
+      ...baseFields,
+      payload.icon,
+      payload.iconBg,
+    ]
+
+    if (requiredFields.some((value) => !isNonEmptyString(value))) {
+      throw new Error("创建内容缺少必要字段，请先补全表单。")
+    }
   }
 }
 
@@ -123,6 +134,8 @@ function createSnapshotRecord(
     category: payload.category.trim(),
     icon: payload.icon.trim(),
     iconBg: payload.iconBg.trim(),
+    iconType: payload.iconType || "icon",
+    ...(payload.iconImage ? { iconImage: payload.iconImage.trim() } : {}),
     modifiedBy: identity.userId,
     modifiedByDisplayName: identity.displayName,
     modifiedAt,
@@ -142,6 +155,16 @@ function createAttachmentsRecord(
 async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true })
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
+}
+
+async function writeIconImageFile(
+  contentDirectoryPath: string,
+  imageBytes: Uint8Array,
+): Promise<string> {
+  const filePath = path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME)
+  await mkdir(contentDirectoryPath, { recursive: true })
+  await writeFile(filePath, imageBytes)
+  return filePath
 }
 
 async function createTemporaryDirectory(parentPath: string, prefix: string): Promise<string> {
@@ -449,6 +472,13 @@ class ContentWriteService {
       throw error
     }
 
+    const extraGitPaths: string[] = []
+
+    if (payload.iconImageBytes) {
+      const iconPath = await writeIconImageFile(targetDirectoryPath, payload.iconImageBytes)
+      extraGitPaths.push(iconPath)
+    }
+
     logger.info("Created new content snapshot.", {
       contentId,
       contentType,
@@ -457,7 +487,7 @@ class ContentWriteService {
     })
 
     return {
-      gitPaths: [targetDirectoryPath, ...attachmentsResult.createdPaths],
+      gitPaths: [targetDirectoryPath, ...attachmentsResult.createdPaths, ...extraGitPaths],
       id: contentId,
       latestHistoryDirname: historyDirname,
       modifiedAt: createdAt,
@@ -504,8 +534,15 @@ class ContentWriteService {
       repositoryUuid: context.repository.uuid,
     })
 
+    const extraGitPaths: string[] = []
+
+    if (payload.iconImageBytes) {
+      const iconPath = await writeIconImageFile(contentDirectoryPath, payload.iconImageBytes)
+      extraGitPaths.push(iconPath)
+    }
+
     return {
-      gitPaths: [historyPath, ...attachmentsResult.createdPaths],
+      gitPaths: [historyPath, ...attachmentsResult.createdPaths, ...extraGitPaths],
       id: contentId,
       latestHistoryDirname: historyDirname,
       modifiedAt,

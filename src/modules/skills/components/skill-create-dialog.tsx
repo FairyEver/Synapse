@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import { ContentAppearanceFields } from "@/modules/content/components/content-appearance-fields"
 import { ContentCreateDialog } from "@/modules/content/components/content-create-dialog"
 import { useContentCreateForm } from "@/modules/content/hooks/use-content-create-form"
+import { useContentIconImage } from "@/modules/content/hooks/use-content-icon-image"
 import type {
   CreateSkillPayload,
   SkillCreateFilePayloadDraft,
@@ -39,6 +40,8 @@ import {
   validateCreateSkillPayload,
 } from "@/modules/skills/utils"
 
+import type { SynapseContentIconType } from "@/types/content"
+
 type SkillCreateDialogProps = {
   initialValue?: CreateSkillPayload | null
   mode?: "create" | "edit"
@@ -47,6 +50,7 @@ type SkillCreateDialogProps = {
   open: boolean
   submitDisabled?: boolean
   submitDisabledReason?: string | null
+  editingId?: string | null
 }
 
 type DataTransferItemWithEntry = DataTransferItem & {
@@ -171,6 +175,7 @@ function SkillCreateDialog({
   open,
   submitDisabled = false,
   submitDisabledReason = null,
+  editingId = null,
 }: SkillCreateDialogProps) {
   const logger = useMemo(() => createRendererLogger("skills.create"), [])
   const categoryOptions = useMemo(() => getCategoryDefinitions("skill"), [])
@@ -192,6 +197,18 @@ function SkillCreateDialog({
     updateField,
   } = useContentCreateForm(SKILL_FORM_CONFIG, { initialValue, onOpenChange, onSubmit, open })
 
+  const {
+    iconImagePreview,
+    iconImageBytes,
+    handleIconImageChange: baseHandleIconImageChange,
+    handleIconImageRemove: baseHandleIconImageRemove,
+  } = useContentIconImage({
+    contentType: "skill",
+    contentId: editingId,
+    iconType: form.iconType,
+    iconImage: form.iconImage,
+  })
+
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null)
   const [isDraggingFiles, setIsDraggingFiles] = useState(false)
   const [isCollectingFiles, setIsCollectingFiles] = useState(false)
@@ -204,6 +221,29 @@ function SkillCreateDialog({
       dragDepthRef.current = 0
     }
     baseHandleDialogOpenChange(nextOpen)
+  }
+
+  const handleIconImageChange = (blob: Blob) => {
+    baseHandleIconImageChange(blob)
+    setErrors((prev) => {
+      if (!prev.iconImage) return prev
+      const { iconImage: _, ...rest } = prev
+      return rest
+    })
+  }
+
+  const handleIconImageRemove = () => {
+    baseHandleIconImageRemove()
+    updateField("iconImage", "")
+  }
+
+  const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    const finalForm = { ...form }
+    if (iconImageBytes) {
+      finalForm.iconImageBytes = iconImageBytes as unknown as CreateSkillPayload["iconImageBytes"]
+      finalForm.iconImage = "icon.png"
+    }
+    handleSubmit(event, finalForm)
   }
 
   const totalAttachmentSize = useMemo(
@@ -281,7 +321,7 @@ function SkillCreateDialog({
       mode={mode}
       onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
       onDialogOpenChange={handleDialogOpenChange}
-      onSubmit={handleSubmit}
+      onSubmit={handleFormSubmit}
       open={open}
       submitDisabled={submitDisabled}
       submitDisabledReason={submitDisabledReason}
@@ -536,8 +576,14 @@ function SkillCreateDialog({
           backgroundError={errors.iconBg}
           iconValue={form.icon}
           iconError={errors.icon}
+          iconTypeValue={form.iconType}
+          iconImagePreview={iconImagePreview}
+          iconImageError={errors.iconImage}
           onBackgroundValueChange={(value) => updateField("iconBg", value)}
           onIconValueChange={(value) => updateField("icon", value)}
+          onIconTypeChange={(value) => updateField("iconType", value as SynapseContentIconType)}
+          onIconImageChange={handleIconImageChange}
+          onIconImageRemove={handleIconImageRemove}
         />
       </div>
     </ContentCreateDialog>

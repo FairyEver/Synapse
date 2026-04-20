@@ -217,7 +217,15 @@ function ContentListCard({
             <LoaderCircle className="animate-spin" aria-hidden="true" />
           </ContentIconBadge>
         ) : (
-          <ContentItemIcon icon={item.icon} title={item.title} tone={item.iconBg} />
+          <ContentItemIcon
+            contentId={item.id}
+            contentType={contentType}
+            icon={item.icon}
+            iconType={item.iconType}
+            iconImage={item.iconImage}
+            title={item.title}
+            tone={item.iconBg}
+          />
         )}
         <ContentItemMeta
           author={authorLabel}

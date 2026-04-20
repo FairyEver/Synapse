@@ -35,6 +35,8 @@ function toDatabaseRow(
     description: summary.description,
     icon: summary.icon,
     iconBg: summary.iconBg,
+    iconType: summary.iconType ?? "icon",
+    iconImage: summary.iconImage ?? null,
     id: summary.id,
     latestHistoryDirname: summary.latestHistoryDirname,
     modifiedAt: summary.modifiedAt,
@@ -83,6 +85,8 @@ function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | nul
     category: row.category,
     icon: row.icon,
     iconBg: row.icon_bg,
+    iconType: typeof row.icon_type === "string" ? row.icon_type : "icon",
+    iconImage: typeof row.icon_image === "string" ? row.icon_image : undefined,
     createdBy: row.created_by,
     createdByDisplayName: typeof row.created_by_name === "string" ? row.created_by_name : "",
     createdAt: row.created_at,
@@ -239,9 +243,10 @@ class ContentIndexService {
       const upsertStatement = database.prepare(`
         INSERT INTO content_index (
           id, type, title, name, description, category, icon, icon_bg,
+          icon_type, icon_image,
           modified_by, modified_by_name, modified_at, created_by, created_by_name,
           created_at, deleted, latest_history_dirname, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type = excluded.type,
           title = excluded.title,
@@ -250,6 +255,8 @@ class ContentIndexService {
           category = excluded.category,
           icon = excluded.icon,
           icon_bg = excluded.icon_bg,
+          icon_type = excluded.icon_type,
+          icon_image = excluded.icon_image,
           modified_by = excluded.modified_by,
           modified_by_name = excluded.modified_by_name,
           modified_at = excluded.modified_at,
@@ -273,6 +280,8 @@ class ContentIndexService {
           row.category,
           row.icon,
           row.iconBg,
+          row.iconType,
+          row.iconImage,
           row.modifiedBy,
           row.modifiedByDisplayName,
           row.modifiedAt,
@@ -361,9 +370,10 @@ class ContentIndexService {
       const upsertStatement = database.prepare(`
         INSERT INTO content_index (
           id, type, title, name, description, category, icon, icon_bg,
+          icon_type, icon_image,
           modified_by, modified_by_name, modified_at, created_by, created_by_name,
           created_at, deleted, latest_history_dirname, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type = excluded.type,
           title = excluded.title,
@@ -372,6 +382,8 @@ class ContentIndexService {
           category = excluded.category,
           icon = excluded.icon,
           icon_bg = excluded.icon_bg,
+          icon_type = excluded.icon_type,
+          icon_image = excluded.icon_image,
           modified_by = excluded.modified_by,
           modified_by_name = excluded.modified_by_name,
           modified_at = excluded.modified_at,
@@ -410,6 +422,8 @@ class ContentIndexService {
           row.category,
           row.icon,
           row.iconBg,
+          row.iconType,
+          row.iconImage,
           row.modifiedBy,
           row.modifiedByDisplayName,
           row.modifiedAt,

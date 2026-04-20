@@ -77,6 +77,21 @@ function ensureRepositoryCacheSchema(
     }
   }
 
+  // Migrate older DBs that predate icon image support.
+  for (const stmt of [
+    `ALTER TABLE content_index ADD COLUMN icon_type TEXT DEFAULT 'icon'`,
+    `ALTER TABLE content_index ADD COLUMN icon_image TEXT`,
+  ]) {
+    try {
+      database.exec(stmt)
+    } catch (error) {
+      const message = (error as Error).message ?? ""
+      if (!message.includes("duplicate column")) {
+        throw error
+      }
+    }
+  }
+
   if (options.includePendingPushes) {
     database.exec(`
       CREATE TABLE IF NOT EXISTS pending_pushes (

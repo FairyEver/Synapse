@@ -25,7 +25,8 @@ import {
 import { ContentAppearanceFields } from "@/modules/content/components/content-appearance-fields"
 import { ContentCreateDialog } from "@/modules/content/components/content-create-dialog"
 import { useContentCreateForm } from "@/modules/content/hooks/use-content-create-form"
-import type { SynapseCreatePromptPayload } from "@/types/content"
+import { useContentIconImage } from "@/modules/content/hooks/use-content-icon-image"
+import type { SynapseContentIconType, SynapseCreatePromptPayload } from "@/types/content"
 
 type PromptCreateDialogProps = {
   initialValue?: SynapseCreatePromptPayload | null
@@ -35,6 +36,7 @@ type PromptCreateDialogProps = {
   open: boolean
   submitDisabled?: boolean
   submitDisabledReason?: string | null
+  editingId?: string | null
 }
 
 const PROMPT_LABELS = {
@@ -58,6 +60,7 @@ function PromptCreateDialog({
   open,
   submitDisabled = false,
   submitDisabledReason = null,
+  editingId = null,
 }: PromptCreateDialogProps) {
   const categoryOptions = useMemo(() => getCategoryDefinitions("prompt"), [])
   const {
@@ -67,10 +70,46 @@ function PromptCreateDialog({
     handleSubmit,
     isDiscardConfirmOpen,
     isSubmitting,
+    setErrors,
     setIsDiscardConfirmOpen,
     submitError,
     updateField,
   } = useContentCreateForm(PROMPT_FORM_CONFIG, { initialValue, onOpenChange, onSubmit, open })
+
+  const {
+    iconImagePreview,
+    iconImageBytes,
+    handleIconImageChange: baseHandleIconImageChange,
+    handleIconImageRemove: baseHandleIconImageRemove,
+  } = useContentIconImage({
+    contentType: "prompt",
+    contentId: editingId,
+    iconType: form.iconType,
+    iconImage: form.iconImage,
+  })
+
+  const handleIconImageChange = (blob: Blob) => {
+    baseHandleIconImageChange(blob)
+    setErrors((prev) => {
+      if (!prev.iconImage) return prev
+      const { iconImage: _, ...rest } = prev
+      return rest
+    })
+  }
+
+  const handleIconImageRemove = () => {
+    baseHandleIconImageRemove()
+    updateField("iconImage", "")
+  }
+
+  const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    const finalForm = { ...form }
+    if (iconImageBytes) {
+      finalForm.iconImageBytes = iconImageBytes as unknown as SynapseCreatePromptPayload["iconImageBytes"]
+      finalForm.iconImage = "icon.png"
+    }
+    handleSubmit(event, finalForm)
+  }
 
   return (
     <ContentCreateDialog
@@ -83,7 +122,7 @@ function PromptCreateDialog({
       mode={mode}
       onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
       onDialogOpenChange={handleDialogOpenChange}
-      onSubmit={handleSubmit}
+      onSubmit={handleFormSubmit}
       open={open}
       submitDisabled={submitDisabled}
       submitDisabledReason={submitDisabledReason}
@@ -166,8 +205,14 @@ function PromptCreateDialog({
           backgroundError={errors.iconBg}
           iconValue={form.icon}
           iconError={errors.icon}
+          iconTypeValue={form.iconType}
+          iconImagePreview={iconImagePreview}
+          iconImageError={errors.iconImage}
           onBackgroundValueChange={(value) => updateField("iconBg", value)}
           onIconValueChange={(value) => updateField("icon", value)}
+          onIconTypeChange={(value) => updateField("iconType", value as SynapseContentIconType)}
+          onIconImageChange={handleIconImageChange}
+          onIconImageRemove={handleIconImageRemove}
         />
       </FieldGroup>
     </ContentCreateDialog>

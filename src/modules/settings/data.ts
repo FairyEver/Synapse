@@ -37,7 +37,7 @@ const settingsCategories: SettingsCategory[] = [
     id: "content",
     icon: FileText,
     label: "内容",
-    description: "内容目录与整理。",
+    description: "内容目录。",
   },
   {
     id: "about",
@@ -49,7 +49,7 @@ const settingsCategories: SettingsCategory[] = [
     id: "admin",
     icon: Shield,
     label: "管理员",
-    description: "高级设置。",
+    description: "仓库维护与高级设置。",
   },
 ]
 
