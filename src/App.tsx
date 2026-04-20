@@ -10,7 +10,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { publishActiveAppTab, subscribeOpenSettingsTab } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useRepositoryManager, usePendingPushes, useRepositoryState } from "@/app-shell/use-repository-manager"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,7 @@ import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { SettingsModule } from "@/modules/settings"
 import type { SynapseContentType } from "@/types/content"
+import type { SynapsePendingPushEntry } from "@/types/repository"
 
 type AppTabId = SynapseContentType | "settings"
 type DialogKind = "create" | "detail" | "install"
@@ -63,7 +64,7 @@ function MainApp() {
     openRepositorySwitchDialog,
   } = useActiveRepositorySwitch()
   const { promise } = useAppNotifications()
-  const { flushPendingPushes, pendingPushes, syncRepository, refreshRepositoryStates, states } = useRepositoryManager()
+  const manager = useRepositoryManager()
   const [activeTab, setActiveTab] = useState<AppTabId>("rule")
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
@@ -72,8 +73,11 @@ function MainApp() {
 
   // 检查是否需要显示空状态页面
   const hasNoRepositories = config.repositories.length === 0
-  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] : null
+  const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const isActiveRepositoryMissing = activeRepositoryState?.status === "missing"
+
+  // 获取待推送状态
+  const activePendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
 
   const tabs = useMemo(
     () => [
@@ -130,12 +134,12 @@ function MainApp() {
 
     // 每 5 秒检测一次仓库状态
     const intervalId = window.setInterval(() => {
-      void refreshRepositoryStates()
+      void manager.refreshRepositoryStates()
     }, 5000)
 
     // 当用户重新聚焦窗口时也检测一次
     const handleFocus = () => {
-      void refreshRepositoryStates()
+      void manager.refreshRepositoryStates()
     }
 
     window.addEventListener("focus", handleFocus)
@@ -144,7 +148,7 @@ function MainApp() {
       window.clearInterval(intervalId)
       window.removeEventListener("focus", handleFocus)
     }
-  }, [hasNoRepositories, isActiveRepositoryMissing, hasContentDialogOpen, refreshRepositoryStates])
+  }, [hasNoRepositories, isActiveRepositoryMissing, hasContentDialogOpen, manager])
 
   useEffect(() => {
     logger.info("App mounted.", {
@@ -162,7 +166,6 @@ function MainApp() {
     })
   }, [])
 
-  const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] : null
   const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
   const toolbarState = useAppShellToolbarState({
     hasBlockingModalOpen,
@@ -190,7 +193,7 @@ function MainApp() {
 
           {activePendingPushState && activePendingPushState.items.length > 0 ? (
             <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-              {activePendingPushState.items.map((entry) => (
+              {activePendingPushState.items.map((entry: SynapsePendingPushEntry) => (
                 <p key={entry.id}>
                   · {entry.action} {entry.title ?? entry.targetId}
                 </p>
@@ -207,7 +210,7 @@ function MainApp() {
                 }
 
                 void promise(
-                  () => flushPendingPushes(activeRepository.uuid),
+                  () => manager.pushRepository(activeRepository.uuid),
                   {
                     loading: "正在同步变更...",
                     success: (result) => result.message ?? "同步完成。",
@@ -260,7 +263,7 @@ function MainApp() {
                 repositoryUuid: activeRepository.uuid,
               })
               void promise(
-                () => syncRepository(activeRepository.uuid),
+                () => manager.syncRepository(activeRepository.uuid),
                 {
                   loading: "正在同步仓库...",
                   success: (result) => result.message ?? "仓库同步完成。",

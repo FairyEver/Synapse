@@ -1,13 +1,11 @@
-import { type ComponentType, useMemo } from "react"
-import { createContent } from "@/app-shell/content"
+import { type ComponentType, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useContentList } from "@/app-shell/use-repository-manager"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
-import { useContentCreationState } from "@/modules/content/hooks/use-content-creation-state"
 import type { SynapseContentMeta, SynapseContentType, SynapseCreateContentPayload } from "@/types/content"
 
 type ContentModuleConfig<T extends SynapseContentType> = {
@@ -22,8 +20,8 @@ type ContentModuleConfig<T extends SynapseContentType> = {
   DetailDialog: ComponentType<{
     item: SynapseContentMeta<T> | null
     open: boolean
-    refreshSignal: number
-    onContentChanged: () => void
+    refreshSignal?: number
+    onContentChanged?: () => void
     onOpenChange: (open: boolean) => void
   }>
   transformCreatePayload?: (
@@ -49,17 +47,8 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const { activeRepository } = useAppConfig()
     const { currentRepoProfileState } = useCurrentRepoProfile()
     const { promise } = useAppNotifications()
-    const { operations, waitForBackgroundPush } = useRepositoryManager()
-    const {
-      handleCreated,
-      isCreateDialogOpen,
-      refreshSignal,
-      setIsCreateDialogOpen,
-    } = useContentCreationState(onCreateDialogOpenChange)
-    const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] : null
-    const isRepositoryInitializing =
-      activeRepositoryOperation?.isRunning
-      && activeRepositoryOperation.operation === "initialize"
+    const { createContent } = useContentList<T>(config.contentType)
+    const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
     const handleSubmit = (payload: SynapseCreateContentPayload<T>) => {
       void promise(
@@ -67,19 +56,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           const finalPayload = config.transformCreatePayload
             ? await config.transformCreatePayload(payload)
             : payload
-          const result = await createContent(config.contentType, finalPayload)
-
-          if (result.status !== "saved") {
-            return result
-          }
-
-          handleCreated()
-
-          if (result.pendingPushCount > 0 && activeRepository) {
-            await waitForBackgroundPush(activeRepository.uuid)
-          }
-
-          return result
+          return createContent(finalPayload)
         },
         {
           loading: "正在保存...",
@@ -92,7 +69,12 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           },
           error: (error) => error instanceof Error ? error.message : "保存失败。",
         },
-      ).catch((error) => {
+      ).then((result) => {
+        if (result?.status === "saved") {
+          setIsCreateDialogOpen(false)
+        }
+        return result
+      }).catch((error) => {
         logger.error(`${definition.singularLabel} save failed from create dialog.`, {
           repositoryUuid: activeRepository?.uuid ?? null,
           error,
@@ -103,24 +85,20 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const submitDisabledReason =
       currentRepoProfileState?.status === "needs-onboarding"
         ? "请先完成当前目录的身份设置"
-        : isRepositoryInitializing
-          ? "当前目录正在初始化，请稍后。"
         : null
 
     return (
       <>
         <ContentBrowserPage
           contentType={config.contentType}
-          refreshSignal={refreshSignal}
           onCreateClick={() => setIsCreateDialogOpen(true)}
+          onCreateDialogOpenChange={onCreateDialogOpenChange}
           onDetailDialogOpenChange={onDetailDialogOpenChange}
           onInstallDialogOpenChange={onInstallDialogOpenChange}
-          renderDetailDialog={({ item, onContentChanged, onOpenChange, open, refreshSignal: detailRefreshSignal }) => (
+          renderDetailDialog={({ item, onOpenChange, open }) => (
             <config.DetailDialog
               item={item?.type === config.contentType ? item as SynapseContentMeta<T> : null}
               open={open}
-              refreshSignal={detailRefreshSignal}
-              onContentChanged={onContentChanged}
               onOpenChange={onOpenChange}
             />
           )}

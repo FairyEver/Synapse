@@ -1,14 +1,17 @@
 import { useMemo } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useAppConfig } from "@/app-shell/config"
-import { useRepositoryManager } from "@/app-shell/repository"
+import {
+  useActiveRepository,
+  usePendingPushes,
+  useRepositoryOperation,
+  useRepositoryState,
+} from "@/app-shell/use-repository-manager"
 import type { SynapseRepositoryOperationKind } from "@/types/repository"
-
-type RepositoryOperations = ReturnType<typeof useRepositoryManager>["operations"]
 
 type RunningRepositoryOperation = {
   repositoryUuid: string
-  operation: RepositoryOperations[string]
+  operation: ReturnType<typeof useRepositoryOperation>
 }
 
 type AppShellToolbarState = {
@@ -40,51 +43,25 @@ function getToolbarActivityLabel(operation: SynapseRepositoryOperationKind | "sw
   }
 }
 
-function findRunningRepositoryOperation(
-  operations: RepositoryOperations,
-  activeRepositoryUuid: string | null,
-): RunningRepositoryOperation | null {
-  if (activeRepositoryUuid) {
-    const activeRepositoryOperation = operations[activeRepositoryUuid]
-
-    if (activeRepositoryOperation?.isRunning) {
-      return {
-        repositoryUuid: activeRepositoryUuid,
-        operation: activeRepositoryOperation,
-      }
-    }
-  }
-
-  const runningEntry = Object.entries(operations).find(([, operation]) => operation.isRunning)
-
-  if (!runningEntry) {
-    return null
-  }
-
-  return {
-    repositoryUuid: runningEntry[0],
-    operation: runningEntry[1],
-  }
-}
-
 function useAppShellToolbarState({
   hasBlockingModalOpen,
 }: {
   hasBlockingModalOpen: boolean
 }): AppShellToolbarState {
-  const { activeRepository, config, isReady } = useAppConfig()
+  const { config, isReady } = useAppConfig()
   const { isSwitchingRepository } = useActiveRepositorySwitch()
-  const { operations, pendingPushes, states } = useRepositoryManager()
+  const { activeRepository } = useActiveRepository()
+
+  const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
+  const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
+  const activePendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
 
   return useMemo(() => {
-    const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] ?? null : null
-    const activeRepositoryState = activeRepository ? states[activeRepository.uuid] ?? null : null
-    const activePendingPushState = activeRepository ? pendingPushes[activeRepository.uuid] ?? null : null
-    const runningRepositoryOperation = findRunningRepositoryOperation(
-      operations,
-      activeRepository?.uuid ?? null,
-    )
-    const hasRunningRepositoryOperation = runningRepositoryOperation !== null
+    const runningOperation = activeRepositoryOperation?.isRunning
+      ? { repositoryUuid: activeRepository?.uuid ?? "", operation: activeRepositoryOperation }
+      : null
+
+    const hasRunningRepositoryOperation = runningOperation !== null
     const isPushOperationRunning =
       activeRepositoryOperation?.operation === "push" && Boolean(activeRepositoryOperation.isRunning)
     const isSyncOperationRunning =
@@ -93,18 +70,21 @@ function useAppShellToolbarState({
       activeRepositoryState?.status === "ready" && activeRepositoryState.isGitRepository
     const hasToolbarLock =
       hasBlockingModalOpen || hasRunningRepositoryOperation || isSwitchingRepository
-    const runningStatusText = runningRepositoryOperation?.operation.statusText ?? null
+    const runningStatusText = runningOperation?.operation?.statusText ?? null
     const activityLabel = isSwitchingRepository
       ? getToolbarActivityLabel("switch")
-      : runningRepositoryOperation
-        ? getToolbarActivityLabel(runningRepositoryOperation.operation.operation ?? "sync")
+      : runningOperation
+        ? getToolbarActivityLabel(runningOperation.operation?.operation ?? "sync")
         : null
 
     let refreshTitle = "同步仓库"
 
     if (isSwitchingRepository) {
       refreshTitle = "正在切换仓库..."
-    } else if (runningRepositoryOperation?.repositoryUuid === activeRepository?.uuid) {
+    } else if (
+      runningOperation?.repositoryUuid === activeRepository?.uuid &&
+      runningOperation?.operation
+    ) {
       refreshTitle = runningStatusText ?? "正在同步..."
     } else if (hasRunningRepositoryOperation) {
       refreshTitle = runningStatusText ?? "当前有任务进行中"
@@ -149,13 +129,13 @@ function useAppShellToolbarState({
     }
   }, [
     activeRepository,
+    activeRepositoryOperation,
+    activeRepositoryState,
+    activePendingPushState,
     config.repositories.length,
     hasBlockingModalOpen,
     isReady,
     isSwitchingRepository,
-    operations,
-    pendingPushes,
-    states,
   ])
 }
 

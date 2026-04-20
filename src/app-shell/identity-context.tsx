@@ -15,7 +15,10 @@ import {
   readLocalIdentityState,
 } from "@/app-shell/identity"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useRepositoryManager } from "@/app-shell/repository"
+import {
+  useRepositoryState,
+  useRepositoryOperation,
+} from "@/app-shell/use-repository-manager"
 import {
   listRepoProfiles,
   updateRepoDisplayName,
@@ -45,7 +48,8 @@ const EMPTY_PROFILE_MAP = new Map<string, SynapseUserProfile>()
 
 function IdentityProvider({ children }: { children: ReactNode }) {
   const { activeRepository } = useAppConfig()
-  const { operations, states } = useRepositoryManager()
+  const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
+  const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
   const [localIdentityState, setLocalIdentityState] = useState<SynapseLocalIdentityState | null>(null)
   const [currentRepoProfileState, setCurrentRepoProfileState] = useState<SynapseRepoProfileState | null>(null)
   const [repoProfileMap, setRepoProfileMap] =
@@ -53,8 +57,6 @@ function IdentityProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hasLoadedRef = useRef(false)
-  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] ?? null : null
-  const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] ?? null : null
 
   const refreshIdentity = useCallback(async () => {
     const nextState = await readLocalIdentityState()

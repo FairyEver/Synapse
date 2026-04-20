@@ -332,34 +332,32 @@ class ContentHistoryService {
     }
 
     const historyEntries = await readDirectoryEntries(path.join(directoryPath, HISTORY_DIRECTORY_NAME))
-    const items: SynapseContentHistoryEntry[] = []
 
-    for (const entry of historyEntries) {
-      if (!entry.isDirectory()) {
-        continue
-      }
+    // 并行读取所有历史版本的 snapshot
+    const snapshots = await Promise.all(
+      historyEntries
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          const snapshot = parseSnapshotRecord(
+            await readJsonFile<unknown>(
+              path.join(directoryPath, HISTORY_DIRECTORY_NAME, entry.name, "snapshot.json"),
+            ),
+          )
+          return snapshot ? { dirname: entry.name, snapshot } : null
+        }),
+    )
 
-      const snapshot = parseSnapshotRecord(
-        await readJsonFile<unknown>(
-          path.join(directoryPath, HISTORY_DIRECTORY_NAME, entry.name, "snapshot.json"),
-        ),
-      )
-
-      if (!snapshot) {
-        continue
-      }
-
-      items.push({
-        dirname: entry.name,
+    return snapshots
+      .filter((item): item is { dirname: string; snapshot: NonNullable<ReturnType<typeof parseSnapshotRecord>> } => item !== null)
+      .map(({ dirname, snapshot }) => ({
+        dirname,
         modifiedAt: snapshot.modifiedAt,
         modifiedBy: snapshot.modifiedBy,
         modifiedByDisplayName: snapshot.modifiedByDisplayName,
         deleted: snapshot.deleted,
-        isCurrent: entry.name === latestVersion.historyDirname,
-      })
-    }
-
-    return items.sort((left, right) => right.dirname.localeCompare(left.dirname))
+        isCurrent: dirname === latestVersion.historyDirname,
+      }))
+      .sort((left, right) => right.dirname.localeCompare(left.dirname))
   }
 
   async readHistoryVersion(
@@ -410,30 +408,27 @@ class ContentHistoryService {
     }
 
     const historyEntries = await readDirectoryEntries(path.join(directoryPath, HISTORY_DIRECTORY_NAME))
-    let latestVersion: ResolvedContentVersion | null = null
 
-    for (const entry of historyEntries) {
-      if (!entry.isDirectory()) {
-        continue
-      }
+    // 过滤有效目录并按名字倒序（目录名是时间戳，字典序即时间序）
+    const sortedDirs = historyEntries
+      .filter((entry) => entry.isDirectory())
+      .sort((left, right) => right.name.localeCompare(left.name))
 
+    // 只读取最新版本，避免遍历所有历史版本
+    for (const entry of sortedDirs) {
       const historyDirectoryPath = path.join(directoryPath, HISTORY_DIRECTORY_NAME, entry.name)
-      const snapshot = parseSnapshotRecord(
-        await readJsonFile<unknown>(path.join(historyDirectoryPath, "snapshot.json")),
-      )
+
+      const [snapshot, content, attachmentsRecord] = await Promise.all([
+        readJsonFile<unknown>(path.join(historyDirectoryPath, "snapshot.json")).then(parseSnapshotRecord),
+        readFile(path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME), "utf8"),
+        readAttachmentsRecord(historyDirectoryPath),
+      ])
 
       if (!snapshot) {
         continue
       }
 
-      if (latestVersion && latestVersion.snapshot.modifiedAt >= snapshot.modifiedAt) {
-        continue
-      }
-
-      const content = await readFile(path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME), "utf8")
-      const attachmentsRecord = await readAttachmentsRecord(historyDirectoryPath)
-
-      latestVersion = {
+      return {
         attachments: attachmentsRecord.files,
         content,
         historyDirname: entry.name,
@@ -442,7 +437,7 @@ class ContentHistoryService {
       }
     }
 
-    return latestVersion
+    return null
   }
 }
 

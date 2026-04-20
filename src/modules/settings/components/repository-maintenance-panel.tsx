@@ -1,6 +1,6 @@
 import { LoaderCircle } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useRepositoryManager, useRepositoryOperation } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 
@@ -9,9 +9,9 @@ type RepositoryMaintenancePanelProps = {
 }
 
 function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePanelProps) {
-  const { operations, runMaintenance } = useRepositoryManager()
+  const manager = useRepositoryManager()
   const { promise } = useAppNotifications()
-  const operation = operations[repositoryUuid]
+  const operation = useRepositoryOperation(repositoryUuid)
   const isBusy = operation?.isRunning && operation.operation === "maintenance"
 
   return (
@@ -32,7 +32,7 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
             disabled={Boolean(operation?.isRunning)}
             onClick={() => {
               void promise(
-                () => runMaintenance(repositoryUuid),
+                () => manager.runMaintenance(repositoryUuid),
                 {
                   loading: "正在整理历史记录...",
                   success: (result) => result.message ?? "整理完成。",

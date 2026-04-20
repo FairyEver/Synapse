@@ -11,7 +11,7 @@ import {
 import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useRepositoryState } from "@/app-shell/use-repository-manager"
 import {
   ModuleSidebar,
   ModuleSidebarHeader,
@@ -45,18 +45,16 @@ import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentBrowserDetailDialogProps = {
   item: SynapseContentMeta | null
-  onContentChanged: () => void
   onOpenChange: (open: boolean) => void
   open: boolean
-  refreshSignal: number
 }
 
 type ContentBrowserPageProps = {
   contentType: SynapseContentType
   onCreateClick?: () => void
+  onCreateDialogOpenChange?: (open: boolean) => void
   onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
-  refreshSignal?: number
   renderDetailDialog: (props: ContentBrowserDetailDialogProps) => ReactNode
 }
 
@@ -84,7 +82,7 @@ const contentSearchOptions: IFuseOptions<SynapseContentMeta> = {
 function getContentState(params: {
   activeCategoryId: string
   categoryItems: SynapseCategoryViewItem[]
-  error: string | null
+  error: Error | null
   filteredItems: SynapseContentMeta[]
   isLoading: boolean
   items: SynapseContentMeta[]
@@ -127,7 +125,7 @@ function getContentState(params: {
   if (error) {
     return {
       title: "读取失败",
-      description: error,
+      description: error.message,
       icon: TriangleAlert,
     }
   }
@@ -243,44 +241,32 @@ function ContentListCard({
 function ContentBrowserPage({
   contentType,
   onCreateClick,
+  onCreateDialogOpenChange,
   onDetailDialogOpenChange,
   onInstallDialogOpenChange,
-  refreshSignal = 0,
   renderDetailDialog,
 }: ContentBrowserPageProps) {
   const definition = getContentTypeDefinition(contentType)
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const { activeRepository } = useAppConfig()
   const { currentRepoProfileState } = useCurrentRepoProfile()
-  const { operations, states } = useRepositoryManager()
-  const [contentRefreshSignal, setContentRefreshSignal] = useState(0)
-  const catalogRefreshSignal = refreshSignal + contentRefreshSignal
-  const { categories, error, isLoading, items, totalCount } = useContentCatalog(
-    contentType,
-    catalogRefreshSignal,
-  )
+  const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
+  const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType)
   const { favoriteIds } = useContentFavorites(contentType)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
 
-  const activeRepositoryState = activeRepository ? (states[activeRepository.uuid] ?? null) : null
-  const activeRepositoryOperation = activeRepository ? (operations[activeRepository.uuid] ?? null) : null
-  const repositoryStatus =
-    activeRepositoryState === null
-      ? "checking"
-      : activeRepositoryState.status === "ready"
-        ? "ready"
-        : "missing"
-  const isRepositoryInitializing =
-    activeRepositoryOperation?.isRunning
-    && activeRepositoryOperation.operation === "initialize"
+  const repositoryStatus = activeRepositoryState?.status ?? "checking"
   const canBrowseContent = repositoryStatus === "ready"
   const canCreateContent =
     canBrowseContent
     && currentRepoProfileState?.status !== "needs-onboarding"
-    && !isRepositoryInitializing
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
+
+  useEffect(() => {
+    onCreateDialogOpenChange?.(false)
+  }, [onCreateDialogOpenChange])
 
   useEffect(() => {
     // 如果当前是"我的收藏"但没有收藏了，重置到"全部"
@@ -396,9 +382,7 @@ function ContentBrowserPage({
         ? "当前目录不存在，不能新建"
         : currentRepoProfileState?.status === "needs-onboarding"
           ? "先完成当前目录的身份设置"
-        : isRepositoryInitializing
-          ? "当前目录正在初始化，稍后。"
-          : `新建 ${definition.singularLabel}`
+        : `新建 ${definition.singularLabel}`
 
   return (
     <>
@@ -528,10 +512,6 @@ function ContentBrowserPage({
       {renderDetailDialog({
         item: selectedItem,
         open: selectedItem !== null,
-        refreshSignal: contentRefreshSignal,
-        onContentChanged: () => {
-          setContentRefreshSignal((currentSignal) => currentSignal + 1)
-        },
         onOpenChange: (open) => {
           if (!open) {
             setSelectedItem(null)

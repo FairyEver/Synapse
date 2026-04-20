@@ -8,7 +8,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useRepositoryManager } from "@/app-shell/use-repository-manager"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -103,7 +103,7 @@ function ContentDetailDialog<TPayload>({
   const repoProfileMap = useRepoProfileMap()
   const { activeRepository } = useAppConfig()
   const { error, promise } = useAppNotifications()
-  const { operations, waitForBackgroundPush } = useRepositoryManager()
+  const manager = useRepositoryManager()
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [conflictState, setConflictState] = useState<ConflictState<TPayload> | null>(null)
@@ -128,7 +128,7 @@ function ContentDetailDialog<TPayload>({
   })
   const { isFavorite, toggleFavorite } = useContentFavorites()
   const isItemFavorite = item ? isFavorite(contentType, item.id) : false
-  const activeRepositoryOperation = activeRepository ? operations[activeRepository.uuid] ?? null : null
+  const activeRepositoryOperation = activeRepository ? manager.getAllOperations().get(activeRepository.uuid) ?? null : null
   const isRepositoryInitializing =
     activeRepositoryOperation?.isRunning
     && activeRepositoryOperation.operation === "initialize"
@@ -191,7 +191,7 @@ function ContentDetailDialog<TPayload>({
         onContentChanged?.()
 
         if (result.pendingPushCount > 0 && activeRepository) {
-          await waitForBackgroundPush(activeRepository.uuid)
+          await manager.waitForBackgroundPush(activeRepository.uuid)
         }
 
         return result

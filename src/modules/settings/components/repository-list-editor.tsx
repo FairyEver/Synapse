@@ -3,7 +3,7 @@ import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useRepositoryManager } from "@/app-shell/use-repository-manager"
 import { DelayedConfirmAlertDialog } from "@/components/delayed-confirm-alert-dialog"
 import { FormDialog } from "@/components/form-dialog"
 import {
@@ -66,16 +66,15 @@ function RepositoryListEditor({
   activeRepoUuid,
   onSave,
 }: RepositoryListEditorProps) {
+  const manager = useRepositoryManager()
   const {
     checkInitializationPreview,
     chooseDirectory,
     createLocalRepository,
-    hasRepositoryBridge,
-    initializeStructure,
-    operations,
-    states,
+    initializeRepository,
     validateDirectory,
-  } = useRepositoryManager()
+  } = manager
+  const hasRepositoryBridge = manager.hasRepositoryBridge()
   const { isSwitchingRepository } = useActiveRepositorySwitch()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const { promise } = useAppNotifications()
@@ -372,7 +371,7 @@ function RepositoryListEditor({
 
     try {
       const result = await promise(
-        () => initializeStructure(repository.uuid),
+        () => initializeRepository(repository.uuid),
         {
           loading: "正在初始化目录...",
           success: (result) => result.message ?? "初始化完成。",
@@ -418,7 +417,7 @@ function RepositoryListEditor({
   const previewList = previewEntries.slice(0, 5)
   const remainingPreviewCount = Math.max(previewEntries.length - previewList.length, 0)
   const isOnboardingBlocked = currentRepoProfileState?.status === "needs-onboarding"
-  const hasRunningRepositoryOperation = Object.values(operations).some((operation) => operation.isRunning)
+  const hasRunningRepositoryOperation = Array.from(manager.getAllOperations().values()).some((operation) => operation.isRunning)
 
   return (
     <>
@@ -618,8 +617,8 @@ function RepositoryListEditor({
         <div className="flex flex-col gap-3">
           {repositories.map((repository) => {
             const isActive = repository.uuid === activeRepoUuid
-            const operation = operations[repository.uuid]
-            const repositoryState = states[repository.uuid]
+            const operation = manager.getAllOperations().get(repository.uuid)
+            const repositoryState = manager.getAllStates().get(repository.uuid)
             const isBusy = Boolean(operation?.isRunning) || initializingUuid === repository.uuid
             const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
             const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked

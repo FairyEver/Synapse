@@ -15,7 +15,7 @@ import {
 
 function QuickRepositorySwitchDialog() {
   const { config } = useAppConfig()
-  const { operations } = useRepositoryManager()
+  const manager = useRepositoryManager()
   const {
     closeRepositorySwitchDialog,
     isRepositorySwitchDialogOpen,
@@ -25,8 +25,8 @@ function QuickRepositorySwitchDialog() {
   } = useActiveRepositorySwitch()
 
   const hasRunningRepositoryOperation = useMemo(
-    () => Object.values(operations).some((operation) => operation.isRunning),
-    [operations],
+    () => Array.from(manager.getAllOperations().values()).some((operation) => operation.isRunning),
+    [manager],
   )
 
   return (

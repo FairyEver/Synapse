@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useLocalIdentity } from "@/app-shell/identity-context"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useRepositoryManager, useRepositoryState } from "@/app-shell/use-repository-manager"
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,8 @@ function RepoOnboardingDialog() {
   const { activeRepository, config } = useAppConfig()
   const { currentRepoProfileState, updateCurrentRepoDisplayName } = useCurrentRepoProfile()
   const { localIdentityState } = useLocalIdentity()
-  const { refreshPendingPushes, states } = useRepositoryManager()
+  const manager = useRepositoryManager()
+  const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const {
     isRepositorySwitchDialogOpen,
     openRepositorySwitchDialog,
@@ -34,7 +35,6 @@ function RepoOnboardingDialog() {
   const [displayName, setDisplayName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const activeRepositoryState = activeRepository ? states[activeRepository.uuid] ?? null : null
   const hasOtherRepositories = config.repositories.length > 1
   const isBlockedByOtherSwitchUi =
     isRepositorySwitchDialogOpen || pendingSwitchOnboarding !== null
@@ -70,7 +70,7 @@ function RepoOnboardingDialog() {
 
     void updateCurrentRepoDisplayName(nextDisplayName)
       .then(async () => {
-        await refreshPendingPushes(activeRepository.uuid)
+        // Refresh is handled automatically by RepositoryManager
       })
       .catch((submitError) => {
         setError(submitError instanceof Error ? submitError.message : "保存显示名称失败。")

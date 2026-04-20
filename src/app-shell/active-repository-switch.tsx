@@ -11,7 +11,7 @@ import {
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/repository"
+import { useRepositoryManager, useRepositoryState } from "@/app-shell/use-repository-manager"
 import { readRepoProfileState, updateRepoDisplayName } from "@/app-shell/user-profile"
 
 type PendingSwitchOnboarding = {
@@ -40,13 +40,16 @@ const logger = createRendererLogger("app.active-repository-switch")
 function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
   const { config, updateConfig } = useAppConfig()
   const { promise } = useAppNotifications()
-  const { states, validateDirectory } = useRepositoryManager()
+  const manager = useRepositoryManager()
   const [switchingRepositoryUuid, setSwitchingRepositoryUuid] = useState<string | null>(null)
   const [isRepositorySwitchDialogOpen, setIsRepositorySwitchDialogOpen] = useState(false)
   const [pendingSwitchOnboarding, setPendingSwitchOnboarding] =
     useState<PendingSwitchOnboarding | null>(null)
   const [isValidatingOnStartup, setIsValidatingOnStartup] = useState(false)
   const pendingResolverRef = useRef<((didSwitch: boolean) => void) | null>(null)
+
+  // 获取当前激活仓库的状态
+  const activeRepoState = useRepositoryState(config.activeRepoUuid ?? "")
 
   // 启动时验证当前激活仓库的目录结构
   useEffect(() => {
@@ -55,14 +58,13 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
     const activeRepo = config.repositories.find(r => r.uuid === config.activeRepoUuid)
     if (!activeRepo) return
 
-    const repoState = states[config.activeRepoUuid]
-    if (repoState?.status !== "ready") return
+    if (activeRepoState?.status !== "ready") return
 
     setIsValidatingOnStartup(true)
 
     void (async () => {
       try {
-        const result = await validateDirectory(activeRepo.localPath)
+        const result = await manager.validateDirectory(activeRepo.localPath)
         if (!result.isValid) {
           logger.warn("Active repository failed validation on startup.", {
             repositoryUuid: config.activeRepoUuid,
@@ -80,7 +82,7 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
         setIsValidatingOnStartup(false)
       }
     })()
-  }, [config.activeRepoUuid, config.repositories, states, validateDirectory, updateConfig])
+  }, [config.activeRepoUuid, config.repositories, activeRepoState?.status, manager, updateConfig])
 
   const runActiveRepoUpdateWithReload = useCallback(
     async (repositoryUuid: string) => {
@@ -166,7 +168,7 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
 
       try {
         // 先验证仓库目录结构是否合法
-        const validationResult = await validateDirectory(targetRepository.localPath)
+        const validationResult = await manager.validateDirectory(targetRepository.localPath)
         if (!validationResult.isValid) {
           throw new Error(validationResult.message)
         }
@@ -207,7 +209,7 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
         setSwitchingRepositoryUuid(null)
       }
     },
-    [config.activeRepoUuid, config.repositories, runActiveRepoUpdateWithReload, validateDirectory],
+    [config.activeRepoUuid, config.repositories, runActiveRepoUpdateWithReload, manager],
   )
 
   const value = useMemo<ActiveRepositorySwitchContextValue>(
