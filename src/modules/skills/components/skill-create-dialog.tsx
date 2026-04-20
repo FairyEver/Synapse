@@ -385,7 +385,7 @@ function SkillCreateDialog({
         <FormDialog
           title={mode === "create" ? "新建 Skill" : "编辑 Skill"}
           
-          contentClassName="sm:max-w-[600px]"
+          contentClassName="sm:max-w-[520px]"
           footer={(
             <>
               {submitError ? (
@@ -484,15 +484,6 @@ function SkillCreateDialog({
               </Select>
               <FieldError message={errors.category} />
             </div>
-
-            <ContentAppearanceFields
-              backgroundValue={form.iconBg}
-              backgroundError={errors.iconBg}
-              iconValue={form.icon}
-              iconError={errors.icon}
-              onBackgroundValueChange={(value) => updateField("iconBg", value)}
-              onIconValueChange={(value) => updateField("icon", value)}
-            />
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="skill-create-content">主说明</Label>
@@ -675,6 +666,15 @@ function SkillCreateDialog({
                 </p>
               )}
             </div>
+
+            <ContentAppearanceFields
+              backgroundValue={form.iconBg}
+              backgroundError={errors.iconBg}
+              iconValue={form.icon}
+              iconError={errors.icon}
+              onBackgroundValueChange={(value) => updateField("iconBg", value)}
+              onIconValueChange={(value) => updateField("icon", value)}
+            />
           </div>
         </FormDialog>
       </Dialog>

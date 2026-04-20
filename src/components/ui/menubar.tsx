@@ -3,6 +3,7 @@ import { Menubar as MenubarPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
+import { track, extractLabel } from "@/lib/ui-tracking"
 
 function Menubar({
   className,
@@ -87,10 +88,13 @@ function MenubarItem({
   className,
   inset,
   variant = "default",
+  "data-track": dataTrack,
+  onSelect,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Item> & {
   inset?: boolean
   variant?: "default" | "destructive"
+  "data-track"?: string
 }) {
   return (
     <MenubarPrimitive.Item
@@ -101,6 +105,11 @@ function MenubarItem({
         "group/menubar-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive!",
         className
       )}
+      onSelect={(e) => {
+        const label = dataTrack ?? extractLabel(e.currentTarget) ?? "menubar-item"
+        track({ component: "menubar-item", name: label, action: "select" })
+        onSelect?.(e)
+      }}
       {...props}
     />
   )
@@ -111,9 +120,12 @@ function MenubarCheckboxItem({
   children,
   checked,
   inset,
+  "data-track": dataTrack,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.CheckboxItem> & {
   inset?: boolean
+  "data-track"?: string
 }) {
   return (
     <MenubarPrimitive.CheckboxItem
@@ -124,6 +136,10 @@ function MenubarCheckboxItem({
         className
       )}
       checked={checked}
+      onCheckedChange={(val) => {
+        track({ component: "menubar-checkbox-item", name: dataTrack ?? props.textValue ?? "menubar-checkbox-item", action: val ? "check" : "uncheck" })
+        onCheckedChange?.(val)
+      }}
       {...props}
     >
       <span className="pointer-events-none absolute left-1.5 flex size-4 items-center justify-center [&_svg:not([class*='size-'])]:size-4">
@@ -141,9 +157,12 @@ function MenubarRadioItem({
   className,
   children,
   inset,
+  "data-track": dataTrack,
+  onSelect,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.RadioItem> & {
   inset?: boolean
+  "data-track"?: string
 }) {
   return (
     <MenubarPrimitive.RadioItem
@@ -153,6 +172,10 @@ function MenubarRadioItem({
         "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-1.5 pl-7 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
+      onSelect={(e) => {
+        track({ component: "menubar-radio-item", name: dataTrack ?? extractLabel(e.currentTarget) ?? "menubar-radio-item", action: "select" })
+        onSelect?.(e)
+      }}
       {...props}
     >
       <span className="pointer-events-none absolute left-1.5 flex size-4 items-center justify-center [&_svg:not([class*='size-'])]:size-4">

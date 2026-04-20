@@ -8,6 +8,7 @@ import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
 import { registerUpdateHandlers } from "./ipc/update-handlers"
 import { registerUserProfileHandlers } from "./ipc/user-profile-handlers"
+import { getWindowIconPath, initializeAppIcon } from "./services/app-icon-service"
 import { configStore } from "./services/config-store"
 import { contentSubmissionService } from "./services/content-submission-service"
 import { createMainLogger, logStore } from "./services/log-store"
@@ -21,6 +22,7 @@ const logger = createMainLogger("main")
 
 function createMainWindow() {
   const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
+  const icon = getWindowIconPath()
   const window = new BrowserWindow({
     width,
     height,
@@ -28,6 +30,7 @@ function createMainWindow() {
     minHeight,
     show: false,
     title: "Synapse",
+    ...(icon ? { icon } : {}),
     ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -96,6 +99,7 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     logger.info("Electron app is ready. Registering services.")
+    initializeAppIcon()
     registerContentHandlers()
     registerLogHandlers()
     registerConfigHandlers()

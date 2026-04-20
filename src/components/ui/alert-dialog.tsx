@@ -3,11 +3,30 @@ import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { track, mergeRefs } from "@/lib/ui-tracking"
+
+const AlertDialogTrackContext = React.createContext<React.MutableRefObject<string | undefined> | null>(null)
 
 function AlertDialog({
+  "data-track": dataTrack,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+}: React.ComponentProps<typeof AlertDialogPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  const titleRef = React.useRef<string | undefined>(undefined)
+  return (
+    <AlertDialogTrackContext.Provider value={titleRef}>
+      <AlertDialogPrimitive.Root
+        data-slot="alert-dialog"
+        onOpenChange={(open) => {
+          track({ component: "alert-dialog", name: dataTrack ?? titleRef.current ?? "alert-dialog", action: open ? "open" : "close" })
+          onOpenChange?.(open)
+        }}
+        {...props}
+      />
+    </AlertDialogTrackContext.Provider>
+  )
 }
 
 function AlertDialogTrigger({
@@ -79,10 +98,17 @@ function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">)
 
 function AlertDialogTitle({
   className,
+  ref,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Title>) {
+  const titleRef = React.useContext(AlertDialogTrackContext)
+  const innerRef = React.useRef<HTMLHeadingElement>(null)
+  React.useEffect(() => {
+    if (titleRef) titleRef.current = innerRef.current?.textContent?.trim()
+  })
   return (
     <AlertDialogPrimitive.Title
+      ref={mergeRefs(ref, innerRef)}
       data-slot="alert-dialog-title"
       className={cn("font-heading text-base leading-none font-medium", className)}
       {...props}
@@ -105,22 +131,37 @@ function AlertDialogDescription({
 
 function AlertDialogAction({
   className,
+  "data-track": dataTrack,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Action> & {
+  "data-track"?: string
+}) {
   return (
     <AlertDialogPrimitive.Action asChild>
-      <Button className={className} {...props} />
+      <Button
+        className={className}
+        data-track={dataTrack}
+        {...props}
+      />
     </AlertDialogPrimitive.Action>
   )
 }
 
 function AlertDialogCancel({
   className,
+  "data-track": dataTrack,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel> & {
+  "data-track"?: string
+}) {
   return (
     <AlertDialogPrimitive.Cancel asChild>
-      <Button variant="outline" className={className} {...props} />
+      <Button
+        variant="outline"
+        className={className}
+        data-track={dataTrack}
+        {...props}
+      />
     </AlertDialogPrimitive.Cancel>
   )
 }

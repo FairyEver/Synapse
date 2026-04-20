@@ -17,7 +17,7 @@ export const DEFAULT_REPOSITORY_CONTENT_DIRECTORIES: Record<SynapseContentType, 
 
 export const DEFAULT_WINDOW_BOUNDS = {
   width: 1000,
-  height: 600,
+  height: 700,
   minWidth: 1000,
   minHeight: 600,
 }

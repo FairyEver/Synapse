@@ -3,11 +3,30 @@ import { Select as SelectPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
+import { track } from "@/lib/ui-tracking"
 
 function Select({
+  "data-track": dataTrack,
+  onOpenChange,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />
+}: React.ComponentProps<typeof SelectPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  return (
+    <SelectPrimitive.Root
+      data-slot="select"
+      onOpenChange={(open) => {
+        track({ component: "select", name: dataTrack ?? "select", action: open ? "open" : "close" })
+        onOpenChange?.(open)
+      }}
+      onValueChange={(value) => {
+        track({ component: "select", name: dataTrack ?? value ?? "select", action: "select", value })
+        onValueChange?.(value)
+      }}
+      {...props}
+    />
+  )
 }
 
 function SelectGroup({

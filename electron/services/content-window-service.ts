@@ -3,6 +3,7 @@ import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
 import { buildContentWindowSearchParams } from "../../src/lib/content-window"
 import type { SynapseOpenContentWindowPayload } from "../../src/types/content"
+import { getWindowIconPath } from "./app-icon-service"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("content-window")
@@ -34,6 +35,7 @@ async function loadContentWindow(
 const contentWindowService = {
   async openDetailWindow(payload: SynapseOpenContentWindowPayload): Promise<void> {
     const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
+    const icon = getWindowIconPath()
     const window = new BrowserWindow({
       width,
       height,
@@ -41,6 +43,7 @@ const contentWindowService = {
       minHeight,
       show: false,
       title: payload.title,
+      ...(icon ? { icon } : {}),
       webPreferences: {
         preload: path.join(__dirname, "../preload.js"),
         contextIsolation: true,

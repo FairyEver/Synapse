@@ -185,7 +185,7 @@ function RuleCreateDialog({
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <FormDialog
           title={mode === "create" ? "新建 Rule" : "编辑 Rule"}
-          contentClassName="sm:max-w-[600px]"
+          contentClassName="sm:max-w-[520px]"
           footer={(
             <>
               <FieldError className="sm:mr-auto">{submitError}</FieldError>
@@ -275,15 +275,6 @@ function RuleCreateDialog({
               </FieldContent>
             </Field>
 
-            <ContentAppearanceFields
-              backgroundValue={form.iconBg}
-              backgroundError={errors.iconBg}
-              iconValue={form.icon}
-              iconError={errors.icon}
-              onBackgroundValueChange={(value) => updateField("iconBg", value)}
-              onIconValueChange={(value) => updateField("icon", value)}
-            />
-
             <Field data-invalid={errors.content ? true : undefined}>
               <FieldLabel htmlFor="rule-create-content">正文</FieldLabel>
               <FieldContent>
@@ -298,6 +289,15 @@ function RuleCreateDialog({
                 <FieldError>{errors.content}</FieldError>
               </FieldContent>
             </Field>
+
+            <ContentAppearanceFields
+              backgroundValue={form.iconBg}
+              backgroundError={errors.iconBg}
+              iconValue={form.icon}
+              iconError={errors.icon}
+              onBackgroundValueChange={(value) => updateField("iconBg", value)}
+              onIconValueChange={(value) => updateField("icon", value)}
+            />
           </FieldGroup>
         </FormDialog>
       </Dialog>

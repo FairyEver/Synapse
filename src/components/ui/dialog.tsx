@@ -4,11 +4,30 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { track, mergeRefs } from "@/lib/ui-tracking"
+
+const DialogTrackContext = React.createContext<React.MutableRefObject<string | undefined> | null>(null)
 
 function Dialog({
+  "data-track": dataTrack,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+}: React.ComponentProps<typeof DialogPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  const titleRef = React.useRef<string | undefined>(undefined)
+  return (
+    <DialogTrackContext.Provider value={titleRef}>
+      <DialogPrimitive.Root
+        data-slot="dialog"
+        onOpenChange={(open) => {
+          track({ component: "dialog", name: dataTrack ?? titleRef.current ?? "dialog", action: open ? "open" : "close" })
+          onOpenChange?.(open)
+        }}
+        {...props}
+      />
+    </DialogTrackContext.Provider>
+  )
 }
 
 function DialogTrigger({
@@ -121,10 +140,17 @@ function DialogFooter({
 
 function DialogTitle({
   className,
+  ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Title>) {
+  const titleRef = React.useContext(DialogTrackContext)
+  const innerRef = React.useRef<HTMLHeadingElement>(null)
+  React.useEffect(() => {
+    if (titleRef) titleRef.current = innerRef.current?.textContent?.trim()
+  })
   return (
     <DialogPrimitive.Title
+      ref={mergeRefs(ref, innerRef)}
       data-slot="dialog-title"
       className={cn(
         "font-heading text-base leading-none font-medium",

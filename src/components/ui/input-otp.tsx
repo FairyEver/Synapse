@@ -5,14 +5,21 @@ import { OTPInput, OTPInputContext } from "input-otp"
 
 import { cn } from "@/lib/utils"
 import { MinusIcon } from "lucide-react"
+import { track } from "@/lib/ui-tracking"
 
 function InputOTP({
   className,
   containerClassName,
+  "data-track": dataTrack,
+  onFocus,
+  onBlur,
+  onComplete,
   ...props
 }: React.ComponentProps<typeof OTPInput> & {
   containerClassName?: string
+  "data-track"?: string
 }) {
+  const label = dataTrack ?? "input-otp"
   return (
     <OTPInput
       data-slot="input-otp"
@@ -22,6 +29,18 @@ function InputOTP({
       )}
       spellCheck={false}
       className={cn("disabled:cursor-not-allowed", className)}
+      onFocus={(e) => {
+        track({ component: "input-otp", name: label, action: "focus" })
+        onFocus?.(e)
+      }}
+      onBlur={(e) => {
+        track({ component: "input-otp", name: label, action: "blur" })
+        onBlur?.(e)
+      }}
+      onComplete={(value) => {
+        track({ component: "input-otp", name: label, action: "complete", value })
+        onComplete?.(value)
+      }}
       {...props}
     />
   )

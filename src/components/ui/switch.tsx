@@ -4,13 +4,17 @@ import * as React from "react"
 import { Switch as SwitchPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 
 function Switch({
   className,
   size = "default",
+  "data-track": dataTrack,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof SwitchPrimitive.Root> & {
   size?: "sm" | "default"
+  "data-track"?: string
 }) {
   return (
     <SwitchPrimitive.Root
@@ -20,6 +24,11 @@ function Switch({
         "peer group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-all outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:bg-primary data-unchecked:bg-input dark:data-unchecked:bg-input/80 data-disabled:cursor-not-allowed data-disabled:opacity-50",
         className
       )}
+      onCheckedChange={(checked) => {
+        const label = dataTrack ?? props["aria-label"] ?? props.id ?? "switch"
+        track({ component: "switch", name: label, action: checked ? "check" : "uncheck" })
+        onCheckedChange?.(checked)
+      }}
       {...props}
     >
       <SwitchPrimitive.Thumb

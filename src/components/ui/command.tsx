@@ -14,6 +14,7 @@ import {
   InputGroupAddon,
 } from "@/components/ui/input-group"
 import { SearchIcon, CheckIcon } from "lucide-react"
+import { track, extractLabel } from "@/lib/ui-tracking"
 
 function Command({
   className,
@@ -147,8 +148,12 @@ function CommandSeparator({
 function CommandItem({
   className,
   children,
+  "data-track": dataTrack,
+  onSelect,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+}: React.ComponentProps<typeof CommandPrimitive.Item> & {
+  "data-track"?: string
+}) {
   return (
     <CommandPrimitive.Item
       data-slot="command-item"
@@ -156,6 +161,10 @@ function CommandItem({
         "group/command-item relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
         className
       )}
+      onSelect={(value) => {
+        track({ component: "command-item", name: dataTrack ?? value ?? "command-item", action: "select", value })
+        onSelect?.(value)
+      }}
       {...props}
     >
       {children}

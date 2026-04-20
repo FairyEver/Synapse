@@ -3,15 +3,25 @@ import { Accordion as AccordionPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { track } from "@/lib/ui-tracking"
 
 function Accordion({
   className,
+  "data-track": dataTrack,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Root>) {
+}: React.ComponentProps<typeof AccordionPrimitive.Root> & {
+  "data-track"?: string
+}) {
   return (
     <AccordionPrimitive.Root
       data-slot="accordion"
       className={cn("flex w-full flex-col", className)}
+      onValueChange={(value: string | string[]) => {
+        const label = dataTrack ?? (typeof value === "string" ? value : undefined) ?? "accordion"
+        track({ component: "accordion", name: label, action: "expand", value })
+        onValueChange?.(value as string & string[])
+      }}
       {...props}
     />
   )

@@ -3,11 +3,25 @@ import { ContextMenu as ContextMenuPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
+import { track, extractLabel } from "@/lib/ui-tracking"
 
 function ContextMenu({
+  "data-track": dataTrack,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
-  return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
+}: React.ComponentProps<typeof ContextMenuPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  return (
+    <ContextMenuPrimitive.Root
+      data-slot="context-menu"
+      onOpenChange={(open) => {
+        track({ component: "context-menu", name: dataTrack ?? "context-menu", action: open ? "open" : "close" })
+        onOpenChange?.(open)
+      }}
+      {...props}
+    />
+  )
 }
 
 function ContextMenuTrigger({
@@ -77,10 +91,13 @@ function ContextMenuItem({
   className,
   inset,
   variant = "default",
+  "data-track": dataTrack,
+  onSelect,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Item> & {
   inset?: boolean
   variant?: "default" | "destructive"
+  "data-track"?: string
 }) {
   return (
     <ContextMenuPrimitive.Item
@@ -91,6 +108,11 @@ function ContextMenuItem({
         "group/context-menu-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 focus:*:[svg]:text-accent-foreground data-[variant=destructive]:*:[svg]:text-destructive",
         className
       )}
+      onSelect={(e) => {
+        const label = dataTrack ?? extractLabel(e.currentTarget) ?? "context-menu-item"
+        track({ component: "context-menu-item", name: label, action: "select" })
+        onSelect?.(e)
+      }}
       {...props}
     />
   )
@@ -138,9 +160,12 @@ function ContextMenuCheckboxItem({
   children,
   checked,
   inset,
+  "data-track": dataTrack,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.CheckboxItem> & {
   inset?: boolean
+  "data-track"?: string
 }) {
   return (
     <ContextMenuPrimitive.CheckboxItem
@@ -151,6 +176,10 @@ function ContextMenuCheckboxItem({
         className
       )}
       checked={checked}
+      onCheckedChange={(val) => {
+        track({ component: "context-menu-checkbox-item", name: dataTrack ?? props.textValue ?? "context-menu-checkbox-item", action: val ? "check" : "uncheck" })
+        onCheckedChange?.(val)
+      }}
       {...props}
     >
       <span className="pointer-events-none absolute right-2">
@@ -168,9 +197,12 @@ function ContextMenuRadioItem({
   className,
   children,
   inset,
+  "data-track": dataTrack,
+  onSelect,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.RadioItem> & {
   inset?: boolean
+  "data-track"?: string
 }) {
   return (
     <ContextMenuPrimitive.RadioItem
@@ -180,6 +212,11 @@ function ContextMenuRadioItem({
         "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
+      onSelect={(e) => {
+        const label = dataTrack ?? extractLabel(e.currentTarget) ?? "context-menu-radio-item"
+        track({ component: "context-menu-radio-item", name: label, action: "select" })
+        onSelect?.(e)
+      }}
       {...props}
     >
       <span className="pointer-events-none absolute right-2">

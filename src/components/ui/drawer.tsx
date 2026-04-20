@@ -4,11 +4,30 @@ import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
+import { track, mergeRefs } from "@/lib/ui-tracking"
+
+const DrawerTrackContext = React.createContext<React.MutableRefObject<string | undefined> | null>(null)
 
 function Drawer({
+  "data-track": dataTrack,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root data-slot="drawer" {...props} />
+}: React.ComponentProps<typeof DrawerPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  const titleRef = React.useRef<string | undefined>(undefined)
+  return (
+    <DrawerTrackContext.Provider value={titleRef}>
+      <DrawerPrimitive.Root
+        data-slot="drawer"
+        onOpenChange={(open) => {
+          track({ component: "drawer", name: dataTrack ?? titleRef.current ?? "drawer", action: open ? "open" : "close" })
+          onOpenChange?.(open)
+        }}
+        {...props}
+      />
+    </DrawerTrackContext.Provider>
+  )
 }
 
 function DrawerTrigger({
@@ -93,10 +112,17 @@ function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
 
 function DrawerTitle({
   className,
+  ref,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Title>) {
+  const titleRef = React.useContext(DrawerTrackContext)
+  const innerRef = React.useRef<HTMLHeadingElement>(null)
+  React.useEffect(() => {
+    if (titleRef) titleRef.current = innerRef.current?.textContent?.trim()
+  })
   return (
     <DrawerPrimitive.Title
+      ref={mergeRefs(ref, innerRef)}
       data-slot="drawer-title"
       className={cn(
         "font-heading text-base font-medium text-foreground",

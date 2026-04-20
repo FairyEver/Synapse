@@ -4,6 +4,7 @@ import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { toggleVariants } from "@/components/ui/toggle"
+import { track } from "@/lib/ui-tracking"
 
 const ToggleGroupContext = React.createContext<
   VariantProps<typeof toggleVariants> & {
@@ -24,11 +25,14 @@ function ToggleGroup({
   spacing = 0,
   orientation = "horizontal",
   children,
+  "data-track": dataTrack,
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof ToggleGroupPrimitive.Root> &
   VariantProps<typeof toggleVariants> & {
     spacing?: number
     orientation?: "horizontal" | "vertical"
+    "data-track"?: string
   }) {
   return (
     <ToggleGroupPrimitive.Root
@@ -42,6 +46,11 @@ function ToggleGroup({
         "group/toggle-group flex w-fit flex-row items-center gap-[--spacing(var(--gap))] rounded-lg data-[size=sm]:rounded-[min(var(--radius-md),10px)] data-vertical:flex-col data-vertical:items-stretch",
         className
       )}
+      onValueChange={(value: string | string[]) => {
+        const label = dataTrack ?? (typeof value === "string" ? value : undefined) ?? "toggle-group"
+        track({ component: "toggle-group", name: label, action: "select", value })
+        onValueChange?.(value as string & string[])
+      }}
       {...props}
     >
       <ToggleGroupContext.Provider

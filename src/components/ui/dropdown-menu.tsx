@@ -3,11 +3,25 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
+import { track, extractLabel } from "@/lib/ui-tracking"
 
 function DropdownMenu({
+  "data-track": dataTrack,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  return (
+    <DropdownMenuPrimitive.Root
+      data-slot="dropdown-menu"
+      onOpenChange={(open) => {
+        track({ component: "dropdown-menu", name: dataTrack ?? "dropdown-menu", action: open ? "open" : "close" })
+        onOpenChange?.(open)
+      }}
+      {...props}
+    />
+  )
 }
 
 function DropdownMenuPortal({
@@ -60,10 +74,13 @@ function DropdownMenuItem({
   className,
   inset,
   variant = "default",
+  "data-track": dataTrack,
+  onSelect,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
   inset?: boolean
   variant?: "default" | "destructive"
+  "data-track"?: string
 }) {
   return (
     <DropdownMenuPrimitive.Item
@@ -74,6 +91,11 @@ function DropdownMenuItem({
         "group/dropdown-menu-item relative flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive",
         className
       )}
+      onSelect={(e) => {
+        const label = dataTrack ?? extractLabel(e.currentTarget) ?? "dropdown-menu-item"
+        track({ component: "dropdown-menu-item", name: label, action: "select" })
+        onSelect?.(e)
+      }}
       {...props}
     />
   )
@@ -84,9 +106,12 @@ function DropdownMenuCheckboxItem({
   children,
   checked,
   inset,
+  "data-track": dataTrack,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem> & {
   inset?: boolean
+  "data-track"?: string
 }) {
   return (
     <DropdownMenuPrimitive.CheckboxItem
@@ -97,6 +122,10 @@ function DropdownMenuCheckboxItem({
         className
       )}
       checked={checked}
+      onCheckedChange={(val) => {
+        track({ component: "dropdown-menu-checkbox-item", name: dataTrack ?? props.textValue ?? "dropdown-menu-checkbox-item", action: val ? "check" : "uncheck" })
+        onCheckedChange?.(val)
+      }}
       {...props}
     >
       <span
@@ -128,9 +157,12 @@ function DropdownMenuRadioItem({
   className,
   children,
   inset,
+  "data-track": dataTrack,
+  onSelect,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem> & {
   inset?: boolean
+  "data-track"?: string
 }) {
   return (
     <DropdownMenuPrimitive.RadioItem
@@ -140,6 +172,11 @@ function DropdownMenuRadioItem({
         "relative flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
+      onSelect={(e) => {
+        const label = dataTrack ?? extractLabel(e.currentTarget) ?? "dropdown-menu-radio-item"
+        track({ component: "dropdown-menu-radio-item", name: label, action: "select" })
+        onSelect?.(e)
+      }}
       {...props}
     >
       <span

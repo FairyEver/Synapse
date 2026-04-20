@@ -4,11 +4,25 @@ import * as React from "react"
 import { Popover as PopoverPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 
 function Popover({
+  "data-track": dataTrack,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />
+}: React.ComponentProps<typeof PopoverPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  return (
+    <PopoverPrimitive.Root
+      data-slot="popover"
+      onOpenChange={(open) => {
+        track({ component: "popover", name: dataTrack ?? "popover", action: open ? "open" : "close" })
+        onOpenChange?.(open)
+      }}
+      {...props}
+    />
+  )
 }
 
 function PopoverTrigger({

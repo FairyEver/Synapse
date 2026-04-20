@@ -2,6 +2,11 @@ import * as React from "react"
 import { Slider as SliderPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { track, debounce } from "@/lib/ui-tracking"
+
+const debouncedTrackSlide = debounce((name: string, value: number[]) => {
+  track({ component: "slider", name, action: "slide", value })
+}, 300)
 
 function Slider({
   className,
@@ -9,8 +14,12 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  "data-track": dataTrack,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof SliderPrimitive.Root>) {
+}: React.ComponentProps<typeof SliderPrimitive.Root> & {
+  "data-track"?: string
+}) {
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -32,6 +41,10 @@ function Slider({
         "relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col",
         className
       )}
+      onValueChange={(val) => {
+        debouncedTrackSlide(dataTrack ?? "slider", val)
+        onValueChange?.(val)
+      }}
       {...props}
     >
       <SliderPrimitive.Track

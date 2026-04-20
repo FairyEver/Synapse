@@ -3,12 +3,17 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { Tabs as TabsPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 
 function Tabs({
   className,
   orientation = "horizontal",
+  "data-track": dataTrack,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+}: React.ComponentProps<typeof TabsPrimitive.Root> & {
+  "data-track"?: string
+}) {
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
@@ -17,6 +22,10 @@ function Tabs({
         "group/tabs flex gap-2 data-horizontal:flex-col",
         className
       )}
+      onValueChange={(value) => {
+        track({ component: "tabs", name: dataTrack ?? value ?? "tabs", action: "select", value })
+        onValueChange?.(value)
+      }}
       {...props}
     />
   )

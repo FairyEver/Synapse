@@ -4,9 +4,30 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { track, mergeRefs } from "@/lib/ui-tracking"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+const SheetTrackContext = React.createContext<React.MutableRefObject<string | undefined> | null>(null)
+
+function Sheet({
+  "data-track": dataTrack,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root> & {
+  "data-track"?: string
+}) {
+  const titleRef = React.useRef<string | undefined>(undefined)
+  return (
+    <SheetTrackContext.Provider value={titleRef}>
+      <SheetPrimitive.Root
+        data-slot="sheet"
+        onOpenChange={(open) => {
+          track({ component: "sheet", name: dataTrack ?? titleRef.current ?? "sheet", action: open ? "open" : "close" })
+          onOpenChange?.(open)
+        }}
+        {...props}
+      />
+    </SheetTrackContext.Provider>
+  )
 }
 
 function SheetTrigger({
@@ -106,10 +127,17 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
 
 function SheetTitle({
   className,
+  ref,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Title>) {
+  const titleRef = React.useContext(SheetTrackContext)
+  const innerRef = React.useRef<HTMLHeadingElement>(null)
+  React.useEffect(() => {
+    if (titleRef) titleRef.current = innerRef.current?.textContent?.trim()
+  })
   return (
     <SheetPrimitive.Title
+      ref={mergeRefs(ref, innerRef)}
       data-slot="sheet-title"
       className={cn(
         "font-heading text-base font-medium text-foreground",

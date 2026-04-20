@@ -2,15 +2,24 @@ import * as React from "react"
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 
 function RadioGroup({
   className,
+  "data-track": dataTrack,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {
+}: React.ComponentProps<typeof RadioGroupPrimitive.Root> & {
+  "data-track"?: string
+}) {
   return (
     <RadioGroupPrimitive.Root
       data-slot="radio-group"
       className={cn("grid w-full gap-2", className)}
+      onValueChange={(value) => {
+        track({ component: "radio-group", name: dataTrack ?? value ?? "radio-group", action: "select", value })
+        onValueChange?.(value)
+      }}
       {...props}
     />
   )
