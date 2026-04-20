@@ -2,6 +2,11 @@ import { useCallback, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import {
+  useActiveRepository,
+  useRepositoryActions,
+  useRepositoryList,
+} from "@/app-shell/use-repository-manager"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,7 +28,10 @@ import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 const logger = createRendererLogger("settings")
 
 function SettingsModule() {
-  const { activeRepository, config, error, isReady, updateConfig, resetKey } = useAppConfig()
+  const { config, error, isReady, updateConfig } = useAppConfig()
+  const activeRepository = useActiveRepository()
+  const repositories = useRepositoryList()
+  const { replaceRepositories } = useRepositoryActions()
   const { promise } = useAppNotifications()
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general")
   const [isAdminMode, setIsAdminMode] = useState(false)
@@ -100,21 +108,28 @@ function SettingsModule() {
   )
 
   const handleSaveRepositories = useCallback(
-    async (repositories: typeof config.repositories, activeRepoUuid: string | null, reset: boolean) => {
+    async (nextRepositories: typeof repositories, activeRepoUuid: string | null) => {
       logger.info("Saving repository list from settings.", {
         activeRepoUuid,
-        reset,
-        repositoryCount: repositories.length,
+        repositoryCount: nextRepositories.length,
       })
-      return applyPatch(
-        {
-          repositories,
-          activeRepoUuid,
-        },
-        reset,
-      )
+      try {
+        await promise(
+          () => replaceRepositories(nextRepositories, activeRepoUuid),
+          {
+            loading: "正在保存目录...",
+            success: () => "目录已保存。",
+            error: (updateError) => updateError instanceof Error ? updateError.message : "保存目录失败。",
+          },
+        )
+
+        return true
+      } catch (updateError) {
+        logger.error("Failed to save repository list from settings.", updateError)
+        return false
+      }
     },
-    [applyPatch],
+    [promise, replaceRepositories, repositories],
   )
 
   const handleSaveProjects = useCallback(
@@ -200,8 +215,6 @@ function SettingsModule() {
 
         {isReady && hasRepositoriesItem ? (
           <RepositoryListEditor
-            repositories={config.repositories}
-            activeRepoUuid={config.activeRepoUuid}
             onSave={handleSaveRepositories}
           />
         ) : null}

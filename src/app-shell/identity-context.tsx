@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react"
-import { useAppConfig } from "@/app-shell/config"
 import {
   adoptExistingIdentityUserId,
   generateNewIdentity,
@@ -16,6 +15,7 @@ import {
 } from "@/app-shell/identity"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
+  useActiveRepository,
   useRepositoryState,
   useRepositoryOperation,
 } from "@/app-shell/use-repository-manager"
@@ -47,7 +47,7 @@ const logger = createRendererLogger("app.identity")
 const EMPTY_PROFILE_MAP = new Map<string, SynapseUserProfile>()
 
 function IdentityProvider({ children }: { children: ReactNode }) {
-  const { activeRepository } = useAppConfig()
+  const activeRepository = useActiveRepository()
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
   const [localIdentityState, setLocalIdentityState] = useState<SynapseLocalIdentityState | null>(null)

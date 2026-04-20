@@ -1,9 +1,8 @@
 import { type ComponentType, useMemo, useState } from "react"
-import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useContentList } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, useContentList } from "@/app-shell/use-repository-manager"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import type { SynapseContentMeta, SynapseContentType, SynapseCreateContentPayload } from "@/types/content"
@@ -44,7 +43,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     onInstallDialogOpenChange,
   }: ContentModuleProps) {
     const logger = useMemo(() => createRendererLogger(config.contentType), [config.contentType])
-    const { activeRepository } = useAppConfig()
+    const activeRepository = useActiveRepository()
     const { currentRepoProfileState } = useCurrentRepoProfile()
     const { promise } = useAppNotifications()
     const { createContent } = useContentList<T>(config.contentType)

@@ -13,14 +13,12 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
-  SynapseRepositoryConfig,
   SynapseThemeMode,
 } from "@/types/config"
-import { createDefaultConfig, getActiveRepositoryConfig } from "@/lib/config"
+import { createDefaultConfig } from "@/lib/config"
 
 type AppConfigContextValue = {
   config: SynapseConfig
-  activeRepository: SynapseRepositoryConfig | null
   error: string | null
   isReady: boolean
   refreshConfig: () => Promise<SynapseConfig>
@@ -144,7 +142,6 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppConfigContextValue>(
     () => ({
       config,
-      activeRepository: getActiveRepositoryConfig(config),
       error,
       isReady,
       refreshConfig,

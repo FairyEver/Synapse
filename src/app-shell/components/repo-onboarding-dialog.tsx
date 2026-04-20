@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
-import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useLocalIdentity } from "@/app-shell/identity-context"
-import { useRepositoryManager, useRepositoryState } from "@/app-shell/use-repository-manager"
+import {
+  useActiveRepository,
+  useRepositoryList,
+  useRepositoryManager,
+  useRepositoryState,
+} from "@/app-shell/use-repository-manager"
 import {
   Dialog,
   DialogContent,
@@ -22,7 +26,8 @@ import {
 import { Input } from "@/components/ui/input"
 
 function RepoOnboardingDialog() {
-  const { activeRepository, config } = useAppConfig()
+  const activeRepository = useActiveRepository()
+  const repositories = useRepositoryList()
   const { currentRepoProfileState, updateCurrentRepoDisplayName } = useCurrentRepoProfile()
   const { localIdentityState } = useLocalIdentity()
   const manager = useRepositoryManager()
@@ -35,7 +40,7 @@ function RepoOnboardingDialog() {
   const [displayName, setDisplayName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const hasOtherRepositories = config.repositories.length > 1
+  const hasOtherRepositories = repositories.length > 1
   const isBlockedByOtherSwitchUi =
     isRepositorySwitchDialogOpen || pendingSwitchOnboarding !== null
   const isOpen =

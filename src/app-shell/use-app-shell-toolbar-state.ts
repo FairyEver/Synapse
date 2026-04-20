@@ -3,6 +3,7 @@ import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useAppConfig } from "@/app-shell/config"
 import {
   useActiveRepository,
+  useRepositoryList,
   usePendingPushes,
   useRepositoryOperation,
   useRepositoryState,
@@ -48,9 +49,10 @@ function useAppShellToolbarState({
 }: {
   hasBlockingModalOpen: boolean
 }): AppShellToolbarState {
-  const { config, isReady } = useAppConfig()
+  const { isReady } = useAppConfig()
+  const activeRepository = useActiveRepository()
+  const repositories = useRepositoryList()
   const { isSwitchingRepository } = useActiveRepositorySwitch()
-  const { activeRepository } = useActiveRepository()
 
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
@@ -110,7 +112,7 @@ function useAppShellToolbarState({
       repositorySwitchTitle = "请先关闭当前弹窗"
     } else if (!isReady) {
       repositorySwitchTitle = "正在加载设置..."
-    } else if (config.repositories.length < 2) {
+    } else if (repositories.length < 2) {
       repositorySwitchTitle = "至少需要两个仓库"
     }
 
@@ -122,20 +124,20 @@ function useAppShellToolbarState({
       refreshBusy: isSyncOperationRunning,
       refreshDisabled: !isReady || !canSyncActiveRepository || hasToolbarLock,
       refreshTitle,
-      repositorySwitchDisabled: !isReady || config.repositories.length < 2 || hasToolbarLock,
+      repositorySwitchDisabled: !isReady || repositories.length < 2 || hasToolbarLock,
       repositorySwitchTitle,
       showRefresh: Boolean(canSyncActiveRepository) && !isPushOperationRunning,
-      showRepositorySwitch: config.repositories.length > 1,
+      showRepositorySwitch: repositories.length > 1,
     }
   }, [
     activeRepository,
     activeRepositoryOperation,
     activeRepositoryState,
     activePendingPushState,
-    config.repositories.length,
     hasBlockingModalOpen,
     isReady,
     isSwitchingRepository,
+    repositories.length,
   ])
 }
 

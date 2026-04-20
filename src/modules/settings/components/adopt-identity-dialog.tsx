@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { LoaderCircle } from "lucide-react"
-import { useAppConfig } from "@/app-shell/config"
 import { useLocalIdentity } from "@/app-shell/identity-context"
+import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import {
   Dialog,
   DialogContent,
@@ -24,7 +24,7 @@ function AdoptIdentityDialog({
   open,
   onOpenChange,
 }: AdoptIdentityDialogProps) {
-  const { activeRepository } = useAppConfig()
+  const activeRepository = useActiveRepository()
   const { adoptExistingUserId } = useLocalIdentity()
   const [value, setValue] = useState("")
   const [error, setError] = useState<string | null>(null)

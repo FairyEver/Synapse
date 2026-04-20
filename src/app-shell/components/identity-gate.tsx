@@ -1,7 +1,7 @@
 import { type ReactNode, useMemo, useState } from "react"
 import { LoaderCircle } from "lucide-react"
-import { useAppConfig } from "@/app-shell/config"
 import { useLocalIdentity } from "@/app-shell/identity-context"
+import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,7 +18,7 @@ function IdentityScreenShell({ children }: { children: ReactNode }) {
 }
 
 function IdentityGate({ children }: { children: ReactNode }) {
-  const { activeRepository } = useAppConfig()
+  const activeRepository = useActiveRepository()
   const {
     adoptExistingUserId,
     error,

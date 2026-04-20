@@ -1,21 +1,41 @@
 import { useCallback, useSyncExternalStore } from "react"
-import type { RepositoryManager, RepositoryOperationState } from "@/app-shell/repository-manager"
+import type {
+  RepositoryAddOptions,
+  RepositoryManager,
+  RepositoryOperationState,
+} from "@/app-shell/repository-manager"
 import { useRepositoryManager as useRepositoryManagerContext } from "@/app-shell/repository"
-import type { SynapseConfigPatch, SynapseRepositoryConfig } from "@/types/config"
+import type { SynapseRepositoryConfig } from "@/types/config"
 import type {
   SynapseContentMeta,
   SynapseContentMutationResult,
   SynapseContentType,
   SynapseCreateContentPayload,
+  SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
   SynapseUpdateContentPayload,
 } from "@/types/content"
-import type { SynapsePendingPushState } from "@/types/repository"
+import type {
+  SynapseCreateLocalRepositoryPayload,
+  SynapseCreateLocalRepositoryResult,
+  SynapsePendingPushState,
+  SynapseRepositoryInitializationResult,
+  SynapseRepositoryOperationResult,
+} from "@/types/repository"
 
 // ===== useRepositoryManager =====
 
 function useRepositoryManager(): RepositoryManager {
   return useRepositoryManagerContext()
+}
+
+function useRepositorySubscription<T>(getSnapshot: (manager: RepositoryManager) => T): T {
+  const manager = useRepositoryManager()
+
+  return useSyncExternalStore(
+    (callback) => manager.subscribeToRepositoryChanges(callback),
+    () => getSnapshot(manager),
+  )
 }
 
 // ===== useContentList =====
@@ -82,24 +102,22 @@ function useContentList<T extends SynapseContentType>(contentType: T): UseConten
 // ===== useActiveRepository =====
 
 function useActiveRepository() {
-  const manager = useRepositoryManager()
+  const activeRepository = useRepositorySubscription((manager) => manager.getActiveRepository())
 
-  const activeRepository = useSyncExternalStore(
-    (callback) => manager.subscribeToRepositoryChanges(callback),
-    () => manager.getActiveRepository(),
-  )
+  return activeRepository
+}
 
-  const switchRepository = useCallback(
-    async (uuid: string) => {
-      await manager.switchActiveRepository(uuid)
-    },
-    [manager],
-  )
+function useRepositoryList(): SynapseRepositoryConfig[] {
+  return useRepositorySubscription((manager) => manager.getRepositories())
+}
 
-  return {
-    activeRepository,
-    switchRepository,
-  }
+function useHasRepositories(): boolean {
+  return useRepositorySubscription((manager) => manager.hasRepositories())
+}
+
+function useActiveRepositoryState() {
+  const activeRepository = useActiveRepository()
+  return useRepositoryState(activeRepository?.uuid ?? "")
 }
 
 // ===== useRepositoryState =====
@@ -134,35 +152,23 @@ function useRepositoryOperation(uuid: string): RepositoryOperationState | undefi
 // ===== usePendingPushes =====
 
 function usePendingPushes(uuid: string): SynapsePendingPushState | undefined {
-  const manager = useRepositoryManager()
-
-  const pendingPushes = useSyncExternalStore(
-    (callback) => manager.subscribeToRepositoryChanges(callback),
-    () => manager.getPendingPushes(uuid),
-  )
-
-  return pendingPushes
+  return useRepositorySubscription((manager) => manager.getPendingPushes(uuid))
 }
 
-// ===== useRepositoryConfig =====
+function useHasRunningRepositoryOperation(): boolean {
+  return useRepositorySubscription((manager) => {
+    return Array.from(manager.getAllOperations().values()).some((operation) => operation.isRunning)
+  })
+}
 
-function useRepositoryConfig() {
+// ===== useRepositoryActions =====
+
+function useRepositoryActions() {
   const manager = useRepositoryManager()
-  const config = useSyncExternalStore(
-    (callback) => manager.subscribeToRepositoryChanges(callback),
-    () => manager.getConfig(),
-  )
-
-  const updateConfig = useCallback(
-    async (patch: SynapseConfigPatch, reset?: boolean) => {
-      await manager.updateConfig(patch, reset)
-    },
-    [manager],
-  )
 
   const addRepository = useCallback(
-    async (repository: SynapseRepositoryConfig) => {
-      await manager.addRepository(repository)
+    async (repository: SynapseRepositoryConfig, options?: RepositoryAddOptions) => {
+      await manager.addRepository(repository, options)
     },
     [manager],
   )
@@ -174,11 +180,94 @@ function useRepositoryConfig() {
     [manager],
   )
 
+  const updateRepository = useCallback(
+    async (uuid: string, patch: Partial<SynapseRepositoryConfig>) => {
+      await manager.updateRepository(uuid, patch)
+    },
+    [manager],
+  )
+
+  const replaceRepositories = useCallback(
+    async (repositories: SynapseRepositoryConfig[], activeRepoUuid: string | null) => {
+      await manager.replaceRepositories(repositories, activeRepoUuid)
+    },
+    [manager],
+  )
+
+  const setActiveRepository = useCallback(
+    async (uuid: string) => {
+      await manager.setActiveRepository(uuid)
+    },
+    [manager],
+  )
+
+  const clearActiveRepository = useCallback(async () => {
+    await manager.clearActiveRepository()
+  }, [manager])
+
+  const switchActiveRepository = useCallback(
+    async (uuid: string) => {
+      await manager.switchActiveRepository(uuid)
+    },
+    [manager],
+  )
+
+  const createLocalRepositoryAndAdd = useCallback(
+    async (
+      options: SynapseCreateLocalRepositoryPayload,
+      addOptions?: RepositoryAddOptions,
+    ): Promise<SynapseCreateLocalRepositoryResult> => {
+      return manager.createLocalRepositoryAndAdd(options, addOptions)
+    },
+    [manager],
+  )
+
+  const syncRepository = useCallback(
+    async (uuid: string): Promise<SynapseRepositoryOperationResult> => {
+      return manager.syncRepository(uuid)
+    },
+    [manager],
+  )
+
+  const pushRepository = useCallback(
+    async (uuid: string): Promise<SynapseRepositoryOperationResult> => {
+      return manager.pushRepository(uuid)
+    },
+    [manager],
+  )
+
+  const runMaintenance = useCallback(
+    async (uuid: string): Promise<SynapseRepositoryOperationResult> => {
+      return manager.runMaintenance(uuid)
+    },
+    [manager],
+  )
+
+  const initializeRepository = useCallback(
+    async (uuid: string): Promise<SynapseRepositoryInitializationResult> => {
+      return manager.initializeRepository(uuid)
+    },
+    [manager],
+  )
+
+  const refreshRepositoryStates = useCallback(async () => {
+    await manager.refreshRepositoryStates()
+  }, [manager])
+
   return {
-    config,
-    updateConfig,
     addRepository,
+    clearActiveRepository,
+    createLocalRepositoryAndAdd,
+    initializeRepository,
+    pushRepository,
+    refreshRepositoryStates,
     removeRepository,
+    replaceRepositories,
+    runMaintenance,
+    setActiveRepository,
+    switchActiveRepository,
+    syncRepository,
+    updateRepository,
   }
 }
 
@@ -186,8 +275,12 @@ export {
   useRepositoryManager,
   useContentList,
   useActiveRepository,
+  useActiveRepositoryState,
+  useHasRepositories,
+  useHasRunningRepositoryOperation,
+  useRepositoryActions,
+  useRepositoryList,
   useRepositoryState,
   useRepositoryOperation,
   usePendingPushes,
-  useRepositoryConfig,
 }

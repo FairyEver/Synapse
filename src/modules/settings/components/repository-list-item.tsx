@@ -1,8 +1,12 @@
 import { Folder, FolderGit2 } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
-import { useRepositoryManager } from "@/app-shell/repository"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
+import {
+  useRepositoryActions,
+  useRepositoryOperation,
+  useRepositoryState,
+} from "@/app-shell/use-repository-manager"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,23 +16,16 @@ import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type { SynapseRepositoryLocalState } from "@/types/repository"
-import type { RepositoryOperationState } from "@/app-shell/repository"
 import { RepositoryDisplayNameField } from "@/modules/settings/components/repository-display-name-field"
 
 type RepositoryListItemProps = {
   repository: SynapseRepositoryConfig
   isActive: boolean
-  isBusy: boolean
-  canSync: boolean
-  canInitialize: boolean
   hasRepositoryBridge: boolean
   hasRunningRepositoryOperation: boolean
   isSwitchingRepository: boolean
   isOnboardingBlocked: boolean
-  repositoryState?: SynapseRepositoryLocalState
-  operation?: RepositoryOperationState
   initializingUuid: string | null
-  activeRepoUuid: string | null
   onInitialize: (repository: SynapseRepositoryConfig) => void
   onRemove: (repositoryUuid: string) => void
   onEdit: (repository: SynapseRepositoryConfig) => void
@@ -51,25 +48,24 @@ function getRepositoryStatusLabel(repositoryState: SynapseRepositoryLocalState |
 function RepositoryListItem({
   repository,
   isActive,
-  isBusy,
-  canSync,
-  canInitialize,
   hasRepositoryBridge,
   hasRunningRepositoryOperation,
   isSwitchingRepository,
   isOnboardingBlocked,
-  repositoryState,
-  operation,
   initializingUuid,
-  activeRepoUuid,
   onInitialize,
   onRemove,
   onEdit,
 }: RepositoryListItemProps) {
-  const { syncRepository } = useRepositoryManager()
+  const repositoryState = useRepositoryState(repository.uuid)
+  const operation = useRepositoryOperation(repository.uuid)
+  const { syncRepository } = useRepositoryActions()
   const { switchActiveRepository } = useActiveRepositorySwitch()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const { promise } = useAppNotifications()
+  const isBusy = Boolean(operation?.isRunning) || initializingUuid === repository.uuid
+  const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
+  const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
 
   const handleSync = async () => {
     try {

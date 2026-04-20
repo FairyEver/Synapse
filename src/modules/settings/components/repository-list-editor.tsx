@@ -3,7 +3,13 @@ import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/use-repository-manager"
+import {
+  useActiveRepository,
+  useHasRunningRepositoryOperation,
+  useRepositoryActions,
+  useRepositoryList,
+  useRepositoryManager,
+} from "@/app-shell/use-repository-manager"
 import { DelayedConfirmAlertDialog } from "@/components/delayed-confirm-alert-dialog"
 import { FormDialog } from "@/components/form-dialog"
 import {
@@ -34,12 +40,9 @@ import type {
 const logger = createRendererLogger("settings.repositories")
 
 type RepositoryListEditorProps = {
-  repositories: SynapseRepositoryConfig[]
-  activeRepoUuid: string | null
   onSave: (
     repositories: SynapseRepositoryConfig[],
     activeRepoUuid: string | null,
-    reset: boolean,
   ) => Promise<boolean>
 }
 
@@ -62,16 +65,16 @@ function validateLocalRepositoryName(value: string): string | null {
 }
 
 function RepositoryListEditor({
-  repositories,
-  activeRepoUuid,
   onSave,
 }: RepositoryListEditorProps) {
+  const repositories = useRepositoryList()
+  const activeRepository = useActiveRepository()
+  const activeRepoUuid = activeRepository?.uuid ?? null
   const manager = useRepositoryManager()
+  const { createLocalRepositoryAndAdd, initializeRepository } = useRepositoryActions()
   const {
     checkInitializationPreview,
     chooseDirectory,
-    createLocalRepository,
-    initializeRepository,
     validateDirectory,
   } = manager
   const hasRepositoryBridge = manager.hasRepositoryBridge()
@@ -113,7 +116,7 @@ function RepositoryListEditor({
     })
 
     try {
-      return await onSave(nextRepositories, nextActiveRepoUuid, false)
+      return await onSave(nextRepositories, nextActiveRepoUuid)
     } catch (error) {
       logger.error("Failed to save repository config.", { error, repositoryUuid: nextRepository.uuid })
       setFormError(error instanceof Error ? error.message : "保存失败。")
@@ -226,16 +229,10 @@ function RepositoryListEditor({
     setCreateRepositoryError(null)
 
     try {
-      const result = await createLocalRepository({
+      const result = await createLocalRepositoryAndAdd({
         name: newRepositoryName.trim(),
         parentPath,
       })
-      const saved = await saveRepositoryConfig(result.repository)
-
-      if (!saved) {
-        setCreateRepositoryError("本地仓库已创建，但写入设置失败。稍后可以再把这个目录加回来。")
-        return
-      }
 
       logger.info("Created local repository from settings.", {
         localPath: result.repository.localPath,
@@ -327,7 +324,7 @@ function RepositoryListEditor({
         repo.uuid === editingRepository.uuid ? updatedRepository : repo
       )
 
-      const saved = await onSave(nextRepositories, activeRepoUuid, false)
+      const saved = await onSave(nextRepositories, activeRepoUuid)
 
       if (saved) {
         setEditingRepository(null)
@@ -359,7 +356,7 @@ function RepositoryListEditor({
     })
 
     try {
-      await onSave(nextRepositories, nextActiveRepoUuid, removedActiveRepository)
+      await onSave(nextRepositories, nextActiveRepoUuid)
     } catch (error) {
       logger.error("Failed to remove repository.", { error, repositoryUuid })
       setFormError(error instanceof Error ? error.message : "删除失败。")
@@ -417,7 +414,7 @@ function RepositoryListEditor({
   const previewList = previewEntries.slice(0, 5)
   const remainingPreviewCount = Math.max(previewEntries.length - previewList.length, 0)
   const isOnboardingBlocked = currentRepoProfileState?.status === "needs-onboarding"
-  const hasRunningRepositoryOperation = Array.from(manager.getAllOperations().values()).some((operation) => operation.isRunning)
+  const hasRunningRepositoryOperation = useHasRunningRepositoryOperation()
 
   return (
     <>
@@ -617,28 +614,17 @@ function RepositoryListEditor({
         <div className="flex flex-col gap-3">
           {repositories.map((repository) => {
             const isActive = repository.uuid === activeRepoUuid
-            const operation = manager.getAllOperations().get(repository.uuid)
-            const repositoryState = manager.getAllStates().get(repository.uuid)
-            const isBusy = Boolean(operation?.isRunning) || initializingUuid === repository.uuid
-            const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
-            const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
 
             return (
               <RepositoryListItem
                 key={repository.uuid}
                 repository={repository}
                 isActive={isActive}
-                isBusy={isBusy}
-                canSync={canSync}
-                canInitialize={canInitialize}
                 hasRepositoryBridge={hasRepositoryBridge}
                 hasRunningRepositoryOperation={hasRunningRepositoryOperation}
                 isSwitchingRepository={isSwitchingRepository}
                 isOnboardingBlocked={isOnboardingBlocked}
-                repositoryState={repositoryState}
-                operation={operation}
                 initializingUuid={initializingUuid}
-                activeRepoUuid={activeRepoUuid}
                 onInitialize={handleInitializeRepository}
                 onRemove={setPendingRemovalUuid}
                 onEdit={handleEditRepository}

@@ -37,6 +37,10 @@ export type RepositoryOperationState = {
   error?: string
 }
 
+export type RepositoryAddOptions = {
+  activate?: boolean
+}
+
 type ContentSubscriber = () => void
 type RepositorySubscriber = () => void
 type OperationSubscriber = (state: RepositoryOperationState) => void
@@ -72,6 +76,7 @@ class RepositoryManager {
     await this.refreshConfig()
     this.setupBridgeListeners()
     await this.refreshRepositoryStates()
+    await this.refreshPendingPushesForRepositories(this.getRepositories().map((repository) => repository.uuid))
 
     // 初始化内容订阅者 Map
     for (const contentType of ["rule", "skill"] as SynapseContentType[]) {
@@ -103,8 +108,16 @@ class RepositoryManager {
     )
   }
 
+  getActiveRepositoryUuid(): string | null {
+    return this.config?.activeRepoUuid ?? null
+  }
+
   getRepositories(): SynapseRepositoryConfig[] {
     return this.config?.repositories ?? []
+  }
+
+  hasRepositories(): boolean {
+    return this.getRepositories().length > 0
   }
 
   isReady(): boolean {
@@ -122,7 +135,7 @@ class RepositoryManager {
     this.notifyRepositorySubscribers()
   }
 
-  async updateConfig(patch: SynapseConfigPatch, reset = false): Promise<void> {
+  async updateConfig(patch: SynapseConfigPatch): Promise<void> {
     const bridge = window.synapse?.config
     if (!bridge) {
       throw new Error("Config bridge not available")
@@ -130,49 +143,148 @@ class RepositoryManager {
 
     this.config = await bridge.update(patch)
     this.notifyRepositorySubscribers()
-
-    if (reset) {
-      window.location.reload()
-    }
   }
 
   async switchActiveRepository(uuid: string): Promise<void> {
-    // 清空内容快照缓存，避免显示旧仓库数据
-    this.contentSnapshots.clear()
-    await this.updateConfig({ activeRepoUuid: uuid })
+    const repository = this.getRepositories().find((item) => item.uuid === uuid)
+
+    if (!repository) {
+      throw new Error("Repository not found")
+    }
+
+    if (this.getActiveRepositoryUuid() === uuid) {
+      return
+    }
+
+    this.resetContentForRepositoryChange()
+    await this.setActiveRepository(uuid)
     await this.refreshRepositoryStates()
-    // 切换仓库后刷新内容缓存
     await this.refreshAllContent()
   }
 
-  async addRepository(repository: SynapseRepositoryConfig): Promise<void> {
+  async setActiveRepository(uuid: string): Promise<void> {
+    const repository = this.getRepositories().find((item) => item.uuid === uuid)
+
+    if (!repository) {
+      throw new Error("Repository not found")
+    }
+
+    await this.updateConfig({ activeRepoUuid: uuid })
+    await this.refreshPendingPushes(uuid)
+  }
+
+  async clearActiveRepository(): Promise<void> {
+    if (!this.getActiveRepositoryUuid()) {
+      return
+    }
+
+    this.resetContentForRepositoryChange()
+    await this.updateConfig({ activeRepoUuid: null })
+  }
+
+  async addRepository(
+    repository: SynapseRepositoryConfig,
+    options: RepositoryAddOptions = {},
+  ): Promise<void> {
     const repos = [...(this.config?.repositories ?? []), repository]
-    await this.updateConfig({ repositories: repos })
+    const nextActiveRepositoryUuid =
+      options.activate === true || !this.getActiveRepositoryUuid()
+        ? repository.uuid
+        : this.getActiveRepositoryUuid()
+
+    await this.updateConfig({
+      repositories: repos,
+      activeRepoUuid: nextActiveRepositoryUuid,
+    })
+    await this.refreshRepositoryStates()
+    await this.refreshPendingPushes(repository.uuid)
   }
 
   async removeRepository(uuid: string): Promise<void> {
     const repos = (this.config?.repositories ?? []).filter((r) => r.uuid !== uuid)
-    const updates: SynapseConfigPatch = { repositories: repos }
+    const nextActiveRepoUuid = this.getActiveRepositoryUuid() === uuid
+      ? null
+      : this.getActiveRepositoryUuid()
 
-    // 如果删除的是当前激活的仓库，清空激活状态
-    if (this.config?.activeRepoUuid === uuid) {
-      updates.activeRepoUuid = null
-    }
-
-    await this.updateConfig(updates)
-    this.repositoryStates.delete(uuid)
-    this.operations.delete(uuid)
-    this.pendingPushes.delete(uuid)
+    await this.replaceRepositories(repos, nextActiveRepoUuid)
   }
 
   async updateRepository(
     uuid: string,
     patch: Partial<SynapseRepositoryConfig>,
   ): Promise<void> {
+    const isActiveRepository = this.getActiveRepositoryUuid() === uuid
+    const contentSourceChanged = patch.localPath !== undefined || patch.contentDirs !== undefined
+
+    if (isActiveRepository && contentSourceChanged) {
+      this.resetContentForRepositoryChange()
+    }
+
     const repos = (this.config?.repositories ?? []).map((r) =>
       r.uuid === uuid ? { ...r, ...patch } : r,
     )
     await this.updateConfig({ repositories: repos })
+    await this.refreshRepositoryStates()
+
+    if (isActiveRepository) {
+      await this.refreshPendingPushes(uuid)
+    }
+
+    if (isActiveRepository && contentSourceChanged) {
+      await this.refreshAllContent()
+    }
+  }
+
+  async replaceRepositories(
+    repositories: SynapseRepositoryConfig[],
+    activeRepoUuid: string | null,
+  ): Promise<void> {
+    const currentActiveRepository = this.getActiveRepository()
+    const nextActiveRepoUuid =
+      activeRepoUuid && repositories.some((repository) => repository.uuid === activeRepoUuid)
+        ? activeRepoUuid
+        : null
+    const nextActiveRepository = nextActiveRepoUuid
+      ? repositories.find((repository) => repository.uuid === nextActiveRepoUuid) ?? null
+      : null
+    const activeRepositoryChanged = this.getActiveRepositoryUuid() !== nextActiveRepoUuid
+    const activeRepositoryContentSourceChanged =
+      !activeRepositoryChanged
+      && currentActiveRepository !== null
+      && nextActiveRepository !== null
+      && (
+        currentActiveRepository.localPath !== nextActiveRepository.localPath
+        || JSON.stringify(currentActiveRepository.contentDirs)
+          !== JSON.stringify(nextActiveRepository.contentDirs)
+      )
+
+    if (activeRepositoryChanged || activeRepositoryContentSourceChanged) {
+      this.resetContentForRepositoryChange()
+    }
+
+    await this.updateConfig({
+      repositories,
+      activeRepoUuid: nextActiveRepoUuid,
+    })
+    this.pruneRepositoryRuntimeState(new Set(repositories.map((repository) => repository.uuid)))
+    await this.refreshRepositoryStates()
+
+    if (nextActiveRepoUuid) {
+      await this.refreshPendingPushes(nextActiveRepoUuid)
+    }
+
+    if ((activeRepositoryChanged || activeRepositoryContentSourceChanged) && nextActiveRepoUuid) {
+      await this.refreshAllContent()
+    }
+  }
+
+  async createLocalRepositoryAndAdd(
+    options: SynapseCreateLocalRepositoryPayload,
+    addOptions: RepositoryAddOptions = { activate: true },
+  ): Promise<SynapseCreateLocalRepositoryResult> {
+    const result = await this.createLocalRepository(options)
+    await this.addRepository(result.repository, addOptions)
+    return result
   }
 
   // ===== 状态查询 =====
@@ -628,6 +740,16 @@ class RepositoryManager {
     this.notifyRepositorySubscribers()
   }
 
+  private async refreshPendingPushesForRepositories(repositoryUuids: string[]): Promise<void> {
+    await Promise.all(
+      repositoryUuids.map(async (repositoryUuid) => {
+        const pendingState = await this.getPendingPushesFromBridge(repositoryUuid)
+        this.pendingPushes.set(repositoryUuid, pendingState)
+      }),
+    )
+    this.notifyRepositorySubscribers()
+  }
+
   private setupBridgeListeners(): void {
     const bridge = window.synapse?.repository
     if (!bridge) {
@@ -667,7 +789,28 @@ class RepositoryManager {
 
   private setOperationState(uuid: string, state: RepositoryOperationState): void {
     this.operations.set(uuid, state)
+    this.notifyRepositorySubscribers()
     this.notifyOperationSubscribers(uuid, state)
+  }
+
+  private pruneRepositoryRuntimeState(validRepositoryUuids: Set<string>): void {
+    for (const repositoryUuid of this.repositoryStates.keys()) {
+      if (!validRepositoryUuids.has(repositoryUuid)) {
+        this.repositoryStates.delete(repositoryUuid)
+      }
+    }
+
+    for (const repositoryUuid of this.operations.keys()) {
+      if (!validRepositoryUuids.has(repositoryUuid)) {
+        this.operations.delete(repositoryUuid)
+      }
+    }
+
+    for (const repositoryUuid of this.pendingPushes.keys()) {
+      if (!validRepositoryUuids.has(repositoryUuid)) {
+        this.pendingPushes.delete(repositoryUuid)
+      }
+    }
   }
 
   private notifyRepositorySubscribers(): void {
@@ -718,6 +861,15 @@ class RepositoryManager {
     // 后台推送由主进程自动处理，这里不需要额外操作
     // 只需要确保 pending pushes 状态会被更新
     void this.refreshPendingPushes(uuid)
+  }
+
+  private resetContentForRepositoryChange(): void {
+    for (const contentType of ["rule", "skill"] as SynapseContentType[]) {
+      this.contentCache.set(contentType, [])
+      this.contentLoading.set(contentType, false)
+      this.contentErrors.set(contentType, null)
+      this.notifyContentSubscribers(contentType)
+    }
   }
 
   private getPreparingStatusText(operation: SynapseRepositoryOperationKind): string {

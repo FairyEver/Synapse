@@ -8,10 +8,9 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react"
-import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useRepositoryState } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, useRepositoryState } from "@/app-shell/use-repository-manager"
 import {
   ModuleSidebar,
   ModuleSidebarHeader,
@@ -248,7 +247,7 @@ function ContentBrowserPage({
 }: ContentBrowserPageProps) {
   const definition = getContentTypeDefinition(contentType)
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
-  const { activeRepository } = useAppConfig()
+  const activeRepository = useActiveRepository()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType)

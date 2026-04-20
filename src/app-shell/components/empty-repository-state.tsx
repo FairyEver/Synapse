@@ -1,10 +1,14 @@
 import { useState } from "react"
 import { FolderOpen, FolderPlus, Package } from "lucide-react"
-import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useRepositoryManager } from "@/app-shell/repository"
 import { useAppNotifications } from "@/app-shell/notifications"
+import {
+  useActiveRepository,
+  useRepositoryActions,
+  useRepositoryManager,
+  useRepositoryList,
+} from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,20 +17,12 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { cn } from "@/lib/utils"
-import type { SynapseRepositoryConfig } from "@/types/config"
 
 type EmptyRepositoryStateProps = {
   reason: "no-repositories" | "active-repository-missing"
 }
 
 const logger = createRendererLogger("app.empty-repository-state")
-
-function generateUUID(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 11)}`
-}
 
 function validateRepositoryName(value: string): string | null {
   const nextValue = value.trim()
@@ -47,12 +43,14 @@ function validateRepositoryName(value: string): string | null {
 }
 
 function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
-  const { config, updateConfig } = useAppConfig()
-  const { chooseDirectory, createLocalRepository, validateDirectory } = useRepositoryManager()
+  const repositories = useRepositoryList()
+  const activeRepository = useActiveRepository()
+  const { addRepository, createLocalRepositoryAndAdd } = useRepositoryActions()
+  const { chooseDirectory, validateDirectory } = useRepositoryManager()
   const { isSwitchingRepository, switchActiveRepository } = useActiveRepositorySwitch()
   const { error: showError } = useAppNotifications()
 
-  const hasOtherRepositories = config.repositories.length > 0
+  const hasOtherRepositories = repositories.length > 0
   const isFirstTime = reason === "no-repositories"
 
   // 新建仓库对话框状态
@@ -81,17 +79,14 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       }
 
       const name = selectedPath.split("/").pop() || "新仓库"
-      const newRepository: SynapseRepositoryConfig = {
-        uuid: generateUUID(),
+      const newRepository = {
+        uuid: crypto.randomUUID(),
         name,
         localPath: selectedPath,
         contentDirs: { ...DEFAULT_REPOSITORY_CONTENT_DIRECTORIES },
       }
 
-      await updateConfig({
-        repositories: [...config.repositories, newRepository],
-        activeRepoUuid: newRepository.uuid,
-      })
+      await addRepository(newRepository, { activate: true })
     } catch (err) {
       logger.error("Failed to choose repository directory.", err)
       showError(err instanceof Error ? err.message : "选择目录失败", { durationMs: 4000 })
@@ -119,13 +114,10 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     setCreateNameError(null)
 
     try {
-      const result = await createLocalRepository({ name: createName.trim(), parentPath: createParentPath })
-
-      await updateConfig({
-        repositories: [...config.repositories, result.repository],
-        activeRepoUuid: result.repository.uuid,
-      })
-
+      await createLocalRepositoryAndAdd(
+        { name: createName.trim(), parentPath: createParentPath },
+        { activate: true },
+      )
       setIsCreateDialogOpen(false)
       resetCreateForm()
     } catch (err) {
@@ -145,8 +137,8 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     }
   }
 
-  const availableRepositories = config.repositories.filter(
-    (repo) => repo.uuid !== config.activeRepoUuid
+  const availableRepositories = repositories.filter(
+    (repo) => repo.uuid !== activeRepository?.uuid
   )
 
   return (
@@ -266,7 +258,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">切换到其他仓库</CardTitle>
                 <CardDescription>
-                  你已配置 {config.repositories.length} 个仓库，可以选择切换到其他可用仓库
+                  你已配置 {repositories.length} 个仓库，可以选择切换到其他可用仓库
                 </CardDescription>
               </CardHeader>
               <CardContent>

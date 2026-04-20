@@ -4,11 +4,14 @@ import {
   openContentDetailWindow,
   updateContent,
 } from "@/app-shell/content"
-import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useRepositoryManager } from "@/app-shell/use-repository-manager"
+import {
+  useActiveRepository,
+  useRepositoryManager,
+  useRepositoryOperation,
+} from "@/app-shell/use-repository-manager"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -101,7 +104,7 @@ function ContentDetailDialog<TPayload>({
   const logger = useMemo(() => createRendererLogger(logCategory), [logCategory])
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const repoProfileMap = useRepoProfileMap()
-  const { activeRepository } = useAppConfig()
+  const activeRepository = useActiveRepository()
   const { error, promise } = useAppNotifications()
   const manager = useRepositoryManager()
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -128,7 +131,7 @@ function ContentDetailDialog<TPayload>({
   })
   const { isFavorite, toggleFavorite } = useContentFavorites()
   const isItemFavorite = item ? isFavorite(contentType, item.id) : false
-  const activeRepositoryOperation = activeRepository ? manager.getAllOperations().get(activeRepository.uuid) ?? null : null
+  const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
   const isRepositoryInitializing =
     activeRepositoryOperation?.isRunning
     && activeRepositoryOperation.operation === "initialize"

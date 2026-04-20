@@ -1,7 +1,10 @@
 import { useMemo } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
-import { useAppConfig } from "@/app-shell/config"
-import { useRepositoryManager } from "@/app-shell/repository"
+import {
+  useActiveRepository,
+  useHasRunningRepositoryOperation,
+  useRepositoryList,
+} from "@/app-shell/use-repository-manager"
 import { Badge } from "@/components/ui/badge"
 import {
   Command,
@@ -14,8 +17,8 @@ import {
 } from "@/components/ui/command"
 
 function QuickRepositorySwitchDialog() {
-  const { config } = useAppConfig()
-  const manager = useRepositoryManager()
+  const repositories = useRepositoryList()
+  const activeRepository = useActiveRepository()
   const {
     closeRepositorySwitchDialog,
     isRepositorySwitchDialogOpen,
@@ -24,10 +27,7 @@ function QuickRepositorySwitchDialog() {
     switchActiveRepository,
   } = useActiveRepositorySwitch()
 
-  const hasRunningRepositoryOperation = useMemo(
-    () => Array.from(manager.getAllOperations().values()).some((operation) => operation.isRunning),
-    [manager],
-  )
+  const hasRunningRepositoryOperation = useHasRunningRepositoryOperation()
 
   return (
     <CommandDialog
@@ -45,8 +45,8 @@ function QuickRepositorySwitchDialog() {
         <CommandList>
           <CommandEmpty>没有找到匹配的仓库。</CommandEmpty>
           <CommandGroup heading="仓库">
-            {config.repositories.map((repository) => {
-              const isActive = repository.uuid === config.activeRepoUuid
+            {repositories.map((repository) => {
+              const isActive = repository.uuid === activeRepository?.uuid
               const isSwitchingCurrentRepository = switchingRepositoryUuid === repository.uuid
               const isDisabled = isActive || hasRunningRepositoryOperation || isSwitchingRepository
 
