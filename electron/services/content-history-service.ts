@@ -417,23 +417,33 @@ class ContentHistoryService {
     // 只读取最新版本，避免遍历所有历史版本
     for (const entry of sortedDirs) {
       const historyDirectoryPath = path.join(directoryPath, HISTORY_DIRECTORY_NAME, entry.name)
-
-      const [snapshot, content, attachmentsRecord] = await Promise.all([
-        readJsonFile<unknown>(path.join(historyDirectoryPath, "snapshot.json")).then(parseSnapshotRecord),
-        readFile(path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME), "utf8"),
-        readAttachmentsRecord(historyDirectoryPath),
-      ])
+      const snapshot = parseSnapshotRecord(
+        await readJsonFile<unknown>(path.join(historyDirectoryPath, "snapshot.json")),
+      )
 
       if (!snapshot) {
         continue
       }
 
-      return {
-        attachments: attachmentsRecord.files,
-        content,
-        historyDirname: entry.name,
-        meta,
-        snapshot,
+      try {
+        const [content, attachmentsRecord] = await Promise.all([
+          readFile(path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME), "utf8"),
+          readAttachmentsRecord(historyDirectoryPath),
+        ])
+
+        return {
+          attachments: attachmentsRecord.files,
+          content,
+          historyDirname: entry.name,
+          meta,
+          snapshot,
+        }
+      } catch (error) {
+        if (isFileNotFoundError(error)) {
+          continue
+        }
+
+        throw error
       }
     }
 

@@ -2,6 +2,7 @@ import { useState } from "react"
 import { FolderOpen, FolderPlus, Package } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useRepositoryManager } from "@/app-shell/repository"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,8 @@ import type { SynapseRepositoryConfig } from "@/types/config"
 type EmptyRepositoryStateProps = {
   reason: "no-repositories" | "active-repository-missing"
 }
+
+const logger = createRendererLogger("app.empty-repository-state")
 
 function generateUUID(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -90,7 +93,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
         activeRepoUuid: newRepository.uuid,
       })
     } catch (err) {
-      console.error("选择目录失败:", err)
+      logger.error("Failed to choose repository directory.", err)
       showError(err instanceof Error ? err.message : "选择目录失败", { durationMs: 4000 })
     }
   }
@@ -126,7 +129,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       setIsCreateDialogOpen(false)
       resetCreateForm()
     } catch (err) {
-      console.error("创建仓库失败:", err)
+      logger.error("Failed to create local repository.", err)
       const errorMessage = err instanceof Error ? err.message : "创建仓库失败"
       setCreateNameError(errorMessage)
     } finally {
@@ -138,7 +141,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     try {
       await switchActiveRepository(repositoryUuid)
     } catch (error) {
-      console.error("切换仓库失败:", error)
+      logger.error("Failed to switch repository from empty state.", error)
     }
   }
 

@@ -16,19 +16,30 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
+    let isDisposed = false
+
     logger.info("Initializing RepositoryManager.")
 
     void manager
       .initialize()
       .then(() => {
+        if (isDisposed) {
+          return
+        }
+
         setIsReady(true)
         logger.info("RepositoryManager initialized.")
       })
       .catch((error) => {
+        if (isDisposed) {
+          return
+        }
+
         logger.error("Failed to initialize RepositoryManager.", error)
       })
 
     return () => {
+      isDisposed = true
       resetRepositoryManager()
     }
   }, [manager])

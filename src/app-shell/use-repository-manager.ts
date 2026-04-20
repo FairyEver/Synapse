@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react"
+import { useCallback, useSyncExternalStore } from "react"
 import type { RepositoryManager, RepositoryOperationState } from "@/app-shell/repository-manager"
-import { getRepositoryManager } from "@/app-shell/repository-manager"
+import { useRepositoryManager as useRepositoryManagerContext } from "@/app-shell/repository"
 import type { SynapseConfigPatch, SynapseRepositoryConfig } from "@/types/config"
 import type {
   SynapseContentMeta,
@@ -15,7 +15,7 @@ import type { SynapsePendingPushState } from "@/types/repository"
 // ===== useRepositoryManager =====
 
 function useRepositoryManager(): RepositoryManager {
-  return getRepositoryManager()
+  return useRepositoryManagerContext()
 }
 
 // ===== useContentList =====
@@ -35,7 +35,7 @@ type UseContentListResult<T extends SynapseContentType> = {
 }
 
 function useContentList<T extends SynapseContentType>(contentType: T): UseContentListResult<T> {
-  const manager = getRepositoryManager()
+  const manager = useRepositoryManager()
 
   // 使用 useSyncExternalStore 订阅内容变更
   const store = useSyncExternalStore(
@@ -82,7 +82,7 @@ function useContentList<T extends SynapseContentType>(contentType: T): UseConten
 // ===== useActiveRepository =====
 
 function useActiveRepository() {
-  const manager = getRepositoryManager()
+  const manager = useRepositoryManager()
 
   const activeRepository = useSyncExternalStore(
     (callback) => manager.subscribeToRepositoryChanges(callback),
@@ -105,7 +105,7 @@ function useActiveRepository() {
 // ===== useRepositoryState =====
 
 function useRepositoryState(uuid: string) {
-  const manager = getRepositoryManager()
+  const manager = useRepositoryManager()
 
   const state = useSyncExternalStore(
     (callback) => manager.subscribeToRepositoryChanges(callback),
@@ -118,7 +118,7 @@ function useRepositoryState(uuid: string) {
 // ===== useRepositoryOperation =====
 
 function useRepositoryOperation(uuid: string): RepositoryOperationState | undefined {
-  const manager = getRepositoryManager()
+  const manager = useRepositoryManager()
 
   const operation = useSyncExternalStore(
     (callback) =>
@@ -134,7 +134,7 @@ function useRepositoryOperation(uuid: string): RepositoryOperationState | undefi
 // ===== usePendingPushes =====
 
 function usePendingPushes(uuid: string): SynapsePendingPushState | undefined {
-  const manager = getRepositoryManager()
+  const manager = useRepositoryManager()
 
   const pendingPushes = useSyncExternalStore(
     (callback) => manager.subscribeToRepositoryChanges(callback),
@@ -147,7 +147,7 @@ function usePendingPushes(uuid: string): SynapsePendingPushState | undefined {
 // ===== useRepositoryConfig =====
 
 function useRepositoryConfig() {
-  const manager = getRepositoryManager()
+  const manager = useRepositoryManager()
   const config = useSyncExternalStore(
     (callback) => manager.subscribeToRepositoryChanges(callback),
     () => manager.getConfig(),

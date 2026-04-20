@@ -558,6 +558,7 @@ class RepositoryManager {
   // ===== 订阅接口 =====
   subscribeToRepositoryChanges(callback: RepositorySubscriber): () => void {
     this.repositorySubscribers.add(callback)
+
     return () => {
       this.repositorySubscribers.delete(callback)
     }
