@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
 import { SYNAPSE_IPC_CHANNELS } from "./ipc/channels"
+import { registerCliHandlers } from "./ipc/cli-handlers"
 import { registerContentHandlers } from "./ipc/content-handlers"
 import { registerConfigHandlers } from "./ipc/config-handlers"
 import { registerEditorHandlers } from "./ipc/editor-handlers"
@@ -104,6 +105,7 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     logger.info("Electron app is ready. Registering services.")
     initializeAppIcon()
+    registerCliHandlers()
     registerContentHandlers()
     registerEditorHandlers()
     registerLogHandlers()

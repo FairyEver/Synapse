@@ -14,7 +14,9 @@ import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
+import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
 import { EditorDirectoriesPanel } from "@/modules/settings/components/editor-directories-panel"
+import { CliDetectPanel } from "@/modules/cli/components/cli-detect-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { LogExportPanel } from "@/modules/settings/components/log-export-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
@@ -222,7 +224,9 @@ function SettingsModule() {
 
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
+        {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
         {isReady && activeCategory === "editors" ? <EditorDirectoriesPanel /> : null}
+        {isReady && activeCategory === "cli" ? <CliDetectPanel /> : null}
         {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 
         {isReady && activeCategory === "admin" && activeRepository ? (

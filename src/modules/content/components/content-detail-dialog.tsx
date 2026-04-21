@@ -33,6 +33,7 @@ import { Separator } from "@/components/ui/separator"
 import { formatDateTime } from "@/lib/date-time"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
+import { cn } from "@/lib/utils"
 import { ContentDetailMenubar } from "@/modules/content/components/content-detail-menubar"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
 import {
@@ -122,6 +123,16 @@ function ContentDetailDialog<TPayload>({
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [conflictState, setConflictState] = useState<ConflictState<TPayload> | null>(null)
+  const [contentReady, setContentReady] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setContentReady(false)
+      return
+    }
+    const timer = setTimeout(() => setContentReady(true), 250)
+    return () => clearTimeout(timer)
+  }, [open])
   const {
     detail,
     displayedVersion,
@@ -451,6 +462,7 @@ function ContentDetailDialog<TPayload>({
                   author={authorLabel}
                   category={categoryLabel}
                   description={resolvedItem.description}
+                  descriptionWrap
                   title={resolvedItem.title}
                 />
 
@@ -489,23 +501,28 @@ function ContentDetailDialog<TPayload>({
 
           <Separator className="mt-5" />
 
-          <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
-            <ContentDetailPanel
-              detail={detail}
-              displayedVersion={displayedVersion}
-              emptyDescription={labels.emptyDescription}
-              emptyTitle={labels.emptyTitle}
-              errorTitle={labels.errorTitle}
-              history={historyEntries}
-              isLoading={isLoading}
-              loadingTitle={labels.loadingTitle}
-              onSelectedHistoryDirnameChange={handleHistorySelectionChange}
-              onViewModeChange={handleViewModeChange}
-              previewError={previewError}
-              renderVersion={renderVersionView}
-              selectedHistoryDirname={selectedHistoryDirname}
-              viewMode={viewMode}
-            />
+          <div className={cn(
+            "flex min-h-0 flex-1 flex-col px-5 py-4 transition-opacity duration-200",
+            contentReady ? "opacity-100" : "opacity-0",
+          )}>
+            {contentReady ? (
+              <ContentDetailPanel
+                detail={detail}
+                displayedVersion={displayedVersion}
+                emptyDescription={labels.emptyDescription}
+                emptyTitle={labels.emptyTitle}
+                errorTitle={labels.errorTitle}
+                history={historyEntries}
+                isLoading={isLoading}
+                loadingTitle={labels.loadingTitle}
+                onSelectedHistoryDirnameChange={handleHistorySelectionChange}
+                onViewModeChange={handleViewModeChange}
+                previewError={previewError}
+                renderVersion={renderVersionView}
+                selectedHistoryDirname={selectedHistoryDirname}
+                viewMode={viewMode}
+              />
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

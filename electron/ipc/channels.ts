@@ -24,6 +24,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     exportBackup: "synapse:config:export-backup",
     get: "synapse:config:get",
     importBackup: "synapse:config:import-backup",
+    resetApp: "synapse:config:reset-app",
     update: "synapse:config:update",
   },
   identity: {
@@ -62,6 +63,9 @@ export const SYNAPSE_IPC_CHANNELS = {
   editor: {
     getGlobalDirectories: "synapse:editor:get-global-directories",
     createDirectory: "synapse:editor:create-directory",
+  },
+  cli: {
+    detect: "synapse:cli:detect",
   },
   shell: {
     showItemInFolder: "synapse:shell:show-item-in-folder",

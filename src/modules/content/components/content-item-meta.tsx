@@ -6,6 +6,7 @@ type ContentItemMetaProps = {
   category: string
   className?: string
   description: string
+  descriptionWrap?: boolean
   title: string
 }
 
@@ -14,16 +15,20 @@ function ContentItemMeta({
   category,
   className,
   description,
+  descriptionWrap,
   title,
 }: ContentItemMetaProps) {
   return (
     <div className={cn("min-w-0", className)}>
       <div className="min-w-0 flex flex-col gap-0.5">
         <p className="truncate text-sm font-medium leading-4 text-foreground">{title}</p>
-        <p className="truncate text-sm leading-4 text-muted-foreground">{description}</p>
+        <p className={cn(
+          "text-sm leading-4 text-muted-foreground",
+          descriptionWrap ? "break-words" : "truncate",
+        )}>{description}</p>
       </div>
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge variant="outline" className="max-w-full truncate">
           @{author}
         </Badge>

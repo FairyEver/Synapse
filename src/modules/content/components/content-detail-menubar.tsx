@@ -1,13 +1,21 @@
-import { Fragment } from "react"
+import { Fragment, useCallback, useState } from "react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Menubar,
   MenubarContent,
   MenubarGroup,
   MenubarItem,
-  MenubarLabel,
   MenubarMenu,
-  MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar"
 import { getContentTypeDefinition } from "@/config/content-types"
@@ -40,18 +48,29 @@ function ContentDetailMenubar({
   onToggleFavorite,
 }: ContentDetailMenubarProps) {
   const {
-    allMenuSections,
     canCopy,
     canDownload,
-    downloadAction,
+    canInstall,
     handleCopy,
+    handleDownload,
+    hasAttachments,
     installDialog,
+    installMenuItems,
     isBusy,
     loadInstallTargets,
   } = useContentDownloadActions({ item })
 
   const definition = getContentTypeDefinition(item.type)
   const primaryAction = definition.listPrimaryAction ?? "download"
+  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false)
+
+  const onCopyClick = useCallback(() => {
+    if (hasAttachments) {
+      setIsCopyDialogOpen(true)
+    } else {
+      void handleCopy()
+    }
+  }, [hasAttachments, handleCopy])
 
   return (
     <>
@@ -91,31 +110,45 @@ function ContentDetailMenubar({
                 className="rounded-sm px-1.5"
                 disabled={isBusy}
                 onClick={() => {
-                  downloadAction?.onSelect?.()
+                  void handleDownload()
                 }}
               >
                 下载
               </Button>
             ) : null}
           </>
-        ) : allMenuSections.length > 0 ? (
-          <MenubarMenu>
-            <MenubarTrigger
-              onFocus={() => {
-                loadInstallTargets()
-              }}
-              onPointerEnter={() => {
-                loadInstallTargets()
-              }}
-            >
-              下载
-            </MenubarTrigger>
-            <MenubarContent className="w-56">
-              {allMenuSections.map((section, index) => (
-                <Fragment key={section.key}>
-                  {section.label ? <MenubarLabel>{section.label}</MenubarLabel> : null}
+        ) : (
+          <>
+            {canDownload ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-sm px-1.5"
+                disabled={isBusy}
+                onClick={() => {
+                  void handleDownload()
+                }}
+              >
+                下载
+              </Button>
+            ) : null}
+
+            {canInstall ? (
+              <MenubarMenu>
+                <MenubarTrigger
+                  onFocus={() => {
+                    loadInstallTargets()
+                  }}
+                  onPointerEnter={() => {
+                    loadInstallTargets()
+                  }}
+                >
+                  安装
+                </MenubarTrigger>
+                <MenubarContent className="w-56">
                   <MenubarGroup>
-                    {section.items.map((action) => (
+                    {installMenuItems.map((action) => (
                       <MenubarItem
                         key={action.key}
                         disabled={action.disabled}
@@ -126,12 +159,24 @@ function ContentDetailMenubar({
                       </MenubarItem>
                     ))}
                   </MenubarGroup>
-                  {index < allMenuSections.length - 1 ? <MenubarSeparator /> : null}
-                </Fragment>
-              ))}
-            </MenubarContent>
-          </MenubarMenu>
-        ) : null}
+                </MenubarContent>
+              </MenubarMenu>
+            ) : null}
+
+            {canCopy ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-sm px-1.5"
+                disabled={isBusy}
+                onClick={onCopyClick}
+              >
+                复制
+              </Button>
+            ) : null}
+          </>
+        )}
 
         <Button
           type="button"
@@ -170,6 +215,28 @@ function ContentDetailMenubar({
       </Menubar>
 
       {installDialog}
+
+      <AlertDialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>复制提示</AlertDialogTitle>
+            <AlertDialogDescription>
+              该技能包含多个文件，仅复制主文件内容。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>关闭</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isBusy}
+              onClick={() => {
+                void handleCopy()
+              }}
+            >
+              复制
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

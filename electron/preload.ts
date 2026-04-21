@@ -25,10 +25,14 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     readIconImage: "synapse:content:read-icon-image",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },
+  cli: {
+    detect: "synapse:cli:detect",
+  },
   config: {
     exportBackup: "synapse:config:export-backup",
     get: "synapse:config:get",
     importBackup: "synapse:config:import-backup",
+    resetApp: "synapse:config:reset-app",
     update: "synapse:config:update",
   },
   identity: {
@@ -126,10 +130,14 @@ const synapseBridge: SynapseBridge = {
     resolveEditorInstallTarget: (payload) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.resolveEditorInstallTarget, payload),
   },
+  cli: {
+    detect: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.cli.detect),
+  },
   config: {
     exportBackup: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.exportBackup),
     get: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.get),
     importBackup: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.importBackup),
+    resetApp: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.resetApp),
     update: (patch) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.update, patch),
   },
   identity: {

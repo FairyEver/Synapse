@@ -2,6 +2,7 @@ import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "./backup"
+import type { SynapseCliDetectResult } from "./cli"
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseContentDownloadResult,
@@ -109,10 +110,14 @@ export type SynapseBridge = {
       payload: SynapseResolveEditorTargetPayload,
     ) => Promise<SynapseEditorResolvedTarget>
   }
+  cli: {
+    detect: () => Promise<SynapseCliDetectResult[]>
+  }
   config: {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>
     get: () => Promise<SynapseConfig>
     importBackup: () => Promise<SynapseConfigBackupImportResult | null>
+    resetApp: () => Promise<void>
     update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
   }
   identity: {

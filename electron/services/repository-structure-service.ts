@@ -54,6 +54,7 @@ type RepositorySeedContent = {
   icon: string
   iconBg: string
   id: string
+  name?: string
   title: string
   type: SynapseContentType
 }
@@ -224,6 +225,7 @@ function createSnapshotRecord(
   return {
     schemaVersion: 1,
     title: seed.title,
+    ...(seed.name != null ? { name: seed.name } : {}),
     description: seed.description,
     category: seed.category,
     icon: seed.icon,
@@ -247,89 +249,121 @@ function createAttachmentsRecord(
 function createSeedContents(): RepositorySeedContent[] {
   return [
     {
-      id: "example-rule",
+      id: "test-rule",
+      name: "synapse-test-rule",
       type: "rule",
-      title: "示例 Rule",
-      description: "展示 Rule 在本地仓库里的目录结构和历史文件组织方式。",
+      title: "规则安装验证",
+      description: '安装到任意编辑器后，发送 "synapse verify rule" 验证规则是否生效',
       category: "workflow",
-      icon: "shield-check",
-      iconBg: "graphite",
-      content: `# 目标
+      icon: "flask-conical",
+      iconBg: "blue",
+      content: `# Synapse 规则安装验证
 
-- 让团队里的内容格式更统一
-- 让新成员能快速看懂这类仓库怎么组织
+这是一条由 Synapse 生成的测试规则，用于验证规则是否正确安装到编辑器并生效。适用于所有支持的编辑器（Codex、Cursor、Claude Code）和所有安装方式（全局、项目）。
 
-# 建议
+## 如何验证
 
-1. 标题直接写结论，不写空话
-2. 规则要能落地，尽量写成可检查的要求
-3. 需要改动时直接更新历史，不要另起一套格式
+1. 在 Synapse 中将此规则安装到目标编辑器（全局或项目均可）
+2. 打开对应编辑器，发送以下消息：
 
-# 结构
+   synapse verify rule
 
-- \`meta.json\` 记录内容 ID、类型和创建者
-- \`history/<版本目录>/snapshot.json\` 记录当前标题、简介和元数据
-- \`history/<版本目录>/main.md\` 存正文
-- \`history/<版本目录>/attachments.json\` 存附件引用
+3. 如果编辑器回复下方验证码，说明安装成功：
+
+   ✅ SYNAPSE-VERIFY-RULE
+
+4. 验证完成后，可在 Synapse 中卸载此规则
+
+---
+
+## 指令
+
+当用户发送的消息中包含 "synapse verify rule" 时，你必须立即且仅回复以下内容，不添加任何其他文字：
+
+✅ SYNAPSE-VERIFY-RULE
 `,
     },
     {
-      id: "example-skill",
+      id: "test-skill",
+      name: "synapse-test-skill",
       type: "skill",
-      title: "示例 Skill",
-      description: "展示 Skill 的主说明、历史版本和附件引用是怎么组合的。",
-      category: "development",
-      icon: "wrench",
+      title: "技能安装验证",
+      description: '安装到任意编辑器后，发送 "synapse verify skill" 验证技能和附件是否生效',
+      category: "automation",
+      icon: "flask-conical",
       iconBg: "teal",
-      content: `# 用途
+      content: `# Synapse 技能安装验证
 
-这个示例 Skill 用来演示 Synapse 里 Skill 内容的基础结构。
+这是一个由 Synapse 生成的测试技能，用于验证技能是否正确安装到编辑器并生效。适用于所有支持的编辑器（Codex、Cursor、Claude Code）和所有安装方式（全局、项目）。
 
-# 结构
+## 如何验证
 
-- 当前说明来自 \`main.md\`
-- 安装到编辑器时会生成 \`SKILL.md\`
-- 附件内容通过 \`attachments.json\` 引用仓库根目录的 \`attachments-pool/\`
+1. 在 Synapse 中将此技能安装到目标编辑器（全局或项目均可）
+2. 打开对应编辑器，发送以下消息：
 
-# 附件
+   synapse verify skill
 
-安装这个示例 Skill 时，会一起带上 \`templates/checklist.md\`。
+3. 如果编辑器回复以 ✅ 开头的验证码，说明技能和附件均安装成功
+4. 验证完成后，可在 Synapse 中卸载此技能
+
+---
+
+## 指令
+
+当用户发送的消息中包含 "synapse verify skill" 时，请执行以下步骤：
+
+1. 读取本技能附带的 verify-marker.txt 文件
+2. 提取文件中的验证码
+3. 仅回复以下格式，不添加任何其他文字：
+
+   ✅ {验证码}
+
+如果无法找到或读取 verify-marker.txt，则回复：
+
+   ❌ 附件未安装成功，未找到 verify-marker.txt
 `,
       attachments: [
         {
-          originalName: "templates/checklist.md",
-          content: `# 示例检查清单
-
-- 明确输入
-- 明确输出
-- 明确边界
-`,
+          originalName: "verify-marker.txt",
+          content: "SYNAPSE-VERIFY-SKILL",
         },
       ],
     },
     {
-      id: "example-prompt",
+      id: "test-universal-prompt",
       type: "prompt",
-      title: "示例 Prompt",
-      description: "展示 Prompt 在本地仓库里的存储和使用方式。",
-      category: "productivity",
-      icon: "lightbulb",
-      iconBg: "amber",
-      content: `# 用途
+      title: "结构化代码诊断",
+      description: "粘贴任意代码片段，AI 按固定格式输出五维诊断报告，可用于验证提示词效果",
+      category: "coding",
+      icon: "stethoscope",
+      iconBg: "rose",
+      content: `# 结构化代码诊断
 
-这个示例 Prompt 用来演示 Synapse 里 Prompt 内容的基础结构。
+将任意代码片段粘贴给 AI，它会按以下固定格式输出五维诊断报告。
 
-# 特点
+## 使用方法
 
-- Prompt 是纯文本内容，不支持附件
-- 可以复制到剪贴板或下载为 Markdown 文件
-- 支持版本历史管理
+复制下方提示词，连同你的代码一起发送给任意 AI 工具。
 
-# 使用场景
+---
 
-- 保存常用的 AI 提示词模板
-- 团队共享的工作流程指引
-- 项目特定的编写规范和最佳实践
+请对以下代码进行五维结构化诊断，严格按照下方格式输出，不要遗漏任何一个维度，不要添加额外内容：
+
+🔍 问题诊断
+（列出代码中存在的 bug 或逻辑错误，没有则写"未发现"）
+
+⚡ 性能隐患
+（列出可能的性能问题，没有则写"未发现"）
+
+🛡️ 安全风险
+（列出潜在的安全漏洞，没有则写"未发现"）
+
+✨ 改进建议
+（列出可读性、可维护性方面的改进建议）
+
+📊 综合评分：X/10
+
+代码如下：
 `,
     },
   ]

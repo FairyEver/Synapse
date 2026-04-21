@@ -11,6 +11,7 @@ import {
   Eye,
   FileText,
   Filter,
+  FlaskConical,
   FolderTree,
   GitBranch,
   GitFork,
@@ -24,6 +25,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Stethoscope,
   StickyNote,
   Target,
   Terminal,
@@ -83,6 +85,9 @@ const SYNAPSE_CONTENT_ICON_OPTIONS: SynapseContentIconOption[] = [
   { value: "search", label: "搜索", icon: Search },
   { value: "scan", label: "扫描", icon: Scan },
   { value: "filter", label: "过滤", icon: Filter },
+  // 测试/诊断类
+  { value: "flask-conical", label: "测试", icon: FlaskConical },
+  { value: "stethoscope", label: "诊断", icon: Stethoscope },
 ]
 
 const SYNAPSE_CONTENT_COLOR_OPTIONS: SynapseContentColorOption[] = [

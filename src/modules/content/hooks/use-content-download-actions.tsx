@@ -9,7 +9,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { getContentTypeDefinition } from "@/config/content-types"
-import { getEditorIconSrc } from "@/lib/editor-icons"
+import { getEditorIconSrc, EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
 import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
 import type { SynapseContentMeta } from "@/types/content"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
@@ -239,7 +239,6 @@ function useContentDownloadActions({
       if (canInstall) {
         sections.push({
           key: "install",
-          label: "安装",
           items: isLoadingAdapters
             ? [{ key: "loading-editors", label: "正在读取编辑器", disabled: true }]
             : adaptersError
@@ -249,9 +248,9 @@ function useContentDownloadActions({
                     const iconSrc = getEditorIconSrc(adapter.id)
                     return {
                       key: `install-${adapter.id}`,
-                      label: `安装到 ${adapter.label}`,
+                      label: adapter.label,
                       icon: iconSrc ? (
-                        <img src={iconSrc} alt={adapter.label} className="size-6 shrink-0" />
+                        <img src={iconSrc} alt={adapter.label} className="size-5 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
                       ) : undefined,
                       onSelect: () => {
                         openInstallDialog(adapter)
@@ -302,13 +301,41 @@ function useContentDownloadActions({
     [auxiliaryMenuSections, downloadAction],
   )
 
+  const installMenuItems = useMemo<ContentActionMenuItem[]>(
+    () => {
+      if (!canInstall) return []
+      if (isLoadingAdapters) return [{ key: "loading-editors", label: "正在读取编辑器", disabled: true }]
+      if (adaptersError) return [{ key: "editors-error", label: adaptersError, disabled: true }]
+      if (filteredAdapters.length === 0) return [{ key: "no-install-target", label: "当前没有可用的安装目标", disabled: true }]
+      return filteredAdapters.map((adapter) => {
+        const iconSrc = getEditorIconSrc(adapter.id)
+        return {
+          key: `install-${adapter.id}`,
+          label: adapter.label,
+          icon: iconSrc ? (
+            <img src={iconSrc} alt={adapter.label} className="size-5 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
+          ) : undefined,
+          onSelect: () => {
+            openInstallDialog(adapter)
+          },
+        }
+      })
+    },
+    [adaptersError, canInstall, filteredAdapters, isLoadingAdapters, openInstallDialog],
+  )
+
+  const hasAttachments = definition.capabilities.hasAttachments
+
   return {
     allMenuSections,
     auxiliaryMenuSections,
     canCopy,
     canDownload,
+    canInstall,
     downloadAction,
     handleCopy,
+    handleDownload,
+    hasAttachments,
     installDialog: canInstall ? (
       <ContentInstallDialog
         editor={selectedEditor}
@@ -318,6 +345,7 @@ function useContentDownloadActions({
         projects={config.global.projects}
       />
     ) : null,
+    installMenuItems,
     isBusy,
     isCopying,
     isDownloading,

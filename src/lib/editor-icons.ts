@@ -9,8 +9,10 @@ const editorIconMap: Record<SynapseEditorId, string> = {
   cursor: cursorIcon,
 }
 
+const EDITOR_ICON_CLIP_STYLE: React.CSSProperties = { clipPath: "inset(6%)" }
+
 function getEditorIconSrc(editorId: SynapseEditorId): string | undefined {
   return editorIconMap[editorId]
 }
 
-export { getEditorIconSrc }
+export { EDITOR_ICON_CLIP_STYLE, getEditorIconSrc }

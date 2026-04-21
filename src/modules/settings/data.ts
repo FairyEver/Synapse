@@ -6,6 +6,7 @@ import {
   ScrollText,
   Settings2,
   Shield,
+  Terminal,
 } from "lucide-react"
 import {
   DEFAULT_GLOBAL_CONFIG,
@@ -37,6 +38,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Code,
     label: "编辑器",
     description: "编辑器全局目录。",
+  },
+  {
+    id: "cli",
+    icon: Terminal,
+    label: "CLI",
+    description: "命令行工具。",
   },
   {
     id: "logs",

@@ -236,8 +236,6 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     }
   }
 
-  const [showChineseSlogan, setShowChineseSlogan] = useState(false)
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col items-center gap-3">
@@ -252,13 +250,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
         />
         <div className="flex flex-col items-center gap-0.5">
           <h1 className="text-lg font-semibold tracking-tight">Synapse</h1>
-          <button
-            type="button"
-            className="text-xs tracking-wide text-muted-foreground/70 transition-colors hover:text-muted-foreground"
-            onClick={() => setShowChineseSlogan((prev) => !prev)}
-          >
-            {showChineseSlogan ? "众妙之门" : "Where Ideas Connect."}
-          </button>
+          <p className="text-xs tracking-wide text-muted-foreground/70">Where Ideas Connect.</p>
         </div>
       </div>
 

@@ -2,6 +2,7 @@ import type { SynapseContentHistoryEntry } from "@/types/content"
 import { CircleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/date-time"
+import { buildHistoryLabel } from "@/lib/content-history"
 import {
   Select,
   SelectContent,
@@ -27,31 +28,6 @@ type ContentHistorySelectProps = {
   onSelectedHistoryDirnameChange: (historyDirname: string) => void
 }
 
-function buildHistoryLabel(
-  entry: SynapseContentHistoryEntry,
-  latestHistoryDirname: string,
-  oldestHistoryDirname: string,
-): string {
-  const tags: string[] = []
-
-  if (entry.dirname === latestHistoryDirname) {
-    tags.push("最新")
-  }
-
-  if (entry.dirname === oldestHistoryDirname) {
-    tags.push("最旧")
-  }
-
-  if (entry.deleted) {
-    tags.push("已删除")
-  }
-
-  const authorLabel = entry.modifiedByDisplayName || "未命名用户"
-  const tagLabel = tags.length > 0 ? ` · ${tags.join(" / ")}` : ""
-
-  return `${formatDateTime(entry.modifiedAt)} · ${authorLabel}${tagLabel}`
-}
-
 function ContentHistorySelect({
   className,
   history,
@@ -68,17 +44,17 @@ function ContentHistorySelect({
       : null
 
   return (
-    <div className={cn("flex w-full items-center gap-2 sm:w-[300px] sm:flex-none", className)}>
+    <div className={cn("flex w-full items-center gap-2 sm:w-[350px] sm:flex-none", className)}>
       <Select data-track="content-history-select" value={selectedHistoryDirname} onValueChange={onSelectedHistoryDirnameChange}>
         <SelectTrigger aria-label="历史版本" className="min-w-0 flex-1">
           <SelectValue placeholder="选择历史版本" />
         </SelectTrigger>
-        <SelectContent className="sm:w-[300px]">
+        <SelectContent className="sm:w-[350px]">
           <SelectGroup>
             <SelectLabel>历史版本</SelectLabel>
             {history.map((entry) => (
               <SelectItem key={entry.dirname} value={entry.dirname}>
-                {buildHistoryLabel(entry, latestHistoryDirname, oldestHistoryDirname)}
+                {buildHistoryLabel(entry, latestHistoryDirname, oldestHistoryDirname, history.length)}
               </SelectItem>
             ))}
           </SelectGroup>

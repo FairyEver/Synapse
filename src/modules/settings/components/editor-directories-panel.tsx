@@ -4,7 +4,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getEditorIconSrc } from "@/lib/editor-icons"
+import { getEditorIconSrc, EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseEditorGlobalDirectory } from "@/types/editor"
 
@@ -116,7 +116,7 @@ function EditorDirectoriesPanel() {
               {(() => {
                 const iconSrc = getEditorIconSrc(dir.editorId)
                 return iconSrc ? (
-                  <img src={iconSrc} alt={dir.label} className="size-7 shrink-0" />
+                  <img src={iconSrc} alt={dir.label} className="size-6 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
                 ) : null
               })()}
               {dir.label}

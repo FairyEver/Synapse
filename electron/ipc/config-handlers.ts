@@ -1,11 +1,14 @@
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
+import { readdir, rm, unlink } from "node:fs/promises"
+import path from "node:path"
 import type { SynapseConfigBackupExportResult, SynapseConfigBackupImportResult } from "../../src/types/backup"
 import type { SynapseConfigPatch } from "../../src/types/config"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "./validated-ipc"
 import { configBackupService } from "../services/config-backup-service"
 import { configStore } from "../services/config-store"
-import { createMainLogger } from "../services/log-store"
+import { createMainLogger, logStore } from "../services/log-store"
+import { repositoryStore } from "../services/repository-store"
 
 let handlersRegistered = false
 const logger = createMainLogger("ipc.config")
@@ -58,6 +61,33 @@ function registerConfigHandlers() {
       return config
     },
   )
+
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.config.resetApp, async () => {
+    logger.info("Handling config.resetApp request. Wiping all user data.")
+
+    repositoryStore.unwatchAll()
+    await logStore.dispose()
+
+    const userDataPath = app.getPath("userData")
+    const entries = await readdir(userDataPath, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const entryPath = path.join(userDataPath, entry.name)
+
+      try {
+        if (entry.isDirectory()) {
+          await rm(entryPath, { recursive: true, force: true })
+        } else {
+          await unlink(entryPath)
+        }
+      } catch {
+        // Best effort — some files may be locked by Chromium.
+      }
+    }
+
+    app.relaunch()
+    app.exit(0)
+  })
 
   handlersRegistered = true
 }
