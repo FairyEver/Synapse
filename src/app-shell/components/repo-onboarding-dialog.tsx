@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useCurrentRepoProfile, useLocalIdentity } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -53,6 +53,17 @@ function RepoOnboardingDialog() {
     && currentRepoProfileState?.status === "needs-onboarding"
     && !isBlockedByOtherSwitchUi
 
+  const prevIsOpenRef = useRef(isOpen)
+  useEffect(() => {
+    if (prevIsOpenRef.current !== isOpen) {
+      logger.info("Repo onboarding dialog visibility changed.", {
+        open: isOpen,
+        repositoryUuid: activeRepository?.uuid ?? null,
+      })
+      prevIsOpenRef.current = isOpen
+    }
+  }, [isOpen, activeRepository?.uuid])
+
   useEffect(() => {
     if (!isOpen) {
       setDisplayName("")
@@ -103,7 +114,7 @@ function RepoOnboardingDialog() {
   }
 
   return (
-    <Dialog open={isOpen}>
+    <Dialog open={isOpen} data-track="repo-onboarding-dialog">
       <DialogContent
         showCloseButton={false}
         className="sm:max-w-lg"

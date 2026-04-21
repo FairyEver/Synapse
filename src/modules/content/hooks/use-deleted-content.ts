@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { listDeletedContent } from "@/app-shell/content"
+import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type UseDeletedContentResult = {
@@ -11,6 +12,7 @@ type UseDeletedContentResult = {
 }
 
 function useDeletedContent(contentType: SynapseContentType): UseDeletedContentResult {
+  const logger = useMemo(() => createRendererLogger("content.deleted"), [])
   const [items, setItems] = useState<SynapseContentMeta[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -18,16 +20,19 @@ function useDeletedContent(contentType: SynapseContentType): UseDeletedContentRe
   const refresh = useCallback(async () => {
     setIsLoading(true)
     setError(null)
+    const startedAt = performance.now()
 
     try {
       const result = await listDeletedContent(contentType)
       setItems(result)
+      logger.info("Deleted content loaded.", { contentType, count: result.length, elapsedMs: Math.round(performance.now() - startedAt) })
     } catch (err) {
+      logger.error("Failed to load deleted content.", { contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
       setError(err instanceof Error ? err : new Error("加载已删除内容失败。"))
     } finally {
       setIsLoading(false)
     }
-  }, [contentType])
+  }, [contentType, logger])
 
   useEffect(() => {
     void refresh()

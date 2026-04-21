@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,17 @@ function SwitchRepositoryOnboardingDialog() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const isOpen = pendingSwitchOnboarding !== null
+
+  const prevIsOpenRef = useRef(isOpen)
+  useEffect(() => {
+    if (prevIsOpenRef.current !== isOpen) {
+      logger.info("Switch onboarding dialog visibility changed.", {
+        open: isOpen,
+        repositoryUuid: pendingSwitchOnboarding?.repositoryUuid ?? null,
+      })
+      prevIsOpenRef.current = isOpen
+    }
+  }, [isOpen, pendingSwitchOnboarding?.repositoryUuid])
 
   useEffect(() => {
     if (!isOpen) {
@@ -82,6 +93,7 @@ function SwitchRepositoryOnboardingDialog() {
   return (
     <Dialog
       open={isOpen}
+      data-track="switch-repository-onboarding-dialog"
       onOpenChange={(open) => {
         if (!open && !isSubmitting) {
           cancelPendingSwitchOnboarding()

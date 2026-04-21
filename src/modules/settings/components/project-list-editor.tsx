@@ -83,6 +83,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       setIsDialogOpen(false)
       resetForm()
     } catch (error) {
+      logger.error("Failed to add project.", { error, name: nextName, path: nextPath })
       setFormError(error instanceof Error ? error.message : "添加失败。")
     } finally {
       setIsSubmitting(false)
@@ -138,8 +139,11 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     const selectedPath = await bridge.chooseDirectory()
 
     if (!selectedPath) {
+      logger.info("Project edit directory picker was dismissed.")
       return
     }
+
+    logger.info("Project edit directory selected.", { selectedPath })
 
     setEditPath(selectedPath)
     setEditError(null)
@@ -223,8 +227,13 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    logger.info("Project removed.", { projectId: project.id })
                     void onSave(projects.filter((itemValue) => itemValue.id !== project.id))
+                      .then(() => {
+                        logger.info("Project removed.", { projectId: project.id })
+                      })
+                      .catch((err) => {
+                        logger.error("Failed to remove project.", { projectId: project.id, error: err })
+                      })
                   }}
                 >
                   删除

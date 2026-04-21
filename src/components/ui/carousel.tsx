@@ -4,6 +4,7 @@ import useEmblaCarousel, {
 } from "embla-carousel-react"
 
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 import { Button } from "@/components/ui/button"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
@@ -63,6 +64,7 @@ function Carousel({
     if (!api) return
     setCanScrollPrev(api.canScrollPrev())
     setCanScrollNext(api.canScrollNext())
+    track({ component: "carousel", name: "carousel", action: "select", value: api.selectedScrollSnap() })
   }, [])
 
   const scrollPrev = React.useCallback(() => {

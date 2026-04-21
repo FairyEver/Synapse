@@ -860,6 +860,7 @@ function ContentBrowserPage({
                     onRestore={async () => {
                       if (busyItemId) return
                       setBusyItemId(item.id)
+                      const startedAt = performance.now()
                       logger.info("Content restore initiated.", { contentId: item.id, contentType })
                       try {
                         await restoreContent({
@@ -867,16 +868,20 @@ function ContentBrowserPage({
                           type: contentType,
                           baseHistoryDirname: item.latestHistoryDirname,
                         })
+                        logger.info("Content restored.", { contentId: item.id, contentType, elapsedMs: Math.round(performance.now() - startedAt) })
                         toast.success(`已恢复「${item.title}」`)
                         void deletedContent.refresh()
                       } catch (err) {
-                        logger.error("Content restore failed.", { contentId: item.id, contentType, error: err })
+                        logger.error("Content restore failed.", { contentId: item.id, contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
                         toast.error("恢复失败，请稍后重试。")
                       } finally {
                         setBusyItemId(null)
                       }
                     }}
-                    onPurge={() => setPurgeTarget(item)}
+                    onPurge={() => {
+                      logger.info("Content purge confirm dialog opened.", { contentId: item.id, contentType })
+                      setPurgeTarget(item)
+                    }}
                   />
                 ))}
               </div>
@@ -929,17 +934,19 @@ function ContentBrowserPage({
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={async () => {
                 if (!purgeTarget) return
+                const startedAt = performance.now()
                 logger.info("Content purge initiated.", { contentId: purgeTarget.id, contentType })
                 try {
                   await purgeContent({
                     id: purgeTarget.id,
                     type: contentType,
                   })
+                  logger.info("Content purged.", { contentId: purgeTarget.id, contentType, elapsedMs: Math.round(performance.now() - startedAt) })
                   toast.success(`已永久删除「${purgeTarget.title}」`)
                   setPurgeTarget(null)
                   void deletedContent.refresh()
                 } catch (err) {
-                  logger.error("Content purge failed.", { contentId: purgeTarget.id, contentType, error: err })
+                  logger.error("Content purge failed.", { contentId: purgeTarget.id, contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
                   toast.error("永久删除失败，请稍后重试。")
                 }
               }}
@@ -971,6 +978,7 @@ function ContentBrowserPage({
                 const targets = [...filteredItems]
                 setBatchAction(null)
                 if (!action || targets.length === 0) return
+                const startedAt = performance.now()
                 logger.info("Batch action initiated.", { action, contentType, count: targets.length })
                 batchBusyRef.current = true
                 let successCount = 0
@@ -986,12 +994,12 @@ function ContentBrowserPage({
                       await purgeContent({ id: item.id, type: contentType })
                     }
                     successCount++
-                  } catch {
-                    // continue with remaining items
+                  } catch (err) {
+                    logger.error("Batch action item failed.", { action, contentId: item.id, contentType, error: err })
                   }
                 }
                 batchBusyRef.current = false
-                logger.info("Batch action completed.", { action, contentType, successCount, total: targets.length })
+                logger.info("Batch action completed.", { action, contentType, successCount, total: targets.length, elapsedMs: Math.round(performance.now() - startedAt) })
                 void deletedContent.refresh()
                 const verb = action === "restore" ? "恢复" : "永久删除"
                 if (successCount === targets.length) {

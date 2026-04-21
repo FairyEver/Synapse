@@ -97,6 +97,7 @@ function ContentActionSplitButton({
 
         {hasDropdown ? (
           <DropdownMenu
+            data-track="content-actions-menu"
             open={isMenuOpen}
             onOpenChange={(open) => {
               setIsMenuOpen(open)

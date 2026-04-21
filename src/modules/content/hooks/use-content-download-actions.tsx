@@ -101,6 +101,7 @@ function useContentDownloadActions({
 
     setIsLoadingAdapters(true)
     setAdaptersError(null)
+    const startedAt = performance.now()
     logger.info("Loading install targets.", {
       contentId: item.id,
       contentType: item.type,
@@ -113,6 +114,7 @@ function useContentDownloadActions({
           adapterCount: nextAdapters.length,
           contentId: item.id,
           contentType: item.type,
+          elapsedMs: Math.round(performance.now() - startedAt),
           supportedCount: nextAdapters.filter((adapter) => (
             adapter.supportedContentTypes.includes(item.type)
           )).length,
@@ -123,6 +125,7 @@ function useContentDownloadActions({
         logger.error("Failed to load install targets.", {
           contentId: item.id,
           contentType: item.type,
+          elapsedMs: Math.round(performance.now() - startedAt),
           error,
         })
       })

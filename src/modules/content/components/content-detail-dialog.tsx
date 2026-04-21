@@ -244,6 +244,11 @@ function ContentDetailDialog<TPayload>({
         loading: "正在保存...",
         success: (result) => {
           if (result.status === "conflict") {
+            logger.warn("Content save conflict detected.", {
+              contentId: detail.id,
+              contentType,
+              latestHistoryDirname: result.latestHistoryDirname ?? null,
+            })
             setConflictState({
               latestHistoryDirname: result.latestHistoryDirname ?? "",
               latestModifiedAt: result.latestModifiedAt ?? "",
@@ -283,6 +288,11 @@ function ContentDetailDialog<TPayload>({
         loading: labels.deleteLoading,
         success: (result) => {
           if (result.status === "conflict") {
+            logger.warn("Content delete conflict detected.", {
+              contentId: deleteTarget.id,
+              contentType,
+              latestHistoryDirname: result.latestHistoryDirname ?? null,
+            })
             setConflictState({
               latestHistoryDirname: result.latestHistoryDirname ?? "",
               latestModifiedAt: result.latestModifiedAt ?? "",
@@ -408,7 +418,7 @@ function ContentDetailDialog<TPayload>({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={onOpenChange} data-track="content-detail-dialog">
         <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
           <DialogHeader className="px-5 pt-5">
             <DialogTitle className="sr-only">{resolvedItem.title}</DialogTitle>

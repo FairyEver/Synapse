@@ -640,7 +640,7 @@ function ContentInstallDialog({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={onOpenChange} data-track="content-install-dialog">
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>安装到 {editor.label}</DialogTitle>

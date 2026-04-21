@@ -6,6 +6,7 @@ import { Slot } from "radix-ui"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -89,7 +90,17 @@ function SidebarProvider({
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
+    if (isMobile) {
+      setOpenMobile((open) => {
+        track({ component: "sidebar", name: "sidebar", action: open ? "close" : "open", value: "mobile" })
+        return !open
+      })
+    } else {
+      setOpen((open) => {
+        track({ component: "sidebar", name: "sidebar", action: open ? "collapse" : "expand", value: "desktop" })
+        return !open
+      })
+    }
   }, [isMobile, setOpen, setOpenMobile])
 
   // Adds a keyboard shortcut to toggle the sidebar.

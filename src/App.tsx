@@ -278,6 +278,11 @@ function MainApp() {
                   return
                 }
 
+                logger.info("Pending push flush initiated from app shell.", {
+                  repositoryUuid: activeRepository.uuid,
+                  pendingCount: activePendingPushState?.count ?? 0,
+                })
+
                 void promise(
                   () => pushRepository(activeRepository.uuid),
                   {

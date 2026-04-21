@@ -157,9 +157,18 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
         throw new Error("显示名称不能为空。")
       }
 
-      await updateRepoDisplayName(target.repositoryUuid, nextDisplayName)
-      await runActiveRepositorySwitch(target.repositoryUuid)
-      resolvePendingSwitch(true)
+      const startedAt = performance.now()
+      logger.info("Switch onboarding completing.", { repositoryUuid: target.repositoryUuid })
+
+      try {
+        await updateRepoDisplayName(target.repositoryUuid, nextDisplayName)
+        await runActiveRepositorySwitch(target.repositoryUuid)
+        logger.info("Switch onboarding complete.", { repositoryUuid: target.repositoryUuid, elapsedMs: Math.round(performance.now() - startedAt) })
+        resolvePendingSwitch(true)
+      } catch (err) {
+        logger.error("Switch onboarding complete failed.", { repositoryUuid: target.repositoryUuid, elapsedMs: Math.round(performance.now() - startedAt), error: err })
+        throw err
+      }
     },
     [pendingSwitchOnboarding, resolvePendingSwitch, runActiveRepositorySwitch],
   )

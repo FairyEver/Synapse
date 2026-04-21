@@ -66,8 +66,12 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  "data-track": dataTrack,
+  onFocus,
+  onBlur,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & { "data-track"?: string }) {
+  const trackName = dataTrack ?? "command-input"
   return (
     <div data-slot="command-input-wrapper" className="p-1 pb-0">
       <InputGroup className="h-8! rounded-lg! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
@@ -77,6 +81,14 @@ function CommandInput({
             "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
             className
           )}
+          onFocus={(e) => {
+            track({ component: "command-input", name: trackName, action: "focus" })
+            onFocus?.(e)
+          }}
+          onBlur={(e) => {
+            track({ component: "command-input", name: trackName, action: "blur" })
+            onBlur?.(e)
+          }}
           {...props}
         />
         <InputGroupAddon>

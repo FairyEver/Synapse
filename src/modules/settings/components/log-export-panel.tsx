@@ -145,6 +145,7 @@ function LogExportPanel() {
         files,
         selected: new Set([files[0].name]),
       })
+      logger.info("Log file picker opened.", { fileCount: files.length, defaultSelected: files[0].name })
     } catch (error) {
       logger.error("Failed to prepare log copy to clipboard.", error)
       showError(error instanceof Error ? error.message : "复制日志失败")
@@ -182,6 +183,7 @@ function LogExportPanel() {
     if (selectedNames.length === 0) return
 
     setActiveAction("copy")
+    logger.info("Selected log copy initiated.", { selectedCount: selectedNames.length, selectedNames })
     try {
       await promise(
         async () => {
@@ -247,7 +249,10 @@ function LogExportPanel() {
             variant="destructive"
             size="sm"
             disabled={isBusy}
-            onClick={() => setIsClearDialogOpen(true)}
+            onClick={() => {
+              logger.info("Log clear confirm dialog opened.")
+              setIsClearDialogOpen(true)
+            }}
           >
             {isClearing ? (
               <LoaderCircle className="animate-spin" data-icon="inline-start" />
@@ -305,6 +310,8 @@ function LogExportPanel() {
                     className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent"
                   >
                     <Checkbox
+                      data-track="log-file-picker-checkbox"
+                      aria-label={`选择日志文件 ${file.name}`}
                       checked={isChecked}
                       onCheckedChange={(checked) => {
                         setLogFilePickerState((prev) => {

@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
@@ -65,6 +65,20 @@ function QuickRepositorySwitchDialog() {
 
   const hasRunningRepositoryOperation = useHasRunningRepositoryOperation()
   const repositoryStates = useRepositoryStatesMap(repositories)
+  const [searchQuery, setSearchQuery] = useState("")
+  const deferredSearchQuery = useDeferredValue(searchQuery)
+
+  useEffect(() => {
+    if (deferredSearchQuery) {
+      logger.info("Repository switch search changed.", { query: deferredSearchQuery })
+    }
+  }, [deferredSearchQuery])
+
+  useEffect(() => {
+    if (!isRepositorySwitchDialogOpen) {
+      setSearchQuery("")
+    }
+  }, [isRepositorySwitchDialogOpen])
 
   return (
     <CommandDialog
@@ -78,7 +92,7 @@ function QuickRepositorySwitchDialog() {
       className="sm:max-w-lg"
     >
       <Command>
-        <CommandInput placeholder="搜索仓库..." />
+        <CommandInput placeholder="搜索仓库..." value={searchQuery} onValueChange={setSearchQuery} />
         <CommandList>
           <CommandEmpty>没有找到匹配的仓库。</CommandEmpty>
           <CommandGroup heading="仓库">
@@ -93,6 +107,7 @@ function QuickRepositorySwitchDialog() {
                 <CommandItem
                   key={repository.uuid}
                   value={`${repository.name} ${repository.localPath}`}
+                  data-track="repository-switch-item"
                   data-checked={isActive ? true : undefined}
                   disabled={isDisabled}
                   className="items-start"

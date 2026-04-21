@@ -41,17 +41,18 @@ function AdoptIdentityDialog({
 
     setIsSubmitting(true)
     setError(null)
+    const startedAt = performance.now()
     logger.info("Adopt identity submitted.", { repositoryUuid: activeRepository.uuid })
 
     void adoptExistingUserId(normalizedValue, activeRepository.uuid)
       .then(() => {
-        logger.info("Adopt identity succeeded.", { repositoryUuid: activeRepository.uuid })
+        logger.info("Adopt identity succeeded.", { repositoryUuid: activeRepository.uuid, elapsedMs: Math.round(performance.now() - startedAt) })
         setValue("")
         setError(null)
         onOpenChange(false)
       })
       .catch((submitError) => {
-        logger.error("Adopt identity failed.", { repositoryUuid: activeRepository.uuid, error: submitError })
+        logger.error("Adopt identity failed.", { repositoryUuid: activeRepository.uuid, elapsedMs: Math.round(performance.now() - startedAt), error: submitError })
         setError(submitError instanceof Error ? submitError.message : "接续身份失败。")
       })
       .finally(() => {

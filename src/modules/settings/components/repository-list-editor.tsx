@@ -161,6 +161,7 @@ function RepositoryListEditor({
 
     const validationResult = await validateDirectory(localPath)
     if (!validationResult.isValid) {
+      logger.warn("Chosen repository directory failed validation.", { localPath, message: validationResult.message })
       setFormError(validationResult.message)
       return
     }
@@ -194,12 +195,15 @@ function RepositoryListEditor({
       return
     }
 
+    logger.info("Opening native directory picker for new repository parent path.")
     const selectedPath = await chooseDirectory()
 
     if (!selectedPath) {
+      logger.info("New repository parent path picker was dismissed.")
       return
     }
 
+    logger.info("New repository parent path selected.", { selectedPath })
     setNewRepositoryParentPath(selectedPath)
     setCreateRepositoryError(null)
   }
@@ -273,12 +277,15 @@ function RepositoryListEditor({
       return
     }
 
+    logger.info("Opening native directory picker for editing repository.")
     const selectedPath = await chooseDirectory()
 
     if (!selectedPath) {
+      logger.info("Repository edit directory picker was dismissed.")
       return
     }
 
+    logger.info("Repository edit directory selected.", { selectedPath })
     setEditPath(selectedPath)
     setEditError(null)
   }
@@ -368,6 +375,8 @@ function RepositoryListEditor({
 
   const runInitialization = async (repository: SynapseRepositoryConfig) => {
     setInitializingUuid(repository.uuid)
+    logger.info("Repository initialization started.", { repositoryUuid: repository.uuid })
+    const startedAt = performance.now()
 
     try {
       const result = await promise(
@@ -378,6 +387,7 @@ function RepositoryListEditor({
           error: (error) => error instanceof Error ? error.message : "初始化失败。",
         },
       )
+      logger.info("Repository initialization completed.", { repositoryUuid: repository.uuid, elapsedMs: Math.round(performance.now() - startedAt) })
       return result
     } catch (error) {
       logger.error("Repository initialization failed from settings.", {
@@ -403,6 +413,10 @@ function RepositoryListEditor({
       setInitializationTarget({
         preview,
         repository,
+      })
+      logger.info("Repository initialization confirm dialog opened.", {
+        repositoryUuid: repository.uuid,
+        previewCount: preview.nonGitEntries.length,
       })
     } catch (error) {
       logger.error("Failed to load repository initialization preview.", {
@@ -629,7 +643,10 @@ function RepositoryListEditor({
                 isOnboardingBlocked={isOnboardingBlocked}
                 initializingUuid={initializingUuid}
                 onInitialize={handleInitializeRepository}
-                onRemove={setPendingRemovalUuid}
+                onRemove={(uuid) => {
+                  logger.info("Repository removal confirm dialog opened.", { repositoryUuid: uuid })
+                  setPendingRemovalUuid(uuid)
+                }}
                 onEdit={handleEditRepository}
               />
             )
@@ -659,7 +676,7 @@ function RepositoryListEditor({
             <Button
               onClick={() => {
                 setCreateRepositoryError(null)
-                setIsCreateDialogOpen(true)
+                handleCreateDialogOpenChange(true)
               }}
             >
               新建本地仓库

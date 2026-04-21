@@ -87,6 +87,8 @@ function useContentDetailState<T extends SynapseContentType>({
     setSelectedHistoryDirname(initialHistoryDirname)
 
     void (async () => {
+      const startedAt = performance.now()
+      logger.info("Content detail load started.", { contentId, contentType })
       try {
         const [nextDetail, nextHistory] = await Promise.all([
           readDetail(contentType, contentId),
@@ -108,10 +110,12 @@ function useContentDetailState<T extends SynapseContentType>({
         setHistory(nextHistory)
         setSelectedHistoryDirname(initialHistoryDirname ?? typedDetail.latestHistoryDirname)
         setPreviewError(null)
+        logger.info("Content detail loaded.", { contentId, contentType, historyCount: nextHistory.length, elapsedMs: Math.round(performance.now() - startedAt) })
       } catch (loadError) {
         logger.error("Failed to load content detail.", {
           contentId,
           contentType,
+          elapsedMs: Math.round(performance.now() - startedAt),
           loadError,
         })
 
@@ -171,6 +175,8 @@ function useContentDetailState<T extends SynapseContentType>({
     setPreviewError(null)
 
     void (async () => {
+      const startedAt = performance.now()
+      logger.info("History version load started.", { contentId, contentType, historyDirname: selectedHistoryDirname })
       try {
         const nextVersion = await readHistoryVersion(contentType, contentId, selectedHistoryDirname)
 
@@ -184,10 +190,12 @@ function useContentDetailState<T extends SynapseContentType>({
 
         setDisplayedVersion(nextVersion as SynapseLoadedContentVersion<T>)
         setPreviewError(null)
+        logger.info("History version loaded.", { contentId, contentType, historyDirname: selectedHistoryDirname, elapsedMs: Math.round(performance.now() - startedAt) })
       } catch (loadError) {
         logger.error("Failed to load content history version.", {
           contentId,
           contentType,
+          elapsedMs: Math.round(performance.now() - startedAt),
           historyDirname: selectedHistoryDirname,
           loadError,
         })
