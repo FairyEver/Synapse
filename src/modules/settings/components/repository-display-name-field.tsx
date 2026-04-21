@@ -104,6 +104,7 @@ function RepositoryDisplayNameField({
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open)
     if (open) {
+      logger.info("Display name edit dialog opened.", { repositoryUuid })
       // 打开时重置为当前值
       setDraft(displayName)
       setSaveError(null)

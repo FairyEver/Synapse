@@ -68,6 +68,7 @@ function RepositoryListItem({
   const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
 
   const handleSync = async () => {
+    logger.info("Repository sync initiated from settings.", { repositoryUuid: repository.uuid })
     try {
       await promise(
         () => syncRepository(repository.uuid),
@@ -87,6 +88,7 @@ function RepositoryListItem({
 
   const handleSwitch = async () => {
     if (!isActive) {
+      logger.info("Repository switch initiated from settings.", { repositoryUuid: repository.uuid })
       try {
         await switchActiveRepository(repository.uuid)
       } catch (error) {

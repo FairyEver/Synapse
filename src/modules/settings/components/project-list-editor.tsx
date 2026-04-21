@@ -46,6 +46,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
 
   const handleOpenChange = (open: boolean) => {
     if (isSubmitting) return
+    if (open) logger.info("Add project dialog opened.")
     setIsDialogOpen(open)
     if (!open) {
       resetForm()

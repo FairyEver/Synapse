@@ -478,9 +478,11 @@ function ContentInstallDialog({
           <div className="flex flex-col gap-5">
             <div className="flex justify-center">
               <Tabs
+                data-track="install-scope"
                 value={scope}
                 onValueChange={(value) => {
                   if (value === "global" || value === "project") {
+                    logger.info("Install scope changed.", { scope: value, contentId: item.id, editorId: editor?.id ?? null })
                     setScope(value)
                   }
                 }}
@@ -500,7 +502,7 @@ function ContentInstallDialog({
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="content-install-project">项目目录</Label>
-                  <Select value={projectSelection} onValueChange={setProjectSelection}>
+                  <Select data-track="install-project-select" value={projectSelection} onValueChange={setProjectSelection}>
                     <SelectTrigger id="content-install-project" className="w-full">
                       <SelectValue placeholder="选择一个项目" />
                     </SelectTrigger>

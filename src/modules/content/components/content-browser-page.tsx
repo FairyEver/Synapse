@@ -805,7 +805,10 @@ function ContentBrowserPage({
                     variant="ghost"
                     size="sm"
                     disabled={filteredItems.length === 0 || batchBusyRef.current}
-                    onClick={() => setBatchAction("restore")}
+                    onClick={() => {
+                      logger.info("Batch action dialog opened.", { action: "restore", contentType })
+                      setBatchAction("restore")
+                    }}
                   >
                     <RotateCcw className="mr-1 size-3.5" />
                     全部恢复
@@ -816,7 +819,10 @@ function ContentBrowserPage({
                     size="sm"
                     className="text-destructive hover:text-destructive"
                     disabled={filteredItems.length === 0 || batchBusyRef.current}
-                    onClick={() => setBatchAction("purge")}
+                    onClick={() => {
+                      logger.info("Batch action dialog opened.", { action: "purge", contentType })
+                      setBatchAction("purge")
+                    }}
                   >
                     <Trash2 className="mr-1 size-3.5" />
                     全部删除

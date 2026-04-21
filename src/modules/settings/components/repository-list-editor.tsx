@@ -180,6 +180,7 @@ function RepositoryListEditor({
       return
     }
 
+    if (open) logger.info("Create repository dialog opened.")
     setIsCreateDialogOpen(open)
 
     if (!open) {

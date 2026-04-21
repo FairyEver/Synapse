@@ -397,7 +397,10 @@ function ContentDetailDialog<TPayload>({
                     isRepositoryInitializing={Boolean(isRepositoryInitializing)}
                     isSyncing={isSyncing}
                     item={resolvedItem}
-                    onDelete={() => setIsDeleteConfirmOpen(true)}
+                    onDelete={() => {
+                      logger.info("Delete confirm dialog opened.", { contentId: item.id, contentType })
+                      setIsDeleteConfirmOpen(true)
+                    }}
                     onEdit={() => {
                       logger.info("Edit dialog opened.", { contentId: item.id, contentType })
                       setIsEditOpen(true)

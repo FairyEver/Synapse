@@ -57,7 +57,10 @@ function ConfigBackupPanel() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsImportOpen(true)}
+              onClick={() => {
+                logger.info("Config backup import dialog opened.")
+                setIsImportOpen(true)
+              }}
             >
               导入配置
             </Button>

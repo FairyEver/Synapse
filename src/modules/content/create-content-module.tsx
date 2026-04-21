@@ -52,6 +52,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
     const handleSubmit = (payload: SynapseCreateContentPayload<T>) => {
+      logger.info("Content create submitted.", { contentType: config.contentType, repositoryUuid: activeRepository?.uuid ?? null })
       void promise(
         async () => {
           const finalPayload = config.transformCreatePayload

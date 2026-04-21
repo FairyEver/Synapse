@@ -37,17 +37,14 @@ NODE
 git add -A
 git commit -m "chore: bump version to ${NEW_VERSION}"
 
-if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-  git push
-else
-  CURRENT_BRANCH=$(git branch --show-current)
+CURRENT_BRANCH=$(git branch --show-current)
 
-  if [ -z "$CURRENT_BRANCH" ]; then
-    echo "Unable to determine current branch." >&2
-    exit 1
-  fi
-
-  git push -u origin "$CURRENT_BRANCH"
+if [ -z "$CURRENT_BRANCH" ]; then
+  echo "Unable to determine current branch." >&2
+  exit 1
 fi
+
+git branch --set-upstream-to=origin/"$CURRENT_BRANCH" "$CURRENT_BRANCH" 2>/dev/null || true
+git push -u origin "$CURRENT_BRANCH"
 
 printf 'Bumped version to %s and pushed the current branch.\n' "$NEW_VERSION"
