@@ -132,6 +132,13 @@ function ContentInstallDialog({
     }
 
     let cancelled = false
+    const startedAt = performance.now()
+
+    logger.info("Resolving global install target.", {
+      contentId: item.id,
+      contentType: item.type,
+      editorId: editor.id,
+    })
 
     setGlobalTargetState({
       error: null,
@@ -152,6 +159,16 @@ function ContentInstallDialog({
           return
         }
 
+        logger.info("Resolved global install target.", {
+          contentId: item.id,
+          contentType: item.type,
+          editorId: editor.id,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          message: value.message,
+          status: value.status,
+          targetKind: value.targetKind,
+          targetPath: value.targetPath,
+        })
         setGlobalTargetState({
           error: null,
           isLoading: false,
@@ -163,6 +180,13 @@ function ContentInstallDialog({
           return
         }
 
+        logger.error("Failed to resolve global install target.", {
+          contentId: item.id,
+          contentType: item.type,
+          editorId: editor.id,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          error,
+        })
         setGlobalTargetState({
           error: error instanceof Error ? error.message : "解析全局安装位置失败。",
           isLoading: false,
@@ -173,7 +197,7 @@ function ContentInstallDialog({
     return () => {
       cancelled = true
     }
-  }, [editor?.id, editor?.supportsGlobal, item.id, item.type, open])
+  }, [editor?.id, editor?.supportsGlobal, item.id, item.type, logger, open])
 
   useEffect(() => {
     if (!open || !editor?.supportsProject) {
@@ -186,6 +210,14 @@ function ContentInstallDialog({
     }
 
     let cancelled = false
+    const startedAt = performance.now()
+
+    logger.info("Resolving project install target.", {
+      contentId: item.id,
+      contentType: item.type,
+      editorId: editor.id,
+      projectPath,
+    })
 
     setProjectTargetState({
       error: null,
@@ -207,6 +239,17 @@ function ContentInstallDialog({
           return
         }
 
+        logger.info("Resolved project install target.", {
+          contentId: item.id,
+          contentType: item.type,
+          editorId: editor.id,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          message: value.message,
+          projectPath,
+          status: value.status,
+          targetKind: value.targetKind,
+          targetPath: value.targetPath,
+        })
         setProjectTargetState({
           error: null,
           isLoading: false,
@@ -218,6 +261,14 @@ function ContentInstallDialog({
           return
         }
 
+        logger.error("Failed to resolve project install target.", {
+          contentId: item.id,
+          contentType: item.type,
+          editorId: editor.id,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          error,
+          projectPath,
+        })
         setProjectTargetState({
           error: error instanceof Error ? error.message : "解析项目安装位置失败。",
           isLoading: false,
@@ -228,13 +279,21 @@ function ContentInstallDialog({
     return () => {
       cancelled = true
     }
-  }, [editor?.id, editor?.supportsProject, item.id, item.type, open, projectPath])
+  }, [editor?.id, editor?.supportsProject, item.id, item.type, logger, open, projectPath])
 
   useEffect(() => {
     if (scope === "global" && globalScopeDisabled && editor?.supportsProject) {
+      logger.info("Install scope changed automatically.", {
+        contentId: item.id,
+        contentType: item.type,
+        editorId: editor.id,
+        from: "global",
+        reason: "global-target-disabled",
+        to: "project",
+      })
       setScope("project")
     }
-  }, [editor?.supportsProject, globalScopeDisabled, scope])
+  }, [editor?.id, editor?.supportsProject, globalScopeDisabled, item.id, item.type, logger, scope])
 
   const handleBrowseDirectory = async () => {
     const bridge = window.synapse?.repository
@@ -243,31 +302,46 @@ function ContentInstallDialog({
       return
     }
 
+    const startedAt = performance.now()
+
     logger.info("Opening native directory picker from install dialog.", {
       editorId: editor?.id ?? null,
       contentId: item.id,
       contentType: item.type,
     })
 
-    const selectedPath = await bridge.chooseDirectory()
+    try {
+      const selectedPath = await bridge.chooseDirectory()
 
-    if (!selectedPath) {
-      logger.info("Native directory picker dismissed from install dialog.", {
+      if (!selectedPath) {
+        logger.info("Native directory picker dismissed from install dialog.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          editorId: editor?.id ?? null,
+          contentId: item.id,
+          contentType: item.type,
+        })
+        return
+      }
+
+      logger.info("Custom install directory selected.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
         editorId: editor?.id ?? null,
         contentId: item.id,
         contentType: item.type,
+        selectedPath,
       })
-      return
+      setProjectSelection(CUSTOM_PROJECT_OPTION)
+      setCustomProjectPath(selectedPath)
+    } catch (error) {
+      logger.error("Failed to choose custom install directory.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        editorId: editor?.id ?? null,
+        contentId: item.id,
+        contentType: item.type,
+        error,
+      })
+      setInstallError("打开目录选择器失败。")
     }
-
-    logger.info("Custom install directory selected.", {
-      editorId: editor?.id ?? null,
-      contentId: item.id,
-      contentType: item.type,
-      selectedPath,
-    })
-    setProjectSelection(CUSTOM_PROJECT_OPTION)
-    setCustomProjectPath(selectedPath)
   }
 
   const handleProjectSelectionChange = (nextSelection: string) => {
@@ -301,6 +375,17 @@ function ContentInstallDialog({
 
     setInstallError(null)
     setIsInstalling(true)
+    const startedAt = performance.now()
+
+    logger.info("Content install initiated from renderer.", {
+      contentId: item.id,
+      contentType: item.type,
+      editorId: editor.id,
+      hasCursorFrontmatter: Boolean(cursorFrontmatter),
+      replaceConfirmed: Boolean(replaceConfirmed),
+      scope,
+      targetPath: activeTarget.targetPath,
+    })
 
     try {
       const result = await promise(
@@ -325,7 +410,9 @@ function ContentInstallDialog({
       logger.info("Content installed from renderer.", {
         contentId: item.id,
         contentType: item.type,
+        elapsedMs: Math.round(performance.now() - startedAt),
         editorId: editor.id,
+        replaceConfirmed: Boolean(replaceConfirmed),
         scope,
         targetPath: result.targetPath,
       })
@@ -337,8 +424,12 @@ function ContentInstallDialog({
       logger.error("Content install failed from renderer.", {
         contentId: item.id,
         contentType: item.type,
+        elapsedMs: Math.round(performance.now() - startedAt),
         editorId: editor.id,
         error,
+        replaceConfirmed: Boolean(replaceConfirmed),
+        scope,
+        targetPath: activeTarget.targetPath,
       })
 
       setInstallError(message)
@@ -355,6 +446,15 @@ function ContentInstallDialog({
 
     setInstallError(null)
     setIsInstalling(true)
+    const startedAt = performance.now()
+
+    logger.info("Reading Cursor frontmatter from install target.", {
+      contentId: item.id,
+      contentType: item.type,
+      editorId: editor?.id ?? null,
+      scope,
+      targetPath: activeTarget.targetPath,
+    })
 
     try {
       const { frontmatter: existing } = await peekCursorFrontmatter({
@@ -371,6 +471,7 @@ function ContentInstallDialog({
       logger.info("Cursor frontmatter dialog opened.", {
         contentId: item.id,
         contentType: item.type,
+        elapsedMs: Math.round(performance.now() - startedAt),
         editorId: editor?.id ?? null,
         hasExistingFrontmatter: Boolean(existing),
         scope,
@@ -382,7 +483,11 @@ function ContentInstallDialog({
 
       logger.error("Failed to peek Cursor frontmatter.", {
         contentId: item.id,
+        contentType: item.type,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        editorId: editor?.id ?? null,
         error,
+        scope,
         targetPath: activeTarget.targetPath,
       })
 

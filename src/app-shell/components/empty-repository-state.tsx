@@ -68,12 +68,27 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
   }
 
   const handleChooseDirectory = async () => {
+    const startedAt = performance.now()
+    logger.info("Existing repository directory chooser opened from empty state.", { reason })
+
     try {
       const selectedPath = await chooseDirectory()
-      if (!selectedPath) return
+      if (!selectedPath) {
+        logger.info("Existing repository directory chooser dismissed from empty state.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          reason,
+        })
+        return
+      }
 
       const validationResult = await validateDirectory(selectedPath)
       if (!validationResult.isValid) {
+        logger.warn("Chosen repository directory failed validation.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          localPath: selectedPath,
+          message: validationResult.message,
+          missingDirectories: validationResult.missingDirectories,
+        })
         showError(validationResult.message, { durationMs: 6000 })
         return
       }
@@ -86,27 +101,57 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
         contentDirs: { ...DEFAULT_REPOSITORY_CONTENT_DIRECTORIES },
       }
 
-      logger.info("Directory chosen for new repository.", { localPath: selectedPath })
       await addRepository(newRepository, { activate: true })
+      logger.info("Repository added from chosen directory.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        localPath: selectedPath,
+        repositoryUuid: newRepository.uuid,
+      })
     } catch (err) {
-      logger.error("Failed to choose repository directory.", err)
+      logger.error("Failed to add repository from chosen directory.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        error: err,
+        reason,
+      })
       showError(err instanceof Error ? err.message : "选择目录失败", { durationMs: 4000 })
     }
   }
 
   const handleCreateNewRepository = async () => {
-    const parentPath = await chooseDirectory()
-    if (!parentPath) return
+    const startedAt = performance.now()
+    logger.info("New repository directory chooser opened from empty state.", { reason })
 
-    logger.info("Create repository dialog opened from empty state.", { parentPath })
-    setCreateParentPath(parentPath)
-    setCreateName("")
-    setCreateNameError(null)
-    setIsCreateDialogOpen(true)
+    try {
+      const parentPath = await chooseDirectory()
+      if (!parentPath) {
+        logger.info("New repository directory chooser dismissed from empty state.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          reason,
+        })
+        return
+      }
+
+      logger.info("Create repository dialog opened from empty state.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        parentPath,
+      })
+      setCreateParentPath(parentPath)
+      setCreateName("")
+      setCreateNameError(null)
+      setIsCreateDialogOpen(true)
+    } catch (error) {
+      logger.error("Failed to choose parent directory for new repository.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        error,
+        reason,
+      })
+      showError(error instanceof Error ? error.message : "选择目录失败", { durationMs: 4000 })
+    }
   }
 
   const handleCreateSubmit = async () => {
-    const nameError = validateRepositoryName(createName)
+    const nextName = createName.trim()
+    const nameError = validateRepositoryName(nextName)
     if (nameError) {
       setCreateNameError(nameError)
       return
@@ -114,24 +159,32 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
 
     setIsCreating(true)
     setCreateNameError(null)
+    const startedAt = performance.now()
 
     try {
       logger.info("Creating local repository from empty state.", {
-        name: createName.trim(),
+        name: nextName,
         parentPath: createParentPath,
       })
-      await createLocalRepositoryAndAdd(
-        { name: createName.trim(), parentPath: createParentPath },
+      const result = await createLocalRepositoryAndAdd(
+        { name: nextName, parentPath: createParentPath },
         { activate: true },
       )
       logger.info("Local repository created from empty state.", {
-        name: createName.trim(),
+        elapsedMs: Math.round(performance.now() - startedAt),
+        name: nextName,
         parentPath: createParentPath,
+        repositoryUuid: result.repository.uuid,
       })
       setIsCreateDialogOpen(false)
       resetCreateForm()
     } catch (err) {
-      logger.error("Failed to create local repository.", err)
+      logger.error("Failed to create local repository.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        error: err,
+        name: nextName,
+        parentPath: createParentPath,
+      })
       const errorMessage = err instanceof Error ? err.message : "创建仓库失败"
       setCreateNameError(errorMessage)
     } finally {

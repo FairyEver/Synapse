@@ -54,14 +54,29 @@ function SwitchRepositoryOnboardingDialog() {
 
     setIsSubmitting(true)
     setError(null)
+    const startedAt = performance.now()
+
     logger.info("Switch onboarding submitted.", {
+      displayNameLength: nextDisplayName.length,
       repositoryUuid: pendingSwitchOnboarding.repositoryUuid,
     })
 
-    completePendingSwitchOnboarding(nextDisplayName).catch((submitError) => {
-      setError(submitError instanceof Error ? submitError.message : "保存显示名称失败。")
-      setIsSubmitting(false)
-    })
+    void completePendingSwitchOnboarding(nextDisplayName)
+      .then(() => {
+        logger.info("Switch onboarding completed.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          repositoryUuid: pendingSwitchOnboarding.repositoryUuid,
+        })
+      })
+      .catch((submitError) => {
+        logger.error("Switch onboarding failed.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          error: submitError,
+          repositoryUuid: pendingSwitchOnboarding.repositoryUuid,
+        })
+        setError(submitError instanceof Error ? submitError.message : "保存显示名称失败。")
+        setIsSubmitting(false)
+      })
   }
 
   return (

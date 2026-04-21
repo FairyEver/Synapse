@@ -75,13 +75,26 @@ function RepoOnboardingDialog() {
 
     setIsSubmitting(true)
     setError(null)
-    logger.info("Repo onboarding submitted.", { repositoryUuid: activeRepository?.uuid })
+    const startedAt = performance.now()
+
+    logger.info("Repo onboarding submitted.", {
+      displayNameLength: nextDisplayName.length,
+      repositoryUuid: activeRepository.uuid,
+    })
 
     void updateCurrentRepoDisplayName(nextDisplayName)
-      .then(async () => {
-        // Refresh is handled automatically by RepositoryManager
+      .then(() => {
+        logger.info("Repo onboarding completed.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          repositoryUuid: activeRepository.uuid,
+        })
       })
       .catch((submitError) => {
+        logger.error("Repo onboarding failed.", {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          error: submitError,
+          repositoryUuid: activeRepository.uuid,
+        })
         setError(submitError instanceof Error ? submitError.message : "保存显示名称失败。")
       })
       .finally(() => {

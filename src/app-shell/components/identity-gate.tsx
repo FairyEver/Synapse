@@ -89,16 +89,22 @@ function IdentityGate({ children }: { children: ReactNode }) {
               variant="outline"
               disabled={isSubmitting}
               onClick={() => {
+                const startedAt = performance.now()
                 logger.info("Generate new identity requested from gate.", {
                   hasActiveRepository: Boolean(activeRepository),
                 })
                 setIsSubmitting(true)
                 void generateNewId()
                   .then(() => {
-                    logger.info("Generated new identity from gate.")
+                    logger.info("Generated new identity from gate.", {
+                      elapsedMs: Math.round(performance.now() - startedAt),
+                    })
                   })
                   .catch((generationError) => {
-                    logger.error("Failed to generate new identity from gate.", generationError)
+                    logger.error("Failed to generate new identity from gate.", {
+                      elapsedMs: Math.round(performance.now() - startedAt),
+                      error: generationError,
+                    })
                   })
                   .finally(() => {
                     setIsSubmitting(false)
@@ -117,6 +123,7 @@ function IdentityGate({ children }: { children: ReactNode }) {
                   return
                 }
 
+                const startedAt = performance.now()
                 logger.info("Adopt existing identity requested from gate.", {
                   repositoryUuid: activeRepository.uuid,
                   userIdLength: normalizedRecoveryValue.length,
@@ -125,11 +132,13 @@ function IdentityGate({ children }: { children: ReactNode }) {
                 void adoptExistingUserId(normalizedRecoveryValue, activeRepository.uuid)
                   .then(() => {
                     logger.info("Adopted existing identity from gate.", {
+                      elapsedMs: Math.round(performance.now() - startedAt),
                       repositoryUuid: activeRepository.uuid,
                     })
                   })
                   .catch((recoveryFailure) => {
                     logger.error("Failed to adopt existing identity from gate.", {
+                      elapsedMs: Math.round(performance.now() - startedAt),
                       repositoryUuid: activeRepository.uuid,
                       error: recoveryFailure,
                     })
