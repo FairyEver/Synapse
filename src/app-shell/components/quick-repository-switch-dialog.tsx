@@ -1,5 +1,6 @@
 import { useRef } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
+import { createRendererLogger } from "@/app-shell/logging"
 import {
   useActiveRepository,
   useHasRunningRepositoryOperation,
@@ -19,6 +20,8 @@ import {
 import { useSyncExternalStore } from "react"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type { SynapseRepositoryLocalState } from "@/types/repository"
+
+const logger = createRendererLogger("app.repository-switch")
 
 function useRepositoryStatesMap(repositories: SynapseRepositoryConfig[]) {
   const manager = useRepositoryManager()
@@ -97,6 +100,11 @@ function QuickRepositorySwitchDialog() {
                     if (isDisabled) {
                       return
                     }
+
+                    logger.info("Repository switch selected.", {
+                      repositoryUuid: repository.uuid,
+                      repositoryName: repository.name,
+                    })
 
                     void switchActiveRepository(repository.uuid).then((didSwitch) => {
                       if (didSwitch) {

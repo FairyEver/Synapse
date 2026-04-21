@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useCurrentRepoProfile, useLocalIdentity } from "@/app-shell/identity-context"
+import { createRendererLogger } from "@/app-shell/logging"
 import {
   useActiveRepository,
   useRepositoryList,
@@ -24,6 +25,8 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+
+const logger = createRendererLogger("app.repo-onboarding")
 
 function RepoOnboardingDialog() {
   const activeRepository = useActiveRepository()
@@ -72,6 +75,7 @@ function RepoOnboardingDialog() {
 
     setIsSubmitting(true)
     setError(null)
+    logger.info("Repo onboarding submitted.", { repositoryUuid: activeRepository?.uuid })
 
     void updateCurrentRepoDisplayName(nextDisplayName)
       .then(async () => {

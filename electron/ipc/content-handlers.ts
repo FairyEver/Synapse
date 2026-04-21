@@ -226,6 +226,10 @@ function registerContentHandlers() {
   handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.content.update,
     async (event, request: SynapseUpdateContentRequest) => {
+      logger.info("Handling content.update request.", {
+        contentType: request.contentType,
+        contentId: request.payload.id,
+      })
       const result = await contentSubmissionService.updateContent(request)
       const repository = await resolveActiveRepository()
 
@@ -242,6 +246,10 @@ function registerContentHandlers() {
   handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.content.deleteContent,
     async (event, payload: SynapseDeleteContentPayload) => {
+      logger.info("Handling content.deleteContent request.", {
+        contentType: payload.type,
+        contentId: payload.id,
+      })
       const result = await contentSubmissionService.deleteContent(payload)
       await notifyPendingPushesUpdated(event.sender)
       return result
@@ -257,6 +265,10 @@ function registerContentHandlers() {
   handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.content.restore,
     async (event, payload: SynapseRestoreContentPayload) => {
+      logger.info("Handling content.restore request.", {
+        contentType: payload.type,
+        contentId: payload.id,
+      })
       const result = await contentSubmissionService.restoreContent(payload)
       await notifyPendingPushesUpdated(event.sender)
       return result
@@ -266,6 +278,10 @@ function registerContentHandlers() {
   handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.content.purge,
     async (event, payload: SynapsePurgeContentPayload) => {
+      logger.info("Handling content.purge request.", {
+        contentType: payload.type,
+        contentId: payload.id,
+      })
       const result = await contentSubmissionService.purgeContent(payload)
       await notifyPendingPushesUpdated(event.sender)
       return result
@@ -296,12 +312,21 @@ function registerContentHandlers() {
       })
 
       if (!filePath) {
+        logger.info("Content download canceled by user.", {
+          contentType: args.contentType,
+          contentId: args.id,
+        })
         return {
           canceled: true,
           filePath: null,
         }
       }
 
+      logger.info("Content download started.", {
+        contentType: args.contentType,
+        contentId: args.id,
+        targetPath: filePath,
+      })
       await contentDownloadService.download(args.contentType, args.id, filePath)
 
       return {
@@ -335,6 +360,12 @@ function registerContentHandlers() {
   handleValidatedIpc(
     SYNAPSE_IPC_CHANNELS.content.installToEditor,
     async (_event, payload: SynapseInstallToEditorPayload) => {
+      logger.info("Handling content.installToEditor request.", {
+        contentType: payload.contentType,
+        contentId: payload.contentId,
+        editorId: payload.editorId,
+        scope: payload.scope,
+      })
       return contentInstallService.installToEditor(payload)
     },
   )

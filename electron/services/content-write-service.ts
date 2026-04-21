@@ -164,6 +164,7 @@ async function writeIconImageFile(
   const filePath = path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME)
   await mkdir(contentDirectoryPath, { recursive: true })
   await writeFile(filePath, imageBytes)
+  logger.info("Wrote icon image file.", { filePath })
   return filePath
 }
 
@@ -186,15 +187,22 @@ async function stageHistoryDirectory(
     const tempHistoryPath = path.join(tempDirectoryPath, historyDirname)
 
     await mkdir(tempHistoryPath, { recursive: true })
-    await writeJsonFile(path.join(tempHistoryPath, SNAPSHOT_FILE_NAME), snapshot)
-    await writeFile(path.join(tempHistoryPath, CONTENT_MAIN_FILE_NAME), normalizeMarkdownContent(mainContent), "utf8")
-    await writeJsonFile(
-      path.join(tempHistoryPath, CONTENT_ATTACHMENTS_FILE_NAME),
-      createAttachmentsRecord(attachments),
-    )
+
+    const snapshotFilePath = path.join(tempHistoryPath, SNAPSHOT_FILE_NAME)
+    await writeJsonFile(snapshotFilePath, snapshot)
+    logger.info("Staged history snapshot file.", { filePath: snapshotFilePath })
+
+    const mainFilePath = path.join(tempHistoryPath, CONTENT_MAIN_FILE_NAME)
+    await writeFile(mainFilePath, normalizeMarkdownContent(mainContent), "utf8")
+    logger.info("Staged history main content file.", { filePath: mainFilePath })
+
+    const attachmentsFilePath = path.join(tempHistoryPath, CONTENT_ATTACHMENTS_FILE_NAME)
+    await writeJsonFile(attachmentsFilePath, createAttachmentsRecord(attachments))
+    logger.info("Staged history attachments file.", { filePath: attachmentsFilePath })
 
     const targetHistoryPath = path.join(historyRootPath, historyDirname)
     await rename(tempHistoryPath, targetHistoryPath)
+    logger.info("Committed history directory.", { targetHistoryPath })
     await rm(tempDirectoryPath, { recursive: true, force: true })
 
     return targetHistoryPath
@@ -408,6 +416,13 @@ class ContentWriteService {
       baseline.attachments,
     )
 
+    logger.info("Wrote delete snapshot.", {
+      contentId,
+      contentType,
+      historyDirname,
+      repositoryUuid: context.repository.uuid,
+    })
+
     return {
       gitPaths: [contentDirectoryPath, historyPath],
       id: contentId,
@@ -460,6 +475,13 @@ class ContentWriteService {
       baseline.attachments,
     )
 
+    logger.info("Wrote restore snapshot.", {
+      contentId,
+      contentType,
+      historyDirname,
+      repositoryUuid: context.repository.uuid,
+    })
+
     return {
       gitPaths: [contentDirectoryPath, historyPath],
       id: contentId,
@@ -487,7 +509,14 @@ class ContentWriteService {
     }
 
     const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
+    logger.info("Purging content directory.", {
+      contentId,
+      contentType,
+      contentDirectoryPath,
+      repositoryUuid: context.repository.uuid,
+    })
     await rm(contentDirectoryPath, { recursive: true, force: true })
+    logger.info("Content directory purged.", { contentId, contentType, contentDirectoryPath })
 
     return {
       gitPaths: [contentDirectoryPath],

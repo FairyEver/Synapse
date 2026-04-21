@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,6 +18,8 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+
+const logger = createRendererLogger("app.switch-onboarding")
 
 function SwitchRepositoryOnboardingDialog() {
   const {
@@ -51,6 +54,9 @@ function SwitchRepositoryOnboardingDialog() {
 
     setIsSubmitting(true)
     setError(null)
+    logger.info("Switch onboarding submitted.", {
+      repositoryUuid: pendingSwitchOnboarding.repositoryUuid,
+    })
 
     completePendingSwitchOnboarding(nextDisplayName).catch((submitError) => {
       setError(submitError instanceof Error ? submitError.message : "保存显示名称失败。")

@@ -105,6 +105,7 @@ class AttachmentsPoolService {
         logger.info("Stored attachment in pool.", {
           originalName,
           sha256: reference.sha256,
+          targetPath,
         })
       }
 
@@ -163,6 +164,11 @@ class AttachmentsPoolService {
   ): Promise<void> {
     await mkdir(path.dirname(targetPath), { recursive: true })
     await copyFile(this.resolveAttachmentPath(repositoryRootPath, attachment.sha256), targetPath)
+    logger.info("Copied attachment to path.", {
+      originalName: attachment.originalName,
+      sha256: attachment.sha256,
+      targetPath,
+    })
   }
 }
 

@@ -127,6 +127,7 @@ async function replaceFileAtomically(targetPath: string, content: string): Promi
   try {
     await writeFile(tempFilePath, normalizeMarkdownContent(content), "utf8")
     await swapPathAtomically(tempFilePath, targetPath)
+    logger.info("Wrote file atomically.", { targetPath })
   } finally {
     await rm(tempDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up temp directory", err))
   }
@@ -238,27 +239,33 @@ class ContentInstallService {
             : detail.content
 
           await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
+            const skillMainFilePath = path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME)
             await writeFile(
-              path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
+              skillMainFilePath,
               normalizeMarkdownContent(skillMainContent),
               "utf8",
             )
+            logger.info("Staged skill main file.", { filePath: skillMainFilePath })
 
             if (payload.contentType === "skill") {
               const meta = { id: payload.contentId }
+              const idFilePath = path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME)
               await writeFile(
-                path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME),
+                idFilePath,
                 JSON.stringify(meta, null, 2),
                 "utf8",
               )
+              logger.info("Staged skill identity file.", { filePath: idFilePath })
             }
 
             for (const attachment of detail.attachments) {
+              const attachmentTargetPath = path.join(stagingDirectoryPath, attachment.originalName)
               await attachmentsPoolService.copyAttachmentToPath(
                 repositoryRootPath,
                 attachment,
-                path.join(stagingDirectoryPath, attachment.originalName),
+                attachmentTargetPath,
               )
+              logger.info("Staged skill attachment.", { filePath: attachmentTargetPath, originalName: attachment.originalName })
             }
           })
 

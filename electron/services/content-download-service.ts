@@ -183,7 +183,9 @@ class ContentDownloadService {
 
     await withTemporaryOutput(definition.download.extension, async (tempPath) => {
       await writeFile(tempPath, file.content, "utf8")
+      logger.info("Wrote text content to temp file.", { tempPath })
       await copyFile(tempPath, targetPath)
+      logger.info("Copied text content to target.", { targetPath })
     })
 
     logger.info("Text content download export completed.", {
@@ -207,18 +209,25 @@ class ContentDownloadService {
 
       try {
         await mkdir(stagingDirectoryPath, { recursive: true })
-        await writeFile(path.join(stagingDirectoryPath, "main.md"), `${detail.content}\n`, "utf8")
+        logger.info("Created staging directory for zip export.", { stagingDirectoryPath })
+
+        const mainFilePath = path.join(stagingDirectoryPath, "main.md")
+        await writeFile(mainFilePath, `${detail.content}\n`, "utf8")
+        logger.info("Wrote main content to staging.", { filePath: mainFilePath })
 
         for (const attachment of detail.attachments) {
+          const attachmentTargetPath = path.join(stagingDirectoryPath, attachment.originalName)
           await attachmentsPoolService.copyAttachmentToPath(
             repositoryRootPath,
             attachment,
-            path.join(stagingDirectoryPath, attachment.originalName),
+            attachmentTargetPath,
           )
         }
 
         await createSkillArchive(stagingDirectoryPath, tempPath)
+        logger.info("Created skill archive.", { tempPath })
         await copyFile(tempPath, targetPath)
+        logger.info("Copied archive to target.", { targetPath })
       } finally {
         await rm(stagingRoot, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging root", err))
       }

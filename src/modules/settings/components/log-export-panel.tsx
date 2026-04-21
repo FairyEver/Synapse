@@ -1,5 +1,6 @@
 import { ClipboardCopy, Download, LoaderCircle, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import {
@@ -54,6 +55,8 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const logger = createRendererLogger("settings.logs")
+
 function LogExportPanel() {
   const { promise } = useAppNotifications()
   const [activeAction, setActiveAction] = useState<"clear" | "copy" | "export" | null>(null)
@@ -77,6 +80,7 @@ function LogExportPanel() {
 
   const handleExport = useCallback(async () => {
     setActiveAction("export")
+    logger.info("Log export initiated.")
     try {
       await promise(
         async () => {
@@ -100,6 +104,7 @@ function LogExportPanel() {
 
   const handleCopyToClipboard = useCallback(async () => {
     setActiveAction("copy")
+    logger.info("Log copy to clipboard initiated.")
     try {
       const files = await withTimeout(
         requireSynapseBridge().log.listFiles(),
@@ -155,6 +160,7 @@ function LogExportPanel() {
 
   const handleClear = useCallback(async () => {
     setActiveAction("clear")
+    logger.info("Log clear initiated.")
     try {
       await promise(
         () =>
