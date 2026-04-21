@@ -161,10 +161,10 @@ Cursor Settings
 
 | 采用 | 方案 | 官方位置 / 发现方式 | 文件格式 | Synapse 当前写法 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| ✅ | 1 | `~/.cursor/skills/<skill-name>/SKILL.md` | `SKILL.md` + YAML frontmatter + Markdown body | 目录名用 `skillName`；`SKILL.md` 写 `name` + `description` frontmatter | Cursor 官方技能主目录之一 |
-|  | 2 | `~/.agents/skills/<skill-name>/SKILL.md` | 同上 | 未采用 | Cursor 官方同样支持的全局技能目录 |
-|  | 3 | `~/.claude/skills/<skill-name>/SKILL.md` | 同上 | 未采用 | Cursor 官方兼容目录 |
-|  | 4 | `~/.codex/skills/<skill-name>/SKILL.md` | 同上 | 未采用 | Cursor 官方兼容目录 |
+| ✅ | 1 | `~/.cursor/skills/<skill-name>/SKILL.md` | `SKILL.md` + YAML frontmatter + Markdown body | 目录名用 `skillName`；`SKILL.md` 写 `name` + `description` frontmatter | Cursor 官方确认支持的全局技能主目录 |
+|  | 2 | `~/.agents/skills/<skill-name>/SKILL.md` | 同上 | 未采用 | 官方文档列出，但全局级有已知 bug 不加载，状态不可靠 |
+|  | 3 | `~/.claude/skills/<skill-name>/SKILL.md` | 同上 | 未采用 | 兼容目录，官方文档未明确列出，状态不确定 |
+|  | 4 | `~/.codex/skills/<skill-name>/SKILL.md` | 同上 | 未采用 | 兼容目录，官方文档未明确列出，状态不确定 |
 
 ### 项目
 
@@ -195,14 +195,13 @@ your-project/
 
 #### Skill frontmatter 说明
 
-Cursor 官方文档当前写得很明确：
+Cursor 官方文档当前的要求：
 
 - 每个 Skill 都定义在带有 YAML frontmatter 的 `SKILL.md` 文件中
 - `name` 必填
 - `description` 必填
-- `name` 必须和父目录名称一致
 
-因此，对 Cursor 来说，Synapse 当前统一写 `name` + `description` frontmatter 是必要且正确的。
+关于 `name` 是否必须和父目录名称一致：官方文档无此强制规定，属于社区建议。Synapse 选择让两者保持一致（`content-install-service.ts` 中用 `path.basename(target.targetPath)` 作为 frontmatter `name`），这是合理的防御性做法，但不是 Cursor 官方的硬性约束。
 
 参考文档：
 
@@ -215,4 +214,4 @@ Cursor 官方文档当前写得很明确：
 | --- | --- | --- | --- |
 | Claude Code | 文档把 `SKILL.md` 定义为 “YAML frontmatter + Markdown body”；字段参考页同时写了 “All fields are optional, but description is strongly recommended” | 始终写 `name` + `description` frontmatter | 这是安全超集。官方文档没有把“无 frontmatter 的纯 Markdown `SKILL.md`”写成明确支持格式 |
 | Codex | 官方明确写 `SKILL.md` 必须包含 `name` 和 `description` | 始终写 `name` + `description` frontmatter | 符合官方要求 |
-| Cursor | 官方明确写 `SKILL.md` 使用 YAML frontmatter；`name`、`description` 必填，且目录名必须等于 `name` | 始终写 `name` + `description` frontmatter，并让目录名跟随 `skillName` | 符合官方要求 |
+| Cursor | 官方明确写 `SKILL.md` 使用 YAML frontmatter；`name`、`description` 必填。目录名等于 `name` 是社区建议，非官方强制 | 始终写 `name` + `description` frontmatter，并让目录名跟随 `skillName` | Synapse 选择保持一致，属于防御性做法 |
