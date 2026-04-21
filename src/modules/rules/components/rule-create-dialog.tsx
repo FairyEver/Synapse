@@ -63,6 +63,12 @@ function RuleCreateDialog({
   editingId = null,
 }: RuleCreateDialogProps) {
   const categoryOptions = useMemo(() => getCategoryDefinitions("rule"), [])
+  const logContext = {
+    category: "rules.create",
+    contentId: editingId,
+    contentType: "rule",
+    mode,
+  } as const
   const {
     errors,
     form,
@@ -75,7 +81,13 @@ function RuleCreateDialog({
     setIsDiscardConfirmOpen,
     submitError,
     updateField,
-  } = useContentCreateForm(RULE_FORM_CONFIG, { initialValue, onOpenChange, onSubmit, open })
+  } = useContentCreateForm(RULE_FORM_CONFIG, {
+    initialValue,
+    logContext,
+    onOpenChange,
+    onSubmit,
+    open,
+  })
 
   const {
     iconImagePreview,
@@ -87,6 +99,7 @@ function RuleCreateDialog({
     contentId: editingId,
     iconType: form.iconType,
     iconImage: form.iconImage,
+    mode,
     setErrors,
     updateField,
   })
@@ -146,6 +159,7 @@ function RuleCreateDialog({
           <FieldLabel htmlFor="rule-create-category">分类</FieldLabel>
           <FieldContent>
             <Select
+              data-track="rule-category-select"
               value={form.category || undefined}
               onValueChange={(value) => updateField("category", value)}
             >

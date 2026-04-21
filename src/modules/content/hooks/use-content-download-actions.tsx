@@ -59,6 +59,37 @@ function useContentDownloadActions({
     adapter.supportedContentTypes.includes(item.type)
   ))
 
+  const openInstallDialog = useCallback((editor: SynapseEditorAdapterSummary) => {
+    setSelectedEditor(editor)
+    setIsInstallDialogOpen((prevOpen) => {
+      if (prevOpen !== true) {
+        logger.info("Content install dialog visibility changed.", {
+          open: true,
+          contentId: item.id,
+          contentType: item.type,
+          editorId: editor.id,
+        })
+      }
+
+      return true
+    })
+  }, [item.id, item.type, logger])
+
+  const handleInstallDialogOpenChange = useCallback((nextOpen: boolean) => {
+    setIsInstallDialogOpen((prevOpen) => {
+      if (prevOpen !== nextOpen) {
+        logger.info("Content install dialog visibility changed.", {
+          open: nextOpen,
+          contentId: item.id,
+          contentType: item.type,
+          editorId: selectedEditor?.id ?? null,
+        })
+      }
+
+      return nextOpen
+    })
+  }, [item.id, item.type, logger, selectedEditor])
+
   useEffect(() => {
     onInstallDialogOpenChangeRef.current?.(isInstallDialogOpen)
   }, [isInstallDialogOpen])
@@ -70,18 +101,35 @@ function useContentDownloadActions({
 
     setIsLoadingAdapters(true)
     setAdaptersError(null)
+    logger.info("Loading install targets.", {
+      contentId: item.id,
+      contentType: item.type,
+    })
 
     void getEditorAdapters()
       .then((nextAdapters) => {
         setAdapters(nextAdapters)
+        logger.info("Install targets loaded.", {
+          adapterCount: nextAdapters.length,
+          contentId: item.id,
+          contentType: item.type,
+          supportedCount: nextAdapters.filter((adapter) => (
+            adapter.supportedContentTypes.includes(item.type)
+          )).length,
+        })
       })
       .catch((error) => {
         setAdaptersError(error instanceof Error ? error.message : "读取编辑器列表失败。")
+        logger.error("Failed to load install targets.", {
+          contentId: item.id,
+          contentType: item.type,
+          error,
+        })
       })
       .finally(() => {
         setIsLoadingAdapters(false)
       })
-  }, [canInstall, isLoadingAdapters])
+  }, [canInstall, isLoadingAdapters, item.id, item.type, logger])
 
   const handleDownload = useCallback(async () => {
     if (isBusy || !canDownload) {
@@ -195,8 +243,7 @@ function useContentDownloadActions({
                     key: `install-${adapter.id}`,
                     label: `安装到 ${adapter.label}`,
                     onSelect: () => {
-                      setSelectedEditor(adapter)
-                      setIsInstallDialogOpen(true)
+                      openInstallDialog(adapter)
                     },
                   }))
                 : [{ key: "no-install-target", label: "当前没有可用的安装目标", disabled: true }],
@@ -219,7 +266,7 @@ function useContentDownloadActions({
 
       return sections
     },
-    [adaptersError, canCopy, canInstall, filteredAdapters, handleCopy, isBusy, isLoadingAdapters],
+    [adaptersError, canCopy, canInstall, filteredAdapters, handleCopy, isBusy, isLoadingAdapters, openInstallDialog],
   )
 
   const downloadAction = useMemo<ContentActionMenuItem | null>(
@@ -255,7 +302,7 @@ function useContentDownloadActions({
         editor={selectedEditor}
         item={item}
         open={isInstallDialogOpen}
-        onOpenChange={setIsInstallDialogOpen}
+        onOpenChange={handleInstallDialogOpenChange}
         projects={config.global.projects}
       />
     ) : null,

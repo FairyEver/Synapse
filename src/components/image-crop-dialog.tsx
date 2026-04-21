@@ -101,12 +101,21 @@ function ImageCropDialog({
           {children}
         </span>
       ) : (
-        <Button variant="outline" type="button" onClick={handleFileSelect}>
+        <Button
+          variant="outline"
+          type="button"
+          data-track="content-icon-image-select"
+          onClick={handleFileSelect}
+        >
           选择图片
         </Button>
       )}
 
-      <Dialog open={open} onOpenChange={(v) => !v && handleCancel()}>
+      <Dialog
+        data-track="content-icon-image-crop-dialog"
+        open={open}
+        onOpenChange={(v) => !v && handleCancel()}
+      >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>裁剪图片</DialogTitle>
@@ -139,6 +148,7 @@ function ImageCropDialog({
               <div className="flex w-full items-center gap-3 px-1">
                 <span className="text-xs text-muted-foreground">缩放</span>
                 <Slider
+                  data-track="content-icon-image-crop-scale"
                   min={100}
                   max={400}
                   step={1}
@@ -151,10 +161,10 @@ function ImageCropDialog({
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleCancel}>
+            <Button variant="outline" data-track="content-icon-image-crop-cancel" onClick={handleCancel}>
               取消
             </Button>
-            <Button onClick={handleConfirm}>确定</Button>
+            <Button data-track="content-icon-image-crop-confirm" onClick={handleConfirm}>确定</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

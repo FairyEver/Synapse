@@ -1,4 +1,5 @@
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react"
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { isDeepEqual } from "@/lib/deep-equal"
 
 type ContentCreateFormConfig<T> = {
@@ -10,6 +11,12 @@ type ContentCreateFormConfig<T> = {
 
 type ContentCreateFormOptions<T> = {
   initialValue?: T | null
+  logContext?: {
+    category: string
+    contentId?: string | null
+    contentType: string
+    mode?: "create" | "edit"
+  }
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: T) => Promise<void> | void
   open: boolean
@@ -36,7 +43,11 @@ function useContentCreateForm<T extends Record<string, unknown>>(
   options: ContentCreateFormOptions<T>,
 ): ContentCreateFormReturn<T> {
   const { createEmpty, normalize, validate, errorFallbackMessage } = config
-  const { initialValue = null, onOpenChange, onSubmit, open } = options
+  const { initialValue = null, logContext, onOpenChange, onSubmit, open } = options
+  const logger = useMemo(
+    () => logContext ? createRendererLogger(logContext.category) : null,
+    [logContext?.category],
+  )
 
   const baseline = useMemo(
     () => normalize(initialValue ?? createEmpty()),
@@ -47,6 +58,8 @@ function useContentCreateForm<T extends Record<string, unknown>>(
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const previousOpenRef = useRef(open)
+  const previousDiscardConfirmOpenRef = useRef(isDiscardConfirmOpen)
 
   useEffect(() => {
     setForm(baseline)
@@ -56,10 +69,57 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     setSubmitError(null)
   }, [baseline, open])
 
+  useEffect(() => {
+    if (previousOpenRef.current !== open) {
+      logger?.info("Content editor dialog visibility changed.", {
+        contentId: logContext?.contentId ?? null,
+        contentType: logContext?.contentType ?? null,
+        mode: logContext?.mode,
+        open,
+      })
+      previousOpenRef.current = open
+    }
+  }, [logContext?.contentId, logContext?.contentType, logContext?.mode, logger, open])
+
+  useEffect(() => {
+    if (previousDiscardConfirmOpenRef.current !== isDiscardConfirmOpen) {
+      logger?.info("Content editor discard confirmation visibility changed.", {
+        contentId: logContext?.contentId ?? null,
+        contentType: logContext?.contentType ?? null,
+        mode: logContext?.mode,
+        open: isDiscardConfirmOpen,
+      })
+      previousDiscardConfirmOpenRef.current = isDiscardConfirmOpen
+    }
+  }, [
+    isDiscardConfirmOpen,
+    logContext?.contentId,
+    logContext?.contentType,
+    logContext?.mode,
+    logger,
+  ])
+
   const updateField = <K extends keyof T>(field: K, value: T[K]) => {
+    const previousValue = form[field]
     const nextForm = { ...form, [field]: value }
     setForm(nextForm)
     setSubmitError(null)
+
+    if (
+      logger
+      && logContext
+      && (field === "category" || field === "iconType" || field === "iconBg" || field === "icon")
+      && !Object.is(previousValue, value)
+    ) {
+      logger.info("Content form field changed.", {
+        contentId: logContext.contentId ?? null,
+        contentType: logContext.contentType,
+        field: String(field),
+        from: previousValue ?? null,
+        mode: logContext.mode,
+        to: value,
+      })
+    }
 
     if (field === "iconType") {
       setErrors({})
@@ -87,6 +147,11 @@ function useContentCreateForm<T extends Record<string, unknown>>(
   }
 
   const handleDiscard = () => {
+    logger?.info("Content form changes discarded.", {
+      contentId: logContext?.contentId ?? null,
+      contentType: logContext?.contentType ?? null,
+      mode: logContext?.mode,
+    })
     setIsDiscardConfirmOpen(false)
     onOpenChange(false)
   }
@@ -98,6 +163,12 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     const nextErrors = validate(target)
 
     if (Object.keys(nextErrors).length > 0) {
+      logger?.warn("Content form validation failed.", {
+        contentId: logContext?.contentId ?? null,
+        contentType: logContext?.contentType ?? null,
+        fields: Object.keys(nextErrors),
+        mode: logContext?.mode,
+      })
       setErrors(nextErrors)
       return
     }

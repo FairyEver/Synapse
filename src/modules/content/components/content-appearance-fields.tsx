@@ -52,6 +52,7 @@ function ContentAppearanceFields({
     <FieldSet className="gap-5">
       <FieldLegend className="sr-only">外观设置</FieldLegend>
       <Tabs
+        data-track="content-appearance-mode"
         value={iconTypeValue}
         onValueChange={(v) => onIconTypeChange(v as SynapseContentIconType)}
       >
@@ -103,7 +104,12 @@ function ContentAppearanceFields({
                   />
                   <div className="flex gap-2">
                     <ImageCropDialog onCropped={onIconImageChange}>
-                      <Button variant="outline" size="sm" type="button">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        data-track="content-icon-image-reselect"
+                      >
                         重新选择
                       </Button>
                     </ImageCropDialog>
@@ -111,6 +117,7 @@ function ContentAppearanceFields({
                       variant="ghost"
                       size="sm"
                       type="button"
+                      data-track="content-icon-image-remove"
                       onClick={onIconImageRemove}
                     >
                       移除

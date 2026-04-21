@@ -46,6 +46,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
   const pendingSaveRef = useRef<number | null>(null)
   const hasLocalEditRef = useRef(false)
   const controlClassName = "border-border/70"
+  const trackName = `settings.${item.key}`
 
   useEffect(() => {
     setDraftValue(currentInputValue)
@@ -116,6 +117,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
     >
       {item.type === "select" ? (
         <Select
+          data-track={trackName}
           value={typeof value === "string" ? value : undefined}
           onValueChange={(nextValue) => {
             void onSave(item, nextValue)
@@ -138,6 +140,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
 
       {item.type === "toggle" ? (
         <Switch
+          data-track={trackName}
           checked={Boolean(value)}
           onCheckedChange={(checked) => {
             void onSave(item, checked)
@@ -147,6 +150,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
 
       {supportsDraftInput ? (
         <Input
+          data-track={trackName}
           className={controlClassName}
           type={item.type === "number" ? "number" : "text"}
           value={draftValue}

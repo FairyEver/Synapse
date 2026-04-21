@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 import { SYNAPSE_CONTENT_COLOR_OPTIONS } from "@/lib/content-appearance"
 
 type ContentBackgroundPickerProps = {
@@ -26,7 +27,18 @@ function ContentBackgroundPicker({
               option.backgroundClassName,
               isSelected && "ring-2 ring-foreground/70 ring-offset-2 ring-offset-background",
             )}
-            onClick={() => onValueChange(option.value)}
+            onClick={() => {
+              if (!isSelected) {
+                track({
+                  component: "content-background-picker",
+                  name: "content-background-picker",
+                  action: "select",
+                  value: option.value,
+                })
+              }
+
+              onValueChange(option.value)
+            }}
             title={option.label}
           />
         )

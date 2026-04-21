@@ -58,7 +58,7 @@ function formatFileSize(bytes: number): string {
 const logger = createRendererLogger("settings.logs")
 
 function LogExportPanel() {
-  const { promise } = useAppNotifications()
+  const { error: showError, promise } = useAppNotifications()
   const [activeAction, setActiveAction] = useState<"clear" | "copy" | "export" | null>(null)
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false)
   const [logFilePickerState, setLogFilePickerState] = useState<{
@@ -146,17 +146,12 @@ function LogExportPanel() {
         selected: new Set([files[0].name]),
       })
     } catch (error) {
-      await promise(
-        () => Promise.reject(error),
-        {
-          loading: "正在复制日志...",
-          error: (e) => e instanceof Error ? e.message : "复制日志失败",
-        },
-      )
+      logger.error("Failed to prepare log copy to clipboard.", error)
+      showError(error instanceof Error ? error.message : "复制日志失败")
     } finally {
       setActiveAction(null)
     }
-  }, [promise])
+  }, [promise, showError])
 
   const handleClear = useCallback(async () => {
     setActiveAction("clear")

@@ -179,6 +179,12 @@ function SkillCreateDialog({
 }: SkillCreateDialogProps) {
   const logger = useMemo(() => createRendererLogger("skills.create"), [])
   const categoryOptions = useMemo(() => getCategoryDefinitions("skill"), [])
+  const logContext = {
+    category: "skills.create",
+    contentId: editingId,
+    contentType: "skill",
+    mode,
+  } as const
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const dragDepthRef = useRef(0)
@@ -196,7 +202,13 @@ function SkillCreateDialog({
     setIsDiscardConfirmOpen,
     submitError,
     updateField,
-  } = useContentCreateForm(SKILL_FORM_CONFIG, { initialValue, onOpenChange, onSubmit, open })
+  } = useContentCreateForm(SKILL_FORM_CONFIG, {
+    initialValue,
+    logContext,
+    onOpenChange,
+    onSubmit,
+    open,
+  })
 
   const {
     iconImagePreview,
@@ -208,6 +220,7 @@ function SkillCreateDialog({
     contentId: editingId,
     iconType: form.iconType,
     iconImage: form.iconImage,
+    mode,
     setErrors,
     updateField,
   })
@@ -234,6 +247,7 @@ function SkillCreateDialog({
     () => form.files.reduce((total, file) => total + file.size, 0),
     [form.files],
   )
+
   const updateFiles = (nextFiles: SkillCreateFilePayloadDraft[]) => {
     const nextForm = { ...form, files: nextFiles }
     setForm(nextForm)
@@ -243,8 +257,12 @@ function SkillCreateDialog({
     }
   }
 
-  const addFiles = (incomingFiles: SkillCreateFilePayloadDraft[]) => {
+  const addFiles = (
+    incomingFiles: SkillCreateFilePayloadDraft[],
+    source: "drop" | "file-picker" | "folder-picker",
+  ) => {
     if (incomingFiles.length === 0) {
+      logger.warn("No skill attachments were provided.", { source })
       return
     }
 
@@ -252,6 +270,13 @@ function SkillCreateDialog({
     const acceptedCount = files.length - form.files.length
 
     updateFiles(files)
+    logger.info("Skill attachments updated.", {
+      acceptedCount,
+      attemptedCount: incomingFiles.length,
+      rejectedCount: rejectedMessages.length,
+      source,
+      totalCount: files.length,
+    })
 
     if (rejectedMessages.length > 0) {
       const prefix = acceptedCount > 0 ? `已添加 ${acceptedCount} 个文件。` : ""
@@ -261,12 +286,16 @@ function SkillCreateDialog({
     }
   }
 
-  const handleHiddenInputFiles = (files: FileList | null) => {
+  const handleHiddenInputFiles = (
+    files: FileList | null,
+    source: "file-picker" | "folder-picker",
+  ) => {
     if (!files || files.length === 0) {
+      logger.info("Skill attachment picker closed without selection.", { source })
       return
     }
 
-    addFiles(toCreateSkillFiles(files))
+    addFiles(toCreateSkillFiles(files), source)
   }
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
@@ -276,16 +305,23 @@ function SkillCreateDialog({
     setIsDraggingFiles(false)
     setAttachmentMessage(null)
     setIsCollectingFiles(true)
+    logger.info("Skill attachment drop started.", {
+      itemCount: event.dataTransfer.items.length,
+      totalCount: form.files.length,
+    })
 
     try {
       const droppedFiles = await collectCreateSkillFilesFromDataTransfer(event.dataTransfer)
 
       if (droppedFiles.length === 0) {
+        logger.warn("No usable skill attachments found in drop.", {
+          itemCount: event.dataTransfer.items.length,
+        })
         setAttachmentMessage("没有检测到可用附件，请改用选择文件或文件夹。")
         return
       }
 
-      addFiles(droppedFiles)
+      addFiles(droppedFiles, "drop")
     } catch (error) {
       logger.error("Failed to collect dropped skill attachments.", error)
       setAttachmentMessage("整理附件失败，请改用选择文件或文件夹。")
@@ -353,6 +389,7 @@ function SkillCreateDialog({
         <div className="flex flex-col gap-2">
           <Label htmlFor="skill-create-category">分类</Label>
           <Select
+            data-track="skill-category-select"
             value={form.category || undefined}
             onValueChange={(value) => updateField("category", value)}
           >
@@ -402,6 +439,7 @@ function SkillCreateDialog({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
+                  logger.info("Skill attachments cleared.", { totalCount: form.files.length })
                   updateFiles([])
                   setAttachmentMessage(null)
                 }}
@@ -461,7 +499,10 @@ function SkillCreateDialog({
                   variant="outline"
                   className="rounded-r-none border-r-0"
                   disabled={isCollectingFiles || isSubmitting}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    logger.info("Skill attachment picker opened.", { source: "file-picker" })
+                    fileInputRef.current?.click()
+                  }}
                 >
                   <Paperclip />
                   选择文件
@@ -471,7 +512,10 @@ function SkillCreateDialog({
                   variant="outline"
                   className="rounded-l-none"
                   disabled={isCollectingFiles || isSubmitting}
-                  onClick={() => folderInputRef.current?.click()}
+                  onClick={() => {
+                    logger.info("Skill attachment picker opened.", { source: "folder-picker" })
+                    folderInputRef.current?.click()
+                  }}
                 >
                   <FolderOpen />
                   选择文件夹
@@ -486,7 +530,7 @@ function SkillCreateDialog({
             type="file"
             multiple
             onChange={(event) => {
-              handleHiddenInputFiles(event.target.files)
+              handleHiddenInputFiles(event.target.files, "file-picker")
               event.currentTarget.value = ""
             }}
           />
@@ -498,7 +542,7 @@ function SkillCreateDialog({
             directory=""
             multiple
             onChange={(event) => {
-              handleHiddenInputFiles(event.target.files)
+              handleHiddenInputFiles(event.target.files, "folder-picker")
               event.currentTarget.value = ""
             }}
           />
@@ -536,6 +580,10 @@ function SkillCreateDialog({
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => {
+                        logger.info("Skill attachment removed.", {
+                          originalName: file.originalName,
+                          remainingCount: form.files.length - 1,
+                        })
                         updateFiles(
                           form.files.filter((item) => item.originalName !== file.originalName),
                         )

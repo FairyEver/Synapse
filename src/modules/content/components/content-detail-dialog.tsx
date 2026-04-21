@@ -453,7 +453,11 @@ function ContentDetailDialog<TPayload>({
                       void handleOpenInNewWindow()
                     }}
                     onToggleFavorite={() => {
-                      logger.info("Favorite toggled.", { contentId: item.id, contentType, isFavorite: !isItemFavorite })
+                      logger.info("Favorite toggle requested from detail dialog.", {
+                        contentId: item.id,
+                        contentType,
+                        isFavorite: !isItemFavorite,
+                      })
                       return toggleFavorite(contentType, item.id)
                     }}
                   />

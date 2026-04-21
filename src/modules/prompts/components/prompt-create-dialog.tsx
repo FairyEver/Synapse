@@ -63,6 +63,12 @@ function PromptCreateDialog({
   editingId = null,
 }: PromptCreateDialogProps) {
   const categoryOptions = useMemo(() => getCategoryDefinitions("prompt"), [])
+  const logContext = {
+    category: "prompts.create",
+    contentId: editingId,
+    contentType: "prompt",
+    mode,
+  } as const
   const {
     errors,
     form,
@@ -75,7 +81,13 @@ function PromptCreateDialog({
     setIsDiscardConfirmOpen,
     submitError,
     updateField,
-  } = useContentCreateForm(PROMPT_FORM_CONFIG, { initialValue, onOpenChange, onSubmit, open })
+  } = useContentCreateForm(PROMPT_FORM_CONFIG, {
+    initialValue,
+    logContext,
+    onOpenChange,
+    onSubmit,
+    open,
+  })
 
   const {
     iconImagePreview,
@@ -87,6 +99,7 @@ function PromptCreateDialog({
     contentId: editingId,
     iconType: form.iconType,
     iconImage: form.iconImage,
+    mode,
     setErrors,
     updateField,
   })
@@ -146,6 +159,7 @@ function PromptCreateDialog({
           <FieldLabel htmlFor="prompt-create-category">分类</FieldLabel>
           <FieldContent>
             <Select
+              data-track="prompt-category-select"
               value={form.category || undefined}
               onValueChange={(value) => updateField("category", value)}
             >

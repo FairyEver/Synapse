@@ -43,7 +43,7 @@ const ActiveRepositorySwitchContext = createContext<ActiveRepositorySwitchContex
 const logger = createRendererLogger("app.active-repository-switch")
 
 function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
-  const { promise } = useAppNotifications()
+  const { error: showError, promise } = useAppNotifications()
   const manager = useRepositoryManager()
   const repositories = useRepositoryList()
   const activeRepository = useActiveRepository()
@@ -107,17 +107,10 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
       // Attempt background sync — don't block the switch
       void syncRepository(repositoryUuid).catch((syncError) => {
         logger.warn("Post-switch sync failed.", { repositoryUuid, error: syncError })
-        void promise(
-          () => Promise.reject(syncError),
-          {
-            loading: "",
-            success: () => null,
-            error: () => "仓库同步失败，显示的内容可能不是最新版本。",
-          },
-        ).catch(() => { /* notification handled */ })
+        showError("仓库同步失败，显示的内容可能不是最新版本。")
       })
     },
-    [activeRepository?.uuid, promise, switchRepository, syncRepository],
+    [activeRepository?.uuid, promise, showError, switchRepository, syncRepository],
   )
 
   const openRepositorySwitchDialog = useCallback(() => {

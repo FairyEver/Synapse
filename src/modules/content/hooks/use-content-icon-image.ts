@@ -1,4 +1,5 @@
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react"
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseContentIconType, SynapseContentType } from "@/types/content"
 
 const ICON_IMAGE_FILE_NAME = "icon.png"
@@ -8,6 +9,7 @@ type UseContentIconImageOptions = {
   contentId: string | null
   iconType: SynapseContentIconType
   iconImage: string
+  mode?: "create" | "edit"
   setErrors?: Dispatch<SetStateAction<Partial<Record<string, string>>>>
   updateField?: (field: "iconImage", value: string) => void
 }
@@ -24,9 +26,11 @@ function useContentIconImage({
   contentId,
   iconType,
   iconImage,
+  mode,
   setErrors,
   updateField,
 }: UseContentIconImageOptions): UseContentIconImageReturn {
+  const logger = useMemo(() => createRendererLogger(`content.icon-image.${contentType}`), [contentType])
   const [iconImagePreview, setIconImagePreview] = useState<string | null>(null)
   const iconImageBytesRef = useRef<Uint8Array | null>(null)
   const blobUrlRef = useRef<string | null>(null)
@@ -37,40 +41,87 @@ function useContentIconImage({
     }
 
     let canceled = false
+    logger.info("Loading content icon image preview.", {
+      contentId,
+      contentType,
+      mode,
+    })
 
     window.synapse?.content
       .readIconImage({ contentType, id: contentId })
       .then((dataUrl) => {
-        if (!canceled && dataUrl) {
+        if (canceled) {
+          return
+        }
+
+        if (dataUrl) {
           setIconImagePreview(dataUrl)
+          logger.info("Content icon image preview loaded.", {
+            contentId,
+            contentType,
+            mode,
+          })
+          return
+        }
+
+        logger.warn("Content icon image preview was empty.", {
+          contentId,
+          contentType,
+          mode,
+        })
+      })
+      .catch((error) => {
+        if (!canceled) {
+          logger.error("Failed to load content icon image preview.", {
+            contentId,
+            contentType,
+            error,
+            mode,
+          })
         }
       })
-      .catch(() => {})
 
     return () => {
       canceled = true
     }
-  }, [contentType, contentId, iconImage, iconType])
+  }, [contentId, contentType, iconImage, iconType, logger, mode])
 
   const handleIconImageChange = useCallback((blob: Blob) => {
-    void blob.arrayBuffer().then((arrayBuffer) => {
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current)
-      }
-      const url = URL.createObjectURL(blob)
-      blobUrlRef.current = url
-      iconImageBytesRef.current = new Uint8Array(arrayBuffer)
-      setIconImagePreview(url)
+    void blob.arrayBuffer()
+      .then((arrayBuffer) => {
+        if (blobUrlRef.current) {
+          URL.revokeObjectURL(blobUrlRef.current)
+        }
+        const url = URL.createObjectURL(blob)
+        blobUrlRef.current = url
+        iconImageBytesRef.current = new Uint8Array(arrayBuffer)
+        setIconImagePreview(url)
+        logger.info("Content icon image updated.", {
+          contentId,
+          contentType,
+          mode,
+          size: blob.size,
+        })
 
-      setErrors?.((prev) => {
-        if (!prev.iconImage) return prev
-        const { iconImage: _, ...rest } = prev
-        return rest
+        setErrors?.((prev) => {
+          if (!prev.iconImage) return prev
+          const { iconImage: _, ...rest } = prev
+          return rest
+        })
       })
-    })
-  }, [setErrors])
+      .catch((error) => {
+        logger.error("Failed to read selected content icon image.", {
+          contentId,
+          contentType,
+          error,
+          mode,
+        })
+      })
+  }, [contentId, contentType, logger, mode, setErrors])
 
   const handleIconImageRemove = useCallback(() => {
+    const hadIconImage = Boolean(blobUrlRef.current || iconImagePreview || iconImage || iconImageBytesRef.current)
+
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current)
       blobUrlRef.current = null
@@ -78,7 +129,15 @@ function useContentIconImage({
     iconImageBytesRef.current = null
     setIconImagePreview(null)
     updateField?.("iconImage", "")
-  }, [updateField])
+
+    if (hadIconImage) {
+      logger.info("Content icon image removed.", {
+        contentId,
+        contentType,
+        mode,
+      })
+    }
+  }, [contentId, contentType, iconImage, iconImagePreview, logger, mode, updateField])
 
   const prepareFormForSubmit = useCallback(<T extends Record<string, unknown>>(form: T): T => {
     if (form.iconType !== "image" || !iconImageBytesRef.current) {

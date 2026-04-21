@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 import {
   getContentColorOption,
   SYNAPSE_CONTENT_ICON_OPTIONS,
@@ -40,7 +41,18 @@ function ContentIconPicker({
               disabled && "cursor-not-allowed opacity-50",
             )}
             disabled={disabled}
-            onClick={() => onValueChange(option.value)}
+            onClick={() => {
+              if (!isSelected) {
+                track({
+                  component: "content-icon-picker",
+                  name: "content-icon-picker",
+                  action: "select",
+                  value: option.value,
+                })
+              }
+
+              onValueChange(option.value)
+            }}
             title={option.label}
           >
             <Icon />

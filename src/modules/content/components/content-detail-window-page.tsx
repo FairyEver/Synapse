@@ -1,4 +1,5 @@
-import { useEffect } from "react"
+import { useCallback, useEffect, useMemo } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
 import { PromptVersionView } from "@/modules/prompts/components/prompt-version-view"
@@ -15,6 +16,7 @@ function RuleDetailWindowPage({
 }: {
   request: SynapseContentWindowRequest
 }) {
+  const logger = useMemo(() => createRendererLogger("rules.detail.window"), [])
   const detailState = useContentDetailState<"rule">({
     initialHistoryDirname: request.historyDirname ?? null,
     initialViewMode: request.viewMode,
@@ -28,6 +30,36 @@ function RuleDetailWindowPage({
     logCategory: "rules.detail.window",
     open: true,
   })
+
+  const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
+    detailState.setViewMode((prevViewMode) => {
+      if (prevViewMode !== nextViewMode) {
+        logger.info("Content view mode changed in detail window.", {
+          contentId: request.id,
+          contentType: "rule",
+          from: prevViewMode,
+          to: nextViewMode,
+        })
+      }
+
+      return nextViewMode
+    })
+  }, [detailState, logger, request.id])
+
+  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string) => {
+    detailState.setSelectedHistoryDirname((prevHistoryDirname) => {
+      if (prevHistoryDirname !== nextHistoryDirname) {
+        logger.info("Content history version changed in detail window.", {
+          contentId: request.id,
+          contentType: "rule",
+          from: prevHistoryDirname ?? "current",
+          to: nextHistoryDirname,
+        })
+      }
+
+      return nextHistoryDirname
+    })
+  }, [detailState, logger, request.id])
 
   useEffect(() => {
     if (detailState.detail) {
@@ -46,8 +78,8 @@ function RuleDetailWindowPage({
         history={detailState.historyEntries}
         isLoading={detailState.isLoading}
         loadingTitle="正在读取规则"
-        onSelectedHistoryDirnameChange={detailState.setSelectedHistoryDirname}
-        onViewModeChange={detailState.setViewMode}
+        onSelectedHistoryDirnameChange={handleHistorySelectionChange}
+        onViewModeChange={handleViewModeChange}
         previewError={detailState.previewError}
         renderVersion={({ mode, version }) => (
           <RuleVersionView mode={mode} surface="plain" version={version} />
@@ -65,6 +97,7 @@ function PromptDetailWindowPage({
 }: {
   request: SynapseContentWindowRequest
 }) {
+  const logger = useMemo(() => createRendererLogger("prompts.detail.window"), [])
   const detailState = useContentDetailState<"prompt">({
     initialHistoryDirname: request.historyDirname ?? null,
     initialViewMode: request.viewMode,
@@ -78,6 +111,36 @@ function PromptDetailWindowPage({
     logCategory: "prompts.detail.window",
     open: true,
   })
+
+  const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
+    detailState.setViewMode((prevViewMode) => {
+      if (prevViewMode !== nextViewMode) {
+        logger.info("Content view mode changed in detail window.", {
+          contentId: request.id,
+          contentType: "prompt",
+          from: prevViewMode,
+          to: nextViewMode,
+        })
+      }
+
+      return nextViewMode
+    })
+  }, [detailState, logger, request.id])
+
+  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string) => {
+    detailState.setSelectedHistoryDirname((prevHistoryDirname) => {
+      if (prevHistoryDirname !== nextHistoryDirname) {
+        logger.info("Content history version changed in detail window.", {
+          contentId: request.id,
+          contentType: "prompt",
+          from: prevHistoryDirname ?? "current",
+          to: nextHistoryDirname,
+        })
+      }
+
+      return nextHistoryDirname
+    })
+  }, [detailState, logger, request.id])
 
   useEffect(() => {
     if (detailState.detail) {
@@ -96,8 +159,8 @@ function PromptDetailWindowPage({
         history={detailState.historyEntries}
         isLoading={detailState.isLoading}
         loadingTitle="正在读取提示词"
-        onSelectedHistoryDirnameChange={detailState.setSelectedHistoryDirname}
-        onViewModeChange={detailState.setViewMode}
+        onSelectedHistoryDirnameChange={handleHistorySelectionChange}
+        onViewModeChange={handleViewModeChange}
         previewError={detailState.previewError}
         renderVersion={({ mode, version }) => (
           <PromptVersionView mode={mode} surface="plain" version={version} />
@@ -115,6 +178,7 @@ function SkillDetailWindowPage({
 }: {
   request: SynapseContentWindowRequest
 }) {
+  const logger = useMemo(() => createRendererLogger("skills.detail.window"), [])
   const detailState = useContentDetailState<"skill">({
     initialHistoryDirname: request.historyDirname ?? null,
     initialViewMode: request.viewMode,
@@ -128,6 +192,36 @@ function SkillDetailWindowPage({
     logCategory: "skills.detail.window",
     open: true,
   })
+
+  const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
+    detailState.setViewMode((prevViewMode) => {
+      if (prevViewMode !== nextViewMode) {
+        logger.info("Content view mode changed in detail window.", {
+          contentId: request.id,
+          contentType: "skill",
+          from: prevViewMode,
+          to: nextViewMode,
+        })
+      }
+
+      return nextViewMode
+    })
+  }, [detailState, logger, request.id])
+
+  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string) => {
+    detailState.setSelectedHistoryDirname((prevHistoryDirname) => {
+      if (prevHistoryDirname !== nextHistoryDirname) {
+        logger.info("Content history version changed in detail window.", {
+          contentId: request.id,
+          contentType: "skill",
+          from: prevHistoryDirname ?? "current",
+          to: nextHistoryDirname,
+        })
+      }
+
+      return nextHistoryDirname
+    })
+  }, [detailState, logger, request.id])
 
   useEffect(() => {
     if (detailState.detail) {
@@ -146,8 +240,8 @@ function SkillDetailWindowPage({
         history={detailState.historyEntries}
         isLoading={detailState.isLoading}
         loadingTitle="正在读取 Skill"
-        onSelectedHistoryDirnameChange={detailState.setSelectedHistoryDirname}
-        onViewModeChange={detailState.setViewMode}
+        onSelectedHistoryDirnameChange={handleHistorySelectionChange}
+        onViewModeChange={handleViewModeChange}
         previewError={detailState.previewError}
         renderVersion={({ mode, version }) => (
           <SkillVersionView mode={mode} surface="plain" version={version} />

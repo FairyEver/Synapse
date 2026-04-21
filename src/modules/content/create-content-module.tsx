@@ -1,4 +1,4 @@
-import { type ComponentType, useMemo, useState } from "react"
+import { type ComponentType, useCallback, useMemo, useState } from "react"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -51,6 +51,11 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const isSyncing = (pendingPushState?.count ?? 0) > 0
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
+    const handleCreateDialogOpenChange = useCallback((nextOpen: boolean) => {
+      setIsCreateDialogOpen(nextOpen)
+      onCreateDialogOpenChange?.(nextOpen)
+    }, [onCreateDialogOpenChange])
+
     const handleSubmit = (payload: SynapseCreateContentPayload<T>) => {
       logger.info("Content create submitted.", { contentType: config.contentType, repositoryUuid: activeRepository?.uuid ?? null })
       void promise(
@@ -73,7 +78,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
         },
       ).then((result) => {
         if (result?.status === "saved") {
-          setIsCreateDialogOpen(false)
+          handleCreateDialogOpenChange(false)
         }
         return result
       }).catch((error) => {
@@ -95,7 +100,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       <>
         <ContentBrowserPage
           contentType={config.contentType}
-          onCreateClick={() => setIsCreateDialogOpen(true)}
+          onCreateClick={() => handleCreateDialogOpenChange(true)}
           onCreateDialogOpenChange={onCreateDialogOpenChange}
           onDetailDialogOpenChange={onDetailDialogOpenChange}
           onInstallDialogOpenChange={onInstallDialogOpenChange}
@@ -110,7 +115,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
 
         <config.CreateDialog
           open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
+          onOpenChange={handleCreateDialogOpenChange}
           onSubmit={handleSubmit}
           submitDisabled={submitDisabledReason !== null}
           submitDisabledReason={submitDisabledReason}
