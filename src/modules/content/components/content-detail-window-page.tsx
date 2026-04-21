@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
+import { PromptVersionView } from "@/modules/prompts/components/prompt-version-view"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
 import { SkillVersionView } from "@/modules/skills/components/skill-version-view"
 import type { SynapseContentWindowRequest } from "@/types/content"
@@ -50,6 +51,56 @@ function RuleDetailWindowPage({
         previewError={detailState.previewError}
         renderVersion={({ mode, version }) => (
           <RuleVersionView mode={mode} surface="plain" version={version} />
+        )}
+        selectedHistoryDirname={detailState.selectedHistoryDirname}
+        stateContainerClassName="min-h-full rounded-none border-0 bg-transparent p-0"
+        viewMode={detailState.viewMode}
+      />
+    </div>
+  )
+}
+
+function PromptDetailWindowPage({
+  request,
+}: {
+  request: SynapseContentWindowRequest
+}) {
+  const detailState = useContentDetailState<"prompt">({
+    initialHistoryDirname: request.historyDirname ?? null,
+    initialViewMode: request.viewMode,
+    invalidTypeMessage: "读取到的内容不是提示词。",
+    item: {
+      id: request.id,
+      type: "prompt",
+    },
+    loadDetailErrorMessage: "读取提示词详情失败。",
+    loadHistoryErrorMessage: "读取提示词历史失败。",
+    logCategory: "prompts.detail.window",
+    open: true,
+  })
+
+  useEffect(() => {
+    if (detailState.detail) {
+      document.title = detailState.detail.title
+    }
+  }, [detailState.detail])
+
+  return (
+    <div className="flex h-screen min-h-0 flex-col bg-background p-4">
+      <ContentDetailPanel
+        detail={detailState.detail}
+        displayedVersion={detailState.displayedVersion}
+        emptyDescription="它可能已经被删除。"
+        emptyTitle="找不到这条提示词"
+        errorTitle="无法显示提示词"
+        history={detailState.historyEntries}
+        isLoading={detailState.isLoading}
+        loadingTitle="正在读取提示词"
+        onSelectedHistoryDirnameChange={detailState.setSelectedHistoryDirname}
+        onViewModeChange={detailState.setViewMode}
+        previewError={detailState.previewError}
+        renderVersion={({ mode, version }) => (
+          <PromptVersionView mode={mode} surface="plain" version={version} />
         )}
         selectedHistoryDirname={detailState.selectedHistoryDirname}
         stateContainerClassName="min-h-full rounded-none border-0 bg-transparent p-0"
@@ -112,6 +163,10 @@ function SkillDetailWindowPage({
 function ContentDetailWindowPage({ request }: ContentDetailWindowPageProps) {
   if (request.contentType === "rule") {
     return <RuleDetailWindowPage request={request} />
+  }
+
+  if (request.contentType === "prompt") {
+    return <PromptDetailWindowPage request={request} />
   }
 
   return <SkillDetailWindowPage request={request} />

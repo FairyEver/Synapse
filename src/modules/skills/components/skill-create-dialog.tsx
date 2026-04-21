@@ -189,6 +189,7 @@ function SkillCreateDialog({
     setForm,
     setErrors,
     handleDialogOpenChange: baseHandleDialogOpenChange,
+    handleDiscard,
     handleSubmit,
     isDiscardConfirmOpen,
     isSubmitting,
@@ -302,8 +303,9 @@ function SkillCreateDialog({
         discardDescription: "当前还没有保存，关闭后已填写的 Skill 内容和附件会被清空。",
       }}
       mode={mode}
-      onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
       onDialogOpenChange={handleDialogOpenChange}
+      onDiscard={handleDiscard}
+      onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
       onSubmit={handleFormSubmit}
       open={open}
       submitDisabled={submitDisabled}

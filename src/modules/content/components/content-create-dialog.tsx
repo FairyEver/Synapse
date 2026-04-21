@@ -32,8 +32,9 @@ type ContentCreateDialogProps = {
   isSubmitting: boolean
   labels: ContentCreateDialogLabels
   mode: "create" | "edit"
-  onDiscardConfirmOpenChange: (open: boolean) => void
   onDialogOpenChange: (open: boolean) => void
+  onDiscard: () => void
+  onDiscardConfirmOpenChange: (open: boolean) => void
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
   open: boolean
   submitDisabled?: boolean
@@ -48,8 +49,9 @@ function ContentCreateDialog({
   isSubmitting,
   labels,
   mode,
-  onDiscardConfirmOpenChange,
   onDialogOpenChange,
+  onDiscard,
+  onDiscardConfirmOpenChange,
   onSubmit,
   open,
   submitDisabled = false,
@@ -69,10 +71,7 @@ function ContentCreateDialog({
           <AlertDialogFooter>
             <AlertDialogCancel>继续编辑</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                onDiscardConfirmOpenChange(false)
-                onDialogOpenChange(false)
-              }}
+              onClick={onDiscard}
             >
               放弃
             </AlertDialogAction>

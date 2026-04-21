@@ -67,6 +67,7 @@ function PromptCreateDialog({
     errors,
     form,
     handleDialogOpenChange,
+    handleDiscard,
     handleSubmit,
     isDiscardConfirmOpen,
     isSubmitting,
@@ -103,8 +104,9 @@ function PromptCreateDialog({
         discardDescription: "当前还没有提交，关闭后已填写的提示词内容会被清空。",
       }}
       mode={mode}
-      onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
       onDialogOpenChange={handleDialogOpenChange}
+      onDiscard={handleDiscard}
+      onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
       onSubmit={handleFormSubmit}
       open={open}
       submitDisabled={submitDisabled}

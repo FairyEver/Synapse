@@ -20,6 +20,7 @@ type ContentCreateFormReturn<T> = {
   errors: Partial<Record<string, string>>
   form: T
   handleDialogOpenChange: (nextOpen: boolean) => void
+  handleDiscard: () => void
   handleSubmit: (event: React.FormEvent<HTMLFormElement>, payloadOverride?: T) => void
   isDiscardConfirmOpen: boolean
   isSubmitting: boolean
@@ -85,6 +86,11 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     onOpenChange(false)
   }
 
+  const handleDiscard = () => {
+    setIsDiscardConfirmOpen(false)
+    onOpenChange(false)
+  }
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>, payloadOverride?: T) => {
     event.preventDefault()
 
@@ -114,6 +120,7 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     errors,
     form,
     handleDialogOpenChange,
+    handleDiscard,
     handleSubmit,
     isDiscardConfirmOpen,
     isSubmitting,
