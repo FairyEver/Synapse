@@ -1,11 +1,14 @@
 import { type ReactNode, useMemo, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { useLocalIdentity } from "@/app-shell/identity-context"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { normalizeUserIdInput, validateUserIdInput } from "@/lib/user-id-input"
+
+const logger = createRendererLogger("app.identity-gate")
 
 function IdentityScreenShell({ children }: { children: ReactNode }) {
   return (
@@ -86,10 +89,20 @@ function IdentityGate({ children }: { children: ReactNode }) {
               variant="outline"
               disabled={isSubmitting}
               onClick={() => {
-                setIsSubmitting(true)
-                void generateNewId().finally(() => {
-                  setIsSubmitting(false)
+                logger.info("Generate new identity requested from gate.", {
+                  hasActiveRepository: Boolean(activeRepository),
                 })
+                setIsSubmitting(true)
+                void generateNewId()
+                  .then(() => {
+                    logger.info("Generated new identity from gate.")
+                  })
+                  .catch((generationError) => {
+                    logger.error("Failed to generate new identity from gate.", generationError)
+                  })
+                  .finally(() => {
+                    setIsSubmitting(false)
+                  })
               }}
             >
               生成新 ID
@@ -99,13 +112,27 @@ function IdentityGate({ children }: { children: ReactNode }) {
               disabled={isSubmitting || Boolean(validateUserIdInput(recoveryValue))}
               onClick={() => {
                 if (!activeRepository) {
+                  logger.warn("Attempted to adopt existing identity without an active repository.")
                   setRecoveryError("先选择当前目录，再接续已有身份。")
                   return
                 }
 
+                logger.info("Adopt existing identity requested from gate.", {
+                  repositoryUuid: activeRepository.uuid,
+                  userIdLength: normalizedRecoveryValue.length,
+                })
                 setIsSubmitting(true)
                 void adoptExistingUserId(normalizedRecoveryValue, activeRepository.uuid)
+                  .then(() => {
+                    logger.info("Adopted existing identity from gate.", {
+                      repositoryUuid: activeRepository.uuid,
+                    })
+                  })
                   .catch((recoveryFailure) => {
+                    logger.error("Failed to adopt existing identity from gate.", {
+                      repositoryUuid: activeRepository.uuid,
+                      error: recoveryFailure,
+                    })
                     setRecoveryError(recoveryFailure instanceof Error ? recoveryFailure.message : "恢复身份失败。")
                   })
                   .finally(() => {

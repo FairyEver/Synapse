@@ -252,11 +252,36 @@ function ContentInstallDialog({
     const selectedPath = await bridge.chooseDirectory()
 
     if (!selectedPath) {
+      logger.info("Native directory picker dismissed from install dialog.", {
+        editorId: editor?.id ?? null,
+        contentId: item.id,
+        contentType: item.type,
+      })
       return
     }
 
+    logger.info("Custom install directory selected.", {
+      editorId: editor?.id ?? null,
+      contentId: item.id,
+      contentType: item.type,
+      selectedPath,
+    })
     setProjectSelection(CUSTOM_PROJECT_OPTION)
     setCustomProjectPath(selectedPath)
+  }
+
+  const handleProjectSelectionChange = (nextSelection: string) => {
+    if (projectSelection !== nextSelection) {
+      logger.info("Install project selection changed.", {
+        contentId: item.id,
+        contentType: item.type,
+        editorId: editor?.id ?? null,
+        from: projectSelection,
+        to: nextSelection,
+      })
+    }
+
+    setProjectSelection(nextSelection)
   }
 
   const runInstall = async (cursorFrontmatter?: CursorRuleFrontmatter, replaceConfirmed?: boolean) => {
@@ -343,6 +368,14 @@ function ContentInstallDialog({
           globs: "",
         },
       )
+      logger.info("Cursor frontmatter dialog opened.", {
+        contentId: item.id,
+        contentType: item.type,
+        editorId: editor?.id ?? null,
+        hasExistingFrontmatter: Boolean(existing),
+        scope,
+        targetPath: activeTarget.targetPath,
+      })
       setIsCursorFrontmatterOpen(true)
     } catch (error) {
       const message = error instanceof Error ? error.message : "读取现有规则元数据失败。"
@@ -366,12 +399,26 @@ function ContentInstallDialog({
         return
       }
 
+      logger.info("Overwrite confirm dialog opened.", {
+        contentId: item.id,
+        contentType: item.type,
+        editorId: editor?.id ?? null,
+        scope,
+        targetPath: activeTarget.targetPath,
+      })
       setIsOverwriteConfirmOpen(true)
       return
     }
 
     // Check for Skill name conflict
     if (activeTarget?.status === "conflict" && item.type === "skill") {
+      logger.info("Skill conflict confirm dialog opened.", {
+        contentId: item.id,
+        contentType: item.type,
+        editorId: editor?.id ?? null,
+        scope,
+        targetPath: activeTarget.targetPath,
+      })
       setIsConflictConfirmOpen(true)
       return
     }
@@ -399,6 +446,16 @@ function ContentInstallDialog({
           defaults={cursorFrontmatterDefaults}
           isSubmitting={isInstalling}
           onConfirm={(frontmatter) => {
+            logger.info("Cursor frontmatter confirmed.", {
+              alwaysApply: frontmatter.alwaysApply,
+              contentId: item.id,
+              contentType: item.type,
+              editorId: editor?.id ?? null,
+              hasDescription: frontmatter.description.trim().length > 0,
+              hasGlobs: frontmatter.globs.trim().length > 0,
+              scope,
+              targetPath: activeTarget?.status === "ready" ? activeTarget.targetPath : null,
+            })
             void runInstall(frontmatter)
           }}
           onOpenChange={(next) => {
@@ -406,6 +463,15 @@ function ContentInstallDialog({
               return
             }
 
+            if (!next) {
+              logger.info("Cursor frontmatter dialog closed.", {
+                contentId: item.id,
+                contentType: item.type,
+                editorId: editor?.id ?? null,
+                scope,
+                targetPath: activeTarget?.status === "ready" ? activeTarget.targetPath : null,
+              })
+            }
             setIsCursorFrontmatterOpen(next)
           }}
           open={isCursorFrontmatterOpen}
@@ -502,7 +568,11 @@ function ContentInstallDialog({
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="content-install-project">项目目录</Label>
-                  <Select data-track="install-project-select" value={projectSelection} onValueChange={setProjectSelection}>
+                  <Select
+                    data-track="install-project-select"
+                    value={projectSelection}
+                    onValueChange={handleProjectSelectionChange}
+                  >
                     <SelectTrigger id="content-install-project" className="w-full">
                       <SelectValue placeholder="选择一个项目" />
                     </SelectTrigger>
