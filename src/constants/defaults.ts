@@ -2,6 +2,7 @@ import type {
   SynapseConfig,
   SynapseFavorites,
   SynapseGlobalConfig,
+  SynapseRecentlyViewed,
   SynapseThemeMode,
 } from "../types/config"
 import type { SynapseContentType } from "../types/content"
@@ -30,10 +31,17 @@ export const DEFAULT_FAVORITES = {
   prompt: [],
 } as const satisfies SynapseFavorites
 
+export const DEFAULT_RECENTLY_VIEWED = {
+  rule: [],
+  skill: [],
+  prompt: [],
+} as const satisfies SynapseRecentlyViewed
+
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
   projects: [],
   favorites: DEFAULT_FAVORITES,
+  recentlyViewed: DEFAULT_RECENTLY_VIEWED,
 }
 
 export const DEFAULT_CONFIG: SynapseConfig = {

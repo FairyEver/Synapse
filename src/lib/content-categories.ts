@@ -9,6 +9,7 @@ import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 export const SYNAPSE_ALL_CATEGORY_ID = "__all__"
 export const SYNAPSE_FALLBACK_CATEGORY_ID = "__fallback__"
 export const SYNAPSE_FAVORITES_CATEGORY_ID = "__favorites__"
+export const SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID = "__recently_viewed__"
 
 function compareCategoryDefinitions(
   left: SynapseCategoryDefinition,

@@ -3,6 +3,7 @@ import {
   FolderGit2,
   FolderKanban,
   Info,
+  ScrollText,
   Settings2,
   Shield,
 } from "lucide-react"
@@ -38,6 +39,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: FileText,
     label: "内容",
     description: "内容目录。",
+  },
+  {
+    id: "logs",
+    icon: ScrollText,
+    label: "调试",
+    description: "日志导出。",
   },
   {
     id: "about",

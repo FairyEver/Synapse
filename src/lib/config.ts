@@ -2,6 +2,7 @@ import {
   DEFAULT_CONFIG,
   DEFAULT_FAVORITES,
   DEFAULT_GLOBAL_CONFIG,
+  DEFAULT_RECENTLY_VIEWED,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
   DEFAULT_THEME_MODE,
 } from "../constants/defaults"
@@ -17,6 +18,7 @@ import type {
   SynapseFavorites,
   SynapseGlobalConfig,
   SynapseProjectConfig,
+  SynapseRecentlyViewed,
   SynapseRepositoryConfig,
   SynapseThemeMode,
 } from "../types/config"
@@ -316,6 +318,22 @@ function normalizeFavorites(value: unknown): SynapseFavorites {
   }
 }
 
+function normalizeRecentlyViewed(value: unknown): SynapseRecentlyViewed {
+  if (!isRecord(value)) {
+    return structuredClone(DEFAULT_RECENTLY_VIEWED)
+  }
+
+  const ruleIds = Array.isArray(value.rule) ? value.rule.filter((id): id is string => typeof id === "string") : []
+  const skillIds = Array.isArray(value.skill) ? value.skill.filter((id): id is string => typeof id === "string") : []
+  const promptIds = Array.isArray(value.prompt) ? value.prompt.filter((id): id is string => typeof id === "string") : []
+
+  return {
+    rule: ruleIds,
+    skill: skillIds,
+    prompt: promptIds,
+  }
+}
+
 function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   if (!isRecord(value)) {
     return structuredClone(DEFAULT_GLOBAL_CONFIG)
@@ -325,6 +343,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
     projects: normalizeProjects(value.projects),
     favorites: normalizeFavorites(value.favorites),
+    recentlyViewed: normalizeRecentlyViewed(value.recentlyViewed),
   }
 }
 

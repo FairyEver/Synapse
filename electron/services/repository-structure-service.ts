@@ -307,6 +307,31 @@ function createSeedContents(): RepositorySeedContent[] {
         },
       ],
     },
+    {
+      id: "example-prompt",
+      type: "prompt",
+      title: "示例 Prompt",
+      description: "展示 Prompt 在本地仓库里的存储和使用方式。",
+      category: "productivity",
+      icon: "lightbulb",
+      iconBg: "amber",
+      content: `# 用途
+
+这个示例 Prompt 用来演示 Synapse 里 Prompt 内容的基础结构。
+
+# 特点
+
+- Prompt 是纯文本内容，不支持附件
+- 可以复制到剪贴板或下载为 Markdown 文件
+- 支持版本历史管理
+
+# 使用场景
+
+- 保存常用的 AI 提示词模板
+- 团队共享的工作流程指引
+- 项目特定的编写规范和最佳实践
+`,
+    },
   ]
 }
 

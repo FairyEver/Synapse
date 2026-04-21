@@ -31,6 +31,7 @@ import {
   resolveCategoryViewId,
   SYNAPSE_ALL_CATEGORY_ID,
   SYNAPSE_FAVORITES_CATEGORY_ID,
+  SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID,
 } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
@@ -40,6 +41,7 @@ import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
 import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
+import { useContentRecentlyViewed } from "@/modules/content/hooks/use-content-recently-viewed"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
@@ -269,6 +271,7 @@ function ContentBrowserPage({
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType)
   const { favoriteIds } = useContentFavorites(contentType)
+  const { recentlyViewedIds, addRecentlyViewed } = useContentRecentlyViewed(contentType)
   const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
   const isSyncing = (pendingPushState?.count ?? 0) > 0
   const pendingTargetIds = useMemo(
@@ -304,10 +307,19 @@ function ContentBrowserPage({
       return
     }
 
+    // 如果当前是"最近浏览"但过滤已删除后为空，重置到"全部"
+    if (activeCategoryId === SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID) {
+      const hasVisibleItems = recentlyViewedIds.some((id) => items.some((item) => item.id === id))
+      if (!hasVisibleItems) {
+        setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
+      }
+      return
+    }
+
     if (!categories.some((item) => item.id === activeCategoryId)) {
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
     }
-  }, [activeCategoryId, categories, favoriteIds])
+  }, [activeCategoryId, categories, favoriteIds, recentlyViewedIds, items])
 
   useEffect(() => {
     if (!selectedItem) {
@@ -335,12 +347,19 @@ function ContentBrowserPage({
         return items.filter((item) => favoriteIds.includes(item.id))
       }
 
+      if (activeCategoryId === SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID) {
+        const itemMap = new Map(items.map((item) => [item.id, item]))
+        return recentlyViewedIds
+          .map((id) => itemMap.get(id))
+          .filter((item): item is SynapseContentMeta => item !== undefined)
+      }
+
       return items.filter((item) => (
         activeCategoryId === SYNAPSE_ALL_CATEGORY_ID
         || resolveCategoryViewId(contentType, item.category) === activeCategoryId
       ))
     },
-    [activeCategoryId, contentType, items, favoriteIds],
+    [activeCategoryId, contentType, items, favoriteIds, recentlyViewedIds],
   )
   const contentSearch = useMemo(
     () => new Fuse(itemsInActiveCategory, contentSearchOptions),
@@ -363,6 +382,11 @@ function ContentBrowserPage({
 
     return `显示 ${filteredItems.length} / ${totalCount} 项`
   }, [activeCategoryId, filteredItems.length, deferredSearchQuery, totalCount])
+
+  const recentlyViewedCount = useMemo(() => {
+    const itemIds = new Set(items.map((item) => item.id))
+    return recentlyViewedIds.filter((id) => itemIds.has(id)).length
+  }, [items, recentlyViewedIds])
 
   const state = useMemo(
     () => getContentState({
@@ -476,6 +500,21 @@ function ContentBrowserPage({
                 我的收藏
               </ModuleSidebarItem>
 
+              {/* 最近浏览 */}
+              <ModuleSidebarItem
+                active={activeCategoryId === SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID}
+                disabled={!canBrowseContent}
+                onClick={() => setActiveCategoryId(SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID)}
+                className="h-10 px-4"
+                trailing={
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {recentlyViewedCount}
+                  </span>
+                }
+              >
+                最近浏览
+              </ModuleSidebarItem>
+
               {/* 其余分类 */}
               {categories.slice(1).map((category) => (
                 <ModuleSidebarItem
@@ -526,6 +565,7 @@ function ContentBrowserPage({
                         contentId: item.id,
                         contentType: item.type,
                       })
+                      addRecentlyViewed(contentType, item.id)
                       setSelectedItem(item)
                     }}
                   />

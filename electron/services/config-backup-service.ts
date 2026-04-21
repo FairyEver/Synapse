@@ -279,6 +279,11 @@ function validateConfig(
         skill: [],
         prompt: [],
       } satisfies SynapseFavorites,
+      recentlyViewed: {
+        rule: [],
+        skill: [],
+        prompt: [],
+      },
     },
   }
 }

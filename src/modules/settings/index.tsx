@@ -231,7 +231,7 @@ function SettingsModule() {
 
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
-        {isReady && activeCategory === "general" ? <LogExportPanel /> : null}
+        {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 
         {isReady && activeCategory === "admin" && activeRepository ? (
           <RepositoryMaintenancePanel repositoryUuid={activeRepository.uuid} />

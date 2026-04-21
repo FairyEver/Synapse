@@ -8,6 +8,7 @@ import {
   useRepositoryOperation,
   useRepositoryState,
 } from "@/app-shell/use-repository-manager"
+import type { SyncStatus } from "@/app-shell/components/sync-status-chip"
 import type { SynapseRepositoryOperationKind } from "@/types/repository"
 
 type RunningRepositoryOperation = {
@@ -17,9 +18,7 @@ type RunningRepositoryOperation = {
 
 type AppShellToolbarState = {
   activityLabel: string | null
-  isPushBusy: boolean
   pendingPushCount: number
-  pushDisabled: boolean
   refreshBusy: boolean
   refreshDisabled: boolean
   refreshTitle: string
@@ -27,6 +26,7 @@ type AppShellToolbarState = {
   repositorySwitchTitle: string
   showRefresh: boolean
   showRepositorySwitch: boolean
+  syncStatus: SyncStatus
 }
 
 function getToolbarActivityLabel(operation: SynapseRepositoryOperationKind | "switch"): string {
@@ -46,8 +46,10 @@ function getToolbarActivityLabel(operation: SynapseRepositoryOperationKind | "sw
 
 function useAppShellToolbarState({
   hasBlockingModalOpen,
+  isOffline,
 }: {
   hasBlockingModalOpen: boolean
+  isOffline: boolean
 }): AppShellToolbarState {
   const { isReady } = useAppConfig()
   const activeRepository = useActiveRepository()
@@ -116,11 +118,18 @@ function useAppShellToolbarState({
       repositorySwitchTitle = "至少需要两个仓库"
     }
 
+    const syncStatus: SyncStatus =
+      isPushOperationRunning || isSyncOperationRunning
+        ? "syncing"
+        : isOffline
+          ? "offline"
+          : (activePendingPushState?.count ?? 0) > 0
+            ? "pending"
+            : "synced"
+
     return {
       activityLabel,
-      isPushBusy: isPushOperationRunning,
       pendingPushCount: activePendingPushState?.count ?? 0,
-      pushDisabled: !isReady || !canSyncActiveRepository || hasToolbarLock,
       refreshBusy: isSyncOperationRunning,
       refreshDisabled: !isReady || !canSyncActiveRepository || hasToolbarLock,
       refreshTitle,
@@ -128,6 +137,7 @@ function useAppShellToolbarState({
       repositorySwitchTitle,
       showRefresh: Boolean(canSyncActiveRepository) && !isPushOperationRunning,
       showRepositorySwitch: repositories.length > 1,
+      syncStatus,
     }
   }, [
     activeRepository,
@@ -135,6 +145,7 @@ function useAppShellToolbarState({
     activeRepositoryState,
     activePendingPushState,
     hasBlockingModalOpen,
+    isOffline,
     isReady,
     isSwitchingRepository,
     repositories.length,

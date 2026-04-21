@@ -109,6 +109,9 @@ function RepositoryListItem({
           )}
           <span className="min-w-0 truncate">{repository.name}</span>
           {isActive && <Badge variant="secondary">当前目录</Badge>}
+          {repositoryState?.status === "missing" && (
+            <Badge variant="destructive">目录不存在</Badge>
+          )}
         </CardTitle>
       </CardHeader>
 
@@ -156,43 +159,47 @@ function RepositoryListItem({
       </CardContent>
 
       <CardFooter className="justify-end gap-2">
-        {!isActive && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isBusy || hasRunningRepositoryOperation || isSwitchingRepository}
-            onClick={() => void handleSwitch()}
-          >
-            切换为当前目录
-          </Button>
+        {repositoryState?.status !== "missing" && (
+          <>
+            {!isActive && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isBusy || hasRunningRepositoryOperation || isSwitchingRepository}
+                onClick={() => void handleSwitch()}
+              >
+                切换为当前目录
+              </Button>
+            )}
+            {hasRepositoryBridge && (
+              <Button
+                size="sm"
+                disabled={isBusy || !canSync}
+                onClick={() => void handleSync()}
+              >
+                {isBusy ? "同步中..." : "同步仓库"}
+              </Button>
+            )}
+            {canInitialize && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isBusy}
+                onClick={() => onInitialize(repository)}
+              >
+                {initializingUuid === repository.uuid ? "初始化中..." : "初始化"}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isBusy}
+              onClick={() => onEdit(repository)}
+            >
+              修改
+            </Button>
+          </>
         )}
-        {hasRepositoryBridge && (
-          <Button
-            size="sm"
-            disabled={isBusy || !canSync}
-            onClick={() => void handleSync()}
-          >
-            {isBusy ? "同步中..." : "同步仓库"}
-          </Button>
-        )}
-        {canInitialize && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isBusy}
-            onClick={() => onInitialize(repository)}
-          >
-            {initializingUuid === repository.uuid ? "初始化中..." : "初始化"}
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={isBusy}
-          onClick={() => onEdit(repository)}
-        >
-          修改
-        </Button>
         <Button
           variant="ghost"
           size="sm"

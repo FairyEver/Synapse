@@ -46,6 +46,21 @@ type ContentDialogHandlerMap = Record<SynapseContentType, Record<DialogKind, (op
 
 const logger = createRendererLogger("app")
 
+const NETWORK_ERROR_PATTERNS = [
+  "could not resolve host",
+  "failed to connect",
+  "connection timed out",
+  "network is unreachable",
+  "connection reset",
+  "无法连接到远程仓库",
+]
+
+function isNetworkError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  const lowered = message.toLowerCase()
+  return NETWORK_ERROR_PATTERNS.some((pattern) => lowered.includes(pattern))
+}
+
 function createEmptyDialogStateMap(): ContentDialogStateMap {
   return Object.fromEntries(
     getAllContentTypeIds().map((contentType) => [contentType, {
@@ -81,6 +96,7 @@ function MainApp() {
     createEmptyDialogStateMap,
   )
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
+  const [isOffline, setIsOffline] = useState(false)
 
   // 检查是否需要显示空状态页面
   const hasNoRepositories = !hasRepositories
@@ -180,6 +196,7 @@ function MainApp() {
   const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
   const toolbarState = useAppShellToolbarState({
     hasBlockingModalOpen,
+    isOffline,
   })
 
   // 如果没有仓库或当前仓库缺失，显示空状态页面
@@ -224,8 +241,16 @@ function MainApp() {
                   () => pushRepository(activeRepository.uuid),
                   {
                     loading: "正在同步变更...",
-                    success: (result) => result.message ?? "同步完成。",
-                    error: (error) => error instanceof Error ? error.message : "同步变更失败。",
+                    success: (result) => {
+                      setIsOffline(false)
+                      return result.message ?? "同步完成。"
+                    },
+                    error: (error) => {
+                      if (isNetworkError(error)) {
+                        setIsOffline(true)
+                      }
+                      return error instanceof Error ? error.message : "同步变更失败。"
+                    },
                   },
                 ).catch((error) => {
                   logger.error("Pending push flush failed from app shell.", error)
@@ -254,9 +279,7 @@ function MainApp() {
         actions={
           <AppShellActions
             activityLabel={toolbarState.activityLabel}
-            isPushBusy={toolbarState.isPushBusy}
             pendingPushCount={toolbarState.pendingPushCount}
-            pushDisabled={toolbarState.pushDisabled}
             refreshBusy={toolbarState.refreshBusy}
             refreshDisabled={toolbarState.refreshDisabled}
             refreshTitle={toolbarState.refreshTitle}
@@ -264,7 +287,8 @@ function MainApp() {
             repositorySwitchTitle={toolbarState.repositorySwitchTitle}
             showRefresh={toolbarState.showRefresh}
             showRepositorySwitch={toolbarState.showRepositorySwitch}
-            onPush={() => setIsPendingPushDialogOpen(true)}
+            syncStatus={toolbarState.syncStatus}
+            onSyncChipClick={() => setIsPendingPushDialogOpen(true)}
             onRefresh={() => {
               if (!activeRepository) {
                 return
@@ -277,8 +301,16 @@ function MainApp() {
                 () => syncRepository(activeRepository.uuid),
                 {
                   loading: "正在同步仓库...",
-                  success: (result) => result.message ?? "仓库同步完成。",
-                  error: (error) => error instanceof Error ? error.message : "同步仓库失败。",
+                  success: (result) => {
+                    setIsOffline(false)
+                    return result.message ?? "仓库同步完成。"
+                  },
+                  error: (error) => {
+                    if (isNetworkError(error)) {
+                      setIsOffline(true)
+                    }
+                    return error instanceof Error ? error.message : "同步仓库失败。"
+                  },
                 },
               ).catch((error) => {
                 logger.error("Manual repository sync failed from app shell.", error)

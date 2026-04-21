@@ -16,6 +16,12 @@ export type SynapseFavorites = {
   prompt: string[]
 }
 
+export type SynapseRecentlyViewed = {
+  rule: string[]
+  skill: string[]
+  prompt: string[]
+}
+
 export type SynapseRepositoryConfig = {
   uuid: string
   name: string
@@ -29,6 +35,7 @@ export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
   projects: SynapseProjectConfig[]
   favorites: SynapseFavorites
+  recentlyViewed: SynapseRecentlyViewed
 }
 
 export type SynapseConfig = {
