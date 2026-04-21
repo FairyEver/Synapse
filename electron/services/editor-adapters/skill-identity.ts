@@ -61,12 +61,8 @@ async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await readdir(targetPath)
     return true
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return false
-    }
-
-    return true
+  } catch {
+    return false
   }
 }
 
@@ -90,7 +86,7 @@ async function resolveUniqueSkillDirectoryPath(idealPath: string): Promise<strin
 }
 
 type SkillConflictCheckResult =
-  | { hasConflict: false }
+  | { hasConflict: false; targetExists: boolean }
   | { hasConflict: true; existingContentId: string; existingPath: string }
 
 async function checkSkillNameConflict(
@@ -102,7 +98,7 @@ async function checkSkillNameConflict(
 
   // Check if the exact path exists
   if (!(await pathExists(targetPath))) {
-    return { hasConflict: false }
+    return { hasConflict: false, targetExists: false }
   }
 
   // Path exists, check if it's the same skill
@@ -110,7 +106,7 @@ async function checkSkillNameConflict(
 
   if (existingContentId === contentId) {
     // Same skill, no conflict
-    return { hasConflict: false }
+    return { hasConflict: false, targetExists: true }
   }
 
   // Different skill with same name - conflict

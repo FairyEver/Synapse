@@ -7,6 +7,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
+  useContentList,
   usePendingPushes,
   useRepositoryManager,
   useRepositoryOperation,
@@ -74,6 +75,7 @@ type ContentDetailDialogProps<TPayload> = {
   refreshSignal?: number
   renderCreateDialog: (props: {
     editingId: string | null
+    existingNames: string[]
     initialValue: TPayload
     mode: "edit"
     open: boolean
@@ -110,6 +112,13 @@ function ContentDetailDialog<TPayload>({
   const activeRepository = useActiveRepository()
   const { error, promise } = useAppNotifications()
   const manager = useRepositoryManager()
+  const { items: contentItems } = useContentList(contentType)
+  const existingNames = useMemo(
+    () => contentItems
+      .filter((ci) => ci.name && ci.id !== item?.id)
+      .map((ci) => ci.name!),
+    [contentItems, item?.id],
+  )
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [conflictState, setConflictState] = useState<ConflictState<TPayload> | null>(null)
@@ -503,6 +512,7 @@ function ContentDetailDialog<TPayload>({
 
       {detail ? renderCreateDialog({
         editingId: item?.id ?? null,
+        existingNames,
         initialValue: buildInitialValue(detail),
         mode: "edit",
         open: isEditOpen,

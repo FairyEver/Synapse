@@ -15,6 +15,7 @@ type ContentModuleConfig<T extends SynapseContentType> = {
     onSubmit: (payload: SynapseCreateContentPayload<T>) => void
     submitDisabled?: boolean
     submitDisabledReason?: string | null
+    existingNames?: string[]
   }>
   DetailDialog: ComponentType<{
     item: SynapseContentMeta<T> | null
@@ -46,7 +47,11 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const activeRepository = useActiveRepository()
     const { currentRepoProfileState } = useCurrentRepoProfile()
     const { promise } = useAppNotifications()
-    const { createContent } = useContentList<T>(config.contentType)
+    const { createContent, items } = useContentList<T>(config.contentType)
+    const existingNames = useMemo(
+      () => items.filter((item) => item.name).map((item) => item.name!),
+      [items],
+    )
     const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
     const isSyncing = (pendingPushState?.count ?? 0) > 0
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -119,6 +124,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           onSubmit={handleSubmit}
           submitDisabled={submitDisabledReason !== null}
           submitDisabledReason={submitDisabledReason}
+          existingNames={existingNames}
         />
       </>
     )

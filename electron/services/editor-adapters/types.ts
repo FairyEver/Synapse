@@ -12,7 +12,13 @@ export type EditorAdapterResolveContext = {
   ruleName?: string
 }
 
+export type EditorGlobalDirectoryPaths = {
+  rulesPath: string | null
+  skillsPath: string | null
+}
+
 export interface EditorAdapter extends SynapseEditorAdapterSummary {
+  resolveGlobalDirectoryPaths(): EditorGlobalDirectoryPaths
   resolveGlobalTarget(context: EditorAdapterResolveContext): Promise<SynapseEditorResolvedTarget>
   resolveProjectTarget(
     projectPath: string,

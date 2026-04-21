@@ -59,6 +59,10 @@ export const SYNAPSE_IPC_CHANNELS = {
     updated: "synapse:repository:updated",
     validateDirectory: "synapse:repository:validate-directory",
   },
+  editor: {
+    getGlobalDirectories: "synapse:editor:get-global-directories",
+    createDirectory: "synapse:editor:create-directory",
+  },
   shell: {
     showItemInFolder: "synapse:shell:show-item-in-folder",
   },

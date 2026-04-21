@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   downloadContent,
@@ -8,6 +9,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { getContentTypeDefinition } from "@/config/content-types"
+import { getEditorIconSrc } from "@/lib/editor-icons"
 import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
 import type { SynapseContentMeta } from "@/types/content"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
@@ -15,6 +17,7 @@ import type { SynapseEditorAdapterSummary } from "@/types/editor"
 type ContentActionMenuItem = {
   key: string
   label: string
+  icon?: ReactNode
   disabled?: boolean
   onSelect?: () => void
 }
@@ -242,13 +245,19 @@ function useContentDownloadActions({
             : adaptersError
               ? [{ key: "editors-error", label: adaptersError, disabled: true }]
               : filteredAdapters.length > 0
-                ? filteredAdapters.map((adapter) => ({
-                    key: `install-${adapter.id}`,
-                    label: `安装到 ${adapter.label}`,
-                    onSelect: () => {
-                      openInstallDialog(adapter)
-                    },
-                  }))
+                ? filteredAdapters.map((adapter) => {
+                    const iconSrc = getEditorIconSrc(adapter.id)
+                    return {
+                      key: `install-${adapter.id}`,
+                      label: `安装到 ${adapter.label}`,
+                      icon: iconSrc ? (
+                        <img src={iconSrc} alt={adapter.label} className="size-6 shrink-0" />
+                      ) : undefined,
+                      onSelect: () => {
+                        openInstallDialog(adapter)
+                      },
+                    }
+                  })
                 : [{ key: "no-install-target", label: "当前没有可用的安装目标", disabled: true }],
         })
       }

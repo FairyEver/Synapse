@@ -64,6 +64,10 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     updated: "synapse:repository:updated",
     validateDirectory: "synapse:repository:validate-directory",
   },
+  editor: {
+    getGlobalDirectories: "synapse:editor:get-global-directories",
+    createDirectory: "synapse:editor:create-directory",
+  },
   shell: {
     showItemInFolder: "synapse:shell:show-item-in-folder",
   },
@@ -152,6 +156,10 @@ const synapseBridge: SynapseBridge = {
     readAll: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.readAll),
     readFiles: (fileNames: string[]) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.readFiles, fileNames),
     write: (payload) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.log.write, payload),
+  },
+  editor: {
+    getGlobalDirectories: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editor.getGlobalDirectories),
+    createDirectory: (dirPath: string) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editor.createDirectory, dirPath),
   },
   shell: {
     showItemInFolder: (filePath: string) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.shell.showItemInFolder, filePath),

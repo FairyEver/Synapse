@@ -31,7 +31,7 @@ function SidebarContentLayout({
       className={cn("h-full min-h-0 w-full overflow-hidden", containerClassName, className)}
     >
       <ResizablePanel
-        defaultSize={280}
+        defaultSize={220}
         minSize={220}
         maxSize={420}
         groupResizeBehavior="preserve-pixel-size"

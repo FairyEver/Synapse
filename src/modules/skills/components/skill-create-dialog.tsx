@@ -43,6 +43,7 @@ import {
 import type { SynapseContentIconType } from "@/types/content"
 
 type SkillCreateDialogProps = {
+  existingNames?: string[]
   initialValue?: CreateSkillPayload | null
   mode?: "create" | "edit"
   onOpenChange: (open: boolean) => void
@@ -168,6 +169,7 @@ const SKILL_FORM_CONFIG = {
   errorFallbackMessage: "保存 Skill 失败。",
 }
 function SkillCreateDialog({
+  existingNames,
   initialValue = null,
   mode = "create",
   onOpenChange,
@@ -228,6 +230,7 @@ function SkillCreateDialog({
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null)
   const [isDraggingFiles, setIsDraggingFiles] = useState(false)
   const [isCollectingFiles, setIsCollectingFiles] = useState(false)
+  const [isDuplicateWarningOpen, setIsDuplicateWarningOpen] = useState(false)
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -240,7 +243,25 @@ function SkillCreateDialog({
   }
 
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    handleSubmit(event, prepareFormForSubmit(form))
+    const prepared = prepareFormForSubmit(form)
+    const validationErrors = validateCreateSkillPayload(prepared)
+    if (Object.keys(validationErrors).length > 0) {
+      handleSubmit(event, prepared)
+      return
+    }
+    const normalizedName = normalizeCreateSkillPayload(prepared).name
+    if (existingNames?.includes(normalizedName)) {
+      event.preventDefault()
+      setIsDuplicateWarningOpen(true)
+      return
+    }
+    handleSubmit(event, prepared)
+  }
+
+  const handleDuplicateWarningContinue = () => {
+    setIsDuplicateWarningOpen(false)
+    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>
+    handleSubmit(syntheticEvent, prepareFormForSubmit(form))
   }
 
   const totalAttachmentSize = useMemo(
@@ -332,6 +353,7 @@ function SkillCreateDialog({
   return (
     <ContentCreateDialog
       isDiscardConfirmOpen={isDiscardConfirmOpen}
+      isDuplicateWarningOpen={isDuplicateWarningOpen}
       isSubmitting={isSubmitting}
       extraSubmitDisabled={isCollectingFiles}
       labels={{
@@ -342,6 +364,8 @@ function SkillCreateDialog({
       onDialogOpenChange={handleDialogOpenChange}
       onDiscard={handleDiscard}
       onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
+      onDuplicateWarningContinue={handleDuplicateWarningContinue}
+      onDuplicateWarningOpenChange={setIsDuplicateWarningOpen}
       onSubmit={handleFormSubmit}
       open={open}
       submitDisabled={submitDisabled}

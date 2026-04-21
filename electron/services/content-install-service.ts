@@ -201,7 +201,6 @@ class ContentInstallService {
           } else if (
             payload.editorId === "claude-code"
             && payload.contentType === "rule"
-            && payload.scope === "project"
           ) {
             const frontmatterPrefix = payload.claudeCodeFrontmatter
               ? serializeClaudeCodeFrontmatter(payload.claudeCodeFrontmatter)
@@ -209,7 +208,7 @@ class ContentInstallService {
             await replaceFileAtomically(target.targetPath, frontmatterPrefix + ruleBody)
           } else if (
             payload.contentType === "rule"
-            && (payload.editorId === "claude-code" || payload.editorId === "codex")
+            && payload.editorId === "codex"
           ) {
             const existing = await readExistingTextFile(target.targetPath)
             const merged = applyRuleSection(existing, payload.contentId, ruleBody)

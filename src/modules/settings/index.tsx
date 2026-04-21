@@ -14,6 +14,7 @@ import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
+import { EditorDirectoriesPanel } from "@/modules/settings/components/editor-directories-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { LogExportPanel } from "@/modules/settings/components/log-export-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
@@ -177,11 +178,6 @@ function SettingsModule() {
       }
     >
       <div className="flex flex-col gap-6 pb-6">
-        {activeCategory === "content" && activeRepository ? (
-          <p className="text-sm text-muted-foreground">
-            {activeRepository.name}
-          </p>
-        ) : null}
         {activeCategory === "admin" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
             {activeRepository.name}
@@ -196,18 +192,6 @@ function SettingsModule() {
               <CardDescription>正在读取设置。</CardDescription>
             </CardHeader>
           </Card>
-        ) : null}
-
-        {isReady && activeCategory === "content" && activeRepository === null ? (
-          <div className="flex min-h-60 flex-col items-center justify-center gap-4">
-            <p className="text-sm text-muted-foreground">请先添加本地目录</p>
-            <Button
-              variant="outline"
-              onClick={() => setActiveCategory("repositories")}
-            >
-              前往添加目录
-            </Button>
-          </div>
         ) : null}
 
         {isReady && activeCategory === "admin" && activeRepository === null ? (
@@ -238,6 +222,7 @@ function SettingsModule() {
 
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
+        {isReady && activeCategory === "editors" ? <EditorDirectoriesPanel /> : null}
         {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 
         {isReady && activeCategory === "admin" && activeRepository ? (

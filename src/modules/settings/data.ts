@@ -1,5 +1,5 @@
 import {
-  FileText,
+  Code,
   FolderGit2,
   FolderKanban,
   Info,
@@ -9,9 +9,7 @@ import {
 } from "lucide-react"
 import {
   DEFAULT_GLOBAL_CONFIG,
-  DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
 } from "@/constants/defaults"
-import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
 
@@ -35,10 +33,10 @@ const settingsCategories: SettingsCategory[] = [
     description: "项目路径。",
   },
   {
-    id: "content",
-    icon: FileText,
-    label: "内容",
-    description: "内容目录。",
+    id: "editors",
+    icon: Code,
+    label: "编辑器",
+    description: "编辑器全局目录。",
   },
   {
     id: "logs",
@@ -59,18 +57,6 @@ const settingsCategories: SettingsCategory[] = [
     description: "仓库维护与高级设置。",
   },
 ]
-
-const contentDirectoryItems: SettingItem[] = CONTENT_TYPE_DEFINITIONS.map((definition) => ({
-  key: `activeRepository.contentDirs.${definition.id}`,
-  label: `${definition.pluralLabel} 主目录名`,
-  description: `当前 ${definition.pluralLabel} 内容存储的目录名称`,
-  category: "content",
-  type: "text",
-  defaultValue: DEFAULT_REPOSITORY_CONTENT_DIRECTORIES[definition.id],
-  readOnly: true,
-  visible: ({ activeRepository }) => activeRepository !== null,
-  scope: "repo",
-}))
 
 const settingsItems: SettingItem[] = [
   {
@@ -98,7 +84,6 @@ const settingsItems: SettingItem[] = [
     defaultValue: [],
     scope: "global",
   },
-  ...contentDirectoryItems,
   {
     key: "global.projects",
     label: "本地项目",

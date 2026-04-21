@@ -236,9 +236,11 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     }
   }
 
+  const [showChineseSlogan, setShowChineseSlogan] = useState(false)
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center gap-3">
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
         <img
           src={synapseLogo}
@@ -248,6 +250,16 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           className="size-24 shrink-0 cursor-pointer object-contain select-none"
           title={isAdminMode ? "管理员模式已开启" : undefined}
         />
+        <div className="flex flex-col items-center gap-0.5">
+          <h1 className="text-lg font-semibold tracking-tight">Synapse</h1>
+          <button
+            type="button"
+            className="text-xs tracking-wide text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+            onClick={() => setShowChineseSlogan((prev) => !prev)}
+          >
+            {showChineseSlogan ? "众妙之门" : "Where Ideas Connect."}
+          </button>
+        </div>
       </div>
 
       <SettingsGroup>

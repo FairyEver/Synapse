@@ -21,6 +21,7 @@ type CreateReadyTargetOptions = CreateTargetBaseOptions & {
   message?: string | null
   targetKind: SynapseEditorInstallTargetKind
   targetPath: string
+  targetExists?: boolean
 }
 
 type CreateUnreadyTargetOptions = CreateTargetBaseOptions & {
@@ -47,6 +48,7 @@ function createReadyTarget({
   scope,
   targetKind,
   targetPath,
+  targetExists = false,
 }: CreateReadyTargetOptions): SynapseEditorResolvedTarget {
   return {
     ...createTargetBase({
@@ -58,6 +60,7 @@ function createReadyTarget({
     status: "ready",
     targetKind,
     targetPath,
+    targetExists,
   }
 }
 

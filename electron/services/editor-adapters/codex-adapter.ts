@@ -31,6 +31,12 @@ const codexAdapter: EditorAdapter = {
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],
+  resolveGlobalDirectoryPaths() {
+    return {
+      rulesPath: resolveCodexHomePath(),
+      skillsPath: getHomePath(".agents", "skills"),
+    }
+  },
   async resolveGlobalTarget({ contentId, contentType, skillName, skillTitle }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
@@ -99,6 +105,7 @@ const codexAdapter: EditorAdapter = {
           scope: "global",
           targetKind: "directory",
           targetPath,
+          targetExists: conflict.targetExists,
         })
       }
       default:
@@ -161,6 +168,7 @@ const codexAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          targetExists: conflict.targetExists,
         })
       }
       default:

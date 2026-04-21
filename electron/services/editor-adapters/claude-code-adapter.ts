@@ -20,7 +20,13 @@ const claudeCodeAdapter: EditorAdapter = {
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],
-  async resolveGlobalTarget({ contentId, contentType, skillName, skillTitle }) {
+  resolveGlobalDirectoryPaths() {
+    return {
+      rulesPath: getHomePath(".claude", "rules"),
+      skillsPath: getHomePath(".claude", "skills"),
+    }
+  },
+  async resolveGlobalTarget({ contentId, contentType, skillName, skillTitle, ruleName }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
         adapter: claudeCodeAdapter,
@@ -41,14 +47,17 @@ const claudeCodeAdapter: EditorAdapter = {
     }
 
     switch (contentType) {
-      case "rule":
+      case "rule": {
+        const effectiveRuleName = ruleName?.trim() || `synapse_${contentId}`
+        const targetPath = path.join(claudeHomePath, "rules", `${effectiveRuleName}.md`)
         return createReadyTarget({
           adapter: claudeCodeAdapter,
           contentType,
           scope: "global",
           targetKind: "file",
-          targetPath: path.join(claudeHomePath, "CLAUDE.md"),
+          targetPath,
         })
+      }
       case "skill": {
         const parentDirectoryPath = path.join(claudeHomePath, "skills")
         const slug = resolveSkillSlug(skillName, skillTitle, contentId)
@@ -76,6 +85,7 @@ const claudeCodeAdapter: EditorAdapter = {
           scope: "global",
           targetKind: "directory",
           targetPath,
+          targetExists: conflict.targetExists,
         })
       }
       default:
@@ -141,6 +151,7 @@ const claudeCodeAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          targetExists: conflict.targetExists,
         })
       }
       default:

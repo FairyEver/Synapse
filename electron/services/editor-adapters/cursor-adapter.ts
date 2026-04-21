@@ -22,6 +22,12 @@ const cursorAdapter: EditorAdapter = {
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],
+  resolveGlobalDirectoryPaths() {
+    return {
+      rulesPath: null,
+      skillsPath: getHomePath(".cursor", "skills"),
+    }
+  },
   async resolveGlobalTarget({ contentId, contentType, skillName, skillTitle }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
@@ -82,6 +88,7 @@ const cursorAdapter: EditorAdapter = {
       scope: "global",
       targetKind: "directory",
       targetPath,
+      targetExists: conflict.targetExists,
     })
   },
   async resolveProjectTarget(projectPath, { contentId, contentType, skillName, skillTitle }) {
@@ -145,6 +152,7 @@ const cursorAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          targetExists: conflict.targetExists,
         })
       }
       default:

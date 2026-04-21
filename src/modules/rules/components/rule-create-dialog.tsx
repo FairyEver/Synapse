@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   Field,
   FieldContent,
@@ -29,6 +29,7 @@ import {
 import type { SynapseContentIconType, SynapseCreateRulePayload } from "@/types/content"
 
 type RuleCreateDialogProps = {
+  existingNames?: string[]
   initialValue?: SynapseCreateRulePayload | null
   mode?: "create" | "edit"
   onOpenChange: (open: boolean) => void
@@ -47,6 +48,7 @@ const RULE_FORM_CONFIG = {
 }
 
 function RuleCreateDialog({
+  existingNames,
   initialValue = null,
   mode = "create",
   onOpenChange,
@@ -98,13 +100,34 @@ function RuleCreateDialog({
     updateField,
   })
 
+  const [isDuplicateWarningOpen, setIsDuplicateWarningOpen] = useState(false)
+
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    handleSubmit(event, prepareFormForSubmit(form))
+    const prepared = prepareFormForSubmit(form)
+    const validationErrors = validateCreateRulePayload(prepared)
+    if (Object.keys(validationErrors).length > 0) {
+      handleSubmit(event, prepared)
+      return
+    }
+    const normalizedName = normalizeCreateRulePayload(prepared).name
+    if (existingNames?.includes(normalizedName)) {
+      event.preventDefault()
+      setIsDuplicateWarningOpen(true)
+      return
+    }
+    handleSubmit(event, prepared)
+  }
+
+  const handleDuplicateWarningContinue = () => {
+    setIsDuplicateWarningOpen(false)
+    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>
+    handleSubmit(syntheticEvent, prepareFormForSubmit(form))
   }
 
   return (
     <ContentCreateDialog
       isDiscardConfirmOpen={isDiscardConfirmOpen}
+      isDuplicateWarningOpen={isDuplicateWarningOpen}
       isSubmitting={isSubmitting}
       labels={{
         title: { create: "新建 Rule", edit: "编辑 Rule" },
@@ -114,6 +137,8 @@ function RuleCreateDialog({
       onDialogOpenChange={handleDialogOpenChange}
       onDiscard={handleDiscard}
       onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
+      onDuplicateWarningContinue={handleDuplicateWarningContinue}
+      onDuplicateWarningOpenChange={setIsDuplicateWarningOpen}
       onSubmit={handleFormSubmit}
       open={open}
       submitDisabled={submitDisabled}

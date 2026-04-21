@@ -27,6 +27,7 @@ import type {
 import type {
   SynapseEditorAdapterSummary,
   SynapseContentInstallResult,
+  SynapseEditorGlobalDirectory,
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
   SynapsePeekClaudeCodeFrontmatterPayload,
@@ -131,6 +132,10 @@ export type SynapseBridge = {
     readAll: () => Promise<string>
     readFiles: (fileNames: string[]) => Promise<string>
     write: (payload: SynapseRendererLogPayload) => void
+  }
+  editor: {
+    getGlobalDirectories: () => Promise<SynapseEditorGlobalDirectory[]>
+    createDirectory: (dirPath: string) => Promise<void>
   }
   shell: {
     showItemInFolder: (filePath: string) => void

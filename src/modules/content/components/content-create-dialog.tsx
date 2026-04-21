@@ -29,12 +29,15 @@ type ContentCreateDialogProps = {
   children: ReactNode
   extraSubmitDisabled?: boolean
   isDiscardConfirmOpen: boolean
+  isDuplicateWarningOpen?: boolean
   isSubmitting: boolean
   labels: ContentCreateDialogLabels
   mode: "create" | "edit"
   onDialogOpenChange: (open: boolean) => void
   onDiscard: () => void
   onDiscardConfirmOpenChange: (open: boolean) => void
+  onDuplicateWarningContinue?: () => void
+  onDuplicateWarningOpenChange?: (open: boolean) => void
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
   open: boolean
   submitDisabled?: boolean
@@ -46,12 +49,15 @@ function ContentCreateDialog({
   children,
   extraSubmitDisabled = false,
   isDiscardConfirmOpen,
+  isDuplicateWarningOpen = false,
   isSubmitting,
   labels,
   mode,
   onDialogOpenChange,
   onDiscard,
   onDiscardConfirmOpenChange,
+  onDuplicateWarningContinue,
+  onDuplicateWarningOpenChange,
   onSubmit,
   open,
   submitDisabled = false,
@@ -78,6 +84,25 @@ function ContentCreateDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {onDuplicateWarningOpenChange ? (
+        <AlertDialog open={isDuplicateWarningOpen} onOpenChange={onDuplicateWarningOpenChange}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>名称重复</AlertDialogTitle>
+              <AlertDialogDescription>
+                当前仓库中已存在同名的内容，继续保存可能导致混淆。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>去修改</AlertDialogCancel>
+              <AlertDialogAction onClick={onDuplicateWarningContinue}>
+                继续保存
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
 
       <Dialog open={open} onOpenChange={onDialogOpenChange}>
         <FormDialog

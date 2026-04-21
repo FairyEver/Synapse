@@ -574,15 +574,17 @@ function ContentInstallDialog({
         return
       }
 
-      logger.info("Overwrite confirm dialog opened.", {
-        contentId: item.id,
-        contentType: item.type,
-        editorId: editor?.id ?? null,
-        scope,
-        targetPath: activeTarget.targetPath,
-      })
-      setIsOverwriteConfirmOpen(true)
-      return
+      if (activeTarget.targetExists) {
+        logger.info("Overwrite confirm dialog opened.", {
+          contentId: item.id,
+          contentType: item.type,
+          editorId: editor?.id ?? null,
+          scope,
+          targetPath: activeTarget.targetPath,
+        })
+        setIsOverwriteConfirmOpen(true)
+        return
+      }
     }
 
     // Check for Skill name conflict

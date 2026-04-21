@@ -171,6 +171,7 @@ function LogExportPanel() {
         },
       )
       setIsClearDialogOpen(false)
+      setTotalLogSize(0)
     } finally {
       setActiveAction(null)
     }

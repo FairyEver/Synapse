@@ -130,6 +130,7 @@ function ContentActionSplitButton({
                         disabled={action.disabled}
                         onSelect={action.onSelect}
                       >
+                        {action.icon}
                         {action.label}
                       </DropdownMenuItem>
                     ))}

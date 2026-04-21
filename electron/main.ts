@@ -4,6 +4,7 @@ import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
 import { SYNAPSE_IPC_CHANNELS } from "./ipc/channels"
 import { registerContentHandlers } from "./ipc/content-handlers"
 import { registerConfigHandlers } from "./ipc/config-handlers"
+import { registerEditorHandlers } from "./ipc/editor-handlers"
 import { registerIdentityHandlers } from "./ipc/identity-handlers"
 import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
@@ -104,6 +105,7 @@ if (!gotSingleInstanceLock) {
     logger.info("Electron app is ready. Registering services.")
     initializeAppIcon()
     registerContentHandlers()
+    registerEditorHandlers()
     registerLogHandlers()
     registerConfigHandlers()
     registerIdentityHandlers()

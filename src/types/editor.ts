@@ -82,6 +82,7 @@ export type SynapseEditorResolvedTarget =
       status: "ready"
       targetKind: SynapseEditorInstallTargetKind
       targetPath: string
+      targetExists: boolean
     })
   | (SynapseEditorResolvedTargetBase & {
       status: "unsupported" | "unavailable"
@@ -111,4 +112,13 @@ export type SynapsePeekClaudeCodeFrontmatterPayload = {
 
 export type SynapsePeekClaudeCodeFrontmatterResult = {
   frontmatter: ClaudeCodeRuleFrontmatter | null
+}
+
+export type SynapseEditorGlobalDirectory = {
+  editorId: SynapseEditorId
+  label: string
+  rulesPath: string | null
+  rulesExists: boolean
+  skillsPath: string | null
+  skillsExists: boolean
 }
