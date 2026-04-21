@@ -25,6 +25,13 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { getContentTypeDefinition } from "@/config/content-types"
 import {
   getCategoryLabel,
@@ -42,7 +49,9 @@ import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
 import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
 import { useContentRecentlyViewed } from "@/modules/content/hooks/use-content-recently-viewed"
+import { useContentSortOrder } from "@/modules/content/hooks/use-content-sort-order"
 import type { SynapseCategoryViewItem } from "@/types/category"
+import type { SynapseContentSortOrder } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentBrowserDetailDialogProps = {
@@ -79,6 +88,31 @@ const contentSearchOptions: IFuseOptions<SynapseContentMeta> = {
     { name: "modifiedByDisplayName", weight: 0.1 },
   ],
   threshold: 0.35,
+}
+
+const SORT_OPTIONS: { value: SynapseContentSortOrder; label: string }[] = [
+  { value: "modified-desc", label: "最近修改" },
+  { value: "created-desc", label: "最近创建" },
+  { value: "name-asc", label: "名称 A→Z" },
+  { value: "name-desc", label: "名称 Z→A" },
+]
+
+function sortContentItems(
+  items: SynapseContentMeta[],
+  order: SynapseContentSortOrder,
+): SynapseContentMeta[] {
+  const sorted = [...items]
+
+  switch (order) {
+    case "modified-desc":
+      return sorted.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
+    case "created-desc":
+      return sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    case "name-asc":
+      return sorted.sort((a, b) => a.title.localeCompare(b.title, "zh-CN"))
+    case "name-desc":
+      return sorted.sort((a, b) => b.title.localeCompare(a.title, "zh-CN"))
+  }
 }
 
 function getContentState(params: {
@@ -272,6 +306,7 @@ function ContentBrowserPage({
   const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType)
   const { favoriteIds } = useContentFavorites(contentType)
   const { recentlyViewedIds, addRecentlyViewed } = useContentRecentlyViewed(contentType)
+  const { sortOrder, setSortOrder } = useContentSortOrder()
   const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
   const isSyncing = (pendingPushState?.count ?? 0) > 0
   const pendingTargetIds = useMemo(
@@ -367,12 +402,21 @@ function ContentBrowserPage({
   )
 
   const filteredItems = useMemo(
-    () => (
-      deferredSearchQuery
-        ? contentSearch.search(deferredSearchQuery).map((result) => result.item)
-        : itemsInActiveCategory
-    ),
-    [contentSearch, itemsInActiveCategory, deferredSearchQuery],
+    () => {
+      if (activeCategoryId === SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID) {
+        return deferredSearchQuery
+          ? contentSearch.search(deferredSearchQuery).map((result) => result.item)
+          : itemsInActiveCategory
+      }
+
+      if (deferredSearchQuery) {
+        const searchResults = contentSearch.search(deferredSearchQuery).map((result) => result.item)
+        return sortOrder ? sortContentItems(searchResults, sortOrder) : searchResults
+      }
+
+      return sortContentItems(itemsInActiveCategory, sortOrder)
+    },
+    [activeCategoryId, contentSearch, itemsInActiveCategory, deferredSearchQuery, sortOrder],
   )
 
   const summaryLabel = useMemo(() => {
@@ -540,13 +584,33 @@ function ContentBrowserPage({
           <div className="flex min-h-full flex-col gap-4 pb-6">
             <div
               data-window-no-drag="true"
-              className="flex flex-wrap items-start justify-between gap-3"
+              className="flex flex-wrap items-center justify-between gap-3"
             >
               <div className="min-w-0">
                 <h2 className="text-base font-medium text-foreground">{definition.pluralLabel}</h2>
               </div>
 
-              <p className="shrink-0 text-sm text-muted-foreground">{summaryLabel}</p>
+              <div className="flex shrink-0 items-center gap-3">
+                {activeCategoryId !== SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID && (
+                  <Select
+                    data-track="content-sort-order"
+                    value={sortOrder}
+                    onValueChange={(value) => setSortOrder(value as SynapseContentSortOrder)}
+                  >
+                    <SelectTrigger size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SORT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p className="text-sm text-muted-foreground">{summaryLabel}</p>
+              </div>
             </div>
 
             {state ? (

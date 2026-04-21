@@ -1,5 +1,6 @@
 import {
   DEFAULT_CONFIG,
+  DEFAULT_CONTENT_SORT_ORDER,
   DEFAULT_FAVORITES,
   DEFAULT_GLOBAL_CONFIG,
   DEFAULT_RECENTLY_VIEWED,
@@ -10,11 +11,12 @@ import {
   CONTENT_TYPE_DEFINITIONS,
   getContentTypeDefinition,
 } from "../config/content-types"
-import { SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
+import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
 import type { SynapseContentType } from "../types/content"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
+  SynapseContentSortOrder,
   SynapseFavorites,
   SynapseGlobalConfig,
   SynapseProjectConfig,
@@ -41,6 +43,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isSynapseThemeMode(value: unknown): value is SynapseThemeMode {
   return typeof value === "string" && SYNAPSE_THEME_MODE_OPTIONS.includes(value as SynapseThemeMode)
+}
+
+function isSynapseContentSortOrder(value: unknown): value is SynapseContentSortOrder {
+  return typeof value === "string" && SYNAPSE_CONTENT_SORT_OPTIONS.includes(value as SynapseContentSortOrder)
 }
 
 function asTrimmedString(value: unknown, fallback = ""): string {
@@ -344,6 +350,9 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     projects: normalizeProjects(value.projects),
     favorites: normalizeFavorites(value.favorites),
     recentlyViewed: normalizeRecentlyViewed(value.recentlyViewed),
+    contentSortOrder: isSynapseContentSortOrder(value.contentSortOrder)
+      ? value.contentSortOrder
+      : DEFAULT_CONTENT_SORT_ORDER,
   }
 }
 

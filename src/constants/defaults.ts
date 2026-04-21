@@ -1,5 +1,6 @@
 import type {
   SynapseConfig,
+  SynapseContentSortOrder,
   SynapseFavorites,
   SynapseGlobalConfig,
   SynapseRecentlyViewed,
@@ -37,11 +38,14 @@ export const DEFAULT_RECENTLY_VIEWED = {
   prompt: [],
 } as const satisfies SynapseRecentlyViewed
 
+export const DEFAULT_CONTENT_SORT_ORDER: SynapseContentSortOrder = "modified-desc"
+
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
   projects: [],
   favorites: DEFAULT_FAVORITES,
   recentlyViewed: DEFAULT_RECENTLY_VIEWED,
+  contentSortOrder: DEFAULT_CONTENT_SORT_ORDER,
 }
 
 export const DEFAULT_CONFIG: SynapseConfig = {

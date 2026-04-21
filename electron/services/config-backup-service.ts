@@ -284,6 +284,7 @@ function validateConfig(
         skill: [],
         prompt: [],
       },
+      contentSortOrder: "modified-desc",
     },
   }
 }

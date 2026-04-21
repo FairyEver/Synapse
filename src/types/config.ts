@@ -1,5 +1,14 @@
 import type { SynapseContentType } from "./content"
 
+export const SYNAPSE_CONTENT_SORT_OPTIONS = [
+  "modified-desc",
+  "created-desc",
+  "name-asc",
+  "name-desc",
+] as const
+
+export type SynapseContentSortOrder = (typeof SYNAPSE_CONTENT_SORT_OPTIONS)[number]
+
 export const SYNAPSE_THEME_MODE_OPTIONS = ["light", "dark", "system"] as const
 
 export type SynapseThemeMode = (typeof SYNAPSE_THEME_MODE_OPTIONS)[number]
@@ -36,6 +45,7 @@ export type SynapseGlobalConfig = {
   projects: SynapseProjectConfig[]
   favorites: SynapseFavorites
   recentlyViewed: SynapseRecentlyViewed
+  contentSortOrder: SynapseContentSortOrder
 }
 
 export type SynapseConfig = {

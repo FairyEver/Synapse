@@ -1,6 +1,13 @@
-import { ArrowLeftRight, RefreshCw } from "lucide-react"
+import { ArrowLeftRight, LoaderCircle, RefreshCw } from "lucide-react"
 import { SyncStatusChip, type SyncStatus } from "@/app-shell/components/sync-status-chip"
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 type AppShellActionsProps = {
   activityLabel?: string | null
@@ -33,41 +40,72 @@ function AppShellActions({
   onSyncChipClick,
   refreshTitle = "同步仓库",
 }: AppShellActionsProps) {
+  const hasActions = showRefresh || showRepositorySwitch
+
   return (
-    <div className="flex items-center gap-2">
-      <SyncStatusChip
-        status={syncStatus}
-        pendingCount={pendingPushCount}
-        onClick={onSyncChipClick}
-      />
+    <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5">
+        {activityLabel ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground select-none [&_svg]:size-3.5 [&_svg]:shrink-0">
+            <LoaderCircle className="animate-spin" />
+            {activityLabel}
+          </span>
+        ) : (
+          <SyncStatusChip
+            status={syncStatus}
+            pendingCount={pendingPushCount}
+            onClick={onSyncChipClick}
+          />
+        )}
+      </div>
 
-      {activityLabel ? (
-        <span className="text-sm text-muted-foreground">{activityLabel}</span>
-      ) : null}
+      {hasActions ? (
+        <>
+          <Separator orientation="vertical" className="mx-1 h-4 data-[orientation=vertical]:self-center" />
+          <TooltipProvider>
+            <div className="flex items-center gap-0.5">
+              {showRefresh ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={refreshDisabled}
+                        onClick={onRefresh}
+                      >
+                        <RefreshCw className={refreshBusy ? "animate-spin" : undefined} />
+                        <span className="sr-only">{refreshTitle}</span>
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{refreshTitle}</TooltipContent>
+                </Tooltip>
+              ) : null}
 
-      {showRefresh ? (
-        <Button
-          variant="secondary"
-          size="icon"
-          disabled={refreshDisabled}
-          onClick={onRefresh}
-          title={refreshTitle}
-        >
-          <RefreshCw className={refreshBusy ? "animate-spin" : undefined} />
-          <span className="sr-only">{refreshTitle}</span>
-        </Button>
-      ) : null}
-
-      {showRepositorySwitch ? (
-        <Button
-          variant="secondary"
-          disabled={repositorySwitchDisabled}
-          onClick={onRepositorySwitch}
-          title={repositorySwitchTitle}
-        >
-          <ArrowLeftRight data-icon="inline-start" />
-          切换仓库
-        </Button>
+              {showRepositorySwitch ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={repositorySwitchDisabled}
+                        onClick={onRepositorySwitch}
+                      >
+                        <ArrowLeftRight data-icon="inline-start" />
+                        切换仓库
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {repositorySwitchDisabled ? (
+                    <TooltipContent>{repositorySwitchTitle}</TooltipContent>
+                  ) : null}
+                </Tooltip>
+              ) : null}
+            </div>
+          </TooltipProvider>
+        </>
       ) : null}
     </div>
   )
