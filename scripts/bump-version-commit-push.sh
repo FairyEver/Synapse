@@ -1,4 +1,7 @@
 #!/usr/bin/env sh
+# 作用：把 package.json 的版本号最后一段自动加 1，然后提交并推送当前分支。
+# 一般通过 `pnpm bump:commit:push` 手动执行，用于快速生成一个版本递增提交。
+# 这个脚本会执行 `git add -A`，会把当前工作区所有改动一起提交，使用前要先确认改动范围。
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

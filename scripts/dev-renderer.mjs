@@ -1,3 +1,8 @@
+/**
+ * 作用：启动 Vite 渲染进程开发服务器。
+ * 一般由 `pnpm dev` 或 `pnpm dev:renderer` 调用，负责提供 React 渲染端页面。
+ * 它只做前端 dev server 启动和退出信号转发，不负责 Electron 主进程。
+ */
 import { spawn } from "node:child_process"
 
 const port = process.env.SYNAPSE_DEV_PORT ?? "5173"

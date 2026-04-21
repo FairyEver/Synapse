@@ -1,3 +1,8 @@
+/**
+ * 作用：把旧的 `rules/<id>` / `skills/<id>` 目录结构迁移成新的 history-based 存储结构。
+ * 它会重写 `meta.json`，生成首条 `history/` 快照，并把旧附件搬到 `attachments-pool/`。
+ * 这是维护者手动跑的一次性迁移脚本，不属于日常开发或应用运行流程。
+ */
 import { createHash } from "node:crypto"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"

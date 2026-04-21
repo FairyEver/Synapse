@@ -1,3 +1,8 @@
+/**
+ * 作用：统一启动本地开发环境。
+ * 它会先挑一个可用端口，然后并行拉起渲染端、Electron TypeScript watch、以及 Electron 应用进程。
+ * 平时执行 `pnpm dev` 走的就是这个脚本，它是当前项目开发启动链路的总入口。
+ */
 import { spawn } from "node:child_process"
 import { createServer } from "node:net"
 

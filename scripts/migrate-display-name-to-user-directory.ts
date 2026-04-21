@@ -1,3 +1,8 @@
+/**
+ * 作用：把旧内容数据里散落的 `createdByDisplayName` / `modifiedByDisplayName`
+ * 提取出来，补写成新的 `users/<userId>/profile.json` 仓库级用户资料。
+ * 这是仓库存储结构升级时用的一次性迁移脚本，运行成功后还会自动提交 `users/` 目录。
+ */
 import { spawn } from "node:child_process"
 import type { Dirent } from "node:fs"
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"

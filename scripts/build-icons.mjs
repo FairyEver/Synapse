@@ -1,3 +1,8 @@
+/**
+ * 作用：把 `source/icon.png` 生成为 Electron 打包要用的图标文件。
+ * 一般在更换应用图标素材后手动运行 `pnpm icons`。
+ * 输出目录是 `build/`，会生成 `icon.ico`、`icon.icns` 等平台资源。
+ */
 import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync } from "node:fs"
 import { dirname, resolve } from "node:path"

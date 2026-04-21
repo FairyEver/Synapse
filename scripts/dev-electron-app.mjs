@@ -1,3 +1,8 @@
+/**
+ * 作用：等待渲染端和 Electron 主进程编译产物就绪后，启动 Electron 桌面应用。
+ * 一般由 `pnpm dev` 间接调用，也可以单独用在拆分调试 Electron 进程时。
+ * 启动前会清理旧的 `dist-electron` 入口文件，随后用 nodemon 监听编译结果并自动重启应用。
+ */
 import { spawn } from "node:child_process"
 import { rm } from "node:fs/promises"
 import path from "node:path"
