@@ -20,7 +20,7 @@ type SkillDetailDialogProps = {
 const SKILL_LABELS: ContentDetailDialogLabels = {
   singular: "Skill",
   deleteConfirmTitle: "确认删除这条 Skill？",
-  deleteConfirmDescription: "删除后，这条 Skill 会从列表里隐藏，但历史记录仍会保留在仓库里。",
+  deleteConfirmDescription: "内容将移入「最近删除」，90 天后自动永久清除。",
   deleteLoading: "正在删除 Skill...",
   deleteError: "删除 Skill 失败。",
   conflictTitle: "有人在你之后改过这条 Skill",

@@ -194,6 +194,17 @@ export type SynapseDeleteContentPayload = {
   force?: boolean
 }
 
+export type SynapseRestoreContentPayload = {
+  id: string
+  type: SynapseContentType
+  baseHistoryDirname: string
+}
+
+export type SynapsePurgeContentPayload = {
+  id: string
+  type: SynapseContentType
+}
+
 type SynapseContentMutationResultBase = {
   id: string
   type: SynapseContentType

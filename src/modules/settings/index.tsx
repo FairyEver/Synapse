@@ -35,8 +35,17 @@ function SettingsModule() {
   const repositories = useRepositoryList()
   const { replaceRepositories } = useRepositoryActions()
   const { promise } = useAppNotifications()
-  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general")
+  const [activeCategory, setActiveCategoryRaw] = useState<SettingsCategoryId>("general")
   const [isAdminMode, setIsAdminModeState] = useState(sessionAdminMode)
+
+  const setActiveCategory = useCallback((nextCategory: SettingsCategoryId) => {
+    setActiveCategoryRaw((prev) => {
+      if (prev !== nextCategory) {
+        logger.info("Settings category switched.", { from: prev, to: nextCategory })
+      }
+      return nextCategory
+    })
+  }, [])
 
   const setIsAdminMode = useCallback((enabled: boolean) => {
     sessionAdminMode = enabled

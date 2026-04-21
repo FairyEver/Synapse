@@ -8,6 +8,9 @@ import {
 } from "react"
 import { toast, type ExternalToast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
+import { createRendererLogger } from "@/app-shell/logging"
+
+const notificationLogger = createRendererLogger("notifications")
 
 type AppNotificationId = string | number
 type AppNotificationTone = "default" | "success" | "info" | "warning" | "destructive" | "loading"
@@ -129,6 +132,8 @@ function showToast(
   options?: AppNotificationOptions,
 ): AppNotificationId {
   const toastOptions = buildToastOptions(tone, options)
+  const logLevel = tone === "destructive" ? "error" : tone === "warning" ? "warn" : "info"
+  notificationLogger[logLevel](`[${tone}] ${typeof message === "string" ? message : "(rich content)"}`)
 
   switch (tone) {
     case "success":
@@ -167,9 +172,13 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
         ...options
       } = input
       const toastId = showToast(loadingMessage, "loading", options)
+      const loadingLabel = typeof loadingMessage === "string" ? loadingMessage : "(async operation)"
+      const startedAt = performance.now()
 
       try {
         const value = await resolvePromiseSource(source)
+        const elapsedMs = Math.round(performance.now() - startedAt)
+        notificationLogger.info(`[async:ok] ${loadingLabel} (${elapsedMs}ms)`)
         const result = resolveNotificationResult(successResolver, value, "success", null)
 
         if (result.message === null) {
@@ -183,6 +192,8 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
 
         return value
       } catch (error) {
+        const elapsedMs = Math.round(performance.now() - startedAt)
+        notificationLogger.error(`[async:fail] ${loadingLabel} (${elapsedMs}ms)`, error)
         const fallbackMessage =
           error instanceof Error && error.message.trim()
             ? error.message

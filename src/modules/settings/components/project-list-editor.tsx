@@ -78,6 +78,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           path: nextPath,
         },
       ])
+      logger.info("Project added.", { name: nextName, path: nextPath })
       setIsDialogOpen(false)
       resetForm()
     } catch (error) {
@@ -179,6 +180,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       )
 
       await onSave(nextProjects)
+      logger.info("Project updated.", { projectId: editingProject.id })
       setEditingProject(null)
       setEditName("")
       setEditPath("")
@@ -219,6 +221,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
+                    logger.info("Project removed.", { projectId: project.id })
                     void onSave(projects.filter((itemValue) => itemValue.id !== project.id))
                   }}
                 >

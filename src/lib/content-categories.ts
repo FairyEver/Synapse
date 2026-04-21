@@ -10,6 +10,7 @@ export const SYNAPSE_ALL_CATEGORY_ID = "__all__"
 export const SYNAPSE_FALLBACK_CATEGORY_ID = "__fallback__"
 export const SYNAPSE_FAVORITES_CATEGORY_ID = "__favorites__"
 export const SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID = "__recently_viewed__"
+export const SYNAPSE_DELETED_CATEGORY_ID = "__deleted__"
 
 function compareCategoryDefinitions(
   left: SynapseCategoryDefinition,

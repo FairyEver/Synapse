@@ -13,6 +13,8 @@ import type {
   SynapseCreateRulePayload,
   SynapseCreateSkillPayload,
   SynapseDeleteContentPayload,
+  SynapsePurgeContentPayload,
+  SynapseRestoreContentPayload,
   SynapseTextContentFile,
   SynapseUpdateContentRequest,
   SynapseUpdateContentPayload,
@@ -111,6 +113,20 @@ async function deleteContent(payload: SynapseDeleteContentPayload): Promise<Syna
   return requireContentBridge().deleteContent(payload)
 }
 
+async function listDeletedContent<T extends SynapseContentType>(
+  contentType: T,
+): Promise<SynapseContentMeta<T>[]> {
+  return requireContentBridge().listDeleted({ contentType })
+}
+
+async function restoreContent(payload: SynapseRestoreContentPayload): Promise<SynapseContentMutationResult> {
+  return requireContentBridge().restore(payload)
+}
+
+async function purgeContent(payload: SynapsePurgeContentPayload): Promise<SynapseContentMutationResult> {
+  return requireContentBridge().purge(payload)
+}
+
 async function downloadContent(
   contentType: SynapseContentType,
   id: string,
@@ -175,8 +191,10 @@ export {
   hasContentBridge,
   installToEditor,
   listContent,
+  listDeletedContent,
   openContentDetailWindow,
   peekCursorFrontmatter,
+  purgeContent,
   readContent,
   readDetail,
   readHistory,
@@ -192,6 +210,7 @@ export {
   readSkillHistoryVersion,
   readSkills,
   resolveEditorInstallTarget,
+  restoreContent,
   updateContent,
   updateRule,
   updateSkill,

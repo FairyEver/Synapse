@@ -1,8 +1,11 @@
 import { LoaderCircle } from "lucide-react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager, useRepositoryOperation } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
+
+const logger = createRendererLogger("settings.admin")
 
 type RepositoryMaintenancePanelProps = {
   repositoryUuid: string
@@ -31,6 +34,7 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
             variant="outline"
             disabled={Boolean(operation?.isRunning)}
             onClick={() => {
+              logger.info("Repository maintenance initiated.", { repositoryUuid })
               void promise(
                 () => manager.runMaintenance(repositoryUuid),
                 {

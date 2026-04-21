@@ -214,6 +214,24 @@ class ContentIndexService {
     })
   }
 
+  async listDeletedContent(
+    repository: SynapseRepositoryConfig,
+    contentType: SynapseContentType,
+  ): Promise<SynapseContentMeta[]> {
+    return withRepositoryCacheDatabase(repository.uuid, (database) => {
+      const rows = database.prepare(`
+        SELECT *
+        FROM content_index
+        WHERE type = ? AND deleted = 1
+        ORDER BY modified_at DESC
+      `).all(contentType) as Record<string, unknown>[]
+
+      return rows
+        .map(fromDatabaseRow)
+        .filter((item): item is SynapseContentMeta => item !== null)
+    })
+  }
+
   async readSummary(
     repository: SynapseRepositoryConfig,
     contentType: SynapseContentType,

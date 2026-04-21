@@ -14,6 +14,8 @@ import type {
   SynapseContentMutationResult,
   SynapseOpenContentWindowPayload,
   SynapseContentType,
+  SynapsePurgeContentPayload,
+  SynapseRestoreContentPayload,
   SynapseTextContentFile,
   SynapseUpdateContentRequest,
 } from "./content"
@@ -78,6 +80,11 @@ export type SynapseBridge = {
     create: (request: SynapseCreateContentRequest) => Promise<SynapseContentMutationResult>
     update: (request: SynapseUpdateContentRequest) => Promise<SynapseContentMutationResult>
     deleteContent: (payload: SynapseDeleteContentPayload) => Promise<SynapseContentMutationResult>
+    listDeleted: <T extends SynapseContentType>(
+      args: { contentType: T },
+    ) => Promise<SynapseContentMeta<T>[]>
+    restore: (payload: SynapseRestoreContentPayload) => Promise<SynapseContentMutationResult>
+    purge: (payload: SynapsePurgeContentPayload) => Promise<SynapseContentMutationResult>
     download: (
       args: { contentType: SynapseContentType; id: string },
     ) => Promise<SynapseContentDownloadResult>

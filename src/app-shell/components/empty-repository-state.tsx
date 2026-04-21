@@ -86,6 +86,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
         contentDirs: { ...DEFAULT_REPOSITORY_CONTENT_DIRECTORIES },
       }
 
+      logger.info("Directory chosen for new repository.", { localPath: selectedPath })
       await addRepository(newRepository, { activate: true })
     } catch (err) {
       logger.error("Failed to choose repository directory.", err)
@@ -131,6 +132,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
 
   const handleSwitchToRepository = async (repositoryUuid: string) => {
     try {
+      logger.info("Switching repository from empty state.", { repositoryUuid })
       await switchActiveRepository(repositoryUuid)
     } catch (error) {
       logger.error("Failed to switch repository from empty state.", error)

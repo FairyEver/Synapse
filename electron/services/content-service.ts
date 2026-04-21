@@ -77,6 +77,17 @@ class ContentService {
     return contentIndexService.listContent(context.repository, contentType) as Promise<SynapseContentMeta<T>[]>
   }
 
+  async listDeletedContent<T extends SynapseContentType>(contentType: T): Promise<SynapseContentMeta<T>[]> {
+    const context = await getActiveRepositoryContext()
+
+    if (!context) {
+      return []
+    }
+
+    await contentIndexService.syncIndex(context.repository)
+    return contentIndexService.listDeletedContent(context.repository, contentType) as Promise<SynapseContentMeta<T>[]>
+  }
+
   async getContent(contentType: SynapseContentType, contentId: string): Promise<SynapseTextContentFile> {
     const detail = await readCurrentDetail(contentType, contentId)
 

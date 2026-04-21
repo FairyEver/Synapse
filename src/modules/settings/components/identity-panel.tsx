@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Copy } from "lucide-react"
 import { useLocalIdentity } from "@/app-shell/identity-context"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
@@ -11,6 +12,7 @@ import { SettingsGroup } from "@/modules/settings/components/settings-group"
 function IdentityPanel() {
   const { promise } = useAppNotifications()
   const { localIdentityState } = useLocalIdentity()
+  const logger = createRendererLogger("settings.identity")
   const [isAdoptDialogOpen, setIsAdoptDialogOpen] = useState(false)
 
   if (!localIdentityState || localIdentityState.status !== "ready") {
@@ -55,7 +57,10 @@ function IdentityPanel() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsAdoptDialogOpen(true)}
+              onClick={() => {
+                logger.info("Adopt identity dialog opened.")
+                setIsAdoptDialogOpen(true)
+              }}
             >
               接续已有身份
             </Button>

@@ -1,14 +1,18 @@
-import { type ReactNode, useDeferredValue, useEffect, useMemo, useState } from "react"
+import { type ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import Fuse, { type IFuseOptions } from "fuse.js"
 import {
   Folders,
   LoaderCircle,
   PackageOpen,
+  RotateCcw,
   SearchX,
+  Trash2,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react"
-import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
+import { toast } from "sonner"
+import { purgeContent, restoreContent } from "@/app-shell/content"
+import { useCurrentRepoProfile, useIdentity, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useActiveRepository, usePendingPushes, useRepositoryState } from "@/app-shell/use-repository-manager"
 import {
@@ -18,6 +22,17 @@ import {
   ModuleSidebarList,
 } from "@/components/module-sidebar"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
@@ -32,11 +47,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getContentTypeDefinition } from "@/config/content-types"
 import {
   getCategoryLabel,
   resolveCategoryViewId,
   SYNAPSE_ALL_CATEGORY_ID,
+  SYNAPSE_DELETED_CATEGORY_ID,
   SYNAPSE_FAVORITES_CATEGORY_ID,
   SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID,
 } from "@/lib/content-categories"
@@ -50,6 +68,7 @@ import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
 import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
 import { useContentRecentlyViewed } from "@/modules/content/hooks/use-content-recently-viewed"
 import { useContentSortOrder } from "@/modules/content/hooks/use-content-sort-order"
+import { useDeletedContent } from "@/modules/content/hooks/use-deleted-content"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentSortOrder } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
@@ -182,6 +201,14 @@ function getContentState(params: {
     }
   }
 
+  if (activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID && itemsInActiveCategory.length === 0) {
+    return {
+      title: "没有已删除的内容",
+      description: null,
+      icon: Trash2,
+    }
+  }
+
   if (activeCategoryId !== SYNAPSE_ALL_CATEGORY_ID && itemsInActiveCategory.length === 0) {
     const categoryLabel = categoryItems.find((item) => item.id === activeCategoryId)?.label ?? "当前分类"
 
@@ -214,6 +241,83 @@ function ContentStateView({ description, icon: Icon, title }: ContentState) {
         {description ? <EmptyDescription>{description}</EmptyDescription> : null}
       </EmptyHeader>
     </Empty>
+  )
+}
+
+function getRemainingDays(modifiedAt: string): number {
+  const deletedDate = new Date(modifiedAt)
+  const expiresAt = deletedDate.getTime() + 90 * 24 * 60 * 60 * 1000
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)))
+}
+
+function DeletedContentCard({
+  contentType,
+  item,
+  onRestore,
+  onPurge,
+  disabled,
+}: {
+  contentType: SynapseContentType
+  item: SynapseContentMeta
+  onRestore: () => void
+  onPurge: () => void
+  disabled?: boolean
+}) {
+  const repoProfileMap = useRepoProfileMap()
+  const deletedByLabel = resolveDisplayName(
+    item.modifiedBy,
+    repoProfileMap,
+    item.modifiedByDisplayName,
+  )
+  const remainingDays = getRemainingDays(item.modifiedAt)
+
+  return (
+    <div
+      data-window-no-drag="true"
+      className="flex items-start gap-3 rounded-lg bg-background px-3 py-3 opacity-60"
+    >
+      <ContentItemIcon
+        contentId={item.id}
+        contentType={contentType}
+        icon={item.icon}
+        iconType={item.iconType}
+        iconImage={item.iconImage}
+        title={item.title}
+        tone={item.iconBg}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          还剩 {remainingDays} 天 · 由 {deletedByLabel} 删除
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          title="恢复"
+          disabled={disabled}
+          onClick={onRestore}
+        >
+          {disabled
+            ? <LoaderCircle className="size-4 animate-spin" />
+            : <RotateCcw className="size-4" />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 text-destructive hover:text-destructive"
+          title="永久删除"
+          disabled={disabled}
+          onClick={onPurge}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -307,6 +411,7 @@ function ContentBrowserPage({
   const { favoriteIds } = useContentFavorites(contentType)
   const { recentlyViewedIds, addRecentlyViewed } = useContentRecentlyViewed(contentType)
   const { sortOrder, setSortOrder } = useContentSortOrder()
+  const deletedContent = useDeletedContent(contentType)
   const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
   const isSyncing = (pendingPushState?.count ?? 0) > 0
   const pendingTargetIds = useMemo(
@@ -314,8 +419,24 @@ function ContentBrowserPage({
     [pendingPushState?.items],
   )
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeCategoryId, setActiveCategoryId] = useState(SYNAPSE_ALL_CATEGORY_ID)
+  const [activeCategoryId, setActiveCategoryIdRaw] = useState(SYNAPSE_ALL_CATEGORY_ID)
+  const setActiveCategoryId = useCallback((nextId: string) => {
+    setActiveCategoryIdRaw((prevId) => {
+      if (prevId !== nextId) {
+        logger.info("Category switched.", { contentType, from: prevId, to: nextId })
+      }
+      return nextId
+    })
+  }, [contentType, logger])
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
+  const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
+  const [busyItemId, setBusyItemId] = useState<string | null>(null)
+  const [deletedFilter, setDeletedFilter] = useState<"mine" | "all">("mine")
+  const [batchAction, setBatchAction] = useState<"restore" | "purge" | null>(null)
+  const batchBusyRef = useRef(false)
+  const isDeletedView = activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID
+  const { localIdentityState } = useIdentity()
+  const currentUserId = localIdentityState?.status === "ready" ? localIdentityState.identity.userId : null
 
   const repositoryStatus = activeRepositoryState?.status ?? "checking"
   const canBrowseContent = repositoryStatus === "ready"
@@ -327,13 +448,28 @@ function ContentBrowserPage({
   const deferredSearchQuery = useDeferredValue(normalizedSearchQuery)
 
   useEffect(() => {
+    if (deferredSearchQuery) {
+      logger.info("Search query applied.", { contentType, query: deferredSearchQuery })
+    }
+  }, [deferredSearchQuery, contentType, logger])
+
+  useEffect(() => {
     onCreateDialogOpenChange?.(false)
   }, [onCreateDialogOpenChange])
+
+  useEffect(() => {
+    if (!isDeletedView) setDeletedFilter("mine")
+  }, [isDeletedView])
 
   useEffect(() => {
     // 如果当前是"我的收藏"但没有收藏了，重置到"全部"
     if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID && favoriteIds.length === 0) {
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
+      return
+    }
+
+    // "最近删除"是特殊分类，不在 categories 数组中，不需要检查
+    if (activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID) {
       return
     }
 
@@ -378,6 +514,13 @@ function ContentBrowserPage({
 
   const itemsInActiveCategory = useMemo(
     () => {
+      if (activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID) {
+        if (deletedFilter === "mine" && currentUserId) {
+          return deletedContent.items.filter((item) => item.modifiedBy === currentUserId)
+        }
+        return deletedContent.items
+      }
+
       if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID) {
         return items.filter((item) => favoriteIds.includes(item.id))
       }
@@ -394,7 +537,7 @@ function ContentBrowserPage({
         || resolveCategoryViewId(contentType, item.category) === activeCategoryId
       ))
     },
-    [activeCategoryId, contentType, items, favoriteIds, recentlyViewedIds],
+    [activeCategoryId, contentType, items, favoriteIds, recentlyViewedIds, deletedContent.items, deletedFilter, currentUserId],
   )
   const contentSearch = useMemo(
     () => new Fuse(itemsInActiveCategory, contentSearchOptions),
@@ -420,12 +563,16 @@ function ContentBrowserPage({
   )
 
   const summaryLabel = useMemo(() => {
+    if (isDeletedView) {
+      return `共 ${filteredItems.length} 项`
+    }
+
     if (activeCategoryId === SYNAPSE_ALL_CATEGORY_ID && !deferredSearchQuery) {
       return `共 ${totalCount} 项`
     }
 
     return `显示 ${filteredItems.length} / ${totalCount} 项`
-  }, [activeCategoryId, filteredItems.length, deferredSearchQuery, totalCount])
+  }, [activeCategoryId, filteredItems.length, isDeletedView, deferredSearchQuery, totalCount])
 
   const recentlyViewedCount = useMemo(() => {
     const itemIds = new Set(items.map((item) => item.id))
@@ -559,6 +706,9 @@ function ContentBrowserPage({
                 最近浏览
               </ModuleSidebarItem>
 
+              {/* 分类分隔符 */}
+              <Separator className="my-2 bg-border/50" />
+
               {/* 其余分类 */}
               {categories.slice(1).map((category) => (
                 <ModuleSidebarItem
@@ -576,6 +726,24 @@ function ContentBrowserPage({
                   {category.label}
                 </ModuleSidebarItem>
               ))}
+
+              {/* 最近删除分隔符 */}
+              <Separator className="my-2 bg-border/50" />
+
+              {/* 最近删除 */}
+              <ModuleSidebarItem
+                active={activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID}
+                disabled={!canBrowseContent}
+                onClick={() => setActiveCategoryId(SYNAPSE_DELETED_CATEGORY_ID)}
+                className="h-10 px-4"
+                trailing={
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {deletedContent.count}
+                  </span>
+                }
+              >
+                最近删除
+              </ModuleSidebarItem>
             </ModuleSidebarList>
           </ModuleSidebar>
         }
@@ -587,11 +755,13 @@ function ContentBrowserPage({
               className="flex flex-wrap items-center justify-between gap-3"
             >
               <div className="min-w-0">
-                <h2 className="text-base font-medium text-foreground">{definition.pluralLabel}</h2>
+                <h2 className="text-base font-medium text-foreground">
+                  {isDeletedView ? "最近删除" : definition.pluralLabel}
+                </h2>
               </div>
 
               <div className="flex shrink-0 items-center gap-3">
-                {activeCategoryId !== SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID && (
+                {!isDeletedView && activeCategoryId !== SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID && (
                   <Select
                     data-track="content-sort-order"
                     value={sortOrder}
@@ -613,8 +783,81 @@ function ContentBrowserPage({
               </div>
             </div>
 
+            {isDeletedView && (
+              <div
+                data-window-no-drag="true"
+                className="flex items-center justify-between gap-3"
+              >
+                <Tabs
+                  data-track="deleted-filter"
+                  value={deletedFilter}
+                  onValueChange={(value) => setDeletedFilter(value as "mine" | "all")}
+                >
+                  <TabsList className="h-8">
+                    <TabsTrigger value="mine">我删除的</TabsTrigger>
+                    <TabsTrigger value="all">全部</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={filteredItems.length === 0 || batchBusyRef.current}
+                    onClick={() => setBatchAction("restore")}
+                  >
+                    <RotateCcw className="mr-1 size-3.5" />
+                    全部恢复
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={filteredItems.length === 0 || batchBusyRef.current}
+                    onClick={() => setBatchAction("purge")}
+                  >
+                    <Trash2 className="mr-1 size-3.5" />
+                    全部删除
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {state ? (
               <ContentStateView {...state} />
+            ) : isDeletedView ? (
+              <div className="grid grid-cols-2 gap-3">
+                {filteredItems.map((item) => (
+                  <DeletedContentCard
+                    key={item.id}
+                    contentType={contentType}
+                    item={item}
+                    disabled={busyItemId === item.id}
+                    onRestore={async () => {
+                      if (busyItemId) return
+                      setBusyItemId(item.id)
+                      logger.info("Content restore initiated.", { contentId: item.id, contentType })
+                      try {
+                        await restoreContent({
+                          id: item.id,
+                          type: contentType,
+                          baseHistoryDirname: item.latestHistoryDirname,
+                        })
+                        toast.success(`已恢复「${item.title}」`)
+                        void deletedContent.refresh()
+                      } catch (err) {
+                        logger.error("Content restore failed.", { contentId: item.id, contentType, error: err })
+                        toast.error("恢复失败，请稍后重试。")
+                      } finally {
+                        setBusyItemId(null)
+                      }
+                    }}
+                    onPurge={() => setPurgeTarget(item)}
+                  />
+                ))}
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {filteredItems.map((item) => (
@@ -649,6 +892,98 @@ function ContentBrowserPage({
           }
         },
       })}
+
+      <AlertDialog open={purgeTarget !== null} onOpenChange={(open) => { if (!open) setPurgeTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>永久删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作不可撤销，内容将被彻底清除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={async () => {
+                if (!purgeTarget) return
+                logger.info("Content purge initiated.", { contentId: purgeTarget.id, contentType })
+                try {
+                  await purgeContent({
+                    id: purgeTarget.id,
+                    type: contentType,
+                  })
+                  toast.success(`已永久删除「${purgeTarget.title}」`)
+                  setPurgeTarget(null)
+                  void deletedContent.refresh()
+                } catch (err) {
+                  logger.error("Content purge failed.", { contentId: purgeTarget.id, contentType, error: err })
+                  toast.error("永久删除失败，请稍后重试。")
+                }
+              }}
+            >
+              永久删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={batchAction !== null} onOpenChange={(open) => { if (!open) setBatchAction(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {batchAction === "restore" ? "全部恢复" : "全部永久删除"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {batchAction === "restore"
+                ? `将恢复当前列表中的 ${filteredItems.length} 项内容。`
+                : `此操作不可撤销，当前列表中的 ${filteredItems.length} 项内容将被彻底清除。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className={batchAction === "purge" ? "bg-destructive text-white hover:bg-destructive/90" : ""}
+              onClick={async () => {
+                const action = batchAction
+                const targets = [...filteredItems]
+                setBatchAction(null)
+                if (!action || targets.length === 0) return
+                logger.info("Batch action initiated.", { action, contentType, count: targets.length })
+                batchBusyRef.current = true
+                let successCount = 0
+                for (const item of targets) {
+                  try {
+                    if (action === "restore") {
+                      await restoreContent({
+                        id: item.id,
+                        type: contentType,
+                        baseHistoryDirname: item.latestHistoryDirname,
+                      })
+                    } else {
+                      await purgeContent({ id: item.id, type: contentType })
+                    }
+                    successCount++
+                  } catch {
+                    // continue with remaining items
+                  }
+                }
+                batchBusyRef.current = false
+                logger.info("Batch action completed.", { action, contentType, successCount, total: targets.length })
+                void deletedContent.refresh()
+                const verb = action === "restore" ? "恢复" : "永久删除"
+                if (successCount === targets.length) {
+                  toast.success(`已${verb} ${successCount} 项内容`)
+                } else {
+                  toast.warning(`${verb}了 ${successCount}/${targets.length} 项，部分操作失败`)
+                }
+              }}
+            >
+              {batchAction === "restore" ? "全部恢复" : "全部永久删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { exportConfigBackup, importConfigBackup } from "@/app-shell/config-backup"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +18,7 @@ import { SettingsGroup } from "@/modules/settings/components/settings-group"
 
 function ConfigBackupPanel() {
   const { promise } = useAppNotifications()
+  const logger = createRendererLogger("settings.backup")
   const [isImportOpen, setIsImportOpen] = useState(false)
 
   return (
@@ -32,6 +34,7 @@ function ConfigBackupPanel() {
               type="button"
               variant="outline"
               onClick={() => {
+                logger.info("Config backup export initiated.")
                 void promise(
                   () => exportConfigBackup(),
                   {
@@ -75,6 +78,7 @@ function ConfigBackupPanel() {
             <AlertDialogAction
               onClick={(event) => {
                 event.preventDefault()
+                logger.info("Config backup import confirmed.")
                 void promise(
                   () => importConfigBackup(),
                   {

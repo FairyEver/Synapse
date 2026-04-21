@@ -129,6 +129,7 @@ function RepositoryDisplayNameField({
     try {
       const nextProfile = await updateRepoDisplayName(repositoryUuid, nextDisplayName)
       setProfileState({ status: "ready", profile: nextProfile })
+      logger.info("Repository display name saved.", { repositoryUuid })
 
       if (isActiveRepository) {
         await refreshRepoProfileState()

@@ -399,12 +399,16 @@ function ContentDetailDialog<TPayload>({
                     item={resolvedItem}
                     onDelete={() => setIsDeleteConfirmOpen(true)}
                     onEdit={() => {
+                      logger.info("Edit dialog opened.", { contentId: item.id, contentType })
                       setIsEditOpen(true)
                     }}
                     onOpenInNewWindow={() => {
                       void handleOpenInNewWindow()
                     }}
-                    onToggleFavorite={() => toggleFavorite(contentType, item.id)}
+                    onToggleFavorite={() => {
+                      logger.info("Favorite toggled.", { contentId: item.id, contentType, isFavorite: !isItemFavorite })
+                      return toggleFavorite(contentType, item.id)
+                    }}
                   />
                 </div>
               </div>

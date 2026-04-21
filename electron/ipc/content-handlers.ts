@@ -7,6 +7,8 @@ import type {
   SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
   SynapseOpenContentWindowPayload,
+  SynapsePurgeContentPayload,
+  SynapseRestoreContentPayload,
   SynapseUpdateContentRequest,
 } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
@@ -241,6 +243,30 @@ function registerContentHandlers() {
     SYNAPSE_IPC_CHANNELS.content.deleteContent,
     async (event, payload: SynapseDeleteContentPayload) => {
       const result = await contentSubmissionService.deleteContent(payload)
+      await notifyPendingPushesUpdated(event.sender)
+      return result
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.listDeleted,
+    async (_event, args: { contentType: SynapseContentType }) =>
+      contentService.listDeletedContent(args.contentType),
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.restore,
+    async (event, payload: SynapseRestoreContentPayload) => {
+      const result = await contentSubmissionService.restoreContent(payload)
+      await notifyPendingPushesUpdated(event.sender)
+      return result
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.purge,
+    async (event, payload: SynapsePurgeContentPayload) => {
+      const result = await contentSubmissionService.purgeContent(payload)
       await notifyPendingPushesUpdated(event.sender)
       return result
     },

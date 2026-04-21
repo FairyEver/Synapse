@@ -19,7 +19,7 @@ type PromptDetailDialogProps = {
 const PROMPT_LABELS: ContentDetailDialogLabels = {
   singular: "提示词",
   deleteConfirmTitle: "确认删除这条提示词？",
-  deleteConfirmDescription: "删除后，这条提示词会从列表里隐藏，但历史记录仍会保留在仓库里。",
+  deleteConfirmDescription: "内容将移入「最近删除」，90 天后自动永久清除。",
   deleteLoading: "正在删除提示词...",
   deleteError: "删除提示词失败。",
   conflictTitle: "有人在你之后改过这条提示词",

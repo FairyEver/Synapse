@@ -418,6 +418,87 @@ class ContentWriteService {
     }
   }
 
+  async restoreContent(
+    contentType: SynapseContentType,
+    contentId: string,
+    identity: SynapseContentAuthor,
+  ): Promise<ContentWriteResult> {
+    const context = await getActiveRepositoryWriteContext(identity)
+    const baseline = await contentHistoryService.readCurrentDetail(
+      context.repository,
+      contentType,
+      contentId,
+    )
+
+    if (!baseline) {
+      throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
+    }
+
+    const modifiedAt = new Date().toISOString()
+    const historyDirname = buildHistoryDirname(identity.userId, new Date(modifiedAt))
+    const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
+    const snapshot = createSnapshotRecord(
+      {
+        title: baseline.title,
+        ...(baseline.name ? { name: baseline.name } : {}),
+        description: baseline.description,
+        category: baseline.category,
+        icon: baseline.icon,
+        iconBg: baseline.iconBg,
+        content: baseline.content,
+      } as ContentCreatePayload,
+      identity,
+      modifiedAt,
+      false,
+    )
+
+    const historyPath = await stageHistoryDirectory(
+      contentDirectoryPath,
+      historyDirname,
+      snapshot,
+      baseline.content,
+      baseline.attachments,
+    )
+
+    return {
+      gitPaths: [contentDirectoryPath, historyPath],
+      id: contentId,
+      latestHistoryDirname: historyDirname,
+      modifiedAt,
+      title: baseline.title,
+      type: contentType,
+    }
+  }
+
+  async purgeContent(
+    contentType: SynapseContentType,
+    contentId: string,
+    identity: SynapseContentAuthor,
+  ): Promise<ContentWriteResult> {
+    const context = await getActiveRepositoryWriteContext(identity)
+    const baseline = await contentHistoryService.readCurrentDetail(
+      context.repository,
+      contentType,
+      contentId,
+    )
+
+    if (!baseline) {
+      throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
+    }
+
+    const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
+    await rm(contentDirectoryPath, { recursive: true, force: true })
+
+    return {
+      gitPaths: [contentDirectoryPath],
+      id: contentId,
+      latestHistoryDirname: baseline.latestHistoryDirname,
+      modifiedAt: new Date().toISOString(),
+      title: baseline.title,
+      type: contentType,
+    }
+  }
+
   async readLatestHistoryDirname(
     contentType: SynapseContentType,
     contentId: string,

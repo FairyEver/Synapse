@@ -88,6 +88,7 @@ function ContentDetailPanel<T extends SynapseContentType>({
             {toolbarAction ? <div className="shrink-0">{toolbarAction}</div> : null}
 
             <Tabs
+              data-track="content-view-mode"
               value={viewMode}
               onValueChange={(value) => onViewModeChange(value === "source" ? "source" : "rendered")}
               className="shrink-0 gap-0"

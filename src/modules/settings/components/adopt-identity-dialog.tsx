@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { useLocalIdentity } from "@/app-shell/identity-context"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import {
   Dialog,
@@ -26,6 +27,7 @@ function AdoptIdentityDialog({
 }: AdoptIdentityDialogProps) {
   const activeRepository = useActiveRepository()
   const { adoptExistingUserId } = useLocalIdentity()
+  const logger = useMemo(() => createRendererLogger("settings.identity"), [])
   const [value, setValue] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -39,14 +41,17 @@ function AdoptIdentityDialog({
 
     setIsSubmitting(true)
     setError(null)
+    logger.info("Adopt identity submitted.", { repositoryUuid: activeRepository.uuid })
 
     void adoptExistingUserId(normalizedValue, activeRepository.uuid)
       .then(() => {
+        logger.info("Adopt identity succeeded.", { repositoryUuid: activeRepository.uuid })
         setValue("")
         setError(null)
         onOpenChange(false)
       })
       .catch((submitError) => {
+        logger.error("Adopt identity failed.", { repositoryUuid: activeRepository.uuid, error: submitError })
         setError(submitError instanceof Error ? submitError.message : "接续身份失败。")
       })
       .finally(() => {

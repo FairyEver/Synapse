@@ -19,7 +19,7 @@ type RuleDetailDialogProps = {
 const RULE_LABELS: ContentDetailDialogLabels = {
   singular: "规则",
   deleteConfirmTitle: "确认删除这条规则？",
-  deleteConfirmDescription: "删除后，这条规则会从列表里隐藏，但历史记录仍会保留在仓库里。",
+  deleteConfirmDescription: "内容将移入「最近删除」，90 天后自动永久清除。",
   deleteLoading: "正在删除 Rule...",
   deleteError: "删除 Rule 失败。",
   conflictTitle: "有人在你之后改过这条规则",
