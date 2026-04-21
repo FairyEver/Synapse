@@ -66,7 +66,11 @@
       "Bash(tail -n +109 electron/services/repository-structure-service.ts)",
       "Bash(mv /tmp/rss1.ts electron/services/repository-structure-service.ts)",
       "Bash(head -31 electron/services/repository-structure-service.ts)",
-      "Bash(tail -n +32 electron/services/repository-structure-service.ts)"
+      "Bash(tail -n +32 electron/services/repository-structure-service.ts)",
+      "Bash(rmdir /Users/liyang/Documents/code/github/Synapse/.claude/skills)",
+      "Bash(rtk ls *)",
+      "Bash(mv /Users/liyang/.claude/skills/detect-duplicate-logs/SKILL.md /Users/liyang/Documents/code/github/Synapse/.claude/skills/detect-duplicate-logs/SKILL.md)",
+      "Bash(rmdir /Users/liyang/.claude/skills/detect-duplicate-logs)"
     ]
   }
 }

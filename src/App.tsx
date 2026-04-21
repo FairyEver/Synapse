@@ -1,4 +1,4 @@
-import { type ComponentType, useCallback, useEffect, useMemo, useState } from "react"
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { EmptyRepositoryState } from "@/app-shell/components/empty-repository-state"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
@@ -95,6 +95,8 @@ function MainApp() {
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
   )
+  const contentDialogStatesRef = useRef(contentDialogStates)
+  contentDialogStatesRef.current = contentDialogStates
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpenRaw] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
 
@@ -106,18 +108,20 @@ function MainApp() {
   // 获取待推送状态
   const activePendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
 
+  const activeTabRef = useRef(activeTab)
+  activeTabRef.current = activeTab
+
   const setActiveTab = useCallback(
     (nextTab: AppTabId, source: "navigation" | "shortcut") => {
-      setActiveTabRaw((prevTab) => {
-        if (prevTab !== nextTab) {
-          logger.info("Top-level tab changed.", {
-            from: prevTab,
-            to: nextTab,
-            source,
-          })
-        }
-        return nextTab
-      })
+      const prevTab = activeTabRef.current
+      if (prevTab !== nextTab) {
+        logger.info("Top-level tab changed.", {
+          from: prevTab,
+          to: nextTab,
+          source,
+        })
+      }
+      setActiveTabRaw(nextTab)
     },
     [],
   )
@@ -138,39 +142,40 @@ function MainApp() {
     kind: DialogKind,
     open: boolean,
   ) => {
-    setContentDialogStates((currentState) => {
-      if (currentState[contentType][kind] === open) {
-        return currentState
-      }
+    const currentState = contentDialogStatesRef.current
+    if (currentState[contentType][kind] === open) {
+      return
+    }
 
-      logger.info("Content dialog visibility changed.", {
-        contentType,
-        dialogKind: kind,
-        open,
-      })
+    logger.info("Content dialog visibility changed.", {
+      contentType,
+      dialogKind: kind,
+      open,
+    })
 
-      return {
-        ...currentState,
-        [contentType]: {
-          ...currentState[contentType],
-          [kind]: open,
-        },
-      }
+    setContentDialogStates({
+      ...currentState,
+      [contentType]: {
+        ...currentState[contentType],
+        [kind]: open,
+      },
     })
   }, [])
 
+  const isPendingPushDialogOpenRef = useRef(isPendingPushDialogOpen)
+  isPendingPushDialogOpenRef.current = isPendingPushDialogOpen
+
   const setPendingPushDialogOpen = useCallback(
     (nextOpen: boolean, source: "sync-chip" | "dialog") => {
-      setIsPendingPushDialogOpenRaw((prevOpen) => {
-        if (prevOpen !== nextOpen) {
-          logger.info("Pending push dialog visibility changed.", {
-            from: prevOpen,
-            to: nextOpen,
-            source,
-          })
-        }
-        return nextOpen
-      })
+      const prevOpen = isPendingPushDialogOpenRef.current
+      if (prevOpen !== nextOpen) {
+        logger.info("Pending push dialog visibility changed.", {
+          from: prevOpen,
+          to: nextOpen,
+          source,
+        })
+      }
+      setIsPendingPushDialogOpenRaw(nextOpen)
     },
     [],
   )

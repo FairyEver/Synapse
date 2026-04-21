@@ -420,25 +420,27 @@ function ContentBrowserPage({
   )
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryIdRaw] = useState(SYNAPSE_ALL_CATEGORY_ID)
+  const activeCategoryIdRef = useRef(activeCategoryId)
+  activeCategoryIdRef.current = activeCategoryId
   const setActiveCategoryId = useCallback((nextId: string) => {
-    setActiveCategoryIdRaw((prevId) => {
-      if (prevId !== nextId) {
-        logger.info("Category switched.", { contentType, from: prevId, to: nextId })
-      }
-      return nextId
-    })
+    const prevId = activeCategoryIdRef.current
+    if (prevId !== nextId) {
+      logger.info("Category switched.", { contentType, from: prevId, to: nextId })
+    }
+    setActiveCategoryIdRaw(nextId)
   }, [contentType, logger])
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
   const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
   const [busyItemId, setBusyItemId] = useState<string | null>(null)
   const [deletedFilter, setDeletedFilterRaw] = useState<"mine" | "all">("mine")
+  const deletedFilterRef = useRef(deletedFilter)
+  deletedFilterRef.current = deletedFilter
   const setDeletedFilter = useCallback((nextFilter: "mine" | "all") => {
-    setDeletedFilterRaw((prevFilter) => {
-      if (prevFilter !== nextFilter) {
-        logger.info("Deleted filter changed.", { contentType, from: prevFilter, to: nextFilter })
-      }
-      return nextFilter
-    })
+    const prevFilter = deletedFilterRef.current
+    if (prevFilter !== nextFilter) {
+      logger.info("Deleted filter changed.", { contentType, from: prevFilter, to: nextFilter })
+    }
+    setDeletedFilterRaw(nextFilter)
   }, [contentType, logger])
   const [batchAction, setBatchAction] = useState<"restore" | "purge" | null>(null)
   const batchBusyRef = useRef(false)

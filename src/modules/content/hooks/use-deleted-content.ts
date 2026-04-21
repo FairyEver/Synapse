@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { listDeletedContent } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
@@ -17,25 +17,31 @@ function useDeletedContent(contentType: SynapseContentType): UseDeletedContentRe
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true)
     setError(null)
     const startedAt = performance.now()
 
     try {
       const result = await listDeletedContent(contentType)
+      if (signal?.aborted) return
       setItems(result)
       logger.info("Deleted content loaded.", { contentType, count: result.length, elapsedMs: Math.round(performance.now() - startedAt) })
     } catch (err) {
+      if (signal?.aborted) return
       logger.error("Failed to load deleted content.", { contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
       setError(err instanceof Error ? err : new Error("加载已删除内容失败。"))
     } finally {
-      setIsLoading(false)
+      if (!signal?.aborted) {
+        setIsLoading(false)
+      }
     }
   }, [contentType, logger])
 
   useEffect(() => {
-    void refresh()
+    const controller = new AbortController()
+    void refresh(controller.signal)
+    return () => controller.abort()
   }, [refresh])
 
   return {

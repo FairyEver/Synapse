@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -36,15 +36,16 @@ function SettingsModule() {
   const { replaceRepositories } = useRepositoryActions()
   const { promise } = useAppNotifications()
   const [activeCategory, setActiveCategoryRaw] = useState<SettingsCategoryId>("general")
+  const activeCategoryRef = useRef(activeCategory)
+  activeCategoryRef.current = activeCategory
   const [isAdminMode, setIsAdminModeState] = useState(sessionAdminMode)
 
   const setActiveCategory = useCallback((nextCategory: SettingsCategoryId) => {
-    setActiveCategoryRaw((prev) => {
-      if (prev !== nextCategory) {
-        logger.info("Settings category switched.", { from: prev, to: nextCategory })
-      }
-      return nextCategory
-    })
+    const prev = activeCategoryRef.current
+    if (prev !== nextCategory) {
+      logger.info("Settings category switched.", { from: prev, to: nextCategory })
+    }
+    setActiveCategoryRaw(nextCategory)
   }, [])
 
   const setIsAdminMode = useCallback((enabled: boolean) => {

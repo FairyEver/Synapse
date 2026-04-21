@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   openContentDetailWindow,
 } from "@/app-shell/content"
@@ -132,6 +132,10 @@ function ContentDetailDialog<TPayload>({
     open,
     refreshSignal,
   })
+  const viewModeRef = useRef(viewMode)
+  viewModeRef.current = viewMode
+  const selectedHistoryDirnameRef = useRef(selectedHistoryDirname)
+  selectedHistoryDirnameRef.current = selectedHistoryDirname
   const { isFavorite, toggleFavorite } = useContentFavorites()
   const isItemFavorite = item ? isFavorite(contentType, item.id) : false
   const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
@@ -150,31 +154,29 @@ function ContentDetailDialog<TPayload>({
           : null
 
   const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
-    setViewModeRaw((prevViewMode) => {
-      if (prevViewMode !== nextViewMode) {
-        logger.info("Content view mode changed.", {
-          contentId: item?.id ?? null,
-          contentType,
-          from: prevViewMode,
-          to: nextViewMode,
-        })
-      }
-      return nextViewMode
-    })
+    const prevViewMode = viewModeRef.current
+    if (prevViewMode !== nextViewMode) {
+      logger.info("Content view mode changed.", {
+        contentId: item?.id ?? null,
+        contentType,
+        from: prevViewMode,
+        to: nextViewMode,
+      })
+    }
+    setViewModeRaw(nextViewMode)
   }, [contentType, item?.id, logger, setViewModeRaw])
 
   const handleHistorySelectionChange = useCallback((nextHistoryDirname: string | null) => {
-    setSelectedHistoryDirnameRaw((prevHistoryDirname) => {
-      if (prevHistoryDirname !== nextHistoryDirname) {
-        logger.info("Content history version changed.", {
-          contentId: item?.id ?? null,
-          contentType,
-          from: prevHistoryDirname ?? "current",
-          to: nextHistoryDirname ?? "current",
-        })
-      }
-      return nextHistoryDirname
-    })
+    const prevHistoryDirname = selectedHistoryDirnameRef.current
+    if (prevHistoryDirname !== nextHistoryDirname) {
+      logger.info("Content history version changed.", {
+        contentId: item?.id ?? null,
+        contentType,
+        from: prevHistoryDirname ?? "current",
+        to: nextHistoryDirname ?? "current",
+      })
+    }
+    setSelectedHistoryDirnameRaw(nextHistoryDirname)
   }, [contentType, item?.id, logger, setSelectedHistoryDirnameRaw])
 
   useEffect(() => {
