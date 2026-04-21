@@ -207,6 +207,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     }
 
     setActionError(null)
+    logger.info("App update action triggered.", { currentStatus: updateState.status })
 
     try {
       const nextState = await bridge.checkForUpdates()
@@ -225,6 +226,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     if (!bridge) {
       return
     }
+
+    logger.info("App update download cancelled.")
 
     try {
       await bridge.cancelDownload()

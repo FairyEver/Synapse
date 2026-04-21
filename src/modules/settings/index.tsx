@@ -170,9 +170,6 @@ function SettingsModule() {
           categories={visibleCategories}
           activeCategory={activeCategory}
           onCategoryChange={(nextCategory) => {
-            logger.info("Settings category changed.", {
-              nextCategory,
-            })
             setActiveCategory(nextCategory)
           }}
         />

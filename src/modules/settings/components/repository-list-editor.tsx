@@ -250,6 +250,7 @@ function RepositoryListEditor({
   }
 
   const handleEditRepository = (repository: SynapseRepositoryConfig) => {
+    logger.info("Repository edit dialog opened.", { repositoryUuid: repository.uuid })
     setEditingRepository(repository)
     setEditName(repository.name)
     setEditPath(repository.localPath)
@@ -313,6 +314,7 @@ function RepositoryListEditor({
 
     setIsSavingEdit(true)
     setEditError(null)
+    logger.info("Repository edit saving.", { repositoryUuid: editingRepository.uuid, name: trimmedName })
 
     try {
       const updatedRepository: SynapseRepositoryConfig = {

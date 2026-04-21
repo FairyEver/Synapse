@@ -110,6 +110,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   }
 
   const handleEditProject = (project: SynapseProjectConfig) => {
+    logger.info("Project edit dialog opened.", { projectId: project.id })
     setEditingProject(project)
     setEditName(project.name)
     setEditPath(project.path)

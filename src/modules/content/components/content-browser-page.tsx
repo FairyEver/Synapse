@@ -431,7 +431,15 @@ function ContentBrowserPage({
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
   const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
   const [busyItemId, setBusyItemId] = useState<string | null>(null)
-  const [deletedFilter, setDeletedFilter] = useState<"mine" | "all">("mine")
+  const [deletedFilter, setDeletedFilterRaw] = useState<"mine" | "all">("mine")
+  const setDeletedFilter = useCallback((nextFilter: "mine" | "all") => {
+    setDeletedFilterRaw((prevFilter) => {
+      if (prevFilter !== nextFilter) {
+        logger.info("Deleted filter changed.", { contentType, from: prevFilter, to: nextFilter })
+      }
+      return nextFilter
+    })
+  }, [contentType, logger])
   const [batchAction, setBatchAction] = useState<"restore" | "purge" | null>(null)
   const batchBusyRef = useRef(false)
   const isDeletedView = activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID
@@ -446,11 +454,19 @@ function ContentBrowserPage({
     && !isSyncing
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
   const deferredSearchQuery = useDeferredValue(normalizedSearchQuery)
+  const lastLoggedSearchQueryRef = useRef(deferredSearchQuery)
 
   useEffect(() => {
-    if (deferredSearchQuery) {
-      logger.info("Search query applied.", { contentType, query: deferredSearchQuery })
+    if (lastLoggedSearchQueryRef.current === deferredSearchQuery) {
+      return
     }
+
+    logger.info("Search query changed.", {
+      contentType,
+      from: lastLoggedSearchQueryRef.current,
+      to: deferredSearchQuery,
+    })
+    lastLoggedSearchQueryRef.current = deferredSearchQuery
   }, [deferredSearchQuery, contentType, logger])
 
   useEffect(() => {

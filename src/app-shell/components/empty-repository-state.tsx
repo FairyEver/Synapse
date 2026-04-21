@@ -98,6 +98,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     const parentPath = await chooseDirectory()
     if (!parentPath) return
 
+    logger.info("Create repository dialog opened from empty state.", { parentPath })
     setCreateParentPath(parentPath)
     setCreateName("")
     setCreateNameError(null)
@@ -115,10 +116,18 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     setCreateNameError(null)
 
     try {
+      logger.info("Creating local repository from empty state.", {
+        name: createName.trim(),
+        parentPath: createParentPath,
+      })
       await createLocalRepositoryAndAdd(
         { name: createName.trim(), parentPath: createParentPath },
         { activate: true },
       )
+      logger.info("Local repository created from empty state.", {
+        name: createName.trim(),
+        parentPath: createParentPath,
+      })
       setIsCreateDialogOpen(false)
       resetCreateForm()
     } catch (err) {

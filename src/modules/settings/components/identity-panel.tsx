@@ -36,6 +36,7 @@ function IdentityPanel() {
                 <InputGroupButton
                   type="button"
                   onClick={() => {
+                    logger.info("User ID copied to clipboard.")
                     void promise(
                       () => navigator.clipboard.writeText(localIdentityState.identity.userId),
                       {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   openContentDetailWindow,
 } from "@/app-shell/content"
@@ -120,8 +120,8 @@ function ContentDetailDialog<TPayload>({
     isLoading,
     previewError,
     selectedHistoryDirname,
-    setSelectedHistoryDirname,
-    setViewMode,
+    setSelectedHistoryDirname: setSelectedHistoryDirnameRaw,
+    setViewMode: setViewModeRaw,
     viewMode,
   } = useContentDetailState({
     invalidTypeMessage: `读取到的内容不是 ${labels.singular}。`,
@@ -149,15 +149,43 @@ function ContentDetailDialog<TPayload>({
           ? "正在同步变更，请稍后。"
           : null
 
+  const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
+    setViewModeRaw((prevViewMode) => {
+      if (prevViewMode !== nextViewMode) {
+        logger.info("Content view mode changed.", {
+          contentId: item?.id ?? null,
+          contentType,
+          from: prevViewMode,
+          to: nextViewMode,
+        })
+      }
+      return nextViewMode
+    })
+  }, [contentType, item?.id, logger, setViewModeRaw])
+
+  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string | null) => {
+    setSelectedHistoryDirnameRaw((prevHistoryDirname) => {
+      if (prevHistoryDirname !== nextHistoryDirname) {
+        logger.info("Content history version changed.", {
+          contentId: item?.id ?? null,
+          contentType,
+          from: prevHistoryDirname ?? "current",
+          to: nextHistoryDirname ?? "current",
+        })
+      }
+      return nextHistoryDirname
+    })
+  }, [contentType, item?.id, logger, setSelectedHistoryDirnameRaw])
+
   useEffect(() => {
     if (!open) {
-      setViewMode("rendered")
-      setSelectedHistoryDirname(null)
+      setViewModeRaw("rendered")
+      setSelectedHistoryDirnameRaw(null)
       setIsEditOpen(false)
       setIsDeleteConfirmOpen(false)
       setConflictState(null)
     }
-  }, [open, setViewMode, setSelectedHistoryDirname])
+  }, [open, setSelectedHistoryDirnameRaw, setViewModeRaw])
 
   if (!item) {
     return null
@@ -177,6 +205,11 @@ function ContentDetailDialog<TPayload>({
       return
     }
 
+    logger.info(`${labels.singular} save initiated from detail dialog.`, {
+      contentId: detail.id,
+      contentType,
+      force,
+    })
     setIsEditOpen(false)
     onOpenChange(false)
 
@@ -234,6 +267,11 @@ function ContentDetailDialog<TPayload>({
   }
 
   const handleDelete = async (force = false) => {
+    logger.info(`${labels.singular} delete initiated from detail dialog.`, {
+      contentId: deleteTarget.id,
+      contentType,
+      force,
+    })
     await promise(
       () => manager.deleteContent({
         id: deleteTarget.id,
@@ -291,6 +329,12 @@ function ContentDetailDialog<TPayload>({
 
   const handleOpenInNewWindow = async () => {
     try {
+      logger.info("Open content detail in new window requested.", {
+        contentId: item.id,
+        contentType,
+        viewMode,
+        historyDirname: selectedHistoryDirname ?? displayedVersion?.historyDirname ?? null,
+      })
       await openContentDetailWindow({
         contentType: item.type,
         id: item.id,
@@ -348,7 +392,7 @@ function ContentDetailDialog<TPayload>({
             <AlertDialogCancel
               onClick={() => {
                 if (conflictState) {
-                  setSelectedHistoryDirname(conflictState.latestHistoryDirname)
+                  handleHistorySelectionChange(conflictState.latestHistoryDirname)
                 }
               }}
             >
@@ -430,8 +474,8 @@ function ContentDetailDialog<TPayload>({
               history={historyEntries}
               isLoading={isLoading}
               loadingTitle={labels.loadingTitle}
-              onSelectedHistoryDirnameChange={setSelectedHistoryDirname}
-              onViewModeChange={setViewMode}
+              onSelectedHistoryDirnameChange={handleHistorySelectionChange}
+              onViewModeChange={handleViewModeChange}
               previewError={previewError}
               renderVersion={renderVersionView}
               selectedHistoryDirname={selectedHistoryDirname}

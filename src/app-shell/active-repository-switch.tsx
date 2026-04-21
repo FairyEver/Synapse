@@ -85,6 +85,11 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
 
   const runActiveRepositorySwitch = useCallback(
     async (repositoryUuid: string) => {
+      logger.info("Active repository switch initiated.", {
+        from: activeRepository?.uuid ?? null,
+        to: repositoryUuid,
+      })
+
       await promise(
         () => switchRepository(repositoryUuid),
         {
@@ -93,6 +98,11 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
           error: (error) => error instanceof Error ? error.message : "切换仓库失败。",
         },
       )
+
+      logger.info("Active repository switch completed.", {
+        from: activeRepository?.uuid ?? null,
+        to: repositoryUuid,
+      })
 
       // Attempt background sync — don't block the switch
       void syncRepository(repositoryUuid).catch((syncError) => {
@@ -107,14 +117,16 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
         ).catch(() => { /* notification handled */ })
       })
     },
-    [promise, switchRepository, syncRepository],
+    [activeRepository?.uuid, promise, switchRepository, syncRepository],
   )
 
   const openRepositorySwitchDialog = useCallback(() => {
+    logger.info("Repository switch dialog opened.")
     setIsRepositorySwitchDialogOpen(true)
   }, [])
 
   const closeRepositorySwitchDialog = useCallback(() => {
+    logger.info("Repository switch dialog closed.")
     setIsRepositorySwitchDialogOpen(false)
   }, [])
 
@@ -130,8 +142,13 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const cancelPendingSwitchOnboarding = useCallback(() => {
+    if (pendingSwitchOnboarding) {
+      logger.info("Repository switch onboarding canceled.", {
+        repositoryUuid: pendingSwitchOnboarding.repositoryUuid,
+      })
+    }
     resolvePendingSwitch(false)
-  }, [resolvePendingSwitch])
+  }, [pendingSwitchOnboarding, resolvePendingSwitch])
 
   const completePendingSwitchOnboarding = useCallback(
     async (displayName: string) => {
@@ -193,6 +210,9 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
         }
 
         if (repoProfileState.status === "needs-onboarding") {
+          logger.info("Repository switch requires onboarding.", {
+            repositoryUuid,
+          })
           setPendingSwitchOnboarding({
             repositoryUuid,
             repositoryName: targetRepository.name,

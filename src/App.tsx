@@ -91,11 +91,11 @@ function MainApp() {
   const { promise } = useAppNotifications()
   const manager = useRepositoryManager()
   const { pushRepository, syncRepository } = useRepositoryActions()
-  const [activeTab, setActiveTab] = useState<AppTabId>("rule")
+  const [activeTab, setActiveTabRaw] = useState<AppTabId>("rule")
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
   )
-  const [isPendingPushDialogOpen, setIsPendingPushDialogOpen] = useState(false)
+  const [isPendingPushDialogOpen, setIsPendingPushDialogOpenRaw] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
 
   // 检查是否需要显示空状态页面
@@ -105,6 +105,22 @@ function MainApp() {
 
   // 获取待推送状态
   const activePendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
+
+  const setActiveTab = useCallback(
+    (nextTab: AppTabId, source: "navigation" | "shortcut") => {
+      setActiveTabRaw((prevTab) => {
+        if (prevTab !== nextTab) {
+          logger.info("Top-level tab changed.", {
+            from: prevTab,
+            to: nextTab,
+            source,
+          })
+        }
+        return nextTab
+      })
+    },
+    [],
+  )
 
   const tabs = useMemo(
     () => [
@@ -127,6 +143,12 @@ function MainApp() {
         return currentState
       }
 
+      logger.info("Content dialog visibility changed.", {
+        contentType,
+        dialogKind: kind,
+        open,
+      })
+
       return {
         ...currentState,
         [contentType]: {
@@ -136,6 +158,22 @@ function MainApp() {
       }
     })
   }, [])
+
+  const setPendingPushDialogOpen = useCallback(
+    (nextOpen: boolean, source: "sync-chip" | "dialog") => {
+      setIsPendingPushDialogOpenRaw((prevOpen) => {
+        if (prevOpen !== nextOpen) {
+          logger.info("Pending push dialog visibility changed.", {
+            from: prevOpen,
+            to: nextOpen,
+            source,
+          })
+        }
+        return nextOpen
+      })
+    },
+    [],
+  )
 
   const contentDialogHandlers = useMemo(
     () => Object.fromEntries(
@@ -189,9 +227,9 @@ function MainApp() {
 
   useEffect(() => {
     return subscribeOpenSettingsTab(() => {
-      setActiveTab("settings")
+      setActiveTab("settings", "shortcut")
     })
-  }, [])
+  }, [setActiveTab])
 
   const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
   const toolbarState = useAppShellToolbarState({
@@ -210,7 +248,10 @@ function MainApp() {
 
   return (
     <IdentityGate>
-      <AlertDialog open={isPendingPushDialogOpen} onOpenChange={setIsPendingPushDialogOpen}>
+      <AlertDialog
+        open={isPendingPushDialogOpen}
+        onOpenChange={(open) => setPendingPushDialogOpen(open, "dialog")}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>同步变更</AlertDialogTitle>
@@ -268,12 +309,7 @@ function MainApp() {
           <AppShellNavigation
             tabs={tabs}
             value={activeTab}
-            onValueChange={(value) => {
-              logger.info("Top-level tab changed.", {
-                nextTab: value,
-              })
-              setActiveTab(value as AppTabId)
-            }}
+            onValueChange={(value) => setActiveTab(value as AppTabId, "navigation")}
           />
         }
         actions={
@@ -288,7 +324,7 @@ function MainApp() {
             showRefresh={toolbarState.showRefresh}
             showRepositorySwitch={toolbarState.showRepositorySwitch}
             syncStatus={toolbarState.syncStatus}
-            onSyncChipClick={() => setIsPendingPushDialogOpen(true)}
+            onSyncChipClick={() => setPendingPushDialogOpen(true, "sync-chip")}
             onRefresh={() => {
               if (!activeRepository) {
                 return
