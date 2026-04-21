@@ -16,6 +16,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
     peekCursorFrontmatter: "synapse:content:peek-cursor-frontmatter",
+    peekClaudeCodeFrontmatter: "synapse:content:peek-claude-code-frontmatter",
     readIconImage: "synapse:content:read-icon-image",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },

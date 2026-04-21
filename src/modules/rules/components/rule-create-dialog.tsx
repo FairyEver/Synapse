@@ -17,15 +17,15 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { getCategoryDefinitions } from "@/lib/content-categories"
-import {
-  createEmptyContentPayload,
-  normalizeContentPayload,
-  validateContentPayload,
-} from "@/modules/content/lib/content-payload"
 import { ContentAppearanceFields } from "@/modules/content/components/content-appearance-fields"
 import { ContentCreateDialog } from "@/modules/content/components/content-create-dialog"
 import { useContentCreateForm } from "@/modules/content/hooks/use-content-create-form"
 import { useContentIconImage } from "@/modules/content/hooks/use-content-icon-image"
+import {
+  createEmptyRulePayload,
+  normalizeCreateRulePayload,
+  validateCreateRulePayload,
+} from "@/modules/rules/utils"
 import type { SynapseContentIconType, SynapseCreateRulePayload } from "@/types/content"
 
 type RuleCreateDialogProps = {
@@ -39,16 +39,10 @@ type RuleCreateDialogProps = {
   editingId?: string | null
 }
 
-const RULE_LABELS = {
-  title: "请输入标题。",
-  description: "请输入简介。",
-  content: "请输入正文。",
-}
-
 const RULE_FORM_CONFIG = {
-  createEmpty: () => createEmptyContentPayload<SynapseCreateRulePayload>(),
-  normalize: (p: SynapseCreateRulePayload) => normalizeContentPayload(p),
-  validate: (p: SynapseCreateRulePayload) => validateContentPayload(p, { labels: RULE_LABELS }),
+  createEmpty: () => createEmptyRulePayload(),
+  normalize: (p: SynapseCreateRulePayload) => normalizeCreateRulePayload(p),
+  validate: (p: SynapseCreateRulePayload) => validateCreateRulePayload(p),
   errorFallbackMessage: "保存 Rule 失败。",
 }
 
@@ -138,6 +132,24 @@ function RuleCreateDialog({
               placeholder="PR 评审规范"
             />
             <FieldError>{errors.title}</FieldError>
+          </FieldContent>
+        </Field>
+
+        <Field data-invalid={errors.name ? true : undefined}>
+          <FieldLabel htmlFor="rule-create-name">名称</FieldLabel>
+          <FieldContent>
+            <Input
+              id="rule-create-name"
+              value={form.name}
+              aria-invalid={errors.name ? "true" : undefined}
+              className="font-mono"
+              onChange={(event) => updateField("name", event.target.value)}
+              placeholder="code-style"
+            />
+            <p className="text-xs text-muted-foreground">
+              小写字母、数字、连字符，3-64 字符。安装到编辑器时用作文件名。
+            </p>
+            <FieldError>{errors.name}</FieldError>
           </FieldContent>
         </Field>
 

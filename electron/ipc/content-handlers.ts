@@ -14,6 +14,8 @@ import type {
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseInstallToEditorPayload,
+  SynapsePeekClaudeCodeFrontmatterPayload,
+  SynapsePeekClaudeCodeFrontmatterResult,
   SynapsePeekCursorFrontmatterPayload,
   SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
@@ -377,6 +379,16 @@ function registerContentHandlers() {
       payload: SynapsePeekCursorFrontmatterPayload,
     ): Promise<SynapsePeekCursorFrontmatterResult> => {
       return contentInstallService.peekCursorFrontmatter(payload)
+    },
+  )
+
+  handleValidatedIpc(
+    SYNAPSE_IPC_CHANNELS.content.peekClaudeCodeFrontmatter,
+    async (
+      _event,
+      payload: SynapsePeekClaudeCodeFrontmatterPayload,
+    ): Promise<SynapsePeekClaudeCodeFrontmatterResult> => {
+      return contentInstallService.peekClaudeCodeFrontmatter(payload)
     },
   )
 

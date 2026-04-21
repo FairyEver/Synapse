@@ -242,7 +242,11 @@ class ContentSubmissionService {
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
 
-    return this.updateContentWithConflictCheck(request.contentType, request.payload, identity)
+    return this.updateContentWithConflictCheck(
+      request.contentType,
+      request.payload as SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
+      identity,
+    )
   }
 
   async updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {

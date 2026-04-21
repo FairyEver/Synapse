@@ -9,6 +9,7 @@ export type EditorAdapterResolveContext = {
   contentType: SynapseContentType
   skillName?: string
   skillTitle?: string
+  ruleName?: string
 }
 
 export interface EditorAdapter extends SynapseEditorAdapterSummary {

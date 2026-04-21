@@ -39,9 +39,11 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | 类型 | 范围 | 目标路径 |
 | --- | --- | --- |
 | 规则 | 全局 | `~/.claude/CLAUDE.md` |
-| 规则 | 项目 | `{projectPath}/CLAUDE.md` |
+| 规则 | 项目 | `{projectPath}/.claude/rules/{name}.md` |
 | 技能 | 全局 | `~/.claude/skills/{contentId}/` |
 | 技能 | 项目 | `{projectPath}/.claude/skills/{contentId}/` |
+
+项目规则以独立 `.md` 文件写入 `.claude/rules/` 目录，文件名取规则的 `name` 字段。如果规则尚未设置名称，则自动使用 `synapse_{contentId}` 作为文件名。安装时可选填 `paths` frontmatter，限定规则仅在匹配文件进入 context 时加载。
 
 #### Codex
 
@@ -65,7 +67,7 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 
 ### 规则与技能的写入形式
 
-- **规则**：写入单个 Markdown 文件。文件名依编辑器而定 —— Claude Code 用 `CLAUDE.md`，Codex 用 `AGENTS.md`，Cursor 用 `{contentId}.mdc`（Cursor 原生 MDC 规则格式）。
+- **规则**：写入单个 Markdown 文件。Claude Code 项目规则写入 `.claude/rules/{name}.md`（独立文件，支持可选的 `paths` frontmatter）；Claude Code 全局规则和 Codex 规则合并写入 `CLAUDE.md` / `AGENTS.md`（用 HTML 注释标记分隔）；Cursor 规则写入 `{contentId}.mdc`（Cursor 原生 MDC 规则格式）。
 - **技能**：写入一个完整目录，目录中包含 `SKILL.md` 主文件和全部附件（附件保留原文件名）。
 
 所有写入都是原子操作：新内容先写入临时位置，就绪后再整体替换目标；失败会自动回滚，不会留下半坏的文件或目录。

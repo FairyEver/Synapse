@@ -82,7 +82,7 @@ const claudeCodeAdapter: EditorAdapter = {
         throw new Error(`${claudeCodeAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
   },
-  async resolveProjectTarget(projectPath, { contentId, contentType, skillName, skillTitle }) {
+  async resolveProjectTarget(projectPath, { contentId, contentType, skillName, skillTitle, ruleName }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
         adapter: claudeCodeAdapter,
@@ -103,14 +103,17 @@ const claudeCodeAdapter: EditorAdapter = {
     }
 
     switch (contentType) {
-      case "rule":
+      case "rule": {
+        const effectiveRuleName = ruleName?.trim() || `synapse_${contentId}`
+        const targetPath = path.join(resolvedProjectPath, ".claude", "rules", `${effectiveRuleName}.md`)
         return createReadyTarget({
           adapter: claudeCodeAdapter,
           contentType,
           scope: "project",
           targetKind: "file",
-          targetPath: path.join(resolvedProjectPath, "CLAUDE.md"),
+          targetPath,
         })
+      }
       case "skill": {
         const parentDirectoryPath = path.join(resolvedProjectPath, ".claude", "skills")
         const slug = resolveSkillSlug(skillName, skillTitle, contentId)

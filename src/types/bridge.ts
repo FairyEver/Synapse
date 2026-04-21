@@ -29,6 +29,8 @@ import type {
   SynapseContentInstallResult,
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
+  SynapsePeekClaudeCodeFrontmatterPayload,
+  SynapsePeekClaudeCodeFrontmatterResult,
   SynapsePeekCursorFrontmatterPayload,
   SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
@@ -96,6 +98,9 @@ export type SynapseBridge = {
     peekCursorFrontmatter: (
       payload: SynapsePeekCursorFrontmatterPayload,
     ) => Promise<SynapsePeekCursorFrontmatterResult>
+    peekClaudeCodeFrontmatter: (
+      payload: SynapsePeekClaudeCodeFrontmatterPayload,
+    ) => Promise<SynapsePeekClaudeCodeFrontmatterResult>
     readIconImage: (
       args: { contentType: SynapseContentType; id: string },
     ) => Promise<string | null>

@@ -34,6 +34,11 @@ export type SynapseResolveEditorTargetPayload = {
    * `name` yet. Slugified to produce a directory name.
    */
   skillTitle?: string
+  /**
+   * Rule's explicit ASCII identifier. Used as the filename for Claude Code
+   * project-scope rules (`.claude/rules/{ruleName}.md`).
+   */
+  ruleName?: string
 }
 
 export type CursorRuleFrontmatter = {
@@ -42,8 +47,13 @@ export type CursorRuleFrontmatter = {
   alwaysApply: boolean
 }
 
+export type ClaudeCodeRuleFrontmatter = {
+  paths: string
+}
+
 export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & {
   cursorFrontmatter?: CursorRuleFrontmatter
+  claudeCodeFrontmatter?: ClaudeCodeRuleFrontmatter
   /**
    * When true, indicates user has confirmed replacing an existing Skill.
    * The existing Skill directory will be backed up before installation.
@@ -93,4 +103,12 @@ export type SynapseContentInstallResult = {
   contentId: string
   targetKind: SynapseEditorInstallTargetKind
   targetPath: string
+}
+
+export type SynapsePeekClaudeCodeFrontmatterPayload = {
+  targetPath: string
+}
+
+export type SynapsePeekClaudeCodeFrontmatterResult = {
+  frontmatter: ClaudeCodeRuleFrontmatter | null
 }

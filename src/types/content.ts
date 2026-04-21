@@ -18,9 +18,9 @@ export type SynapseContentSnapshotRecord = {
   schemaVersion: SynapseContentSchemaVersion
   title: string
   /**
-   * Skill-only. Required when creating/updating a Skill. Absent for Rule and for
-   * legacy Skill snapshots written before this field existed; the edit dialog
-   * forces migration on next save.
+   * Skill/Rule identifier slug. Required when creating/updating a Skill or Rule.
+   * Absent for legacy snapshots written before this field existed; the edit
+   * dialog forces migration on next save.
    */
   name?: string
   description: string
@@ -49,7 +49,7 @@ export type SynapseContentAttachmentsRecord = {
 type SynapseContentSummaryBase = {
   id: string
   title: string
-  /** Skill-only identifier slug. Optional here for shared-type convenience. */
+  /** Skill/Rule identifier slug. Optional here for shared-type convenience. */
   name?: string
   description: string
   category: string
@@ -147,7 +147,11 @@ export type SynapseCreateContentPayload<T extends SynapseContentType = SynapseCo
         name: string
         files: SynapseCreateSkillFilePayload[]
       }
-    : SynapseCreateContentPayloadBase
+    : T extends "rule"
+      ? SynapseCreateContentPayloadBase & {
+          name: string
+        }
+      : SynapseCreateContentPayloadBase
 
 export type SynapseCreateRulePayload = SynapseCreateContentPayload<"rule">
 
@@ -167,7 +171,11 @@ export type SynapseUpdateContentPayload<T extends SynapseContentType = SynapseCo
         name: string
         files: SynapseCreateSkillFilePayload[]
       }
-    : SynapseUpdateContentPayloadBase
+    : T extends "rule"
+      ? SynapseUpdateContentPayloadBase & {
+          name: string
+        }
+      : SynapseUpdateContentPayloadBase
 
 export type SynapseUpdateRulePayload = SynapseUpdateContentPayload<"rule">
 

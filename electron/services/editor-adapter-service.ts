@@ -63,6 +63,7 @@ class EditorAdapterService {
         contentType: payload.contentType,
         skillName: payload.skillName,
         skillTitle: payload.skillTitle,
+        ruleName: payload.ruleName,
       })
     }
 
@@ -80,6 +81,7 @@ class EditorAdapterService {
       contentType: payload.contentType,
       skillName: payload.skillName,
       skillTitle: payload.skillTitle,
+      ruleName: payload.ruleName,
     })
   }
 }

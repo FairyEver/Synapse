@@ -5,7 +5,7 @@ import {
 import { buildBaseContentInitialValue } from "@/modules/content/lib/content-payload"
 import { RuleCreateDialog } from "@/modules/rules/components/rule-create-dialog"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
-import type { SynapseCreateRulePayload, SynapseRuleMeta } from "@/types/content"
+import type { SynapseContentDetail, SynapseCreateRulePayload, SynapseRuleMeta } from "@/types/content"
 import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
 
 type RuleDetailDialogProps = {
@@ -56,7 +56,10 @@ function RuleDetailDialog({
           version={version as unknown as SynapseLoadedContentVersion<"rule">}
         />
       )}
-      buildInitialValue={buildBaseContentInitialValue}
+      buildInitialValue={(detail: SynapseContentDetail): SynapseCreateRulePayload => ({
+        ...buildBaseContentInitialValue(detail),
+        name: detail.name ?? "",
+      })}
     />
   )
 }

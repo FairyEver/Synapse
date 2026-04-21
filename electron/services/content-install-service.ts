@@ -5,6 +5,8 @@ import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type {
   SynapseContentInstallResult,
   SynapseInstallToEditorPayload,
+  SynapsePeekClaudeCodeFrontmatterPayload,
+  SynapsePeekClaudeCodeFrontmatterResult,
   SynapsePeekCursorFrontmatterPayload,
   SynapsePeekCursorFrontmatterResult,
 } from "../../src/types/editor"
@@ -14,6 +16,7 @@ import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { parseMdcFrontmatter, serializeMdcFrontmatter } from "./editor-adapters/cursor-mdc"
+import { parseClaudeCodeFrontmatter, serializeClaudeCodeFrontmatter } from "./editor-adapters/claude-code-frontmatter"
 import { applyRuleSection } from "./editor-adapters/rule-section"
 import {
   SYNAPSE_SKILL_ID_FILE_NAME,
@@ -196,6 +199,15 @@ class ContentInstallService {
               : ruleBody
             await replaceFileAtomically(target.targetPath, wrapped)
           } else if (
+            payload.editorId === "claude-code"
+            && payload.contentType === "rule"
+            && payload.scope === "project"
+          ) {
+            const frontmatterPrefix = payload.claudeCodeFrontmatter
+              ? serializeClaudeCodeFrontmatter(payload.claudeCodeFrontmatter)
+              : ""
+            await replaceFileAtomically(target.targetPath, frontmatterPrefix + ruleBody)
+          } else if (
             payload.contentType === "rule"
             && (payload.editorId === "claude-code" || payload.editorId === "codex")
           ) {
@@ -311,6 +323,21 @@ class ContentInstallService {
     try {
       const existing = await readFile(payload.targetPath, "utf8")
       return { frontmatter: parseMdcFrontmatter(existing) }
+    } catch (error) {
+      if (isFileNotFoundError(error)) {
+        return { frontmatter: null }
+      }
+
+      throw error
+    }
+  }
+
+  async peekClaudeCodeFrontmatter(
+    payload: SynapsePeekClaudeCodeFrontmatterPayload,
+  ): Promise<SynapsePeekClaudeCodeFrontmatterResult> {
+    try {
+      const existing = await readFile(payload.targetPath, "utf8")
+      return { frontmatter: parseClaudeCodeFrontmatter(existing) }
     } catch (error) {
       if (isFileNotFoundError(error)) {
         return { frontmatter: null }

@@ -26,6 +26,8 @@ import type {
   SynapseContentInstallResult,
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
+  SynapsePeekClaudeCodeFrontmatterPayload,
+  SynapsePeekClaudeCodeFrontmatterResult,
   SynapsePeekCursorFrontmatterPayload,
   SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
@@ -160,6 +162,12 @@ async function peekCursorFrontmatter(
   return requireContentBridge().peekCursorFrontmatter(payload)
 }
 
+async function peekClaudeCodeFrontmatter(
+  payload: SynapsePeekClaudeCodeFrontmatterPayload,
+): Promise<SynapsePeekClaudeCodeFrontmatterResult> {
+  return requireContentBridge().peekClaudeCodeFrontmatter(payload)
+}
+
 const createRule = (payload: SynapseCreateRulePayload) => createContent("rule", payload)
 const createSkill = (payload: SynapseCreateSkillPayload) => createContent("skill", payload)
 const updateRule = (payload: SynapseUpdateRulePayload) => updateContent("rule", payload)
@@ -193,6 +201,7 @@ export {
   listContent,
   listDeletedContent,
   openContentDetailWindow,
+  peekClaudeCodeFrontmatter,
   peekCursorFrontmatter,
   purgeContent,
   readContent,
