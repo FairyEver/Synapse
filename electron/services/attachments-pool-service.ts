@@ -9,8 +9,8 @@ import type {
 import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import { createMainLogger } from "./log-store"
 
-const ATTACHMENTS_POOL_DIRECTORY_NAME = "attachments-pool"
-const logger = createMainLogger("service.attachments-pool")
+const BLOBS_DIRECTORY_PATH = path.join("system", "blobs")
+const logger = createMainLogger("service.blobs")
 
 type AttachmentWriteInput = {
   originalName: string
@@ -25,7 +25,7 @@ function normalizeOriginalName(originalName: string): string {
 function createAttachmentPoolPath(repositoryRootPath: string, sha256: string): string {
   return path.join(
     repositoryRootPath,
-    ATTACHMENTS_POOL_DIRECTORY_NAME,
+    BLOBS_DIRECTORY_PATH,
     sha256.slice(0, 2),
     sha256.slice(2, 4),
     sha256,

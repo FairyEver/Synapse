@@ -26,7 +26,7 @@ import { repositoryStore } from "./repository-store"
 const SYNAPSE_BOT_NAME = "Synapse Bot"
 const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const ZERO_USER_ID = "00000000000000000000000000000000"
-const ATTACHMENTS_POOL_DIRECTORY_NAME = "attachments-pool"
+const BLOBS_DIRECTORY_PATH = path.join("system", "blobs")
 const LAST_MAINTENANCE_AT_KEY = "last_maintenance_at"
 const MANUAL_MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000
 const COMPACTION_TRIGGER_THRESHOLD = 20
@@ -262,7 +262,7 @@ function parseAttachmentsRecord(rawValue: unknown): SynapseContentAttachmentsRec
 function createAttachmentPoolPath(repositoryRootPath: string, sha256: string): string {
   return path.join(
     repositoryRootPath,
-    ATTACHMENTS_POOL_DIRECTORY_NAME,
+    BLOBS_DIRECTORY_PATH,
     sha256.slice(0, 2),
     sha256.slice(2, 4),
     sha256,
@@ -535,7 +535,7 @@ class RepositoryMaintenanceService {
       commitQueue.push({
         action: "gc",
         commitHash,
-        targetId: ATTACHMENTS_POOL_DIRECTORY_NAME,
+        targetId: BLOBS_DIRECTORY_PATH,
         title: createPendingPushTitle("gc"),
       })
     }
@@ -752,7 +752,7 @@ class RepositoryMaintenanceService {
       }
 
       await rm(poolFilePath, { force: true })
-      gitPaths.add(path.join(repository.localPath, ATTACHMENTS_POOL_DIRECTORY_NAME))
+      gitPaths.add(path.join(repository.localPath, BLOBS_DIRECTORY_PATH))
       deletedCount += 1
 
       await removeEmptyDirectoryIfNeeded(path.dirname(poolFilePath))
@@ -872,7 +872,7 @@ class RepositoryMaintenanceService {
   }
 
   private async listAttachmentPoolFiles(repositoryRootPath: string): Promise<string[]> {
-    const poolRootPath = path.join(repositoryRootPath, ATTACHMENTS_POOL_DIRECTORY_NAME)
+    const poolRootPath = path.join(repositoryRootPath, BLOBS_DIRECTORY_PATH)
     const firstLevelEntries = await readDirectoryEntries(poolRootPath)
     const files: string[] = []
 

@@ -1,6 +1,6 @@
 /**
  * 作用：把旧的 `rules/<id>` / `skills/<id>` 目录结构迁移成新的 history-based 存储结构。
- * 它会重写 `meta.json`，生成首条 `history/` 快照，并把旧附件搬到 `attachments-pool/`。
+ * 它会重写 `meta.json`，生成首条 `history/` 快照，并把旧附件搬到 `system/blobs/`。
  * 这是维护者手动跑的一次性迁移脚本，不属于日常开发或应用运行流程。
  */
 import { createHash } from "node:crypto"
@@ -9,7 +9,7 @@ import type { Dirent } from "node:fs"
 import path from "node:path"
 
 const ZERO_USER_ID = "00000000000000000000000000000000"
-const ATTACHMENTS_POOL_DIRECTORY_NAME = "attachments-pool"
+const BLOBS_DIRECTORY_PATH = path.join("system", "blobs")
 const META_FILE_NAME = "meta.json"
 const MAIN_FILE_NAME = "main.md"
 const HISTORY_DIRECTORY_NAME = "history"
@@ -105,7 +105,7 @@ async function writeAttachmentToPool(repoRootPath: string, sourcePath: string): 
   const sha256 = createHash("sha256").update(fileBuffer).digest("hex")
   const targetPath = path.join(
     repoRootPath,
-    ATTACHMENTS_POOL_DIRECTORY_NAME,
+    BLOBS_DIRECTORY_PATH,
     sha256.slice(0, 2),
     sha256.slice(2, 4),
     sha256,

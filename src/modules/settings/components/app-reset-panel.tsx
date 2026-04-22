@@ -55,7 +55,7 @@ function AppResetPanel() {
           </div>
         }
         confirmLabel="确认重置"
-        delaySeconds={5}
+        delaySeconds={3}
         onConfirm={() => {
           logger.info("App reset confirmed. Initiating full reset.")
           void window.synapse?.config.resetApp()

@@ -7,7 +7,7 @@ import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
 const USER_PROFILE_SCHEMA_VERSION = 1 as const
-const USERS_DIRECTORY_NAME = "users"
+const USERS_DIRECTORY_PATH = path.join("system", "users")
 const USER_PROFILE_FILE_NAME = "profile.json"
 const logger = createMainLogger("service.user-profile-cache")
 
@@ -36,11 +36,11 @@ async function readDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
 }
 
 function resolveUsersRootPath(repoRootPath: string): string {
-  return path.join(repoRootPath, USERS_DIRECTORY_NAME)
+  return path.join(repoRootPath, USERS_DIRECTORY_PATH)
 }
 
 function resolveUserProfileRelativePath(userId: string): string {
-  return path.join(USERS_DIRECTORY_NAME, userId, USER_PROFILE_FILE_NAME)
+  return path.join(USERS_DIRECTORY_PATH, userId, USER_PROFILE_FILE_NAME)
 }
 
 function resolveUserProfilePath(repoRootPath: string, userId: string): string {
@@ -161,7 +161,7 @@ const userProfileCache = new UserProfileCache()
 
 export {
   USER_PROFILE_FILE_NAME,
-  USERS_DIRECTORY_NAME,
+  USERS_DIRECTORY_PATH,
   parseUserProfile,
   resolveUserProfilePath,
   resolveUserProfileRelativePath,

@@ -381,14 +381,15 @@ function getRepositorySkeletonDirectories(repository: SynapseRepositoryConfig): 
     repository.contentDirs.rule ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.rule,
     repository.contentDirs.skill ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.skill,
     repository.contentDirs.prompt ?? DEFAULT_REPOSITORY_CONTENT_DIRECTORIES.prompt,
-    "users",
-    "attachments-pool",
+    "system",
+    path.join("system", "blobs"),
+    path.join("system", "users"),
   ]
 }
 
 class RepositoryStructureService {
   async ensureContentDirectories(localPath: string): Promise<void> {
-    const coreMarkers = ["users", "attachments-pool"]
+    const coreMarkers = [path.join("system", "users"), path.join("system", "blobs")]
     const hasCoreStructure = (await Promise.all(
       coreMarkers.map((dir) => pathExists(path.join(localPath, dir))),
     )).some(Boolean)
@@ -407,7 +408,7 @@ class RepositoryStructureService {
     missingDirectories: string[]
     message: string
   }> {
-    const requiredDirs = ["rules", "skills", "prompts", "users", "attachments-pool"]
+    const requiredDirs = ["rules", "skills", "prompts", path.join("system", "users"), path.join("system", "blobs")]
     const missingDirectories: string[] = []
 
     for (const dir of requiredDirs) {
@@ -424,7 +425,7 @@ class RepositoryStructureService {
     if (isValid) {
       message = "目录结构验证通过。"
     } else if (missingDirectories.length === requiredDirs.length) {
-      message = `该目录不是有效的 Synapse 仓库，缺少必要的目录结构（rules, skills, users, attachments-pool）。`
+      message = `该目录不是有效的 Synapse 仓库，缺少必要的目录结构（rules, skills, system/users, system/blobs）。`
     } else {
       message = `该目录缺少以下必要目录：${missingDirectories.join(", ")}`
     }
