@@ -1,4 +1,9 @@
 import type {
+  DataStoreCliDebugInfo,
+  DataStoreCliStatus,
+  DataStoreMcpServerInfo,
+  DataStoreMcpStatus,
+  DataStoreMcpTarget,
   DataStoreColumnDef,
   DataStoreQueryParams,
   DataStoreQueryResult,
@@ -197,7 +202,11 @@ export type SynapseBridge = {
     exportDB: () => Promise<{ success: boolean; path?: string }>
     importDB: () => Promise<{ success: boolean }>
     installCLI: () => Promise<{ success: boolean; path?: string; error?: string }>
-    getCliStatus: () => Promise<{ installed: boolean; path: string }>
-    registerMCP: (target: "claude" | "codex") => Promise<{ success: boolean; error?: string }>
+    getCliStatus: () => Promise<DataStoreCliStatus>
+    getCliDebugInfo: () => Promise<DataStoreCliDebugInfo>
+    getMcpStatus: () => Promise<DataStoreMcpStatus>
+    getMCPServers: () => Promise<DataStoreMcpServerInfo[]>
+    openMCPSettings: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
+    registerMCP: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
   }
 }

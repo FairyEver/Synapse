@@ -2,8 +2,8 @@ import { BrowserWindow, dialog } from "electron"
 import { DATA_STORE_IPC_CHANNELS } from "./channels"
 import { dataStoreService } from "./service"
 import { getHttpPort } from "./http-server"
-import { installCli, getCliStatus } from "./cli-installer"
-import { registerMcp, getMcpStatus } from "./mcp-installer"
+import { getCliDebugInfo, installCli, getCliStatus } from "./cli-installer"
+import { getMcpServers, getMcpStatus, openMcpSettings, registerMcp } from "./mcp-installer"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
 import type {
@@ -132,6 +132,22 @@ function registerDataStoreHandlers(): void {
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getCliStatus, async () => {
     return getCliStatus()
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getCliDebugInfo, async () => {
+    return getCliDebugInfo()
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getMcpStatus, async () => {
+    return getMcpStatus()
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getMCPServers, async () => {
+    return getMcpServers()
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.openMCPSettings, async (_event, target: "claude" | "codex") => {
+    return openMcpSettings(target)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.registerMCP, async (_event, target: "claude" | "codex") => {

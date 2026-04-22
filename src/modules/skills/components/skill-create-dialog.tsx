@@ -1,10 +1,8 @@
 import { useMemo, useRef, useState } from "react"
 import {
   FolderOpen,
-  LoaderCircle,
   Paperclip,
   Trash2,
-  Upload,
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -179,6 +177,7 @@ function SkillCreateDialog({
   submitDisabledReason = null,
   editingId = null,
 }: SkillCreateDialogProps) {
+  const isEditMode = mode === "edit"
   const logger = useMemo(() => createRendererLogger("skills.create"), [])
   const categoryOptions = useMemo(() => getCategoryDefinitions("skill"), [])
   const logContext = {
@@ -263,6 +262,100 @@ function SkillCreateDialog({
     const syntheticEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>
     handleSubmit(syntheticEvent, prepareFormForSubmit(form))
   }
+
+  const titleField = (
+    <div className="min-w-0 flex flex-col gap-2">
+      <Label htmlFor="skill-create-title">中文名称</Label>
+      <Input
+        id="skill-create-title"
+        value={form.title}
+        aria-invalid={errors.title ? "true" : undefined}
+        onChange={(event) => updateField("title", event.target.value)}
+        placeholder="API 文档生成助手"
+      />
+      <FieldError message={errors.title} />
+    </div>
+  )
+
+  const nameField = (
+    <div className="min-w-0 flex flex-col gap-2">
+      <Label htmlFor="skill-create-name">名称</Label>
+      <Input
+        id="skill-create-name"
+        value={form.name}
+        aria-invalid={errors.name ? "true" : undefined}
+        className="font-mono"
+        onChange={(event) => updateField("name", event.target.value)}
+        placeholder="my-skill-name"
+      />
+      <p className="text-xs text-muted-foreground">小写字母、数字、连字符，3-50 字符。安装到编辑器时用作文件名。</p>
+      <FieldError message={errors.name} />
+    </div>
+  )
+
+  const categoryField = (
+    <div className="min-w-0 flex flex-col gap-2">
+      <Label htmlFor="skill-create-category">分类</Label>
+      <Select
+        data-track="skill-category-select"
+        value={form.category || undefined}
+        onValueChange={(value) => updateField("category", value)}
+      >
+        <SelectTrigger
+          id="skill-create-category"
+          aria-invalid={errors.category ? "true" : undefined}
+          className="w-full"
+        >
+          <SelectValue placeholder="选择分类" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {categoryOptions.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <FieldError message={errors.category} />
+    </div>
+  )
+
+  const descriptionField = (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="skill-create-description">简介</Label>
+      <Textarea
+        id="skill-create-description"
+        value={form.description}
+        aria-invalid={errors.description ? "true" : undefined}
+        onChange={(event) => updateField("description", event.target.value)}
+        placeholder="自动整理 API 文档"
+        rows={2}
+        className="min-h-0 resize-none"
+      />
+      <p className="text-xs text-muted-foreground">
+        安装到编辑器时，这段简介会作为 skill 描述一并写入。
+      </p>
+      <FieldError message={errors.description} />
+    </div>
+  )
+
+  const contentField = (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="skill-create-content">主说明</Label>
+      <Textarea
+        id="skill-create-content"
+        value={form.content}
+        aria-invalid={errors.content ? "true" : undefined}
+        className="min-h-0"
+        onChange={(event) => updateField("content", event.target.value)}
+        placeholder="输入 Skill 的主说明。"
+        rows={5}
+      />
+      <FieldError message={errors.content} />
+    </div>
+  )
 
   const totalAttachmentSize = useMemo(
     () => form.files.reduce((total, file) => total + file.size, 0),
@@ -373,84 +466,21 @@ function SkillCreateDialog({
       submitError={submitError}
     >
       <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="skill-create-title">中文名称</Label>
-          <Input
-            id="skill-create-title"
-            value={form.title}
-            aria-invalid={errors.title ? "true" : undefined}
-            onChange={(event) => updateField("title", event.target.value)}
-            placeholder="API 文档生成助手"
-          />
-          <FieldError message={errors.title} />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="skill-create-name">名称</Label>
-          <Input
-            id="skill-create-name"
-            value={form.name}
-            aria-invalid={errors.name ? "true" : undefined}
-            className="font-mono"
-            onChange={(event) => updateField("name", event.target.value)}
-            placeholder="my-skill-name"
-          />
-          <p className="text-xs text-muted-foreground">小写字母、数字、连字符，3-50 字符。安装到编辑器时用作文件名。</p>
-          <FieldError message={errors.name} />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="skill-create-description">简介</Label>
-          <Textarea
-            id="skill-create-description"
-            value={form.description}
-            aria-invalid={errors.description ? "true" : undefined}
-            onChange={(event) => updateField("description", event.target.value)}
-            placeholder="自动整理 API 文档"
-            rows={3}
-            className="resize-none"
-          />
-          <FieldError message={errors.description} />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="skill-create-category">分类</Label>
-          <Select
-            data-track="skill-category-select"
-            value={form.category || undefined}
-            onValueChange={(value) => updateField("category", value)}
-          >
-            <SelectTrigger
-              id="skill-create-category"
-              aria-invalid={errors.category ? "true" : undefined}
-              className="w-full"
-            >
-              <SelectValue placeholder="选择分类" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {categoryOptions.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <FieldError message={errors.category} />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="skill-create-content">主说明</Label>
-          <Textarea
-            id="skill-create-content"
-            value={form.content}
-            aria-invalid={errors.content ? "true" : undefined}
-            className="min-h-56"
-            onChange={(event) => updateField("content", event.target.value)}
-            placeholder="输入 Skill 的主说明。"
-          />
-          <FieldError message={errors.content} />
-        </div>
+        {isEditMode ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {titleField}
+            {nameField}
+            {categoryField}
+          </div>
+        ) : (
+          <>
+            {titleField}
+            {nameField}
+          </>
+        )}
+        {descriptionField}
+        {!isEditMode ? categoryField : null}
+        {contentField}
         <div className="flex flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -504,13 +534,6 @@ function SkillCreateDialog({
             onDrop={handleDrop}
           >
             <div className="flex flex-col items-center gap-3 text-center">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-                {isCollectingFiles ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <Upload />
-                )}
-              </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">
                   {isCollectingFiles ? "正在整理附件..." : "拖入文件或文件夹"}

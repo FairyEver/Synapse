@@ -10,13 +10,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
   Table,
   TableBody,
   TableCell,
@@ -35,9 +28,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import type { DataStoreColumnType, DataStoreTableSchema } from "@/types/data-store"
-
-const COLUMN_TYPES: DataStoreColumnType[] = ["TEXT", "INTEGER", "REAL", "BLOB", "JSON"]
+import {
+  DATA_STORE_COLUMN_TYPES,
+  getDataStoreColumnTypeDisplayName,
+  getDataStoreColumnTypeLabel,
+} from "./data-store-column-types"
 
 type TableSchemaSheetProps = {
   open: boolean
@@ -68,61 +72,69 @@ function TableSchemaSheet({
   if (!schema) return null
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{schema.name} 表结构</SheetTitle>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0">
+        <DialogHeader className="px-5 pt-5">
+          <DialogTitle>{schema.name} 表结构</DialogTitle>
+        </DialogHeader>
 
-        <div className="flex flex-col gap-4 px-4 py-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>列名</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>说明</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {schema.columns.map((col) => (
-                <TableRow key={col.name}>
-                  <TableCell className="font-mono text-sm">{col.name}</TableCell>
-                  <TableCell>{col.type}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {col.primaryKey ? "自增主键" : ""}
-                  </TableCell>
+        <div className="flex max-h-[calc(100vh-12rem)] min-h-0 flex-col gap-5 overflow-y-auto px-5 py-4">
+          <div className="min-h-0 overflow-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>列名</TableHead>
+                  <TableHead>类型</TableHead>
+                  <TableHead>说明</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {schema.columns.map((col) => (
+                  <TableRow key={col.name}>
+                    <TableCell className="font-mono text-sm">{col.name}</TableCell>
+                    <TableCell>{getDataStoreColumnTypeDisplayName(col.type)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {col.primaryKey ? "自增主键" : ""}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
           <div className="flex flex-col gap-2">
             <Label>添加列</Label>
-            <div className="flex items-center gap-2">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_auto]">
               <Input
-                className="flex-1"
                 value={newColName}
                 onChange={(e) => setNewColName(e.target.value)}
                 placeholder="列名"
               />
               <Select value={newColType} onValueChange={(v) => setNewColType(v as DataStoreColumnType)}>
-                <SelectTrigger className="w-28">
-                  <SelectValue />
+                <SelectTrigger className="w-full">
+                  <SelectValue>{getDataStoreColumnTypeLabel(newColType)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {COLUMN_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  {DATA_STORE_COLUMN_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {getDataStoreColumnTypeLabel(t)}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button size="sm" onClick={handleAddColumn} disabled={!newColName.trim()}>
+              <Button
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={handleAddColumn}
+                disabled={!newColName.trim()}
+              >
                 添加
               </Button>
             </div>
           </div>
         </div>
 
-        <SheetFooter>
+        <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none rounded-b-xl px-5 py-4 sm:items-center sm:justify-between">
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive">删除此表</Button>
@@ -140,9 +152,12 @@ function TableSchemaSheet({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          <DialogClose asChild>
+            <Button variant="outline">关闭</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

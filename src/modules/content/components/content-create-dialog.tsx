@@ -107,7 +107,7 @@ function ContentCreateDialog({
       <Dialog open={open} onOpenChange={onDialogOpenChange}>
         <FormDialog
           title={mode === "create" ? labels.title.create : labels.title.edit}
-          contentClassName="sm:max-w-[520px]"
+          contentClassName={mode === "edit" ? "sm:max-w-[850px]" : "sm:max-w-[520px]"}
           footer={(
             <>
               <FieldError className="sm:mr-auto">{submitError}</FieldError>

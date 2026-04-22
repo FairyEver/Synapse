@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
+  DataStoreCliDebugInfo,
+  DataStoreCliStatus,
   DataStoreColumnDef,
+  DataStoreMcpServerInfo,
+  DataStoreMcpStatus,
+  DataStoreMcpTarget,
   DataStoreQueryParams,
   DataStoreQueryResult,
   DataStoreStatus,
@@ -147,11 +152,27 @@ async function installCLI(): Promise<{ success: boolean; path?: string; error?: 
   return requireSynapseBridge().dataStore.installCLI()
 }
 
-async function getCliStatus(): Promise<{ installed: boolean; path: string }> {
+async function getCliStatus(): Promise<DataStoreCliStatus> {
   return requireSynapseBridge().dataStore.getCliStatus()
 }
 
-async function registerMCP(target: "claude" | "codex"): Promise<{ success: boolean; error?: string }> {
+async function getCliDebugInfo(): Promise<DataStoreCliDebugInfo> {
+  return requireSynapseBridge().dataStore.getCliDebugInfo()
+}
+
+async function getMcpStatus(): Promise<DataStoreMcpStatus> {
+  return requireSynapseBridge().dataStore.getMcpStatus()
+}
+
+async function getMCPServers(): Promise<DataStoreMcpServerInfo[]> {
+  return requireSynapseBridge().dataStore.getMCPServers()
+}
+
+async function openMCPSettings(target: DataStoreMcpTarget): Promise<{ success: boolean; error?: string }> {
+  return requireSynapseBridge().dataStore.openMCPSettings(target)
+}
+
+async function registerMCP(target: DataStoreMcpTarget): Promise<{ success: boolean; error?: string }> {
   return requireSynapseBridge().dataStore.registerMCP(target)
 }
 
@@ -161,10 +182,14 @@ export {
   deleteRow,
   dropTable,
   exportDB,
+  getCliDebugInfo,
   getCliStatus,
+  getMCPServers,
+  getMcpStatus,
   importDB,
   insertRow,
   installCLI,
+  openMCPSettings,
   registerMCP,
   updateRow,
   useDataStoreQuery,

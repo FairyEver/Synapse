@@ -760,7 +760,7 @@ function ContentBrowserPage({
         }
       >
         <section className="h-full min-h-0">
-          <div className="flex min-h-full flex-col gap-4 pb-6">
+          <div className="flex min-h-full flex-col gap-2">
             <div
                       className="flex flex-wrap items-center justify-between gap-3"
             >

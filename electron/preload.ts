@@ -99,6 +99,10 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     importDB: "synapse:data-store:import-db",
     installCLI: "synapse:data-store:install-cli",
     getCliStatus: "synapse:data-store:get-cli-status",
+    getCliDebugInfo: "synapse:data-store:get-cli-debug-info",
+    getMcpStatus: "synapse:data-store:get-mcp-status",
+    getMCPServers: "synapse:data-store:get-mcp-servers",
+    openMCPSettings: "synapse:data-store:open-mcp-settings",
     registerMCP: "synapse:data-store:register-mcp",
   },
 } as const
@@ -244,6 +248,10 @@ const synapseBridge: SynapseBridge = {
     importDB: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.importDB),
     installCLI: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.installCLI),
     getCliStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getCliStatus),
+    getCliDebugInfo: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getCliDebugInfo),
+    getMcpStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getMcpStatus),
+    getMCPServers: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getMCPServers),
+    openMCPSettings: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.openMCPSettings, target),
     registerMCP: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.registerMCP, target),
   },
 }

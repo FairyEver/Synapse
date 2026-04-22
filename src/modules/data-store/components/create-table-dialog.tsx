@@ -18,8 +18,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { DataStoreColumnDef, DataStoreColumnType } from "@/types/data-store"
-
-const COLUMN_TYPES: DataStoreColumnType[] = ["TEXT", "INTEGER", "REAL", "BLOB", "JSON"]
+import {
+  DATA_STORE_COLUMN_TYPES,
+  getDataStoreColumnTypeLabel,
+} from "./data-store-column-types"
 
 type ColumnRow = {
   key: number
@@ -139,12 +141,12 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                     onValueChange={(v) => updateColumn(col.key, "type", v)}
                   >
                     <SelectTrigger className="w-28">
-                      <SelectValue />
+                      <SelectValue>{getDataStoreColumnTypeLabel(col.type)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {COLUMN_TYPES.map((t) => (
+                      {DATA_STORE_COLUMN_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>
-                          {t}
+                          {getDataStoreColumnTypeLabel(t)}
                         </SelectItem>
                       ))}
                     </SelectContent>

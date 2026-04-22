@@ -62,6 +62,7 @@ function PromptCreateDialog({
   submitDisabledReason = null,
   editingId = null,
 }: PromptCreateDialogProps) {
+  const isEditMode = mode === "edit"
   const categoryOptions = useMemo(() => getCategoryDefinitions("prompt"), [])
   const logContext = {
     category: "prompts.create",
@@ -108,6 +109,89 @@ function PromptCreateDialog({
     handleSubmit(event, prepareFormForSubmit(form))
   }
 
+  const titleField = (
+    <Field className="min-w-0" data-invalid={errors.title ? true : undefined}>
+      <FieldLabel htmlFor="prompt-create-title">标题</FieldLabel>
+      <FieldContent>
+        <Input
+          id="prompt-create-title"
+          value={form.title}
+          aria-invalid={errors.title ? "true" : undefined}
+          onChange={(event) => updateField("title", event.target.value)}
+          placeholder="代码审查助手"
+        />
+        <FieldError>{errors.title}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
+  const categoryField = (
+    <Field className="min-w-0" data-invalid={errors.category ? true : undefined}>
+      <FieldLabel htmlFor="prompt-create-category">分类</FieldLabel>
+      <FieldContent>
+        <Select
+          data-track="prompt-category-select"
+          value={form.category || undefined}
+          onValueChange={(value) => updateField("category", value)}
+        >
+          <SelectTrigger
+            id="prompt-create-category"
+            aria-invalid={errors.category ? "true" : undefined}
+            className="w-full"
+          >
+            <SelectValue placeholder="选择分类" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {categoryOptions.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <FieldError>{errors.category}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
+  const descriptionField = (
+    <Field className="min-w-0" data-invalid={errors.description ? true : undefined}>
+      <FieldLabel htmlFor="prompt-create-description">简介</FieldLabel>
+      <FieldContent>
+        <Textarea
+          id="prompt-create-description"
+          value={form.description}
+          aria-invalid={errors.description ? "true" : undefined}
+          onChange={(event) => updateField("description", event.target.value)}
+          placeholder="帮助审查代码质量和规范"
+          rows={2}
+          className="min-h-0 resize-none"
+        />
+        <FieldError>{errors.description}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
+  const contentField = (
+    <Field className="min-w-0" data-invalid={errors.content ? true : undefined}>
+      <FieldLabel htmlFor="prompt-create-content">正文</FieldLabel>
+      <FieldContent>
+        <Textarea
+          id="prompt-create-content"
+          value={form.content}
+          aria-invalid={errors.content ? "true" : undefined}
+          className="min-h-0"
+          onChange={(event) => updateField("content", event.target.value)}
+          placeholder="输入或粘贴提示词正文。"
+          rows={5}
+        />
+        <FieldError>{errors.content}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
   return (
     <ContentCreateDialog
       isDiscardConfirmOpen={isDiscardConfirmOpen}
@@ -127,79 +211,17 @@ function PromptCreateDialog({
       submitError={submitError}
     >
       <FieldGroup className="gap-5">
-        <Field data-invalid={errors.title ? true : undefined}>
-          <FieldLabel htmlFor="prompt-create-title">标题</FieldLabel>
-          <FieldContent>
-            <Input
-              id="prompt-create-title"
-              value={form.title}
-              aria-invalid={errors.title ? "true" : undefined}
-              onChange={(event) => updateField("title", event.target.value)}
-              placeholder="代码审查助手"
-            />
-            <FieldError>{errors.title}</FieldError>
-          </FieldContent>
-        </Field>
-
-        <Field data-invalid={errors.description ? true : undefined}>
-          <FieldLabel htmlFor="prompt-create-description">简介</FieldLabel>
-          <FieldContent>
-            <Textarea
-              id="prompt-create-description"
-              value={form.description}
-              aria-invalid={errors.description ? "true" : undefined}
-              onChange={(event) => updateField("description", event.target.value)}
-              placeholder="帮助审查代码质量和规范"
-              rows={3}
-              className="resize-none"
-            />
-            <FieldError>{errors.description}</FieldError>
-          </FieldContent>
-        </Field>
-
-        <Field data-invalid={errors.category ? true : undefined}>
-          <FieldLabel htmlFor="prompt-create-category">分类</FieldLabel>
-          <FieldContent>
-            <Select
-              data-track="prompt-category-select"
-              value={form.category || undefined}
-              onValueChange={(value) => updateField("category", value)}
-            >
-              <SelectTrigger
-                id="prompt-create-category"
-                aria-invalid={errors.category ? "true" : undefined}
-                className="w-full"
-              >
-                <SelectValue placeholder="选择分类" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {categoryOptions.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldError>{errors.category}</FieldError>
-          </FieldContent>
-        </Field>
-
-        <Field data-invalid={errors.content ? true : undefined}>
-          <FieldLabel htmlFor="prompt-create-content">正文</FieldLabel>
-          <FieldContent>
-            <Textarea
-              id="prompt-create-content"
-              value={form.content}
-              aria-invalid={errors.content ? "true" : undefined}
-              className="min-h-56"
-              onChange={(event) => updateField("content", event.target.value)}
-              placeholder="输入或粘贴提示词正文。"
-            />
-            <FieldError>{errors.content}</FieldError>
-          </FieldContent>
-        </Field>
+        {isEditMode ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="sm:col-span-2">{titleField}</div>
+            {categoryField}
+          </div>
+        ) : (
+          titleField
+        )}
+        {descriptionField}
+        {!isEditMode ? categoryField : null}
+        {contentField}
 
         <ContentAppearanceFields
           backgroundValue={form.iconBg}

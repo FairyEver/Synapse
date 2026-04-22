@@ -58,7 +58,65 @@ type DataStoreStatus = {
   tableCount: number
 }
 
+type DataStoreCliStatus = {
+  installed: boolean
+  path: string
+  executable: boolean
+  pathInShell: boolean
+  runtimeExists: boolean
+  bundledScriptExists: boolean
+  shimCurrent: boolean
+  available: boolean
+}
+
+type DataStoreCliDebugInfo = {
+  checkedAt: string
+  platform: string
+  shell: string
+  isPackaged: boolean
+  processExecPath: string
+  runtimePath: string
+  bundledScriptPath: string
+  cliBinName: string
+  testCommand: string
+  installedPath: string | null
+  preferredInstallPath: string
+  knownInstallDirs: string[]
+  installPathCandidates: string[]
+  processPathEntries: string[]
+  shellPathEntries: string[]
+  combinedPathEntries: string[]
+  environment: {
+    home: string
+    processPath: string
+    shellPath: string
+    localAppData: string
+    appData: string
+    userProfile: string
+  }
+  status: DataStoreCliStatus
+}
+
+type DataStoreMcpStatus = {
+  claude: boolean
+  codex: boolean
+}
+
+type DataStoreMcpTarget = "claude" | "codex"
+
+type DataStoreMcpServerInfo = {
+  target: DataStoreMcpTarget
+  settingsPath: string
+  settingsFileExists: boolean
+  registered: boolean
+}
+
 export type {
+  DataStoreCliDebugInfo,
+  DataStoreCliStatus,
+  DataStoreMcpServerInfo,
+  DataStoreMcpStatus,
+  DataStoreMcpTarget,
   DataStoreColumnDef,
   DataStoreColumnInfo,
   DataStoreColumnType,

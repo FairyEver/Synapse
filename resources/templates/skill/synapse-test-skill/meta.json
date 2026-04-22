@@ -1,0 +1,9 @@
+{
+  "id": "test-skill",
+  "name": "synapse-test-skill",
+  "title": "技能安装验证",
+  "description": "测试技能，安装到编辑器后发送 \"synapse verify skill\"，若回复 ✅ 验证码则技能和附件均安装成功",
+  "category": "automation",
+  "icon": "flask-conical",
+  "iconBg": "teal"
+}

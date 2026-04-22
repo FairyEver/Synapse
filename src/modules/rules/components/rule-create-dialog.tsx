@@ -58,6 +58,7 @@ function RuleCreateDialog({
   submitDisabledReason = null,
   editingId = null,
 }: RuleCreateDialogProps) {
+  const isEditMode = mode === "edit"
   const categoryOptions = useMemo(() => getCategoryDefinitions("rule"), [])
   const logContext = {
     category: "rules.create",
@@ -124,6 +125,109 @@ function RuleCreateDialog({
     handleSubmit(syntheticEvent, prepareFormForSubmit(form))
   }
 
+  const titleField = (
+    <Field className="min-w-0" data-invalid={errors.title ? true : undefined}>
+      <FieldLabel htmlFor="rule-create-title">标题</FieldLabel>
+      <FieldContent>
+        <Input
+          id="rule-create-title"
+          value={form.title}
+          aria-invalid={errors.title ? "true" : undefined}
+          onChange={(event) => updateField("title", event.target.value)}
+          placeholder="PR 评审规范"
+        />
+        <FieldError>{errors.title}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
+  const nameField = (
+    <Field className="min-w-0" data-invalid={errors.name ? true : undefined}>
+      <FieldLabel htmlFor="rule-create-name">名称</FieldLabel>
+      <FieldContent>
+        <Input
+          id="rule-create-name"
+          value={form.name}
+          aria-invalid={errors.name ? "true" : undefined}
+          className="font-mono"
+          onChange={(event) => updateField("name", event.target.value)}
+          placeholder="code-style"
+        />
+        <p className="text-xs text-muted-foreground">
+          小写字母、数字、连字符，3-64 字符。安装到编辑器时用作文件名。
+        </p>
+        <FieldError>{errors.name}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
+  const categoryField = (
+    <Field className="min-w-0" data-invalid={errors.category ? true : undefined}>
+      <FieldLabel htmlFor="rule-create-category">分类</FieldLabel>
+      <FieldContent>
+        <Select
+          data-track="rule-category-select"
+          value={form.category || undefined}
+          onValueChange={(value) => updateField("category", value)}
+        >
+          <SelectTrigger
+            id="rule-create-category"
+            aria-invalid={errors.category ? "true" : undefined}
+            className="w-full"
+          >
+            <SelectValue placeholder="选择分类" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {categoryOptions.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <FieldError>{errors.category}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
+  const descriptionField = (
+    <Field className="min-w-0" data-invalid={errors.description ? true : undefined}>
+      <FieldLabel htmlFor="rule-create-description">简介</FieldLabel>
+      <FieldContent>
+        <Textarea
+          id="rule-create-description"
+          value={form.description}
+          aria-invalid={errors.description ? "true" : undefined}
+          onChange={(event) => updateField("description", event.target.value)}
+          placeholder="PR 评审的提交要求"
+          rows={2}
+          className="min-h-0 resize-none"
+        />
+        <FieldError>{errors.description}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
+  const contentField = (
+    <Field className="min-w-0" data-invalid={errors.content ? true : undefined}>
+      <FieldLabel htmlFor="rule-create-content">正文</FieldLabel>
+      <FieldContent>
+        <Textarea
+          id="rule-create-content"
+          value={form.content}
+          aria-invalid={errors.content ? "true" : undefined}
+          className="min-h-0"
+          onChange={(event) => updateField("content", event.target.value)}
+          placeholder="输入或粘贴 Rule 正文。"
+          rows={5}
+        />
+        <FieldError>{errors.content}</FieldError>
+      </FieldContent>
+    </Field>
+  )
+
   return (
     <ContentCreateDialog
       isDiscardConfirmOpen={isDiscardConfirmOpen}
@@ -146,97 +250,21 @@ function RuleCreateDialog({
       submitError={submitError}
     >
       <FieldGroup className="gap-5">
-        <Field data-invalid={errors.title ? true : undefined}>
-          <FieldLabel htmlFor="rule-create-title">标题</FieldLabel>
-          <FieldContent>
-            <Input
-              id="rule-create-title"
-              value={form.title}
-              aria-invalid={errors.title ? "true" : undefined}
-              onChange={(event) => updateField("title", event.target.value)}
-              placeholder="PR 评审规范"
-            />
-            <FieldError>{errors.title}</FieldError>
-          </FieldContent>
-        </Field>
-
-        <Field data-invalid={errors.name ? true : undefined}>
-          <FieldLabel htmlFor="rule-create-name">名称</FieldLabel>
-          <FieldContent>
-            <Input
-              id="rule-create-name"
-              value={form.name}
-              aria-invalid={errors.name ? "true" : undefined}
-              className="font-mono"
-              onChange={(event) => updateField("name", event.target.value)}
-              placeholder="code-style"
-            />
-            <p className="text-xs text-muted-foreground">
-              小写字母、数字、连字符，3-64 字符。安装到编辑器时用作文件名。
-            </p>
-            <FieldError>{errors.name}</FieldError>
-          </FieldContent>
-        </Field>
-
-        <Field data-invalid={errors.description ? true : undefined}>
-          <FieldLabel htmlFor="rule-create-description">简介</FieldLabel>
-          <FieldContent>
-            <Textarea
-              id="rule-create-description"
-              value={form.description}
-              aria-invalid={errors.description ? "true" : undefined}
-              onChange={(event) => updateField("description", event.target.value)}
-              placeholder="PR 评审的提交要求"
-              rows={3}
-              className="resize-none"
-            />
-            <FieldError>{errors.description}</FieldError>
-          </FieldContent>
-        </Field>
-
-        <Field data-invalid={errors.category ? true : undefined}>
-          <FieldLabel htmlFor="rule-create-category">分类</FieldLabel>
-          <FieldContent>
-            <Select
-              data-track="rule-category-select"
-              value={form.category || undefined}
-              onValueChange={(value) => updateField("category", value)}
-            >
-              <SelectTrigger
-                id="rule-create-category"
-                aria-invalid={errors.category ? "true" : undefined}
-                className="w-full"
-              >
-                <SelectValue placeholder="选择分类" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {categoryOptions.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldError>{errors.category}</FieldError>
-          </FieldContent>
-        </Field>
-
-        <Field data-invalid={errors.content ? true : undefined}>
-          <FieldLabel htmlFor="rule-create-content">正文</FieldLabel>
-          <FieldContent>
-            <Textarea
-              id="rule-create-content"
-              value={form.content}
-              aria-invalid={errors.content ? "true" : undefined}
-              className="min-h-56"
-              onChange={(event) => updateField("content", event.target.value)}
-              placeholder="输入或粘贴 Rule 正文。"
-            />
-            <FieldError>{errors.content}</FieldError>
-          </FieldContent>
-        </Field>
+        {isEditMode ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {titleField}
+            {nameField}
+            {categoryField}
+          </div>
+        ) : (
+          <>
+            {titleField}
+            {nameField}
+          </>
+        )}
+        {descriptionField}
+        {!isEditMode ? categoryField : null}
+        {contentField}
 
         <ContentAppearanceFields
           backgroundValue={form.iconBg}

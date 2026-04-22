@@ -19,7 +19,7 @@ async function initDataStore(): Promise<void> {
 
   registerDataStoreHandlers()
 
-  if (!getCliStatus().installed) {
+  if (!(await getCliStatus()).installed) {
     try {
       await installCli()
     } catch (error) {

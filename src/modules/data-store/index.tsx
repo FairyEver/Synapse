@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
@@ -6,6 +6,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { DataStoreSidebar } from "./components/data-store-sidebar"
 import { DataTableView } from "./components/data-table-view"
+import type { DataTableViewHandle } from "./components/data-table-view"
 import { CreateTableDialog } from "./components/create-table-dialog"
 import { TableSchemaSheet } from "./components/table-schema-sheet"
 import {
@@ -25,20 +26,34 @@ const logger = createRendererLogger("data-store")
 
 function DataStoreModule() {
   const { tables, refresh: refreshTables } = useDataStoreTables()
-  const { promise } = useAppNotifications()
+  const { error: showError, promise } = useAppNotifications()
 
   const [activeTable, setActiveTable] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isSchemaSheetOpen, setIsSchemaSheetOpen] = useState(false)
+  const dataTableViewRef = useRef<DataTableViewHandle | null>(null)
 
   const selectedTable = activeTable ?? tables[0]?.name ?? null
   const { rows, total, refresh: refreshQuery, pageSize } = useDataStoreQuery(selectedTable, page)
   const { schema, refresh: refreshSchema } = useDataStoreSchema(selectedTable)
 
-  const handleTableSelect = useCallback((name: string) => {
-    setActiveTable(name)
-    setPage(1)
+  const handleTableSelect = useCallback(
+    async (name: string) => {
+      if (name === selectedTable) {
+        return
+      }
+
+      await dataTableViewRef.current?.commitPendingChanges()
+      setActiveTable(name)
+      setPage(1)
+    },
+    [selectedTable],
+  )
+
+  const handleOpenCreateDialog = useCallback(async () => {
+    await dataTableViewRef.current?.commitPendingChanges()
+    setIsCreateDialogOpen(true)
   }, [])
 
   const handleCreateTable = useCallback(
@@ -96,9 +111,11 @@ function DataStoreModule() {
         await refreshTables()
       } catch (error) {
         logger.error("Insert failed.", { error })
+        showError(error instanceof Error ? error.message : "新增失败，请稍后重试。")
+        throw error
       }
     },
-    [selectedTable, refreshQuery, refreshTables],
+    [refreshQuery, refreshTables, selectedTable, showError],
   )
 
   const handleUpdate = useCallback(
@@ -109,9 +126,11 @@ function DataStoreModule() {
         await refreshQuery()
       } catch (error) {
         logger.error("Update failed.", { error })
+        showError(error instanceof Error ? error.message : "保存失败，请稍后重试。")
+        throw error
       }
     },
-    [selectedTable, refreshQuery],
+    [refreshQuery, selectedTable, showError],
   )
 
   const handleDelete = useCallback(
@@ -132,8 +151,12 @@ function DataStoreModule() {
     <DataStoreSidebar
       tables={tables}
       activeTable={selectedTable}
-      onTableSelect={handleTableSelect}
-      onCreateTable={() => setIsCreateDialogOpen(true)}
+      onTableSelect={(name) => {
+        void handleTableSelect(name).catch(() => {})
+      }}
+      onCreateTable={() => {
+        void handleOpenCreateDialog().catch(() => {})
+      }}
     />
   )
 
@@ -143,6 +166,7 @@ function DataStoreModule() {
         <div className="flex h-full flex-col">
           <div className="min-h-0 flex-1">
             <DataTableView
+              ref={dataTableViewRef}
               tableName={selectedTable}
               columns={schema.columns}
               rows={rows}
@@ -164,7 +188,13 @@ function DataStoreModule() {
               <Package className="size-10 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">还没有数据表</p>
               <p className="text-xs text-muted-foreground">创建一张表开始使用</p>
-              <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void handleOpenCreateDialog().catch(() => {})
+                }}
+              >
                 新建表
               </Button>
             </div>

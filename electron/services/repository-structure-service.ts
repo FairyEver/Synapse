@@ -32,6 +32,7 @@ import { runGitTextCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
+import { readRepositorySeedContents, type RepositorySeedContent } from "./repository-template-service"
 import { repositoryStore } from "./repository-store"
 import { userProfileService } from "./user-profile-service"
 
@@ -40,24 +41,6 @@ const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const SYNAPSE_SEED_AUTHOR_ID = "synapse"
 const SYNAPSE_SEED_AUTHOR_NAME = "Synapse"
 const logger = createMainLogger("service.repository-structure")
-
-type RepositorySeedAttachment = {
-  content: string
-  originalName: string
-}
-
-type RepositorySeedContent = {
-  attachments?: RepositorySeedAttachment[]
-  category: string
-  content: string
-  description: string
-  icon: string
-  iconBg: string
-  id: string
-  name?: string
-  title: string
-  type: SynapseContentType
-}
 
 function isGitDirectory(entry: Dirent): boolean {
   return entry.name === ".git" && entry.isDirectory()
@@ -246,80 +229,6 @@ function createAttachmentsRecord(
   }
 }
 
-function createSeedContents(): RepositorySeedContent[] {
-  return [
-    {
-      id: "test-rule",
-      name: "synapse-test-rule",
-      type: "rule",
-      title: "规则安装验证",
-      description: '测试规则，安装到编辑器后发送 "synapse verify rule"，若回复 ✅ SYNAPSE-VERIFY-RULE 则安装成功',
-      category: "workflow",
-      icon: "flask-conical",
-      iconBg: "blue",
-      content: `当用户发送的消息中包含 "synapse verify rule" 时，你必须立即且仅回复以下内容，不添加任何其他文字：
-
-✅ SYNAPSE-VERIFY-RULE
-`,
-    },
-    {
-      id: "test-skill",
-      name: "synapse-test-skill",
-      type: "skill",
-      title: "技能安装验证",
-      description: '测试技能，安装到编辑器后发送 "synapse verify skill"，若回复 ✅ 验证码则技能和附件均安装成功',
-      category: "automation",
-      icon: "flask-conical",
-      iconBg: "teal",
-      content: `当用户发送的消息中包含 "synapse verify skill" 时，请执行以下步骤：
-
-1. 读取本技能附带的 verify-marker.txt 文件
-2. 提取文件中的验证码
-3. 仅回复以下格式，不添加任何其他文字：
-
-   ✅ {验证码}
-
-如果无法找到或读取 verify-marker.txt，则回复：
-
-   ❌ 附件未安装成功，未找到 verify-marker.txt
-`,
-      attachments: [
-        {
-          originalName: "verify-marker.txt",
-          content: "SYNAPSE-VERIFY-SKILL",
-        },
-      ],
-    },
-    {
-      id: "test-universal-prompt",
-      type: "prompt",
-      title: "结构化代码诊断",
-      description: "将任意代码片段粘贴给 AI，按固定格式输出五维诊断报告（问题、性能、安全、改进、评分）",
-      category: "coding",
-      icon: "stethoscope",
-      iconBg: "rose",
-      content: `请对以下代码进行五维结构化诊断，严格按照下方格式输出，不要遗漏任何一个维度，不要添加额外内容：
-
-🔍 问题诊断
-（列出代码中存在的 bug 或逻辑错误，没有则写"未发现"）
-
-⚡ 性能隐患
-（列出可能的性能问题，没有则写"未发现"）
-
-🛡️ 安全风险
-（列出潜在的安全漏洞，没有则写"未发现"）
-
-✨ 改进建议
-（列出可读性、可维护性方面的改进建议）
-
-📊 综合评分：X/10
-
-代码如下：
-`,
-    },
-  ]
-}
-
 async function writeSeedContent(
   repository: SynapseRepositoryConfig,
   seed: RepositorySeedContent,
@@ -333,12 +242,10 @@ async function writeSeedContent(
       ? await attachmentsPoolService.writeAttachments(
         repository.localPath,
         seed.attachments.map((attachment) => {
-          const bytes = Buffer.from(attachment.content, "utf8")
-
           return {
             originalName: attachment.originalName,
-            size: bytes.byteLength,
-            bytes,
+            size: attachment.bytes.byteLength,
+            bytes: attachment.bytes,
           }
         }),
       )
@@ -367,11 +274,13 @@ async function writeSeedContent(
 }
 
 async function scaffoldNewLocalRepository(repository: SynapseRepositoryConfig): Promise<void> {
+  const seeds = await readRepositorySeedContents()
+
   for (const directoryName of getRepositorySkeletonDirectories(repository)) {
     await mkdir(path.join(repository.localPath, directoryName), { recursive: true })
   }
 
-  for (const seed of createSeedContents()) {
+  for (const seed of seeds) {
     await writeSeedContent(repository, seed)
   }
 }
@@ -515,6 +424,7 @@ class RepositoryStructureService {
   async initializeStructure(
     repository: SynapseRepositoryConfig,
   ): Promise<SynapseRepositoryInitializationResult> {
+    const seeds = await readRepositorySeedContents()
     const repositoryState = await repositoryStore.getRepositoryState(repository)
 
     if (repositoryState.status !== "ready") {
@@ -537,7 +447,7 @@ class RepositoryStructureService {
       await writeGitkeep(path.join(repository.localPath, directoryName))
     }
 
-    for (const seed of createSeedContents()) {
+    for (const seed of seeds) {
       await writeSeedContent(repository, seed)
     }
 
