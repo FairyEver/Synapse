@@ -395,7 +395,7 @@ function SkillCreateDialog({
             onChange={(event) => updateField("name", event.target.value)}
             placeholder="my-skill-name"
           />
-          <p className="text-xs text-muted-foreground">小写字母、数字、连字符，3-50 字符。</p>
+          <p className="text-xs text-muted-foreground">小写字母、数字、连字符，3-50 字符。安装到编辑器时用作文件名。</p>
           <FieldError message={errors.name} />
         </div>
 
