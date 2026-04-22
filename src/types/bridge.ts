@@ -171,5 +171,6 @@ export type SynapseBridge = {
     checkForUpdates: () => Promise<SynapseAppUpdateState>
     getState: () => Promise<SynapseAppUpdateState>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
+    onOpenUpdatePage: (listener: () => void) => () => void
   }
 }

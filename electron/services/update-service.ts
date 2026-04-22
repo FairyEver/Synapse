@@ -5,7 +5,7 @@ import type { OutgoingHttpHeaders } from "node:http"
 import path from "node:path"
 import { Readable, Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
-import { app, BrowserWindow, shell } from "electron"
+import { app, BrowserWindow, Notification, shell } from "electron"
 import * as electronUpdater from "electron-updater"
 import type {
   AppUpdater,
@@ -142,12 +142,18 @@ function pickInstallerFile(files: ResolvedUpdateFileInfo[]): ResolvedUpdateFileI
   return files[0] ?? null
 }
 
+const AUTO_CHECK_INTERVAL_MS = 60_000
+const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
+
 class UpdateService {
   private initialized = false
   private state: SynapseAppUpdateState = createBaseState()
   private downloadAbortController: AbortController | null = null
   private currentTempPath: string | null = null
   private stallTimedOut = false
+  private isAutoCheck = false
+  private lastNotifiedVersion: string | null = null
+  private autoCheckTimer: ReturnType<typeof setInterval> | null = null
 
   private resetDownloadState(): void {
     this.downloadAbortController = null
@@ -212,49 +218,59 @@ class UpdateService {
 
     autoUpdater.on("checking-for-update", () => {
       logger.info("Checking for updates.")
-      this.setState({
-        status: "checking",
-        message: "正在检查更新...",
-        error: null,
-        releaseVersion: null,
-        downloadPercent: null,
-        bytesPerSecond: null,
-        transferredBytes: null,
-        totalBytes: null,
-        canCheck: false,
-        downloadedFilePath: null,
-      })
+      if (!this.isAutoCheck) {
+        this.setState({
+          status: "checking",
+          message: "正在检查更新...",
+          error: null,
+          releaseVersion: null,
+          downloadPercent: null,
+          bytesPerSecond: null,
+          transferredBytes: null,
+          totalBytes: null,
+          canCheck: false,
+          downloadedFilePath: null,
+        })
+      }
     })
 
     autoUpdater.on("update-available", (updateInfo) => {
       logger.info("Update is available.", {
         version: updateInfo.version,
       })
-      this.handleUpdateAvailable(updateInfo)
+      if (this.isAutoCheck) {
+        this.handleAutoCheckUpdateAvailable(updateInfo)
+      } else {
+        this.handleUpdateAvailable(updateInfo)
+      }
     })
 
     autoUpdater.on("update-not-available", (updateInfo) => {
       logger.info("No update available.", {
         version: updateInfo.version,
       })
-      this.setState({
-        status: "not-available",
-        message: "当前已经是最新版本。",
-        error: null,
-        releaseVersion: updateInfo.version,
-        downloadPercent: null,
-        bytesPerSecond: null,
-        transferredBytes: null,
-        totalBytes: null,
-        lastCheckedAt: new Date().toISOString(),
-        canCheck: true,
-        downloadedFilePath: null,
-      })
+      if (!this.isAutoCheck) {
+        this.setState({
+          status: "not-available",
+          message: "当前已经是最新版本。",
+          error: null,
+          releaseVersion: updateInfo.version,
+          downloadPercent: null,
+          bytesPerSecond: null,
+          transferredBytes: null,
+          totalBytes: null,
+          lastCheckedAt: new Date().toISOString(),
+          canCheck: true,
+          downloadedFilePath: null,
+        })
+      }
     })
 
     autoUpdater.on("error", (error) => {
       logger.error("App updater reported an error.", error)
-      this.handleError(error)
+      if (!this.isAutoCheck) {
+        this.handleError(error)
+      }
     })
 
     logger.info("App updater initialized.", {
@@ -278,6 +294,8 @@ class UpdateService {
     if (this.state.status === "checking" || this.state.status === "downloading") {
       return this.getState()
     }
+
+    this.isAutoCheck = false
 
     try {
       await autoUpdater.checkForUpdates()
@@ -550,6 +568,63 @@ class UpdateService {
 
       window.webContents.send(SYNAPSE_IPC_CHANNELS.update.stateChanged, nextState)
     }
+  }
+
+  startAutoCheck(): void {
+    if (!isUpdateSupportedInCurrentEnvironment()) {
+      return
+    }
+
+    if (this.autoCheckTimer) {
+      return
+    }
+
+    const runAutoCheck = () => {
+      if (this.state.status === "checking" || this.state.status === "downloading") {
+        return
+      }
+
+      this.isAutoCheck = true
+      autoUpdater.checkForUpdates().catch(() => {})
+    }
+
+    setTimeout(runAutoCheck, AUTO_CHECK_INITIAL_DELAY_MS)
+    this.autoCheckTimer = setInterval(runAutoCheck, AUTO_CHECK_INTERVAL_MS)
+  }
+
+  private handleAutoCheckUpdateAvailable(updateInfo: UpdateInfo): void {
+    if (this.lastNotifiedVersion === updateInfo.version) {
+      return
+    }
+
+    this.lastNotifiedVersion = updateInfo.version
+
+    if (!Notification.isSupported()) {
+      return
+    }
+
+    const notification = new Notification({
+      title: "Synapse",
+      body: `新版本 ${updateInfo.version} 已发布，点击查看更新`,
+    })
+
+    notification.on("click", () => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!isTrustedRendererContents(window.webContents)) {
+          continue
+        }
+
+        window.restore()
+        window.focus()
+        window.webContents.send(SYNAPSE_IPC_CHANNELS.update.openUpdatePage)
+      }
+
+      if (BrowserWindow.getAllWindows().length === 0) {
+        app.emit("activate")
+      }
+    })
+
+    notification.show()
   }
 }
 

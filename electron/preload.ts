@@ -79,6 +79,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     cancelDownload: "synapse:update:cancel-download",
     checkForUpdates: "synapse:update:check-for-updates",
     getState: "synapse:update:get-state",
+    openUpdatePage: "synapse:update:open-update-page",
     stateChanged: "synapse:update:state-changed",
   },
 } as const
@@ -204,6 +205,8 @@ const synapseBridge: SynapseBridge = {
     getState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.getState),
     onStateChanged: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.stateChanged, listener),
+    onOpenUpdatePage: (listener) =>
+      subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.openUpdatePage, listener),
   },
 }
 

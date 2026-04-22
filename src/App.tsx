@@ -8,7 +8,7 @@ import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useAppShellToolbarState } from "@/app-shell/use-app-shell-toolbar-state"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { publishActiveAppTab, subscribeOpenSettingsTab } from "@/app-shell/navigation"
+import { publishActiveAppTab, requestOpenSettingsAbout, subscribeOpenSettingsTab } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentDetailWindowPage } from "@/modules/content/components/content-detail-window-page"
 import { RulesModule } from "@/modules/rules"
@@ -112,7 +113,7 @@ function MainApp() {
   activeTabRef.current = activeTab
 
   const setActiveTab = useCallback(
-    (nextTab: AppTabId, source: "navigation" | "shortcut") => {
+    (nextTab: AppTabId, source: "navigation" | "shortcut" | "notification") => {
       const prevTab = activeTabRef.current
       if (prevTab !== nextTab) {
         logger.info("Top-level tab changed.", {
@@ -233,6 +234,18 @@ function MainApp() {
   useEffect(() => {
     return subscribeOpenSettingsTab(() => {
       setActiveTab("settings", "shortcut")
+    })
+  }, [setActiveTab])
+
+  useEffect(() => {
+    const bridge = getSynapseBridge()
+    if (!bridge) {
+      return
+    }
+
+    return bridge.updater.onOpenUpdatePage(() => {
+      setActiveTab("settings", "notification")
+      requestOpenSettingsAbout()
     })
   }, [setActiveTab])
 

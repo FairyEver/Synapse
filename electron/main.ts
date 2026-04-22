@@ -117,6 +117,7 @@ if (!gotSingleInstanceLock) {
     registerUpdateHandlers()
     await configStore.load()
     updateService.initialize()
+    updateService.startAutoCheck()
 
     logger.info("Core services initialized. Creating main window.")
     createMainWindow()

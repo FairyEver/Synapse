@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { subscribeOpenSettingsAbout } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
@@ -55,6 +56,13 @@ function SettingsModule() {
     sessionAdminMode = enabled
     setIsAdminModeState(enabled)
   }, [])
+
+  useEffect(() => {
+    return subscribeOpenSettingsAbout(() => {
+      setActiveCategory("about")
+    })
+  }, [setActiveCategory])
+
   const context = useMemo(
     () => ({
       config,
