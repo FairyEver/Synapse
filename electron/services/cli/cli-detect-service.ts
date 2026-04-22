@@ -72,14 +72,15 @@ async function whichViaCommonPaths(bin: string): Promise<string | null> {
 }
 
 async function whichBin(bin: string): Promise<string | null> {
-  const result = await whichViaShell(bin)
-  if (result) return result
+  // 先查常见路径（纯 fs 检查，毫秒级），再走 shell（需要加载 ~/.zshrc，慢）
+  const fast = await whichViaCommonPaths(bin)
+  if (fast) return fast
 
-  const fallback = await whichViaCommonPaths(bin)
-  if (fallback) {
-    logger.info("Found via common paths fallback.", { bin, path: fallback })
+  const slow = await whichViaShell(bin)
+  if (slow) {
+    logger.info("Found via shell fallback.", { bin, path: slow })
   }
-  return fallback
+  return slow
 }
 
 async function detectClis(): Promise<SynapseCliDetectResult[]> {
