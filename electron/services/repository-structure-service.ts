@@ -585,6 +585,10 @@ class RepositoryStructureService {
       await writeGitkeep(path.join(repository.localPath, directoryName))
     }
 
+    for (const seed of createSeedContents()) {
+      await writeSeedContent(repository, seed)
+    }
+
     let pendingPushCount = 0
 
     if (repositoryState.isGitRepository) {

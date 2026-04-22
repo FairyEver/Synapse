@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { FolderOpen, FolderPlus, Package } from "lucide-react"
+import { FolderOpen, FolderPlus } from "lucide-react"
+import appIcon from "@/assets/icon.png"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -45,8 +46,9 @@ function validateRepositoryName(value: string): string | null {
 function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
   const repositories = useRepositoryList()
   const activeRepository = useActiveRepository()
-  const { addRepository, createLocalRepositoryAndAdd } = useRepositoryActions()
-  const { chooseDirectory, validateDirectory } = useRepositoryManager()
+  const { addRepository, createLocalRepositoryAndAdd, initializeRepository } = useRepositoryActions()
+  const manager = useRepositoryManager()
+  const { chooseDirectory, validateDirectory } = manager
   const { isSwitchingRepository, switchActiveRepository } = useActiveRepositorySwitch()
   const { error: showError } = useAppNotifications()
 
@@ -59,6 +61,11 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
   const [createName, setCreateName] = useState("")
   const [createNameError, setCreateNameError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+
+  // 初始化空目录对话框状态
+  const [isInitDialogOpen, setIsInitDialogOpen] = useState(false)
+  const [initTargetPath, setInitTargetPath] = useState("")
+  const [isInitializing, setIsInitializing] = useState(false)
 
   const resetCreateForm = () => {
     setCreateParentPath("")
@@ -83,6 +90,15 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
 
       const validationResult = await validateDirectory(selectedPath)
       if (!validationResult.isValid) {
+        if (validationResult.missingDirectories.length === 5) {
+          logger.info("Chosen directory is empty, offering initialization.", {
+            localPath: selectedPath,
+          })
+          setInitTargetPath(selectedPath)
+          setIsInitDialogOpen(true)
+          return
+        }
+
         logger.warn("Chosen repository directory failed validation.", {
           elapsedMs: Math.round(performance.now() - startedAt),
           localPath: selectedPath,
@@ -192,6 +208,46 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     }
   }
 
+  const handleInitConfirm = async () => {
+    setIsInitializing(true)
+    const startedAt = performance.now()
+    const selectedPath = initTargetPath
+
+    try {
+      const name = selectedPath.split("/").pop() || "新仓库"
+      const newRepository = {
+        uuid: crypto.randomUUID(),
+        name,
+        localPath: selectedPath,
+        contentDirs: { ...DEFAULT_REPOSITORY_CONTENT_DIRECTORIES },
+      }
+
+      const repos = [...manager.getRepositories(), newRepository]
+      await manager.updateConfig({ repositories: repos })
+      await manager.refreshRepositoryStates()
+
+      await initializeRepository(newRepository.uuid)
+      await manager.switchActiveRepository(newRepository.uuid)
+
+      logger.info("Repository initialized from empty directory.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        localPath: selectedPath,
+        repositoryUuid: newRepository.uuid,
+      })
+      setIsInitDialogOpen(false)
+      setInitTargetPath("")
+    } catch (err) {
+      logger.error("Failed to initialize repository from empty directory.", {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        error: err,
+        localPath: selectedPath,
+      })
+      showError(err instanceof Error ? err.message : "初始化仓库失败", { durationMs: 4000 })
+    } finally {
+      setIsInitializing(false)
+    }
+  }
+
   const handleSwitchToRepository = async (repositoryUuid: string) => {
     try {
       logger.info("Switching repository from empty state.", { repositoryUuid })
@@ -263,11 +319,41 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={isInitDialogOpen} onOpenChange={(open) => {
+        if (!isInitializing) {
+          setIsInitDialogOpen(open)
+          if (!open) setInitTargetPath("")
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>初始化仓库</DialogTitle>
+            <DialogDescription>
+              该目录尚未包含 Synapse 仓库结构，是否将其初始化为 Synapse 仓库？
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground break-all">
+            {initTargetPath}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setIsInitDialogOpen(false); setInitTargetPath("") }}
+              disabled={isInitializing}
+            >
+              取消
+            </Button>
+            <Button onClick={() => void handleInitConfirm()} disabled={isInitializing}>
+              {isInitializing ? "初始化中..." : "初始化"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex h-screen w-full items-center justify-center bg-background p-6">
         <div className="flex w-full max-w-2xl flex-col gap-6">
           <div className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <Package className="h-6 w-6 text-primary" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+              <img src={appIcon} alt="Synapse" className="size-16 object-contain select-none" draggable={false} />
             </div>
             <h1 className="text-xl font-semibold tracking-tight">
               {isFirstTime ? "欢迎使用 Synapse" : "当前仓库不可用"}

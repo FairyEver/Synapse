@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type { SynapseAppUpdateState } from "@/types/update"
-import synapseLogo from "@/modules/settings/assets/synapse-logo.png"
+import synapseLogo from "@/assets/icon.png"
 
 const logger = createRendererLogger("settings.about")
 
