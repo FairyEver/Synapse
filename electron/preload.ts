@@ -98,6 +98,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     exportDB: "synapse:data-store:export-db",
     importDB: "synapse:data-store:import-db",
     installCLI: "synapse:data-store:install-cli",
+    getCliStatus: "synapse:data-store:get-cli-status",
     registerMCP: "synapse:data-store:register-mcp",
   },
 } as const
@@ -242,6 +243,7 @@ const synapseBridge: SynapseBridge = {
     exportDB: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.exportDB),
     importDB: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.importDB),
     installCLI: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.installCLI),
+    getCliStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getCliStatus),
     registerMCP: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.registerMCP, target),
   },
 }

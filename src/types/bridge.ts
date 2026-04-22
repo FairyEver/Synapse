@@ -197,6 +197,7 @@ export type SynapseBridge = {
     exportDB: () => Promise<{ success: boolean; path?: string }>
     importDB: () => Promise<{ success: boolean }>
     installCLI: () => Promise<{ success: boolean; path?: string; error?: string }>
+    getCliStatus: () => Promise<{ installed: boolean; path: string }>
     registerMCP: (target: "claude" | "codex") => Promise<{ success: boolean; error?: string }>
   }
 }

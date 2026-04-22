@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { existsSync, writeFileSync, mkdirSync } from "node:fs"
 import { chmod } from "node:fs/promises"
 import path from "node:path"
 import { app } from "electron"
@@ -11,7 +11,7 @@ function getCliScriptPath(): string {
     const appData = process.env.LOCALAPPDATA ?? path.join(process.env.USERPROFILE ?? "", "AppData", "Local")
     return path.join(appData, "Microsoft", "WindowsApps", "synd.cmd")
   }
-  return "/usr/local/bin/synd"
+  return path.join(app.getPath("home"), ".local", "bin", "synd")
 }
 
 function getMcpScriptPath(): string {

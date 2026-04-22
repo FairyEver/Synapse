@@ -147,6 +147,10 @@ async function installCLI(): Promise<{ success: boolean; path?: string; error?: 
   return requireSynapseBridge().dataStore.installCLI()
 }
 
+async function getCliStatus(): Promise<{ installed: boolean; path: string }> {
+  return requireSynapseBridge().dataStore.getCliStatus()
+}
+
 async function registerMCP(target: "claude" | "codex"): Promise<{ success: boolean; error?: string }> {
   return requireSynapseBridge().dataStore.registerMCP(target)
 }
@@ -157,6 +161,7 @@ export {
   deleteRow,
   dropTable,
   exportDB,
+  getCliStatus,
   importDB,
   insertRow,
   installCLI,

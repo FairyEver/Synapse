@@ -130,6 +130,10 @@ function registerDataStoreHandlers(): void {
     return installCli()
   })
 
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getCliStatus, async () => {
+    return getCliStatus()
+  })
+
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.registerMCP, async (_event, target: "claude" | "codex") => {
     return registerMcp(target)
   })

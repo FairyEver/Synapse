@@ -1,7 +1,7 @@
 import { dataStoreService } from "./service"
 import { startHttpServer, stopHttpServer } from "./http-server"
 import { registerDataStoreHandlers } from "./ipc-handlers"
-import { installCli } from "./cli-installer"
+import { getCliStatus, installCli } from "./cli-installer"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store")
@@ -19,10 +19,12 @@ async function initDataStore(): Promise<void> {
 
   registerDataStoreHandlers()
 
-  try {
-    await installCli()
-  } catch (error) {
-    logger.warn("Auto CLI install failed (non-fatal).", { error })
+  if (!getCliStatus().installed) {
+    try {
+      await installCli()
+    } catch (error) {
+      logger.warn("Auto CLI install failed (non-fatal).", { error })
+    }
   }
 
   logger.info("Data store initialized.")

@@ -14,5 +14,6 @@ export const DATA_STORE_IPC_CHANNELS = {
   exportDB: "synapse:data-store:export-db",
   importDB: "synapse:data-store:import-db",
   installCLI: "synapse:data-store:install-cli",
+  getCliStatus: "synapse:data-store:get-cli-status",
   registerMCP: "synapse:data-store:register-mcp",
 } as const
