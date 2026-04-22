@@ -36,10 +36,11 @@ import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
+import { DataStoreModule } from "@/modules/data-store"
 import type { SynapseContentType } from "@/types/content"
 import type { SynapsePendingPushEntry } from "@/types/repository"
 
-type AppTabId = SynapseContentType | "settings"
+type AppTabId = SynapseContentType | "data-store" | "settings"
 type DialogKind = "create" | "detail" | "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -133,6 +134,7 @@ function MainApp() {
         id: definition.id,
         label: definition.tabLabel,
       })),
+      { id: "data-store" as const, label: "数据" },
       { id: "settings" as const, label: "设置" },
     ],
     [],
@@ -403,6 +405,7 @@ function MainApp() {
               />
             )
           })}
+          {activeTab === "data-store" ? <DataStoreModule /> : null}
           {activeTab === "settings" ? <SettingsModule /> : null}
         </div>
       </AppShellLayout>

@@ -1,5 +1,6 @@
 import {
   Code,
+  Database,
   FolderGit2,
   FolderKanban,
   Info,
@@ -44,6 +45,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Terminal,
     label: "CLI",
     description: "命令行工具。",
+  },
+  {
+    id: "data-store",
+    icon: Database,
+    label: "数据服务",
+    description: "本地数据库。",
   },
   {
     id: "logs",

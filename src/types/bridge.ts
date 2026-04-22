@@ -1,4 +1,12 @@
 import type {
+  DataStoreColumnDef,
+  DataStoreQueryParams,
+  DataStoreQueryResult,
+  DataStoreStatus,
+  DataStoreTableInfo,
+  DataStoreTableSchema,
+} from "./data-store"
+import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "./backup"
@@ -172,5 +180,23 @@ export type SynapseBridge = {
     getState: () => Promise<SynapseAppUpdateState>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
     onOpenUpdatePage: (listener: () => void) => () => void
+  }
+  dataStore: {
+    listTables: () => Promise<DataStoreTableInfo[]>
+    createTable: (params: { name: string; description?: string; columns: DataStoreColumnDef[] }) => Promise<void>
+    dropTable: (name: string) => Promise<void>
+    describeTable: (name: string) => Promise<DataStoreTableSchema>
+    addColumn: (params: { table: string; column: DataStoreColumnDef & { default?: unknown } }) => Promise<void>
+    insert: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
+    batchInsert: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
+    query: (params: DataStoreQueryParams) => Promise<DataStoreQueryResult>
+    update: (params: { table: string; id: number; data: Record<string, unknown> }) => Promise<{ affected: number }>
+    delete: (params: { table: string; id: number }) => Promise<{ affected: number }>
+    rawSQL: (params: { sql: string; params?: unknown[] }) => Promise<{ rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number }>
+    getStatus: () => Promise<DataStoreStatus>
+    exportDB: () => Promise<{ success: boolean; path?: string }>
+    importDB: () => Promise<{ success: boolean }>
+    installCLI: () => Promise<{ success: boolean; path?: string; error?: string }>
+    registerMCP: (target: "claude" | "codex") => Promise<{ success: boolean; error?: string }>
   }
 }

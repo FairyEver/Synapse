@@ -1,0 +1,18 @@
+export const DATA_STORE_IPC_CHANNELS = {
+  listTables: "synapse:data-store:list-tables",
+  createTable: "synapse:data-store:create-table",
+  dropTable: "synapse:data-store:drop-table",
+  describeTable: "synapse:data-store:describe-table",
+  addColumn: "synapse:data-store:add-column",
+  insert: "synapse:data-store:insert",
+  batchInsert: "synapse:data-store:batch-insert",
+  query: "synapse:data-store:query",
+  update: "synapse:data-store:update",
+  delete: "synapse:data-store:delete",
+  rawSQL: "synapse:data-store:raw-sql",
+  getStatus: "synapse:data-store:get-status",
+  exportDB: "synapse:data-store:export-db",
+  importDB: "synapse:data-store:import-db",
+  installCLI: "synapse:data-store:install-cli",
+  registerMCP: "synapse:data-store:register-mcp",
+} as const

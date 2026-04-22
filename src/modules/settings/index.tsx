@@ -26,6 +26,7 @@ import { RepositoryListEditor } from "@/modules/settings/components/repository-l
 import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
+import { DataStoreSettingsPanel } from "@/modules/settings/components/data-store-settings-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 
@@ -235,6 +236,7 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
         {isReady && activeCategory === "editors" ? <EditorDirectoriesPanel /> : null}
         {isReady && activeCategory === "cli" ? <CliDetectPanel /> : null}
+        {isReady && activeCategory === "data-store" ? <DataStoreSettingsPanel /> : null}
         {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 
         {isReady && activeCategory === "admin" && activeRepository ? (

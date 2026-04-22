@@ -14,9 +14,10 @@
     "dev:electron:build": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:electron:app": "node scripts/dev-electron-app.mjs",
     "icons": "node scripts/build-icons.mjs",
-    "build": "pnpm build:renderer && pnpm build:electron",
+    "build": "pnpm build:renderer && pnpm build:electron && pnpm build:data-store",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "build:data-store": "esbuild data-store/cli/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/cli/index.js --format=esm && esbuild data-store/mcp/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/mcp/index.js --format=esm",
     "package": "pnpm exec electron-builder --publish never",
     "package:mac": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",
     "package:win": "pnpm exec electron-builder --win nsis --x64 --publish never",
@@ -68,6 +69,7 @@
     "cross-env": "10.1.0",
     "electron": "41.2.1",
     "electron-builder": "26.3.3",
+    "esbuild": "^0.28.0",
     "nodemon": "3.1.14",
     "shadcn": "4.2.0",
     "tailwindcss": "4.2.2",
@@ -91,6 +93,12 @@
     "extraMetadata": {
       "main": "dist-electron/electron/main.js"
     },
+    "extraResources": [
+      {
+        "from": "dist-data-store",
+        "to": "data-store"
+      }
+    ],
     "publish": [
       {
         "provider": "github",

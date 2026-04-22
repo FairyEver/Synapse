@@ -20,6 +20,7 @@ import { pendingPushesService } from "./services/pending-pushes-service"
 import { repositoryMaintenanceService } from "./services/repository-maintenance-service"
 import { repositoryStore } from "./services/repository-store"
 import { updateService } from "./services/update-service"
+import { initDataStore, shutdownDataStore } from "./data-store"
 
 let mainWindow: BrowserWindow | null = null
 let allowAppQuit = false
@@ -115,6 +116,7 @@ if (!gotSingleInstanceLock) {
     registerUserProfileHandlers()
     registerRepositoryHandlers()
     registerUpdateHandlers()
+    await initDataStore()
     await configStore.load()
     updateService.initialize()
     updateService.startAutoCheck()
@@ -170,6 +172,7 @@ app.on("before-quit", async (event) => {
 
   if (allowAppQuit) {
     // 确保日志被刷新
+    await shutdownDataStore()
     await logStore.dispose()
     return
   }

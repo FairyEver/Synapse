@@ -1,0 +1,73 @@
+type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON"
+
+type DataStoreColumnDef = {
+  name: string
+  type: DataStoreColumnType
+}
+
+type DataStoreColumnInfo = {
+  name: string
+  type: string
+  primaryKey: boolean
+}
+
+type DataStoreTableInfo = {
+  name: string
+  description: string
+  rowCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+type DataStoreTableSchema = {
+  name: string
+  description: string
+  columns: DataStoreColumnInfo[]
+  rowCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+type DataStoreWhereCondition = {
+  field: string
+  op: "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE"
+  value: unknown
+}
+
+type DataStoreWhereClause = Record<string, unknown> | DataStoreWhereCondition[]
+
+type DataStoreOrderBy = string | { field: string; dir: "asc" | "desc" }
+
+type DataStoreQueryParams = {
+  table: string
+  where?: DataStoreWhereClause
+  orderBy?: DataStoreOrderBy
+  limit?: number
+  offset?: number
+}
+
+type DataStoreQueryResult = {
+  rows: Record<string, unknown>[]
+  total: number
+}
+
+type DataStoreStatus = {
+  port: number
+  running: boolean
+  dbSize: number
+  tableCount: number
+}
+
+export type {
+  DataStoreColumnDef,
+  DataStoreColumnInfo,
+  DataStoreColumnType,
+  DataStoreOrderBy,
+  DataStoreQueryParams,
+  DataStoreQueryResult,
+  DataStoreStatus,
+  DataStoreTableInfo,
+  DataStoreTableSchema,
+  DataStoreWhereClause,
+  DataStoreWhereCondition,
+}

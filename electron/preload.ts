@@ -82,6 +82,24 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     openUpdatePage: "synapse:update:open-update-page",
     stateChanged: "synapse:update:state-changed",
   },
+  dataStore: {
+    listTables: "synapse:data-store:list-tables",
+    createTable: "synapse:data-store:create-table",
+    dropTable: "synapse:data-store:drop-table",
+    describeTable: "synapse:data-store:describe-table",
+    addColumn: "synapse:data-store:add-column",
+    insert: "synapse:data-store:insert",
+    batchInsert: "synapse:data-store:batch-insert",
+    query: "synapse:data-store:query",
+    update: "synapse:data-store:update",
+    delete: "synapse:data-store:delete",
+    rawSQL: "synapse:data-store:raw-sql",
+    getStatus: "synapse:data-store:get-status",
+    exportDB: "synapse:data-store:export-db",
+    importDB: "synapse:data-store:import-db",
+    installCLI: "synapse:data-store:install-cli",
+    registerMCP: "synapse:data-store:register-mcp",
+  },
 } as const
 
 function subscribeToChannel<T>(channel: string, listener: (payload: T) => void): () => void {
@@ -207,6 +225,24 @@ const synapseBridge: SynapseBridge = {
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.stateChanged, listener),
     onOpenUpdatePage: (listener) =>
       subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.openUpdatePage, listener),
+  },
+  dataStore: {
+    listTables: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.listTables),
+    createTable: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.createTable, params),
+    dropTable: (name) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.dropTable, name),
+    describeTable: (name) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.describeTable, name),
+    addColumn: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.addColumn, params),
+    insert: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.insert, params),
+    batchInsert: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.batchInsert, params),
+    query: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.query, params),
+    update: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.update, params),
+    delete: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.delete, params),
+    rawSQL: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.rawSQL, params),
+    getStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getStatus),
+    exportDB: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.exportDB),
+    importDB: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.importDB),
+    installCLI: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.installCLI),
+    registerMCP: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.registerMCP, target),
   },
 }
 
