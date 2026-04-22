@@ -2,7 +2,7 @@
   "name": "synapse",
   "productName": "Synapse",
   "private": true,
-  "version": "0.1.82",
+  "version": "0.1.83",
   "description": "Synapse desktop scaffold built with Electron, Vite, React, Tailwind CSS, and shadcn/ui.",
   "author": "FairyEver",
   "homepage": "https://github.com/FairyEver/Synapse",
@@ -114,6 +114,10 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "hardenedRuntime": true,
+      "notarize": true,
       "target": [
         {
           "target": "dmg",

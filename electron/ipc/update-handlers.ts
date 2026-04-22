@@ -26,6 +26,11 @@ function registerUpdateHandlers(): void {
     await updateService.cancelDownload()
   })
 
+  handleValidatedIpc(SYNAPSE_IPC_CHANNELS.update.installUpdate, async () => {
+    logger.info("Handling update.installUpdate request.")
+    await updateService.installUpdate()
+  })
+
   handlersRegistered = true
 }
 

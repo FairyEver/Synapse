@@ -1,6 +1,7 @@
 import { app } from "electron"
 import { access, readFile, readdir } from "node:fs/promises"
 import path from "node:path"
+import { getContentTypeDefinition } from "../../src/config/content-types"
 import type { SynapseContentType } from "../../src/types/content"
 
 type RepositorySeedAttachment = {
@@ -22,12 +23,6 @@ type RepositorySeedContent = {
 }
 
 type RepositoryTemplateMeta = Omit<RepositorySeedContent, "attachments" | "content" | "type">
-
-const TEMPLATE_DIRECTORY_BY_TYPE: Record<SynapseContentType, string> = {
-  rule: "rules",
-  skill: "skill",
-  prompt: "prompt",
-}
 
 function getTemplateRootPath(): string {
   if (app.isPackaged) {
@@ -86,12 +81,19 @@ function parseTemplateMeta(
     throw new Error(`模板 ${templateDirectoryPath} 缺少 name。`)
   }
 
+  const category = assertStringField(record.category, "category", templateDirectoryPath)
+  const categoryExists = getContentTypeDefinition(type).categories.some((item) => item.id === category)
+
+  if (!categoryExists) {
+    throw new Error(`模板 ${templateDirectoryPath} 的 category "${category}" 不存在于 ${type} 分类定义中。`)
+  }
+
   return {
     id: assertStringField(record.id, "id", templateDirectoryPath),
     ...(typeof name === "string" ? { name } : {}),
     title: assertStringField(record.title, "title", templateDirectoryPath),
     description: assertStringField(record.description, "description", templateDirectoryPath),
-    category: assertStringField(record.category, "category", templateDirectoryPath),
+    category,
     icon: assertStringField(record.icon, "icon", templateDirectoryPath),
     iconBg: assertStringField(record.iconBg, "iconBg", templateDirectoryPath),
   }
@@ -139,12 +141,12 @@ async function collectTemplateAttachments(
 
 async function readSeedContent(
   type: SynapseContentType,
+  templateRootPath: string,
   templateDirectoryName: string,
 ): Promise<RepositorySeedContent> {
-  const templateRootPath = getTemplateRootPath()
   const templateDirectoryPath = path.join(
     templateRootPath,
-    TEMPLATE_DIRECTORY_BY_TYPE[type],
+    getContentTypeDefinition(type).repositoryDir.defaultDirectoryName,
     templateDirectoryName,
   )
   const [metaRaw, content] = await Promise.all([
@@ -165,18 +167,50 @@ async function readSeedContent(
   }
 }
 
+function validateSeedUniqueness(seeds: readonly RepositorySeedContent[]): void {
+  const usedIds = new Map<string, SynapseContentType>()
+  const usedNames = new Map<string, SynapseContentType>()
+
+  for (const seed of seeds) {
+    const existingIdType = usedIds.get(seed.id)
+
+    if (existingIdType) {
+      throw new Error(`模板内容 id "${seed.id}" 重复，涉及 ${existingIdType} 与 ${seed.type}。`)
+    }
+
+    usedIds.set(seed.id, seed.type)
+
+    if (seed.name == null) {
+      continue
+    }
+
+    const existingNameType = usedNames.get(seed.name)
+
+    if (existingNameType) {
+      throw new Error(`模板内容 name "${seed.name}" 重复，涉及 ${existingNameType} 与 ${seed.type}。`)
+    }
+
+    usedNames.set(seed.name, seed.type)
+  }
+}
+
 async function readRepositorySeedContents(): Promise<RepositorySeedContent[]> {
   const seeds: RepositorySeedContent[] = []
   const templateRootPath = getTemplateRootPath()
 
   for (const type of ["rule", "skill", "prompt"] as const) {
-    const typeRootPath = path.join(templateRootPath, TEMPLATE_DIRECTORY_BY_TYPE[type])
+    const typeRootPath = path.join(
+      templateRootPath,
+      getContentTypeDefinition(type).repositoryDir.defaultDirectoryName,
+    )
     const templateDirectoryNames = await listTemplateDirectories(typeRootPath)
 
     for (const templateDirectoryName of templateDirectoryNames) {
-      seeds.push(await readSeedContent(type, templateDirectoryName))
+      seeds.push(await readSeedContent(type, templateRootPath, templateDirectoryName))
     }
   }
+
+  validateSeedUniqueness(seeds)
 
   return seeds
 }

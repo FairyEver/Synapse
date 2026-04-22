@@ -65,7 +65,7 @@ function formatDuration(totalSeconds: number): string {
 
 function getDownloadDetails(updateState: SynapseAppUpdateState): string | null {
   if (updateState.status === "downloaded") {
-    return "已保存到下载目录"
+    return "重启后完成安装"
   }
 
   if (updateState.status !== "downloading") {
@@ -157,10 +157,10 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   }, [])
 
   const isChecking = updateState.status === "checking"
-  const isDownloading = updateState.status === "downloading"
+  const isDownloading = updateState.status === "available" || updateState.status === "downloading"
   const isDownloaded = updateState.status === "downloaded"
-  const actionLabel = isChecking ? "检查中..." : isDownloading ? "下载中..." : "检查更新"
-  const actionDisabled = !updateState.canCheck || isChecking || isDownloading
+  const actionLabel = isDownloaded ? "重启安装" : isChecking ? "检查中..." : isDownloading ? "下载中..." : "检查更新"
+  const actionDisabled = isDownloaded ? false : !updateState.canCheck || isChecking || isDownloading
   const statusClassName = updateState.status === "error" || actionError
     ? "text-sm text-destructive"
     : "text-sm text-muted-foreground"
@@ -210,6 +210,11 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     logger.info("App update action triggered.", { currentStatus: updateState.status })
 
     try {
+      if (isDownloaded) {
+        await bridge.installUpdate()
+        return
+      }
+
       const nextState = await bridge.checkForUpdates()
       setUpdateState(nextState)
     } catch (error) {
@@ -269,14 +274,6 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
               <p className={statusClassName}>{actionError ?? updateState.message}</p>
               {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
                 <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
-              ) : null}
-              {isDownloaded ? (
-                <p className="text-xs text-muted-foreground">退出后运行安装包。</p>
-              ) : null}
-              {updateState.downloadedFilePath ? (
-                <p className="text-xs break-all text-muted-foreground">
-                  下载位置：{updateState.downloadedFilePath}
-                </p>
               ) : null}
             </div>
 

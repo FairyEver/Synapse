@@ -1,15 +1,10 @@
-import { createHash } from "node:crypto"
-import { createWriteStream } from "node:fs"
-import { access, mkdir, rename, rm } from "node:fs/promises"
-import type { OutgoingHttpHeaders } from "node:http"
-import path from "node:path"
-import { Readable, Transform } from "node:stream"
-import { pipeline } from "node:stream/promises"
-import { app, BrowserWindow, Notification, shell } from "electron"
+import { app, BrowserWindow, Notification } from "electron"
+import { CancellationToken } from "electron-updater"
 import * as electronUpdater from "electron-updater"
 import type {
   AppUpdater,
-  ResolvedUpdateFileInfo,
+  ProgressInfo,
+  UpdateDownloadedEvent,
   UpdateInfo,
 } from "electron-updater"
 import type { SynapseAppUpdateState } from "../../src/types/update"
@@ -20,16 +15,8 @@ import { createMainLogger } from "./log-store"
 const autoUpdater: AppUpdater = electronUpdater.autoUpdater
 const logger = createMainLogger("updater")
 
-type UpdateInfoAndProviderLike = {
-  info: UpdateInfo
-  provider: {
-    resolveFiles: (updateInfo: UpdateInfo) => ResolvedUpdateFileInfo[]
-  }
-}
-
-type AppUpdaterWithResolvedFiles = AppUpdater & {
-  updateInfoAndProvider: UpdateInfoAndProviderLike | null
-}
+const AUTO_CHECK_INTERVAL_MS = 60_000
+const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
 
 function isSupportedPlatform(): boolean {
   return process.platform === "darwin" || process.platform === "win32"
@@ -70,116 +57,35 @@ function cloneState(state: SynapseAppUpdateState): SynapseAppUpdateState {
   return structuredClone(state)
 }
 
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
+function toNullablePositiveNumber(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null
 }
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return false
-    }
-
-    throw error
-  }
-}
-
-function toFetchHeaders(headers: OutgoingHttpHeaders | null): Record<string, string> | undefined {
-  if (!headers) {
-    return undefined
-  }
-
-  const nextHeaders: Record<string, string> = {}
-
-  for (const [key, value] of Object.entries(headers)) {
-    if (value === undefined) {
-      continue
-    }
-
-    nextHeaders[key] = Array.isArray(value) ? value.join(", ") : String(value)
-  }
-
-  return Object.keys(nextHeaders).length > 0 ? nextHeaders : undefined
-}
-
-function getResolvedFileName(fileInfo: ResolvedUpdateFileInfo, fallbackVersion: string): string {
-  const baseName = path.posix.basename(decodeURIComponent(fileInfo.url.pathname)).trim()
-
-  if (baseName.length > 0) {
-    return baseName
-  }
-
-  const extension = path.extname(fileInfo.info.url ?? "").trim() || ".zip"
-  return `Synapse-${fallbackVersion}${extension}`
-}
-
-function getPreferredArtifactExtensions(): string[] {
-  if (process.platform === "darwin") {
-    return [".dmg", ".zip"]
-  }
-
-  if (process.platform === "win32") {
-    return [".exe"]
-  }
-
-  return []
-}
-
-function pickInstallerFile(files: ResolvedUpdateFileInfo[]): ResolvedUpdateFileInfo | null {
-  const preferredExtensions = getPreferredArtifactExtensions()
-
-  for (const extension of preferredExtensions) {
-    const match = files.find((file) => path.extname(file.url.pathname).toLowerCase() === extension)
-
-    if (match) {
-      return match
-    }
-  }
-
-  return files[0] ?? null
-}
-
-const AUTO_CHECK_INTERVAL_MS = 60_000
-const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
 
 class UpdateService {
   private initialized = false
   private state: SynapseAppUpdateState = createBaseState()
-  private downloadAbortController: AbortController | null = null
-  private currentTempPath: string | null = null
-  private stallTimedOut = false
+  private downloadCancellationToken: CancellationToken | null = null
+  private isCancellingDownload = false
   private isAutoCheck = false
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
 
-  private resetDownloadState(): void {
-    this.downloadAbortController = null
-    this.currentTempPath = null
-    this.stallTimedOut = false
+  private clearDownloadTracking(): void {
+    this.downloadCancellationToken = null
+    this.isCancellingDownload = false
   }
 
-  private async cleanupTempFile(): Promise<void> {
-    if (this.currentTempPath) {
-      const tempPath = this.currentTempPath
-      this.currentTempPath = null
-      try {
-        await rm(tempPath, { force: true })
-        logger.info("Cleaned up temp download file.", { tempPath })
-      } catch (err) {
-        logger.warn("Failed to clean up temp file", err)
-      }
-    }
+  private isDownloadCancelledError(error: unknown): boolean {
+    return this.isCancellingDownload || (error instanceof Error && error.message === "cancelled")
   }
 
   async cancelDownload(): Promise<void> {
-    if (this.downloadAbortController) {
-      logger.info("Cancelling download.")
-      this.downloadAbortController.abort()
+    if (this.downloadCancellationToken) {
+      logger.info("Cancelling update download.")
+      this.isCancellingDownload = true
+      this.downloadCancellationToken.cancel()
     }
-    await this.cleanupTempFile()
+
     if (this.state.status === "downloading" || this.state.status === "available") {
       this.setState({
         status: "idle",
@@ -193,6 +99,24 @@ class UpdateService {
         downloadedFilePath: null,
       })
     }
+  }
+
+  async installUpdate(): Promise<void> {
+    this.initialize()
+
+    if (!isUpdateSupportedInCurrentEnvironment()) {
+      return
+    }
+
+    if (this.state.status !== "downloaded") {
+      throw new Error("更新尚未准备好，请先完成下载。")
+    }
+
+    logger.info("Installing downloaded update.", {
+      version: this.state.releaseVersion,
+    })
+
+    autoUpdater.quitAndInstall()
   }
 
   initialize(): void {
@@ -266,9 +190,39 @@ class UpdateService {
       }
     })
 
+    autoUpdater.on("download-progress", (progressInfo) => {
+      if (!this.isAutoCheck) {
+        this.handleDownloadProgress(progressInfo)
+      }
+    })
+
+    autoUpdater.on("update-downloaded", (event) => {
+      logger.info("Update downloaded.", {
+        version: event.version,
+        downloadedFile: event.downloadedFile,
+      })
+      if (!this.isAutoCheck) {
+        this.handleUpdateDownloaded(event)
+      }
+    })
+
+    autoUpdater.on("update-cancelled", (updateInfo) => {
+      logger.info("Update download cancelled.", {
+        version: updateInfo.version,
+      })
+      if (!this.isAutoCheck) {
+        this.handleDownloadCancelled(updateInfo)
+      }
+    })
+
     autoUpdater.on("error", (error) => {
       logger.error("App updater reported an error.", error)
       if (!this.isAutoCheck) {
+        if (this.isDownloadCancelledError(error)) {
+          this.handleDownloadCancelled()
+          return
+        }
+
         this.handleError(error)
       }
     })
@@ -291,7 +245,12 @@ class UpdateService {
       return this.getState()
     }
 
-    if (this.state.status === "checking" || this.state.status === "downloading") {
+    if (
+      this.state.status === "checking"
+      || this.state.status === "available"
+      || this.state.status === "downloading"
+      || this.state.status === "downloaded"
+    ) {
       return this.getState()
     }
 
@@ -309,7 +268,7 @@ class UpdateService {
   private handleUpdateAvailable(updateInfo: UpdateInfo): void {
     this.setState({
       status: "available",
-      message: `发现新版本 v${updateInfo.version}，正在下载到下载目录...`,
+      message: `发现新版本 v${updateInfo.version}，正在准备下载...`,
       error: null,
       releaseVersion: updateInfo.version,
       lastCheckedAt: new Date().toISOString(),
@@ -321,223 +280,89 @@ class UpdateService {
       downloadedFilePath: null,
     })
 
-    void this.downloadLatestUpdatePackage(updateInfo).catch((error) => {
-      logger.error("Failed to download update package.", error)
+    void this.downloadLatestUpdate(updateInfo).catch((error) => {
+      if (this.isDownloadCancelledError(error)) {
+        this.handleDownloadCancelled(updateInfo)
+        return
+      }
+
+      logger.error("Failed to download update.", error)
       this.handleError(error)
     })
   }
 
-  private async downloadLatestUpdatePackage(updateInfo: UpdateInfo): Promise<void> {
-    this.downloadAbortController = new AbortController()
-
-    const fileInfo = this.resolveInstallerFile(updateInfo)
-    const fileName = getResolvedFileName(fileInfo, updateInfo.version)
-    const downloadsDir = app.getPath("downloads")
-
-    await mkdir(downloadsDir, { recursive: true })
-
-    const destinationPath = await this.createUniqueDownloadPath(downloadsDir, fileName)
-    const tempPath = `${destinationPath}.download`
-    this.currentTempPath = tempPath
-
-    const expectedSize = this.getExpectedTotalBytes(fileInfo)
-    const startedAt = Date.now()
-    const hash = createHash("sha512")
-
-    this.setState({
-      status: "downloading",
-      message: "正在下载更新包到下载目录...",
-      error: null,
-      downloadPercent: expectedSize === null ? null : 0,
-      bytesPerSecond: null,
-      transferredBytes: 0,
-      totalBytes: expectedSize,
-      canCheck: false,
-      downloadedFilePath: null,
-    })
+  private async downloadLatestUpdate(updateInfo: UpdateInfo): Promise<void> {
+    const cancellationToken = new CancellationToken()
+    this.downloadCancellationToken = cancellationToken
+    this.isCancellingDownload = false
 
     try {
-      const response = await fetch(fileInfo.url, {
-        headers: toFetchHeaders(autoUpdater.requestHeaders),
-        redirect: "follow",
-        signal: this.downloadAbortController.signal,
-      })
-
-      if (!response.ok || !response.body) {
-        throw new Error("下载更新包失败，请稍后再试。")
-      }
-
-      const totalBytes = this.resolveResponseTotalBytes(response, fileInfo)
-      let transferredBytes = 0
-      let lastProgressAt = 0
-      let lastDataReceivedAt = Date.now()
-
-      const STALL_TIMEOUT_MS = 30_000
-      const stallCheckInterval = setInterval(() => {
-        if (Date.now() - lastDataReceivedAt > STALL_TIMEOUT_MS) {
-          logger.warn("Download stalled, aborting.", { transferredBytes, totalBytes })
-          this.stallTimedOut = true
-          this.downloadAbortController?.abort()
-        }
-      }, 5_000)
-
-      const progressStream = new Transform({
-        transform: (chunk, _encoding, callback) => {
-          if (this.downloadAbortController?.signal.aborted) {
-            callback(new Error("下载已取消"))
-            return
-          }
-
-          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-
-          transferredBytes += buffer.length
-          lastDataReceivedAt = Date.now()
-          hash.update(buffer)
-
-          const now = Date.now()
-
-          if (lastProgressAt === 0 || now - lastProgressAt >= 200) {
-            lastProgressAt = now
-            this.updateDownloadProgress(updateInfo, transferredBytes, totalBytes, startedAt)
-          }
-
-          callback(null, buffer)
-        },
-      })
-
-      try {
-        await pipeline(
-          Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
-          progressStream,
-          createWriteStream(tempPath),
-        )
-      } finally {
-        clearInterval(stallCheckInterval)
-      }
-
-      const actualSha512 = hash.digest("base64")
-
-      if (fileInfo.info.sha512 && actualSha512 !== fileInfo.info.sha512) {
-        throw new Error("下载的更新包校验失败，请重新检查更新。")
-      }
-
-      this.updateDownloadProgress(updateInfo, transferredBytes, totalBytes, startedAt)
-
-      await rename(tempPath, destinationPath)
-      this.currentTempPath = null
-      this.downloadAbortController = null
-
-      logger.info("Update package downloaded to downloads directory.", {
-        version: updateInfo.version,
-        destinationPath,
-      })
-
-      shell.showItemInFolder(destinationPath)
-
-      this.setState({
-        status: "downloaded",
-        message: `新版本 v${updateInfo.version} 已下载到下载目录，并已打开所在位置。`,
-        error: null,
-        releaseVersion: updateInfo.version,
-        downloadPercent: 100,
-        bytesPerSecond: this.state.bytesPerSecond,
-        transferredBytes,
-        totalBytes,
-        canCheck: true,
-        downloadedFilePath: destinationPath,
-      })
+      await autoUpdater.downloadUpdate(cancellationToken)
     } catch (error) {
-      await this.cleanupTempFile()
-
-      const wasStallTimeout = this.stallTimedOut
-      this.resetDownloadState()
-
-      if (error instanceof Error && error.message === "下载已取消") {
-        if (wasStallTimeout) {
-          throw new Error("下载超时，请检查网络连接后重试。")
-        }
-
+      if (this.isDownloadCancelledError(error)) {
         return
       }
 
       throw error
+    } finally {
+      this.clearDownloadTracking()
     }
   }
 
-  private updateDownloadProgress(
-    updateInfo: UpdateInfo,
-    transferredBytes: number,
-    totalBytes: number | null,
-    startedAt: number,
-  ): void {
-    const elapsedSeconds = Math.max(1, (Date.now() - startedAt) / 1000)
-    const bytesPerSecond = transferredBytes > 0 ? transferredBytes / elapsedSeconds : null
-
+  private handleDownloadProgress(progressInfo: ProgressInfo): void {
     this.setState({
       status: "downloading",
-      message: "正在下载更新包到下载目录...",
+      message: "正在下载更新...",
       error: null,
-      releaseVersion: updateInfo.version,
-      downloadPercent: totalBytes && totalBytes > 0 ? (transferredBytes / totalBytes) * 100 : null,
-      bytesPerSecond,
-      transferredBytes,
-      totalBytes,
+      downloadPercent: toNullablePositiveNumber(progressInfo.percent),
+      bytesPerSecond: toNullablePositiveNumber(progressInfo.bytesPerSecond),
+      transferredBytes: toNullablePositiveNumber(progressInfo.transferred),
+      totalBytes: toNullablePositiveNumber(progressInfo.total),
       canCheck: false,
       downloadedFilePath: null,
     })
   }
 
-  private resolveInstallerFile(updateInfo: UpdateInfo): ResolvedUpdateFileInfo {
-    const updaterWithResolvedFiles = autoUpdater as AppUpdaterWithResolvedFiles
-    const updateInfoAndProvider = updaterWithResolvedFiles.updateInfoAndProvider
+  private handleUpdateDownloaded(event: UpdateDownloadedEvent): void {
+    this.clearDownloadTracking()
 
-    if (!updateInfoAndProvider) {
-      throw new Error("更新信息还没有准备好，请重新检查更新。")
-    }
-
-    const resolvedFiles = updateInfoAndProvider.provider.resolveFiles(updateInfoAndProvider.info)
-    const installerFile = pickInstallerFile(resolvedFiles)
-
-    if (!installerFile) {
-      throw new Error("没有找到可下载的安装包。")
-    }
-
-    return installerFile
+    this.setState({
+      status: "downloaded",
+      message: `新版本 v${event.version} 已准备好，重启后安装。`,
+      error: null,
+      releaseVersion: event.version,
+      downloadPercent: 100,
+      transferredBytes: this.state.totalBytes ?? this.state.transferredBytes,
+      totalBytes: this.state.totalBytes ?? this.state.transferredBytes,
+      canCheck: false,
+      downloadedFilePath: event.downloadedFile,
+    })
   }
 
-  private getExpectedTotalBytes(fileInfo: ResolvedUpdateFileInfo): number | null {
-    return typeof fileInfo.info.size === "number" && Number.isFinite(fileInfo.info.size) && fileInfo.info.size > 0
-      ? fileInfo.info.size
-      : null
-  }
+  private handleDownloadCancelled(updateInfo?: UpdateInfo): void {
+    this.clearDownloadTracking()
 
-  private resolveResponseTotalBytes(response: Response, fileInfo: ResolvedUpdateFileInfo): number | null {
-    const contentLength = Number.parseInt(response.headers.get("content-length") ?? "", 10)
-
-    if (Number.isFinite(contentLength) && contentLength > 0) {
-      return contentLength
+    if (this.state.status !== "downloading" && this.state.status !== "available") {
+      return
     }
 
-    return this.getExpectedTotalBytes(fileInfo)
-  }
-
-  private async createUniqueDownloadPath(directoryPath: string, fileName: string): Promise<string> {
-    const parsedFile = path.parse(fileName)
-    let attempt = 0
-
-    while (true) {
-      const suffix = attempt === 0 ? "" : ` (${attempt})`
-      const candidatePath = path.join(directoryPath, `${parsedFile.name}${suffix}${parsedFile.ext}`)
-
-      if (!await pathExists(candidatePath) && !await pathExists(`${candidatePath}.download`)) {
-        return candidatePath
-      }
-
-      attempt += 1
-    }
+    this.setState({
+      status: "idle",
+      message: "下载已取消。",
+      error: null,
+      releaseVersion: updateInfo?.version ?? this.state.releaseVersion,
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
+      canCheck: isUpdateSupportedInCurrentEnvironment(),
+      downloadedFilePath: null,
+    })
   }
 
   private handleError(error: unknown): void {
+    this.clearDownloadTracking()
+
     const message =
       error instanceof Error && error.message.trim()
         ? error.message
@@ -547,6 +372,10 @@ class UpdateService {
       status: "error",
       message,
       error: message,
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
       canCheck: isUpdateSupportedInCurrentEnvironment(),
       downloadedFilePath: null,
     })
@@ -580,7 +409,12 @@ class UpdateService {
     }
 
     const runAutoCheck = () => {
-      if (this.state.status === "checking" || this.state.status === "downloading") {
+      if (
+        this.state.status === "checking"
+        || this.state.status === "available"
+        || this.state.status === "downloading"
+        || this.state.status === "downloaded"
+      ) {
         return
       }
 

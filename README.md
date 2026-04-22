@@ -90,6 +90,21 @@ UI 会根据状态启用或禁用安装按钮，并给出相应提示。
 
 以下对比的是 Synapse 数据存储模块在 `CLI`、`MCP`、`API` 三条入口上的能力覆盖情况。
 
+### 数据服务 MCP 安装规则
+
+在设置页的“数据服务”中点击 MCP 注册时，Synapse 会按各编辑器的官方全局配置位置写入 `synapse-data` 这个 MCP server。
+
+| 编辑器 | 全局配置文件 | 写入格式 |
+| --- | --- | --- |
+| Claude Code | `~/.claude.json` | JSON，写入顶层 `mcpServers.synapse-data` |
+| Codex | `~/.codex/config.toml` | TOML，写入 `[mcp_servers.synapse-data]` |
+
+写入规则：
+
+- Claude Code 会写入 JSON 结构，包含 `"type": "stdio"`、`"command": "node"`、`"args": [MCP 脚本路径]`，并保留 `~/.claude.json` 中其他已有配置。
+- Codex 会在 `~/.codex/config.toml` 中增量更新 `synapse-data` 对应的 table，不会覆盖其他如 `model`、`profiles`、审批策略等现有配置。
+- “重新注册”只更新 `synapse-data` 这一项；“打开文件”打开的也是上述官方全局配置文件。
+
 说明：
 
 - `支持`：有明确的一等命令 / tool / action。
