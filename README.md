@@ -4,7 +4,7 @@ Where Ideas Connect
 
 ## 下载
 
-[github releases](https://github.com/FairyEver/Synapse/releases)
+[github releases](https://github.com/FairyEver/SynapseAppRelease/releases)
 
 ## 常见问题
 
