@@ -32,7 +32,7 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 
 ### 安装路径
 
-下表中 `{contentId}` 为内容的唯一 ID，`{projectPath}` 为你在 Synapse 中选中的项目目录。
+下表中 `{contentId}` 为内容的唯一 ID，`{skillName}` 为技能的 `name` 字段（缺少时依次回退为标题 slug、`contentId`），`{projectPath}` 为你在 Synapse 中选中的项目目录。
 
 #### Claude Code
 
@@ -40,8 +40,8 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | --- | --- | --- |
 | 规则 | 全局 | `~/.claude/CLAUDE.md` |
 | 规则 | 项目 | `{projectPath}/.claude/rules/{name}.md` |
-| 技能 | 全局 | `~/.claude/skills/{contentId}/` |
-| 技能 | 项目 | `{projectPath}/.claude/skills/{contentId}/` |
+| 技能 | 全局 | `~/.claude/skills/{skillName}/` |
+| 技能 | 项目 | `{projectPath}/.claude/skills/{skillName}/` |
 
 项目规则以独立 `.md` 文件写入 `.claude/rules/` 目录，文件名取规则的 `name` 字段。如果规则尚未设置名称，则自动使用 `synapse_{contentId}` 作为文件名。安装时可选填 `paths` frontmatter，限定规则仅在匹配文件进入 context 时加载。
 
@@ -51,8 +51,8 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | --- | --- | --- |
 | 规则 | 全局 | `$CODEX_HOME/AGENTS.md`，未设置则为 `~/.codex/AGENTS.md` |
 | 规则 | 项目 | `{projectPath}/AGENTS.md` |
-| 技能 | 全局 | `~/.agents/skills/{contentId}/` |
-| 技能 | 项目 | `{projectPath}/.agents/skills/{contentId}/` |
+| 技能 | 全局 | `~/.agents/skills/{skillName}/` |
+| 技能 | 项目 | `{projectPath}/.agents/skills/{skillName}/` |
 
 注意：Codex 全局技能写到 `~/.agents`，而不是 `~/.codex`。
 
@@ -62,8 +62,8 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | --- | --- | --- |
 | 规则 | 全局 | 不支持（Cursor 全局规则只能通过其设置界面管理） |
 | 规则 | 项目 | `{projectPath}/.cursor/rules/{contentId}.mdc` |
-| 技能 | 全局 | `~/.cursor/skills/{contentId}/` |
-| 技能 | 项目 | `{projectPath}/.cursor/skills/{contentId}/` |
+| 技能 | 全局 | `~/.cursor/skills/{skillName}/` |
+| 技能 | 项目 | `{projectPath}/.cursor/skills/{skillName}/` |
 
 ### 规则与技能的写入形式
 
