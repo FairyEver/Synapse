@@ -29,7 +29,8 @@ async function whichBin(bin: string): Promise<string | null> {
     const { stdout } = await execFileAsync(shell, ["-l", "-c", `which ${bin}`], { timeout: 8000 })
     const firstLine = stdout.trim().split("\n")[0]
     return firstLine || null
-  } catch {
+  } catch (err) {
+    logger.warn("whichBin failed.", { bin, shell, error: String(err) })
     return null
   }
 }
