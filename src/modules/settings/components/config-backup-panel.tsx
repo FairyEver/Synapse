@@ -13,7 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 
 function ConfigBackupPanel() {
@@ -24,12 +23,19 @@ function ConfigBackupPanel() {
   return (
     <>
       <SettingsGroup>
-        <div className="flex flex-col gap-4">
-          <SettingsFieldRow
-            label="导出配置"
-            description="导出当前设置和身份。"
-            controlClassName="flex w-full justify-start md:w-fit"
-          >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm font-medium text-foreground">配置</p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                logger.info("Config backup import dialog opened.")
+                setIsImportOpen(true)
+              }}
+            >
+              导入
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -45,26 +51,9 @@ function ConfigBackupPanel() {
                 ).catch(() => {})
               }}
             >
-              导出配置
+              导出
             </Button>
-          </SettingsFieldRow>
-
-          <SettingsFieldRow
-            label="导入配置"
-            description="会覆盖当前设置和身份。"
-            controlClassName="flex w-full justify-start md:w-fit"
-          >
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                logger.info("Config backup import dialog opened.")
-                setIsImportOpen(true)
-              }}
-            >
-              导入配置
-            </Button>
-          </SettingsFieldRow>
+          </div>
         </div>
       </SettingsGroup>
 
