@@ -480,19 +480,13 @@ function ContentBrowserPage({
   }, [isDeletedView])
 
   useEffect(() => {
-    // 如果当前是"我的收藏"但没有收藏了，重置到"全部"
-    if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID && favoriteIds.length === 0) {
-      setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
+    // "我的收藏"是特殊分类，不在 categories 数组中，不需要检查
+    if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID) {
       return
     }
 
     // "最近删除"是特殊分类，不在 categories 数组中，不需要检查
     if (activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID) {
-      return
-    }
-
-    // "我的收藏"是特殊分类，不在 categories 数组中，不需要检查
-    if (activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID) {
       return
     }
 
@@ -564,12 +558,6 @@ function ContentBrowserPage({
 
   const filteredItems = useMemo(
     () => {
-      if (activeCategoryId === SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID) {
-        return deferredSearchQuery
-          ? contentSearch.search(deferredSearchQuery).map((result) => result.item)
-          : itemsInActiveCategory
-      }
-
       if (deferredSearchQuery) {
         const searchResults = contentSearch.search(deferredSearchQuery).map((result) => result.item)
         return sortOrder ? sortContentItems(searchResults, sortOrder) : searchResults
@@ -585,12 +573,19 @@ function ContentBrowserPage({
       return `共 ${filteredItems.length} 项`
     }
 
-    if (activeCategoryId === SYNAPSE_ALL_CATEGORY_ID && !deferredSearchQuery) {
-      return `共 ${totalCount} 项`
+    if (
+      activeCategoryId === SYNAPSE_ALL_CATEGORY_ID
+      || activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID
+      || activeCategoryId === SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID
+    ) {
+      if (!deferredSearchQuery) {
+        return `共 ${filteredItems.length} 项`
+      }
+      return `显示 ${filteredItems.length} / ${itemsInActiveCategory.length} 项`
     }
 
     return `显示 ${filteredItems.length} / ${totalCount} 项`
-  }, [activeCategoryId, filteredItems.length, isDeletedView, deferredSearchQuery, totalCount])
+  }, [activeCategoryId, filteredItems.length, isDeletedView, deferredSearchQuery, totalCount, itemsInActiveCategory.length])
 
   const recentlyViewedCount = useMemo(() => {
     const itemIds = new Set(items.map((item) => item.id))
@@ -779,7 +774,7 @@ function ContentBrowserPage({
               </div>
 
               <div className="flex shrink-0 items-center gap-3">
-                {!isDeletedView && activeCategoryId !== SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID && (
+                {!isDeletedView && (
                   <Select
                     data-track="content-sort-order"
                     value={sortOrder}
