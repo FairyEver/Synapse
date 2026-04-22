@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
-import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
 
 type EmptyRepositoryStateProps = {
@@ -45,7 +44,6 @@ function validateRepositoryName(value: string): string | null {
 }
 
 function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
-  const isMacDesktop = getSynapseBridge()?.platform === "darwin"
   const repositories = useRepositoryList()
   const activeRepository = useActiveRepository()
   const { addRepository, createLocalRepositoryAndAdd, initializeRepository } = useRepositoryActions()
@@ -352,12 +350,9 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
         </DialogContent>
       </Dialog>
       <div
-        data-window-drag-context={isMacDesktop ? "true" : undefined}
-        data-window-drag={isMacDesktop ? "true" : undefined}
         className="flex h-screen w-full items-center justify-center bg-background p-6"
       >
         <div
-          data-window-no-drag={isMacDesktop ? "true" : undefined}
           className="flex w-full max-w-2xl flex-col gap-6"
         >
           <div className="text-center">

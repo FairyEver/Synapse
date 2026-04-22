@@ -25,6 +25,13 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
+import { RepoIdRecoveryDialog } from "@/app-shell/components/repo-id-recovery-dialog"
 
 const logger = createRendererLogger("app.repo-onboarding")
 
@@ -43,6 +50,7 @@ function RepoOnboardingDialog() {
   const [displayName, setDisplayName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false)
   const hasOtherRepositories = repositories.length > 1
   const isBlockedByOtherSwitchUi =
     isRepositorySwitchDialogOpen || pendingSwitchOnboarding !== null
@@ -69,6 +77,7 @@ function RepoOnboardingDialog() {
       setDisplayName("")
       setError(null)
       setIsSubmitting(false)
+      setIsRecoveryOpen(false)
     }
   }, [isOpen])
 
@@ -114,6 +123,7 @@ function RepoOnboardingDialog() {
   }
 
   return (
+    <>
     <Dialog open={isOpen} data-track="repo-onboarding-dialog">
       <DialogContent
         showCloseButton={false}
@@ -128,12 +138,28 @@ function RepoOnboardingDialog() {
         <FieldGroup className="gap-4">
           <Field>
             <FieldLabel htmlFor="repo-onboarding-user-id">用户 ID</FieldLabel>
-            <Input
-              id="repo-onboarding-user-id"
-              readOnly
-              value={currentRepoProfileState.userId}
-              className="font-mono"
-            />
+            <InputGroup>
+              <InputGroupInput
+                id="repo-onboarding-user-id"
+                readOnly
+                value={currentRepoProfileState.userId}
+                className="font-mono"
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    logger.info("Repo id recovery dialog opened.", {
+                      repositoryUuid: activeRepository.uuid,
+                    })
+                    setIsRecoveryOpen(true)
+                  }}
+                >
+                  通过 ID 恢复
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
           </Field>
 
           <Field data-invalid={error ? true : undefined}>
@@ -181,6 +207,8 @@ function RepoOnboardingDialog() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <RepoIdRecoveryDialog open={isRecoveryOpen} onOpenChange={setIsRecoveryOpen} />
+    </>
   )
 }
 

@@ -37,7 +37,6 @@ function SidebarContentLayout({
         groupResizeBehavior="preserve-pixel-size"
       >
         <div
-          data-window-no-drag="true"
           className={cn(
             "h-full min-h-0 min-w-0 overflow-hidden bg-background px-4 py-5",
             sidebarClassName,
@@ -51,7 +50,6 @@ function SidebarContentLayout({
 
       <ResizablePanel>
         <div
-          data-window-no-drag="true"
           className={cn(
             "h-full min-h-0 min-w-0 bg-background px-6 py-5",
             contentScrollable ? "overflow-y-auto" : "overflow-hidden",

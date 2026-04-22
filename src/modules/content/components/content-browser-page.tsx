@@ -273,7 +273,6 @@ function DeletedContentCard({
 
   return (
     <div
-      data-window-no-drag="true"
       className="flex items-start gap-3 rounded-lg bg-background px-3 py-3 opacity-60"
     >
       <ContentItemIcon
@@ -344,7 +343,6 @@ function ContentListCard({
 
   return (
     <div
-      data-window-no-drag="true"
       className="flex items-start gap-3 rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
     >
       <button
@@ -764,8 +762,7 @@ function ContentBrowserPage({
         <section className="h-full min-h-0">
           <div className="flex min-h-full flex-col gap-4 pb-6">
             <div
-              data-window-no-drag="true"
-              className="flex flex-wrap items-center justify-between gap-3"
+                      className="flex flex-wrap items-center justify-between gap-3"
             >
               <div className="min-w-0">
                 <h2 className="text-base font-medium text-foreground">
@@ -798,8 +795,7 @@ function ContentBrowserPage({
 
             {isDeletedView && (
               <div
-                data-window-no-drag="true"
-                className="flex items-center justify-between gap-3"
+                          className="flex items-center justify-between gap-3"
               >
                 <Tabs
                   data-track="deleted-filter"

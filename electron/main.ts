@@ -37,7 +37,6 @@ function createMainWindow() {
     show: false,
     title: "Synapse",
     ...(icon ? { icon } : {}),
-    ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
