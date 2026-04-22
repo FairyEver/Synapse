@@ -683,7 +683,7 @@ function ContentBrowserPage({
                   active={categories[0].id === activeCategoryId}
                   disabled={!canBrowseContent}
                   onClick={() => setActiveCategoryId(categories[0].id)}
-                  className="h-10 px-4"
+                  className="h-8 px-4"
                   trailing={
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {categories[0].count}
@@ -699,7 +699,7 @@ function ContentBrowserPage({
                 active={activeCategoryId === SYNAPSE_FAVORITES_CATEGORY_ID}
                 disabled={!canBrowseContent}
                 onClick={() => setActiveCategoryId(SYNAPSE_FAVORITES_CATEGORY_ID)}
-                className="h-10 px-4"
+                className="h-8 px-4"
                 trailing={
                   <span className="text-xs tabular-nums text-muted-foreground">
                     {favoriteIds.length}
@@ -714,7 +714,7 @@ function ContentBrowserPage({
                 active={activeCategoryId === SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID}
                 disabled={!canBrowseContent}
                 onClick={() => setActiveCategoryId(SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID)}
-                className="h-10 px-4"
+                className="h-8 px-4"
                 trailing={
                   <span className="text-xs tabular-nums text-muted-foreground">
                     {recentlyViewedCount}
@@ -734,7 +734,7 @@ function ContentBrowserPage({
                   active={category.id === activeCategoryId}
                   disabled={!canBrowseContent}
                   onClick={() => setActiveCategoryId(category.id)}
-                  className="h-10 px-4"
+                  className="h-8 px-4"
                   trailing={
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {category.count}
@@ -753,7 +753,7 @@ function ContentBrowserPage({
                 active={activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID}
                 disabled={!canBrowseContent}
                 onClick={() => setActiveCategoryId(SYNAPSE_DELETED_CATEGORY_ID)}
-                className="h-10 px-4"
+                className="h-8 px-4"
                 trailing={
                   <span className="text-xs tabular-nums text-muted-foreground">
                     {deletedContent.count}
