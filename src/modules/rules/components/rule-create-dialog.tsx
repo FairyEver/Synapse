@@ -181,12 +181,14 @@ function RuleCreateDialog({
         <Field data-invalid={errors.description ? true : undefined}>
           <FieldLabel htmlFor="rule-create-description">简介</FieldLabel>
           <FieldContent>
-            <Input
+            <Textarea
               id="rule-create-description"
               value={form.description}
               aria-invalid={errors.description ? "true" : undefined}
               onChange={(event) => updateField("description", event.target.value)}
               placeholder="PR 评审的提交要求"
+              rows={3}
+              className="resize-none"
             />
             <FieldError>{errors.description}</FieldError>
           </FieldContent>

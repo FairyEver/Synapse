@@ -401,12 +401,14 @@ function SkillCreateDialog({
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="skill-create-description">简介</Label>
-          <Input
+          <Textarea
             id="skill-create-description"
             value={form.description}
             aria-invalid={errors.description ? "true" : undefined}
             onChange={(event) => updateField("description", event.target.value)}
             placeholder="自动整理 API 文档"
+            rows={3}
+            className="resize-none"
           />
           <FieldError message={errors.description} />
         </div>

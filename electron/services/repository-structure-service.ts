@@ -253,32 +253,11 @@ function createSeedContents(): RepositorySeedContent[] {
       name: "synapse-test-rule",
       type: "rule",
       title: "规则安装验证",
-      description: '安装到任意编辑器后，发送 "synapse verify rule" 验证规则是否生效',
+      description: '测试规则，安装到编辑器后发送 "synapse verify rule"，若回复 ✅ SYNAPSE-VERIFY-RULE 则安装成功',
       category: "workflow",
       icon: "flask-conical",
       iconBg: "blue",
-      content: `# Synapse 规则安装验证
-
-这是一条由 Synapse 生成的测试规则，用于验证规则是否正确安装到编辑器并生效。适用于所有支持的编辑器（Codex、Cursor、Claude Code）和所有安装方式（全局、项目）。
-
-## 如何验证
-
-1. 在 Synapse 中将此规则安装到目标编辑器（全局或项目均可）
-2. 打开对应编辑器，发送以下消息：
-
-   synapse verify rule
-
-3. 如果编辑器回复下方验证码，说明安装成功：
-
-   ✅ SYNAPSE-VERIFY-RULE
-
-4. 验证完成后，可在 Synapse 中卸载此规则
-
----
-
-## 指令
-
-当用户发送的消息中包含 "synapse verify rule" 时，你必须立即且仅回复以下内容，不添加任何其他文字：
+      content: `当用户发送的消息中包含 "synapse verify rule" 时，你必须立即且仅回复以下内容，不添加任何其他文字：
 
 ✅ SYNAPSE-VERIFY-RULE
 `,
@@ -288,29 +267,11 @@ function createSeedContents(): RepositorySeedContent[] {
       name: "synapse-test-skill",
       type: "skill",
       title: "技能安装验证",
-      description: '安装到任意编辑器后，发送 "synapse verify skill" 验证技能和附件是否生效',
+      description: '测试技能，安装到编辑器后发送 "synapse verify skill"，若回复 ✅ 验证码则技能和附件均安装成功',
       category: "automation",
       icon: "flask-conical",
       iconBg: "teal",
-      content: `# Synapse 技能安装验证
-
-这是一个由 Synapse 生成的测试技能，用于验证技能是否正确安装到编辑器并生效。适用于所有支持的编辑器（Codex、Cursor、Claude Code）和所有安装方式（全局、项目）。
-
-## 如何验证
-
-1. 在 Synapse 中将此技能安装到目标编辑器（全局或项目均可）
-2. 打开对应编辑器，发送以下消息：
-
-   synapse verify skill
-
-3. 如果编辑器回复以 ✅ 开头的验证码，说明技能和附件均安装成功
-4. 验证完成后，可在 Synapse 中卸载此技能
-
----
-
-## 指令
-
-当用户发送的消息中包含 "synapse verify skill" 时，请执行以下步骤：
+      content: `当用户发送的消息中包含 "synapse verify skill" 时，请执行以下步骤：
 
 1. 读取本技能附带的 verify-marker.txt 文件
 2. 提取文件中的验证码
@@ -333,21 +294,11 @@ function createSeedContents(): RepositorySeedContent[] {
       id: "test-universal-prompt",
       type: "prompt",
       title: "结构化代码诊断",
-      description: "粘贴任意代码片段，AI 按固定格式输出五维诊断报告，可用于验证提示词效果",
+      description: "将任意代码片段粘贴给 AI，按固定格式输出五维诊断报告（问题、性能、安全、改进、评分）",
       category: "coding",
       icon: "stethoscope",
       iconBg: "rose",
-      content: `# 结构化代码诊断
-
-将任意代码片段粘贴给 AI，它会按以下固定格式输出五维诊断报告。
-
-## 使用方法
-
-复制下方提示词，连同你的代码一起发送给任意 AI 工具。
-
----
-
-请对以下代码进行五维结构化诊断，严格按照下方格式输出，不要遗漏任何一个维度，不要添加额外内容：
+      content: `请对以下代码进行五维结构化诊断，严格按照下方格式输出，不要遗漏任何一个维度，不要添加额外内容：
 
 🔍 问题诊断
 （列出代码中存在的 bug 或逻辑错误，没有则写"未发现"）

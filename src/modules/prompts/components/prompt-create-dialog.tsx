@@ -144,12 +144,14 @@ function PromptCreateDialog({
         <Field data-invalid={errors.description ? true : undefined}>
           <FieldLabel htmlFor="prompt-create-description">简介</FieldLabel>
           <FieldContent>
-            <Input
+            <Textarea
               id="prompt-create-description"
               value={form.description}
               aria-invalid={errors.description ? "true" : undefined}
               onChange={(event) => updateField("description", event.target.value)}
               placeholder="帮助审查代码质量和规范"
+              rows={3}
+              className="resize-none"
             />
             <FieldError>{errors.description}</FieldError>
           </FieldContent>

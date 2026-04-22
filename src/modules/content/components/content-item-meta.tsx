@@ -24,7 +24,7 @@ function ContentItemMeta({
         <p className="truncate text-sm font-medium leading-4 text-foreground">{title}</p>
         <p className={cn(
           "text-sm leading-4 text-muted-foreground",
-          descriptionWrap ? "break-words" : "truncate",
+          descriptionWrap ? "break-words whitespace-pre-wrap" : "truncate",
         )}>{description}</p>
       </div>
 
