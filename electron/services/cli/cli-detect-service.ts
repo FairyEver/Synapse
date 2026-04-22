@@ -30,13 +30,30 @@ async function whichBin(bin: string): Promise<string | null> {
     const firstLine = stdout.trim().split("\n")[0]
     return firstLine || null
   } catch (err) {
-    logger.warn("whichBin failed.", { bin, shell, error: String(err) })
+    const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string; code?: number }
+    logger.warn("whichBin failed.", {
+      bin,
+      shell,
+      exitCode: e.code,
+      stderr: e.stderr?.trim(),
+      stdout: e.stdout?.trim(),
+      error: e.message,
+    })
     return null
   }
 }
 
 async function detectClis(): Promise<SynapseCliDetectResult[]> {
-  logger.info("Starting CLI detection.", { platform: process.platform, shell: process.env.SHELL })
+  const shell = process.env.SHELL || "/bin/zsh"
+  logger.info("Starting CLI detection.", { platform: process.platform, shell, home: process.env.HOME })
+
+  // 诊断：打印 login shell 实际拿到的 PATH
+  try {
+    const { stdout: pathOut } = await execFileAsync(shell, ["-l", "-c", "echo $PATH"], { timeout: 8000 })
+    logger.info("Login shell PATH.", { path: pathOut.trim() })
+  } catch (err) {
+    logger.warn("Failed to get login shell PATH.", { error: String(err) })
+  }
 
   const results = await Promise.all(
     CLI_DEFINITIONS.map(async ({ id, label, bin }) => {
