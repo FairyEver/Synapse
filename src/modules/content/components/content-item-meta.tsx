@@ -20,7 +20,7 @@ function ContentItemMeta({
 }: ContentItemMetaProps) {
   return (
     <div className={cn("min-w-0", className)}>
-      <div className="min-w-0 flex flex-col gap-0.5">
+      <div className="min-w-0 flex flex-col gap-1.5">
         <p className="truncate text-sm font-medium leading-4 text-foreground">{title}</p>
         <p className={cn(
           "text-sm leading-4 text-muted-foreground",
