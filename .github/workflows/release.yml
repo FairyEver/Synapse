@@ -25,6 +25,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       CSC_KEY_PASSWORD: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}
       CSC_LINK: ${{ secrets.APPLE_SIGNING_CERT }}
@@ -56,10 +57,10 @@ jobs:
           cache: pnpm
 
       - name: Prepare Apple notarization key
-        if: matrix.os == 'macos-latest' && secrets.APPLE_API_KEY_P8 != ''
+        if: matrix.os == 'macos-latest' && env.APPLE_API_KEY_P8 != ''
         run: |
           KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-          printf '%s' '${{ secrets.APPLE_API_KEY_P8 }}' > "$KEY_PATH"
+          printf '%s' "$APPLE_API_KEY_P8" > "$KEY_PATH"
           echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Install dependencies
