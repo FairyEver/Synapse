@@ -9,6 +9,15 @@ import { configBackupService } from "../services/config-backup-service"
 import { configStore } from "../services/config-store"
 import { createMainLogger, logStore } from "../services/log-store"
 import { repositoryStore } from "../services/repository-store"
+import { shutdownDataStore } from "../data-store"
+
+// 重置应用时需要保留的文件前缀。数据服务（对外提供的数据库）独立于应用配置，
+// 不随重置一起清空。匹配主库 .db、WAL/SHM sidecar 以及历史损坏备份。
+const PRESERVED_FILE_PREFIXES = ["synapse-data.db"]
+
+function shouldPreserveOnReset(entryName: string): boolean {
+  return PRESERVED_FILE_PREFIXES.some((prefix) => entryName.startsWith(prefix))
+}
 
 let handlersRegistered = false
 const logger = createMainLogger("ipc.config")
@@ -63,15 +72,22 @@ function registerConfigHandlers() {
   )
 
   handleValidatedIpc(SYNAPSE_IPC_CHANNELS.config.resetApp, async () => {
-    logger.info("Handling config.resetApp request. Wiping all user data.")
+    logger.info("Handling config.resetApp request. Wiping all user data except data-store files.")
 
     repositoryStore.unwatchAll()
+    // 先关闭数据服务，确保 SQLite WAL 正确 checkpoint 到主库文件，
+    // 这样保留下来的 synapse-data.db 是自洽的。
+    await shutdownDataStore()
     await logStore.dispose()
 
     const userDataPath = app.getPath("userData")
     const entries = await readdir(userDataPath, { withFileTypes: true })
 
     for (const entry of entries) {
+      if (shouldPreserveOnReset(entry.name)) {
+        continue
+      }
+
       const entryPath = path.join(userDataPath, entry.name)
 
       try {

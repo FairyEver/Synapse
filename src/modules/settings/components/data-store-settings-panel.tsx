@@ -1,10 +1,25 @@
 import { useCallback, useEffect, useState } from "react"
-import { AlertTriangle } from "lucide-react"
 import ccIcon from "@/assets/cc.png"
 import codexIcon from "@/assets/codex.png"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { SettingsGroup } from "./settings-group"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
@@ -41,20 +56,6 @@ function StatusPill({ active, activeLabel, inactiveLabel }: StatusPillProps) {
     <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
       {inactiveLabel}
     </span>
-  )
-}
-
-type SectionHeaderProps = {
-  title: string
-  trailing?: React.ReactNode
-}
-
-function SectionHeader({ title, trailing }: SectionHeaderProps) {
-  return (
-    <div className="mb-3 flex items-center justify-between">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {trailing}
-    </div>
   )
 }
 
@@ -166,37 +167,37 @@ function DataStoreSettingsPanel() {
   ]
 
   return (
-    <SettingsGroup>
-      <div>
-        <SectionHeader
-          title="服务状态"
-          trailing={
+    <div className="flex flex-col gap-4">
+      <Card className="bg-background">
+        <CardHeader className="pb-0">
+          <CardTitle>服务状态</CardTitle>
+          <CardAction>
             <StatusPill
               active={Boolean(status?.running)}
               activeLabel="运行中"
               inactiveLabel="未启动"
             />
-          }
-        />
-        <div className="flex flex-col gap-2">
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
           <StatusRow label="HTTP 端口" value={status?.port ?? "—"} />
           <StatusRow label="数据库大小" value={status ? formatBytes(status.dbSize) : "—"} />
           <StatusRow label="表数量" value={status?.tableCount ?? "—"} />
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div>
-        <SectionHeader
-          title="CLI"
-          trailing={
+      <Card className="bg-background">
+        <CardHeader className="pb-0">
+          <CardTitle>CLI</CardTitle>
+          <CardAction>
             <StatusPill
               active={Boolean(cliStatus?.installed)}
               activeLabel="已安装"
               inactiveLabel="未安装"
             />
-          }
-        />
-        <div className="flex flex-col gap-3">
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
           {cliStatus?.path ? (
             <p
               className="truncate font-mono text-xs text-muted-foreground"
@@ -210,12 +211,14 @@ function DataStoreSettingsPanel() {
               {cliStatus?.installed ? "重新安装" : "安装 CLI"}
             </Button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div>
-        <SectionHeader title="MCP Server" />
-        <div className="flex flex-col gap-2">
+      <Card className="bg-background">
+        <CardHeader className="pb-0">
+          <CardTitle>MCP Server</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
           {mcpServers.map((server) => (
             <div
               key={server.id}
@@ -246,29 +249,43 @@ function DataStoreSettingsPanel() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div>
-        <SectionHeader title="数据管理" />
-        <div className="flex flex-col gap-3">
-          <Alert variant="destructive">
-            <AlertTriangle />
-            <AlertDescription>
-              导入将替换当前所有数据，请先导出备份。
-            </AlertDescription>
-          </Alert>
+      <Card className="bg-background">
+        <CardHeader className="pb-0">
+          <CardTitle>数据管理</CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleExport}>
               导出数据库
             </Button>
-            <Button variant="outline" size="sm" onClick={handleImport}>
-              导入数据库
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  导入数据库
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>导入数据库</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    导入将替换当前所有数据，请注意先导出备份。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleImport}>
+                    确认导入
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
-        </div>
-      </div>
-    </SettingsGroup>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
