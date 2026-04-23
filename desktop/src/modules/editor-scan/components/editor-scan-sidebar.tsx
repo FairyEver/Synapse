@@ -65,9 +65,6 @@ function EditorScanSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
-        编辑器
-      </div>
       <ModuleSidebarList>
         {summaries.map((s) => {
           const iconSrc = getEditorIconSrc(s.editorId)

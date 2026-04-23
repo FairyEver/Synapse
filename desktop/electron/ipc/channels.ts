@@ -66,6 +66,8 @@ export const SYNAPSE_IPC_CHANNELS = {
   },
   editorScan: {
     scanAll: "synapse:editor-scan:scan-all",
+    readItemContent: "synapse:editor-scan:read-item-content",
+    listSkillFiles: "synapse:editor-scan:list-skill-files",
   },
   cli: {
     detect: "synapse:cli:detect",

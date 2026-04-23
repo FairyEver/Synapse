@@ -35,13 +35,14 @@ function useEditorScan() {
         loading: false,
         error: error instanceof Error ? error.message : "扫描失败",
       }))
+      throw error
     }
   }, [])
 
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true
-      void scan()
+      void scan().catch(() => {})
     }
   }, [scan])
 

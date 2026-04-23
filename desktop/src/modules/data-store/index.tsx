@@ -26,7 +26,7 @@ const logger = createRendererLogger("data-store")
 
 function DataStoreModule() {
   const { tables, refresh: refreshTables } = useDataStoreTables()
-  const { error: showError, promise } = useAppNotifications()
+  const { error: showError, success: showSuccess, promise } = useAppNotifications()
 
   const [activeTable, setActiveTable] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -109,13 +109,14 @@ function DataStoreModule() {
         await insertRow(selectedTable, data)
         await refreshQuery()
         await refreshTables()
+        showSuccess("已添加一行")
       } catch (error) {
         logger.error("Insert failed.", { error })
         showError(error instanceof Error ? error.message : "新增失败，请稍后重试。")
         throw error
       }
     },
-    [refreshQuery, refreshTables, selectedTable, showError],
+    [refreshQuery, refreshTables, selectedTable, showError, showSuccess],
   )
 
   const handleUpdate = useCallback(
@@ -140,11 +141,13 @@ function DataStoreModule() {
         await deleteRow(selectedTable, id)
         await refreshQuery()
         await refreshTables()
+        showSuccess("已删除一行")
       } catch (error) {
         logger.error("Delete failed.", { error })
+        showError(error instanceof Error ? error.message : "删除失败，请稍后重试。")
       }
     },
-    [selectedTable, refreshQuery, refreshTables],
+    [selectedTable, refreshQuery, refreshTables, showSuccess, showError],
   )
 
   const sidebar = (

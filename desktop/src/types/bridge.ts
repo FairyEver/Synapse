@@ -50,7 +50,7 @@ import type {
   SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
 } from "./editor"
-import type { EditorScanResult } from "./editor-scan"
+import type { EditorScanResult, EditorScanSkillFileEntry } from "./editor-scan"
 import type {
   SynapseLogClearResult,
   SynapseLogExportResult,
@@ -158,6 +158,8 @@ export type SynapseBridge = {
   }
   editorScan: {
     scanAll: () => Promise<EditorScanResult>
+    readItemContent: (filePath: string) => Promise<string>
+    listSkillFiles: (dirPath: string) => Promise<EditorScanSkillFileEntry[]>
   }
   shell: {
     showItemInFolder: (filePath: string) => void

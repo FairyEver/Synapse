@@ -1,7 +1,6 @@
-import { Fragment, useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { Pencil, Plus, Trash2 } from "lucide-react"
-import { useAppConfig } from "@/app-shell/config"
-import { useActiveRepository } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, useRepositoryActions } from "@/app-shell/use-repository-manager"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,31 +11,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import { FormDialog } from "@/components/form-dialog"
-import type { SynapseConfig, SynapseVariable } from "@/types/config"
+import type { SynapseVariable } from "@/types/config"
 
 const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
-
-function createVariablesPatch(
-  config: SynapseConfig,
-  repositoryUuid: string,
-  nextVariables: SynapseVariable[],
-) {
-  return {
-    repositories: config.repositories.map((repo) =>
-      repo.uuid === repositoryUuid
-        ? { ...repo, variables: nextVariables.length > 0 ? nextVariables : undefined }
-        : repo,
-    ),
-  }
-}
 
 type VariableFormState = {
   name: string
@@ -44,9 +26,53 @@ type VariableFormState = {
   description: string
 }
 
+function VariableCard({
+  variable,
+  onEdit,
+  onDelete,
+}: {
+  variable: SynapseVariable
+  onEdit: (variable: SynapseVariable) => void
+  onDelete: (variable: SynapseVariable) => void
+}) {
+  return (
+    <div className="group rounded-lg bg-background px-3.5 py-3">
+      <div className="flex items-center gap-2">
+        <span className="truncate font-mono text-sm font-medium">{variable.name}</span>
+        <div className="ml-auto flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={() => onEdit(variable)}
+          >
+            <Pencil className="size-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={() => onDelete(variable)}
+          >
+            <Trash2 className="size-3" />
+          </Button>
+        </div>
+      </div>
+      <p className="mt-1 truncate text-xs text-muted-foreground">
+        {variable.value || <span className="italic">（空值）</span>}
+      </p>
+      {variable.description ? (
+        <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+          {variable.description}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function VariablesPanel() {
-  const { config, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
+  const { updateRepository } = useRepositoryActions()
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [editingVariable, setEditingVariable] = useState<SynapseVariable | null>(null)
   const [deletingVariable, setDeletingVariable] = useState<SynapseVariable | null>(null)
@@ -95,11 +121,15 @@ function VariablesPanel() {
       ...(form.description.trim() ? { description: form.description.trim() } : undefined),
     }
 
-    await updateConfig(
-      createVariablesPatch(config, activeRepository.uuid, [...variables, newVariable]),
-    )
-    setIsAddOpen(false)
-  }, [activeRepository, config, form, updateConfig, variables])
+    try {
+      await updateRepository(activeRepository.uuid, {
+        variables: [...variables, newVariable],
+      })
+      setIsAddOpen(false)
+    } catch {
+      setFormError("保存失败，请重试。")
+    }
+  }, [activeRepository, form, updateRepository, variables])
 
   const handleSubmitEdit = useCallback(async () => {
     if (!activeRepository || !editingVariable) return
@@ -130,22 +160,30 @@ function VariablesPanel() {
       v.name === editingVariable.name ? updated : v,
     )
 
-    await updateConfig(
-      createVariablesPatch(config, activeRepository.uuid, nextVariables),
-    )
-    setEditingVariable(null)
-  }, [activeRepository, config, editingVariable, form, updateConfig, variables])
+    try {
+      await updateRepository(activeRepository.uuid, {
+        variables: nextVariables.length > 0 ? nextVariables : undefined,
+      })
+      setEditingVariable(null)
+    } catch {
+      setFormError("保存失败，请重试。")
+    }
+  }, [activeRepository, editingVariable, form, updateRepository, variables])
 
   const handleDelete = useCallback(async () => {
     if (!activeRepository || !deletingVariable) return
 
     const nextVariables = variables.filter((v) => v.name !== deletingVariable.name)
 
-    await updateConfig(
-      createVariablesPatch(config, activeRepository.uuid, nextVariables),
-    )
+    try {
+      await updateRepository(activeRepository.uuid, {
+        variables: nextVariables.length > 0 ? nextVariables : undefined,
+      })
+    } catch {
+      // best effort
+    }
     setDeletingVariable(null)
-  }, [activeRepository, config, deletingVariable, updateConfig, variables])
+  }, [activeRepository, deletingVariable, updateRepository, variables])
 
   if (!activeRepository) {
     return (
@@ -193,65 +231,27 @@ function VariablesPanel() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <Badge variant="secondary">{activeRepository.name}</Badge>
-        <Button variant="outline" size="sm" onClick={handleAdd}>
+        <p className="text-sm text-muted-foreground">
+          在内容中使用 <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">{"${{ NAME }}"}</code> 占位符，安装时自动替换。
+        </p>
+        <Button variant="outline" size="sm" className="shrink-0" onClick={handleAdd}>
           <Plus className="size-3.5" />
-          添加变量
+          添加
         </Button>
       </div>
 
-      {variables.length === 0 ? (
-        <Card className="bg-background">
-          <CardContent className="flex flex-col items-center gap-3 py-8">
-            <p className="text-sm text-muted-foreground">
-              还没有变量。在内容中使用 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{"${{ NAME }}"}</code> 占位符，安装时自动替换。
-            </p>
-            <Button variant="outline" size="sm" onClick={handleAdd}>
-              <Plus className="size-3.5" />
-              添加变量
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="bg-background">
-          <CardContent className="p-0">
-            {variables.map((variable, index) => (
-              <Fragment key={variable.name}>
-                {index > 0 ? <Separator /> : null}
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-sm">{variable.name}</p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {variable.value || <span className="italic">（空）</span>}
-                    </p>
-                    {variable.description ? (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {variable.description}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(variable)}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeletingVariable(variable)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </Fragment>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      {variables.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2">
+          {variables.map((variable) => (
+            <VariableCard
+              key={variable.name}
+              variable={variable}
+              onEdit={handleEdit}
+              onDelete={setDeletingVariable}
+            />
+          ))}
+        </div>
+      ) : null}
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <FormDialog

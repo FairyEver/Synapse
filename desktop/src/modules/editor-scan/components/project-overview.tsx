@@ -1,7 +1,8 @@
 import { useMemo } from "react"
+import { FolderKanban } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { SynapseEditorId } from "@/types/editor"
-import type { EditorScanProjectResult } from "@/types/editor-scan"
+import type { EditorScanProjectResult, EditorScanRuleItem, EditorScanSkillItem } from "@/types/editor-scan"
 import { ScanItemCard } from "./scan-item-card"
 
 type ProjectOverviewProps = {
@@ -9,6 +10,7 @@ type ProjectOverviewProps = {
   selectedEditorId: SynapseEditorId
   selectedEditorLabel: string
   contentTab: "skill" | "rule"
+  onItemClick?: (item: EditorScanSkillItem | EditorScanRuleItem, type: "skill" | "rule") => void
 }
 
 function ProjectOverview({
@@ -16,6 +18,7 @@ function ProjectOverview({
   selectedEditorId,
   selectedEditorLabel,
   contentTab,
+  onItemClick,
 }: ProjectOverviewProps) {
   const filteredProjects = useMemo(() => {
     return projects
@@ -49,35 +52,40 @@ function ProjectOverview({
           ? editorEntry?.skills ?? []
           : editorEntry?.rules ?? []
 
+        const label = contentTab === "skill" ? "Skill" : "规则"
+
         return (
           <section key={project.projectPath}>
             <div className="mb-3 flex items-center gap-2">
+              <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
               <h4 className="text-sm font-medium text-muted-foreground">
                 {project.projectName}
               </h4>
-              {!project.pathExists ? (
+              {!project.pathExists && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                   路径不存在
                 </Badge>
-              ) : (
-                <span className="text-xs text-muted-foreground/60">
-                  {items.length}
-                </span>
               )}
             </div>
             {project.pathExists && items.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2">
-                {items.map((item) => (
-                  <ScanItemCard
-                    key={item.path}
-                    name={item.name}
-                    path={item.path}
-                    source={item.source}
-                    preview={item.preview}
-                    metadata={"metadata" in item ? item.metadata : undefined}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {items.map((item) => (
+                    <ScanItemCard
+                      key={item.path}
+                      name={item.name}
+                      path={item.path}
+                      source={item.source}
+                      preview={item.preview}
+                      metadata={"metadata" in item ? item.metadata : undefined}
+                      onClick={() => onItemClick?.(item, contentTab)}
+                    />
+                  ))}
+                </div>
+                <p className="mt-3 text-center text-xs text-muted-foreground">
+                  共有 {items.length} 个{label}
+                </p>
+              </>
             ) : null}
           </section>
         )

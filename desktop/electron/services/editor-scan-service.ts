@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises"
+import { readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import type {
   EditorScanGlobalResult,
@@ -122,9 +122,13 @@ async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem
       if (mdFiles.length === 0 && !meta) continue
 
       let previewFile: string | null = null
-      if (mdFiles.includes("SKILL.md")) {
-        previewFile = path.join(skillDir, "SKILL.md")
-      } else if (mdFiles.length > 0) {
+      for (const candidate of SKILL_MAIN_FILE_PRIORITY) {
+        if (mdFiles.includes(candidate)) {
+          previewFile = path.join(skillDir, candidate)
+          break
+        }
+      }
+      if (!previewFile && mdFiles.length > 0) {
         mdFiles.sort()
         previewFile = path.join(skillDir, mdFiles[0])
       }
@@ -453,4 +457,108 @@ async function scanAll(): Promise<EditorScanResult> {
   return { global, projects: projectResults }
 }
 
-export { scanAll }
+// Skill 主文件发现优先级
+// Claude Code / Cursor / Codex / Windsurf 均以 SKILL.md（大写）为唯一标准入口
+// 后续为 Synapse 兼容性 fallback，编辑器本身不识别这些文件名
+const SKILL_MAIN_FILE_PRIORITY = [
+  "SKILL.md",
+  "skill.md",
+  "README.md",
+  "readme.md",
+  "index.md",
+]
+
+async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
+  let children: string[]
+  try {
+    children = await readdir(dirPath)
+  } catch {
+    return null
+  }
+
+  for (const candidate of SKILL_MAIN_FILE_PRIORITY) {
+    if (children.includes(candidate)) {
+      return path.join(dirPath, candidate)
+    }
+  }
+
+  const mdFiles = children.filter((f) => f.endsWith(".md")).sort()
+  return mdFiles.length > 0 ? path.join(dirPath, mdFiles[0]) : null
+}
+
+async function readItemContent(filePath: string): Promise<string> {
+  try {
+    const info = await stat(filePath)
+    if (info.isDirectory()) {
+      const mainFile = await resolveSkillMainFile(filePath)
+      if (!mainFile) return ""
+      return await readFile(mainFile, "utf8")
+    }
+    return await readFile(filePath, "utf8")
+  } catch (error) {
+    logger.warn("Failed to read scan item content.", { path: filePath, error })
+    return ""
+  }
+}
+
+type SkillFileEntry = {
+  name: string
+  size: number
+}
+
+async function collectFiles(
+  baseDir: string,
+  currentDir: string,
+  skip: Set<string>,
+  entries: SkillFileEntry[],
+): Promise<void> {
+  let children: string[]
+  try {
+    children = await readdir(currentDir)
+  } catch {
+    return
+  }
+
+  for (const name of children) {
+    if (name.startsWith(".")) continue
+    const fullPath = path.join(currentDir, name)
+    const relativeName = path.relative(baseDir, fullPath)
+    if (skip.has(name) && currentDir === baseDir) continue
+    try {
+      const fileStat = await stat(fullPath)
+      if (fileStat.isFile()) {
+        entries.push({ name: relativeName, size: fileStat.size })
+      } else if (fileStat.isDirectory()) {
+        await collectFiles(baseDir, fullPath, skip, entries)
+      }
+    } catch {
+      continue
+    }
+  }
+}
+
+async function listSkillFiles(dirPath: string): Promise<SkillFileEntry[]> {
+  try {
+    const info = await stat(dirPath)
+    if (!info.isDirectory()) return []
+
+    const mainFile = await resolveSkillMainFile(dirPath)
+    const mainFileName = mainFile ? path.basename(mainFile) : null
+
+    const skip = new Set<string>()
+    if (mainFileName) skip.add(mainFileName)
+    skip.add(SYNAPSE_SKILL_ID_FILE)
+
+    const entries: SkillFileEntry[] = []
+    await collectFiles(dirPath, dirPath, skip, entries)
+
+    entries.sort((a, b) => a.name.localeCompare(b.name))
+    return entries
+  } catch (error) {
+    logger.warn("Failed to list skill files.", { path: dirPath, error })
+    return []
+  }
+}
+
+export { scanAll, readItemContent, listSkillFiles }
+export type { SkillFileEntry }

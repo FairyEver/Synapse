@@ -74,6 +74,8 @@ const SYNAPSE_PRELOAD_CHANNELS = {
   },
   editorScan: {
     scanAll: "synapse:editor-scan:scan-all",
+    readItemContent: "synapse:editor-scan:read-item-content",
+    listSkillFiles: "synapse:editor-scan:list-skill-files",
   },
   shell: {
     showItemInFolder: "synapse:shell:show-item-in-folder",
@@ -199,6 +201,8 @@ const synapseBridge: SynapseBridge = {
   },
   editorScan: {
     scanAll: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editorScan.scanAll),
+    readItemContent: (filePath: string) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editorScan.readItemContent, filePath),
+    listSkillFiles: (dirPath: string) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editorScan.listSkillFiles, dirPath),
   },
   shell: {
     showItemInFolder: (filePath: string) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.shell.showItemInFolder, filePath),

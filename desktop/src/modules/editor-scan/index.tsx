@@ -1,26 +1,57 @@
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { LoaderCircle, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
+import { useAppNotifications } from "@/app-shell/notifications"
 import type { SynapseEditorId } from "@/types/editor"
+import type { EditorScanRuleItem, EditorScanSkillItem } from "@/types/editor-scan"
 import { useEditorScan } from "./hooks/use-editor-scan"
 import { EditorScanSidebar } from "./components/editor-scan-sidebar"
 import { GlobalOverview } from "./components/global-overview"
 import { ProjectOverview } from "./components/project-overview"
 import { EmptyScanState } from "./components/empty-scan-state"
+import { ScanItemDetailDialog, type ScanItemForDetail } from "./components/scan-item-detail-dialog"
 
 type ContentTab = "skill" | "rule"
 type ScopeTab = "global" | "project"
 
 function EditorScanModule() {
   const { data, loading, error, refresh } = useEditorScan()
+  const { success: showSuccess, error: showError } = useAppNotifications()
   const [selectedEditorId, setSelectedEditorId] =
     useState<SynapseEditorId>("claude-code")
   const [contentTab, setContentTab] = useState<ContentTab>("skill")
   const [scopeTab, setScopeTab] = useState<ScopeTab>("global")
+  const [detailItem, setDetailItem] = useState<ScanItemForDetail | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      await refresh()
+      showSuccess("扫描结果已刷新")
+    } catch {
+      showError("刷新失败，请稍后重试。")
+    }
+  }, [refresh, showSuccess, showError])
+
+  const handleItemClick = useCallback(
+    (item: EditorScanSkillItem | EditorScanRuleItem, type: "skill" | "rule") => {
+      setDetailItem({
+        type,
+        name: item.name,
+        path: item.path,
+        source: item.source,
+        preview: item.preview,
+        fileCount: "fileCount" in item ? item.fileCount : undefined,
+        metadata: "metadata" in item ? item.metadata : undefined,
+      })
+      setDetailOpen(true)
+    },
+    [],
+  )
 
   const globalResult = useMemo(
     () => data?.global.find((g) => g.editorId === selectedEditorId) ?? null,
@@ -65,7 +96,7 @@ function EditorScanModule() {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-2">
           <p className="text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" size="sm" onClick={refresh}>
+          <Button variant="outline" size="sm" onClick={() => void handleRefresh()}>
             重试
           </Button>
         </div>
@@ -94,13 +125,14 @@ function EditorScanModule() {
       <ScrollArea className="h-full">
         <div className="flex flex-col gap-6">
           {scopeTab === "global" ? (
-            <GlobalOverview result={globalResult} contentTab={contentTab} />
+            <GlobalOverview result={globalResult} contentTab={contentTab} onItemClick={handleItemClick} />
           ) : (
             <ProjectOverview
               projects={data?.projects ?? []}
               selectedEditorId={selectedEditorId}
               selectedEditorLabel={globalResult.editorLabel}
               contentTab={contentTab}
+              onItemClick={handleItemClick}
             />
           )}
         </div>
@@ -110,7 +142,7 @@ function EditorScanModule() {
 
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
-      <div className="flex h-full flex-col gap-2">
+      <div className="flex h-full flex-col gap-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold">
@@ -139,7 +171,7 @@ function EditorScanModule() {
             variant="ghost"
             size="icon"
             className="size-7"
-            onClick={refresh}
+            onClick={() => void handleRefresh()}
             disabled={loading}
             title="刷新"
           >
@@ -154,6 +186,12 @@ function EditorScanModule() {
           {renderContent()}
         </div>
       </div>
+
+      <ScanItemDetailDialog
+        item={detailItem}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
     </SidebarContentLayout>
   )
 }

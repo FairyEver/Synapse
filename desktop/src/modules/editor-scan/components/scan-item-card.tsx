@@ -1,5 +1,11 @@
-import { Diamond, Circle, FolderOpen } from "lucide-react"
+import { FolderOpen } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type { EditorScanItemSource } from "@/types/editor-scan"
 
@@ -9,6 +15,7 @@ type ScanItemCardProps = {
   source: EditorScanItemSource
   preview: string
   metadata?: Record<string, string>
+  onClick?: () => void
 }
 
 function ScanItemCard({
@@ -17,8 +24,10 @@ function ScanItemCard({
   source,
   preview,
   metadata,
+  onClick,
 }: ScanItemCardProps) {
-  const handleOpenInFinder = () => {
+  const handleOpenInFinder = (e: React.MouseEvent) => {
+    e.stopPropagation()
     const bridge = getSynapseBridge()
     bridge?.shell.showItemInFolder(itemPath)
   }
@@ -30,34 +39,43 @@ function ScanItemCard({
   const firstLine = preview?.split("\n")[0] ?? ""
 
   return (
-    <div className="group rounded-lg bg-muted/40 px-3.5 py-3 transition-colors hover:bg-muted/70">
+    <div
+      className="group cursor-pointer rounded-lg bg-muted/40 px-3.5 py-3 transition-colors hover:bg-muted/70"
+      onClick={onClick}
+    >
       <div className="flex items-center gap-2">
-        {source === "synapse" ? (
-          <Diamond className="size-3.5 shrink-0 text-primary" />
-        ) : (
-          <Circle className="size-3.5 shrink-0 text-muted-foreground" />
-        )}
         <span className="truncate text-sm font-medium">{name}</span>
-        <Badge
-          variant={source === "synapse" ? "default" : "secondary"}
-          className="shrink-0 text-[10px] px-1.5 py-0"
-        >
-          {source === "synapse" ? "Synapse" : "外部"}
-        </Badge>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant={source === "synapse" ? "default" : "secondary"}
+                className="shrink-0 text-[10px] px-1.5 py-0"
+              >
+                {source === "synapse" ? "Synapse" : "外部"}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              {source === "synapse"
+                ? "由 Synapse 安装"
+                : "用户自行管理"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
       {firstLine ? (
-        <p className="mt-1 truncate pl-5.5 text-xs text-muted-foreground">
+        <p className="mt-1 truncate text-xs text-muted-foreground">
           {firstLine}
         </p>
       ) : null}
       {metaEntries.length > 0 ? (
-        <p className="mt-0.5 truncate pl-5.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
           {metaEntries.map(([k, v]) => `${k}: ${v}`).join(" · ")}
         </p>
       ) : null}
       <button
         type="button"
-        className="mt-1.5 flex max-w-full items-center gap-1 pl-5.5 text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
+        className="mt-1.5 flex max-w-full items-center gap-1 text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
         onClick={handleOpenInFinder}
       >
         <FolderOpen className="size-3 shrink-0" />

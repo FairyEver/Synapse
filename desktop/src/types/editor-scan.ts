@@ -49,3 +49,8 @@ export type EditorScanResult = {
   global: EditorScanGlobalResult[]
   projects: EditorScanProjectResult[]
 }
+
+export type EditorScanSkillFileEntry = {
+  name: string
+  size: number
+}

@@ -2,7 +2,7 @@
   "name": "@synapse/desktop",
   "productName": "Synapse",
   "private": true,
-  "version": "0.1.97",
+  "version": "0.1.98",
   "description": "Synapse desktop scaffold built with Electron, Vite, React, Tailwind CSS, and shadcn/ui.",
   "author": "FairyEver",
   "homepage": "https://github.com/FairyEver/Synapse",

@@ -150,7 +150,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   }, [commitPendingChanges, isAdding])
 
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div className="flex h-full flex-col gap-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">{tableName}</h2>

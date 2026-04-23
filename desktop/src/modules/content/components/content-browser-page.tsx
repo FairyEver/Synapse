@@ -642,17 +642,16 @@ function ContentBrowserPage({
         contentClassName="bg-muted/30"
         sidebar={
           <ModuleSidebar variant="bare">
-            <div className="pb-2">
-              <ModuleSidebarHeader
-                searchValue={searchQuery}
-                onSearchChange={setSearchQuery}
-                searchPlaceholder={`搜索 ${definition.pluralLabel}`}
-                searchDisabled={!canBrowseContent}
-                onAddClick={() => {
-                  logger.info("Create entry requested from browser page.", {
-                    contentType,
-                    repositoryUuid: activeRepository.uuid,
-                  })
+            <ModuleSidebarHeader
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder={`搜索 ${definition.pluralLabel}`}
+              searchDisabled={!canBrowseContent}
+              onAddClick={() => {
+                logger.info("Create entry requested from browser page.", {
+                  contentType,
+                  repositoryUuid: activeRepository.uuid,
+                })
 
                 if (!onCreateClick) {
                   logger.warn("Create entry requested without a registered handler.", {
@@ -663,11 +662,10 @@ function ContentBrowserPage({
                 }
 
                 onCreateClick()
-                }}
-                addDisabled={!canCreateContent}
-                addTitle={createButtonTitle}
-              />
-            </div>
+              }}
+              addDisabled={!canCreateContent}
+              addTitle={createButtonTitle}
+            />
             <ModuleSidebarList>
               {/* 全部分类 */}
               {categories[0] && (
@@ -760,7 +758,7 @@ function ContentBrowserPage({
         }
       >
         <section className="h-full min-h-0">
-          <div className="flex min-h-full flex-col gap-2">
+          <div className="flex min-h-full flex-col gap-2.5">
             <div
                       className="flex flex-wrap items-center justify-between gap-3"
             >

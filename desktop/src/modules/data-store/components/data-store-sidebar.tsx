@@ -31,15 +31,13 @@ function DataStoreSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <div className="pb-2">
-        <ModuleSidebarHeader
-          searchValue={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="搜索数据表"
-          onAddClick={onCreateTable}
-          addTitle="新建表"
-        />
-      </div>
+      <ModuleSidebarHeader
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="搜索数据表"
+        onAddClick={onCreateTable}
+        addTitle="新建表"
+      />
       <ModuleSidebarList>
         {filteredTables.length === 0 ? (
           <div className="px-3 py-2 text-sm text-muted-foreground">
