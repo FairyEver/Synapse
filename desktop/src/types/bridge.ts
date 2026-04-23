@@ -50,6 +50,7 @@ import type {
   SynapsePeekCursorFrontmatterResult,
   SynapseResolveEditorTargetPayload,
 } from "./editor"
+import type { EditorScanResult } from "./editor-scan"
 import type {
   SynapseLogClearResult,
   SynapseLogExportResult,
@@ -154,6 +155,9 @@ export type SynapseBridge = {
   editor: {
     getGlobalDirectories: () => Promise<SynapseEditorGlobalDirectory[]>
     createDirectory: (dirPath: string) => Promise<void>
+  }
+  editorScan: {
+    scanAll: () => Promise<EditorScanResult>
   }
   shell: {
     showItemInFolder: (filePath: string) => void

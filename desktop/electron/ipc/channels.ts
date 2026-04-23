@@ -64,6 +64,9 @@ export const SYNAPSE_IPC_CHANNELS = {
     getGlobalDirectories: "synapse:editor:get-global-directories",
     createDirectory: "synapse:editor:create-directory",
   },
+  editorScan: {
+    scanAll: "synapse:editor-scan:scan-all",
+  },
   cli: {
     detect: "synapse:cli:detect",
   },

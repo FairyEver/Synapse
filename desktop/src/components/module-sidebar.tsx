@@ -97,6 +97,7 @@ type ModuleSidebarItemProps = {
   active?: boolean
   disabled?: boolean
   icon?: LucideIcon
+  iconElement?: ReactNode
   onClick?: () => void
   trailing?: ReactNode
   children: ReactNode
@@ -107,6 +108,7 @@ function ModuleSidebarItem({
   active,
   disabled,
   icon: Icon,
+  iconElement,
   onClick,
   trailing,
   children,
@@ -128,7 +130,7 @@ function ModuleSidebarItem({
       )}
     >
       <span className="flex min-w-0 items-center gap-2 text-left">
-        {Icon ? <Icon className="size-4 shrink-0" /> : null}
+        {Icon ? <Icon className="size-4 shrink-0" /> : iconElement ?? null}
         <span className="truncate">{children}</span>
       </span>
       {trailing ? <span className="ml-2 shrink-0">{trailing}</span> : null}

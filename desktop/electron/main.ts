@@ -6,6 +6,7 @@ import { registerCliHandlers } from "./ipc/cli-handlers"
 import { registerContentHandlers } from "./ipc/content-handlers"
 import { registerConfigHandlers } from "./ipc/config-handlers"
 import { registerEditorHandlers } from "./ipc/editor-handlers"
+import { registerEditorScanHandlers } from "./ipc/editor-scan-handlers"
 import { registerIdentityHandlers } from "./ipc/identity-handlers"
 import { registerLogHandlers } from "./ipc/log-handlers"
 import { registerRepositoryHandlers } from "./ipc/repository-handlers"
@@ -108,6 +109,7 @@ if (!gotSingleInstanceLock) {
     registerCliHandlers()
     registerContentHandlers()
     registerEditorHandlers()
+    registerEditorScanHandlers()
     registerLogHandlers()
     registerConfigHandlers()
     registerIdentityHandlers()

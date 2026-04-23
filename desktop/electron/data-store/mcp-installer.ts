@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs"
 import path from "node:path"
 import { homedir } from "node:os"
-import { shell } from "electron"
+import { app, shell } from "electron"
 import { getMcpScriptPath } from "./cli-installer"
 import { createMainLogger } from "../services/log-store"
 
@@ -18,6 +18,17 @@ type McpServerInfo = {
 
 const MCP_TARGETS: McpTarget[] = ["claude", "codex"]
 const SYNAPSE_DATA_SERVER_NAME = "synapse-data"
+
+function getStableMcpScriptPath(): string {
+  return path.join(app.getPath("userData"), "mcp", "index.js")
+}
+
+function deployMcpScript(): void {
+  const source = getMcpScriptPath()
+  const target = getStableMcpScriptPath()
+  mkdirSync(path.dirname(target), { recursive: true })
+  copyFileSync(source, target)
+}
 
 function getSettingsPath(target: McpTarget): string {
   const home = homedir()
@@ -226,9 +237,10 @@ function registerCodexMcp(settingsPath: string, mcpScriptPath: string): void {
 
 function registerMcp(target: McpTarget): { success: boolean; error?: string } {
   const settingsPath = getSettingsPath(target)
-  const mcpScriptPath = getMcpScriptPath()
+  const mcpScriptPath = getStableMcpScriptPath()
 
   try {
+    deployMcpScript()
     ensureParentDirectory(settingsPath)
 
     if (target === "claude") {
@@ -247,7 +259,7 @@ function registerMcp(target: McpTarget): { success: boolean; error?: string } {
 }
 
 function getMcpServers(): McpServerInfo[] {
-  const mcpScriptPath = getMcpScriptPath()
+  const mcpScriptPath = getStableMcpScriptPath()
 
   return MCP_TARGETS.map((target) => {
     const settingsPath = getSettingsPath(target)

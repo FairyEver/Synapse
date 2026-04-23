@@ -37,10 +37,11 @@ import { SkillsModule } from "@/modules/skills"
 import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
 import { DataStoreModule } from "@/modules/data-store"
+import { EditorScanModule } from "@/modules/editor-scan"
 import type { SynapseContentType } from "@/types/content"
 import type { SynapsePendingPushEntry } from "@/types/repository"
 
-type AppTabId = SynapseContentType | "data-store" | "settings"
+type AppTabId = SynapseContentType | "data-store" | "editor-scan" | "settings"
 type DialogKind = "create" | "detail" | "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -135,6 +136,7 @@ function MainApp() {
         label: definition.tabLabel,
       })),
       { id: "data-store" as const, label: "数据" },
+      { id: "editor-scan" as const, label: "编辑器" },
       { id: "settings" as const, label: "设置" },
     ],
     [],
@@ -406,6 +408,7 @@ function MainApp() {
             )
           })}
           {activeTab === "data-store" ? <DataStoreModule /> : null}
+          {activeTab === "editor-scan" ? <EditorScanModule /> : null}
           {activeTab === "settings" ? <SettingsModule /> : null}
         </div>
       </AppShellLayout>
