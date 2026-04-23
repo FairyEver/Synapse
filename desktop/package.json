@@ -18,12 +18,9 @@
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:data-store": "esbuild data-store/cli/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/cli/index.js --format=cjs && esbuild data-store/mcp/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/mcp/index.js --format=cjs",
-    "package": "pnpm exec electron-builder --publish never",
     "package:mac": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",
     "package:win": "pnpm exec electron-builder --win nsis --x64 --publish never",
     "bump:commit:push": "sh scripts/bump-version-commit-push.sh",
-    "release": "pnpm exec electron-builder --publish always",
-    "start": "electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"
   },
   "repository": {
