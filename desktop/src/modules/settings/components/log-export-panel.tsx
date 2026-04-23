@@ -88,12 +88,14 @@ function LogExportPanel() {
             requireSynapseBridge().log.export(),
             "导出日志超时，请稍后重试。",
           )
-          window.synapse?.shell.showItemInFolder(result.filePath)
+          if (result.filePath) {
+            window.synapse?.shell.showItemInFolder(result.filePath)
+          }
           return result
         },
         {
           loading: "正在导出日志...",
-          success: (result) => `已导出 ${result.fileCount} 个日志文件到 ${result.filePath}`,
+          success: (result) => result.filePath ? `已导出 ${result.fileCount} 个日志文件到 ${result.filePath}` : null,
           error: (error) => error instanceof Error ? error.message : "导出日志失败",
         },
       )

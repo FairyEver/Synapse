@@ -492,13 +492,12 @@ class LogService {
     })
   }
 
-  async exportAllLogs(): Promise<SynapseLogExportResult> {
+  async exportAllLogs(exportFilePath: string): Promise<SynapseLogExportResult> {
     return this.enqueue(async () => {
       await this.flushBuffer()
       await this.rotateIfNeeded()
 
       const logFiles = await this.listLogFiles()
-      const exportFilePath = path.join(app.getPath("downloads"), createExportFileName(new Date()))
       const stagingRootPath = await mkdtemp(path.join(os.tmpdir(), "synapse-log-export-"))
       const stagingDirectoryPath = path.join(stagingRootPath, "synapse-logs")
 

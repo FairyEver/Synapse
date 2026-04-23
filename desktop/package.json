@@ -2,7 +2,7 @@
   "name": "@synapse/desktop",
   "productName": "Synapse",
   "private": true,
-  "version": "0.1.104",
+  "version": "0.1.105",
   "description": "Synapse desktop scaffold built with Electron, Vite, React, Tailwind CSS, and shadcn/ui.",
   "author": "FairyEver",
   "homepage": "https://github.com/FairyEver/Synapse",
@@ -115,6 +115,11 @@
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "hardenedRuntime": true,
       "notarize": true,
+      "extendInfo": {
+        "NSDocumentsFolderUsageDescription": "Synapse 需要访问文稿文件夹以管理你的内容仓库。",
+        "NSDesktopFolderUsageDescription": "Synapse 需要访问桌面文件夹以管理你的内容仓库。",
+        "NSDownloadsFolderUsageDescription": "Synapse 需要访问下载文件夹以导出内容和备份。"
+      },
       "target": [
         {
           "target": "dmg",
