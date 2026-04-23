@@ -11,7 +11,6 @@ import {
   useRepositoryList,
 } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -424,34 +423,30 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
           </div>
 
           {availableRepositories.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">切换到其他仓库</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-auto max-h-48">
-                  <div className="flex flex-col gap-2 pr-4">
-                    {availableRepositories.map((repo) => (
-                      <button
-                        key={repo.uuid}
-                        type="button"
-                        disabled={isSwitchingRepository}
-                        onClick={() => handleSwitchToRepository(repo.uuid)}
-                        className={cn(
-                          "flex w-full flex-col gap-1 rounded-md border border-border bg-background p-3 text-left transition-colors",
-                          "hover:bg-accent hover:text-accent-foreground",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          isSwitchingRepository && "pointer-events-none opacity-50"
-                        )}
-                      >
-                        <span className="truncate font-medium">{repo.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{repo.localPath}</span>
-                      </button>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+            <div className="flex flex-col gap-2">
+              <span className="px-1 text-xs font-medium text-muted-foreground">切换到其他仓库</span>
+              <ScrollArea className="h-auto max-h-48">
+                <div className="flex flex-col gap-1 pr-1">
+                  {availableRepositories.map((repo) => (
+                    <button
+                      key={repo.uuid}
+                      type="button"
+                      disabled={isSwitchingRepository}
+                      onClick={() => handleSwitchToRepository(repo.uuid)}
+                      className={cn(
+                        "flex w-full flex-col gap-1 rounded-md px-3 py-2 text-left transition-colors",
+                        "hover:bg-accent hover:text-accent-foreground",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        isSwitchingRepository && "pointer-events-none opacity-50"
+                      )}
+                    >
+                      <span className="truncate text-sm font-medium">{repo.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">{repo.localPath}</span>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
           )}
         </div>
       </div>
