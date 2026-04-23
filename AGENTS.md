@@ -55,6 +55,7 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 - Handle async errors explicitly. Do not silently swallow failures.
 - Preserve the existing interaction patterns unless the task explicitly changes them.
 - Never start a development server for verification unless the user explicitly asks. After code changes, leave runtime validation to the user.
+- Never start or invoke runtime debugging, browser previews, Chrome DevTools, MCP browser/page inspection, Playwright sessions, or open running app pages for verification unless the user explicitly asks. Reason through the source code instead.
 - For feature UI, prefer shadcn/ui composition and the default preset styles documented in `.claude/rules/design.md`.
 - When a task changes UI or styling, use existing shadcn components and theme tokens before adding custom visual treatment.
 - Treat the current renderer UI stack as `shadcn/ui + Radix`; do not silently swap the primitive library or preset.

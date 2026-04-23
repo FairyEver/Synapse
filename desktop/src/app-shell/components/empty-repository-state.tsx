@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState, useSyncExternalStore } from "react"
 import { FolderOpen, FolderPlus } from "lucide-react"
 import appIcon from "@/assets/icon.png"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
@@ -11,7 +11,7 @@ import {
   useRepositoryList,
 } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -52,8 +52,28 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
   const { isSwitchingRepository, switchActiveRepository } = useActiveRepositorySwitch()
   const { error: showError } = useAppNotifications()
 
-  const hasOtherRepositories = repositories.length > 0
   const isFirstTime = reason === "no-repositories"
+
+  // Subscribe to repository state changes so candidate filtering stays in sync
+  // when directories appear/disappear after the initial render.
+  const repositoryStatesKey = useSyncExternalStore(
+    (callback) => manager.subscribeToRepositoryChanges(callback),
+    () => {
+      const parts: string[] = []
+      for (const [uuid, state] of manager.getAllStates()) {
+        parts.push(`${uuid}:${state.status}`)
+      }
+      return parts.join("|")
+    },
+  )
+
+  // Other repositories whose local directories exist and can be switched to.
+  const availableRepositories = useMemo(() => {
+    return repositories.filter((repo) => {
+      if (repo.uuid === activeRepository?.uuid) return false
+      return manager.getRepositoryState(repo.uuid)?.status === "ready"
+    })
+  }, [repositories, activeRepository?.uuid, manager, repositoryStatesKey])
 
   // 新建仓库对话框状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -257,10 +277,6 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     }
   }
 
-  const availableRepositories = repositories.filter(
-    (repo) => repo.uuid !== activeRepository?.uuid
-  )
-
   return (
     <>
       <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
@@ -407,13 +423,10 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
             </button>
           </div>
 
-          {hasOtherRepositories && availableRepositories.length > 0 && (
+          {availableRepositories.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">切换到其他仓库</CardTitle>
-                <CardDescription>
-                  你已配置 {repositories.length} 个仓库，可以选择切换到其他可用仓库
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-auto max-h-48">
