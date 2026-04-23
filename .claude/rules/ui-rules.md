@@ -1,10 +1,19 @@
+---
+name: ui-rules
+paths:
+  - desktop/src/**/*.tsx
+  - desktop/src/**/*.css
+  - desktop/src/styles/**
+  - desktop/components.json
+---
+
 # Synapse UI 编写规则
 
 ## 0. 规范优先级
 
-`doc/DESIGN.md` 是视觉与样式规范的最高优先级来源。
+`.claude/rules/design.md` 是视觉与样式规范的最高优先级来源。
 
-只要任务涉及以下任一内容，都必须先遵守 `doc/DESIGN.md`：
+只要任务涉及以下任一内容，都必须先遵守 `.claude/rules/design.md`：
 
 - 颜色
 - 字体

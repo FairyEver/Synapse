@@ -2,17 +2,12 @@
 
 Follow this file first for every task in this repository.
 
-If a task touches architecture or file placement, also read:
-
-- `doc/engineering-standards.md`
-- `doc/project-structure.md`
-
 If a task touches UI behavior, styling, visual design, typography, color, spacing, component appearance, theming, or any renderer-side presentation, you must read and follow:
 
-- `doc/DESIGN.md`
-- `doc/ui-rules.md`
+- `.claude/rules/design.md`
+- `.claude/rules/ui-rules.md`
 
-For any visual decision, `doc/DESIGN.md` is the canonical authority for the repository's current shadcn-based visual baseline.
+For any visual decision, `.claude/rules/design.md` is the canonical authority for the repository's current shadcn-based visual baseline.
 
 ## Stack
 
@@ -32,7 +27,7 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority for the repo
 
 ## Current repository structure
 
-- This repo is a pnpm monorepo. The workspace root hosts shared docs (`doc/`, `AGENTS.md`, `CLAUDE.md`, `README.md`), `.github/` CI, and the monorepo `package.json` / `pnpm-workspace.yaml`. Source code lives in the `desktop/` subpackage published as `@synapse/desktop`.
+- This repo is a pnpm monorepo. The workspace root hosts shared docs (`AGENTS.md`, `CLAUDE.md`, `README.md`), project-scoped Claude rules under `.claude/rules/`, `.github/` CI, and the monorepo `package.json` / `pnpm-workspace.yaml`. Source code lives in the `desktop/` subpackage published as `@synapse/desktop`.
 - Run scripts from the repo root (e.g. `pnpm desktop:dev`, `pnpm desktop:build`, `pnpm desktop:typecheck`); they delegate into `desktop/` via `pnpm --filter @synapse/desktop`.
 - Privileged Electron code lives in `desktop/electron/`.
 - Renderer code lives in `desktop/src/`.
@@ -60,12 +55,12 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority for the repo
 - Handle async errors explicitly. Do not silently swallow failures.
 - Preserve the existing interaction patterns unless the task explicitly changes them.
 - Never start a development server for verification unless the user explicitly asks. After code changes, leave runtime validation to the user.
-- For feature UI, prefer shadcn/ui composition and the default preset styles documented in `doc/DESIGN.md`.
+- For feature UI, prefer shadcn/ui composition and the default preset styles documented in `.claude/rules/design.md`.
 - When a task changes UI or styling, use existing shadcn components and theme tokens before adding custom visual treatment.
 - Treat the current renderer UI stack as `shadcn/ui + Radix`; do not silently swap the primitive library or preset.
 - Prefer `desktop/src/components/ui/` shadcn primitives over creating new general-purpose components in `desktop/src/components/`.
 - If a needed UI primitive is missing, add the official shadcn component to `desktop/src/components/ui/` or match CLI output closely before hand-rolling a custom primitive.
-- If `doc/DESIGN.md` specifies the active shadcn preset, font imports, tokens, or component usage rules, follow those over ad hoc page-level overrides.
+- If `.claude/rules/design.md` specifies the active shadcn preset, font imports, tokens, or component usage rules, follow those over ad hoc page-level overrides.
 - Keep the app shell and feature modules on the same shared shadcn baseline instead of maintaining parallel visual systems.
 - If a component, hook, or service grows too large, split it into smaller, well-named units.
 

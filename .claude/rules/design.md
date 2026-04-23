@@ -1,3 +1,12 @@
+---
+name: design
+paths:
+  - desktop/src/**/*.tsx
+  - desktop/src/**/*.css
+  - desktop/src/styles/**
+  - desktop/components.json
+---
+
 # Synapse Design Baseline
 
 ## 1. 权威
@@ -31,7 +40,7 @@ primitive: radix-ui  # 组件底座，通过 package.json 依赖和组件实现�
 - `desktop/components.json`
 - `desktop/src/styles/globals.css`
 - 相关 `desktop/src/components/ui/*`
-- `doc/DESIGN.md` 与 `doc/ui-rules.md`
+- `.claude/rules/design.md` 与 `.claude/rules/ui-rules.md`
 
 ## 3. 颜色 Token
 

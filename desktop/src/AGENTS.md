@@ -4,8 +4,8 @@ These rules apply to all renderer-side work under `desktop/src/`.
 
 ## Design authority
 
-- For any UI, styling, layout, typography, color, spacing, surface, card, button, form, or interaction appearance change, follow `/Users/liyang/Documents/code/github/Synapse/doc/DESIGN.md` strictly.
-- `doc/DESIGN.md` defines the repository's current shadcn preset baseline and overrides ad hoc page-level styling.
+- For any UI, styling, layout, typography, color, spacing, surface, card, button, form, or interaction appearance change, follow `.claude/rules/design.md` strictly.
+- `.claude/rules/design.md` defines the repository's current shadcn preset baseline and overrides ad hoc page-level styling.
 - Do not introduce a competing design language inside renderer code.
 
 ## Required visual defaults
