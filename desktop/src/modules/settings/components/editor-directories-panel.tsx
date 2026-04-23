@@ -1,9 +1,10 @@
+import { Fragment } from "react"
 import { FolderPlus } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { getEditorIconSrc, EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseEditorGlobalDirectory } from "@/types/editor"
@@ -63,7 +64,7 @@ function DirectoryRow({ label, dirPath, exists, editorLabel, onOpen, onCreate }:
   )
 }
 
-function EditorDirectoriesPanel() {
+function useEditorDirectories() {
   const [directories, setDirectories] = useState<SynapseEditorGlobalDirectory[]>([])
   const { promise } = useAppNotifications()
 
@@ -103,47 +104,54 @@ function EditorDirectoriesPanel() {
     [loadDirectories, promise],
   )
 
+  return { directories, handleOpen, handleCreate }
+}
+
+function EditorDirectoriesContent() {
+  const { directories, handleOpen, handleCreate } = useEditorDirectories()
+
   if (directories.length === 0) {
     return null
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {directories.map((dir) => (
-        <Card key={dir.editorId} className="bg-background">
-          <CardHeader className="pb-0">
-            <CardTitle className="flex items-center gap-2 text-base">
+    <>
+      {directories.map((dir, index) => (
+        <Fragment key={dir.editorId}>
+          {index > 0 ? <Separator /> : null}
+          <div className="flex flex-col gap-3 px-4 py-3">
+            <div className="flex items-center gap-2 font-medium">
               {(() => {
                 const iconSrc = getEditorIconSrc(dir.editorId)
                 return iconSrc ? (
-                  <img src={iconSrc} alt={dir.label} className="size-6 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
+                  <img src={iconSrc} alt={dir.label} className="size-5 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
                 ) : null
               })()}
               {dir.label}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <DirectoryRow
-              label="全局规则"
-              dirPath={dir.rulesPath}
-              exists={dir.rulesExists}
-              editorLabel={dir.label}
-              onOpen={handleOpen}
-              onCreate={handleCreate}
-            />
-            <DirectoryRow
-              label="全局技能"
-              dirPath={dir.skillsPath}
-              exists={dir.skillsExists}
-              editorLabel={dir.label}
-              onOpen={handleOpen}
-              onCreate={handleCreate}
-            />
-          </CardContent>
-        </Card>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <DirectoryRow
+                label="全局规则"
+                dirPath={dir.rulesPath}
+                exists={dir.rulesExists}
+                editorLabel={dir.label}
+                onOpen={handleOpen}
+                onCreate={handleCreate}
+              />
+              <DirectoryRow
+                label="全局技能"
+                dirPath={dir.skillsPath}
+                exists={dir.skillsExists}
+                editorLabel={dir.label}
+                onOpen={handleOpen}
+                onCreate={handleCreate}
+              />
+            </div>
+          </div>
+        </Fragment>
       ))}
-    </div>
+    </>
   )
 }
 
-export { EditorDirectoriesPanel }
+export { EditorDirectoriesContent }

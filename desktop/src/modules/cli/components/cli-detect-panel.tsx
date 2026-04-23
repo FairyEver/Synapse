@@ -1,49 +1,7 @@
 import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useCliDetect } from "@/modules/cli/hooks/use-cli-detect"
-import { CLI_ICON_CLIP_STYLE, getCliIconSrc } from "@/modules/cli/lib/cli-icons"
-import type { SynapseCliDetectResult } from "@/types/cli"
-
-function CliStatusBadge({ installed }: { installed: boolean }) {
-  return installed ? (
-    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-600 dark:text-emerald-400">
-      已安装
-    </span>
-  ) : (
-    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-      未安装
-    </span>
-  )
-}
-
-function CliToolRow({ item }: { item: SynapseCliDetectResult }) {
-  const iconSrc = getCliIconSrc(item.id)
-  return (
-    <Card className="bg-background">
-      <CardHeader className="pb-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          {iconSrc ? (
-            <img src={iconSrc} alt={item.label} className="size-6 shrink-0" style={CLI_ICON_CLIP_STYLE} />
-          ) : null}
-          {item.label}
-          <CliStatusBadge installed={item.installed} />
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {item.path ? (
-          <p className="truncate text-sm text-muted-foreground" title={item.path}>
-            {item.path}
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            未检测到本地安装
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
+import { CliToolRow } from "@/modules/cli/components/cli-tool-card"
 
 function CliDetectPanel() {
   const { results, loading, refresh } = useCliDetect()

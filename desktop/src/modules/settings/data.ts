@@ -1,5 +1,5 @@
 import {
-  Code,
+  Blocks,
   Database,
   FolderGit2,
   FolderKanban,
@@ -7,7 +7,6 @@ import {
   ScrollText,
   Settings2,
   Shield,
-  Terminal,
 } from "lucide-react"
 import {
   DEFAULT_GLOBAL_CONFIG,
@@ -35,16 +34,10 @@ const settingsCategories: SettingsCategory[] = [
     description: "项目路径。",
   },
   {
-    id: "editors",
-    icon: Code,
-    label: "编辑器",
-    description: "编辑器全局目录。",
-  },
-  {
-    id: "cli",
-    icon: Terminal,
-    label: "CLI",
-    description: "命令行工具。",
+    id: "tools",
+    icon: Blocks,
+    label: "工具",
+    description: "编辑器与命令行工具。",
   },
   {
     id: "data-store",
