@@ -151,7 +151,7 @@ if (!gotSingleInstanceLock) {
   })
 
   app.whenReady().then(async () => {
-    logger.info("Electron app is ready. Registering services.")
+    logger.info("Electron app is ready. Registering IPC handlers.")
     initializeAppIcon()
     registerCliHandlers()
     registerContentHandlers()
@@ -164,28 +164,44 @@ if (!gotSingleInstanceLock) {
     registerUserProfileHandlers()
     registerRepositoryHandlers()
     registerUpdateHandlers()
-    await initDataStore()
-    await configStore.load()
-    updateService.initialize()
-    updateService.startAutoCheck()
 
-    logger.info("Core services initialized. Creating main window.")
+    // --- core: config + window (failure = fatal) ---
+    await configStore.load()
+    logger.info("Core config loaded. Creating main window.")
     createMainWindow()
 
+    // --- peripheral: data-store, update, repository watch (failure = degraded) ---
+    try {
+      await initDataStore()
+    } catch (error) {
+      logger.error("Data store initialization failed. CLI/MCP will be unavailable.", error)
+    }
+
+    try {
+      updateService.initialize()
+      updateService.startAutoCheck()
+    } catch (error) {
+      logger.error("Update service initialization failed. Auto-update disabled.", error)
+    }
+
     void (async () => {
-      const config = await configStore.load()
+      try {
+        const config = await configStore.load()
 
-      for (const repository of config.repositories) {
-        repositoryStore.watchRepository(repository)
+        for (const repository of config.repositories) {
+          repositoryStore.watchRepository(repository)
 
-        try {
-          await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
-        } catch (error) {
-          logger.warn("Scheduled repository maintenance failed.", {
-            error,
-            repositoryUuid: repository.uuid,
-          })
+          try {
+            await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
+          } catch (error) {
+            logger.warn("Scheduled repository maintenance failed.", {
+              error,
+              repositoryUuid: repository.uuid,
+            })
+          }
         }
+      } catch (error) {
+        logger.error("Repository watch setup failed.", error)
       }
     })()
 
@@ -229,12 +245,19 @@ app.on("before-quit", async (event) => {
 
   void (async () => {
     try {
+      const quitTimeout = setTimeout(() => {
+        logger.warn("Before-quit flow timed out after 15s. Force quitting.")
+        allowAppQuit = true
+        app.quit()
+      }, 15_000)
+
       await logStore.flush()
 
       const config = await configStore.load()
       const pendingPushCount = await pendingPushesService.countAll(config.repositories)
 
       if (pendingPushCount === 0) {
+        clearTimeout(quitTimeout)
         allowAppQuit = true
         app.quit()
         return
@@ -267,19 +290,13 @@ app.on("before-quit", async (event) => {
         }
       }
 
+      clearTimeout(quitTimeout)
       allowAppQuit = true
       app.quit()
     } catch (error) {
       logger.error("Failed to resolve before-quit pending pushes flow.", error)
-
-      if (mainWindow) {
-        await dialog.showMessageBox(mainWindow, {
-          type: "error",
-          title: "无法完成同步",
-          message: error instanceof Error ? error.message : "同步失败。",
-          buttons: ["关闭"],
-        })
-      }
+      allowAppQuit = true
+      app.quit()
     }
   })()
 })

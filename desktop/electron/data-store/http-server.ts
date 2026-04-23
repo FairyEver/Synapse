@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { randomBytes } from "node:crypto"
-import { writeFileSync, unlinkSync } from "node:fs"
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
 import type { DataStoreQueryParams } from "../../src/types/data-store"
@@ -179,7 +179,28 @@ function dispatch(action: string, params: Record<string, unknown>): unknown {
   }
 }
 
+function cleanupStaleServerInfo(): void {
+  try {
+    const raw = readFileSync(getServerInfoPath(), "utf-8")
+    const info = JSON.parse(raw) as { pid?: number }
+
+    if (typeof info.pid !== "number") {
+      return
+    }
+
+    try {
+      process.kill(info.pid, 0)
+    } catch {
+      unlinkSync(getServerInfoPath())
+      logger.info("Cleaned up stale data-server.json from a previous crash.", { stalePid: info.pid })
+    }
+  } catch {
+    // file doesn't exist or unreadable — nothing to clean
+  }
+}
+
 function startHttpServer(): Promise<number> {
+  cleanupStaleServerInfo()
   return new Promise((resolve, reject) => {
     const s = createServer((req, res) => {
       handleRequest(req, res).catch((error) => {

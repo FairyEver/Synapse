@@ -58,8 +58,24 @@ function readJsonSettings(settingsPath: string): Record<string, unknown> {
     return {}
   }
 
-  const raw = readFileSync(settingsPath, "utf-8")
-  const parsed = JSON.parse(raw)
+  let raw: string
+  try {
+    raw = readFileSync(settingsPath, "utf-8")
+  } catch {
+    return {}
+  }
+
+  if (!raw.trim()) {
+    return {}
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error(`配置文件 JSON 格式损坏：${settingsPath}`)
+  }
+
   if (!isRecord(parsed)) {
     throw new Error("配置文件格式无效。")
   }
