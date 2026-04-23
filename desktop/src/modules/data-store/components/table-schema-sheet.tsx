@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { TagInput } from "@/components/ui/tag-input"
 import {
   Select,
   SelectContent,
@@ -65,7 +66,7 @@ function TableSchemaSheet({
   const [newColName, setNewColName] = useState("")
   const [newColType, setNewColType] = useState<DataStoreColumnType>("TEXT")
   const [newColDesc, setNewColDesc] = useState("")
-  const [newColEnumValues, setNewColEnumValues] = useState("")
+  const [newColEnumValues, setNewColEnumValues] = useState<string[]>([])
   const [editingCol, setEditingCol] = useState<string | null>(null)
   const [editingDesc, setEditingDesc] = useState("")
   const editInputRef = useRef<HTMLInputElement>(null)
@@ -73,15 +74,15 @@ function TableSchemaSheet({
   const handleAddColumn = useCallback(() => {
     const trimmed = newColName.trim()
     if (!trimmed) return
-    const enumVals = newColType === "ENUM" && newColEnumValues.trim()
-      ? newColEnumValues.split(",").map((v) => v.trim()).filter(Boolean)
+    const enumVals = newColType === "ENUM" && newColEnumValues.length > 0
+      ? newColEnumValues
       : undefined
     if (newColType === "ENUM" && (!enumVals || enumVals.length === 0)) return
     onAddColumn(trimmed, newColType, newColDesc.trim() || undefined, enumVals)
     setNewColName("")
     setNewColType("TEXT")
     setNewColDesc("")
-    setNewColEnumValues("")
+    setNewColEnumValues([])
   }, [newColName, newColType, newColDesc, newColEnumValues, onAddColumn])
 
   const startEditDescription = useCallback((colName: string, currentDesc: string) => {
@@ -193,10 +194,10 @@ function TableSchemaSheet({
               className="text-xs"
             />
             {newColType === "ENUM" ? (
-              <Input
+              <TagInput
                 value={newColEnumValues}
-                onChange={(e) => setNewColEnumValues(e.target.value)}
-                placeholder="允许的值，用逗号分隔，如：收入, 支出"
+                onChange={setNewColEnumValues}
+                placeholder="输入后按空格添加，如：收入 支出"
                 className="text-xs"
               />
             ) : null}
