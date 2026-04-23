@@ -73,6 +73,9 @@ jobs:
       - name: Build Electron process
         run: pnpm build:electron
 
+      - name: Build data-store bundles
+        run: pnpm build:data-store
+
       - name: Package installer
         run: pnpm ${{ matrix.package_script }}
 
