@@ -7,15 +7,15 @@ Synapse 的桌面端子包，基于 Electron + Vite + React + Tailwind CSS + sha
 推荐从仓库根目录执行，pnpm 会通过 `--filter @synapse/desktop` 把命令转发到本子包：
 
 ```bash
-pnpm install             # 安装全部工作区依赖
-pnpm dev                 # 启动本地开发环境
-pnpm typecheck           # 类型检查
-pnpm build               # 渲染端 + 主进程 + data-store 构建
-pnpm package:mac         # 打包 macOS（dmg + zip）
-pnpm package:win         # 打包 Windows（nsis）
+pnpm install                 # 安装全部工作区依赖
+pnpm desktop:dev             # 启动本地开发环境
+pnpm desktop:typecheck       # 类型检查
+pnpm desktop:build           # 渲染端 + 主进程 + data-store 构建
+pnpm desktop:package:mac     # 打包 macOS（dmg + zip）
+pnpm desktop:package:win     # 打包 Windows（nsis）
 ```
 
-也可以直接在 `desktop/` 下运行（命令名相同）：
+也可以直接在 `desktop/` 下运行不带前缀的版本：
 
 ```bash
 cd desktop
@@ -29,22 +29,22 @@ pnpm package:mac
 版本号只写在 `desktop/package.json`。在仓库根目录执行：
 
 ```bash
-pnpm bump:commit:push    # 递增 desktop 子包 patch 版本号并在仓库根提交 + push
+pnpm desktop:bump:commit:push    # 递增 desktop 子包 patch 版本号并在仓库根提交 + push
 ```
 
 `push` 到 `main` 后，`.github/workflows/release.yml` 会自动：
 
 1. 装依赖（`pnpm install --frozen-lockfile`，需要根目录 `pnpm-lock.yaml` 已提交）。
-2. 依次执行 `pnpm build:renderer`、`pnpm build:electron`、`pnpm build:data-store`。
-3. 执行 `pnpm package:mac` / `pnpm package:win`。
+2. 依次执行 `pnpm desktop:build:renderer`、`pnpm desktop:build:electron`、`pnpm desktop:build:data-store`。
+3. 执行 `pnpm desktop:package:mac` / `pnpm desktop:package:win`。
 4. 把 `desktop/release/` 下的产物上传到 `FairyEver/SynapseAppRelease` 仓库的 GitHub Release。
 
 手动本地冒烟：
 
 ```bash
 pnpm install --frozen-lockfile   # 验证 lockfile 与 CI 行为一致
-pnpm build                        # 跑完 renderer + electron + data-store
-pnpm package:mac                  # 可选：本地验证打包产物
+pnpm desktop:build               # 跑完 renderer + electron + data-store
+pnpm desktop:package:mac         # 可选：本地验证打包产物
 ```
 
 ## 编辑器集成说明

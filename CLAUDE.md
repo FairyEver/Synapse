@@ -11,8 +11,3 @@
 - 不写 `any`，宁可拆函数也不要断言
 - 组件优先组合 shadcn 原语，不自造 div + class
 - 错误处理：网络/文件 IO 必须 try/catch；内部纯函数不兜错
-
-## 测试
-
-- 改动后一律跑 `npm run typecheck`
-- UI 改动需要在 dev server 里亲自点一遍再收工

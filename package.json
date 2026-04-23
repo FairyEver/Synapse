@@ -4,19 +4,19 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "pnpm --filter @synapse/desktop run dev",
-    "dev:renderer": "pnpm --filter @synapse/desktop run dev:renderer",
-    "icons": "pnpm --filter @synapse/desktop run icons",
-    "build": "pnpm --filter @synapse/desktop run build",
-    "build:renderer": "pnpm --filter @synapse/desktop run build:renderer",
-    "build:electron": "pnpm --filter @synapse/desktop run build:electron",
-    "build:data-store": "pnpm --filter @synapse/desktop run build:data-store",
-    "package": "pnpm --filter @synapse/desktop run package",
-    "package:mac": "pnpm --filter @synapse/desktop run package:mac",
-    "package:win": "pnpm --filter @synapse/desktop run package:win",
-    "release": "pnpm --filter @synapse/desktop run release",
-    "start": "pnpm --filter @synapse/desktop run start",
-    "typecheck": "pnpm --filter @synapse/desktop run typecheck",
-    "bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push"
+    "desktop:dev": "pnpm --filter @synapse/desktop run dev",
+    "desktop:dev:renderer": "pnpm --filter @synapse/desktop run dev:renderer",
+    "desktop:icons": "pnpm --filter @synapse/desktop run icons",
+    "desktop:build": "pnpm --filter @synapse/desktop run build",
+    "desktop:build:renderer": "pnpm --filter @synapse/desktop run build:renderer",
+    "desktop:build:electron": "pnpm --filter @synapse/desktop run build:electron",
+    "desktop:build:data-store": "pnpm --filter @synapse/desktop run build:data-store",
+    "desktop:package": "pnpm --filter @synapse/desktop run package",
+    "desktop:package:mac": "pnpm --filter @synapse/desktop run package:mac",
+    "desktop:package:win": "pnpm --filter @synapse/desktop run package:win",
+    "desktop:release": "pnpm --filter @synapse/desktop run release",
+    "desktop:start": "pnpm --filter @synapse/desktop run start",
+    "desktop:typecheck": "pnpm --filter @synapse/desktop run typecheck",
+    "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push"
   }
 }

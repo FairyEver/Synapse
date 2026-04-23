@@ -33,7 +33,7 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority for the repo
 ## Current repository structure
 
 - This repo is a pnpm monorepo. The workspace root hosts shared docs (`doc/`, `AGENTS.md`, `CLAUDE.md`, `README.md`), `.github/` CI, and the monorepo `package.json` / `pnpm-workspace.yaml`. Source code lives in the `desktop/` subpackage published as `@synapse/desktop`.
-- Run scripts from the repo root (e.g. `pnpm dev`, `pnpm build`, `pnpm typecheck`); they delegate into `desktop/` via `pnpm --filter @synapse/desktop`.
+- Run scripts from the repo root (e.g. `pnpm desktop:dev`, `pnpm desktop:build`, `pnpm desktop:typecheck`); they delegate into `desktop/` via `pnpm --filter @synapse/desktop`.
 - Privileged Electron code lives in `desktop/electron/`.
 - Renderer code lives in `desktop/src/`.
 - Shared shell state and orchestration live in `desktop/src/app-shell/`.
