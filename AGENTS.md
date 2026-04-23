@@ -24,27 +24,29 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority for the repo
 
 ## Current UI foundation
 
-- The active shadcn preset is `radix-nova` in `components.json`.
+- The active shadcn preset is `radix-nova` in `desktop/components.json`.
 - The current primitive base is Radix, not Base UI.
-- `src/components/ui/` must stay aligned with the current shadcn + Radix setup.
+- `desktop/src/components/ui/` must stay aligned with the current shadcn + Radix setup.
 - Do not add or reintroduce `@base-ui/react` unless the task is an explicit migration approved by the user.
 - When adding or reinstalling shadcn components, preserve the current Radix base. If a task requires shadcn re-initialization or reinstall, use the Radix path rather than switching to `base`.
 
 ## Current repository structure
 
-- Privileged Electron code lives in `electron/`.
-- Renderer code lives in `src/`.
-- Shared shell state and orchestration live in `src/app-shell/`.
-- Shared UI components live in `src/components/` and `src/components/ui/`.
-- Shared pure utilities live in `src/lib/`.
-- Shared renderer-wide types live in `src/types/`.
-- New business modules should live in `src/modules/`, not `src/features/`.
+- This repo is a pnpm monorepo. The workspace root hosts shared docs (`doc/`, `AGENTS.md`, `CLAUDE.md`, `README.md`), `.github/` CI, and the monorepo `package.json` / `pnpm-workspace.yaml`. Source code lives in the `desktop/` subpackage published as `@synapse/desktop`.
+- Run scripts from the repo root (e.g. `pnpm dev`, `pnpm build`, `pnpm typecheck`); they delegate into `desktop/` via `pnpm --filter @synapse/desktop`.
+- Privileged Electron code lives in `desktop/electron/`.
+- Renderer code lives in `desktop/src/`.
+- Shared shell state and orchestration live in `desktop/src/app-shell/`.
+- Shared UI components live in `desktop/src/components/` and `desktop/src/components/ui/`.
+- Shared pure utilities live in `desktop/src/lib/`.
+- Shared renderer-wide types live in `desktop/src/types/`.
+- New business modules should live in `desktop/src/modules/`, not `desktop/src/features/`.
 - Planned first-class modules include `rules`, `skills`, and `settings`; do not assume those directories already exist unless the task creates them.
 
 ## Core rules
 
 - Follow the existing project structure before creating new files or folders.
-- Do not introduce a parallel architecture such as `src/features/` unless the task is an explicit migration.
+- Do not introduce a parallel architecture such as `desktop/src/features/` unless the task is an explicit migration.
 - Prefer small, local changes over broad rewrites.
 - Reuse existing components, hooks, services, and utilities before adding new ones.
 - Do not add dependencies unless explicitly asked.
@@ -61,8 +63,8 @@ For any visual decision, `doc/DESIGN.md` is the canonical authority for the repo
 - For feature UI, prefer shadcn/ui composition and the default preset styles documented in `doc/DESIGN.md`.
 - When a task changes UI or styling, use existing shadcn components and theme tokens before adding custom visual treatment.
 - Treat the current renderer UI stack as `shadcn/ui + Radix`; do not silently swap the primitive library or preset.
-- Prefer `src/components/ui/` shadcn primitives over creating new general-purpose components in `src/components/`.
-- If a needed UI primitive is missing, add the official shadcn component to `src/components/ui/` or match CLI output closely before hand-rolling a custom primitive.
+- Prefer `desktop/src/components/ui/` shadcn primitives over creating new general-purpose components in `desktop/src/components/`.
+- If a needed UI primitive is missing, add the official shadcn component to `desktop/src/components/ui/` or match CLI output closely before hand-rolling a custom primitive.
 - If `doc/DESIGN.md` specifies the active shadcn preset, font imports, tokens, or component usage rules, follow those over ad hoc page-level overrides.
 - Keep the app shell and feature modules on the same shared shadcn baseline instead of maintaining parallel visual systems.
 - If a component, hook, or service grows too large, split it into smaller, well-named units.
@@ -140,14 +142,14 @@ These guidelines are working if: fewer unnecessary changes in diffs, fewer rewri
 
 For any UI or styling task, treat these as default requirements unless the user explicitly asks for an exception:
 
-- Use the active shadcn preset and CSS variable tokens defined by `components.json` and `src/styles/globals.css`.
+- Use the active shadcn preset and CSS variable tokens defined by `desktop/components.json` and `desktop/src/styles/globals.css`.
 - Prefer neutral palette tokens such as `bg-background`, `text-foreground`, `bg-card`, `border-border`, and `bg-muted`.
 - Use the preset's default font imports and tokenized font roles instead of adding separate brand display styles.
 - Prefer stock shadcn radius, border, shadow, and focus-ring treatment over custom arbitrary values.
-- Use this UI decision order: existing business composition that already fits -> existing `src/components/ui/` component -> new shadcn component added under `src/components/ui/` -> thin module-local composition -> last-resort custom primitive.
+- Use this UI decision order: existing business composition that already fits -> existing `desktop/src/components/ui/` component -> new shadcn component added under `desktop/src/components/ui/` -> thin module-local composition -> last-resort custom primitive.
 - Compose from shadcn components before hand-rolling parallel UI primitives.
 - Let Tailwind primarily handle layout, spacing, sizing, responsive behavior, overflow, and simple typography; do not use it as the main way to restyle buttons, inputs, cards, dialogs, or tabs.
-- Do not create a new shared presentational primitive in `src/components/` when a shadcn equivalent exists or can be added.
+- Do not create a new shared presentational primitive in `desktop/src/components/` when a shadcn equivalent exists or can be added.
 - Avoid hard-coded brand colors, custom shadow systems, decorative gradients, and page-specific visual languages unless the task explicitly asks for them.
 
 ## Product copy guardrails
@@ -160,12 +162,12 @@ For any UI or styling task, treat these as default requirements unless the user 
 
 ## Placement rules
 
-- New renderer business logic should usually live inside the relevant module under `src/modules/<module>/`.
+- New renderer business logic should usually live inside the relevant module under `desktop/src/modules/<module>/`.
 - Inside a module, prefer `components/`, `hooks/`, `services/`, `types.ts`, and `utils.ts` when those boundaries help.
-- Shared pure helpers belong in `src/lib/`.
-- Shared renderer-wide types belong in `src/types/`.
-- When Electron logic grows, split it into clearly named files under `electron/` instead of inflating `electron/main.ts`.
-- Keep `src/App.tsx` focused on app-shell composition and top-level tab orchestration, not deep feature logic.
+- Shared pure helpers belong in `desktop/src/lib/`.
+- Shared renderer-wide types belong in `desktop/src/types/`.
+- When Electron logic grows, split it into clearly named files under `desktop/electron/` instead of inflating `desktop/electron/main.ts`.
+- Keep `desktop/src/App.tsx` focused on app-shell composition and top-level tab orchestration, not deep feature logic.
 
 ## Before finishing
 

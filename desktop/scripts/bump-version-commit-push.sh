@@ -1,13 +1,15 @@
 #!/usr/bin/env sh
-# 作用：把 package.json 的版本号最后一段自动加 1，然后提交并推送当前分支。
-# 一般通过 `pnpm bump:commit:push` 手动执行，用于快速生成一个版本递增提交。
-# 这个脚本会执行 `git add -A`，会把当前工作区所有改动一起提交，使用前要先确认改动范围。
+# 作用：把 desktop 子包 package.json 的版本号最后一段自动加 1，然后在仓库根目录
+# 执行 `git add -A` 把工作区所有改动一起提交，并推送当前分支。
+# 一般通过根目录 `pnpm bump:commit:push` 触发（会转发到 @synapse/desktop）。
+# 由于使用 `git add -A`，执行前要先确认工作区改动范围。
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+PACKAGE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+REPO_ROOT=$(git -C "$PACKAGE_ROOT" rev-parse --show-toplevel)
 
-cd "$REPO_ROOT"
+cd "$PACKAGE_ROOT"
 
 NEW_VERSION=$(
 node <<'NODE'
@@ -36,6 +38,8 @@ fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 process.stdout.write(packageJson.version);
 NODE
 )
+
+cd "$REPO_ROOT"
 
 git add -A
 git commit -m "chore: bump version to ${NEW_VERSION}"

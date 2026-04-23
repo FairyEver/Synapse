@@ -6,9 +6,9 @@ Synapse 的视觉基线来自 shadcn/ui 的 preset 配置。
 
 以下文件共同定义视觉系统：
 
-- `components.json`
-- `src/styles/globals.css`
-- `src/components/ui/`
+- `desktop/components.json`
+- `desktop/src/styles/globals.css`
+- `desktop/src/components/ui/`
 
 只要任务没有明确要求变更 preset，这三处应与 shadcn CLI 输出保持一致。
 
@@ -24,13 +24,13 @@ menu accent: subtle
 primitive: radix-ui  # 组件底座，通过 package.json 依赖和组件实现体现
 ```
 
-字体与 token 以 `src/styles/globals.css` 为准。
+字体与 token 以 `desktop/src/styles/globals.css` 为准。
 
 如需切换 preset，必须同步更新：
 
-- `components.json`
-- `src/styles/globals.css`
-- 相关 `src/components/ui/*`
+- `desktop/components.json`
+- `desktop/src/styles/globals.css`
+- 相关 `desktop/src/components/ui/*`
 - `doc/DESIGN.md` 与 `doc/ui-rules.md`
 
 ## 3. 颜色 Token
@@ -58,14 +58,14 @@ primitive: radix-ui  # 组件底座，通过 package.json 依赖和组件实现�
 
 ## 4. 字体
 
-使用 `src/styles/globals.css` 中声明的字体：
+使用 `desktop/src/styles/globals.css` 中声明的字体：
 
 - `--font-sans`: Geist Variable
 - `--font-heading`: 与 sans 一致
 
 ## 5. 组件风格
 
-默认优先使用 `src/components/ui/` 中的 shadcn 组件：
+默认优先使用 `desktop/src/components/ui/` 中的 shadcn 组件：
 
 - `Button`
 - `Card`
@@ -82,7 +82,7 @@ primitive: radix-ui  # 组件底座，通过 package.json 依赖和组件实现�
 决策顺序：
 
 1. 现有业务组合组件
-2. `src/components/ui/` 现有组件
+2. `desktop/src/components/ui/` 现有组件
 3. 新增 shadcn 组件
 4. 模块内薄包装组件
 5. 最后才允许自定义 primitive

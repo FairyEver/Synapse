@@ -1,6 +1,6 @@
 # Synapse Renderer Rules
 
-These rules apply to all renderer-side work under `src/`.
+These rules apply to all renderer-side work under `desktop/src/`.
 
 ## Design authority
 
@@ -11,14 +11,14 @@ These rules apply to all renderer-side work under `src/`.
 ## Required visual defaults
 
 - The active shadcn preset is `radix-nova` and the current primitive base is Radix.
-- Use the active shadcn preset tokens from `components.json` and `src/styles/globals.css`.
-- Prefer shared shadcn components from `src/components/ui/` over custom renderer-side primitives.
-- Use this order for UI work: existing business composition that already fits -> existing `src/components/ui/` component -> add a shadcn component under `src/components/ui/` -> thin module-local composition -> last-resort custom primitive.
+- Use the active shadcn preset tokens from `desktop/components.json` and `desktop/src/styles/globals.css`.
+- Prefer shared shadcn components from `desktop/src/components/ui/` over custom renderer-side primitives.
+- Use this order for UI work: existing business composition that already fits -> existing `desktop/src/components/ui/` component -> add a shadcn component under `desktop/src/components/ui/` -> thin module-local composition -> last-resort custom primitive.
 - Keep colors, radius, borders, shadows, and focus states on stock shadcn defaults unless the task explicitly changes the preset.
 - Prefer tokenized utilities such as `bg-background`, `text-foreground`, `border-border`, `bg-muted`, and `text-muted-foreground`.
 - Use Tailwind mainly for layout, spacing, sizing, responsive behavior, overflow, and simple typography instead of re-skinning component surfaces.
 - Keep renderer styling simple and consistent rather than introducing a separate shell-specific brand layer.
-- Do not import renderer primitives from `@base-ui/react` or introduce another primitive layer when `src/components/ui/` already covers the need.
+- Do not import renderer primitives from `@base-ui/react` or introduce another primitive layer when `desktop/src/components/ui/` already covers the need.
 - When a primitive is missing, add it through the existing shadcn setup and keep the project on the Radix base.
 - Do not start Vite, Electron, or any other development server for verification unless the user explicitly asks. After renderer changes, leave runtime validation to the user.
 

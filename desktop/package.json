@@ -1,5 +1,5 @@
 {
-  "name": "synapse",
+  "name": "@synapse/desktop",
   "productName": "Synapse",
   "private": true,
   "version": "0.1.89",

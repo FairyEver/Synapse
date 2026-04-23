@@ -2,6 +2,21 @@
 
 Where Ideas Connect
 
+## 开发
+
+本仓库是 pnpm monorepo，桌面端源码位于 `desktop/`（包名 `@synapse/desktop`）。常用脚本从仓库根目录执行：
+
+```bash
+pnpm install             # 安装全部工作区依赖
+pnpm dev                 # 启动本地开发环境
+pnpm typecheck           # 类型检查
+pnpm build               # 渲染端 + 主进程 + data-store 构建
+pnpm package:mac         # 打包 macOS（dmg + zip）
+pnpm package:win         # 打包 Windows（nsis）
+```
+
+根目录脚本都会通过 `pnpm --filter @synapse/desktop` 转发到子包。
+
 ## 下载
 
 [github releases](https://github.com/FairyEver/SynapseAppRelease/releases)

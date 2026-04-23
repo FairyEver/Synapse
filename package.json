@@ -1,0 +1,22 @@
+{
+  "name": "synapse-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.22.0",
+  "scripts": {
+    "dev": "pnpm --filter @synapse/desktop run dev",
+    "dev:renderer": "pnpm --filter @synapse/desktop run dev:renderer",
+    "icons": "pnpm --filter @synapse/desktop run icons",
+    "build": "pnpm --filter @synapse/desktop run build",
+    "build:renderer": "pnpm --filter @synapse/desktop run build:renderer",
+    "build:electron": "pnpm --filter @synapse/desktop run build:electron",
+    "build:data-store": "pnpm --filter @synapse/desktop run build:data-store",
+    "package": "pnpm --filter @synapse/desktop run package",
+    "package:mac": "pnpm --filter @synapse/desktop run package:mac",
+    "package:win": "pnpm --filter @synapse/desktop run package:win",
+    "release": "pnpm --filter @synapse/desktop run release",
+    "start": "pnpm --filter @synapse/desktop run start",
+    "typecheck": "pnpm --filter @synapse/desktop run typecheck",
+    "bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push"
+  }
+}

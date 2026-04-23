@@ -23,21 +23,23 @@
 
 这份规范必须以仓库现状为准，而不是照搬抽象模板。
 
+仓库是 pnpm monorepo，所有源码在 `desktop/` 子包（`@synapse/desktop`）下。共享文档（`doc/`、`AGENTS.md`、`CLAUDE.md`、`README.md`）和 CI（`.github/`）留在仓库根目录。
+
 当前实际结构包括：
 
-- `electron/`：主进程与 preload
-- `src/app-shell/`：应用壳层上下文与顶层编排
-- `src/components/`：共享 UI
-- `src/components/ui/`：shadcn/ui 组件源码
-- `src/modules/`：业务模块
-- `src/lib/`：纯工具函数
-- `src/types/`：共享类型
+- `desktop/electron/`：主进程与 preload
+- `desktop/src/app-shell/`：应用壳层上下文与顶层编排
+- `desktop/src/components/`：共享 UI
+- `desktop/src/components/ui/`：shadcn/ui 组件源码
+- `desktop/src/modules/`：业务模块
+- `desktop/src/lib/`：纯工具函数
+- `desktop/src/types/`：共享类型
 
 重要说明：
 
-- 本仓库当前使用 `src/modules/` 作为业务模块目录。
+- 本仓库当前使用 `desktop/src/modules/` 作为业务模块目录。
 - 外部文档里提到的 `features/` 在 Synapse 当前语境下应理解为 `modules/`。
-- 未经明确重构任务，不要在现有 `src/modules/` 旁边再引入一套 `src/features/` 平行结构。
+- 未经明确重构任务，不要在现有 `desktop/src/modules/` 旁边再引入一套 `desktop/src/features/` 平行结构。
 
 ## 3. 总原则
 
@@ -84,8 +86,8 @@ Synapse 必须坚持三层边界：
 
 约束：
 
-- 这类逻辑只能放在 `electron/` 下的主进程代码中。
-- 随着功能增长，应拆出清晰的主进程服务文件，而不是持续堆在 `electron/main.ts`。
+- 这类逻辑只能放在 `desktop/electron/` 下的主进程代码中。
+- 随着功能增长，应拆出清晰的主进程服务文件，而不是持续堆在 `desktop/electron/main.ts`。
 
 ### 4.2 Preload 桥接层
 
@@ -122,26 +124,26 @@ Synapse 必须坚持三层边界：
 
 ### 5.1 顶层建议
 
-- `electron/`：主进程与 preload
+- `desktop/electron/`：主进程与 preload
   - `ipc/`：IPC 处理器
   - `services/`：主进程服务
-- `src/App.tsx`：应用壳层编排与一级模块切换
-- `src/app-shell/`：顶层状态与共享上下文
-- `src/components/`：共享 UI 组件
-- `src/components/ui/`：shadcn/ui 组件
-- `src/hooks/`：共享自定义 hooks
-- `src/modules/`：业务模块
-- `src/lib/`：纯工具函数
-- `src/types/`：共享类型
-- `src/styles/`：全局样式
+- `desktop/src/App.tsx`：应用壳层编排与一级模块切换
+- `desktop/src/app-shell/`：顶层状态与共享上下文
+- `desktop/src/components/`：共享 UI 组件
+- `desktop/src/components/ui/`：shadcn/ui 组件
+- `desktop/src/hooks/`：共享自定义 hooks
+- `desktop/src/modules/`：业务模块
+- `desktop/src/lib/`：纯工具函数
+- `desktop/src/types/`：共享类型
+- `desktop/src/styles/`：全局样式
 
 ### 5.2 模块拆分
 
 当前一类模块对应一个业务域，例如：
 
-- `src/modules/rules`
-- `src/modules/skills`
-- `src/modules/settings`
+- `desktop/src/modules/rules`
+- `desktop/src/modules/skills`
+- `desktop/src/modules/settings`
 
 模块内部建议按需要逐步拆为：
 
@@ -153,14 +155,14 @@ Synapse 必须坚持三层边界：
 
 ### 5.3 共享代码位置
 
-- 纯工具函数放 `src/lib/`
-- 共享类型放 `src/types/`
+- 纯工具函数放 `desktop/src/lib/`
+- 共享类型放 `desktop/src/types/`
 - 业务私有逻辑优先留在对应模块内部
 - 不要把模块细节泄露进共享组件层
 
 ### 5.4 App 壳层约束
 
-`src/App.tsx` 应只承担：
+`desktop/src/App.tsx` 应只承担：
 
 - 顶层骨架
 - 一级模块切换
@@ -227,8 +229,8 @@ renderer 负责：
 
 共享组件和 hooks 应尽量与业务解耦：
 
-- `src/components/` 不应依赖具体业务模块实现
-- `src/hooks/` 不应依赖具体业务模块逻辑
+- `desktop/src/components/` 不应依赖具体业务模块实现
+- `desktop/src/hooks/` 不应依赖具体业务模块逻辑
 - 业务模块可以依赖共享组件和 hooks
 - 业务模块之间不要直接耦合实现细节
 
@@ -272,10 +274,10 @@ Tailwind 主要用于：
 - 视觉基线以 `doc/DESIGN.md` 为准（当前为 `radix-nova` preset、Radix primitive）
 - 业务 UI 优先通过组合已有组件完成
 - 不要为了”更好看”随意改组件内部实现
-- 需要新 UI 原子组件时，优先新增到 `src/components/ui/`，不要先在 `src/components/` 手搓一个平行版本
+- 需要新 UI 原子组件时，优先新增到 `desktop/src/components/ui/`，不要先在 `desktop/src/components/` 手搓一个平行版本
 - 不要重新引入 `@base-ui/react` 或把项目切回 Base UI 路线，除非任务是用户明确要求的迁移
 - 新增或重装 shadcn 组件时，必须保留当前 Radix 基线；如果需要重新初始化或批量重装，显式使用 `--base radix`
-- 默认决策顺序应为：现有业务组合组件 -> `src/components/ui/` 现有组件 -> 新增 shadcn 组件 -> 模块内薄组合组件 -> 最后才是自定义 primitive
+- 默认决策顺序应为：现有业务组合组件 -> `desktop/src/components/ui/` 现有组件 -> 新增 shadcn 组件 -> 模块内薄组合组件 -> 最后才是自定义 primitive
 
 优先使用的组件包括：
 
@@ -312,7 +314,7 @@ Tailwind 主要用于：
 
 ### 9.2 类型位置
 
-- 共享类型放 `src/types/`
+- 共享类型放 `desktop/src/types/`
 - 模块私有类型放对应模块内部
 - preload 暴露到 `window` 的能力必须同时更新全局类型声明
 

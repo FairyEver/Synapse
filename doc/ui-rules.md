@@ -82,8 +82,8 @@ Tailwind 主要用于：
 - 不为了"更好看"随意改内部源码
 - 需要新增组件时，优先通过 shadcn CLI 生成或严格对齐 CLI 输出
 - 需要定制时，优先调整主题 token 或共享组件层，而不是在页面里零散覆盖
-- 新建共享 UI 前，先确认现有 `src/components/ui/` 是否可直接使用或是否应先补一个 shadcn 组件
-- 不要为了单个页面或单个模块，在 `src/components/` 新建与 shadcn 等价的按钮、输入框、卡片、弹窗、标签等基础组件
+- 新建共享 UI 前，先确认现有 `desktop/src/components/ui/` 是否可直接使用或是否应先补一个 shadcn 组件
+- 不要为了单个页面或单个模块，在 `desktop/src/components/` 新建与 shadcn 等价的按钮、输入框、卡片、弹窗、标签等基础组件
 
 优先使用的组件包括：
 
