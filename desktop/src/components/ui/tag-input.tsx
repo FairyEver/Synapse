@@ -1,4 +1,4 @@
-import { useCallback, useRef, type KeyboardEvent } from "react"
+import { useCallback, useRef, useState, type KeyboardEvent } from "react"
 import { X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -13,6 +13,7 @@ type TagInputProps = {
 
 function TagInput({ value, onChange, placeholder, disabled, className }: TagInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [composing, setComposing] = useState(false)
 
   const addTag = useCallback(
     (raw: string) => {
@@ -32,10 +33,12 @@ function TagInput({ value, onChange, placeholder, disabled, className }: TagInpu
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
+      if (composing) return
+
       const input = inputRef.current
       if (!input) return
 
-      if (e.key === " " || e.key === "Enter") {
+      if (e.key === "Enter") {
         e.preventDefault()
         addTag(input.value)
         input.value = ""
@@ -46,7 +49,7 @@ function TagInput({ value, onChange, placeholder, disabled, className }: TagInpu
         onChange(value.slice(0, -1))
       }
     },
-    [addTag, onChange, value],
+    [addTag, composing, onChange, value],
   )
 
   const handleBlur = useCallback(() => {
@@ -87,6 +90,8 @@ function TagInput({ value, onChange, placeholder, disabled, className }: TagInpu
         className="min-w-16 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
+        onCompositionStart={() => setComposing(true)}
+        onCompositionEnd={() => setComposing(false)}
       />
     </div>
   )

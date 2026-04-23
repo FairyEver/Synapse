@@ -197,7 +197,7 @@ function TableSchemaSheet({
               <TagInput
                 value={newColEnumValues}
                 onChange={setNewColEnumValues}
-                placeholder="输入后按空格添加，如：收入 支出"
+                placeholder="输入后按回车添加"
                 className="text-xs"
               />
             ) : null}

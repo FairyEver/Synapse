@@ -211,7 +211,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                       className="text-xs"
                       value={col.enumValues}
                       onChange={(v) => updateColumn(col.key, "enumValues", v)}
-                      placeholder="输入后按空格添加，如：收入 支出"
+                      placeholder="输入后按回车添加"
                     />
                   ) : null}
                 </div>
