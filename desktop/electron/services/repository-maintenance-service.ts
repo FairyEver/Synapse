@@ -1,6 +1,7 @@
 import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
+import { isFileNotFoundError, pathExists } from "./fs-utils"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -70,10 +71,6 @@ type RepositoryMaintenanceResult = {
 
 function toGitPath(filePath: string): string {
   return filePath.split(path.sep).join("/")
-}
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -146,18 +143,6 @@ function createPendingPushTitle(action: "compaction" | "gc"): string {
   return action === "compaction" ? "整理历史记录" : "清理附件池"
 }
 
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return false
-    }
-
-    throw error
-  }
-}
 
 async function readDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
   try {

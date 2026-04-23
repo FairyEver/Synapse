@@ -1,5 +1,6 @@
-import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { isFileNotFoundError, isPermissionError, pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type {
@@ -30,29 +31,8 @@ import { repositoryStore } from "./repository-store"
 const INSTALLED_SKILL_MAIN_FILE_NAME = "SKILL.md"
 const logger = createMainLogger("service.content-install")
 
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
-
-function isPermissionError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && (error.code === "EACCES" || error.code === "EPERM")
-}
-
 function normalizeMarkdownContent(content: string): string {
   return content.endsWith("\n") ? content : `${content}\n`
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return false
-    }
-
-    return false
-  }
 }
 
 async function getActiveRepository(): Promise<SynapseRepositoryConfig> {

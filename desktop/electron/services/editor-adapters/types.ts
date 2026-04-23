@@ -17,6 +17,17 @@ export type EditorGlobalDirectoryPaths = {
   skillsPath: string | null
 }
 
+export type EditorScanPathConfig = {
+  globalSkillsPath: string | null
+  globalRulesPath: string | null
+  rulesSupported: boolean
+  detectionDir: string
+  projectPaths: (projectPath: string) => {
+    skillsPath: string
+    rulesPath: string
+  }
+}
+
 export interface EditorAdapter extends SynapseEditorAdapterSummary {
   resolveGlobalDirectoryPaths(): EditorGlobalDirectoryPaths
   resolveGlobalTarget(context: EditorAdapterResolveContext): Promise<SynapseEditorResolvedTarget>
@@ -24,4 +35,5 @@ export interface EditorAdapter extends SynapseEditorAdapterSummary {
     projectPath: string,
     context: EditorAdapterResolveContext,
   ): Promise<SynapseEditorResolvedTarget>
+  getScanPathConfig(): EditorScanPathConfig
 }

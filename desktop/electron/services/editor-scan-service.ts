@@ -11,7 +11,7 @@ import type {
 } from "../../src/types/editor-scan"
 import type { SynapseEditorId } from "../../src/types/editor"
 import { editorAdapters } from "./editor-adapters"
-import { getHomePath, pathExists, expandHomeDirectory } from "./editor-adapters/utils"
+import { extractContentIdFromSynapseFile, pathExists, isSynapseFile } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
 
@@ -172,13 +172,13 @@ async function scanClaudeCodeRules(dirPath: string): Promise<EditorScanRuleItem[
     try {
       const text = await readFullText(filePath)
       const { metadata, body } = parseFrontmatter(text)
-      const isSynapse = entry.name.startsWith("synapse_")
+      const synapse = isSynapseFile(entry.name)
 
       items.push({
         name: entry.name,
         path: filePath,
-        source: isSynapse ? "synapse" : "external",
-        synapseContentId: isSynapse ? entry.name.replace(/^synapse_/, "").replace(/\.md$/, "") : null,
+        source: synapse ? "synapse" : "external",
+        synapseContentId: synapse ? extractContentIdFromSynapseFile(entry.name) : null,
         preview: previewLines(body),
         metadata,
       })
@@ -312,39 +312,18 @@ type EditorScanPaths = {
   detectionDir: string
 }
 
-function resolveCodexHomePath(): string {
-  const env = process.env.CODEX_HOME?.trim()
-  if (env) return path.resolve(expandHomeDirectory(env))
-  return getHomePath(".codex")
-}
-
 function getEditorScanPaths(): EditorScanPaths[] {
-  return [
-    {
-      editorId: "claude-code",
-      editorLabel: "Claude Code",
-      globalSkillsPath: getHomePath(".claude", "skills"),
-      globalRulesPath: getHomePath(".claude", "rules"),
-      rulesSupported: true,
-      detectionDir: getHomePath(".claude"),
-    },
-    {
-      editorId: "cursor",
-      editorLabel: "Cursor",
-      globalSkillsPath: getHomePath(".cursor", "skills"),
-      globalRulesPath: null,
-      rulesSupported: false,
-      detectionDir: getHomePath(".cursor"),
-    },
-    {
-      editorId: "codex",
-      editorLabel: "Codex",
-      globalSkillsPath: getHomePath(".agents", "skills"),
-      globalRulesPath: path.join(resolveCodexHomePath(), "AGENTS.md"),
-      rulesSupported: true,
-      detectionDir: resolveCodexHomePath(),
-    },
-  ]
+  return editorAdapters.map((adapter) => {
+    const config = adapter.getScanPathConfig()
+    return {
+      editorId: adapter.id,
+      editorLabel: adapter.label,
+      globalSkillsPath: config.globalSkillsPath,
+      globalRulesPath: config.globalRulesPath,
+      rulesSupported: config.rulesSupported,
+      detectionDir: config.detectionDir,
+    }
+  })
 }
 
 async function scanRulesForEditor(
@@ -372,26 +351,16 @@ function getProjectEditorPaths(
   skillsPath: string
   rulesPath: string
 }> {
-  return [
-    {
-      editorId: "claude-code",
-      editorLabel: "Claude Code",
-      skillsPath: path.join(projectPath, ".claude", "skills"),
-      rulesPath: path.join(projectPath, ".claude", "rules"),
-    },
-    {
-      editorId: "cursor",
-      editorLabel: "Cursor",
-      skillsPath: path.join(projectPath, ".cursor", "skills"),
-      rulesPath: path.join(projectPath, ".cursor", "rules"),
-    },
-    {
-      editorId: "codex",
-      editorLabel: "Codex",
-      skillsPath: path.join(projectPath, ".agents", "skills"),
-      rulesPath: path.join(projectPath, "AGENTS.md"),
-    },
-  ]
+  return editorAdapters.map((adapter) => {
+    const config = adapter.getScanPathConfig()
+    const paths = config.projectPaths(projectPath)
+    return {
+      editorId: adapter.id,
+      editorLabel: adapter.label,
+      skillsPath: paths.skillsPath,
+      rulesPath: paths.rulesPath,
+    }
+  })
 }
 
 async function scanProject(

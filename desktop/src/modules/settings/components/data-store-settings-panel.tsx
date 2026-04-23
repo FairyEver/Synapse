@@ -51,9 +51,10 @@ import {
   useDataStoreStatus,
 } from "@/modules/data-store/hooks/use-data-store"
 
+import { EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
+
 const logger = createRendererLogger("settings.data-store")
 
-const EDITOR_ICON_CLIP_STYLE: React.CSSProperties = { clipPath: "inset(6%)" }
 const MCP_SERVER_META = [
   { id: "claude" as const, label: "Claude Code", icon: ccIcon },
   { id: "codex" as const, label: "Codex", icon: codexIcon },

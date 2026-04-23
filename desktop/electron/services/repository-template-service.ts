@@ -1,6 +1,7 @@
 import { app } from "electron"
-import { access, readFile, readdir } from "node:fs/promises"
+import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
+import { isFileNotFoundError, pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import type { SynapseContentType } from "../../src/types/content"
 
@@ -30,23 +31,6 @@ function getTemplateRootPath(): string {
   }
 
   return path.join(app.getAppPath(), "resources", "templates")
-}
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return false
-    }
-
-    throw error
-  }
 }
 
 function assertStringField(

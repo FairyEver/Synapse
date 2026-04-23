@@ -5,6 +5,7 @@ import {
   ModuleSidebarList,
 } from "@/components/module-sidebar"
 import { getEditorIconSrc, EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
+import { EDITOR_ORDER, getEditorLabel } from "@/lib/editor-registry"
 import type { SynapseEditorId } from "@/types/editor"
 import type { EditorScanResult } from "@/types/editor-scan"
 
@@ -22,8 +23,6 @@ type EditorSummary = {
   ruleCount: number
 }
 
-const EDITOR_ORDER: SynapseEditorId[] = ["claude-code", "cursor", "codex"]
-
 function EditorScanSidebar({
   data,
   selectedEditorId,
@@ -33,7 +32,7 @@ function EditorScanSidebar({
     if (!data) {
       return EDITOR_ORDER.map((id) => ({
         editorId: id,
-        label: id === "claude-code" ? "Claude Code" : id === "cursor" ? "Cursor" : "Codex",
+        label: getEditorLabel(id),
         detected: false,
         skillCount: 0,
         ruleCount: 0,

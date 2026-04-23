@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
+import { isFileNotFoundError, pathExists } from "../fs-utils"
 
 const SYNAPSE_SKILL_ID_FILE_NAME = ".synapse.json"
 
@@ -7,10 +8,6 @@ interface SynapseSkillMeta {
   id: string
 }
 const UNIQUE_SUFFIX_LIMIT = 999
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
 
 async function readSkillIdFile(skillDirectoryPath: string): Promise<string | null> {
   try {
@@ -55,15 +52,6 @@ async function findSkillDirectoryByContentId(
   }
 
   return null
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await readdir(targetPath)
-    return true
-  } catch {
-    return false
-  }
 }
 
 async function resolveUniqueSkillDirectoryPath(idealPath: string): Promise<string> {

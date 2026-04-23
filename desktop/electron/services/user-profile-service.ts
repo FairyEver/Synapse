@@ -21,11 +21,9 @@ import {
 const USER_PROFILE_SCHEMA_VERSION = 1 as const
 const SYNAPSE_BOT_NAME = "Synapse Bot"
 const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
-const logger = createMainLogger("service.user-profile")
+import { isFileNotFoundError } from "./fs-utils"
 
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
+const logger = createMainLogger("service.user-profile")
 
 function createUserProfile(userId: string, displayName: string): SynapseUserProfile {
   return {

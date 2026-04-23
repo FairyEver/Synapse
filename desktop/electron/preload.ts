@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { SynapseBridge } from "../src/types/bridge"
+import type { SynapseAllChannels } from "./ipc/channels"
 
-// Sandbox preload cannot require arbitrary local modules, so the IPC channel
-// names used here must stay inline instead of importing ./ipc/channels.
+// Sandbox preload cannot require local modules at runtime, so channel strings
+// stay inline. The `satisfies SynapseAllChannels` assertion ensures they stay
+// in sync with the canonical definitions in ./ipc/channels.ts at compile time.
 const SYNAPSE_PRELOAD_CHANNELS = {
   content: {
     list: "synapse:content:list",
@@ -111,7 +113,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     openMCPSettings: "synapse:data-store:open-mcp-settings",
     registerMCP: "synapse:data-store:register-mcp",
   },
-} as const
+} as const satisfies SynapseAllChannels
 
 function subscribeToChannel<T>(channel: string, listener: (payload: T) => void): () => void {
   const wrappedListener = (_event: Electron.IpcRendererEvent, payload: T) => {

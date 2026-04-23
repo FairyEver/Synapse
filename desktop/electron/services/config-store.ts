@@ -8,14 +8,11 @@ import {
   sanitizeSynapseConfig,
 } from "../../src/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "../../src/types/config"
+import { isFileNotFoundError } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 
 const CONFIG_FILE_NAME = "config.json"
 const logger = createMainLogger("service.config-store")
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)

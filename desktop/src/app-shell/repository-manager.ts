@@ -27,6 +27,7 @@ import type {
   SynapseRepositoryUpdatedEvent,
   SynapseRepositoryValidationResult,
 } from "@/types/repository"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
 
 export type RepositoryOperationState = {
   operation: SynapseRepositoryOperationKind | null
@@ -127,10 +128,7 @@ class RepositoryManager {
   }
 
   async refreshConfig(): Promise<void> {
-    const bridge = window.synapse?.config
-    if (!bridge) {
-      throw new Error("Config bridge not available")
-    }
+    const bridge = requireBridgeDomain("config")
 
     this.config = await bridge.get()
     this.isConfigReady = true
@@ -138,10 +136,7 @@ class RepositoryManager {
   }
 
   async updateConfig(patch: SynapseConfigPatch): Promise<void> {
-    const bridge = window.synapse?.config
-    if (!bridge) {
-      throw new Error("Config bridge not available")
-    }
+    const bridge = requireBridgeDomain("config")
 
     this.config = await bridge.update(patch)
     this.notifyRepositorySubscribers()
@@ -331,10 +326,7 @@ class RepositoryManager {
   }
 
   async initializeRepository(uuid: string): Promise<SynapseRepositoryInitializationResult> {
-    const bridge = window.synapse?.repository
-    if (!bridge) {
-      throw new Error("Repository bridge not available")
-    }
+    const bridge = requireBridgeDomain("repository")
 
     this.setOperationState(uuid, {
       operation: "initialize",
@@ -378,10 +370,7 @@ class RepositoryManager {
     uuid: string,
     operation: SynapseRepositoryOperationKind,
   ): Promise<SynapseRepositoryOperationResult> {
-    const bridge = window.synapse?.repository
-    if (!bridge) {
-      throw new Error("Repository bridge not available")
-    }
+    const bridge = requireBridgeDomain("repository")
 
     this.setOperationState(uuid, {
       operation,
@@ -434,10 +423,7 @@ class RepositoryManager {
   }
 
   async waitForBackgroundPush(uuid: string, timeoutMs = 120000): Promise<void> {
-    const bridge = window.synapse?.repository
-    if (!bridge) {
-      throw new Error("Repository bridge not available")
-    }
+    const bridge = requireBridgeDomain("repository")
 
     return new Promise<void>((resolve, reject) => {
       let settled = false
@@ -502,10 +488,7 @@ class RepositoryManager {
     contentType: T,
     payload: SynapseCreateContentPayload<T>,
   ): Promise<SynapseContentMutationResult> {
-    const bridge = window.synapse?.content
-    if (!bridge) {
-      throw new Error("Content bridge not available")
-    }
+    const bridge = requireBridgeDomain("content")
 
     const result = await bridge.create({ contentType, payload } as SynapseCreateContentRequest<T>)
 
@@ -526,10 +509,7 @@ class RepositoryManager {
     contentType: T,
     payload: SynapseUpdateContentPayload<T>,
   ): Promise<SynapseContentMutationResult> {
-    const bridge = window.synapse?.content
-    if (!bridge) {
-      throw new Error("Content bridge not available")
-    }
+    const bridge = requireBridgeDomain("content")
 
     const result = await bridge.update({ contentType, payload } as SynapseUpdateContentRequest<T>)
 
@@ -547,10 +527,7 @@ class RepositoryManager {
   }
 
   async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
-    const bridge = window.synapse?.content
-    if (!bridge) {
-      throw new Error("Content bridge not available")
-    }
+    const bridge = requireBridgeDomain("content")
 
     const result = await bridge.deleteContent(payload)
 
@@ -639,18 +616,12 @@ class RepositoryManager {
 
   // ===== 工具方法 =====
   async checkInitializationPreview(uuid: string): Promise<SynapseRepositoryInitializationPreview> {
-    const bridge = window.synapse?.repository
-    if (!bridge) {
-      throw new Error("Repository bridge not available")
-    }
+    const bridge = requireBridgeDomain("repository")
     return bridge.checkInitializationPreview(uuid)
   }
 
   async validateDirectory(targetPath: string): Promise<SynapseRepositoryValidationResult> {
-    const bridge = window.synapse?.repository
-    if (!bridge) {
-      throw new Error("Repository bridge not available")
-    }
+    const bridge = requireBridgeDomain("repository")
     return bridge.validateDirectory(targetPath)
   }
 
@@ -665,10 +636,7 @@ class RepositoryManager {
   async createLocalRepository(
     options: SynapseCreateLocalRepositoryPayload,
   ): Promise<SynapseCreateLocalRepositoryResult> {
-    const bridge = window.synapse?.repository
-    if (!bridge) {
-      throw new Error("Repository bridge not available")
-    }
+    const bridge = requireBridgeDomain("repository")
     return bridge.createLocalRepository(options)
   }
 

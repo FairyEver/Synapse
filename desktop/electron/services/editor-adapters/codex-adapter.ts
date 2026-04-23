@@ -175,6 +175,19 @@ const codexAdapter: EditorAdapter = {
         throw new Error(`${codexAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
   },
+  getScanPathConfig() {
+    const codexHome = resolveCodexHomePath()
+    return {
+      globalSkillsPath: getHomePath(".agents", "skills"),
+      globalRulesPath: path.join(codexHome, "AGENTS.md"),
+      rulesSupported: true,
+      detectionDir: codexHome,
+      projectPaths: (projectPath: string) => ({
+        skillsPath: path.join(projectPath, ".agents", "skills"),
+        rulesPath: path.join(projectPath, "AGENTS.md"),
+      }),
+    }
+  },
 }
 
-export { codexAdapter }
+export { codexAdapter, resolveCodexHomePath }

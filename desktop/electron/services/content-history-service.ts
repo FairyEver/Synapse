@@ -14,6 +14,7 @@ import type {
   SynapseContentSnapshotRecord,
   SynapseContentType,
 } from "../../src/types/content"
+import { isFileNotFoundError } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 
 const CONTENT_META_FILE_NAME = "meta.json"
@@ -28,10 +29,6 @@ type ResolvedContentVersion = {
   historyDirname: string
   meta: SynapseContentMetaRecord
   snapshot: SynapseContentSnapshotRecord
-}
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

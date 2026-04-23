@@ -11,12 +11,10 @@ const USERS_DIRECTORY_PATH = path.join("system", "users")
 const USER_PROFILE_FILE_NAME = "profile.json"
 const logger = createMainLogger("service.user-profile-cache")
 
+import { isFileNotFoundError } from "./fs-utils"
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
 }
 
 function isValidUserId(value: string): boolean {

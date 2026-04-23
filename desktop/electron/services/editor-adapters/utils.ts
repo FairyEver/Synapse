@@ -1,6 +1,6 @@
-import { access } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { pathExists } from "../fs-utils"
 import type { SynapseContentType } from "../../../src/types/content"
 import type {
   SynapseEditorAdapterSummary,
@@ -167,15 +167,6 @@ function isSupportedEditorPlatform(): boolean {
   return SUPPORTED_EDITOR_PLATFORMS.has(process.platform)
 }
 
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function resolveExistingProjectPath(projectPath: string): Promise<string | null> {
   const trimmedProjectPath = projectPath.trim()
 
@@ -186,6 +177,20 @@ async function resolveExistingProjectPath(projectPath: string): Promise<string |
   return (await pathExists(trimmedProjectPath)) ? trimmedProjectPath : null
 }
 
+const SYNAPSE_FILE_PREFIX = "synapse_"
+
+function toSynapseRuleName(contentId: string): string {
+  return `${SYNAPSE_FILE_PREFIX}${contentId}`
+}
+
+function isSynapseFile(fileName: string): boolean {
+  return fileName.startsWith(SYNAPSE_FILE_PREFIX)
+}
+
+function extractContentIdFromSynapseFile(fileName: string): string {
+  return fileName.replace(/^synapse_/, "").replace(/\.\w+$/, "")
+}
+
 export {
   createConflictTarget,
   createReadyTarget,
@@ -193,9 +198,13 @@ export {
   createUnsupportedPlatformTarget,
   createUnsupportedTarget,
   expandHomeDirectory,
+  extractContentIdFromSynapseFile,
   getHomePath,
   getRuleFileName,
   isSupportedEditorPlatform,
+  isSynapseFile,
   pathExists,
   resolveExistingProjectPath,
+  SYNAPSE_FILE_PREFIX,
+  toSynapseRuleName,
 }

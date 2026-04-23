@@ -11,6 +11,7 @@ import {
   isSupportedEditorPlatform,
   pathExists,
   resolveExistingProjectPath,
+  toSynapseRuleName,
 } from "./utils"
 
 // Source of truth: document/不同编辑器存储规则.md (official-doc review, 2026-04-18).
@@ -48,7 +49,7 @@ const claudeCodeAdapter: EditorAdapter = {
 
     switch (contentType) {
       case "rule": {
-        const effectiveRuleName = ruleName?.trim() || `synapse_${contentId}`
+        const effectiveRuleName = ruleName?.trim() || toSynapseRuleName(contentId)
         const targetPath = path.join(claudeHomePath, "rules", `${effectiveRuleName}.md`)
         return createReadyTarget({
           adapter: claudeCodeAdapter,
@@ -114,7 +115,7 @@ const claudeCodeAdapter: EditorAdapter = {
 
     switch (contentType) {
       case "rule": {
-        const effectiveRuleName = ruleName?.trim() || `synapse_${contentId}`
+        const effectiveRuleName = ruleName?.trim() || toSynapseRuleName(contentId)
         const targetPath = path.join(resolvedProjectPath, ".claude", "rules", `${effectiveRuleName}.md`)
         return createReadyTarget({
           adapter: claudeCodeAdapter,
@@ -156,6 +157,18 @@ const claudeCodeAdapter: EditorAdapter = {
       }
       default:
         throw new Error(`${claudeCodeAdapter.label} 暂不支持 ${contentType} 类型。`)
+    }
+  },
+  getScanPathConfig() {
+    return {
+      globalSkillsPath: getHomePath(".claude", "skills"),
+      globalRulesPath: getHomePath(".claude", "rules"),
+      rulesSupported: true,
+      detectionDir: getHomePath(".claude"),
+      projectPaths: (projectPath: string) => ({
+        skillsPath: path.join(projectPath, ".claude", "skills"),
+        rulesPath: path.join(projectPath, ".claude", "rules"),
+      }),
     }
   },
 }

@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs"
 import { access, mkdir, mkdtemp, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { constants as fsConstants } from "node:fs"
 import path from "node:path"
+import { isFileNotFoundError, pathExists } from "./fs-utils"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "../../src/constants/defaults"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
@@ -58,22 +59,6 @@ function getNonGitEntries(entries: Dirent[]): Dirent[] {
   return entries.filter((entry) => !isGitDirectory(entry))
 }
 
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return false
-    }
-
-    throw error
-  }
-}
 
 
 function runStructureGitCommand(

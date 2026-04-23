@@ -159,6 +159,18 @@ const cursorAdapter: EditorAdapter = {
         throw new Error(`${cursorAdapter.label} 暂不支持 ${contentType} 类型。`)
     }
   },
+  getScanPathConfig() {
+    return {
+      globalSkillsPath: getHomePath(".cursor", "skills"),
+      globalRulesPath: null,
+      rulesSupported: false,
+      detectionDir: getHomePath(".cursor"),
+      projectPaths: (projectPath: string) => ({
+        skillsPath: path.join(projectPath, ".cursor", "skills"),
+        rulesPath: path.join(projectPath, ".cursor", "rules"),
+      }),
+    }
+  },
 }
 
 export { cursorAdapter }

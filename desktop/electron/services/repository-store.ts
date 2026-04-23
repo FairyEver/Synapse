@@ -1,28 +1,11 @@
 import { spawn } from "node:child_process"
-import { access } from "node:fs/promises"
 import { watch, type FSWatcher } from "node:fs"
+import { isFileNotFoundError, pathExists } from "./fs-utils"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseRepositoryLocalState } from "../../src/types/repository"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.repository-store")
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return false
-    }
-
-    throw error
-  }
-}
 
 function isNotGitRepositoryError(error: unknown): boolean {
   return error instanceof Error && /not a git repository/i.test(error.message)

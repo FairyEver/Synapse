@@ -1,7 +1,8 @@
 import { isUtf8 } from "node:buffer"
 import { createHash } from "node:crypto"
-import { access, copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { pathExists } from "./fs-utils"
 import type {
   SynapseContentAttachmentRecord,
   SynapseContentFile,
@@ -52,15 +53,6 @@ function looksBinaryFile(fileBuffer: Buffer): boolean {
   }
 
   return !isUtf8(fileBuffer)
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath)
-    return true
-  } catch {
-    return false
-  }
 }
 
 class AttachmentsPoolService {

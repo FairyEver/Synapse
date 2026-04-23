@@ -1,3 +1,5 @@
+import { DATA_STORE_IPC_CHANNELS } from "../data-store/channels"
+
 export const SYNAPSE_IPC_CHANNELS = {
   content: {
     list: "synapse:content:list",
@@ -83,4 +85,7 @@ export const SYNAPSE_IPC_CHANNELS = {
     openUpdatePage: "synapse:update:open-update-page",
     stateChanged: "synapse:update:state-changed",
   },
+  dataStore: DATA_STORE_IPC_CHANNELS,
 } as const
+
+export type SynapseAllChannels = typeof SYNAPSE_IPC_CHANNELS

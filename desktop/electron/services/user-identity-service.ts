@@ -18,14 +18,12 @@ import { repositoryStore } from "./repository-store"
 
 const USER_IDENTITY_FILE_NAME = "user-identity.json"
 const USER_IDENTITY_SCHEMA_VERSION = 2 as const
+import { isFileNotFoundError } from "./fs-utils"
+
 const logger = createMainLogger("service.user-identity")
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
 }
 
 function generateUserId(): string {
