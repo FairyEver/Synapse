@@ -218,7 +218,9 @@ if (!gotSingleInstanceLock) {
       }
     })
   }).catch((error) => {
-    logger.error("Failed to initialize app services.", error)
+    logger.error("Failed to initialize app.", error)
+    const message = error instanceof Error ? error.message : String(error)
+    dialog.showErrorBox("Synapse 启动失败", `初始化时遇到错误：\n\n${message}\n\n请检查磁盘空间和文件权限。`)
     app.quit()
   })
 }
