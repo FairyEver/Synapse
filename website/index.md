@@ -5,6 +5,9 @@ hero:
   name: Synapse
   text: Where Ideas Connect
   tagline: 面向团队的 AI Rules 与 Skills 分享平台，让好用的提示词和能力包在团队内自由流动。
+  image:
+    src: /icon.png
+    alt: Synapse
   actions:
     - theme: brand
       text: 了解产品

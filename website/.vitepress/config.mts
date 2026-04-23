@@ -10,6 +10,10 @@ export default defineConfig({
 
   srcExclude: ['README.md'],
 
+  head: [
+    ['link', { rel: 'icon', type: 'image/png', href: '/icon.png' }]
+  ],
+
   vite: {
     server: {
       port: 5174
@@ -17,6 +21,8 @@ export default defineConfig({
   },
 
   themeConfig: {
+    logo: '/icon.png',
+
     nav: [
       { text: '首页', link: '/' },
       { text: '产品介绍', link: '/guide/introduction' },
