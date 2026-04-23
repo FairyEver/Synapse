@@ -1,5 +1,6 @@
 packages:
   - desktop
+  - website
 
 onlyBuiltDependencies:
   - electron
