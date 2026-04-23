@@ -80,17 +80,18 @@ const TOOLS: McpTool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Table name" },
+        table: { type: "string", description: "Table name" },
         column: {
           type: "object",
           properties: {
             name: { type: "string" },
             type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON"] },
+            default: { description: "Default value for the column" },
           },
           required: ["name", "type"],
         },
       },
-      required: ["name", "column"],
+      required: ["table", "column"],
     },
   },
   {
@@ -124,8 +125,39 @@ const TOOLS: McpTool[] = [
       type: "object",
       properties: {
         table: { type: "string", description: "Table name" },
-        where: { description: "Filter conditions (object for equality, array for expressions)" },
-        orderBy: { description: "Sort order (string or {field, dir})" },
+        where: {
+          description: "Filter conditions (object for equality, array for expressions)",
+          oneOf: [
+            { type: "object", description: "Equality filter: { column: value }" },
+            {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  field: { type: "string" },
+                  op: { type: "string", enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE"] },
+                  value: {},
+                },
+                required: ["field", "op", "value"],
+              },
+              description: "Expression filter: [{ field, op, value }]",
+            },
+          ],
+        },
+        orderBy: {
+          description: "Sort order (string or {field, dir})",
+          oneOf: [
+            { type: "string", description: "Column name (ascending)" },
+            {
+              type: "object",
+              properties: {
+                field: { type: "string" },
+                dir: { type: "string", enum: ["asc", "desc"] },
+              },
+              required: ["field", "dir"],
+            },
+          ],
+        },
         limit: { type: "number", description: "Max rows to return (default 100)" },
         offset: { type: "number", description: "Number of rows to skip" },
       },
@@ -198,17 +230,32 @@ function sendError(id: number | string | null, code: number, message: string): v
 let serverInfo: ServerInfo | null = null
 
 function getServerInfo(): ServerInfo {
+  if (serverInfo) {
+    if (!isAppRunning(serverInfo.pid)) {
+      serverInfo = null
+    }
+  }
   if (!serverInfo) {
     serverInfo = readServerInfo()
     if (!isAppRunning(serverInfo.pid)) {
+      serverInfo = null
       throw new Error("Synapse app is not running")
     }
   }
   return serverInfo
 }
 
+function clearServerInfoCache(): void {
+  serverInfo = null
+}
+
 async function handleRequest(request: JsonRpcRequest): Promise<void> {
-  const { id, method, params } = request
+  const { id, method } = request
+
+  if (request.jsonrpc !== "2.0" || typeof method !== "string") {
+    sendError(id ?? null, -32600, "Invalid Request: missing jsonrpc 2.0 or method")
+    return
+  }
 
   if (method === "initialize") {
     sendResponse(id, {
@@ -229,6 +276,14 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
   }
 
   if (method === "tools/call") {
+    const params = request.params
+    if (!params || typeof params !== "object") {
+      sendResponse(id, {
+        content: [{ type: "text", text: "Error: missing params" }],
+        isError: true,
+      })
+      return
+    }
     const toolName = (params as { name: string }).name
     const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {}
     const action = ACTION_MAP[toolName]
@@ -248,6 +303,7 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       })
     } catch (error) {
+      clearServerInfoCache()
       sendResponse(id, {
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
         isError: true,
@@ -262,9 +318,12 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
 const rl = createInterface({ input: process.stdin })
 
 rl.on("line", (line) => {
+  if (!line.trim()) return
   try {
     const request = JSON.parse(line) as JsonRpcRequest
-    void handleRequest(request)
+    handleRequest(request).catch((error) => {
+      sendError(request.id ?? null, -32603, `Internal error: ${(error as Error).message}`)
+    })
   } catch {
     sendError(null, -32700, "Parse error")
   }

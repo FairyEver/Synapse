@@ -17,13 +17,16 @@ import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store.service")
 
-const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
+const NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_]*$/
 const RESERVED_PREFIX = "_"
 const JSON_COLUMN_TYPE = "JSON"
+const VALID_COLUMN_TYPES = new Set(["TEXT", "INTEGER", "REAL", "BLOB", "JSON"])
+const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE"])
+const VALID_ORDER_DIRS = new Set(["ASC", "DESC"])
 
 function validateName(name: string, kind: "table" | "column"): void {
   if (!NAME_PATTERN.test(name)) {
-    throw new Error(`Invalid ${kind} name "${name}": only letters, digits, underscores allowed, must start with a letter`)
+    throw new Error(`Invalid ${kind} name "${name}": only letters, digits, underscores allowed, must not start with "_"`)
   }
   if (name.startsWith(RESERVED_PREFIX)) {
     throw new Error(`Invalid ${kind} name "${name}": names starting with "_" are reserved`)
@@ -37,8 +40,14 @@ function validateColumnName(name: string): void {
   }
 }
 
+function validateColumnType(type: string): void {
+  if (!VALID_COLUMN_TYPES.has(type.toUpperCase())) {
+    throw new Error(`Invalid column type "${type}": must be one of TEXT, INTEGER, REAL, BLOB, JSON`)
+  }
+}
+
 function q(name: string): string {
-  return `"${name}"`
+  return `"${name.replace(/"/g, '""')}"`
 }
 
 function toSqlValue(v: unknown): SQLInputValue {
@@ -64,22 +73,28 @@ class DataStoreService {
     try {
       this.db = new DatabaseSync(this.dbPath)
       this.db.exec("PRAGMA journal_mode=WAL")
+    } catch (error) {
+      throw new Error(`Failed to open database: ${error instanceof Error ? error.message : String(error)}`)
+    }
 
+    try {
       const result = this.db.prepare("PRAGMA integrity_check").all() as { integrity_check: string }[]
       if (result[0]?.integrity_check !== "ok") {
         throw new Error("Database integrity check failed")
       }
     } catch (error) {
-      logger.warn("Database corrupted or unreadable. Creating fresh database.", { error })
+      logger.warn("Database corrupted. Creating fresh database.", { error })
       corrupted = true
 
-      if (this.db) {
-        try { this.db.close() } catch { /* ignore */ }
-      }
+      try { this.db.close() } catch { /* ignore */ }
 
       const timestamp = Date.now()
       try {
         renameSync(this.dbPath, `${this.dbPath}.corrupt.${timestamp}`)
+        const walPath = `${this.dbPath}-wal`
+        const shmPath = `${this.dbPath}-shm`
+        try { renameSync(walPath, `${walPath}.corrupt.${timestamp}`) } catch { /* may not exist */ }
+        try { renameSync(shmPath, `${shmPath}.corrupt.${timestamp}`) } catch { /* may not exist */ }
       } catch { /* ignore */ }
 
       this.db = new DatabaseSync(this.dbPath)
@@ -118,11 +133,17 @@ class DataStoreService {
         updated_at TEXT NOT NULL
       )
     `)
+    this.getDb().exec(`
+      CREATE TABLE IF NOT EXISTS "_meta_config" (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `)
   }
 
   private ensureDemoTable(): void {
     const db = this.getDb()
-    const row = db.prepare(`SELECT COUNT(*) as count FROM "_meta_tables"`).get() as { count: number }
+    const row = db.prepare(`SELECT COUNT(*) as count FROM "_meta_config" WHERE key = 'initialized'`).get() as { count: number }
     if (row.count > 0) return
 
     const now = new Date().toISOString()
@@ -144,6 +165,8 @@ class DataStoreService {
       insert.run("GitHub", "https://github.com", "dev,tools", "代码托管平台")
       insert.run("Claude", "https://claude.ai", "ai,assistant", "AI 助手")
       insert.run("Tailwind CSS", "https://tailwindcss.com", "css,frontend", "实用优先的 CSS 框架")
+
+      db.prepare(`INSERT OR REPLACE INTO "_meta_config" (key, value) VALUES (?, ?)`).run("initialized", "1")
 
       db.exec("COMMIT")
     } catch (error) {
@@ -220,6 +243,7 @@ class DataStoreService {
     const seenColumns = new Set<string>()
     for (const col of columns) {
       validateColumnName(col.name)
+      validateColumnType(col.type)
       const lower = col.name.toLowerCase()
       if (seenColumns.has(lower)) {
         throw new Error(`Duplicate column name "${col.name}"`)
@@ -310,6 +334,7 @@ class DataStoreService {
   addColumn(table: string, column: DataStoreColumnDef & { default?: unknown }): void {
     validateName(table, "table")
     validateColumnName(column.name)
+    validateColumnType(column.type)
     this.assertTableExists(table)
 
     const db = this.getDb()
@@ -321,8 +346,15 @@ class DataStoreService {
       sql += ` DEFAULT ${typeof defaultVal === "string" ? `'${defaultVal.replace(/'/g, "''")}'` : defaultVal}`
     }
 
-    db.exec(sql)
-    db.prepare(`UPDATE "_meta_tables" SET updated_at = ? WHERE name = ?`).run(new Date().toISOString(), table)
+    db.exec("BEGIN")
+    try {
+      db.exec(sql)
+      db.prepare(`UPDATE "_meta_tables" SET updated_at = ? WHERE name = ?`).run(new Date().toISOString(), table)
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
 
     if (column.type.toUpperCase() === JSON_COLUMN_TYPE) {
       const existing = this.jsonColumns.get(table) ?? new Set()
@@ -338,6 +370,7 @@ class DataStoreService {
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(table)
     const keys = Object.keys(data)
+    for (const k of keys) validateColumnName(k)
     const values = keys.map((k) => toSqlValue(jsonCols.has(k) ? JSON.stringify(data[k]) : data[k]))
     const placeholders = keys.map(() => "?").join(", ")
     const columnList = keys.map(q).join(", ")
@@ -359,6 +392,7 @@ class DataStoreService {
       const jsonCols = this.getJsonColumnsForTable(table)
       for (const row of rows) {
         const keys = Object.keys(row)
+        for (const k of keys) validateColumnName(k)
         const values = keys.map((k) => toSqlValue(jsonCols.has(k) ? JSON.stringify(row[k]) : row[k]))
         const placeholders = keys.map(() => "?").join(", ")
         const columnList = keys.map(q).join(", ")
@@ -381,7 +415,7 @@ class DataStoreService {
 
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(params.table)
-    const { whereSQL, whereParams } = this.buildWhere(params.where)
+    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols)
     const orderSQL = this.buildOrderBy(params.orderBy)
     const limit = params.limit ?? 100
     const offset = params.offset ?? 0
@@ -413,6 +447,7 @@ class DataStoreService {
     const jsonCols = this.getJsonColumnsForTable(table)
     const keys = Object.keys(data)
     if (keys.length === 0) return { affected: 0 }
+    for (const k of keys) validateColumnName(k)
 
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
     const values = keys.map((k) => toSqlValue(jsonCols.has(k) ? JSON.stringify(data[k]) : data[k]))
@@ -433,7 +468,7 @@ class DataStoreService {
   rawSQL(sql: string, params?: unknown[]): { rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number } {
     const normalized = sql.trim().toLowerCase()
 
-    if (/\b_\w+/.test(sql) && /\b_(meta_tables)\b/i.test(sql)) {
+    if (/\b_\w+/i.test(sql) && /\b_[a-zA-Z]\w*\b/.test(sql)) {
       throw new Error("Cannot operate on system tables (prefixed with _)")
     }
     if (/\b(attach|detach)\b/i.test(normalized)) {
@@ -442,6 +477,7 @@ class DataStoreService {
 
     const db = this.getDb()
     const isRead = /^(select|pragma|explain)\b/.test(normalized)
+    const isDDL = /^(create\s+table|drop\s+table|alter\s+table)\b/.test(normalized)
     const sqlParams = (params ?? []).map(toSqlValue)
 
     if (isRead) {
@@ -450,6 +486,11 @@ class DataStoreService {
     }
 
     const result = db.prepare(sql).run(...sqlParams)
+
+    if (isDDL) {
+      this.refreshJsonColumnCache()
+    }
+
     return { changes: toNumber(result.changes), lastInsertRowid: toNumber(result.lastInsertRowid) }
   }
 
@@ -468,6 +509,8 @@ class DataStoreService {
   }
 
   exportDatabase(targetPath: string): void {
+    const db = this.getDb()
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)")
     copyFileSync(this.dbPath, targetPath)
   }
 
@@ -490,16 +533,39 @@ class DataStoreService {
       tempDb?.close()
     }
 
+    const backupPath = `${this.dbPath}.import-backup.${Date.now()}`
+    const walPath = `${this.dbPath}-wal`
+    const shmPath = `${this.dbPath}-shm`
+
+    try {
+      this.getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)")
+    } catch { /* best effort */ }
+
+    copyFileSync(this.dbPath, backupPath)
     this.close()
 
     try {
       unlinkSync(this.dbPath)
-    } catch { /* ignore */ }
-    copyFileSync(sourcePath, this.dbPath)
+      try { unlinkSync(walPath) } catch { /* may not exist */ }
+      try { unlinkSync(shmPath) } catch { /* may not exist */ }
+      copyFileSync(sourcePath, this.dbPath)
 
-    this.db = new DatabaseSync(this.dbPath)
-    this.db.exec("PRAGMA journal_mode=WAL")
-    this.refreshJsonColumnCache()
+      this.db = new DatabaseSync(this.dbPath)
+      this.db.exec("PRAGMA journal_mode=WAL")
+      this.refreshJsonColumnCache()
+    } catch (error) {
+      try {
+        copyFileSync(backupPath, this.dbPath)
+        this.db = new DatabaseSync(this.dbPath)
+        this.db.exec("PRAGMA journal_mode=WAL")
+        this.refreshJsonColumnCache()
+      } catch (restoreError) {
+        logger.error("Failed to restore backup after import failure.", { restoreError })
+      }
+      throw error
+    } finally {
+      try { unlinkSync(backupPath) } catch { /* ignore */ }
+    }
 
     logger.info("Database imported.", { source: sourcePath })
   }
@@ -508,21 +574,33 @@ class DataStoreService {
     return this.dbPath
   }
 
-  private buildWhere(where?: DataStoreWhereClause): { whereSQL: string; whereParams: SQLInputValue[] } {
+  private buildWhere(where?: DataStoreWhereClause, jsonCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
     if (!where) return { whereSQL: "", whereParams: [] }
 
     const conditions: string[] = []
     const params: SQLInputValue[] = []
+    const jCols = jsonCols ?? new Set<string>()
 
     if (Array.isArray(where)) {
       for (const cond of where as DataStoreWhereCondition[]) {
+        validateName(cond.field, "column")
+        if (!VALID_WHERE_OPS.has(cond.op)) {
+          throw new Error(`Invalid where operator "${cond.op}": must be one of =, !=, >, <, >=, <=, LIKE`)
+        }
         conditions.push(`${q(cond.field)} ${cond.op} ?`)
-        params.push(toSqlValue(cond.value))
+        const val = jCols.has(cond.field) && cond.value != null && typeof cond.value === "object"
+          ? JSON.stringify(cond.value)
+          : cond.value
+        params.push(toSqlValue(val))
       }
     } else {
       for (const [key, value] of Object.entries(where)) {
+        validateName(key, "column")
         conditions.push(`${q(key)} = ?`)
-        params.push(toSqlValue(value))
+        const val = jCols.has(key) && value != null && typeof value === "object"
+          ? JSON.stringify(value)
+          : value
+        params.push(toSqlValue(val))
       }
     }
 
@@ -532,8 +610,16 @@ class DataStoreService {
 
   private buildOrderBy(orderBy?: DataStoreOrderBy): string {
     if (!orderBy) return ""
-    if (typeof orderBy === "string") return ` ORDER BY ${q(orderBy)} ASC`
-    return ` ORDER BY ${q(orderBy.field)} ${orderBy.dir.toUpperCase()}`
+    if (typeof orderBy === "string") {
+      validateName(orderBy, "column")
+      return ` ORDER BY ${q(orderBy)} ASC`
+    }
+    validateName(orderBy.field, "column")
+    const dir = orderBy.dir.toUpperCase()
+    if (!VALID_ORDER_DIRS.has(dir)) {
+      throw new Error(`Invalid order direction "${orderBy.dir}": must be "asc" or "desc"`)
+    }
+    return ` ORDER BY ${q(orderBy.field)} ${dir}`
   }
 }
 

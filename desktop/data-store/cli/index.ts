@@ -65,6 +65,34 @@ Usage:
     return
   }
 
+  const KNOWN_COMMANDS = new Set(["tables", "create", "drop", "describe", "add-column", "insert", "query", "update", "delete", "sql", "status"])
+  if (!KNOWN_COMMANDS.has(command)) {
+    console.error(`Unknown command: ${command}\nRun "synapse help" for usage.`)
+    process.exit(1)
+  }
+
+  if (command === "status") {
+    let info: ServerInfo | null = null
+    try {
+      info = readServerInfo()
+    } catch { /* ignore */ }
+
+    if (!info) {
+      console.log("Port: -")
+      console.log("PID: -")
+      console.log("Started: -")
+      console.log("Running: no")
+      return
+    }
+
+    const running = isAppRunning(info.pid)
+    console.log(`Port: ${info.port}`)
+    console.log(`PID: ${info.pid}`)
+    console.log(`Started: ${info.startedAt}`)
+    console.log(`Running: ${running ? "yes" : "no"}`)
+    return
+  }
+
   let info: ServerInfo
   try {
     info = readServerInfo()
@@ -119,7 +147,7 @@ Usage:
         const colDef = args[2]
         if (!table || !colDef) { console.error("Usage: synapse add-column <table> <col:type>"); process.exit(1) }
         const col = parseColDef(colDef)
-        await apiCall(info, "addColumn", { name: table, column: col })
+        await apiCall(info, "addColumn", { table, column: col })
         console.log(`Column "${col.name}" added to "${table}".`)
         break
       }
@@ -130,7 +158,11 @@ Usage:
 
         const batchIdx = args.indexOf("--batch")
         if (batchIdx !== -1) {
-          const rows = JSON.parse(args[batchIdx + 1])
+          let rows: unknown
+          try { rows = JSON.parse(args[batchIdx + 1]) } catch {
+            console.error("Invalid JSON for --batch. Expected a JSON array of objects.")
+            process.exit(1)
+          }
           const result = await apiCall(info, "batchInsert", { table, rows }) as { affected: number }
           console.log(`${result.affected} rows inserted.`)
           break
@@ -138,7 +170,11 @@ Usage:
 
         const dataIdx = args.indexOf("--data")
         if (dataIdx === -1) { console.error("Missing --data or --batch flag"); process.exit(1) }
-        const data = JSON.parse(args[dataIdx + 1])
+        let data: unknown
+        try { data = JSON.parse(args[dataIdx + 1]) } catch {
+          console.error("Invalid JSON for --data. Expected a JSON object.")
+          process.exit(1)
+        }
         const result = await apiCall(info, "insert", { table, data }) as { data: { id: number } }
         console.log(`Row inserted with id=${result.data.id}.`)
         break
@@ -154,13 +190,26 @@ Usage:
           const where: Record<string, string> = {}
           for (let i = whereIdx + 1; i < args.length; i++) {
             if (args[i].startsWith("--")) break
-            const [k, v] = args[i].split("=")
-            if (k && v) where[k] = v
+            const eqIdx = args[i].indexOf("=")
+            if (eqIdx === -1) {
+              console.error(`Invalid --where value: "${args[i]}". Expected format: key=value`)
+              process.exit(1)
+            }
+            const k = args[i].slice(0, eqIdx)
+            const v = args[i].slice(eqIdx + 1)
+            if (k) where[k] = v
           }
           params.where = where
         }
         const limitIdx = args.indexOf("--limit")
-        if (limitIdx !== -1) params.limit = parseInt(args[limitIdx + 1])
+        if (limitIdx !== -1) {
+          const limitVal = parseInt(args[limitIdx + 1])
+          if (isNaN(limitVal) || limitVal < 0 || !Number.isInteger(limitVal)) {
+            console.error("Invalid --limit value: expected a non-negative integer")
+            process.exit(1)
+          }
+          params.limit = limitVal
+        }
 
         const result = await apiCall(info, "query", params) as { data: unknown[]; total: number }
         printTable(result.data as Record<string, unknown>[])
@@ -176,7 +225,11 @@ Usage:
           console.error("Usage: synapse update <table> <id> --data '{...}'")
           process.exit(1)
         }
-        const data = JSON.parse(args[dataIdx + 1])
+        let data: unknown
+        try { data = JSON.parse(args[dataIdx + 1]) } catch {
+          console.error("Invalid JSON for --data. Expected a JSON object.")
+          process.exit(1)
+        }
         await apiCall(info, "update", { table, id, data })
         console.log(`Row ${id} updated.`)
         break
@@ -203,17 +256,8 @@ Usage:
         break
       }
 
-      case "status": {
-        console.log(`Port: ${info.port}`)
-        console.log(`PID: ${info.pid}`)
-        console.log(`Started: ${info.startedAt}`)
-        console.log(`Running: ${isAppRunning(info.pid) ? "yes" : "no"}`)
-        break
-      }
-
       default:
-        console.error(`Unknown command: ${command}\nRun "synapse help" for usage.`)
-        process.exit(1)
+        break
     }
   } catch (error) {
     console.error(`Error: ${(error as Error).message}`)

@@ -63,6 +63,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const { action, ...params } = body
 
+  if (typeof action !== "string" || !action) {
+    sendJson(res, 400, { ok: false, error: "Missing or invalid 'action' field" })
+    return
+  }
+
   try {
     const result = dispatch(action as string, params)
     sendJson(res, 200, result)
@@ -73,6 +78,30 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 }
 
+function assertString(params: Record<string, unknown>, key: string): string {
+  const v = params[key]
+  if (typeof v !== "string" || !v) throw new Error(`Missing or invalid '${key}': expected non-empty string`)
+  return v
+}
+
+function assertNumber(params: Record<string, unknown>, key: string): number {
+  const v = params[key]
+  if (typeof v !== "number" || !Number.isFinite(v)) throw new Error(`Missing or invalid '${key}': expected number`)
+  return v
+}
+
+function assertObject(params: Record<string, unknown>, key: string): Record<string, unknown> {
+  const v = params[key]
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`Missing or invalid '${key}': expected object`)
+  return v as Record<string, unknown>
+}
+
+function assertArray(params: Record<string, unknown>, key: string): unknown[] {
+  const v = params[key]
+  if (!Array.isArray(v)) throw new Error(`Missing or invalid '${key}': expected array`)
+  return v
+}
+
 function dispatch(action: string, params: Record<string, unknown>): unknown {
   switch (action) {
     case "listTables":
@@ -80,50 +109,54 @@ function dispatch(action: string, params: Record<string, unknown>): unknown {
 
     case "createTable":
       dataStoreService.createTable(
-        params.name as string,
-        params.columns as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" }[],
+        assertString(params, "name"),
+        assertArray(params, "columns") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" }[],
         params.description as string | undefined,
       )
       return { ok: true }
 
     case "dropTable":
-      dataStoreService.dropTable(params.name as string)
+      dataStoreService.dropTable(assertString(params, "name"))
       return { ok: true }
 
     case "describeTable":
-      return { ok: true, data: dataStoreService.describeTable(params.name as string) }
+      return { ok: true, data: dataStoreService.describeTable(assertString(params, "name")) }
 
-    case "addColumn":
-      dataStoreService.addColumn(params.name as string, params.column as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON"; default?: unknown })
+    case "addColumn": {
+      const tableName = (params.table ?? params.name) as string | undefined
+      if (typeof tableName !== "string" || !tableName) throw new Error("Missing or invalid 'table' (or 'name'): expected non-empty string")
+      dataStoreService.addColumn(tableName, assertObject(params, "column") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON"; default?: unknown })
       return { ok: true }
+    }
 
     case "insert": {
-      const insertResult = dataStoreService.insert(params.table as string, params.data as Record<string, unknown>)
+      const insertResult = dataStoreService.insert(assertString(params, "table"), assertObject(params, "data"))
       return { ok: true, data: insertResult, affected: 1 }
     }
 
     case "batchInsert": {
-      const batchResult = dataStoreService.batchInsert(params.table as string, params.rows as Record<string, unknown>[])
+      const batchResult = dataStoreService.batchInsert(assertString(params, "table"), assertArray(params, "rows") as Record<string, unknown>[])
       return { ok: true, data: batchResult, affected: batchResult.ids.length }
     }
 
     case "query": {
+      assertString(params, "table")
       const queryResult = dataStoreService.query(params as DataStoreQueryParams)
       return { ok: true, data: queryResult.rows, total: queryResult.total }
     }
 
     case "update": {
-      const updateResult = dataStoreService.update(params.table as string, params.id as number, params.data as Record<string, unknown>)
+      const updateResult = dataStoreService.update(assertString(params, "table"), assertNumber(params, "id"), assertObject(params, "data"))
       return { ok: true, data: { id: params.id }, affected: updateResult.affected }
     }
 
     case "delete": {
-      const deleteResult = dataStoreService.delete(params.table as string, params.id as number)
+      const deleteResult = dataStoreService.delete(assertString(params, "table"), assertNumber(params, "id"))
       return { ok: true, data: { id: params.id }, affected: deleteResult.affected }
     }
 
     case "rawSQL": {
-      const rawResult = dataStoreService.rawSQL(params.sql as string, params.params as unknown[] | undefined)
+      const rawResult = dataStoreService.rawSQL(assertString(params, "sql"), params.params as unknown[] | undefined)
       if (rawResult.rows) {
         return { ok: true, data: { rows: rawResult.rows } }
       }
@@ -165,6 +198,9 @@ function startHttpServer(): Promise<number> {
         writeFileSync(getServerInfoPath(), JSON.stringify(serverInfo, null, 2))
       } catch (error) {
         logger.error("Failed to write server info file.", { error })
+        s.close()
+        reject(new Error("Failed to write data-server.json: CLI/MCP will not be able to connect"))
+        return
       }
 
       server = s

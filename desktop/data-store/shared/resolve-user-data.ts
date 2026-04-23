@@ -34,21 +34,45 @@ function isAppRunning(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EPERM") return true
     return false
   }
 }
 
 async function apiCall(info: ServerInfo, action: string, params: Record<string, unknown> = {}): Promise<unknown> {
   const url = `http://127.0.0.1:${info.port}/api`
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${info.token}`,
-    },
-    body: JSON.stringify({ action, ...params }),
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${info.token}`,
+      },
+      body: JSON.stringify({ action, ...params }),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      throw new Error("Request timed out (10s)")
+    }
+    throw new Error(`Failed to connect to Synapse at 127.0.0.1:${info.port}: ${(error as Error).message}`)
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+  }
+
+  const contentType = response.headers.get("content-type") ?? ""
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Unexpected response type: ${contentType}`)
+  }
 
   const data = await response.json() as { ok: boolean; data?: unknown; error?: string; total?: number; affected?: number }
   if (!data.ok) {
