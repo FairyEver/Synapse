@@ -1,5 +1,6 @@
 import {
   Blocks,
+  Braces,
   Database,
   FolderGit2,
   FolderKanban,
@@ -38,6 +39,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Blocks,
     label: "工具",
     description: "编辑器与命令行工具。",
+  },
+  {
+    id: "variables",
+    icon: Braces,
+    label: "变量",
+    description: "安装时替换占位符。",
   },
   {
     id: "data-store",

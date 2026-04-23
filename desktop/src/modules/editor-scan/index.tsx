@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react"
 import { LoaderCircle, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -14,19 +13,19 @@ import { ProjectOverview } from "./components/project-overview"
 import { EmptyScanState } from "./components/empty-scan-state"
 
 type ContentTab = "skill" | "rule"
+type ScopeTab = "global" | "project"
 
 function EditorScanModule() {
   const { data, loading, error, refresh } = useEditorScan()
   const [selectedEditorId, setSelectedEditorId] =
     useState<SynapseEditorId>("claude-code")
   const [contentTab, setContentTab] = useState<ContentTab>("skill")
+  const [scopeTab, setScopeTab] = useState<ScopeTab>("global")
 
   const globalResult = useMemo(
     () => data?.global.find((g) => g.editorId === selectedEditorId) ?? null,
     [data, selectedEditorId],
   )
-
-  const hasProjects = (data?.projects.length ?? 0) > 0
 
   const isEditorEmpty = useMemo(() => {
     if (!globalResult) return true
@@ -94,18 +93,16 @@ function EditorScanModule() {
     return (
       <ScrollArea className="h-full">
         <div className="flex flex-col gap-6">
-          <GlobalOverview result={globalResult} contentTab={contentTab} />
-          {hasProjects ? (
-            <>
-              <Separator />
-              <ProjectOverview
-                projects={data?.projects ?? []}
-                selectedEditorId={selectedEditorId}
-                selectedEditorLabel={globalResult.editorLabel}
-                contentTab={contentTab}
-              />
-            </>
-          ) : null}
+          {scopeTab === "global" ? (
+            <GlobalOverview result={globalResult} contentTab={contentTab} />
+          ) : (
+            <ProjectOverview
+              projects={data?.projects ?? []}
+              selectedEditorId={selectedEditorId}
+              selectedEditorLabel={globalResult.editorLabel}
+              contentTab={contentTab}
+            />
+          )}
         </div>
       </ScrollArea>
     )
@@ -126,6 +123,15 @@ function EditorScanModule() {
               <TabsList>
                 <TabsTrigger value="skill">Skill</TabsTrigger>
                 <TabsTrigger value="rule">Rule</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Tabs
+              value={scopeTab}
+              onValueChange={(v) => setScopeTab(v as ScopeTab)}
+            >
+              <TabsList>
+                <TabsTrigger value="global">全局</TabsTrigger>
+                <TabsTrigger value="project">项目</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>

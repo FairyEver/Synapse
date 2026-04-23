@@ -1,13 +1,7 @@
 import { useMemo } from "react"
-import { ChevronRight } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import type { SynapseEditorId } from "@/types/editor"
-import type { EditorScanProjectResult, EditorScanRuleItem } from "@/types/editor-scan"
+import type { EditorScanProjectResult } from "@/types/editor-scan"
 import { ScanItemCard } from "./scan-item-card"
 
 type ProjectOverviewProps = {
@@ -49,52 +43,43 @@ function ProjectOverview({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       {filteredProjects.map(({ project, editorEntry }) => {
         const items = contentTab === "skill"
           ? editorEntry?.skills ?? []
           : editorEntry?.rules ?? []
 
         return (
-          <Collapsible key={project.projectPath} data-track="editor-scan-project">
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted/40 transition-colors"
-                disabled={!project.pathExists}
-              >
-                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-90" />
-                <span className="truncate">项目: {project.projectName}</span>
-                {!project.pathExists ? (
-                  <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">
-                    路径不存在
-                  </Badge>
-                ) : (
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {items.length}
-                  </span>
-                )}
-              </button>
-            </CollapsibleTrigger>
+          <section key={project.projectPath}>
+            <div className="mb-3 flex items-center gap-2">
+              <h4 className="text-sm font-medium text-muted-foreground">
+                {project.projectName}
+              </h4>
+              {!project.pathExists ? (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                  路径不存在
+                </Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground/60">
+                  {items.length}
+                </span>
+              )}
+            </div>
             {project.pathExists && items.length > 0 ? (
-              <CollapsibleContent>
-                <div className="ml-6 mt-1">
-                  <div className="overflow-hidden rounded-lg border border-border">
-                    {items.map((item) => (
-                      <ScanItemCard
-                        key={`${item.path}-${item.name}`}
-                        name={item.name}
-                        path={item.path}
-                        source={item.source}
-                        preview={item.preview}
-                        metadata={contentTab === "rule" ? (item as EditorScanRuleItem).metadata : undefined}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </CollapsibleContent>
+              <div className="grid grid-cols-2 gap-2">
+                {items.map((item) => (
+                  <ScanItemCard
+                    key={item.path}
+                    name={item.name}
+                    path={item.path}
+                    source={item.source}
+                    preview={item.preview}
+                    metadata={"metadata" in item ? item.metadata : undefined}
+                  />
+                ))}
+              </div>
             ) : null}
-          </Collapsible>
+          </section>
         )
       })}
     </div>

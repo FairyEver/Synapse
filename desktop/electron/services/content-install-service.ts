@@ -23,6 +23,7 @@ import {
   findSkillDirectoryByContentId,
 } from "./editor-adapters/skill-identity"
 import { serializeSkillFrontmatter } from "./editor-adapters/skill-frontmatter"
+import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
@@ -188,7 +189,11 @@ class ContentInstallService {
           }
 
           const file = await contentService.getContent(payload.contentType, payload.contentId)
-          const ruleBody = file.content
+          let ruleBody = file.content
+
+          if (payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0) {
+            ruleBody = applyVariableSubstitutions(ruleBody, payload.variableSubstitutions)
+          }
 
           if (
             payload.editorId === "cursor"
@@ -242,12 +247,18 @@ class ContentInstallService {
             }
           }
 
+          let detailContent = detail.content
+
+          if (payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0) {
+            detailContent = applyVariableSubstitutions(detailContent, payload.variableSubstitutions)
+          }
+
           const skillMainContent = payload.contentType === "skill"
             ? serializeSkillFrontmatter({
                 description: detail.description,
                 name: path.basename(target.targetPath),
-              }) + detail.content
-            : detail.content
+              }) + detailContent
+            : detailContent
 
           await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
             const skillMainFilePath = path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME)

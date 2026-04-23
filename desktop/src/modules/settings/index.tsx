@@ -26,6 +26,7 @@ import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
 import { DataStoreSettingsPanel } from "@/modules/settings/components/data-store-settings-panel"
+import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 
@@ -234,6 +235,7 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}
+        {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
         {isReady && activeCategory === "data-store" ? <DataStoreSettingsPanel /> : null}
         {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 

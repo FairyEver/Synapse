@@ -10,11 +10,11 @@ function GlobalOverview({ result, contentTab }: GlobalOverviewProps) {
   if (contentTab === "skill") {
     return (
       <section>
-        <h3 className="mb-2 text-sm font-medium">
+        <h3 className="mb-3 text-sm font-medium text-muted-foreground">
           全局 Skill ({result.skills.length})
         </h3>
         {result.skills.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-border">
+          <div className="grid grid-cols-2 gap-2">
             {result.skills.map((skill) => (
               <ScanItemCard
                 key={skill.path}
@@ -36,7 +36,7 @@ function GlobalOverview({ result, contentTab }: GlobalOverviewProps) {
 
   return (
     <section>
-      <h3 className="mb-2 text-sm font-medium">
+      <h3 className="mb-3 text-sm font-medium text-muted-foreground">
         {result.rulesSupported
           ? `全局规则 (${result.rules.length})`
           : "全局规则"}
@@ -46,7 +46,7 @@ function GlobalOverview({ result, contentTab }: GlobalOverviewProps) {
           {result.editorLabel} 暂不支持全局规则目录
         </p>
       ) : result.rules.length > 0 ? (
-        <div className="overflow-hidden rounded-lg border border-border">
+        <div className="grid grid-cols-2 gap-2">
           {result.rules.map((rule) => (
             <ScanItemCard
               key={`${rule.path}-${rule.name}`}

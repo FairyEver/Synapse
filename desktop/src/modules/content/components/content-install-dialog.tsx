@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { FolderOpen, LoaderCircle } from "lucide-react"
 import {
   installToEditor,
   peekClaudeCodeFrontmatter,
   peekCursorFrontmatter,
+  readContent,
   resolveEditorInstallTarget,
 } from "@/app-shell/content"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -37,7 +40,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getContentTypeDefinition } from "@/config/content-types"
-import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseProjectConfig, SynapseVariable } from "@/types/config"
 import type { SynapseContentMeta } from "@/types/content"
 import type {
   ClaudeCodeRuleFrontmatter,
@@ -47,6 +50,8 @@ import type {
 } from "@/types/editor"
 import { ClaudeCodeFrontmatterDialog } from "./claude-code-frontmatter-dialog"
 import { CursorFrontmatterDialog } from "./cursor-frontmatter-dialog"
+import { VariableSubstitutionDialog } from "./variable-substitution-dialog"
+import { detectPlaceholders } from "@/lib/variable-substitution"
 
 const CUSTOM_PROJECT_OPTION = "__custom__"
 
@@ -85,6 +90,13 @@ function ContentInstallDialog({
     [item.type],
   )
   const { promise } = useAppNotifications()
+  const { config, updateConfig } = useAppConfig()
+  const activeRepository = useActiveRepository()
+  const [preloadedContent, setPreloadedContent] = useState<string | null>(null)
+  const [isVariableConfirmOpen, setIsVariableConfirmOpen] = useState(false)
+  const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([])
+  const pendingSubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
+  const variableConfirmPassedRef = useRef(false)
   const [scope, setScope] = useState<"global" | "project">("global")
   const [projectSelection, setProjectSelection] = useState<string>(CUSTOM_PROJECT_OPTION)
   const [customProjectPath, setCustomProjectPath] = useState("")
@@ -132,7 +144,26 @@ function ContentInstallDialog({
     setCursorFrontmatterDefaults(null)
     setIsClaudeCodeFrontmatterOpen(false)
     setClaudeCodeFrontmatterDefaults(null)
+    setPreloadedContent(null)
+    setIsVariableConfirmOpen(false)
+    setDetectedPlaceholders([])
+    pendingSubstitutionsRef.current = undefined
+    variableConfirmPassedRef.current = false
   }, [editor?.id, open, projects])
+
+  useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+
+    void readContent(item.type, item.id)
+      .then((file) => {
+        if (!cancelled) setPreloadedContent(file.content)
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [item.id, item.type, open])
 
   useEffect(() => {
     if (!open || !editor?.supportsGlobal) {
@@ -396,6 +427,7 @@ function ContentInstallDialog({
       contentType: item.type,
       editorId: editor.id,
       hasCursorFrontmatter: Boolean(cursorFrontmatter),
+      hasVariableSubstitutions: Boolean(pendingSubstitutionsRef.current),
       replaceConfirmed: Boolean(replaceConfirmed),
       scope,
       targetPath: activeTarget.targetPath,
@@ -415,6 +447,7 @@ function ContentInstallDialog({
           cursorFrontmatter,
           claudeCodeFrontmatter,
           replaceConfirmed,
+          variableSubstitutions: pendingSubstitutionsRef.current,
         }),
         {
           loading: `正在安装到 ${editor.label}...`,
@@ -567,7 +600,60 @@ function ContentInstallDialog({
     }
   }
 
+  const handleVariableConfirm = async (
+    substitutions: Record<string, string>,
+    saveToRepo: boolean,
+  ) => {
+    const filtered = Object.fromEntries(
+      Object.entries(substitutions).filter(([, v]) => v.length > 0),
+    )
+    pendingSubstitutionsRef.current = Object.keys(filtered).length > 0 ? filtered : undefined
+    variableConfirmPassedRef.current = true
+
+    if (saveToRepo && activeRepository) {
+      try {
+        const existingVariables = activeRepository.variables ?? []
+        const newVariables: SynapseVariable[] = []
+
+        for (const [name, value] of Object.entries(substitutions)) {
+          if (!value) continue
+          const exists = existingVariables.some(
+            (v) => v.name.toLowerCase() === name.toLowerCase(),
+          )
+          if (!exists) {
+            newVariables.push({ name, value })
+          }
+        }
+
+        if (newVariables.length > 0) {
+          await updateConfig({
+            repositories: config.repositories.map((repo) =>
+              repo.uuid === activeRepository.uuid
+                ? { ...repo, variables: [...existingVariables, ...newVariables] }
+                : repo,
+            ),
+          })
+        }
+      } catch {
+        // toast 提示但不阻塞安装
+        logger.warn("Failed to save variables to repository.")
+      }
+    }
+
+    setIsVariableConfirmOpen(false)
+    await handleInstall()
+  }
+
   const handleInstall = async () => {
+    if (!variableConfirmPassedRef.current && preloadedContent) {
+      const placeholders = detectPlaceholders(preloadedContent)
+      if (placeholders.length > 0) {
+        setDetectedPlaceholders(placeholders)
+        setIsVariableConfirmOpen(true)
+        return
+      }
+    }
+
     if (definition.install.kind === "directory-overwrite") {
       if (!activeTarget || activeTarget.status !== "ready") {
         setInstallError("当前还没有可用的安装目标。")
@@ -627,6 +713,22 @@ function ContentInstallDialog({
 
   return (
     <>
+      <VariableSubstitutionDialog
+        open={isVariableConfirmOpen}
+        onOpenChange={(next) => {
+          if (!next) {
+            variableConfirmPassedRef.current = false
+          }
+          setIsVariableConfirmOpen(next)
+        }}
+        placeholders={detectedPlaceholders}
+        repositoryVariables={activeRepository?.variables ?? []}
+        repositoryUuid={activeRepository?.uuid ?? null}
+        onConfirm={(substitutions, saveToRepo) => {
+          void handleVariableConfirm(substitutions, saveToRepo)
+        }}
+      />
+
       {cursorFrontmatterDefaults ? (
         <CursorFrontmatterDialog
           defaults={cursorFrontmatterDefaults}

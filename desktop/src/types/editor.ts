@@ -59,6 +59,7 @@ export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & 
    * The existing Skill directory will be backed up before installation.
    */
   replaceConfirmed?: boolean
+  variableSubstitutions?: Record<string, string>
 }
 
 export type SynapsePeekCursorFrontmatterPayload = {

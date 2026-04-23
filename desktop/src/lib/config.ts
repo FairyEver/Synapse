@@ -23,6 +23,7 @@ import type {
   SynapseRecentlyViewed,
   SynapseRepositoryConfig,
   SynapseThemeMode,
+  SynapseVariable,
 } from "../types/config"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -240,6 +241,43 @@ function normalizeProjectConfig(value: unknown): SynapseProjectConfig | null {
   }
 }
 
+const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
+
+function normalizeVariable(value: unknown): SynapseVariable | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const name = asTrimmedString(value.name)
+
+  if (!name || !VARIABLE_NAME_REGEX.test(name)) {
+    return null
+  }
+
+  const variableValue = typeof value.value === "string" ? value.value : ""
+
+  return {
+    name,
+    value: variableValue,
+    ...(typeof value.description === "string" && value.description.trim().length > 0
+      ? { description: value.description.trim() }
+      : undefined),
+  }
+}
+
+function normalizeVariables(value: unknown): SynapseVariable[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const variables = dedupeByKey(
+    value.map(normalizeVariable).filter(isDefined),
+    (v) => v.name.toLowerCase(),
+  )
+
+  return variables.length > 0 ? variables : undefined
+}
+
 function normalizeRepositoryConfig(value: unknown): SynapseRepositoryConfig | null {
   if (!isRecord(value)) {
     return null
@@ -253,11 +291,14 @@ function normalizeRepositoryConfig(value: unknown): SynapseRepositoryConfig | nu
     return null
   }
 
+  const variables = normalizeVariables(value.variables)
+
   return {
     uuid,
     name,
     localPath,
     contentDirs: resolveContentDirs(value),
+    ...(variables ? { variables } : undefined),
   }
 }
 

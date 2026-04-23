@@ -31,6 +31,12 @@ export type SynapseRecentlyViewed = {
   prompt: string[]
 }
 
+export type SynapseVariable = {
+  name: string
+  value: string
+  description?: string
+}
+
 export type SynapseRepositoryConfig = {
   uuid: string
   name: string
@@ -38,6 +44,7 @@ export type SynapseRepositoryConfig = {
   contentDirs: Partial<Record<SynapseContentType, string>>
   rulesDir?: string
   skillsDir?: string
+  variables?: SynapseVariable[]
 }
 
 export type SynapseGlobalConfig = {
