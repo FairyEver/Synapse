@@ -18,6 +18,7 @@ export const DATA_STORE_IPC_CHANNELS = {
   installCLI: "synapse:data-store:install-cli",
   getCliStatus: "synapse:data-store:get-cli-status",
   getCliDebugInfo: "synapse:data-store:get-cli-debug-info",
+  getMcpHttpStatus: "synapse:data-store:get-mcp-http-status",
   getMcpStatus: "synapse:data-store:get-mcp-status",
   getMCPServers: "synapse:data-store:get-mcp-servers",
   openMCPSettings: "synapse:data-store:open-mcp-settings",

@@ -1,20 +1,27 @@
-#!/usr/bin/env node
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
+import { dataStoreService } from "./service"
+import { createMainLogger } from "../services/log-store"
+import type { DataStoreQueryParams } from "./types"
 
-const [major] = process.versions.node.split(".").map(Number)
-if (major < 18) {
-  process.stderr.write(`Error: Synapse MCP server requires Node.js >= 18.0.0 (current: ${process.versions.node})\n`)
-  process.exit(1)
-}
+const logger = createMainLogger("data-store.mcp-server")
 
-import { apiCall, isAppRunning, readServerInfo, type ServerInfo } from "../shared/resolve-user-data"
-import { createInterface } from "node:readline"
+const MCP_DEFAULT_PORT = 23578
+const MCP_PORT_ATTEMPTS = 5
+const MAX_BODY_SIZE = 1024 * 1024
+
+let server: Server | null = null
+let activePort = 0
 
 type JsonRpcRequest = {
   jsonrpc: "2.0"
-  id: number | string
+  id?: number | string | null
   method: string
   params?: Record<string, unknown>
 }
+
+type TableInfo = { name: string; description: string; rowCount: number }
+type ColumnInfo = { name: string; type: string; primaryKey: boolean; description: string; enumValues?: string[] }
+type TableSchema = TableInfo & { columns: ColumnInfo[] }
 
 type McpTool = {
   name: string
@@ -26,9 +33,7 @@ type McpTool = {
   }
 }
 
-type TableInfo = { name: string; description: string; rowCount: number }
-type ColumnInfo = { name: string; type: string; primaryKey: boolean; description: string; enumValues?: string[] }
-type TableSchema = TableInfo & { columns: ColumnInfo[] }
+// --- Tool definitions (ported from desktop/data-store/mcp/index.ts) ---
 
 function buildTableSummary(schemas: TableSchema[]): string {
   if (schemas.length === 0) return "\n\nNo tables exist yet."
@@ -46,16 +51,14 @@ function buildTableSummary(schemas: TableSchema[]): string {
   return lines.join("\n")
 }
 
-async function fetchTableSchemas(info: ServerInfo): Promise<TableSchema[]> {
-  const listResult = await apiCall(info, "listTables") as { data: TableInfo[] }
-  const tables = listResult.data ?? []
+function fetchTableSchemas(): TableSchema[] {
+  const tables = dataStoreService.listTables() as TableInfo[]
   if (tables.length === 0) return []
 
   const schemas: TableSchema[] = []
   for (const t of tables) {
     try {
-      const desc = await apiCall(info, "describeTable", { name: t.name }) as { data: TableSchema }
-      schemas.push(desc.data)
+      schemas.push(dataStoreService.describeTable(t.name) as TableSchema)
     } catch {
       schemas.push({ ...t, columns: [] })
     }
@@ -105,20 +108,12 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     {
       name: "drop_table",
       description: "Drop a table and all its data. This action is irreversible.",
-      inputSchema: {
-        type: "object",
-        properties: { name: tableNameProp },
-        required: ["name"],
-      },
+      inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
     },
     {
       name: "describe_table",
       description: "Get table schema and metadata. Returns columns (name, type, primaryKey, system, description, enumValues), rowCount, description, createdAt, updatedAt.",
-      inputSchema: {
-        type: "object",
-        properties: { name: tableNameProp },
-        required: ["name"],
-      },
+      inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
     },
     {
       name: "add_column",
@@ -224,10 +219,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
               { type: "string", description: "Column name (ascending)" },
               {
                 type: "object",
-                properties: {
-                  field: { type: "string" },
-                  dir: { type: "string", enum: ["asc", "desc"] },
-                },
+                properties: { field: { type: "string" }, dir: { type: "string", enum: ["asc", "desc"] } },
                 required: ["field", "dir"],
               },
             ],
@@ -278,64 +270,91 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
   ]
 }
 
-const ACTION_MAP: Record<string, string> = {
-  list_tables: "listTables",
-  create_table: "createTable",
-  drop_table: "dropTable",
-  describe_table: "describeTable",
-  add_column: "addColumn",
-  update_column_description: "updateColumnDescription",
-  update_column_enum_values: "updateColumnEnumValues",
-  insert: "insert",
-  batch_insert: "batchInsert",
-  query: "query",
-  update: "update",
-  delete: "delete",
-  raw_sql: "rawSQL",
+const ACTION_MAP: Record<string, (args: Record<string, unknown>) => unknown> = {
+  list_tables: () => ({ ok: true, data: dataStoreService.listTables() }),
+  create_table: (args) => {
+    dataStoreService.createTable(
+      args.name as string,
+      args.columns as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; enumValues?: string[] }[],
+      args.description as string | undefined,
+    )
+    return { ok: true }
+  },
+  drop_table: (args) => { dataStoreService.dropTable(args.name as string); return { ok: true } },
+  describe_table: (args) => ({ ok: true, data: dataStoreService.describeTable(args.name as string) }),
+  add_column: (args) => {
+    const table = (args.table ?? args.name) as string
+    dataStoreService.addColumn(table, args.column as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; default?: unknown; description?: string; enumValues?: string[] })
+    return { ok: true }
+  },
+  update_column_description: (args) => {
+    dataStoreService.updateColumnDescription(args.table as string, args.column as string, args.description as string)
+    return { ok: true }
+  },
+  update_column_enum_values: (args) => {
+    dataStoreService.updateColumnEnumValues(args.table as string, args.column as string, args.values as string[])
+    return { ok: true }
+  },
+  insert: (args) => {
+    const result = dataStoreService.insert(args.table as string, args.data as Record<string, unknown>)
+    return { ok: true, data: result, affected: 1 }
+  },
+  batch_insert: (args) => {
+    const result = dataStoreService.batchInsert(args.table as string, args.rows as Record<string, unknown>[])
+    return { ok: true, data: result, affected: result.ids.length }
+  },
+  query: (args) => {
+    const result = dataStoreService.query(args as DataStoreQueryParams)
+    return { ok: true, data: result.rows, total: result.total }
+  },
+  update: (args) => {
+    const result = dataStoreService.update(args.table as string, args.id as number, args.data as Record<string, unknown>)
+    return { ok: true, data: { id: args.id }, affected: result.affected }
+  },
+  delete: (args) => {
+    const result = dataStoreService.delete(args.table as string, args.id as number)
+    return { ok: true, data: { id: args.id }, affected: result.affected }
+  },
+  raw_sql: (args) => {
+    const result = dataStoreService.rawSQL(args.sql as string, args.params as unknown[] | undefined)
+    if (result.rows) return { ok: true, data: { rows: result.rows } }
+    return { ok: true, data: { changes: result.changes, lastInsertRowid: result.lastInsertRowid } }
+  },
 }
 
-function sendResponse(id: number | string, result: unknown): void {
-  const msg = JSON.stringify({ jsonrpc: "2.0", id, result })
-  process.stdout.write(msg + "\n")
+// --- JSON-RPC handling ---
+
+function sendJsonRpc(res: ServerResponse, id: number | string | null, result: unknown): void {
+  const body = JSON.stringify({ jsonrpc: "2.0", id, result })
+  res.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) })
+  res.end(body)
 }
 
-function sendError(id: number | string | null, code: number, message: string): void {
-  const msg = JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })
-  process.stdout.write(msg + "\n")
+function sendJsonRpcError(res: ServerResponse, id: number | string | null, code: number, message: string): void {
+  const body = JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })
+  res.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) })
+  res.end(body)
 }
 
-let serverInfo: ServerInfo | null = null
-
-function getServerInfo(): ServerInfo {
-  if (serverInfo) {
-    if (!isAppRunning(serverInfo.pid)) {
-      serverInfo = null
-    }
-  }
-  if (!serverInfo) {
-    serverInfo = readServerInfo()
-    if (!isAppRunning(serverInfo.pid)) {
-      serverInfo = null
-      throw new Error("Synapse app is not running")
-    }
-  }
-  return serverInfo
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length
+      if (size > MAX_BODY_SIZE) { req.destroy(); reject(new Error("Request body too large")); return }
+      chunks.push(chunk)
+    })
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")))
+    req.on("error", reject)
+  })
 }
 
-function clearServerInfoCache(): void {
-  serverInfo = null
-}
-
-async function handleRequest(request: JsonRpcRequest): Promise<void> {
-  const { id, method } = request
-
-  if (request.jsonrpc !== "2.0" || typeof method !== "string") {
-    sendError(id ?? null, -32600, "Invalid Request: missing jsonrpc 2.0 or method")
-    return
-  }
+function handleMcpRequest(req: JsonRpcRequest, res: ServerResponse): void {
+  const { method, id } = req
 
   if (method === "initialize") {
-    sendResponse(id, {
+    sendJsonRpc(res, id ?? null, {
       protocolVersion: "2024-11-05",
       capabilities: { tools: {} },
       serverInfo: { name: "synapse-data", version: "1.0.0" },
@@ -344,57 +363,47 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
   }
 
   if (method === "notifications/initialized" || method === "notifications/cancelled") {
+    res.writeHead(204)
+    res.end()
     return
   }
 
   if (method === "ping") {
-    sendResponse(id, {})
+    sendJsonRpc(res, id ?? null, {})
     return
   }
 
   if (method === "tools/list") {
     let tools: McpTool[]
     try {
-      const info = getServerInfo()
-      const schemas = await fetchTableSchemas(info)
-      tools = buildTools(schemas)
+      tools = buildTools(fetchTableSchemas())
     } catch {
       tools = buildTools([])
     }
-    sendResponse(id, { tools })
+    sendJsonRpc(res, id ?? null, { tools })
     return
   }
 
   if (method === "tools/call") {
-    const params = request.params
+    const params = req.params
     if (!params || typeof params !== "object") {
-      sendResponse(id, {
-        content: [{ type: "text", text: "Error: missing params" }],
-        isError: true,
-      })
+      sendJsonRpc(res, id ?? null, { content: [{ type: "text", text: "Error: missing params" }], isError: true })
       return
     }
     const toolName = (params as { name: string }).name
     const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {}
-    const action = ACTION_MAP[toolName]
+    const handler = ACTION_MAP[toolName]
 
-    if (!action) {
-      sendResponse(id, {
-        content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-        isError: true,
-      })
+    if (!handler) {
+      sendJsonRpc(res, id ?? null, { content: [{ type: "text", text: `Unknown tool: ${toolName}` }], isError: true })
       return
     }
 
     try {
-      const info = getServerInfo()
-      const result = await apiCall(info, action, toolArgs)
-      sendResponse(id, {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      })
+      const result = handler(toolArgs)
+      sendJsonRpc(res, id ?? null, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] })
     } catch (error) {
-      clearServerInfoCache()
-      sendResponse(id, {
+      sendJsonRpc(res, id ?? null, {
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
         isError: true,
       })
@@ -402,19 +411,104 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
     return
   }
 
-  sendError(id, -32601, `Method not found: ${method}`)
+  sendJsonRpcError(res, id ?? null, -32601, `Method not found: ${method}`)
 }
 
-const rl = createInterface({ input: process.stdin })
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
 
-rl.on("line", (line) => {
-  if (!line.trim()) return
-  try {
-    const request = JSON.parse(line) as JsonRpcRequest
-    handleRequest(request).catch((error) => {
-      sendError(request.id ?? null, -32603, `Internal error: ${(error as Error).message}`)
-    })
-  } catch {
-    sendError(null, -32700, "Parse error")
+  if (req.method === "OPTIONS") {
+    res.writeHead(204)
+    res.end()
+    return
   }
-})
+
+  if (req.method !== "POST" || req.url !== "/mcp") {
+    res.writeHead(404, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ error: "Not found" }))
+    return
+  }
+
+  let body: JsonRpcRequest
+  try {
+    body = JSON.parse(await readBody(req)) as JsonRpcRequest
+  } catch {
+    sendJsonRpcError(res, null, -32700, "Parse error")
+    return
+  }
+
+  if (body.jsonrpc !== "2.0" || typeof body.method !== "string") {
+    sendJsonRpcError(res, body.id ?? null, -32600, "Invalid Request")
+    return
+  }
+
+  handleMcpRequest(body, res)
+}
+
+// --- Server lifecycle ---
+
+function tryListen(port: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const s = createServer((req, res) => {
+      handleRequest(req, res).catch((error) => {
+        logger.error("Unhandled MCP HTTP error.", { error })
+        res.writeHead(500)
+        res.end()
+      })
+    })
+
+    s.on("error", reject)
+
+    s.listen(port, "127.0.0.1", () => {
+      server = s
+      activePort = port
+      resolve(port)
+    })
+  })
+}
+
+async function startMcpServer(): Promise<number> {
+  for (let i = 0; i < MCP_PORT_ATTEMPTS; i++) {
+    const port = MCP_DEFAULT_PORT + i
+    try {
+      const bound = await tryListen(port)
+      logger.info("MCP HTTP server started.", { port: bound })
+      return bound
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+        logger.warn(`MCP port ${port} in use, trying next.`)
+        continue
+      }
+      throw error
+    }
+  }
+  throw new Error(`All MCP ports ${MCP_DEFAULT_PORT}–${MCP_DEFAULT_PORT + MCP_PORT_ATTEMPTS - 1} occupied`)
+}
+
+function stopMcpServer(): Promise<void> {
+  return new Promise((resolve) => {
+    activePort = 0
+    if (!server) { resolve(); return }
+    server.close(() => {
+      server = null
+      logger.info("MCP HTTP server stopped.")
+      resolve()
+    })
+  })
+}
+
+function getMcpServerPort(): number {
+  return activePort
+}
+
+function isMcpServerRunning(): boolean {
+  return activePort > 0 && server !== null
+}
+
+function getMcpServerUrl(): string {
+  return activePort > 0 ? `http://127.0.0.1:${activePort}/mcp` : ""
+}
+
+export { startMcpServer, stopMcpServer, getMcpServerPort, isMcpServerRunning, getMcpServerUrl }

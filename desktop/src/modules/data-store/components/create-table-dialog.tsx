@@ -104,13 +104,16 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       return
     }
 
-    const dupCol = validColumns.find((c) => c.name.trim().toLowerCase() === "id")
+    const dupCol = validColumns.find((c) => {
+      const lower = c.name.trim().toLowerCase()
+      return lower === "id" || lower === "created_at" || lower === "updated_at"
+    })
     if (dupCol) {
-      setError(`列名 "id" 为系统保留字段`)
+      setError(`列名 "${dupCol.name.trim()}" 为系统保留字段`)
       return
     }
 
-    const emptyEnum = validColumns.find((c) => c.type === "ENUM" && c.enumValues.length === 0)
+    const emptyEnum = validColumns.find((c) => (c.type === "ENUM" || c.type === "MULTI_ENUM") && c.enumValues.length === 0)
     if (emptyEnum) {
       setError(`枚举列 "${emptyEnum.name.trim()}" 需要填写允许的值`)
       return
@@ -124,7 +127,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
           type: c.type,
           description: c.description.trim() || undefined,
         }
-        if (c.type === "ENUM" && c.enumValues.length > 0) {
+        if ((c.type === "ENUM" || c.type === "MULTI_ENUM") && c.enumValues.length > 0) {
           def.enumValues = c.enumValues
         }
         return def
@@ -165,7 +168,22 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
 
           <div className="flex flex-col gap-2">
             <Label>列定义</Label>
-            <p className="text-xs text-muted-foreground">列名须以英文字母开头，只能包含字母、数字、下划线，id 为系统保留字段</p>
+            <p className="text-xs text-muted-foreground">以下系统列会自动创建，无需手动添加</p>
+            <div className="flex flex-col gap-1 rounded-md border bg-muted/50 p-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="w-28 font-mono">id</span>
+                <span className="w-28">整数（自增主键）</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 font-mono">created_at</span>
+                <span className="w-28">创建时间</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 font-mono">updated_at</span>
+                <span className="w-28">更新时间</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">自定义列名须以英文字母开头，只能包含字母、数字、下划线</p>
             <div className="flex flex-col gap-2">
               {columns.map((col) => (
                 <div key={col.key} className="flex flex-col gap-1.5 rounded-md border p-2">
@@ -206,7 +224,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                     onChange={(e) => updateColumn(col.key, "description", e.target.value)}
                     placeholder="用途说明，帮助 AI 理解此列"
                   />
-                  {col.type === "ENUM" ? (
+                  {col.type === "ENUM" || col.type === "MULTI_ENUM" ? (
                     <TagInput
                       className="text-xs"
                       value={col.enumValues}

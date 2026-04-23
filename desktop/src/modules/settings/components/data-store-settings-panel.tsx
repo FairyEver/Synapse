@@ -37,6 +37,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import type {
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
+  DataStoreMcpHttpStatus,
   DataStoreMcpServerInfo,
   DataStoreMcpTarget,
 } from "@/types/data-store"
@@ -45,6 +46,7 @@ import {
   getCliDebugInfo,
   getCliStatus,
   getMCPServers,
+  getMcpHttpStatus,
   importDB,
   installCLI,
   openMCPSettings,
@@ -170,6 +172,7 @@ function DataStoreSettingsPanel() {
   const [mcpServersByTarget, setMcpServersByTarget] = useState<
     Partial<Record<DataStoreMcpTarget, DataStoreMcpServerInfo>>
   >({})
+  const [mcpHttpStatus, setMcpHttpStatus] = useState<DataStoreMcpHttpStatus | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -189,6 +192,10 @@ function DataStoreSettingsPanel() {
         })
       }
     })()
+  }, [])
+
+  useEffect(() => {
+    void getMcpHttpStatus().then(setMcpHttpStatus).catch(() => setMcpHttpStatus(null))
   }, [])
 
   const refreshMcpServers = useCallback(async () => {
@@ -341,8 +348,14 @@ function DataStoreSettingsPanel() {
       ...server,
       registered: Boolean(state?.registered),
       settingsFileExists: Boolean(state?.settingsFileExists),
+      mode: state?.mode ?? null,
     }
   })
+
+  const handleCopyMcpUrl = useCallback(() => {
+    if (!mcpHttpStatus?.url) return
+    void navigator.clipboard.writeText(mcpHttpStatus.url)
+  }, [mcpHttpStatus])
 
   return (
     <div className="flex flex-col gap-4">
@@ -416,8 +429,27 @@ function DataStoreSettingsPanel() {
       <Card className="bg-background">
         <CardHeader className="pb-0">
           <CardTitle>MCP Server</CardTitle>
+          <CardAction>
+            <StatusPill
+              active={Boolean(mcpHttpStatus?.running)}
+              activeLabel="运行中"
+              inactiveLabel="未启动"
+            />
+          </CardAction>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+        <CardContent className="flex flex-col gap-3">
+          {mcpHttpStatus?.url ? (
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                {mcpHttpStatus.url}
+              </code>
+              <Button variant="outline" size="sm" onClick={handleCopyMcpUrl}>
+                <Copy data-icon="inline-start" />
+                复制
+              </Button>
+            </div>
+          ) : null}
+          <Separator />
           {mcpServers.map((server) => (
             <div
               key={server.id}
@@ -431,11 +463,15 @@ function DataStoreSettingsPanel() {
                   style={EDITOR_ICON_CLIP_STYLE}
                 />
                 <span className="truncate text-sm">{server.label}</span>
-                <StatusPill
-                  active={server.registered}
-                  activeLabel="已注册"
-                  inactiveLabel="未注册"
-                />
+                {server.registered && server.mode === "http" ? (
+                  <StatusPill active activeLabel="已注册" inactiveLabel="" />
+                ) : server.registered && server.mode === "stdio" ? (
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                    需更新
+                  </span>
+                ) : (
+                  <StatusPill active={false} activeLabel="" inactiveLabel="未注册" />
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button

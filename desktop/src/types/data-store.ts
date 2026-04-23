@@ -1,4 +1,4 @@
-type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM"
+type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"
 
 type DataStoreColumnDef = {
   name: string
@@ -11,6 +11,7 @@ type DataStoreColumnInfo = {
   name: string
   type: string
   primaryKey: boolean
+  system?: boolean
   description: string
   enumValues?: string[]
 }
@@ -114,11 +115,20 @@ type DataStoreMcpServerInfo = {
   settingsPath: string
   settingsFileExists: boolean
   registered: boolean
+  mode: "http" | "stdio" | null
+  url: string | null
+}
+
+type DataStoreMcpHttpStatus = {
+  running: boolean
+  port: number
+  url: string
 }
 
 export type {
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
+  DataStoreMcpHttpStatus,
   DataStoreMcpServerInfo,
   DataStoreMcpStatus,
   DataStoreMcpTarget,

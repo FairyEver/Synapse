@@ -17,11 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Checkbox } from "@/components/ui/checkbox"
 import type { DataStoreColumnInfo } from "@/types/data-store"
 import { DataTableCellInput } from "./data-table-cell-input"
 import {
   DATA_TABLE_ACTION_COLUMN_CLASS,
   DATA_TABLE_ID_COLUMN_CLASS,
+  DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS,
   DATA_TABLE_VALUE_COLUMN_CLASS,
 } from "./data-table-layout"
 
@@ -47,12 +50,17 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
   },
   ref,
 ) {
-  const editableColumns = useMemo(() => columns.filter((c) => !c.primaryKey), [columns])
+  const editableColumns = useMemo(() => columns.filter((c) => !c.primaryKey && !c.system), [columns])
+  const systemTimeColumns = useMemo(() => columns.filter((c) => c.system && !c.primaryKey), [columns])
   const initialValues = useMemo(() => {
     const init: Record<string, string> = {}
     for (const col of editableColumns) {
       const val = initialData?.[col.name]
-      init[col.name] = val != null ? String(val) : ""
+      if (col.type.toUpperCase() === "MULTI_ENUM" && Array.isArray(val)) {
+        init[col.name] = JSON.stringify(val)
+      } else {
+        init[col.name] = val != null ? String(val) : ""
+      }
     }
     return init
   }, [editableColumns, initialData])
@@ -108,6 +116,13 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
         if (raw === "true") data[col.name] = true
         else if (raw === "false") data[col.name] = false
         else data[col.name] = null
+      } else if (upper === "MULTI_ENUM") {
+        try {
+          const parsed = raw ? JSON.parse(raw) : []
+          data[col.name] = Array.isArray(parsed) ? parsed : []
+        } catch {
+          data[col.name] = []
+        }
       } else {
         data[col.name] = raw || null
       }
@@ -185,6 +200,13 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
         return
       }
 
+      if (nextTarget instanceof HTMLElement && nextTarget.closest("[data-row-editor-portal]")) {
+        return
+      }
+      if (pointerTarget instanceof HTMLElement && (pointerTarget as HTMLElement).closest("[data-row-editor-portal]")) {
+        return
+      }
+
       void handleSave().catch(() => {})
     },
     [handleSave, isSaving],
@@ -203,7 +225,45 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
       {editableColumns.map((col) => {
         const upper = col.type.toUpperCase()
         const isEnum = upper === "ENUM" && col.enumValues && col.enumValues.length > 0
+        const isMultiEnum = upper === "MULTI_ENUM" && col.enumValues && col.enumValues.length > 0
         const isBool = upper === "BOOLEAN"
+
+        if (isMultiEnum) {
+          let selected: string[] = []
+          try { selected = JSON.parse(values[col.name] || "[]") } catch { /* empty */ }
+          if (!Array.isArray(selected)) selected = []
+          const toggleValue = (v: string) => {
+            const next = selected.includes(v) ? selected.filter((s) => s !== v) : [...selected, v]
+            handleChange(col.name, JSON.stringify(next))
+          }
+          const display = selected.length > 0 ? selected.join(", ") : "选择..."
+          return (
+            <TableCell key={col.name} className={DATA_TABLE_VALUE_COLUMN_CLASS}>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    className="flex h-6 w-full items-center rounded-md border border-input bg-transparent px-2 text-xs text-left truncate"
+                  >
+                    <span className="truncate">{display}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1" align="start" data-row-editor-portal>
+                  {col.enumValues!.map((v) => (
+                    <label key={v} className="flex items-center gap-2 rounded-sm px-2 py-1 text-xs hover:bg-accent cursor-pointer">
+                      <Checkbox
+                        checked={selected.includes(v)}
+                        onCheckedChange={() => toggleValue(v)}
+                      />
+                      {v}
+                    </label>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            </TableCell>
+          )
+        }
 
         if (isEnum || isBool) {
           const options = isBool
@@ -248,6 +308,14 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
           </TableCell>
         )
       })}
+      {systemTimeColumns.map((col) => (
+        <TableCell
+          key={col.name}
+          className={`${DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
+        >
+          {initialData?.[col.name] != null ? String(initialData[col.name]) : ""}
+        </TableCell>
+      ))}
       <TableCell className={`${DATA_TABLE_ACTION_COLUMN_CLASS} py-0.5`}>
         <div className="flex items-center gap-0.5">
           <Button

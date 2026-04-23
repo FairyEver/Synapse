@@ -4,6 +4,7 @@ import type {
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
   DataStoreColumnDef,
+  DataStoreMcpHttpStatus,
   DataStoreMcpServerInfo,
   DataStoreMcpStatus,
   DataStoreMcpTarget,
@@ -168,6 +169,10 @@ async function getCliDebugInfo(): Promise<DataStoreCliDebugInfo> {
   return requireSynapseBridge().dataStore.getCliDebugInfo()
 }
 
+async function getMcpHttpStatus(): Promise<DataStoreMcpHttpStatus> {
+  return requireSynapseBridge().dataStore.getMcpHttpStatus()
+}
+
 async function getMcpStatus(): Promise<DataStoreMcpStatus> {
   return requireSynapseBridge().dataStore.getMcpStatus()
 }
@@ -193,6 +198,7 @@ export {
   getCliDebugInfo,
   getCliStatus,
   getMCPServers,
+  getMcpHttpStatus,
   getMcpStatus,
   importDB,
   insertRow,

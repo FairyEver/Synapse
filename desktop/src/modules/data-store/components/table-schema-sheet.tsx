@@ -74,10 +74,11 @@ function TableSchemaSheet({
   const handleAddColumn = useCallback(() => {
     const trimmed = newColName.trim()
     if (!trimmed) return
-    const enumVals = newColType === "ENUM" && newColEnumValues.length > 0
+    const isEnumLike = newColType === "ENUM" || newColType === "MULTI_ENUM"
+    const enumVals = isEnumLike && newColEnumValues.length > 0
       ? newColEnumValues
       : undefined
-    if (newColType === "ENUM" && (!enumVals || enumVals.length === 0)) return
+    if (isEnumLike && (!enumVals || enumVals.length === 0)) return
     onAddColumn(trimmed, newColType, newColDesc.trim() || undefined, enumVals)
     setNewColName("")
     setNewColType("TEXT")
@@ -102,7 +103,7 @@ function TableSchemaSheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0">
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[600px]">
         <DialogHeader className="px-5 pt-5">
           <DialogTitle>{schema.name} 表结构</DialogTitle>
         </DialogHeader>
@@ -128,8 +129,8 @@ function TableSchemaSheet({
                       ) : null}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {col.primaryKey ? (
-                        "自增主键"
+                      {col.system ? (
+                        col.primaryKey ? "自增主键" : col.name === "created_at" ? "创建时间，自动生成" : "更新时间，自动更新"
                       ) : editingCol === col.name ? (
                         <Input
                           ref={editInputRef}
@@ -160,7 +161,7 @@ function TableSchemaSheet({
 
           <div className="flex flex-col gap-2">
             <Label>添加列</Label>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_auto]">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1.25fr)_auto]">
               <Input
                 value={newColName}
                 onChange={(e) => setNewColName(e.target.value)}
@@ -178,6 +179,12 @@ function TableSchemaSheet({
                   ))}
                 </SelectContent>
               </Select>
+              <Input
+                value={newColDesc}
+                onChange={(e) => setNewColDesc(e.target.value)}
+                placeholder="用途说明，帮助 AI 理解此列"
+                className="text-xs"
+              />
               <Button
                 size="sm"
                 className="w-full sm:w-auto"
@@ -187,13 +194,7 @@ function TableSchemaSheet({
                 添加
               </Button>
             </div>
-            <Input
-              value={newColDesc}
-              onChange={(e) => setNewColDesc(e.target.value)}
-              placeholder="用途说明，帮助 AI 理解此列"
-              className="text-xs"
-            />
-            {newColType === "ENUM" ? (
+            {newColType === "ENUM" || newColType === "MULTI_ENUM" ? (
               <TagInput
                 value={newColEnumValues}
                 onChange={setNewColEnumValues}

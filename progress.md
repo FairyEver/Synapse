@@ -34,3 +34,11 @@
 
 ### 验证
 - `pnpm desktop:typecheck` 通过 ✓
+
+### 阶段 8：TagInput 组件（追加）
+
+- 新建 `desktop/src/components/ui/tag-input.tsx` — 标签输入组件，Enter 创建标签，Backspace 删除，X 按钮移除
+- 修改 `create-table-dialog.tsx` — enumValues 从 `string` 改为 `string[]`，用 TagInput 替换 Input
+- 修改 `table-schema-sheet.tsx` — 同上
+- 修复 IME 输入法冲突：`compositionstart/compositionend` 跟踪状态，输入法激活时不拦截按键
+- `pnpm desktop:typecheck` 通过 ✓

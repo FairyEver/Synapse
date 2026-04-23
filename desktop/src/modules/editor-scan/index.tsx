@@ -146,7 +146,7 @@ function EditorScanModule() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold">
-              {globalResult?.editorLabel ?? "编辑器"}
+              {globalResult?.editorLabel ?? "IDE"}
             </h2>
             <Tabs
               value={contentTab}

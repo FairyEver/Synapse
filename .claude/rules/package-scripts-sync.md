@@ -47,6 +47,7 @@ paths:
 | 根 script | 实现 | 说明 |
 | --- | --- | --- |
 | `dev` | `pnpm -r --parallel run dev` | 并行启动所有 workspace 子包的 `dev` 脚本；新增带 `dev` 脚本的子包会自动被带上，不需要再改根 script |
+| `kill` | 内联 shell（grep + kill -9） | 一键杀死所有 Synapse dev 相关进程（Vite、Electron、VitePress、concurrently 整条链） |
 
 新增 umbrella 命令的条件：
 

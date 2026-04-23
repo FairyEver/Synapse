@@ -1,7 +1,9 @@
 import { dataStoreService } from "./service"
 import { startHttpServer, stopHttpServer } from "./http-server"
+import { startMcpServer, stopMcpServer, getMcpServerPort } from "./mcp-server"
 import { registerDataStoreHandlers } from "./ipc-handlers"
 import { getCliStatus, installCli } from "./cli-installer"
+import { autoRegisterMcp } from "./mcp-installer"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store")
@@ -17,6 +19,14 @@ async function initDataStore(): Promise<void> {
   const port = await startHttpServer()
   logger.info("Data store HTTP server ready.", { port })
 
+  let mcpPort = 0
+  try {
+    mcpPort = await startMcpServer()
+    logger.info("MCP HTTP server ready.", { port: mcpPort })
+  } catch (error) {
+    logger.warn("MCP HTTP server failed to start (non-fatal).", { error })
+  }
+
   registerDataStoreHandlers()
 
   if (!(await getCliStatus()).installed) {
@@ -27,11 +37,20 @@ async function initDataStore(): Promise<void> {
     }
   }
 
+  if (mcpPort > 0) {
+    try {
+      autoRegisterMcp(mcpPort)
+    } catch (error) {
+      logger.warn("MCP auto-registration failed (non-fatal).", { error })
+    }
+  }
+
   logger.info("Data store initialized.")
 }
 
 async function shutdownDataStore(): Promise<void> {
   logger.info("Shutting down data store.")
+  await stopMcpServer()
   await stopHttpServer()
   dataStoreService.close()
   logger.info("Data store shut down.")

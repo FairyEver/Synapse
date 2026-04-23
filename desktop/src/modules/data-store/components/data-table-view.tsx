@@ -37,6 +37,7 @@ import type { RowEditorHandle } from "./row-editor"
 import {
   DATA_TABLE_ACTION_COLUMN_CLASS,
   DATA_TABLE_ID_COLUMN_CLASS,
+  DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS,
   DATA_TABLE_VALUE_COLUMN_CLASS,
 } from "./data-table-layout"
 import type { DataStoreColumnInfo, DataStoreTableSchema } from "@/types/data-store"
@@ -84,7 +85,8 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const rowEditorRef = useRef<RowEditorHandle | null>(null)
 
-  const editableColumns = columns.filter((c) => !c.primaryKey)
+  const editableColumns = columns.filter((c) => !c.primaryKey && !c.system)
+  const systemTimeColumns = columns.filter((c) => c.system && !c.primaryKey)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const handleSaveEdit = useCallback(
@@ -242,6 +244,14 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   {col.name}
                 </TableHead>
               ))}
+              {systemTimeColumns.map((col) => (
+                <TableHead
+                  key={col.name}
+                  className={`${DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS} text-xs font-medium text-muted-foreground`}
+                >
+                  {col.name}
+                </TableHead>
+              ))}
               <TableHead className={DATA_TABLE_ACTION_COLUMN_CLASS} />
             </TableRow>
           </TableHeader>
@@ -284,6 +294,14 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                       {formatCellValue(row[col.name], col.type)}
                     </TableCell>
                   ))}
+                  {systemTimeColumns.map((col) => (
+                    <TableCell
+                      key={col.name}
+                      className={`${DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
+                    >
+                      {formatCellValue(row[col.name], col.type)}
+                    </TableCell>
+                  ))}
                   <TableCell className={`${DATA_TABLE_ACTION_COLUMN_CLASS} py-0.5`}>
                     <div className="flex items-center gap-0.5">
                       <Button
@@ -321,7 +339,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
 
             {rows.length === 0 && !isAdding ? (
               <TableRow>
-                <TableCell colSpan={columns.length + 1} className="h-20 text-center text-muted-foreground">
+                <TableCell colSpan={1 + editableColumns.length + systemTimeColumns.length + 1} className="h-20 text-center text-muted-foreground">
                   暂无数据
                 </TableCell>
               </TableRow>
@@ -377,6 +395,9 @@ function formatCellValue(value: unknown, type?: string): string {
   if (value == null) return ""
   if (type?.toUpperCase() === "BOOLEAN") {
     return value === true || value === 1 ? "✓" : "✗"
+  }
+  if (type?.toUpperCase() === "MULTI_ENUM" && Array.isArray(value)) {
+    return value.join(", ")
   }
   if (typeof value === "object") return JSON.stringify(value)
   return String(value)

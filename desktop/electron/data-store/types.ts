@@ -1,4 +1,4 @@
-type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM"
+type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"
 
 type DataStoreColumnDef = {
   name: string
@@ -11,6 +11,7 @@ type DataStoreColumnInfo = {
   name: string
   type: string
   primaryKey: boolean
+  system?: boolean
   description: string
   enumValues?: string[]
 }

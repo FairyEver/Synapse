@@ -1,34 +1,25 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { homedir } from "node:os"
 import { app, shell } from "electron"
-import { getMcpScriptPath } from "./cli-installer"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store.mcp-installer")
 
 type McpTarget = "claude" | "codex" | "cursor"
+type McpRegistrationMode = "http" | "stdio" | null
 type McpStatus = Record<McpTarget, boolean>
 type McpServerInfo = {
   target: McpTarget
   settingsPath: string
   settingsFileExists: boolean
   registered: boolean
+  mode: McpRegistrationMode
+  url: string | null
 }
 
 const MCP_TARGETS: McpTarget[] = ["claude", "codex", "cursor"]
 const SYNAPSE_DATA_SERVER_NAME = "synapse-data"
-
-function getStableMcpScriptPath(): string {
-  return path.join(app.getPath("userData"), "mcp", "index.js")
-}
-
-function deployMcpScript(): void {
-  const source = getMcpScriptPath()
-  const target = getStableMcpScriptPath()
-  mkdirSync(path.dirname(target), { recursive: true })
-  copyFileSync(source, target)
-}
 
 function getSettingsPath(target: McpTarget): string {
   const home = homedir()
@@ -86,38 +77,33 @@ function readJsonSettings(settingsPath: string): Record<string, unknown> {
   return parsed
 }
 
-function hasJsonSynapseDataServer(settings: Record<string, unknown>, mcpScriptPath: string): boolean {
-  const servers = settings.mcpServers
-  if (!isRecord(servers)) {
-    return false
-  }
-
-  const server = servers[SYNAPSE_DATA_SERVER_NAME]
-  if (!isRecord(server)) {
-    return false
-  }
-
-  return server.command === "node"
-    && isStringArray(server.args)
-    && server.args.length === 1
-    && server.args[0] === mcpScriptPath
-    && (server.type == null || server.type === "stdio")
+function getMcpUrl(port: number): string {
+  return `http://127.0.0.1:${port}/mcp`
 }
 
-function registerJsonMcp(settingsPath: string, mcpScriptPath: string, target: McpTarget): void {
+function detectJsonRegistration(settings: Record<string, unknown>): { registered: boolean; mode: McpRegistrationMode; url: string | null } {
+  const servers = settings.mcpServers
+  if (!isRecord(servers)) return { registered: false, mode: null, url: null }
+
+  const server = servers[SYNAPSE_DATA_SERVER_NAME]
+  if (!isRecord(server)) return { registered: false, mode: null, url: null }
+
+  if (typeof server.url === "string" && server.url.startsWith("http://127.0.0.1:")) {
+    return { registered: true, mode: "http", url: server.url }
+  }
+
+  if (server.command === "node" && isStringArray(server.args) && server.args.length === 1) {
+    return { registered: true, mode: "stdio", url: null }
+  }
+
+  return { registered: false, mode: null, url: null }
+}
+
+function registerJsonMcp(settingsPath: string, mcpUrl: string): void {
   const settings = readJsonSettings(settingsPath)
   const servers = isRecord(settings.mcpServers) ? settings.mcpServers : {}
 
-  const entry: Record<string, unknown> = {
-    command: "node",
-    args: [mcpScriptPath],
-    env: {},
-  }
-  if (target === "claude") {
-    entry.type = "stdio"
-  }
-
-  servers[SYNAPSE_DATA_SERVER_NAME] = entry
+  servers[SYNAPSE_DATA_SERVER_NAME] = { url: mcpUrl }
   settings.mcpServers = servers
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
 }
@@ -170,11 +156,10 @@ function findCodexServerSectionRange(lines: string[]): { start: number; end: num
   return { start, end }
 }
 
-function buildCodexServerBlock(mcpScriptPath: string, lineEnding: string): string {
+function buildCodexServerBlock(mcpUrl: string, lineEnding: string): string {
   return [
     getCodexServerTableName(),
-    `command = ${escapeTomlString("node")}`,
-    `args = [${escapeTomlString(mcpScriptPath)}]`,
+    `url = ${escapeTomlString(mcpUrl)}`,
   ].join(lineEnding)
 }
 
@@ -212,66 +197,48 @@ function extractCodexServerSection(raw: string): string | null {
   return lines.slice(range.start, range.end).join("\n")
 }
 
-function parseTomlStringArray(value: string): string[] | null {
-  const trimmed = value.trim()
-  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
-    return null
-  }
-
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    return null
-  }
-}
-
-function hasCodexSynapseDataServer(raw: string, mcpScriptPath: string): boolean {
+function detectCodexRegistration(raw: string): { registered: boolean; mode: McpRegistrationMode; url: string | null } {
   const section = extractCodexServerSection(raw)
-  if (!section) {
-    return false
+  if (!section) return { registered: false, mode: null, url: null }
+
+  const urlMatch = section.match(/^\s*url\s*=\s*("(?:\\.|[^"])*")\s*$/m)
+  if (urlMatch) {
+    try {
+      const url = JSON.parse(urlMatch[1]) as string
+      if (url.startsWith("http://127.0.0.1:")) {
+        return { registered: true, mode: "http", url }
+      }
+    } catch { /* ignore */ }
   }
 
   const commandMatch = section.match(/^\s*command\s*=\s*("(?:\\.|[^"])*")\s*$/m)
-  const argsMatch = section.match(/^\s*args\s*=\s*(\[[^\n]*\])\s*$/m)
-
-  if (!commandMatch || !argsMatch) {
-    return false
+  if (commandMatch) {
+    return { registered: true, mode: "stdio", url: null }
   }
 
-  try {
-    const command = JSON.parse(commandMatch[1])
-    const args = parseTomlStringArray(argsMatch[1])
-
-    return command === "node"
-      && args != null
-      && args.length === 1
-      && args[0] === mcpScriptPath
-  } catch {
-    return false
-  }
+  return { registered: false, mode: null, url: null }
 }
 
-function registerCodexMcp(settingsPath: string, mcpScriptPath: string): void {
+function registerCodexMcp(settingsPath: string, mcpUrl: string): void {
   const raw = existsSync(settingsPath) ? readFileSync(settingsPath, "utf-8") : ""
-  const nextConfig = upsertCodexServerConfig(raw, mcpScriptPath)
+  const nextConfig = upsertCodexServerConfig(raw, mcpUrl)
   writeFileSync(settingsPath, nextConfig, "utf-8")
 }
 
-function registerMcp(target: McpTarget): { success: boolean; error?: string } {
+function registerMcp(target: McpTarget, mcpPort: number): { success: boolean; error?: string } {
   const settingsPath = getSettingsPath(target)
-  const mcpScriptPath = getStableMcpScriptPath()
+  const mcpUrl = getMcpUrl(mcpPort)
 
   try {
-    deployMcpScript()
     ensureParentDirectory(settingsPath)
 
     if (target === "claude" || target === "cursor") {
-      registerJsonMcp(settingsPath, mcpScriptPath, target)
+      registerJsonMcp(settingsPath, mcpUrl)
     } else {
-      registerCodexMcp(settingsPath, mcpScriptPath)
+      registerCodexMcp(settingsPath, mcpUrl)
     }
 
-    logger.info("MCP server registered.", { target, settingsPath })
+    logger.info("MCP server registered.", { target, settingsPath, mode: "http" })
     return { success: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -281,39 +248,27 @@ function registerMcp(target: McpTarget): { success: boolean; error?: string } {
 }
 
 function getMcpServers(): McpServerInfo[] {
-  const mcpScriptPath = getStableMcpScriptPath()
-
   return MCP_TARGETS.map((target) => {
     const settingsPath = getSettingsPath(target)
     const settingsFileExists = existsSync(settingsPath)
-    let registered = false
+    const base = { target, settingsPath, settingsFileExists, registered: false, mode: null as McpRegistrationMode, url: null as string | null }
 
     try {
-      if (!settingsFileExists) {
-        return {
-          target,
-          settingsPath,
-          settingsFileExists,
-          registered,
-        }
-      }
+      if (!settingsFileExists) return base
+
+      let detection: { registered: boolean; mode: McpRegistrationMode; url: string | null }
 
       if (target === "claude" || target === "cursor") {
         const settings = readJsonSettings(settingsPath)
-        registered = hasJsonSynapseDataServer(settings, mcpScriptPath)
+        detection = detectJsonRegistration(settings)
       } else {
         const raw = readFileSync(settingsPath, "utf-8")
-        registered = hasCodexSynapseDataServer(raw, mcpScriptPath)
+        detection = detectCodexRegistration(raw)
       }
-    } catch {
-      registered = false
-    }
 
-    return {
-      target,
-      settingsPath,
-      settingsFileExists,
-      registered,
+      return { ...base, ...detection }
+    } catch {
+      return base
     }
   })
 }
@@ -351,4 +306,34 @@ async function openMcpSettings(target: McpTarget): Promise<{ success: boolean; e
   }
 }
 
-export { registerMcp, getMcpServers, getMcpStatus, openMcpSettings }
+function autoRegisterMcp(mcpPort: number): void {
+  const mcpUrl = getMcpUrl(mcpPort)
+
+  for (const target of MCP_TARGETS) {
+    try {
+      const settingsPath = getSettingsPath(target)
+      const settingsDir = path.dirname(settingsPath)
+      if (!existsSync(settingsDir)) continue
+
+      const settingsFileExists = existsSync(settingsPath)
+      let detection: { registered: boolean; mode: McpRegistrationMode; url: string | null } = { registered: false, mode: null, url: null }
+
+      if (settingsFileExists) {
+        if (target === "claude" || target === "cursor") {
+          detection = detectJsonRegistration(readJsonSettings(settingsPath))
+        } else {
+          detection = detectCodexRegistration(readFileSync(settingsPath, "utf-8"))
+        }
+      }
+
+      if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) continue
+
+      registerMcp(target, mcpPort)
+      logger.info("MCP auto-registered.", { target, previousMode: detection.mode })
+    } catch (error) {
+      logger.warn("MCP auto-registration failed (non-fatal).", { target, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+}
+
+export { autoRegisterMcp, registerMcp, getMcpServers, getMcpStatus, openMcpSettings }

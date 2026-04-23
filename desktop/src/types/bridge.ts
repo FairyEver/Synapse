@@ -1,6 +1,7 @@
 import type {
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
+  DataStoreMcpHttpStatus,
   DataStoreMcpServerInfo,
   DataStoreMcpStatus,
   DataStoreMcpTarget,
@@ -213,6 +214,7 @@ export type SynapseBridge = {
     installCLI: () => Promise<{ success: boolean; path?: string; error?: string }>
     getCliStatus: () => Promise<DataStoreCliStatus>
     getCliDebugInfo: () => Promise<DataStoreCliDebugInfo>
+    getMcpHttpStatus: () => Promise<DataStoreMcpHttpStatus>
     getMcpStatus: () => Promise<DataStoreMcpStatus>
     getMCPServers: () => Promise<DataStoreMcpServerInfo[]>
     openMCPSettings: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
