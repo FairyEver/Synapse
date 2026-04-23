@@ -10,8 +10,8 @@ import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store.cli-installer")
 const execFileAsync = promisify(execFile)
-const CLI_BIN_NAME = process.platform === "win32" ? "synd.cmd" : "synd"
-const CLI_TEST_COMMAND = "synd help"
+const CLI_BIN_NAME = process.platform === "win32" ? "synapse.cmd" : "synapse"
+const CLI_TEST_COMMAND = "synapse help"
 const PNPM_COMMAND = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 
 let shellPathEntriesPromise: Promise<string[]> | null = null

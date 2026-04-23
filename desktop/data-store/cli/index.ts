@@ -2,7 +2,7 @@
 
 const [major] = process.versions.node.split(".").map(Number)
 if (major < 18) {
-  console.error(`Error: synd requires Node.js >= 18.0.0 (current: ${process.versions.node})`)
+  console.error(`Error: synapse requires Node.js >= 18.0.0 (current: ${process.versions.node})`)
   process.exit(1)
 }
 
@@ -47,21 +47,21 @@ async function main(): Promise<void> {
   const command = args[0]
 
   if (!command || command === "help" || command === "--help") {
-    console.log(`synd - Synapse Data Store CLI
+    console.log(`synapse - Synapse Data Store CLI
 
 Usage:
-  synd tables                                     List all tables
-  synd create <name> <col:type> [col:type...]     Create a table
-  synd drop <name>                                Drop a table
-  synd describe <name>                            Describe table schema
-  synd add-column <table> <col:type>              Add a column
-  synd insert <table> --data '{"k":"v"}'          Insert a row
-  synd insert <table> --batch '[{...}]'           Batch insert
-  synd query <table> [--where k=v] [--limit N]    Query rows
-  synd update <table> <id> --data '{"k":"v"}'     Update a row
-  synd delete <table> <id>                        Delete a row
-  synd sql '<SQL>'                                Execute raw SQL
-  synd status                                     Show service status`)
+  synapse tables                                     List all tables
+  synapse create <name> <col:type> [col:type...]     Create a table
+  synapse drop <name>                                Drop a table
+  synapse describe <name>                            Describe table schema
+  synapse add-column <table> <col:type>              Add a column
+  synapse insert <table> --data '{"k":"v"}'          Insert a row
+  synapse insert <table> --batch '[{...}]'           Batch insert
+  synapse query <table> [--where k=v] [--limit N]    Query rows
+  synapse update <table> <id> --data '{"k":"v"}'     Update a row
+  synapse delete <table> <id>                        Delete a row
+  synapse sql '<SQL>'                                Execute raw SQL
+  synapse status                                     Show service status`)
     return
   }
 
@@ -90,7 +90,7 @@ Usage:
         const name = args[1]
         const colDefs = args.slice(2).map(parseColDef)
         if (!name || colDefs.length === 0) {
-          console.error("Usage: synd create <name> <col:type> [col:type...]")
+          console.error("Usage: synapse create <name> <col:type> [col:type...]")
           process.exit(1)
         }
         await apiCall(info, "createTable", { name, columns: colDefs })
@@ -100,7 +100,7 @@ Usage:
 
       case "drop": {
         const name = args[1]
-        if (!name) { console.error("Usage: synd drop <name>"); process.exit(1) }
+        if (!name) { console.error("Usage: synapse drop <name>"); process.exit(1) }
         await apiCall(info, "dropTable", { name })
         console.log(`Table "${name}" dropped.`)
         break
@@ -108,7 +108,7 @@ Usage:
 
       case "describe": {
         const name = args[1]
-        if (!name) { console.error("Usage: synd describe <name>"); process.exit(1) }
+        if (!name) { console.error("Usage: synapse describe <name>"); process.exit(1) }
         const result = await apiCall(info, "describeTable", { name }) as { data: { columns: unknown[] } }
         printTable(result.data.columns as Record<string, unknown>[])
         break
@@ -117,7 +117,7 @@ Usage:
       case "add-column": {
         const table = args[1]
         const colDef = args[2]
-        if (!table || !colDef) { console.error("Usage: synd add-column <table> <col:type>"); process.exit(1) }
+        if (!table || !colDef) { console.error("Usage: synapse add-column <table> <col:type>"); process.exit(1) }
         const col = parseColDef(colDef)
         await apiCall(info, "addColumn", { name: table, column: col })
         console.log(`Column "${col.name}" added to "${table}".`)
@@ -126,7 +126,7 @@ Usage:
 
       case "insert": {
         const table = args[1]
-        if (!table) { console.error("Usage: synd insert <table> --data '{...}'"); process.exit(1) }
+        if (!table) { console.error("Usage: synapse insert <table> --data '{...}'"); process.exit(1) }
 
         const batchIdx = args.indexOf("--batch")
         if (batchIdx !== -1) {
@@ -146,7 +146,7 @@ Usage:
 
       case "query": {
         const table = args[1]
-        if (!table) { console.error("Usage: synd query <table>"); process.exit(1) }
+        if (!table) { console.error("Usage: synapse query <table>"); process.exit(1) }
 
         const params: Record<string, unknown> = { table }
         const whereIdx = args.indexOf("--where")
@@ -173,7 +173,7 @@ Usage:
         const id = parseInt(args[2])
         const dataIdx = args.indexOf("--data")
         if (!table || isNaN(id) || dataIdx === -1) {
-          console.error("Usage: synd update <table> <id> --data '{...}'")
+          console.error("Usage: synapse update <table> <id> --data '{...}'")
           process.exit(1)
         }
         const data = JSON.parse(args[dataIdx + 1])
@@ -185,7 +185,7 @@ Usage:
       case "delete": {
         const table = args[1]
         const id = parseInt(args[2])
-        if (!table || isNaN(id)) { console.error("Usage: synd delete <table> <id>"); process.exit(1) }
+        if (!table || isNaN(id)) { console.error("Usage: synapse delete <table> <id>"); process.exit(1) }
         await apiCall(info, "delete", { table, id })
         console.log(`Row ${id} deleted.`)
         break
@@ -193,7 +193,7 @@ Usage:
 
       case "sql": {
         const sql = args[1]
-        if (!sql) { console.error("Usage: synd sql '<SQL>'"); process.exit(1) }
+        if (!sql) { console.error("Usage: synapse sql '<SQL>'"); process.exit(1) }
         const result = await apiCall(info, "rawSQL", { sql }) as { data: { rows?: unknown[]; changes?: number } }
         if (result.data.rows) {
           printTable(result.data.rows as Record<string, unknown>[])
@@ -212,7 +212,7 @@ Usage:
       }
 
       default:
-        console.error(`Unknown command: ${command}\nRun "synd help" for usage.`)
+        console.error(`Unknown command: ${command}\nRun "synapse help" for usage.`)
         process.exit(1)
     }
   } catch (error) {

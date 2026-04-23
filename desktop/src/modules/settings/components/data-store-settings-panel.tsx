@@ -98,7 +98,7 @@ function getCliStatusLabel(status: DataStoreCliStatus | null): string {
 
 function getCliIssueText(status: DataStoreCliStatus | null): string | null {
   if (!status || !status.installed || status.available) return null
-  if (!status.pathInShell) return "当前 shell 的 PATH 里没有这个目录，终端里可能找不到 synd。"
+  if (!status.pathInShell) return "当前 shell 的 PATH 里没有这个目录，终端里可能找不到 synapse。"
   if (!status.shimCurrent) return "当前 CLI 脚本不是最新版本，请重新安装。"
   if (!status.bundledScriptExists) return "CLI 依赖的本地脚本还未准备好，请重新安装。"
   if (!status.runtimeExists) return "CLI 运行时不可用，请重新安装应用。"
@@ -507,7 +507,7 @@ function DataStoreSettingsPanel() {
                 <DetailField label="Shell" value={cliDebugInfo?.shell || "—"} />
                 <DetailField
                   label="测试命令"
-                  value={<code className="font-mono text-xs">{cliDebugInfo?.testCommand ?? "synd help"}</code>}
+                  value={<code className="font-mono text-xs">{cliDebugInfo?.testCommand ?? "synapse help"}</code>}
                 />
               </div>
 
@@ -575,18 +575,18 @@ function DataStoreSettingsPanel() {
           <DialogHeader>
             <DialogTitle>测试 CLI</DialogTitle>
             <DialogDescription>
-              在你自己的终端里运行下面这条命令。如果 CLI 已正确安装，你会看到 `synd` 的帮助信息。
+              在你自己的终端里运行下面这条命令。如果 CLI 已正确安装，你会看到 `synapse` 的帮助信息。
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
             <div className="rounded-md bg-muted p-3">
               <code className="font-mono text-sm text-foreground">
-                {cliDebugInfo?.testCommand ?? "synd help"}
+                {cliDebugInfo?.testCommand ?? "synapse help"}
               </code>
             </div>
             <p className="text-sm text-muted-foreground">
-              如果终端提示找不到 `synd`，或者在 Windows 上提示“不是内部或外部命令”，通常说明 PATH 还没有生效。
+              如果终端提示找不到 `synapse`，或者在 Windows 上提示“不是内部或外部命令”，通常说明 PATH 还没有生效。
             </p>
           </div>
 
