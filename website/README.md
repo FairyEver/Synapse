@@ -2,6 +2,8 @@
 
 Synapse 产品介绍站，基于 [VitePress](https://vitepress.dev) 构建，面向普通用户介绍 Synapse 能做什么、如何使用。
 
+线上地址：<https://usesynapse.netlify.app>（由 Netlify 自动部署，构建配置见仓库根目录的 `netlify.toml`）。
+
 ## 本地开发
 
 推荐在仓库根目录执行：

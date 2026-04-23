@@ -2,6 +2,8 @@
 
 Where Ideas Connect
 
+官网：<https://usesynapse.netlify.app>
+
 本仓库是 pnpm monorepo。桌面端源码与对应的开发、打包、集成说明位于 [`desktop/`](./desktop/README.md)（包名 `@synapse/desktop`）。
 
 ## 本地开发
@@ -53,4 +55,5 @@ pnpm desktop:package:win     # 打包 Windows（nsis）
 
 ## 下载
 
-[github releases](https://github.com/FairyEver/SynapseAppRelease/releases)
+- 官网：<https://usesynapse.netlify.app>
+- GitHub Releases：<https://github.com/FairyEver/SynapseAppRelease/releases>
