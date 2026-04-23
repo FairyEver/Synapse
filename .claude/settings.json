@@ -29,7 +29,8 @@
       "Bash(curl *)",
       "Bash(whoami)",
       "Bash(pwd)",
-      "Bash(npx *)"
+      "Bash(npx *)",
+      "Bash(rtk gain *)"
     ]
   }
 }
