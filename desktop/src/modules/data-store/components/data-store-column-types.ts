@@ -1,6 +1,6 @@
 import type { DataStoreColumnType } from "@/types/data-store"
 
-const DATA_STORE_COLUMN_TYPES: DataStoreColumnType[] = ["TEXT", "INTEGER", "REAL", "DATE", "DATETIME", "BOOLEAN", "JSON", "BLOB"]
+const DATA_STORE_COLUMN_TYPES: DataStoreColumnType[] = ["TEXT", "INTEGER", "REAL", "DATE", "DATETIME", "BOOLEAN", "ENUM", "JSON", "BLOB"]
 
 const DATA_STORE_COLUMN_TYPE_LABELS: Record<DataStoreColumnType, string> = {
   TEXT: "文本",
@@ -9,6 +9,7 @@ const DATA_STORE_COLUMN_TYPE_LABELS: Record<DataStoreColumnType, string> = {
   DATE: "日期",
   DATETIME: "日期时间",
   BOOLEAN: "布尔",
+  ENUM: "枚举",
   BLOB: "二进制",
   JSON: "JSON",
 }

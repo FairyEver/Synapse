@@ -121,7 +121,7 @@ function dispatch(action: string, params: Record<string, unknown>): unknown {
     case "createTable":
       dataStoreService.createTable(
         assertString(params, "name"),
-        assertArray(params, "columns") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" }[],
+        assertArray(params, "columns") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM"; enumValues?: string[] }[],
         params.description as string | undefined,
       )
       return { ok: true }
@@ -136,7 +136,7 @@ function dispatch(action: string, params: Record<string, unknown>): unknown {
     case "addColumn": {
       const tableName = (params.table ?? params.name) as string | undefined
       if (typeof tableName !== "string" || !tableName) throw new Error("Missing or invalid 'table' (or 'name'): expected non-empty string")
-      dataStoreService.addColumn(tableName, assertObject(params, "column") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN"; default?: unknown; description?: string })
+      dataStoreService.addColumn(tableName, assertObject(params, "column") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM"; default?: unknown; description?: string; enumValues?: string[] })
       return { ok: true }
     }
 
@@ -145,6 +145,14 @@ function dispatch(action: string, params: Record<string, unknown>): unknown {
         assertString(params, "table"),
         assertString(params, "column"),
         assertString(params, "description"),
+      )
+      return { ok: true }
+
+    case "updateColumnEnumValues":
+      dataStoreService.updateColumnEnumValues(
+        assertString(params, "table"),
+        assertString(params, "column"),
+        assertArray(params, "values") as string[],
       )
       return { ok: true }
 

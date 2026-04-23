@@ -27,7 +27,7 @@ type McpTool = {
 }
 
 type TableInfo = { name: string; description: string; rowCount: number }
-type ColumnInfo = { name: string; type: string; primaryKey: boolean; description: string }
+type ColumnInfo = { name: string; type: string; primaryKey: boolean; description: string; enumValues?: string[] }
 type TableSchema = TableInfo & { columns: ColumnInfo[] }
 
 function buildTableSummary(schemas: TableSchema[]): string {
@@ -39,7 +39,8 @@ function buildTableSummary(schemas: TableSchema[]): string {
     for (const c of t.columns) {
       const cdesc = c.description ? ` — ${c.description}` : ""
       const pk = c.primaryKey ? " [PK]" : ""
-      lines.push(`    ${c.name}: ${c.type}${pk}${cdesc}`)
+      const enumSuffix = c.enumValues && c.enumValues.length > 0 ? ` [${c.enumValues.join(", ")}]` : ""
+      lines.push(`    ${c.name}: ${c.type}${pk}${enumSuffix}${cdesc}`)
     }
   }
   return lines.join("\n")
@@ -77,7 +78,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "create_table",
-      description: "Create a new table. Column types: TEXT, INTEGER, REAL, DATE (YYYY-MM-DD), DATETIME (YYYY-MM-DD HH:mm:ss), BOOLEAN (true/false), JSON, BLOB",
+      description: "Create a new table. Column types: TEXT, INTEGER, REAL, DATE (YYYY-MM-DD), DATETIME (YYYY-MM-DD HH:mm:ss), BOOLEAN (true/false), JSON, BLOB, ENUM (requires enumValues)",
       inputSchema: {
         type: "object",
         properties: {
@@ -88,8 +89,9 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
               type: "object",
               properties: {
                 name: { type: "string" },
-                type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN"] },
+                type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN", "ENUM"] },
                 description: { type: "string", description: "Column description (helps AI understand the column's purpose)" },
+                enumValues: { type: "array", items: { type: "string" }, description: "Required for ENUM type: list of allowed values" },
               },
               required: ["name", "type"],
             },
@@ -129,9 +131,10 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
             type: "object",
             properties: {
               name: { type: "string" },
-              type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN"] },
+              type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN", "ENUM"] },
               default: { description: "Default value for the column" },
               description: { type: "string", description: "Column description" },
+              enumValues: { type: "array", items: { type: "string" }, description: "Required for ENUM type: list of allowed values" },
             },
             required: ["name", "type"],
           },
@@ -153,8 +156,21 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
       },
     },
     {
+      name: "update_column_enum_values",
+      description: "Update the allowed values for an ENUM column",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          column: { type: "string", description: "ENUM column name" },
+          values: { type: "array", items: { type: "string" }, description: "New list of allowed values" },
+        },
+        required: ["table", "column", "values"],
+      },
+    },
+    {
       name: "insert",
-      description: "Insert a single row. DATE: YYYY-MM-DD. DATETIME: YYYY-MM-DD HH:mm:ss. BOOLEAN: true/false" + summary,
+      description: "Insert a single row. DATE: YYYY-MM-DD. DATETIME: YYYY-MM-DD HH:mm:ss. BOOLEAN: true/false. ENUM: must match allowed values" + summary,
       inputSchema: {
         type: "object",
         properties: {
@@ -224,7 +240,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "update",
-      description: "Update a row by id (partial update). DATE: YYYY-MM-DD. DATETIME: YYYY-MM-DD HH:mm:ss. BOOLEAN: true/false" + summary,
+      description: "Update a row by id (partial update). DATE: YYYY-MM-DD. DATETIME: YYYY-MM-DD HH:mm:ss. BOOLEAN: true/false. ENUM: must match allowed values" + summary,
       inputSchema: {
         type: "object",
         properties: {
@@ -269,6 +285,7 @@ const ACTION_MAP: Record<string, string> = {
   describe_table: "describeTable",
   add_column: "addColumn",
   update_column_description: "updateColumnDescription",
+  update_column_enum_values: "updateColumnEnumValues",
   insert: "insert",
   batch_insert: "batchInsert",
   query: "query",

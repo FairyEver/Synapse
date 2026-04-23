@@ -47,8 +47,9 @@ type TableSchemaSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   schema: DataStoreTableSchema | null
-  onAddColumn: (name: string, type: DataStoreColumnType, description?: string) => void
+  onAddColumn: (name: string, type: DataStoreColumnType, description?: string, enumValues?: string[]) => void
   onUpdateColumnDescription: (column: string, description: string) => void
+  onUpdateColumnEnumValues: (column: string, values: string[]) => void
   onDropTable: () => void
 }
 
@@ -58,11 +59,13 @@ function TableSchemaSheet({
   schema,
   onAddColumn,
   onUpdateColumnDescription,
+  onUpdateColumnEnumValues,
   onDropTable,
 }: TableSchemaSheetProps) {
   const [newColName, setNewColName] = useState("")
   const [newColType, setNewColType] = useState<DataStoreColumnType>("TEXT")
   const [newColDesc, setNewColDesc] = useState("")
+  const [newColEnumValues, setNewColEnumValues] = useState("")
   const [editingCol, setEditingCol] = useState<string | null>(null)
   const [editingDesc, setEditingDesc] = useState("")
   const editInputRef = useRef<HTMLInputElement>(null)
@@ -70,11 +73,16 @@ function TableSchemaSheet({
   const handleAddColumn = useCallback(() => {
     const trimmed = newColName.trim()
     if (!trimmed) return
-    onAddColumn(trimmed, newColType, newColDesc.trim() || undefined)
+    const enumVals = newColType === "ENUM" && newColEnumValues.trim()
+      ? newColEnumValues.split(",").map((v) => v.trim()).filter(Boolean)
+      : undefined
+    if (newColType === "ENUM" && (!enumVals || enumVals.length === 0)) return
+    onAddColumn(trimmed, newColType, newColDesc.trim() || undefined, enumVals)
     setNewColName("")
     setNewColType("TEXT")
     setNewColDesc("")
-  }, [newColName, newColType, newColDesc, onAddColumn])
+    setNewColEnumValues("")
+  }, [newColName, newColType, newColDesc, newColEnumValues, onAddColumn])
 
   const startEditDescription = useCallback((colName: string, currentDesc: string) => {
     setEditingCol(colName)
@@ -112,7 +120,12 @@ function TableSchemaSheet({
                 {schema.columns.map((col) => (
                   <TableRow key={col.name}>
                     <TableCell className="font-mono text-sm">{col.name}</TableCell>
-                    <TableCell>{getDataStoreColumnTypeDisplayName(col.type)}</TableCell>
+                    <TableCell>
+                      {getDataStoreColumnTypeDisplayName(col.type)}
+                      {col.enumValues && col.enumValues.length > 0 ? (
+                        <span className="ml-1 text-xs text-muted-foreground">[{col.enumValues.join(", ")}]</span>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {col.primaryKey ? (
                         "自增主键"
@@ -179,6 +192,14 @@ function TableSchemaSheet({
               placeholder="用途说明，帮助 AI 理解此列"
               className="text-xs"
             />
+            {newColType === "ENUM" ? (
+              <Input
+                value={newColEnumValues}
+                onChange={(e) => setNewColEnumValues(e.target.value)}
+                placeholder="允许的值，用逗号分隔，如：收入, 支出"
+                className="text-xs"
+              />
+            ) : null}
           </div>
         </div>
 

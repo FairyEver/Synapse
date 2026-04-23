@@ -5,6 +5,7 @@ export const DATA_STORE_IPC_CHANNELS = {
   describeTable: "synapse:data-store:describe-table",
   addColumn: "synapse:data-store:add-column",
   updateColumnDescription: "synapse:data-store:update-column-description",
+  updateColumnEnumValues: "synapse:data-store:update-column-enum-values",
   insert: "synapse:data-store:insert",
   batchInsert: "synapse:data-store:batch-insert",
   query: "synapse:data-store:query",

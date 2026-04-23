@@ -23,7 +23,8 @@ const JSON_COLUMN_TYPE = "JSON"
 const BOOLEAN_COLUMN_TYPE = "BOOLEAN"
 const DATE_COLUMN_TYPE = "DATE"
 const DATETIME_COLUMN_TYPE = "DATETIME"
-const VALID_COLUMN_TYPES = new Set(["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN"])
+const ENUM_COLUMN_TYPE = "ENUM"
+const VALID_COLUMN_TYPES = new Set(["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN", "ENUM"])
 const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE"])
 const VALID_ORDER_DIRS = new Set(["ASC", "DESC"])
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -47,7 +48,7 @@ function validateColumnName(name: string): void {
 
 function validateColumnType(type: string): void {
   if (!VALID_COLUMN_TYPES.has(type.toUpperCase())) {
-    throw new Error(`Invalid column type "${type}": must be one of TEXT, INTEGER, REAL, BLOB, JSON`)
+    throw new Error(`Invalid column type "${type}": must be one of TEXT, INTEGER, REAL, BLOB, JSON, ENUM`)
   }
 }
 
@@ -111,6 +112,7 @@ class DataStoreService {
   private booleanColumns = new Map<string, Set<string>>()
   private dateColumns = new Map<string, Set<string>>()
   private datetimeColumns = new Map<string, Set<string>>()
+  private enumColumns = new Map<string, Map<string, string[]>>()
 
   open(): { corrupted: boolean } {
     this.dbPath = path.join(app.getPath("userData"), "synapse-data.db")
@@ -188,6 +190,11 @@ class DataStoreService {
         PRIMARY KEY (table_name, column_name)
       )
     `)
+    const cols = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
+    const colNames = new Set(cols.map((c) => c.name))
+    if (!colNames.has("enum_values")) {
+      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN enum_values TEXT NOT NULL DEFAULT ''`)
+    }
   }
 
   private syncMetaTables(): void {
@@ -223,6 +230,7 @@ class DataStoreService {
     this.booleanColumns.clear()
     this.dateColumns.clear()
     this.datetimeColumns.clear()
+    this.enumColumns.clear()
     const db = this.getDb()
     const tables = db.prepare(`SELECT name FROM "_meta_tables"`).all() as { name: string }[]
 
@@ -233,19 +241,42 @@ class DataStoreService {
         const boolCols = new Set<string>()
         const dateCols = new Set<string>()
         const dtCols = new Set<string>()
+        const enumCols = new Map<string, string[]>()
         for (const col of columns) {
           const upper = col.type.toUpperCase()
           if (upper === JSON_COLUMN_TYPE) jsonCols.add(col.name)
           else if (upper === BOOLEAN_COLUMN_TYPE) boolCols.add(col.name)
           else if (upper === DATETIME_COLUMN_TYPE) dtCols.add(col.name)
           else if (upper === DATE_COLUMN_TYPE) dateCols.add(col.name)
+          else if (upper === ENUM_COLUMN_TYPE) enumCols.set(col.name, [])
         }
         if (jsonCols.size > 0) this.jsonColumns.set(name, jsonCols)
         if (boolCols.size > 0) this.booleanColumns.set(name, boolCols)
         if (dateCols.size > 0) this.dateColumns.set(name, dateCols)
         if (dtCols.size > 0) this.datetimeColumns.set(name, dtCols)
+        if (enumCols.size > 0) this.enumColumns.set(name, enumCols)
       } catch { /* table might not exist */ }
     }
+
+    try {
+      const metaRows = db.prepare(`SELECT table_name, column_name, enum_values FROM "_meta_columns" WHERE enum_values != ''`).all() as {
+        table_name: string
+        column_name: string
+        enum_values: string
+      }[]
+      for (const row of metaRows) {
+        try {
+          const values = JSON.parse(row.enum_values) as string[]
+          if (!Array.isArray(values)) continue
+          let tableMap = this.enumColumns.get(row.table_name)
+          if (!tableMap) {
+            tableMap = new Map()
+            this.enumColumns.set(row.table_name, tableMap)
+          }
+          tableMap.set(row.column_name, values)
+        } catch { /* invalid JSON, skip */ }
+      }
+    } catch { /* _meta_columns might not have enum_values column yet */ }
   }
 
   private getJsonColumnsForTable(table: string): Set<string> {
@@ -262,6 +293,20 @@ class DataStoreService {
 
   private getDatetimeColumnsForTable(table: string): Set<string> {
     return this.datetimeColumns.get(table) ?? new Set()
+  }
+
+  private getEnumColumnsForTable(table: string): Map<string, string[]> {
+    return this.enumColumns.get(table) ?? new Map()
+  }
+
+  private validateEnumValue(key: string, value: unknown, enumCols: Map<string, string[]>): void {
+    const allowed = enumCols.get(key)
+    if (!allowed) return
+    if (value === null || value === undefined || value === "") return
+    const s = String(value)
+    if (!allowed.includes(s)) {
+      throw new Error(`Invalid value "${s}" for ENUM column "${key}". Allowed: ${allowed.join(", ")}`)
+    }
   }
 
   private convertWriteValue(
@@ -332,6 +377,11 @@ class DataStoreService {
         throw new Error(`Duplicate column name "${col.name}"`)
       }
       seenColumns.add(lower)
+      if (col.type.toUpperCase() === ENUM_COLUMN_TYPE) {
+        if (!col.enumValues || col.enumValues.length === 0) {
+          throw new Error(`ENUM column "${col.name}" requires at least one value in enumValues`)
+        }
+      }
     }
 
     const db = this.getDb()
@@ -346,9 +396,11 @@ class DataStoreService {
       db.prepare(`INSERT INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
         .run(name, description ?? "", now, now)
       for (const col of columns) {
-        if (col.description) {
-          db.prepare(`INSERT INTO "_meta_columns" (table_name, column_name, description) VALUES (?, ?, ?)`)
-            .run(name, col.name, col.description)
+        const hasDesc = !!col.description
+        const hasEnum = col.type.toUpperCase() === ENUM_COLUMN_TYPE && col.enumValues
+        if (hasDesc || hasEnum) {
+          db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, ?, ?)`)
+            .run(name, col.name, col.description ?? "", hasEnum ? JSON.stringify(col.enumValues) : "")
         }
       }
       db.exec("COMMIT")
@@ -361,17 +413,20 @@ class DataStoreService {
     const boolCols = new Set<string>()
     const dateCols = new Set<string>()
     const dtCols = new Set<string>()
+    const enumCols = new Map<string, string[]>()
     for (const col of columns) {
       const upper = col.type.toUpperCase()
       if (upper === JSON_COLUMN_TYPE) jsonCols.add(col.name)
       else if (upper === BOOLEAN_COLUMN_TYPE) boolCols.add(col.name)
       else if (upper === DATETIME_COLUMN_TYPE) dtCols.add(col.name)
       else if (upper === DATE_COLUMN_TYPE) dateCols.add(col.name)
+      else if (upper === ENUM_COLUMN_TYPE && col.enumValues) enumCols.set(col.name, col.enumValues)
     }
     if (jsonCols.size > 0) this.jsonColumns.set(name, jsonCols)
     if (boolCols.size > 0) this.booleanColumns.set(name, boolCols)
     if (dateCols.size > 0) this.dateColumns.set(name, dateCols)
     if (dtCols.size > 0) this.datetimeColumns.set(name, dtCols)
+    if (enumCols.size > 0) this.enumColumns.set(name, enumCols)
   }
 
   dropTable(name: string): void {
@@ -394,6 +449,7 @@ class DataStoreService {
     this.booleanColumns.delete(name)
     this.dateColumns.delete(name)
     this.datetimeColumns.delete(name)
+    this.enumColumns.delete(name)
   }
 
   describeTable(name: string): DataStoreTableSchema {
@@ -406,18 +462,33 @@ class DataStoreService {
       pk: number
     }[]
 
-    const colDescRows = db.prepare(`SELECT column_name, description FROM "_meta_columns" WHERE table_name = ?`).all(name) as {
+    const colMetaRows = db.prepare(`SELECT column_name, description, enum_values FROM "_meta_columns" WHERE table_name = ?`).all(name) as {
       column_name: string
       description: string
+      enum_values: string
     }[]
-    const colDescMap = new Map(colDescRows.map((r) => [r.column_name, r.description]))
+    const colDescMap = new Map(colMetaRows.map((r) => [r.column_name, r.description]))
+    const colEnumMap = new Map<string, string[]>()
+    for (const r of colMetaRows) {
+      if (r.enum_values) {
+        try {
+          const vals = JSON.parse(r.enum_values)
+          if (Array.isArray(vals)) colEnumMap.set(r.column_name, vals)
+        } catch { /* skip */ }
+      }
+    }
 
-    const columns: DataStoreColumnInfo[] = pragmaRows.map((r) => ({
-      name: r.name,
-      type: r.type,
-      primaryKey: r.pk === 1,
-      description: colDescMap.get(r.name) ?? "",
-    }))
+    const columns: DataStoreColumnInfo[] = pragmaRows.map((r) => {
+      const info: DataStoreColumnInfo = {
+        name: r.name,
+        type: r.type,
+        primaryKey: r.pk === 1,
+        description: colDescMap.get(r.name) ?? "",
+      }
+      const ev = colEnumMap.get(r.name)
+      if (ev) info.enumValues = ev
+      return info
+    })
 
     const meta = db.prepare(`SELECT description, created_at, updated_at FROM "_meta_tables" WHERE name = ?`).get(name) as {
       description: string
@@ -443,10 +514,23 @@ class DataStoreService {
     validateColumnType(column.type)
     this.assertTableExists(table)
 
+    const upper = column.type.toUpperCase()
+    const isEnum = upper === ENUM_COLUMN_TYPE
+    if (isEnum) {
+      if (!column.enumValues || column.enumValues.length === 0) {
+        throw new Error(`ENUM column "${column.name}" requires at least one value in enumValues`)
+      }
+      if (column.default !== undefined && column.default !== null && column.default !== "") {
+        if (!column.enumValues.includes(String(column.default))) {
+          throw new Error(`Default value "${column.default}" is not in enumValues: ${column.enumValues.join(", ")}`)
+        }
+      }
+    }
+
     const db = this.getDb()
     let sql = `ALTER TABLE ${q(table)} ADD COLUMN ${q(column.name)} ${column.type}`
     if (column.default !== undefined) {
-      const defaultVal = column.type.toUpperCase() === JSON_COLUMN_TYPE
+      const defaultVal = upper === JSON_COLUMN_TYPE
         ? JSON.stringify(column.default)
         : column.default
       sql += ` DEFAULT ${typeof defaultVal === "string" ? `'${defaultVal.replace(/'/g, "''")}'` : defaultVal}`
@@ -456,9 +540,9 @@ class DataStoreService {
     try {
       db.exec(sql)
       db.prepare(`UPDATE "_meta_tables" SET updated_at = ? WHERE name = ?`).run(new Date().toISOString(), table)
-      if (column.description) {
-        db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description) VALUES (?, ?, ?)`)
-          .run(table, column.name, column.description)
+      if (column.description || isEnum) {
+        db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, ?, ?)`)
+          .run(table, column.name, column.description ?? "", isEnum ? JSON.stringify(column.enumValues) : "")
       }
       db.exec("COMMIT")
     } catch (error) {
@@ -466,7 +550,6 @@ class DataStoreService {
       throw error
     }
 
-    const upper = column.type.toUpperCase()
     if (upper === JSON_COLUMN_TYPE) {
       const existing = this.jsonColumns.get(table) ?? new Set()
       existing.add(column.name)
@@ -483,6 +566,10 @@ class DataStoreService {
       const existing = this.datetimeColumns.get(table) ?? new Set()
       existing.add(column.name)
       this.datetimeColumns.set(table, existing)
+    } else if (isEnum && column.enumValues) {
+      const existing = this.enumColumns.get(table) ?? new Map()
+      existing.set(column.name, column.enumValues)
+      this.enumColumns.set(table, existing)
     }
   }
 
@@ -492,8 +579,25 @@ class DataStoreService {
     this.assertTableExists(table)
 
     const db = this.getDb()
-    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description) VALUES (?, ?, ?)`)
-      .run(table, column, description)
+    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, ?, COALESCE((SELECT enum_values FROM "_meta_columns" WHERE table_name = ? AND column_name = ?), ''))`)
+      .run(table, column, description, table, column)
+  }
+
+  updateColumnEnumValues(table: string, column: string, values: string[]): void {
+    validateName(table, "table")
+    validateColumnName(column)
+    this.assertTableExists(table)
+    if (values.length === 0) {
+      throw new Error("ENUM values list cannot be empty")
+    }
+
+    const db = this.getDb()
+    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, COALESCE((SELECT description FROM "_meta_columns" WHERE table_name = ? AND column_name = ?), ''), ?)`)
+      .run(table, column, table, column, JSON.stringify(values))
+
+    const existing = this.enumColumns.get(table) ?? new Map()
+    existing.set(column, values)
+    this.enumColumns.set(table, existing)
   }
 
   insert(table: string, data: Record<string, unknown>): { id: number } {
@@ -505,8 +609,12 @@ class DataStoreService {
     const boolCols = this.getBooleanColumnsForTable(table)
     const dateCols = this.getDateColumnsForTable(table)
     const dtCols = this.getDatetimeColumnsForTable(table)
+    const enumCols = this.getEnumColumnsForTable(table)
     const keys = Object.keys(data)
-    for (const k of keys) validateColumnName(k)
+    for (const k of keys) {
+      validateColumnName(k)
+      this.validateEnumValue(k, data[k], enumCols)
+    }
     const values = keys.map((k) => this.convertWriteValue(k, data[k], jsonCols, boolCols, dateCols, dtCols))
     const placeholders = keys.map(() => "?").join(", ")
     const columnList = keys.map(q).join(", ")
@@ -529,9 +637,13 @@ class DataStoreService {
       const boolCols = this.getBooleanColumnsForTable(table)
       const dateCols = this.getDateColumnsForTable(table)
       const dtCols = this.getDatetimeColumnsForTable(table)
+      const enumCols = this.getEnumColumnsForTable(table)
       for (const row of rows) {
         const keys = Object.keys(row)
-        for (const k of keys) validateColumnName(k)
+        for (const k of keys) {
+          validateColumnName(k)
+          this.validateEnumValue(k, row[k], enumCols)
+        }
         const values = keys.map((k) => this.convertWriteValue(k, row[k], jsonCols, boolCols, dateCols, dtCols))
         const placeholders = keys.map(() => "?").join(", ")
         const columnList = keys.map(q).join(", ")
@@ -591,9 +703,13 @@ class DataStoreService {
     const boolCols = this.getBooleanColumnsForTable(table)
     const dateCols = this.getDateColumnsForTable(table)
     const dtCols = this.getDatetimeColumnsForTable(table)
+    const enumCols = this.getEnumColumnsForTable(table)
     const keys = Object.keys(data)
     if (keys.length === 0) return { affected: 0 }
-    for (const k of keys) validateColumnName(k)
+    for (const k of keys) {
+      validateColumnName(k)
+      this.validateEnumValue(k, data[k], enumCols)
+    }
 
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
     const values = keys.map((k) => this.convertWriteValue(k, data[k], jsonCols, boolCols, dateCols, dtCols))
@@ -699,12 +815,14 @@ class DataStoreService {
 
       this.db = new DatabaseSync(this.dbPath)
       this.db.exec("PRAGMA journal_mode=WAL")
+      this.ensureSystemSchema()
       this.refreshJsonColumnCache()
     } catch (error) {
       try {
         copyFileSync(backupPath, this.dbPath)
         this.db = new DatabaseSync(this.dbPath)
         this.db.exec("PRAGMA journal_mode=WAL")
+        this.ensureSystemSchema()
         this.refreshJsonColumnCache()
       } catch (restoreError) {
         logger.error("Failed to restore backup after import failure.", { restoreError })

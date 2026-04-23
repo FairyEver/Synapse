@@ -9,19 +9,28 @@
 - 涉及文件清单
 - 创建 task_plan.md / findings.md / progress.md
 
-### 未开始
-- 所有 7 个阶段的代码实现
-
 ## 会话：2026-04-23（第二轮）
 
-### 阶段 1：数据模型与存储
-- **状态：** in_progress
+### 阶段 1-7 全部完成
 
-## 五问重启检查
-| 问题 | 答案 |
-|------|------|
-| 我在哪里？ | 阶段 1 开始 |
-| 我要去哪里？ | 阶段 1-7 全部实现 |
-| 目标是什么？ | Data Store 新增 ENUM 列类型 |
-| 我学到了什么？ | 见 findings.md |
-| 我做了什么？ | 第一轮完成规划，第二轮开始实现 |
+修改文件清单：
+- `desktop/electron/data-store/types.ts` — 加 ENUM 类型 + enumValues
+- `desktop/src/types/data-store.ts` — 同步渲染进程类型
+- `desktop/electron/data-store/service.ts` — 核心：schema 迁移、缓存、验证、CRUD、updateColumnEnumValues、importDatabase 修复
+- `desktop/electron/data-store/channels.ts` — 加 updateColumnEnumValues channel
+- `desktop/electron/data-store/ipc-handlers.ts` — 加 handler
+- `desktop/electron/data-store/http-server.ts` — 修复类型断言 + 加 dispatch case
+- `desktop/electron/preload.ts` — 加 channel + bridge 方法
+- `desktop/src/types/bridge.ts` — 加方法签名
+- `desktop/src/modules/data-store/hooks/use-data-store.ts` — 加 updateColumnEnumValues
+- `desktop/data-store/mcp/index.ts` — ENUM 工具 schema + buildTableSummary + ACTION_MAP
+- `desktop/src/modules/data-store/components/data-store-column-types.ts` — 加 ENUM 标签
+- `desktop/src/modules/data-store/components/create-table-dialog.tsx` — ENUM 值输入 + 校验
+- `desktop/src/modules/data-store/components/table-schema-sheet.tsx` — 显示/编辑 ENUM 值
+- `desktop/src/modules/data-store/components/row-editor.tsx` — ENUM/BOOLEAN Select 下拉
+- `desktop/src/modules/data-store/components/data-table-view.tsx` — BOOLEAN ✓/✗ 显示
+- `desktop/src/modules/data-store/components/schema-copy-formats.ts` — 全格式 ENUM 支持
+- `desktop/src/modules/data-store/index.tsx` — 接线 updateColumnEnumValues
+
+### 验证
+- `pnpm desktop:typecheck` 通过 ✓

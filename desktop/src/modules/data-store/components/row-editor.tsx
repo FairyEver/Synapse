@@ -10,6 +10,13 @@ import {
 import { Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { DataStoreColumnInfo } from "@/types/data-store"
 import { DataTableCellInput } from "./data-table-cell-input"
 import {
@@ -86,16 +93,21 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
     const data: Record<string, unknown> = {}
     for (const col of editableColumns) {
       const raw = values[col.name] ?? ""
-      if (col.type === "INTEGER") {
+      const upper = col.type.toUpperCase()
+      if (upper === "INTEGER") {
         data[col.name] = raw ? parseInt(raw, 10) : null
-      } else if (col.type === "REAL") {
+      } else if (upper === "REAL") {
         data[col.name] = raw ? parseFloat(raw) : null
-      } else if (col.type === "JSON") {
+      } else if (upper === "JSON") {
         try {
           data[col.name] = raw ? JSON.parse(raw) : null
         } catch {
           data[col.name] = raw
         }
+      } else if (upper === "BOOLEAN") {
+        if (raw === "true") data[col.name] = true
+        else if (raw === "false") data[col.name] = false
+        else data[col.name] = null
       } else {
         data[col.name] = raw || null
       }
@@ -188,22 +200,54 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
       <TableCell className={`${DATA_TABLE_ID_COLUMN_CLASS} font-mono text-muted-foreground`}>
         {initialData?.id != null ? String(initialData.id) : ""}
       </TableCell>
-      {editableColumns.map((col) => (
-        <TableCell key={col.name} className={DATA_TABLE_VALUE_COLUMN_CLASS}>
-          <DataTableCellInput
-            ref={(node) => {
-              inputRefs.current[col.name] = node
-            }}
-            disabled={isSaving}
-            value={values[col.name] ?? ""}
-            onChange={(e) => handleChange(col.name, e.target.value)}
-            onFocus={() => {
-              activeColumnNameRef.current = col.name
-            }}
-            onKeyDown={handleInputKeyDown}
-          />
-        </TableCell>
-      ))}
+      {editableColumns.map((col) => {
+        const upper = col.type.toUpperCase()
+        const isEnum = upper === "ENUM" && col.enumValues && col.enumValues.length > 0
+        const isBool = upper === "BOOLEAN"
+
+        if (isEnum || isBool) {
+          const options = isBool
+            ? [{ value: "true", label: "true" }, { value: "false", label: "false" }]
+            : col.enumValues!.map((v) => ({ value: v, label: v }))
+          return (
+            <TableCell key={col.name} className={DATA_TABLE_VALUE_COLUMN_CLASS}>
+              <Select
+                disabled={isSaving}
+                value={values[col.name] || undefined}
+                onValueChange={(v) => handleChange(col.name, v)}
+              >
+                <SelectTrigger className="h-6 text-xs">
+                  <SelectValue placeholder="选择..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </TableCell>
+          )
+        }
+
+        return (
+          <TableCell key={col.name} className={DATA_TABLE_VALUE_COLUMN_CLASS}>
+            <DataTableCellInput
+              ref={(node) => {
+                inputRefs.current[col.name] = node
+              }}
+              disabled={isSaving}
+              value={values[col.name] ?? ""}
+              onChange={(e) => handleChange(col.name, e.target.value)}
+              onFocus={() => {
+                activeColumnNameRef.current = col.name
+              }}
+              onKeyDown={handleInputKeyDown}
+            />
+          </TableCell>
+        )
+      })}
       <TableCell className={`${DATA_TABLE_ACTION_COLUMN_CLASS} py-0.5`}>
         <div className="flex items-center gap-0.5">
           <Button

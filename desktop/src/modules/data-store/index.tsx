@@ -16,6 +16,7 @@ import {
   dropTable,
   insertRow,
   updateColumnDescription,
+  updateColumnEnumValues,
   updateRow,
   useDataStoreQuery,
   useDataStoreSchema,
@@ -88,11 +89,11 @@ function DataStoreModule() {
   }, [selectedTable, promise, refreshTables])
 
   const handleAddColumn = useCallback(
-    async (name: string, type: DataStoreColumnType, description?: string) => {
+    async (name: string, type: DataStoreColumnType, description?: string, enumValues?: string[]) => {
       if (!selectedTable) return
       await promise(
         async () => {
-          await addColumn(selectedTable, { name, type, description })
+          await addColumn(selectedTable, { name, type, description, enumValues })
           logger.info("Column added.", { table: selectedTable, column: name })
           await refreshSchema()
           await refreshQuery()
@@ -110,6 +111,20 @@ function DataStoreModule() {
       await refreshSchema()
     },
     [selectedTable, refreshSchema],
+  )
+
+  const handleUpdateColumnEnumValues = useCallback(
+    async (column: string, values: string[]) => {
+      if (!selectedTable) return
+      await promise(
+        async () => {
+          await updateColumnEnumValues(selectedTable, column, values)
+          await refreshSchema()
+        },
+        { loading: "正在更新枚举值...", success: "枚举值已更新" },
+      )
+    },
+    [selectedTable, promise, refreshSchema],
   )
 
   const handleInsert = useCallback(
@@ -228,6 +243,7 @@ function DataStoreModule() {
         schema={schema}
         onAddColumn={handleAddColumn}
         onUpdateColumnDescription={handleUpdateColumnDescription}
+        onUpdateColumnEnumValues={handleUpdateColumnEnumValues}
         onDropTable={handleDropTable}
       />
     </SidebarContentLayout>

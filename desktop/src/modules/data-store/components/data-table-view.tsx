@@ -281,7 +281,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         void beginRowEdit(rowId, col.name).catch(() => {})
                       }}
                     >
-                      {formatCellValue(row[col.name])}
+                      {formatCellValue(row[col.name], col.type)}
                     </TableCell>
                   ))}
                   <TableCell className={`${DATA_TABLE_ACTION_COLUMN_CLASS} py-0.5`}>
@@ -373,8 +373,11 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   )
 })
 
-function formatCellValue(value: unknown): string {
+function formatCellValue(value: unknown, type?: string): string {
   if (value == null) return ""
+  if (type?.toUpperCase() === "BOOLEAN") {
+    return value === true || value === 1 ? "✓" : "✗"
+  }
   if (typeof value === "object") return JSON.stringify(value)
   return String(value)
 }

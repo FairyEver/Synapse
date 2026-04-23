@@ -11,11 +11,12 @@ function sqlType(col: DataStoreColumnInfo): string {
   if (col.primaryKey) return "INTEGER PRIMARY KEY AUTOINCREMENT"
   if (col.type === "DATE" || col.type === "DATETIME") return "TEXT"
   if (col.type === "BOOLEAN") return "INTEGER"
+  if (col.type === "ENUM") return "TEXT"
   return col.type
 }
 
-function tsType(colType: string): string {
-  switch (colType) {
+function tsType(col: DataStoreColumnInfo): string {
+  switch (col.type) {
     case "INTEGER":
       return "number"
     case "REAL":
@@ -32,6 +33,11 @@ function tsType(colType: string): string {
       return "Buffer"
     case "JSON":
       return "Record<string, unknown>"
+    case "ENUM":
+      if (col.enumValues && col.enumValues.length > 0) {
+        return col.enumValues.map((v) => `"${v}"`).join(" | ")
+      }
+      return "string"
     default:
       return "unknown"
   }
@@ -45,9 +51,12 @@ function generateSQL(schema: DataStoreTableSchema): string {
 function generateMarkdown(schema: DataStoreTableSchema): string {
   const header = "| 列名 | 类型 | 说明 |"
   const separator = "| --- | --- | --- |"
-  const rows = schema.columns.map(
-    (col) => `| ${col.name} | ${col.type} | ${col.primaryKey ? "主键，自增" : col.description || ""} |`,
-  )
+  const rows = schema.columns.map((col) => {
+    const typeDisplay = col.type === "ENUM" && col.enumValues && col.enumValues.length > 0
+      ? `ENUM [${col.enumValues.join(", ")}]`
+      : col.type
+    return `| ${col.name} | ${typeDisplay} | ${col.primaryKey ? "主键，自增" : col.description || ""} |`
+  })
   const lines = [`## ${schema.name}`, ""]
   if (schema.description) {
     lines.push(schema.description, "")
@@ -60,7 +69,7 @@ function generateTypeScript(schema: DataStoreTableSchema): string {
   const name = schema.name.charAt(0).toUpperCase() + schema.name.slice(1)
   const fields = schema.columns
     .filter((col) => !col.primaryKey)
-    .map((col) => `  ${col.name}: ${tsType(col.type)}`)
+    .map((col) => `  ${col.name}: ${tsType(col)}`)
   const lines = [
     `type ${name}Row = {`,
     `  id: number`,
@@ -71,9 +80,9 @@ function generateTypeScript(schema: DataStoreTableSchema): string {
 }
 
 function generateJSONSchema(schema: DataStoreTableSchema): string {
-  const properties: Record<string, { type: string; format?: string; description?: string }> = {}
+  const properties: Record<string, { type: string; format?: string; description?: string; enum?: string[] }> = {}
   for (const col of schema.columns) {
-    const prop: { type: string; format?: string; description?: string } = {
+    const prop: { type: string; format?: string; description?: string; enum?: string[] } = {
       type: col.type === "INTEGER" || col.type === "REAL" ? "number"
         : col.type === "BOOLEAN" ? "boolean"
         : col.type === "JSON" ? "object"
@@ -81,6 +90,9 @@ function generateJSONSchema(schema: DataStoreTableSchema): string {
     }
     if (col.type === "DATE") prop.format = "date"
     if (col.type === "DATETIME") prop.format = "date-time"
+    if (col.type === "ENUM" && col.enumValues && col.enumValues.length > 0) {
+      prop.enum = col.enumValues
+    }
     if (col.primaryKey) prop.description = "Auto-increment primary key"
     else if (col.description) prop.description = col.description
     properties[col.name] = prop
@@ -117,6 +129,11 @@ function generateMCPExample(schema: DataStoreTableSchema): string {
         break
       case "JSON":
         sampleData[col.name] = "{}"
+        break
+      case "ENUM":
+        sampleData[col.name] = col.enumValues && col.enumValues.length > 0
+          ? `"${col.enumValues[0]}"`
+          : `"..."`
         break
       default:
         sampleData[col.name] = `"..."`
@@ -164,7 +181,10 @@ function generateSkillContext(schema: DataStoreTableSchema): string {
 
   const colRows = editableCols.map((col) => {
     const desc = col.description ? ` — ${col.description}` : ""
-    return `- ${col.name} (${col.type})${desc}`
+    const enumSuffix = col.type === "ENUM" && col.enumValues && col.enumValues.length > 0
+      ? `: ${col.enumValues.join("/")}`
+      : ""
+    return `- ${col.name} (${col.type}${enumSuffix})${desc}`
   })
 
   const sampleData: Record<string, string> = {}
@@ -187,6 +207,11 @@ function generateSkillContext(schema: DataStoreTableSchema): string {
         break
       case "JSON":
         sampleData[col.name] = "{}"
+        break
+      case "ENUM":
+        sampleData[col.name] = col.enumValues && col.enumValues.length > 0
+          ? `"${col.enumValues[0]}"`
+          : `"..."`
         break
       default:
         sampleData[col.name] = `"..."`

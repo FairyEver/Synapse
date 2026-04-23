@@ -28,6 +28,7 @@ type ColumnRow = {
   name: string
   type: DataStoreColumnType
   description: string
+  enumValues: string
 }
 
 type CreateTableDialogProps = {
@@ -44,14 +45,14 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [columns, setColumns] = useState<ColumnRow[]>([
-    { key: ++nextKey, name: "", type: "TEXT", description: "" },
+    { key: ++nextKey, name: "", type: "TEXT", description: "", enumValues: "" },
   ])
   const [error, setError] = useState("")
 
   const reset = useCallback(() => {
     setName("")
     setDescription("")
-    setColumns([{ key: ++nextKey, name: "", type: "TEXT", description: "" }])
+    setColumns([{ key: ++nextKey, name: "", type: "TEXT", description: "", enumValues: "" }])
     setError("")
   }, [])
 
@@ -64,14 +65,14 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
   )
 
   const addColumn = useCallback(() => {
-    setColumns((prev) => [...prev, { key: ++nextKey, name: "", type: "TEXT", description: "" }])
+    setColumns((prev) => [...prev, { key: ++nextKey, name: "", type: "TEXT", description: "", enumValues: "" }])
   }, [])
 
   const removeColumn = useCallback((key: number) => {
     setColumns((prev) => prev.filter((c) => c.key !== key))
   }, [])
 
-  const updateColumn = useCallback((key: number, field: "name" | "type" | "description", value: string) => {
+  const updateColumn = useCallback((key: number, field: "name" | "type" | "description" | "enumValues", value: string) => {
     setColumns((prev) =>
       prev.map((c) => (c.key === key ? { ...c, [field]: value } : c)),
     )
@@ -108,13 +109,25 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       return
     }
 
+    const emptyEnum = validColumns.find((c) => c.type === "ENUM" && !c.enumValues.trim())
+    if (emptyEnum) {
+      setError(`枚举列 "${emptyEnum.name.trim()}" 需要填写允许的值`)
+      return
+    }
+
     onSubmit(
       trimmedName,
-      validColumns.map((c) => ({
-        name: c.name.trim(),
-        type: c.type,
-        description: c.description.trim() || undefined,
-      })),
+      validColumns.map((c) => {
+        const def: DataStoreColumnDef = {
+          name: c.name.trim(),
+          type: c.type,
+          description: c.description.trim() || undefined,
+        }
+        if (c.type === "ENUM" && c.enumValues.trim()) {
+          def.enumValues = c.enumValues.split(",").map((v) => v.trim()).filter(Boolean)
+        }
+        return def
+      }),
       description.trim() || undefined,
     )
     handleOpenChange(false)
@@ -192,6 +205,14 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                     onChange={(e) => updateColumn(col.key, "description", e.target.value)}
                     placeholder="用途说明，帮助 AI 理解此列"
                   />
+                  {col.type === "ENUM" ? (
+                    <Input
+                      className="text-xs"
+                      value={col.enumValues}
+                      onChange={(e) => updateColumn(col.key, "enumValues", e.target.value)}
+                      placeholder="允许的值，用逗号分隔，如：收入, 支出"
+                    />
+                  ) : null}
                 </div>
               ))}
             </div>
