@@ -158,7 +158,7 @@ class DataStoreService {
           "note" TEXT
         )
       `)
-      db.prepare(`INSERT INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+      db.prepare(`INSERT OR IGNORE INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
         .run("bookmarks", "收藏夹", now, now)
 
       const insert = db.prepare(`INSERT INTO "bookmarks" ("title", "url", "tags", "note") VALUES (?, ?, ?, ?)`)

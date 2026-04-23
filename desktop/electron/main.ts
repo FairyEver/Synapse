@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog } from "electron"
+import { existsSync, readlinkSync, rmSync } from "node:fs"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
 import { SYNAPSE_IPC_CHANNELS } from "./ipc/channels"
@@ -84,9 +85,55 @@ process.on("unhandledRejection", (reason) => {
   logger.error("Unhandled rejection in main process.", reason)
 })
 
-const gotSingleInstanceLock = app.requestSingleInstanceLock()
+function clearStaleSingletonLock(): boolean {
+  const lockPath = path.join(app.getPath("userData"), "SingletonLock")
+
+  if (!existsSync(lockPath)) {
+    return false
+  }
+
+  try {
+    const target = readlinkSync(lockPath)
+    const match = target.match(/-(\d+)$/)
+
+    if (!match) {
+      return false
+    }
+
+    const pid = Number.parseInt(match[1], 10)
+
+    try {
+      process.kill(pid, 0)
+      return false
+    } catch {
+      // process doesn't exist — lock is stale
+    }
+  } catch {
+    // not a symlink or unreadable — treat as stale
+  }
+
+  const userData = app.getPath("userData")
+
+  for (const file of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) {
+    try {
+      rmSync(path.join(userData, file), { force: true })
+    } catch {
+      // best-effort cleanup
+    }
+  }
+
+  logger.warn("Cleared stale singleton lock files from a previous crash.")
+  return true
+}
+
+let gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!gotSingleInstanceLock && clearStaleSingletonLock()) {
+  gotSingleInstanceLock = app.requestSingleInstanceLock()
+}
 
 if (!gotSingleInstanceLock) {
+  console.error("[Synapse] Another instance is already running. Exiting.")
   logger.warn("Another Synapse instance is already running. Exiting current process.")
   app.quit()
 } else {
