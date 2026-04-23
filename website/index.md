@@ -4,7 +4,10 @@ layout: home
 hero:
   name: Synapse
   text: Where Ideas Connect
-  tagline: 面向团队的 AI Rules 与 Skills 分享平台，让好用的提示词和能力包在团队内自由流动。
+  tagline: |
+    跨编辑器的 AI Rules & Skills 管理工具
+    统一维护团队提示词资产
+    一键分发至 Claude Code、Cursor、Codex
   image:
     src: /icon.png
     alt: Synapse
@@ -20,16 +23,16 @@ hero:
       link: https://github.com/FairyEver/Synapse
 
 features:
-  - title: 共享规则（Rules）
-    details: 把团队沉淀下来的提示词、约束、风格统一成可复用的规则，一次整理，全员共享。
-  - title: 共享能力包（Skills）
-    details: 把带附件、带步骤的复合能力打包成一个 Skill，队友拿到即装即用，不用复制粘贴多文件。
-  - title: 一键装入 AI 编辑器
-    details: 为 Claude Code、Cursor、Codex 自动识别安装位置，支持全局或项目级安装，免手工拷贝。
-  - title: 基于本地目录协作
-    details: 内容存在你熟悉的团队仓库目录，用谁的 Git 流程都行，Synapse 只负责整理、分发和安装。
-  - title: 轻量桌面应用
-    details: macOS 与 Windows 原生桌面应用，启动即用，无需搭建服务端。
-  - title: 面向真实工作流
-    details: 按分类浏览、全文搜索、一键安装到指定项目，围绕日常使用习惯而不是管理后台。
+  - title: Rules 管理
+    details: 将编码规范、输出约束、风格指南等提示词标准化为可复用的 Rule，团队统一维护、按需安装。
+  - title: Skills 管理
+    details: 将带附件的复合工作流封装为 Skill，包含主说明与参考文件，安装后即可在编辑器中直接调用。
+  - title: 多编辑器适配
+    details: 支持 Claude Code、Cursor、Codex，自动识别各编辑器的规则目录，提供全局或项目级安装。
+  - title: 本地目录 + Git 协作
+    details: 内容存储在团队自有的 Git 仓库中，Synapse 负责内容的组织、检索与安装，不托管任何数据。
+  - title: 原生桌面应用
+    details: 支持 macOS 与 Windows，无需部署服务端，开箱即用。
+  - title: 面向日常工作流
+    details: 分类浏览、全文搜索、一键安装到指定项目，围绕实际使用场景设计，而非后台管理逻辑。
 ---

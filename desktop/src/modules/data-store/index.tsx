@@ -15,6 +15,7 @@ import {
   deleteRow,
   dropTable,
   insertRow,
+  updateColumnDescription,
   updateRow,
   useDataStoreQuery,
   useDataStoreSchema,
@@ -87,11 +88,11 @@ function DataStoreModule() {
   }, [selectedTable, promise, refreshTables])
 
   const handleAddColumn = useCallback(
-    async (name: string, type: DataStoreColumnType) => {
+    async (name: string, type: DataStoreColumnType, description?: string) => {
       if (!selectedTable) return
       await promise(
         async () => {
-          await addColumn(selectedTable, { name, type })
+          await addColumn(selectedTable, { name, type, description })
           logger.info("Column added.", { table: selectedTable, column: name })
           await refreshSchema()
           await refreshQuery()
@@ -100,6 +101,15 @@ function DataStoreModule() {
       )
     },
     [selectedTable, promise, refreshSchema, refreshQuery],
+  )
+
+  const handleUpdateColumnDescription = useCallback(
+    async (column: string, description: string) => {
+      if (!selectedTable) return
+      await updateColumnDescription(selectedTable, column, description)
+      await refreshSchema()
+    },
+    [selectedTable, refreshSchema],
   )
 
   const handleInsert = useCallback(
@@ -172,6 +182,7 @@ function DataStoreModule() {
               ref={dataTableViewRef}
               tableName={selectedTable}
               columns={schema.columns}
+              schema={schema}
               rows={rows}
               total={total}
               page={page}
@@ -216,6 +227,7 @@ function DataStoreModule() {
         onOpenChange={setIsSchemaSheetOpen}
         schema={schema}
         onAddColumn={handleAddColumn}
+        onUpdateColumnDescription={handleUpdateColumnDescription}
         onDropTable={handleDropTable}
       />
     </SidebarContentLayout>

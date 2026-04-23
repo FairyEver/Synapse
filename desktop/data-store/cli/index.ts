@@ -55,6 +55,7 @@ Usage:
   synapse drop <name>                                Drop a table
   synapse describe <name>                            Describe table schema
   synapse add-column <table> <col:type>              Add a column
+  synapse update-column-description <table> <col> <desc>  Update column description
   synapse insert <table> --data '{"k":"v"}'          Insert a row
   synapse insert <table> --batch '[{...}]'           Batch insert
   synapse query <table> [--where k=v] [--limit N]    Query rows
@@ -65,7 +66,7 @@ Usage:
     return
   }
 
-  const KNOWN_COMMANDS = new Set(["tables", "create", "drop", "describe", "add-column", "insert", "query", "update", "delete", "sql", "status"])
+  const KNOWN_COMMANDS = new Set(["tables", "create", "drop", "describe", "add-column", "update-column-description", "insert", "query", "update", "delete", "sql", "status"])
   if (!KNOWN_COMMANDS.has(command)) {
     console.error(`Unknown command: ${command}\nRun "synapse help" for usage.`)
     process.exit(1)
@@ -149,6 +150,19 @@ Usage:
         const col = parseColDef(colDef)
         await apiCall(info, "addColumn", { table, column: col })
         console.log(`Column "${col.name}" added to "${table}".`)
+        break
+      }
+
+      case "update-column-description": {
+        const table = args[1]
+        const column = args[2]
+        const description = args[3]
+        if (!table || !column || !description) {
+          console.error("Usage: synapse update-column-description <table> <column> <description>")
+          process.exit(1)
+        }
+        await apiCall(info, "updateColumnDescription", { table, column, description })
+        console.log(`Column "${column}" description updated.`)
         break
       }
 

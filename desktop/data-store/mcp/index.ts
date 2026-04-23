@@ -26,182 +26,241 @@ type McpTool = {
   }
 }
 
-const TOOLS: McpTool[] = [
-  {
-    name: "list_tables",
-    description: "List all user tables in the data store",
-    inputSchema: { type: "object", properties: {} },
-  },
-  {
-    name: "create_table",
-    description: "Create a new table",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Table name" },
-        columns: {
-          type: "array",
-          items: {
+type TableInfo = { name: string; description: string; rowCount: number }
+type ColumnInfo = { name: string; type: string; primaryKey: boolean; description: string }
+type TableSchema = TableInfo & { columns: ColumnInfo[] }
+
+function buildTableSummary(schemas: TableSchema[]): string {
+  if (schemas.length === 0) return "\n\nNo tables exist yet."
+  const lines = ["\n\nAvailable tables:"]
+  for (const t of schemas) {
+    const desc = t.description ? ` — ${t.description}` : ""
+    lines.push(`\n- ${t.name} (${t.rowCount} rows)${desc}`)
+    for (const c of t.columns) {
+      const cdesc = c.description ? ` — ${c.description}` : ""
+      const pk = c.primaryKey ? " [PK]" : ""
+      lines.push(`    ${c.name}: ${c.type}${pk}${cdesc}`)
+    }
+  }
+  return lines.join("\n")
+}
+
+async function fetchTableSchemas(info: ServerInfo): Promise<TableSchema[]> {
+  const listResult = await apiCall(info, "listTables") as { data: TableInfo[] }
+  const tables = listResult.data ?? []
+  if (tables.length === 0) return []
+
+  const schemas: TableSchema[] = []
+  for (const t of tables) {
+    try {
+      const desc = await apiCall(info, "describeTable", { name: t.name }) as { data: TableSchema }
+      schemas.push(desc.data)
+    } catch {
+      schemas.push({ ...t, columns: [] })
+    }
+  }
+  return schemas
+}
+
+function buildTools(schemas: TableSchema[]): McpTool[] {
+  const summary = buildTableSummary(schemas)
+  const tableNames = schemas.map((t) => t.name)
+  const tableNameProp: Record<string, unknown> = tableNames.length > 0
+    ? { type: "string", description: "Table name", enum: tableNames }
+    : { type: "string", description: "Table name" }
+
+  return [
+    {
+      name: "list_tables",
+      description: "List all user tables in the data store" + summary,
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "create_table",
+      description: "Create a new table. Column types: TEXT, INTEGER, REAL, DATE (YYYY-MM-DD), DATETIME (YYYY-MM-DD HH:mm:ss), BOOLEAN (true/false), JSON, BLOB",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Table name" },
+          columns: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN"] },
+                description: { type: "string", description: "Column description (helps AI understand the column's purpose)" },
+              },
+              required: ["name", "type"],
+            },
+            description: "Column definitions",
+          },
+          description: { type: "string", description: "Optional table description" },
+        },
+        required: ["name", "columns"],
+      },
+    },
+    {
+      name: "drop_table",
+      description: "Drop a table and all its data",
+      inputSchema: {
+        type: "object",
+        properties: { name: tableNameProp },
+        required: ["name"],
+      },
+    },
+    {
+      name: "describe_table",
+      description: "Get table schema and metadata",
+      inputSchema: {
+        type: "object",
+        properties: { name: tableNameProp },
+        required: ["name"],
+      },
+    },
+    {
+      name: "add_column",
+      description: "Add a column to an existing table",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          column: {
             type: "object",
             properties: {
               name: { type: "string" },
-              type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON"] },
+              type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN"] },
+              default: { description: "Default value for the column" },
+              description: { type: "string", description: "Column description" },
             },
             required: ["name", "type"],
           },
-          description: "Column definitions",
         },
-        description: { type: "string", description: "Optional table description" },
+        required: ["table", "column"],
       },
-      required: ["name", "columns"],
     },
-  },
-  {
-    name: "drop_table",
-    description: "Drop a table and all its data",
-    inputSchema: {
-      type: "object",
-      properties: { name: { type: "string", description: "Table name" } },
-      required: ["name"],
+    {
+      name: "update_column_description",
+      description: "Update the description of a column",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          column: { type: "string", description: "Column name" },
+          description: { type: "string", description: "New column description" },
+        },
+        required: ["table", "column", "description"],
+      },
     },
-  },
-  {
-    name: "describe_table",
-    description: "Get table schema and metadata",
-    inputSchema: {
-      type: "object",
-      properties: { name: { type: "string", description: "Table name" } },
-      required: ["name"],
+    {
+      name: "insert",
+      description: "Insert a single row. DATE: YYYY-MM-DD. DATETIME: YYYY-MM-DD HH:mm:ss. BOOLEAN: true/false" + summary,
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          data: { type: "object", description: "Row data as key-value pairs" },
+        },
+        required: ["table", "data"],
+      },
     },
-  },
-  {
-    name: "add_column",
-    description: "Add a column to an existing table",
-    inputSchema: {
-      type: "object",
-      properties: {
-        table: { type: "string", description: "Table name" },
-        column: {
-          type: "object",
-          properties: {
-            name: { type: "string" },
-            type: { type: "string", enum: ["TEXT", "INTEGER", "REAL", "BLOB", "JSON"] },
-            default: { description: "Default value for the column" },
+    {
+      name: "batch_insert",
+      description: "Insert multiple rows in a single transaction" + summary,
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          rows: { type: "array", items: { type: "object" }, description: "Array of row data" },
+        },
+        required: ["table", "rows"],
+      },
+    },
+    {
+      name: "query",
+      description: "Query rows from a table with optional filtering, sorting, and pagination" + summary,
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          where: {
+            description: "Filter conditions (object for equality, array for expressions)",
+            oneOf: [
+              { type: "object", description: "Equality filter: { column: value }" },
+              {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    field: { type: "string" },
+                    op: { type: "string", enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE"] },
+                    value: {},
+                  },
+                  required: ["field", "op", "value"],
+                },
+                description: "Expression filter: [{ field, op, value }]",
+              },
+            ],
           },
-          required: ["name", "type"],
-        },
-      },
-      required: ["table", "column"],
-    },
-  },
-  {
-    name: "insert",
-    description: "Insert a single row",
-    inputSchema: {
-      type: "object",
-      properties: {
-        table: { type: "string", description: "Table name" },
-        data: { type: "object", description: "Row data as key-value pairs" },
-      },
-      required: ["table", "data"],
-    },
-  },
-  {
-    name: "batch_insert",
-    description: "Insert multiple rows in a single transaction",
-    inputSchema: {
-      type: "object",
-      properties: {
-        table: { type: "string", description: "Table name" },
-        rows: { type: "array", items: { type: "object" }, description: "Array of row data" },
-      },
-      required: ["table", "rows"],
-    },
-  },
-  {
-    name: "query",
-    description: "Query rows from a table with optional filtering, sorting, and pagination",
-    inputSchema: {
-      type: "object",
-      properties: {
-        table: { type: "string", description: "Table name" },
-        where: {
-          description: "Filter conditions (object for equality, array for expressions)",
-          oneOf: [
-            { type: "object", description: "Equality filter: { column: value }" },
-            {
-              type: "array",
-              items: {
+          orderBy: {
+            description: "Sort order (string or {field, dir})",
+            oneOf: [
+              { type: "string", description: "Column name (ascending)" },
+              {
                 type: "object",
                 properties: {
                   field: { type: "string" },
-                  op: { type: "string", enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE"] },
-                  value: {},
+                  dir: { type: "string", enum: ["asc", "desc"] },
                 },
-                required: ["field", "op", "value"],
+                required: ["field", "dir"],
               },
-              description: "Expression filter: [{ field, op, value }]",
-            },
-          ],
+            ],
+          },
+          limit: { type: "number", description: "Max rows to return (default 100)" },
+          offset: { type: "number", description: "Number of rows to skip" },
         },
-        orderBy: {
-          description: "Sort order (string or {field, dir})",
-          oneOf: [
-            { type: "string", description: "Column name (ascending)" },
-            {
-              type: "object",
-              properties: {
-                field: { type: "string" },
-                dir: { type: "string", enum: ["asc", "desc"] },
-              },
-              required: ["field", "dir"],
-            },
-          ],
+        required: ["table"],
+      },
+    },
+    {
+      name: "update",
+      description: "Update a row by id (partial update). DATE: YYYY-MM-DD. DATETIME: YYYY-MM-DD HH:mm:ss. BOOLEAN: true/false" + summary,
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          id: { type: "number", description: "Row id" },
+          data: { type: "object", description: "Fields to update" },
         },
-        limit: { type: "number", description: "Max rows to return (default 100)" },
-        offset: { type: "number", description: "Number of rows to skip" },
+        required: ["table", "id", "data"],
       },
-      required: ["table"],
     },
-  },
-  {
-    name: "update",
-    description: "Update a row by id (partial update)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        table: { type: "string", description: "Table name" },
-        id: { type: "number", description: "Row id" },
-        data: { type: "object", description: "Fields to update" },
+    {
+      name: "delete",
+      description: "Delete a row by id",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          id: { type: "number", description: "Row id" },
+        },
+        required: ["table", "id"],
       },
-      required: ["table", "id", "data"],
     },
-  },
-  {
-    name: "delete",
-    description: "Delete a row by id",
-    inputSchema: {
-      type: "object",
-      properties: {
-        table: { type: "string", description: "Table name" },
-        id: { type: "number", description: "Row id" },
+    {
+      name: "raw_sql",
+      description: "Execute raw SQL (cannot access system tables or use ATTACH/DETACH)" + summary,
+      inputSchema: {
+        type: "object",
+        properties: {
+          sql: { type: "string", description: "SQL statement" },
+          params: { type: "array", description: "Bind parameters" },
+        },
+        required: ["sql"],
       },
-      required: ["table", "id"],
     },
-  },
-  {
-    name: "raw_sql",
-    description: "Execute raw SQL (cannot access system tables or use ATTACH/DETACH)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        sql: { type: "string", description: "SQL statement" },
-        params: { type: "array", description: "Bind parameters" },
-      },
-      required: ["sql"],
-    },
-  },
-]
+  ]
+}
 
 const ACTION_MAP: Record<string, string> = {
   list_tables: "listTables",
@@ -209,6 +268,7 @@ const ACTION_MAP: Record<string, string> = {
   drop_table: "dropTable",
   describe_table: "describeTable",
   add_column: "addColumn",
+  update_column_description: "updateColumnDescription",
   insert: "insert",
   batch_insert: "batchInsert",
   query: "query",
@@ -266,12 +326,25 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
     return
   }
 
-  if (method === "notifications/initialized") {
+  if (method === "notifications/initialized" || method === "notifications/cancelled") {
+    return
+  }
+
+  if (method === "ping") {
+    sendResponse(id, {})
     return
   }
 
   if (method === "tools/list") {
-    sendResponse(id, { tools: TOOLS })
+    let tools: McpTool[]
+    try {
+      const info = getServerInfo()
+      const schemas = await fetchTableSchemas(info)
+      tools = buildTools(schemas)
+    } catch {
+      tools = buildTools([])
+    }
+    sendResponse(id, { tools })
     return
   }
 

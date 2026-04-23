@@ -5,7 +5,8 @@ import {
   useRef,
   useState,
 } from "react"
-import { Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react"
+import { ClipboardCopy, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -25,6 +26,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { RowEditor } from "./row-editor"
 import type { RowEditorHandle } from "./row-editor"
 import {
@@ -32,11 +39,13 @@ import {
   DATA_TABLE_ID_COLUMN_CLASS,
   DATA_TABLE_VALUE_COLUMN_CLASS,
 } from "./data-table-layout"
-import type { DataStoreColumnInfo } from "@/types/data-store"
+import type { DataStoreColumnInfo, DataStoreTableSchema } from "@/types/data-store"
+import { SCHEMA_COPY_FORMATS } from "./schema-copy-formats"
 
 type DataTableViewProps = {
   tableName: string
   columns: DataStoreColumnInfo[]
+  schema: DataStoreTableSchema | null
   rows: Record<string, unknown>[]
   total: number
   page: number
@@ -56,6 +65,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   {
     tableName,
     columns,
+    schema,
     rows,
     total,
     page,
@@ -149,6 +159,18 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     setIsAdding(true)
   }, [commitPendingChanges, isAdding])
 
+  const handleCopySchema = useCallback(
+    async (formatKey: string) => {
+      if (!schema) return
+      const format = SCHEMA_COPY_FORMATS.find((f) => f.key === formatKey)
+      if (!format) return
+      const text = format.generate(schema)
+      await navigator.clipboard.writeText(text)
+      toast(`已复制 ${format.label}`)
+    },
+    [schema],
+  )
+
   return (
     <div className="flex h-full flex-col gap-2.5">
       <div className="flex items-center justify-between">
@@ -165,17 +187,42 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             <SlidersHorizontal className="size-4" />
           </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void handleStartAdding().catch(() => {})
-          }}
-          disabled={isAdding}
-        >
-          <Plus className="mr-1 size-4" />
-          新增行
-        </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <ClipboardCopy className="mr-1 size-4" />
+                复制结构
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {SCHEMA_COPY_FORMATS.map((format) => (
+                <DropdownMenuItem
+                  key={format.key}
+                  onSelect={() => {
+                    void handleCopySchema(format.key)
+                  }}
+                >
+                  <span className="flex flex-col">
+                    <span>{format.label}</span>
+                    <span className="text-xs text-muted-foreground">{format.description}</span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void handleStartAdding().catch(() => {})
+            }}
+            disabled={isAdding}
+          >
+            <Plus className="mr-1 size-4" />
+            新增行
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">

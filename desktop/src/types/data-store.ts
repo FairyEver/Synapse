@@ -1,14 +1,16 @@
-type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON"
+type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN"
 
 type DataStoreColumnDef = {
   name: string
   type: DataStoreColumnType
+  description?: string
 }
 
 type DataStoreColumnInfo = {
   name: string
   type: string
   primaryKey: boolean
+  description: string
 }
 
 type DataStoreTableInfo = {
@@ -100,9 +102,10 @@ type DataStoreCliDebugInfo = {
 type DataStoreMcpStatus = {
   claude: boolean
   codex: boolean
+  cursor: boolean
 }
 
-type DataStoreMcpTarget = "claude" | "codex"
+type DataStoreMcpTarget = "claude" | "codex" | "cursor"
 
 type DataStoreMcpServerInfo = {
   target: DataStoreMcpTarget

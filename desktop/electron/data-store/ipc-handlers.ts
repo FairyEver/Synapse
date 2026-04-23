@@ -44,6 +44,14 @@ function registerDataStoreHandlers(): void {
     dataStoreService.addColumn(params.table, params.column)
   })
 
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateColumnDescription, async (_event, params: {
+    table: string
+    column: string
+    description: string
+  }) => {
+    dataStoreService.updateColumnDescription(params.table, params.column, params.description)
+  })
+
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.insert, async (_event, params: {
     table: string
     data: Record<string, unknown>
@@ -146,11 +154,11 @@ function registerDataStoreHandlers(): void {
     return getMcpServers()
   })
 
-  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.openMCPSettings, async (_event, target: "claude" | "codex") => {
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.openMCPSettings, async (_event, target: "claude" | "codex" | "cursor") => {
     return openMcpSettings(target)
   })
 
-  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.registerMCP, async (_event, target: "claude" | "codex") => {
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.registerMCP, async (_event, target: "claude" | "codex" | "cursor") => {
     return registerMcp(target)
   })
 

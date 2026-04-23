@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -47,7 +47,8 @@ type TableSchemaSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   schema: DataStoreTableSchema | null
-  onAddColumn: (name: string, type: DataStoreColumnType) => void
+  onAddColumn: (name: string, type: DataStoreColumnType, description?: string) => void
+  onUpdateColumnDescription: (column: string, description: string) => void
   onDropTable: () => void
 }
 
@@ -56,18 +57,37 @@ function TableSchemaSheet({
   onOpenChange,
   schema,
   onAddColumn,
+  onUpdateColumnDescription,
   onDropTable,
 }: TableSchemaSheetProps) {
   const [newColName, setNewColName] = useState("")
   const [newColType, setNewColType] = useState<DataStoreColumnType>("TEXT")
+  const [newColDesc, setNewColDesc] = useState("")
+  const [editingCol, setEditingCol] = useState<string | null>(null)
+  const [editingDesc, setEditingDesc] = useState("")
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   const handleAddColumn = useCallback(() => {
     const trimmed = newColName.trim()
     if (!trimmed) return
-    onAddColumn(trimmed, newColType)
+    onAddColumn(trimmed, newColType, newColDesc.trim() || undefined)
     setNewColName("")
     setNewColType("TEXT")
-  }, [newColName, newColType, onAddColumn])
+    setNewColDesc("")
+  }, [newColName, newColType, newColDesc, onAddColumn])
+
+  const startEditDescription = useCallback((colName: string, currentDesc: string) => {
+    setEditingCol(colName)
+    setEditingDesc(currentDesc)
+    setTimeout(() => editInputRef.current?.focus(), 0)
+  }, [])
+
+  const commitEditDescription = useCallback(() => {
+    if (editingCol) {
+      onUpdateColumnDescription(editingCol, editingDesc.trim())
+      setEditingCol(null)
+    }
+  }, [editingCol, editingDesc, onUpdateColumnDescription])
 
   if (!schema) return null
 
@@ -94,7 +114,29 @@ function TableSchemaSheet({
                     <TableCell className="font-mono text-sm">{col.name}</TableCell>
                     <TableCell>{getDataStoreColumnTypeDisplayName(col.type)}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {col.primaryKey ? "自增主键" : ""}
+                      {col.primaryKey ? (
+                        "自增主键"
+                      ) : editingCol === col.name ? (
+                        <Input
+                          ref={editInputRef}
+                          className="h-7 text-xs"
+                          value={editingDesc}
+                          onChange={(e) => setEditingDesc(e.target.value)}
+                          onBlur={commitEditDescription}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEditDescription()
+                            if (e.key === "Escape") setEditingCol(null)
+                          }}
+                          placeholder="列说明"
+                        />
+                      ) : (
+                        <span
+                          className="cursor-pointer rounded px-1 py-0.5 hover:bg-muted"
+                          onClick={() => startEditDescription(col.name, col.description)}
+                        >
+                          {col.description || "点击添加说明"}
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -131,6 +173,12 @@ function TableSchemaSheet({
                 添加
               </Button>
             </div>
+            <Input
+              value={newColDesc}
+              onChange={(e) => setNewColDesc(e.target.value)}
+              placeholder="用途说明，帮助 AI 理解此列"
+              className="text-xs"
+            />
           </div>
         </div>
 

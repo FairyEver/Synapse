@@ -7,7 +7,7 @@ import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store.mcp-installer")
 
-type McpTarget = "claude" | "codex"
+type McpTarget = "claude" | "codex" | "cursor"
 type McpStatus = Record<McpTarget, boolean>
 type McpServerInfo = {
   target: McpTarget
@@ -16,7 +16,7 @@ type McpServerInfo = {
   registered: boolean
 }
 
-const MCP_TARGETS: McpTarget[] = ["claude", "codex"]
+const MCP_TARGETS: McpTarget[] = ["claude", "codex", "cursor"]
 const SYNAPSE_DATA_SERVER_NAME = "synapse-data"
 
 function getStableMcpScriptPath(): string {
@@ -33,7 +33,10 @@ function deployMcpScript(): void {
 function getSettingsPath(target: McpTarget): string {
   const home = homedir()
   if (target === "claude") {
-    return path.join(home, ".claude.json")
+    return path.join(home, ".claude", "settings.json")
+  }
+  if (target === "cursor") {
+    return path.join(home, ".cursor", "mcp.json")
   }
   return path.join(home, ".codex", "config.toml")
 }
@@ -83,7 +86,7 @@ function readJsonSettings(settingsPath: string): Record<string, unknown> {
   return parsed
 }
 
-function hasClaudeSynapseDataServer(settings: Record<string, unknown>, mcpScriptPath: string): boolean {
+function hasJsonSynapseDataServer(settings: Record<string, unknown>, mcpScriptPath: string): boolean {
   const servers = settings.mcpServers
   if (!isRecord(servers)) {
     return false
@@ -101,17 +104,20 @@ function hasClaudeSynapseDataServer(settings: Record<string, unknown>, mcpScript
     && (server.type == null || server.type === "stdio")
 }
 
-function registerClaudeMcp(settingsPath: string, mcpScriptPath: string): void {
+function registerJsonMcp(settingsPath: string, mcpScriptPath: string, target: McpTarget): void {
   const settings = readJsonSettings(settingsPath)
   const servers = isRecord(settings.mcpServers) ? settings.mcpServers : {}
 
-  servers[SYNAPSE_DATA_SERVER_NAME] = {
-    type: "stdio",
+  const entry: Record<string, unknown> = {
     command: "node",
     args: [mcpScriptPath],
     env: {},
   }
+  if (target === "claude") {
+    entry.type = "stdio"
+  }
 
+  servers[SYNAPSE_DATA_SERVER_NAME] = entry
   settings.mcpServers = servers
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
 }
@@ -259,8 +265,8 @@ function registerMcp(target: McpTarget): { success: boolean; error?: string } {
     deployMcpScript()
     ensureParentDirectory(settingsPath)
 
-    if (target === "claude") {
-      registerClaudeMcp(settingsPath, mcpScriptPath)
+    if (target === "claude" || target === "cursor") {
+      registerJsonMcp(settingsPath, mcpScriptPath, target)
     } else {
       registerCodexMcp(settingsPath, mcpScriptPath)
     }
@@ -292,9 +298,9 @@ function getMcpServers(): McpServerInfo[] {
         }
       }
 
-      if (target === "claude") {
+      if (target === "claude" || target === "cursor") {
         const settings = readJsonSettings(settingsPath)
-        registered = hasClaudeSynapseDataServer(settings, mcpScriptPath)
+        registered = hasJsonSynapseDataServer(settings, mcpScriptPath)
       } else {
         const raw = readFileSync(settingsPath, "utf-8")
         registered = hasCodexSynapseDataServer(raw, mcpScriptPath)
@@ -318,7 +324,7 @@ function getMcpStatus(): McpStatus {
       result[server.target] = server.registered
       return result
     },
-    { claude: false, codex: false },
+    { claude: false, codex: false, cursor: false },
   )
 }
 

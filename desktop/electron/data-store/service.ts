@@ -17,16 +17,21 @@ import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store.service")
 
-const NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_]*$/
+const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 const RESERVED_PREFIX = "_"
 const JSON_COLUMN_TYPE = "JSON"
-const VALID_COLUMN_TYPES = new Set(["TEXT", "INTEGER", "REAL", "BLOB", "JSON"])
+const BOOLEAN_COLUMN_TYPE = "BOOLEAN"
+const DATE_COLUMN_TYPE = "DATE"
+const DATETIME_COLUMN_TYPE = "DATETIME"
+const VALID_COLUMN_TYPES = new Set(["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN"])
 const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE"])
 const VALID_ORDER_DIRS = new Set(["ASC", "DESC"])
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}$/
 
 function validateName(name: string, kind: "table" | "column"): void {
   if (!NAME_PATTERN.test(name)) {
-    throw new Error(`Invalid ${kind} name "${name}": only letters, digits, underscores allowed, must not start with "_"`)
+    throw new Error(`Invalid ${kind} name "${name}": must start with a letter, only letters, digits, underscores allowed`)
   }
   if (name.startsWith(RESERVED_PREFIX)) {
     throw new Error(`Invalid ${kind} name "${name}": names starting with "_" are reserved`)
@@ -61,10 +66,51 @@ function toNumber(v: number | bigint): number {
   return typeof v === "bigint" ? Number(v) : v
 }
 
+function toBooleanInt(v: unknown): number {
+  if (v === true || v === 1 || v === "true" || v === "1") return 1
+  if (v === false || v === 0 || v === "false" || v === "0" || v === null || v === undefined) return 0
+  throw new Error(`Invalid boolean value: ${JSON.stringify(v)}. Expected true/false, 1/0, "true"/"false"`)
+}
+
+function validateDateString(v: unknown): string {
+  if (v === null || v === undefined) return ""
+  const s = String(v)
+  if (!DATE_PATTERN.test(s)) {
+    throw new Error(`Invalid date format: "${s}". Expected YYYY-MM-DD`)
+  }
+  const [y, m, d] = s.split("-").map(Number)
+  const date = new Date(y, m - 1, d)
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
+    throw new Error(`Invalid date: "${s}"`)
+  }
+  return s
+}
+
+function validateDateTimeString(v: unknown): string {
+  if (v === null || v === undefined) return ""
+  const s = String(v)
+  if (!DATETIME_PATTERN.test(s)) {
+    throw new Error(`Invalid datetime format: "${s}". Expected YYYY-MM-DD HH:mm:ss`)
+  }
+  const normalized = s.replace("T", " ")
+  const [datePart, timePart] = normalized.split(" ")
+  const [y, m, d] = datePart.split("-").map(Number)
+  const [hh, mm, ss] = timePart.split(":").map(Number)
+  const date = new Date(y, m - 1, d, hh, mm, ss)
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d
+    || date.getHours() !== hh || date.getMinutes() !== mm || date.getSeconds() !== ss) {
+    throw new Error(`Invalid datetime: "${s}"`)
+  }
+  return normalized
+}
+
 class DataStoreService {
   private db: DatabaseSync | null = null
   private dbPath: string = ""
   private jsonColumns = new Map<string, Set<string>>()
+  private booleanColumns = new Map<string, Set<string>>()
+  private dateColumns = new Map<string, Set<string>>()
+  private datetimeColumns = new Map<string, Set<string>>()
 
   open(): { corrupted: boolean } {
     this.dbPath = path.join(app.getPath("userData"), "synapse-data.db")
@@ -125,12 +171,21 @@ class DataStoreService {
   }
 
   private ensureSystemSchema(): void {
-    this.getDb().exec(`
+    const db = this.getDb()
+    db.exec(`
       CREATE TABLE IF NOT EXISTS "_meta_tables" (
         name TEXT PRIMARY KEY,
         description TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      )
+    `)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS "_meta_columns" (
+        table_name TEXT NOT NULL,
+        column_name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (table_name, column_name)
       )
     `)
   }
@@ -158,12 +213,16 @@ class DataStoreService {
     for (const name of tracked) {
       if (!actual.has(name)) {
         db.prepare(`DELETE FROM "_meta_tables" WHERE name = ?`).run(name)
+        db.prepare(`DELETE FROM "_meta_columns" WHERE table_name = ?`).run(name)
       }
     }
   }
 
   private refreshJsonColumnCache(): void {
     this.jsonColumns.clear()
+    this.booleanColumns.clear()
+    this.dateColumns.clear()
+    this.datetimeColumns.clear()
     const db = this.getDb()
     const tables = db.prepare(`SELECT name FROM "_meta_tables"`).all() as { name: string }[]
 
@@ -171,20 +230,57 @@ class DataStoreService {
       try {
         const columns = db.prepare(`PRAGMA table_info(${q(name)})`).all() as { name: string; type: string }[]
         const jsonCols = new Set<string>()
+        const boolCols = new Set<string>()
+        const dateCols = new Set<string>()
+        const dtCols = new Set<string>()
         for (const col of columns) {
-          if (col.type.toUpperCase() === JSON_COLUMN_TYPE) {
-            jsonCols.add(col.name)
-          }
+          const upper = col.type.toUpperCase()
+          if (upper === JSON_COLUMN_TYPE) jsonCols.add(col.name)
+          else if (upper === BOOLEAN_COLUMN_TYPE) boolCols.add(col.name)
+          else if (upper === DATETIME_COLUMN_TYPE) dtCols.add(col.name)
+          else if (upper === DATE_COLUMN_TYPE) dateCols.add(col.name)
         }
-        if (jsonCols.size > 0) {
-          this.jsonColumns.set(name, jsonCols)
-        }
+        if (jsonCols.size > 0) this.jsonColumns.set(name, jsonCols)
+        if (boolCols.size > 0) this.booleanColumns.set(name, boolCols)
+        if (dateCols.size > 0) this.dateColumns.set(name, dateCols)
+        if (dtCols.size > 0) this.datetimeColumns.set(name, dtCols)
       } catch { /* table might not exist */ }
     }
   }
 
   private getJsonColumnsForTable(table: string): Set<string> {
     return this.jsonColumns.get(table) ?? new Set()
+  }
+
+  private getBooleanColumnsForTable(table: string): Set<string> {
+    return this.booleanColumns.get(table) ?? new Set()
+  }
+
+  private getDateColumnsForTable(table: string): Set<string> {
+    return this.dateColumns.get(table) ?? new Set()
+  }
+
+  private getDatetimeColumnsForTable(table: string): Set<string> {
+    return this.datetimeColumns.get(table) ?? new Set()
+  }
+
+  private convertWriteValue(
+    key: string,
+    value: unknown,
+    jsonCols: Set<string>,
+    boolCols: Set<string>,
+    dateCols: Set<string>,
+    dtCols: Set<string>,
+  ): SQLInputValue {
+    if (jsonCols.has(key)) return toSqlValue(JSON.stringify(value))
+    if (boolCols.has(key)) return toBooleanInt(value)
+    if (dateCols.has(key) && value !== null && value !== undefined && value !== "") {
+      return validateDateString(value)
+    }
+    if (dtCols.has(key) && value !== null && value !== undefined && value !== "") {
+      return validateDateTimeString(value)
+    }
+    return toSqlValue(value)
   }
 
   private assertTableExists(name: string): void {
@@ -249,6 +345,12 @@ class DataStoreService {
       db.exec(createSQL)
       db.prepare(`INSERT INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
         .run(name, description ?? "", now, now)
+      for (const col of columns) {
+        if (col.description) {
+          db.prepare(`INSERT INTO "_meta_columns" (table_name, column_name, description) VALUES (?, ?, ?)`)
+            .run(name, col.name, col.description)
+        }
+      }
       db.exec("COMMIT")
     } catch (error) {
       db.exec("ROLLBACK")
@@ -256,14 +358,20 @@ class DataStoreService {
     }
 
     const jsonCols = new Set<string>()
+    const boolCols = new Set<string>()
+    const dateCols = new Set<string>()
+    const dtCols = new Set<string>()
     for (const col of columns) {
-      if (col.type.toUpperCase() === JSON_COLUMN_TYPE) {
-        jsonCols.add(col.name)
-      }
+      const upper = col.type.toUpperCase()
+      if (upper === JSON_COLUMN_TYPE) jsonCols.add(col.name)
+      else if (upper === BOOLEAN_COLUMN_TYPE) boolCols.add(col.name)
+      else if (upper === DATETIME_COLUMN_TYPE) dtCols.add(col.name)
+      else if (upper === DATE_COLUMN_TYPE) dateCols.add(col.name)
     }
-    if (jsonCols.size > 0) {
-      this.jsonColumns.set(name, jsonCols)
-    }
+    if (jsonCols.size > 0) this.jsonColumns.set(name, jsonCols)
+    if (boolCols.size > 0) this.booleanColumns.set(name, boolCols)
+    if (dateCols.size > 0) this.dateColumns.set(name, dateCols)
+    if (dtCols.size > 0) this.datetimeColumns.set(name, dtCols)
   }
 
   dropTable(name: string): void {
@@ -275,6 +383,7 @@ class DataStoreService {
     try {
       db.exec(`DROP TABLE ${q(name)}`)
       db.prepare(`DELETE FROM "_meta_tables" WHERE name = ?`).run(name)
+      db.prepare(`DELETE FROM "_meta_columns" WHERE table_name = ?`).run(name)
       db.exec("COMMIT")
     } catch (error) {
       db.exec("ROLLBACK")
@@ -282,6 +391,9 @@ class DataStoreService {
     }
 
     this.jsonColumns.delete(name)
+    this.booleanColumns.delete(name)
+    this.dateColumns.delete(name)
+    this.datetimeColumns.delete(name)
   }
 
   describeTable(name: string): DataStoreTableSchema {
@@ -294,10 +406,17 @@ class DataStoreService {
       pk: number
     }[]
 
+    const colDescRows = db.prepare(`SELECT column_name, description FROM "_meta_columns" WHERE table_name = ?`).all(name) as {
+      column_name: string
+      description: string
+    }[]
+    const colDescMap = new Map(colDescRows.map((r) => [r.column_name, r.description]))
+
     const columns: DataStoreColumnInfo[] = pragmaRows.map((r) => ({
       name: r.name,
       type: r.type,
       primaryKey: r.pk === 1,
+      description: colDescMap.get(r.name) ?? "",
     }))
 
     const meta = db.prepare(`SELECT description, created_at, updated_at FROM "_meta_tables" WHERE name = ?`).get(name) as {
@@ -337,17 +456,44 @@ class DataStoreService {
     try {
       db.exec(sql)
       db.prepare(`UPDATE "_meta_tables" SET updated_at = ? WHERE name = ?`).run(new Date().toISOString(), table)
+      if (column.description) {
+        db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description) VALUES (?, ?, ?)`)
+          .run(table, column.name, column.description)
+      }
       db.exec("COMMIT")
     } catch (error) {
       db.exec("ROLLBACK")
       throw error
     }
 
-    if (column.type.toUpperCase() === JSON_COLUMN_TYPE) {
+    const upper = column.type.toUpperCase()
+    if (upper === JSON_COLUMN_TYPE) {
       const existing = this.jsonColumns.get(table) ?? new Set()
       existing.add(column.name)
       this.jsonColumns.set(table, existing)
+    } else if (upper === BOOLEAN_COLUMN_TYPE) {
+      const existing = this.booleanColumns.get(table) ?? new Set()
+      existing.add(column.name)
+      this.booleanColumns.set(table, existing)
+    } else if (upper === DATE_COLUMN_TYPE) {
+      const existing = this.dateColumns.get(table) ?? new Set()
+      existing.add(column.name)
+      this.dateColumns.set(table, existing)
+    } else if (upper === DATETIME_COLUMN_TYPE) {
+      const existing = this.datetimeColumns.get(table) ?? new Set()
+      existing.add(column.name)
+      this.datetimeColumns.set(table, existing)
     }
+  }
+
+  updateColumnDescription(table: string, column: string, description: string): void {
+    validateName(table, "table")
+    validateColumnName(column)
+    this.assertTableExists(table)
+
+    const db = this.getDb()
+    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description) VALUES (?, ?, ?)`)
+      .run(table, column, description)
   }
 
   insert(table: string, data: Record<string, unknown>): { id: number } {
@@ -356,9 +502,12 @@ class DataStoreService {
 
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(table)
+    const boolCols = this.getBooleanColumnsForTable(table)
+    const dateCols = this.getDateColumnsForTable(table)
+    const dtCols = this.getDatetimeColumnsForTable(table)
     const keys = Object.keys(data)
     for (const k of keys) validateColumnName(k)
-    const values = keys.map((k) => toSqlValue(jsonCols.has(k) ? JSON.stringify(data[k]) : data[k]))
+    const values = keys.map((k) => this.convertWriteValue(k, data[k], jsonCols, boolCols, dateCols, dtCols))
     const placeholders = keys.map(() => "?").join(", ")
     const columnList = keys.map(q).join(", ")
 
@@ -377,10 +526,13 @@ class DataStoreService {
     db.exec("BEGIN")
     try {
       const jsonCols = this.getJsonColumnsForTable(table)
+      const boolCols = this.getBooleanColumnsForTable(table)
+      const dateCols = this.getDateColumnsForTable(table)
+      const dtCols = this.getDatetimeColumnsForTable(table)
       for (const row of rows) {
         const keys = Object.keys(row)
         for (const k of keys) validateColumnName(k)
-        const values = keys.map((k) => toSqlValue(jsonCols.has(k) ? JSON.stringify(row[k]) : row[k]))
+        const values = keys.map((k) => this.convertWriteValue(k, row[k], jsonCols, boolCols, dateCols, dtCols))
         const placeholders = keys.map(() => "?").join(", ")
         const columnList = keys.map(q).join(", ")
 
@@ -402,7 +554,8 @@ class DataStoreService {
 
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(params.table)
-    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols)
+    const boolCols = this.getBooleanColumnsForTable(params.table)
+    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols, boolCols)
     const orderSQL = this.buildOrderBy(params.orderBy)
     const limit = params.limit ?? 100
     const offset = params.offset ?? 0
@@ -413,12 +566,15 @@ class DataStoreService {
     const countSQL = `SELECT COUNT(*) as total FROM ${q(params.table)}${whereSQL}`
     const countRow = db.prepare(countSQL).get(...whereParams) as { total: number }
 
-    if (jsonCols.size > 0) {
-      for (const row of rows) {
-        for (const col of jsonCols) {
-          if (col in row && typeof row[col] === "string") {
-            try { row[col] = JSON.parse(row[col] as string) } catch { /* keep as string */ }
-          }
+    for (const row of rows) {
+      for (const col of jsonCols) {
+        if (col in row && typeof row[col] === "string") {
+          try { row[col] = JSON.parse(row[col] as string) } catch { /* keep as string */ }
+        }
+      }
+      for (const col of boolCols) {
+        if (col in row) {
+          row[col] = row[col] === 1 || row[col] === true
         }
       }
     }
@@ -432,12 +588,15 @@ class DataStoreService {
 
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(table)
+    const boolCols = this.getBooleanColumnsForTable(table)
+    const dateCols = this.getDateColumnsForTable(table)
+    const dtCols = this.getDatetimeColumnsForTable(table)
     const keys = Object.keys(data)
     if (keys.length === 0) return { affected: 0 }
     for (const k of keys) validateColumnName(k)
 
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
-    const values = keys.map((k) => toSqlValue(jsonCols.has(k) ? JSON.stringify(data[k]) : data[k]))
+    const values = keys.map((k) => this.convertWriteValue(k, data[k], jsonCols, boolCols, dateCols, dtCols))
 
     const result = db.prepare(`UPDATE ${q(table)} SET ${setClauses} WHERE "id" = ?`).run(...values, id)
     return { affected: toNumber(result.changes) }
@@ -562,12 +721,13 @@ class DataStoreService {
     return this.dbPath
   }
 
-  private buildWhere(where?: DataStoreWhereClause, jsonCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
+  private buildWhere(where?: DataStoreWhereClause, jsonCols?: Set<string>, boolCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
     if (!where) return { whereSQL: "", whereParams: [] }
 
     const conditions: string[] = []
     const params: SQLInputValue[] = []
     const jCols = jsonCols ?? new Set<string>()
+    const bCols = boolCols ?? new Set<string>()
 
     if (Array.isArray(where)) {
       for (const cond of where as DataStoreWhereCondition[]) {
@@ -576,19 +736,27 @@ class DataStoreService {
           throw new Error(`Invalid where operator "${cond.op}": must be one of =, !=, >, <, >=, <=, LIKE`)
         }
         conditions.push(`${q(cond.field)} ${cond.op} ?`)
-        const val = jCols.has(cond.field) && cond.value != null && typeof cond.value === "object"
-          ? JSON.stringify(cond.value)
-          : cond.value
-        params.push(toSqlValue(val))
+        if (bCols.has(cond.field)) {
+          params.push(toBooleanInt(cond.value))
+        } else {
+          const val = jCols.has(cond.field) && cond.value != null && typeof cond.value === "object"
+            ? JSON.stringify(cond.value)
+            : cond.value
+          params.push(toSqlValue(val))
+        }
       }
     } else {
       for (const [key, value] of Object.entries(where)) {
         validateName(key, "column")
         conditions.push(`${q(key)} = ?`)
-        const val = jCols.has(key) && value != null && typeof value === "object"
-          ? JSON.stringify(value)
-          : value
-        params.push(toSqlValue(val))
+        if (bCols.has(key)) {
+          params.push(toBooleanInt(value))
+        } else {
+          const val = jCols.has(key) && value != null && typeof value === "object"
+            ? JSON.stringify(value)
+            : value
+          params.push(toSqlValue(val))
+        }
       }
     }
 

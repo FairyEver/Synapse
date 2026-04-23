@@ -27,6 +27,7 @@ type ColumnRow = {
   key: number
   name: string
   type: DataStoreColumnType
+  description: string
 }
 
 type CreateTableDialogProps = {
@@ -35,20 +36,22 @@ type CreateTableDialogProps = {
   onSubmit: (name: string, columns: DataStoreColumnDef[], description?: string) => void
 }
 
+const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
+
 let nextKey = 0
 
 function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [columns, setColumns] = useState<ColumnRow[]>([
-    { key: ++nextKey, name: "", type: "TEXT" },
+    { key: ++nextKey, name: "", type: "TEXT", description: "" },
   ])
   const [error, setError] = useState("")
 
   const reset = useCallback(() => {
     setName("")
     setDescription("")
-    setColumns([{ key: ++nextKey, name: "", type: "TEXT" }])
+    setColumns([{ key: ++nextKey, name: "", type: "TEXT", description: "" }])
     setError("")
   }, [])
 
@@ -61,14 +64,14 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
   )
 
   const addColumn = useCallback(() => {
-    setColumns((prev) => [...prev, { key: ++nextKey, name: "", type: "TEXT" }])
+    setColumns((prev) => [...prev, { key: ++nextKey, name: "", type: "TEXT", description: "" }])
   }, [])
 
   const removeColumn = useCallback((key: number) => {
     setColumns((prev) => prev.filter((c) => c.key !== key))
   }, [])
 
-  const updateColumn = useCallback((key: number, field: "name" | "type", value: string) => {
+  const updateColumn = useCallback((key: number, field: "name" | "type" | "description", value: string) => {
     setColumns((prev) =>
       prev.map((c) => (c.key === key ? { ...c, [field]: value } : c)),
     )
@@ -82,6 +85,10 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       setError("请输入表名")
       return
     }
+    if (!NAME_PATTERN.test(trimmedName)) {
+      setError("表名须以英文字母开头，只能包含字母、数字、下划线")
+      return
+    }
 
     const validColumns = columns.filter((c) => c.name.trim())
     if (validColumns.length === 0) {
@@ -89,9 +96,25 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       return
     }
 
+    const badCol = validColumns.find((c) => !NAME_PATTERN.test(c.name.trim()))
+    if (badCol) {
+      setError(`列名 "${badCol.name.trim()}" 不合法，须以英文字母开头，只能包含字母、数字、下划线`)
+      return
+    }
+
+    const dupCol = validColumns.find((c) => c.name.trim().toLowerCase() === "id")
+    if (dupCol) {
+      setError(`列名 "id" 为系统保留字段`)
+      return
+    }
+
     onSubmit(
       trimmedName,
-      validColumns.map((c) => ({ name: c.name.trim(), type: c.type })),
+      validColumns.map((c) => ({
+        name: c.name.trim(),
+        type: c.type,
+        description: c.description.trim() || undefined,
+      })),
       description.trim() || undefined,
     )
     handleOpenChange(false)
@@ -99,7 +122,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>新建表</DialogTitle>
         </DialogHeader>
@@ -113,6 +136,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
               onChange={(e) => setName(e.target.value)}
               placeholder="my_table"
             />
+            <p className="text-xs text-muted-foreground">英文字母开头，只能包含字母、数字、下划线</p>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -127,38 +151,47 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
 
           <div className="flex flex-col gap-2">
             <Label>列定义</Label>
+            <p className="text-xs text-muted-foreground">列名须以英文字母开头，只能包含字母、数字、下划线，id 为系统保留字段</p>
             <div className="flex flex-col gap-2">
               {columns.map((col) => (
-                <div key={col.key} className="flex items-center gap-2">
+                <div key={col.key} className="flex flex-col gap-1.5 rounded-md border p-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      className="flex-1"
+                      value={col.name}
+                      onChange={(e) => updateColumn(col.key, "name", e.target.value)}
+                      placeholder="列名"
+                    />
+                    <Select
+                      value={col.type}
+                      onValueChange={(v) => updateColumn(col.key, "type", v)}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue>{getDataStoreColumnTypeLabel(col.type)}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DATA_STORE_COLUMN_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {getDataStoreColumnTypeLabel(t)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeColumn(col.key)}
+                      disabled={columns.length <= 1}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
                   <Input
-                    className="flex-1"
-                    value={col.name}
-                    onChange={(e) => updateColumn(col.key, "name", e.target.value)}
-                    placeholder="列名"
+                    className="text-xs"
+                    value={col.description}
+                    onChange={(e) => updateColumn(col.key, "description", e.target.value)}
+                    placeholder="用途说明，帮助 AI 理解此列"
                   />
-                  <Select
-                    value={col.type}
-                    onValueChange={(v) => updateColumn(col.key, "type", v)}
-                  >
-                    <SelectTrigger className="w-28">
-                      <SelectValue>{getDataStoreColumnTypeLabel(col.type)}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DATA_STORE_COLUMN_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {getDataStoreColumnTypeLabel(t)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeColumn(col.key)}
-                    disabled={columns.length <= 1}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
                 </div>
               ))}
             </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Copy } from "lucide-react"
 import ccIcon from "@/assets/cc.png"
 import codexIcon from "@/assets/codex.png"
+import cursorIcon from "@/assets/cursor.png"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,6 +58,7 @@ const logger = createRendererLogger("settings.data-store")
 
 const MCP_SERVER_META = [
   { id: "claude" as const, label: "Claude Code", icon: ccIcon },
+  { id: "cursor" as const, label: "Cursor", icon: cursorIcon },
   { id: "codex" as const, label: "Codex", icon: codexIcon },
 ]
 
@@ -286,7 +288,7 @@ function DataStoreSettingsPanel() {
           await refreshMcpServers()
           logger.info("MCP registered.", { target })
         },
-        { loading: "正在注册 MCP...", success: `MCP Server 已注册到 ${target === "claude" ? "Claude Code" : "Codex"}` },
+        { loading: "正在注册 MCP...", success: `MCP Server 已注册到 ${MCP_SERVER_META.find((m) => m.id === target)?.label ?? target}` },
       )
     },
     [promise, refreshMcpServers],

@@ -65,3 +65,4 @@ dev 端口：desktop 5173 / website 5174，详见 `.claude/rules/workspace-dev-p
 | `testing.md` | 测试策略与规则 |
 | `workspace-dev-ports.md` | 子包 dev 端口分配 |
 | `package-scripts-sync.md` | 根与子包 scripts 同步规则 |
+| `website-copy.md` | 文档站文案规范：调性、禁止清单、术语一致性、结构要求 |

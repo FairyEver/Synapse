@@ -199,6 +199,7 @@ export type SynapseBridge = {
     dropTable: (name: string) => Promise<void>
     describeTable: (name: string) => Promise<DataStoreTableSchema>
     addColumn: (params: { table: string; column: DataStoreColumnDef & { default?: unknown } }) => Promise<void>
+    updateColumnDescription: (params: { table: string; column: string; description: string }) => Promise<void>
     insert: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
     batchInsert: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
     query: (params: DataStoreQueryParams) => Promise<DataStoreQueryResult>

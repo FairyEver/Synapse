@@ -170,10 +170,12 @@ async function findInstalledCliPath(): Promise<string | null> {
 }
 
 async function pickCliInstallPath(): Promise<string> {
-  const candidateDirs = dedupePaths([
-    ...await getCombinedPathEntries(),
-    ...getKnownCliInstallDirs(),
-  ])
+  const knownDirs = getKnownCliInstallDirs()
+  const pathDirs = await getCombinedPathEntries()
+
+  // Prefer known standard dirs, then fall back to whatever is in PATH.
+  // This avoids installing into unrelated tool directories that happen to appear first in PATH.
+  const candidateDirs = dedupePaths([...knownDirs, ...pathDirs])
 
   for (const dirPath of candidateDirs) {
     if (await canWriteToDir(dirPath)) {
@@ -181,7 +183,7 @@ async function pickCliInstallPath(): Promise<string> {
     }
   }
 
-  return path.join(getKnownCliInstallDirs()[0], CLI_BIN_NAME)
+  return path.join(knownDirs[0], CLI_BIN_NAME)
 }
 
 function isDirInPath(dirPath: string, pathEntries: string[]): boolean {
