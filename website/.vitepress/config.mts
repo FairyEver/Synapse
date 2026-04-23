@@ -10,6 +10,12 @@ export default defineConfig({
 
   srcExclude: ['README.md'],
 
+  vite: {
+    server: {
+      port: 5174
+    }
+  },
+
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },

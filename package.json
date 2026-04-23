@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
+    "dev": "pnpm -r --parallel run dev",
     "desktop:dev": "pnpm --filter @synapse/desktop run dev",
     "desktop:dev:renderer": "pnpm --filter @synapse/desktop run dev:renderer",
     "desktop:dev:electron:build": "pnpm --filter @synapse/desktop run dev:electron:build",
