@@ -102,7 +102,7 @@ class DataStoreService {
     }
 
     this.ensureSystemSchema()
-    this.ensureDemoTable()
+    this.syncMetaTables()
     this.refreshJsonColumnCache()
 
     logger.info("Data store opened.", { path: this.dbPath, corrupted })
@@ -133,45 +133,32 @@ class DataStoreService {
         updated_at TEXT NOT NULL
       )
     `)
-    this.getDb().exec(`
-      CREATE TABLE IF NOT EXISTS "_meta_config" (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    `)
   }
 
-  private ensureDemoTable(): void {
+  private syncMetaTables(): void {
     const db = this.getDb()
-    const row = db.prepare(`SELECT COUNT(*) as count FROM "_meta_config" WHERE key = 'initialized'`).get() as { count: number }
-    if (row.count > 0) return
+    const actual = new Set(
+      (db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '\\_%' ESCAPE '\\' AND name != 'sqlite_sequence'`).all() as { name: string }[])
+        .map((r) => r.name),
+    )
+    const tracked = new Set(
+      (db.prepare(`SELECT name FROM "_meta_tables"`).all() as { name: string }[])
+        .map((r) => r.name),
+    )
 
     const now = new Date().toISOString()
-    db.exec("BEGIN")
-    try {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS "bookmarks" (
-          "id" INTEGER PRIMARY KEY AUTOINCREMENT,
-          "title" TEXT,
-          "url" TEXT,
-          "tags" TEXT,
-          "note" TEXT
-        )
-      `)
-      db.prepare(`INSERT OR IGNORE INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
-        .run("bookmarks", "收藏夹", now, now)
 
-      const insert = db.prepare(`INSERT INTO "bookmarks" ("title", "url", "tags", "note") VALUES (?, ?, ?, ?)`)
-      insert.run("GitHub", "https://github.com", "dev,tools", "代码托管平台")
-      insert.run("Claude", "https://claude.ai", "ai,assistant", "AI 助手")
-      insert.run("Tailwind CSS", "https://tailwindcss.com", "css,frontend", "实用优先的 CSS 框架")
+    for (const name of actual) {
+      if (!tracked.has(name)) {
+        db.prepare(`INSERT OR IGNORE INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+          .run(name, "", now, now)
+      }
+    }
 
-      db.prepare(`INSERT OR REPLACE INTO "_meta_config" (key, value) VALUES (?, ?)`).run("initialized", "1")
-
-      db.exec("COMMIT")
-    } catch (error) {
-      db.exec("ROLLBACK")
-      throw error
+    for (const name of tracked) {
+      if (!actual.has(name)) {
+        db.prepare(`DELETE FROM "_meta_tables" WHERE name = ?`).run(name)
+      }
     }
   }
 
@@ -488,6 +475,7 @@ class DataStoreService {
     const result = db.prepare(sql).run(...sqlParams)
 
     if (isDDL) {
+      this.syncMetaTables()
       this.refreshJsonColumnCache()
     }
 

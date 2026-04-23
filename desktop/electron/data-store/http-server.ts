@@ -17,10 +17,21 @@ function getServerInfoPath(): string {
   return path.join(app.getPath("userData"), "data-server.json")
 }
 
+const MAX_BODY_SIZE = 1024 * 1024
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on("data", (chunk: Buffer) => chunks.push(chunk))
+    let size = 0
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length
+      if (size > MAX_BODY_SIZE) {
+        req.destroy()
+        reject(new Error("Request body too large"))
+        return
+      }
+      chunks.push(chunk)
+    })
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")))
     req.on("error", reject)
   })
