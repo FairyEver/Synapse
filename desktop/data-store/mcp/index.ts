@@ -15,8 +15,7 @@ import {
   type JsonRpcRequest,
   type McpRpcResponse,
 } from "../shared/mcp-rpc"
-
-const SERVER_IDENTITY = { name: "synapse-data", version: "1.0.0" } as const
+import { SYNAPSE_DATA_SERVER_IDENTITY } from "../shared/server-identity"
 
 let serverInfo: ServerInfo | null = null
 
@@ -62,7 +61,7 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
     return
   }
 
-  const response = await processMcpRequest(request, SERVER_IDENTITY, executeTool)
+  const response = await processMcpRequest(request, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
   writeResponse(response)
 }
 

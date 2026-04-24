@@ -8,13 +8,13 @@ import {
   type JsonRpcRequest,
   type McpRpcResponse,
 } from "../../data-store/shared/mcp-rpc"
+import { SYNAPSE_DATA_SERVER_IDENTITY } from "../../data-store/shared/server-identity"
 
 const logger = createMainLogger("data-store.mcp-server")
 
 const MCP_DEFAULT_PORT = 23578
 const MCP_PORT_ATTEMPTS = 5
 const MAX_BODY_SIZE = 1024 * 1024
-const SERVER_IDENTITY = { name: "synapse-data", version: "1.0.0" } as const
 
 let server: Server | null = null
 let activePort = 0
@@ -84,7 +84,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return
   }
 
-  const response = await processMcpRequest(body, SERVER_IDENTITY, executeTool)
+  const response = await processMcpRequest(body, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
   sendRpcResponse(res, response)
 }
 

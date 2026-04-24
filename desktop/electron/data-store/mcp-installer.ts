@@ -3,6 +3,7 @@ import path from "node:path"
 import { homedir } from "node:os"
 import { app, shell } from "electron"
 import { createMainLogger } from "../services/log-store"
+import { SYNAPSE_DATA_SERVER_NAME, SYNAPSE_DATA_LEGACY_SERVER_NAMES } from "../../data-store/shared/server-identity"
 
 const logger = createMainLogger("data-store.mcp-installer")
 
@@ -19,7 +20,6 @@ type McpServerInfo = {
 }
 
 const MCP_TARGETS: McpTarget[] = ["claude", "codex", "cursor"]
-const SYNAPSE_DATA_SERVER_NAME = "synapse-data"
 
 function getSettingsPath(target: McpTarget): string {
   const home = homedir()
@@ -116,21 +116,21 @@ function getLineEnding(raw: string): string {
   return raw.includes("\r\n") ? "\r\n" : "\n"
 }
 
-function getCodexServerTableName(): string {
-  return `[mcp_servers.${SYNAPSE_DATA_SERVER_NAME}]`
+function getCodexServerTableName(serverName: string): string {
+  return `[mcp_servers.${serverName}]`
 }
 
-function getCodexServerSubtablePrefix(): string {
-  return `[mcp_servers.${SYNAPSE_DATA_SERVER_NAME}.`
+function getCodexServerSubtablePrefix(serverName: string): string {
+  return `[mcp_servers.${serverName}.`
 }
 
 function isTomlTableHeader(line: string): boolean {
   return /^\[[^\]]+\]\s*$/.test(line.trim())
 }
 
-function findCodexServerSectionRange(lines: string[]): { start: number; end: number } | null {
-  const tableName = getCodexServerTableName()
-  const subtablePrefix = getCodexServerSubtablePrefix()
+function findCodexServerSectionRange(lines: string[], serverName: string): { start: number; end: number } | null {
+  const tableName = getCodexServerTableName(serverName)
+  const subtablePrefix = getCodexServerSubtablePrefix(serverName)
   const start = lines.findIndex((line) => line.trim() === tableName)
 
   if (start < 0) {
@@ -158,7 +158,7 @@ function findCodexServerSectionRange(lines: string[]): { start: number; end: num
 
 function buildCodexServerBlock(mcpUrl: string, lineEnding: string): string {
   return [
-    getCodexServerTableName(),
+    getCodexServerTableName(SYNAPSE_DATA_SERVER_NAME),
     `url = ${escapeTomlString(mcpUrl)}`,
   ].join(lineEnding)
 }
@@ -167,7 +167,7 @@ function upsertCodexServerConfig(raw: string, mcpUrl: string): string {
   const lineEnding = getLineEnding(raw)
   const block = buildCodexServerBlock(mcpUrl, lineEnding)
   const lines = raw.length > 0 ? raw.split(/\r?\n/) : []
-  const existingRange = findCodexServerSectionRange(lines)
+  const existingRange = findCodexServerSectionRange(lines, SYNAPSE_DATA_SERVER_NAME)
 
   if (existingRange) {
     const nextLines = [
@@ -188,7 +188,7 @@ function upsertCodexServerConfig(raw: string, mcpUrl: string): string {
 
 function extractCodexServerSection(raw: string): string | null {
   const lines = raw.split(/\r?\n/)
-  const range = findCodexServerSectionRange(lines)
+  const range = findCodexServerSectionRange(lines, SYNAPSE_DATA_SERVER_NAME)
 
   if (!range) {
     return null
@@ -244,6 +244,57 @@ function registerMcp(target: McpTarget, mcpPort: number): { success: boolean; er
     const message = error instanceof Error ? error.message : String(error)
     logger.error("MCP registration failed.", { target, error: message })
     return { success: false, error: message }
+  }
+}
+
+function removeJsonMcp(settingsPath: string, serverName: string): boolean {
+  if (!existsSync(settingsPath)) return false
+  const settings = readJsonSettings(settingsPath)
+  const servers = settings.mcpServers
+  if (!isRecord(servers) || !(serverName in servers)) return false
+  delete servers[serverName]
+  settings.mcpServers = servers
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
+  return true
+}
+
+function removeCodexMcp(settingsPath: string, serverName: string): boolean {
+  if (!existsSync(settingsPath)) return false
+  const raw = readFileSync(settingsPath, "utf-8")
+  const lines = raw.length > 0 ? raw.split(/\r?\n/) : []
+  const range = findCodexServerSectionRange(lines, serverName)
+  if (!range) return false
+  const lineEnding = getLineEnding(raw)
+  const nextLines = [...lines.slice(0, range.start), ...lines.slice(range.end)]
+  const next = `${nextLines.join(lineEnding).replace(/[ \t]+$/gm, "").trimEnd()}${lineEnding}`
+  writeFileSync(settingsPath, next, "utf-8")
+  return true
+}
+
+function unregisterMcp(target: McpTarget, serverName: string): { success: boolean; modified: boolean; error?: string } {
+  const settingsPath = getSettingsPath(target)
+  try {
+    const modified = target === "codex"
+      ? removeCodexMcp(settingsPath, serverName)
+      : removeJsonMcp(settingsPath, serverName)
+    return { success: true, modified }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.warn("MCP unregister failed.", { target, name: serverName, error: message })
+    return { success: false, modified: false, error: message }
+  }
+}
+
+function cleanupLegacyMcpNames(): void {
+  if (SYNAPSE_DATA_LEGACY_SERVER_NAMES.length === 0) return
+  for (const legacy of SYNAPSE_DATA_LEGACY_SERVER_NAMES) {
+    if (legacy === SYNAPSE_DATA_SERVER_NAME) continue
+    for (const target of MCP_TARGETS) {
+      const { success, modified } = unregisterMcp(target, legacy)
+      if (success && modified) {
+        logger.info("Legacy MCP entry removed.", { target, name: legacy })
+      }
+    }
   }
 }
 
@@ -307,6 +358,7 @@ async function openMcpSettings(target: McpTarget): Promise<{ success: boolean; e
 }
 
 function autoRegisterMcp(mcpPort: number): void {
+  cleanupLegacyMcpNames()
   const mcpUrl = getMcpUrl(mcpPort)
 
   for (const target of MCP_TARGETS) {
