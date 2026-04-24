@@ -7,6 +7,12 @@ type SchemaCopyFormat = {
   generate: (schema: DataStoreTableSchema) => string
 }
 
+type SchemaCopyGroup = {
+  key: string
+  label: string
+  formats: SchemaCopyFormat[]
+}
+
 function sqlType(col: DataStoreColumnInfo): string {
   if (col.primaryKey) return "INTEGER PRIMARY KEY AUTOINCREMENT"
   if (col.type === "DATE" || col.type === "DATETIME") return "TEXT"
@@ -406,50 +412,72 @@ function generateSkillFile(schema: DataStoreTableSchema): string {
   return `${frontmatter}\n${generateSkillContext(schema)}`
 }
 
-const SCHEMA_COPY_FORMATS: SchemaCopyFormat[] = [
+const SCHEMA_COPY_GROUPS: SchemaCopyGroup[] = [
   {
-    key: "skill-file",
-    label: "新建 Skill",
-    description: "完整 SKILL.md，含 frontmatter",
-    generate: generateSkillFile,
+    key: "skill",
+    label: "Skill 文件",
+    formats: [
+      {
+        key: "skill-file",
+        label: "新建 Skill",
+        description: "完整 SKILL.md，含 frontmatter",
+        generate: generateSkillFile,
+      },
+      {
+        key: "skill-context",
+        label: "嵌入已有 Skill",
+        description: "仅正文，粘到现有 SKILL.md",
+        generate: generateSkillContext,
+      },
+    ],
   },
   {
-    key: "skill-context",
-    label: "嵌入已有 Skill",
-    description: "仅正文，粘到现有 SKILL.md",
-    generate: generateSkillContext,
+    key: "reference",
+    label: "结构说明",
+    formats: [
+      {
+        key: "mcp",
+        label: "MCP 调用速查",
+        description: "synapse-data 的 CRUD 示例",
+        generate: generateMCPExample,
+      },
+      {
+        key: "markdown",
+        label: "Markdown 表格",
+        description: "字段列表，适合写入文档",
+        generate: generateMarkdown,
+      },
+      {
+        key: "sql",
+        label: "SQL CREATE TABLE",
+        description: "DDL 建表语句",
+        generate: generateSQL,
+      },
+    ],
   },
   {
-    key: "sql",
-    label: "SQL CREATE TABLE",
-    description: "DDL 建表语句",
-    generate: generateSQL,
-  },
-  {
-    key: "markdown",
-    label: "Markdown",
-    description: "表格形式的结构说明",
-    generate: generateMarkdown,
-  },
-  {
-    key: "typescript",
-    label: "TypeScript 类型",
-    description: "行数据的 TS 类型定义",
-    generate: generateTypeScript,
-  },
-  {
-    key: "json-schema",
-    label: "JSON Schema",
-    description: "JSON Schema 格式",
-    generate: generateJSONSchema,
-  },
-  {
-    key: "mcp",
-    label: "MCP 调用示例",
-    description: "synapse-data 工具的 CRUD 示例",
-    generate: generateMCPExample,
+    key: "typing",
+    label: "类型定义",
+    formats: [
+      {
+        key: "typescript",
+        label: "TypeScript 类型",
+        description: "行数据的 TS 类型",
+        generate: generateTypeScript,
+      },
+      {
+        key: "json-schema",
+        label: "JSON Schema",
+        description: "用于字段校验",
+        generate: generateJSONSchema,
+      },
+    ],
   },
 ]
 
-export { SCHEMA_COPY_FORMATS }
-export type { SchemaCopyFormat }
+const SCHEMA_COPY_FORMATS: SchemaCopyFormat[] = SCHEMA_COPY_GROUPS.flatMap(
+  (group) => group.formats,
+)
+
+export { SCHEMA_COPY_FORMATS, SCHEMA_COPY_GROUPS }
+export type { SchemaCopyFormat, SchemaCopyGroup }

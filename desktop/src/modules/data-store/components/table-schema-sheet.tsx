@@ -186,7 +186,6 @@ function TableSchemaSheet({
                 className="text-xs"
               />
               <Button
-                size="sm"
                 className="w-full sm:w-auto"
                 onClick={handleAddColumn}
                 disabled={!newColName.trim()}

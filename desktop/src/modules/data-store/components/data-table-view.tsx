@@ -1,4 +1,5 @@
 import {
+  Fragment,
   forwardRef,
   useCallback,
   useImperativeHandle,
@@ -29,7 +30,10 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { RowEditor } from "./row-editor"
@@ -41,7 +45,7 @@ import {
   DATA_TABLE_VALUE_COLUMN_CLASS,
 } from "./data-table-layout"
 import type { DataStoreColumnInfo, DataStoreTableSchema } from "@/types/data-store"
-import { SCHEMA_COPY_FORMATS } from "./schema-copy-formats"
+import { SCHEMA_COPY_FORMATS, SCHEMA_COPY_GROUPS } from "./schema-copy-formats"
 
 type DataTableViewProps = {
   tableName: string
@@ -198,18 +202,26 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              {SCHEMA_COPY_FORMATS.map((format) => (
-                <DropdownMenuItem
-                  key={format.key}
-                  onSelect={() => {
-                    void handleCopySchema(format.key)
-                  }}
-                >
-                  <span className="flex flex-col">
-                    <span>{format.label}</span>
-                    <span className="text-xs text-muted-foreground">{format.description}</span>
-                  </span>
-                </DropdownMenuItem>
+              {SCHEMA_COPY_GROUPS.map((group, groupIndex) => (
+                <Fragment key={group.key}>
+                  {groupIndex > 0 ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+                    {group.formats.map((format) => (
+                      <DropdownMenuItem
+                        key={format.key}
+                        onSelect={() => {
+                          void handleCopySchema(format.key)
+                        }}
+                      >
+                        <span className="flex flex-col">
+                          <span>{format.label}</span>
+                          <span className="text-xs text-muted-foreground">{format.description}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                </Fragment>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
