@@ -55,10 +55,14 @@ Usage:
   synapse drop <name>                                Drop a table
   synapse describe <name>                            Describe table schema
   synapse add-column <table> <col:type>              Add a column
+  synapse drop-column <table> <column>               Drop a column
+  synapse rename-table <from> <to>                   Rename a table
+  synapse rename-column <table> <from> <to>          Rename a column
   synapse update-column-description <table> <col> <desc>  Update column description
   synapse insert <table> --data '{"k":"v"}'          Insert a row
   synapse insert <table> --batch '[{...}]'           Batch insert
   synapse query <table> [--where k=v] [--limit N]    Query rows
+  synapse count <table> [--where k=v]                Count rows
   synapse update <table> <id> --data '{"k":"v"}'     Update a row
   synapse delete <table> <id>                        Delete a row
   synapse sql '<SQL>'                                Execute raw SQL
@@ -66,7 +70,7 @@ Usage:
     return
   }
 
-  const KNOWN_COMMANDS = new Set(["tables", "create", "drop", "describe", "add-column", "update-column-description", "insert", "query", "update", "delete", "sql", "status"])
+  const KNOWN_COMMANDS = new Set(["tables", "create", "drop", "describe", "add-column", "drop-column", "rename-table", "rename-column", "update-column-description", "insert", "query", "count", "update", "delete", "sql", "status"])
   if (!KNOWN_COMMANDS.has(command)) {
     console.error(`Unknown command: ${command}\nRun "synapse help" for usage.`)
     process.exit(1)
@@ -228,6 +232,61 @@ Usage:
         const result = await apiCall(info, "query", params) as { data: unknown[]; total: number }
         printTable(result.data as Record<string, unknown>[])
         console.log(`\nTotal: ${result.total}`)
+        break
+      }
+
+      case "count": {
+        const table = args[1]
+        if (!table) { console.error("Usage: synapse count <table> [--where k=v]"); process.exit(1) }
+
+        const params: Record<string, unknown> = { table }
+        const whereIdx = args.indexOf("--where")
+        if (whereIdx !== -1) {
+          const where: Record<string, string> = {}
+          for (let i = whereIdx + 1; i < args.length; i++) {
+            if (args[i].startsWith("--")) break
+            const eqIdx = args[i].indexOf("=")
+            if (eqIdx === -1) {
+              console.error(`Invalid --where value: "${args[i]}". Expected format: key=value`)
+              process.exit(1)
+            }
+            const k = args[i].slice(0, eqIdx)
+            const v = args[i].slice(eqIdx + 1)
+            if (k) where[k] = v
+          }
+          params.where = where
+        }
+
+        const result = await apiCall(info, "count", params) as { data: { count: number } }
+        console.log(result.data.count)
+        break
+      }
+
+      case "rename-table": {
+        const from = args[1]
+        const to = args[2]
+        if (!from || !to) { console.error("Usage: synapse rename-table <from> <to>"); process.exit(1) }
+        await apiCall(info, "renameTable", { from, to })
+        console.log(`Table "${from}" renamed to "${to}".`)
+        break
+      }
+
+      case "rename-column": {
+        const table = args[1]
+        const from = args[2]
+        const to = args[3]
+        if (!table || !from || !to) { console.error("Usage: synapse rename-column <table> <from> <to>"); process.exit(1) }
+        await apiCall(info, "renameColumn", { table, from, to })
+        console.log(`Column "${from}" in "${table}" renamed to "${to}".`)
+        break
+      }
+
+      case "drop-column": {
+        const table = args[1]
+        const column = args[2]
+        if (!table || !column) { console.error("Usage: synapse drop-column <table> <column>"); process.exit(1) }
+        await apiCall(info, "dropColumn", { table, column })
+        console.log(`Column "${column}" dropped from "${table}".`)
         break
       }
 

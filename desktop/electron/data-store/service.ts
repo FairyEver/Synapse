@@ -986,6 +986,126 @@ class DataStoreService {
     return { changes: toNumber(result.changes), lastInsertRowid: toNumber(result.lastInsertRowid) }
   }
 
+  count(table: string, where?: DataStoreWhereClause): { count: number } {
+    validateName(table, "table")
+    this.assertTableExists(table)
+
+    const db = this.getDb()
+    const jsonCols = this.getJsonColumnsForTable(table)
+    const boolCols = this.getBooleanColumnsForTable(table)
+    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
+    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiEnumCols)
+    const row = db.prepare(`SELECT COUNT(*) as count FROM ${q(table)}${whereSQL}`).get(...whereParams) as { count: number | bigint }
+    return { count: toNumber(row.count) }
+  }
+
+  renameTable(from: string, to: string): void {
+    validateName(from, "table")
+    validateName(to, "table")
+    if (from === to) return
+    this.assertTableExists(from)
+
+    const db = this.getDb()
+    const existing = db.prepare(`SELECT COUNT(*) as count FROM "_meta_tables" WHERE name = ?`).get(to) as { count: number }
+    if (existing.count > 0) {
+      throw new Error(`Table "${to}" already exists`)
+    }
+
+    const now = new Date().toISOString()
+    db.exec("BEGIN")
+    try {
+      db.exec(`ALTER TABLE ${q(from)} RENAME TO ${q(to)}`)
+      db.prepare(`UPDATE "_meta_tables" SET name = ?, updated_at = ? WHERE name = ?`).run(to, now, from)
+      db.prepare(`UPDATE "_meta_columns" SET table_name = ? WHERE table_name = ?`).run(to, from)
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
+
+    const typeCaches: Map<string, Set<string>>[] = [
+      this.jsonColumns,
+      this.booleanColumns,
+      this.dateColumns,
+      this.datetimeColumns,
+      this.multiEnumColumns,
+    ]
+    for (const cache of typeCaches) {
+      const value = cache.get(from)
+      if (value) {
+        cache.set(to, value)
+        cache.delete(from)
+      }
+    }
+    const enumValue = this.enumColumns.get(from)
+    if (enumValue) {
+      this.enumColumns.set(to, enumValue)
+      this.enumColumns.delete(from)
+    }
+  }
+
+  renameColumn(table: string, from: string, to: string): void {
+    validateName(table, "table")
+    validateColumnName(from)
+    validateColumnName(to)
+    if (from === to) return
+    this.assertTableExists(table)
+
+    const db = this.getDb()
+    const columns = db.prepare(`PRAGMA table_info(${q(table)})`).all() as { name: string }[]
+    const names = new Set(columns.map((c) => c.name))
+    if (!names.has(from)) {
+      throw new Error(`Column "${from}" not found in table "${table}"`)
+    }
+    if (names.has(to)) {
+      throw new Error(`Column "${to}" already exists in table "${table}"`)
+    }
+
+    const now = new Date().toISOString()
+    db.exec("BEGIN")
+    try {
+      db.exec(`ALTER TABLE ${q(table)} RENAME COLUMN ${q(from)} TO ${q(to)}`)
+      db.prepare(`UPDATE "_meta_columns" SET column_name = ? WHERE table_name = ? AND column_name = ?`).run(to, table, from)
+      db.prepare(`UPDATE "_meta_tables" SET updated_at = ? WHERE name = ?`).run(now, table)
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
+
+    this.refreshJsonColumnCache()
+  }
+
+  dropColumn(table: string, column: string): void {
+    validateName(table, "table")
+    validateColumnName(column)
+    this.assertTableExists(table)
+
+    const db = this.getDb()
+    const columns = db.prepare(`PRAGMA table_info(${q(table)})`).all() as { name: string }[]
+    if (!columns.some((c) => c.name === column)) {
+      throw new Error(`Column "${column}" not found in table "${table}"`)
+    }
+    const userColumnCount = columns.filter((c) => c.name !== "id" && c.name !== "created_at" && c.name !== "updated_at").length
+    if (userColumnCount <= 1) {
+      throw new Error(`Cannot drop the last user column of table "${table}". Drop the table instead if you no longer need it.`)
+    }
+
+    const now = new Date().toISOString()
+    db.exec("BEGIN")
+    try {
+      db.exec(`ALTER TABLE ${q(table)} DROP COLUMN ${q(column)}`)
+      db.prepare(`DELETE FROM "_meta_columns" WHERE table_name = ? AND column_name = ?`).run(table, column)
+      db.prepare(`UPDATE "_meta_tables" SET updated_at = ? WHERE name = ?`).run(now, table)
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
+
+    this.refreshJsonColumnCache()
+  }
+
   getDbSize(): number {
     try {
       return statSync(this.dbPath).size

@@ -11,6 +11,7 @@ import type {
   DataStoreStatus,
   DataStoreTableInfo,
   DataStoreTableSchema,
+  DataStoreWhereClause,
 } from "./data-store"
 import type {
   SynapseConfigBackupExportResult,
@@ -207,6 +208,12 @@ export type SynapseBridge = {
     query: (params: DataStoreQueryParams) => Promise<DataStoreQueryResult>
     update: (params: { table: string; id: number; data: Record<string, unknown> }) => Promise<{ affected: number }>
     delete: (params: { table: string; id: number }) => Promise<{ affected: number }>
+    updateWhere: (params: { table: string; where: DataStoreWhereClause; data: Record<string, unknown> }) => Promise<{ affected: number; ids: number[] }>
+    deleteWhere: (params: { table: string; where: DataStoreWhereClause }) => Promise<{ affected: number; ids: number[] }>
+    count: (params: { table: string; where?: DataStoreWhereClause }) => Promise<{ count: number }>
+    renameTable: (params: { from: string; to: string }) => Promise<void>
+    renameColumn: (params: { table: string; from: string; to: string }) => Promise<void>
+    dropColumn: (params: { table: string; column: string }) => Promise<void>
     rawSQL: (params: { sql: string; params?: unknown[] }) => Promise<{ rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number }>
     getStatus: () => Promise<DataStoreStatus>
     exportDB: () => Promise<{ success: boolean; path?: string }>

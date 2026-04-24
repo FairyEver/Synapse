@@ -10,6 +10,7 @@ import { createMainLogger } from "../services/log-store"
 import type {
   DataStoreColumnDef,
   DataStoreQueryParams,
+  DataStoreWhereClause,
 } from "./types"
 
 const logger = createMainLogger("data-store.ipc")
@@ -92,6 +93,50 @@ function registerDataStoreHandlers(): void {
     id: number
   }) => {
     return dataStoreService.delete(params.table, params.id)
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateWhere, async (_event, params: {
+    table: string
+    where: DataStoreWhereClause
+    data: Record<string, unknown>
+  }) => {
+    return dataStoreService.updateWhere(params.table, params.where, params.data)
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.deleteWhere, async (_event, params: {
+    table: string
+    where: DataStoreWhereClause
+  }) => {
+    return dataStoreService.deleteWhere(params.table, params.where)
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.count, async (_event, params: {
+    table: string
+    where?: DataStoreWhereClause
+  }) => {
+    return dataStoreService.count(params.table, params.where)
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.renameTable, async (_event, params: {
+    from: string
+    to: string
+  }) => {
+    dataStoreService.renameTable(params.from, params.to)
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.renameColumn, async (_event, params: {
+    table: string
+    from: string
+    to: string
+  }) => {
+    dataStoreService.renameColumn(params.table, params.from, params.to)
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.dropColumn, async (_event, params: {
+    table: string
+    column: string
+  }) => {
+    dataStoreService.dropColumn(params.table, params.column)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.rawSQL, async (_event, params: {

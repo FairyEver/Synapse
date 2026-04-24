@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
-import { dataStoreService } from "./service"
+import { dispatchDataStoreAction } from "./dispatcher"
 import { createMainLogger } from "../services/log-store"
-import type { DataStoreQueryParams, DataStoreWhereClause } from "./types"
+import { MCP_TOOL_ACTIONS } from "../../data-store/shared/mcp-tools"
 import {
   processMcpRequest,
   serializeJsonRpcPayload,
@@ -19,79 +19,12 @@ const SERVER_IDENTITY = { name: "synapse-data", version: "1.0.0" } as const
 let server: Server | null = null
 let activePort = 0
 
-// Each tool forwards directly to the in-process data store service. Param
-// shapes mirror the schema declared in data-store/shared/mcp-tools.ts.
-const TOOL_HANDLERS: Record<string, (args: Record<string, unknown>) => unknown> = {
-  list_tables: () => ({ ok: true, data: dataStoreService.listTables() }),
-  create_table: (args) => {
-    dataStoreService.createTable(
-      args.name as string,
-      args.columns as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; enumValues?: string[] }[],
-      args.description as string | undefined,
-    )
-    return { ok: true }
-  },
-  drop_table: (args) => { dataStoreService.dropTable(args.name as string); return { ok: true } },
-  describe_table: (args) => ({ ok: true, data: dataStoreService.describeTable(args.name as string) }),
-  add_column: (args) => {
-    const table = (args.table ?? args.name) as string
-    dataStoreService.addColumn(table, args.column as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; default?: unknown; description?: string; enumValues?: string[] })
-    return { ok: true }
-  },
-  update_column_description: (args) => {
-    dataStoreService.updateColumnDescription(args.table as string, args.column as string, args.description as string)
-    return { ok: true }
-  },
-  update_column_enum_values: (args) => {
-    dataStoreService.updateColumnEnumValues(args.table as string, args.column as string, args.values as string[])
-    return { ok: true }
-  },
-  insert: (args) => {
-    const result = dataStoreService.insert(args.table as string, args.data as Record<string, unknown>)
-    return { ok: true, data: result, affected: 1 }
-  },
-  batch_insert: (args) => {
-    const result = dataStoreService.batchInsert(args.table as string, args.rows as Record<string, unknown>[])
-    return { ok: true, data: result, affected: result.ids.length }
-  },
-  query: (args) => {
-    const result = dataStoreService.query(args as DataStoreQueryParams)
-    return { ok: true, data: result.rows, total: result.total }
-  },
-  update: (args) => {
-    const result = dataStoreService.update(args.table as string, args.id as number, args.data as Record<string, unknown>)
-    return { ok: true, data: { id: args.id }, affected: result.affected }
-  },
-  delete: (args) => {
-    const result = dataStoreService.delete(args.table as string, args.id as number)
-    return { ok: true, data: { id: args.id }, affected: result.affected }
-  },
-  update_where: (args) => {
-    const result = dataStoreService.updateWhere(
-      args.table as string,
-      args.where as DataStoreWhereClause,
-      args.data as Record<string, unknown>,
-    )
-    return { ok: true, data: { ids: result.ids }, affected: result.affected }
-  },
-  delete_where: (args) => {
-    const result = dataStoreService.deleteWhere(
-      args.table as string,
-      args.where as DataStoreWhereClause,
-    )
-    return { ok: true, data: { ids: result.ids }, affected: result.affected }
-  },
-  raw_sql: (args) => {
-    const result = dataStoreService.rawSQL(args.sql as string, args.params as unknown[] | undefined)
-    if (result.rows) return { ok: true, data: { rows: result.rows } }
-    return { ok: true, data: { changes: result.changes, lastInsertRowid: result.lastInsertRowid } }
-  },
-}
-
-async function executeTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  const handler = TOOL_HANDLERS[toolName]
-  if (!handler) throw new Error(`Unknown tool: ${toolName}`)
-  return handler(args)
+// MCP tool calls route through the same dispatcher as the HTTP API so the two
+// protocols can never disagree about argument handling or response shape.
+function executeTool(toolName: string, args: Record<string, unknown>): unknown {
+  const action = MCP_TOOL_ACTIONS[toolName]
+  if (!action) throw new Error(`Unknown tool: ${toolName}`)
+  return dispatchDataStoreAction(action, args)
 }
 
 // --- HTTP transport ---

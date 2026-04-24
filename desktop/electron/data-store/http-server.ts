@@ -3,8 +3,7 @@ import { randomBytes } from "node:crypto"
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
-import type { DataStoreQueryParams, DataStoreWhereClause } from "../../src/types/data-store"
-import { dataStoreService } from "./service"
+import { dispatchDataStoreAction } from "./dispatcher"
 import type { DataStoreServerInfo } from "./types"
 import { createMainLogger } from "../services/log-store"
 
@@ -80,139 +79,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 
   try {
-    const result = dispatch(action as string, params)
+    const result = dispatchDataStoreAction(action, params)
     sendJson(res, 200, result)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     logger.warn("API request failed.", { action, error: message })
     sendJson(res, 200, { ok: false, error: message })
-  }
-}
-
-function assertString(params: Record<string, unknown>, key: string): string {
-  const v = params[key]
-  if (typeof v !== "string" || !v) throw new Error(`Missing or invalid '${key}': expected non-empty string`)
-  return v
-}
-
-function assertNumber(params: Record<string, unknown>, key: string): number {
-  const v = params[key]
-  if (typeof v !== "number" || !Number.isFinite(v)) throw new Error(`Missing or invalid '${key}': expected number`)
-  return v
-}
-
-function assertObject(params: Record<string, unknown>, key: string): Record<string, unknown> {
-  const v = params[key]
-  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`Missing or invalid '${key}': expected object`)
-  return v as Record<string, unknown>
-}
-
-function assertArray(params: Record<string, unknown>, key: string): unknown[] {
-  const v = params[key]
-  if (!Array.isArray(v)) throw new Error(`Missing or invalid '${key}': expected array`)
-  return v
-}
-
-function dispatch(action: string, params: Record<string, unknown>): unknown {
-  switch (action) {
-    case "listTables":
-      return { ok: true, data: dataStoreService.listTables() }
-
-    case "createTable":
-      dataStoreService.createTable(
-        assertString(params, "name"),
-        assertArray(params, "columns") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; enumValues?: string[] }[],
-        params.description as string | undefined,
-      )
-      return { ok: true }
-
-    case "dropTable":
-      dataStoreService.dropTable(assertString(params, "name"))
-      return { ok: true }
-
-    case "describeTable":
-      return { ok: true, data: dataStoreService.describeTable(assertString(params, "name")) }
-
-    case "addColumn": {
-      const tableName = (params.table ?? params.name) as string | undefined
-      if (typeof tableName !== "string" || !tableName) throw new Error("Missing or invalid 'table' (or 'name'): expected non-empty string")
-      dataStoreService.addColumn(tableName, assertObject(params, "column") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; default?: unknown; description?: string; enumValues?: string[] })
-      return { ok: true }
-    }
-
-    case "updateColumnDescription":
-      dataStoreService.updateColumnDescription(
-        assertString(params, "table"),
-        assertString(params, "column"),
-        assertString(params, "description"),
-      )
-      return { ok: true }
-
-    case "updateColumnEnumValues":
-      dataStoreService.updateColumnEnumValues(
-        assertString(params, "table"),
-        assertString(params, "column"),
-        assertArray(params, "values") as string[],
-      )
-      return { ok: true }
-
-    case "insert": {
-      const insertResult = dataStoreService.insert(assertString(params, "table"), assertObject(params, "data"))
-      return { ok: true, data: insertResult, affected: 1 }
-    }
-
-    case "batchInsert": {
-      const batchResult = dataStoreService.batchInsert(assertString(params, "table"), assertArray(params, "rows") as Record<string, unknown>[])
-      return { ok: true, data: batchResult, affected: batchResult.ids.length }
-    }
-
-    case "query": {
-      assertString(params, "table")
-      const queryResult = dataStoreService.query(params as DataStoreQueryParams)
-      return { ok: true, data: queryResult.rows, total: queryResult.total }
-    }
-
-    case "update": {
-      const updateResult = dataStoreService.update(assertString(params, "table"), assertNumber(params, "id"), assertObject(params, "data"))
-      return { ok: true, data: { id: params.id }, affected: updateResult.affected }
-    }
-
-    case "delete": {
-      const deleteResult = dataStoreService.delete(assertString(params, "table"), assertNumber(params, "id"))
-      return { ok: true, data: { id: params.id }, affected: deleteResult.affected }
-    }
-
-    case "updateWhere": {
-      const whereVal = params.where
-      if (whereVal === undefined || whereVal === null) throw new Error("Missing 'where': expected non-empty object or array")
-      const result = dataStoreService.updateWhere(
-        assertString(params, "table"),
-        whereVal as DataStoreWhereClause,
-        assertObject(params, "data"),
-      )
-      return { ok: true, data: { ids: result.ids }, affected: result.affected }
-    }
-
-    case "deleteWhere": {
-      const whereVal = params.where
-      if (whereVal === undefined || whereVal === null) throw new Error("Missing 'where': expected non-empty object or array")
-      const result = dataStoreService.deleteWhere(
-        assertString(params, "table"),
-        whereVal as DataStoreWhereClause,
-      )
-      return { ok: true, data: { ids: result.ids }, affected: result.affected }
-    }
-
-    case "rawSQL": {
-      const rawResult = dataStoreService.rawSQL(assertString(params, "sql"), params.params as unknown[] | undefined)
-      if (rawResult.rows) {
-        return { ok: true, data: { rows: rawResult.rows } }
-      }
-      return { ok: true, data: { changes: rawResult.changes, lastInsertRowid: rawResult.lastInsertRowid } }
-    }
-
-    default:
-      throw new Error(`Unknown action: ${action}`)
   }
 }
 

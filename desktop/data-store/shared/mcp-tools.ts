@@ -252,6 +252,55 @@ function buildTools(): McpTool[] {
       },
     },
     {
+      name: "count",
+      description: "Count rows in a table with optional filter. Returns { count }. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns. Use this instead of query+limit when you only need the number of matching rows.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          where: { description: "Optional filter (object for equality, array for expressions)", ...whereClauseSchema },
+        },
+        required: ["table"],
+      },
+    },
+    {
+      name: "rename_table",
+      description: "Rename a table. Fails if the target name already exists. System columns and metadata are preserved automatically. Naming: must start with a letter, only letters/digits/underscores, cannot start with '_'.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          from: { type: "string", description: "Current table name" },
+          to: { type: "string", description: "New table name" },
+        },
+        required: ["from", "to"],
+      },
+    },
+    {
+      name: "rename_column",
+      description: "Rename a column in a table. Fails if the target column already exists. Cannot rename system columns (id / created_at / updated_at), and the new name must not be a reserved system column name. Column description and enum values are preserved.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          from: { type: "string", description: "Current column name" },
+          to: { type: "string", description: "New column name" },
+        },
+        required: ["table", "from", "to"],
+      },
+    },
+    {
+      name: "drop_column",
+      description: "Drop a column from a table (irreversible — all values in that column are lost). Cannot drop system columns (id / created_at / updated_at). Refuses to drop the last user column of a table — drop the table instead.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          column: { type: "string", description: "Column name" },
+        },
+        required: ["table", "column"],
+      },
+    },
+    {
       name: "raw_sql",
       description: "Execute raw SQL. Cannot access system tables (prefixed with '_') or use ATTACH/DETACH. SELECT/PRAGMA/EXPLAIN returns { rows }. INSERT/UPDATE/DELETE returns { changes, lastInsertRowid }. DDL (CREATE/DROP/ALTER TABLE) auto-syncs metadata. Prefer structured tools over raw_sql when possible. If you need to inspect existing tables, call list_tables and describe_table first.",
       inputSchema: {
@@ -284,6 +333,10 @@ const MCP_TOOL_ACTIONS: Record<string, string> = {
   delete: "delete",
   update_where: "updateWhere",
   delete_where: "deleteWhere",
+  count: "count",
+  rename_table: "renameTable",
+  rename_column: "renameColumn",
+  drop_column: "dropColumn",
   raw_sql: "rawSQL",
 }
 
