@@ -54,6 +54,54 @@ function validateColumnType(type: string): void {
   }
 }
 
+const MULTI_ENUM_NAME_SIGNALS = ["tags", "labels", "categories", "标签", "分类", "类别"]
+const ENUM_NAME_SIGNALS = ["status", "priority", "level", "role", "severity", "gender", "优先级", "级别", "状态", "角色", "等级", "性别"]
+const ENUM_OR_MULTI_NAME_SIGNALS = ["category", "type", "kind", "tag", "label", "种类"]
+const BOOLEAN_NAME_EXACT = ["done", "enabled", "active", "visible", "archived", "deleted", "published", "completed", "locked", "pinned", "starred", "favorite", "read"]
+const BOOLEAN_NAME_PREFIXES = ["is_", "has_", "can_", "should_"]
+const BOOLEAN_NAME_PREFIXES_CN = ["是否"]
+
+function assertSemanticallyCorrectColumn(col: DataStoreColumnDef): void {
+  const type = col.type.toUpperCase()
+  const lower = col.name.toLowerCase()
+
+  if (col.enumValues && col.enumValues.length > 0 && type !== ENUM_COLUMN_TYPE && type !== MULTI_ENUM_COLUMN_TYPE) {
+    throw new Error(
+      `Column "${col.name}" has enumValues but type is ${type}. enumValues only applies to ENUM (single-choice) or MULTI_ENUM (multi-select). Change type to "ENUM" or "MULTI_ENUM" based on whether the user wants single or multiple selection.`,
+    )
+  }
+
+  if ((type === "JSON" || type === "TEXT") && (MULTI_ENUM_NAME_SIGNALS.includes(lower) || MULTI_ENUM_NAME_SIGNALS.includes(col.name))) {
+    throw new Error(
+      `Column "${col.name}" is a multi-select field. Use type="MULTI_ENUM" with enumValues=[...allowed values...], not ${type}. Example: { name: "${col.name}", type: "MULTI_ENUM", enumValues: ["选项1", "选项2"] }. If the user genuinely needs free-form data without a fixed value set, rename the column to avoid multi-select keywords.`,
+    )
+  }
+
+  if (type === "TEXT" && (ENUM_NAME_SIGNALS.includes(lower) || ENUM_NAME_SIGNALS.includes(col.name))) {
+    throw new Error(
+      `Column "${col.name}" is a single-choice enum field. Use type="ENUM" with enumValues=[...allowed values...], not TEXT. Example: { name: "${col.name}", type: "ENUM", enumValues: ["值1", "值2", "值3"] }.`,
+    )
+  }
+
+  if ((type === "JSON" || type === "TEXT") && ENUM_OR_MULTI_NAME_SIGNALS.includes(lower)) {
+    throw new Error(
+      `Column "${col.name}" looks like an enum-like field. Use type="ENUM" (if each row has ONE value) or type="MULTI_ENUM" (if each row can hold multiple values) with enumValues=[...allowed values...], not ${type}.`,
+    )
+  }
+
+  if (type === "INTEGER") {
+    const looksBool =
+      BOOLEAN_NAME_EXACT.includes(lower)
+      || BOOLEAN_NAME_PREFIXES.some((p) => lower.startsWith(p))
+      || BOOLEAN_NAME_PREFIXES_CN.some((p) => col.name.startsWith(p))
+    if (looksBool) {
+      throw new Error(
+        `Column "${col.name}" is a boolean field. Use type="BOOLEAN" (stored as 0/1, returned as true/false), not INTEGER.`,
+      )
+    }
+  }
+}
+
 function q(name: string): string {
   return `"${name.replace(/"/g, '""')}"`
 }
@@ -411,6 +459,7 @@ class DataStoreService {
           throw new Error(`${upperType} column "${col.name}" requires at least one value in enumValues`)
         }
       }
+      assertSemanticallyCorrectColumn(col)
     }
 
     const db = this.getDb()
@@ -548,6 +597,7 @@ class DataStoreService {
     validateName(table, "table")
     validateColumnName(column.name)
     validateColumnType(column.type)
+    assertSemanticallyCorrectColumn(column)
     this.assertTableExists(table)
 
     const upper = column.type.toUpperCase()
