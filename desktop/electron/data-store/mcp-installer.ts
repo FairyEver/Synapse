@@ -163,9 +163,9 @@ function buildCodexServerBlock(mcpUrl: string, lineEnding: string): string {
   ].join(lineEnding)
 }
 
-function upsertCodexServerConfig(raw: string, mcpScriptPath: string): string {
+function upsertCodexServerConfig(raw: string, mcpUrl: string): string {
   const lineEnding = getLineEnding(raw)
-  const block = buildCodexServerBlock(mcpScriptPath, lineEnding)
+  const block = buildCodexServerBlock(mcpUrl, lineEnding)
   const lines = raw.length > 0 ? raw.split(/\r?\n/) : []
   const existingRange = findCodexServerSectionRange(lines)
 
