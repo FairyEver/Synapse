@@ -1,4 +1,5 @@
 import type {
+  DataStoreChangeEvent,
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
   DataStoreMcpHttpStatus,
@@ -226,5 +227,6 @@ export type SynapseBridge = {
     getMCPServers: () => Promise<DataStoreMcpServerInfo[]>
     openMCPSettings: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
     registerMCP: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
+    onChanged: (listener: (event: DataStoreChangeEvent) => void) => () => void
   }
 }

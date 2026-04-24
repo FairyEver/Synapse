@@ -205,15 +205,59 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 }
 
+const MUTATING_ACTIONS = new Set<string>([
+  "createTable",
+  "dropTable",
+  "addColumn",
+  "updateColumnDescription",
+  "updateColumnEnumValues",
+  "insert",
+  "batchInsert",
+  "update",
+  "delete",
+  "updateWhere",
+  "deleteWhere",
+  "renameTable",
+  "renameColumn",
+  "dropColumn",
+  "rawSQL",
+])
+
+type DataStoreChangeEvent = { action: string; table?: string }
+type DataStoreChangeListener = (event: DataStoreChangeEvent) => void
+
+let changeListener: DataStoreChangeListener | null = null
+
+function setDataStoreChangeListener(listener: DataStoreChangeListener | null): void {
+  changeListener = listener
+}
+
+function extractTableName(action: string, params: Record<string, unknown>): string | undefined {
+  if (action === "renameTable") {
+    return typeof params.to === "string" ? params.to : undefined
+  }
+  if (typeof params.table === "string") return params.table
+  if (typeof params.name === "string") return params.name
+  return undefined
+}
+
 function dispatchDataStoreAction(action: string, params: Record<string, unknown>): DispatchResult {
   const handler = ACTION_HANDLERS[action]
   if (!handler) throw new Error(`Unknown action: ${action}`)
-  return handler(params)
+  const result = handler(params)
+  if (MUTATING_ACTIONS.has(action) && changeListener) {
+    try {
+      changeListener({ action, table: extractTableName(action, params) })
+    } catch {
+      // Never let a broadcast failure break the dispatch result.
+    }
+  }
+  return result
 }
 
 function hasDataStoreAction(action: string): boolean {
   return action in ACTION_HANDLERS
 }
 
-export { dispatchDataStoreAction, hasDataStoreAction }
-export type { DispatchResult }
+export { dispatchDataStoreAction, hasDataStoreAction, setDataStoreChangeListener }
+export type { DispatchResult, DataStoreChangeEvent, DataStoreChangeListener }

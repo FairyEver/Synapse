@@ -121,6 +121,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     getMCPServers: "synapse:data-store:get-mcp-servers",
     openMCPSettings: "synapse:data-store:open-mcp-settings",
     registerMCP: "synapse:data-store:register-mcp",
+    changed: "synapse:data-store:changed",
   },
 } as const satisfies SynapseAllChannels
 
@@ -285,6 +286,7 @@ const synapseBridge: SynapseBridge = {
     getMCPServers: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getMCPServers),
     openMCPSettings: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.openMCPSettings, target),
     registerMCP: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.registerMCP, target),
+    onChanged: (listener) => subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.dataStore.changed, listener),
   },
 }
 

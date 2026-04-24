@@ -52,6 +52,10 @@ dev 端口：desktop 5173 / website 5174，详见 `.claude/rules/workspace-dev-p
 - 错误处理：网络/文件 IO 必须 try/catch；内部纯函数不兜错
 - 路径别名：`@/*` → `./src/*`
 
+## Data Store 快捷指令
+
+当消息中出现 "sss" 时，使用 synapse-data MCP 工具完成数据操作。sss 是 Synapse Data Store 的缩写。
+
 ## 模块化规则索引
 
 详细规范拆分到 `.claude/rules/`，按需自动加载：

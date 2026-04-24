@@ -29,4 +29,5 @@ export const DATA_STORE_IPC_CHANNELS = {
   getMCPServers: "synapse:data-store:get-mcp-servers",
   openMCPSettings: "synapse:data-store:open-mcp-settings",
   registerMCP: "synapse:data-store:register-mcp",
+  changed: "synapse:data-store:changed",
 } as const

@@ -125,7 +125,13 @@ type DataStoreMcpHttpStatus = {
   url: string
 }
 
+type DataStoreChangeEvent = {
+  action: string
+  table?: string
+}
+
 export type {
+  DataStoreChangeEvent,
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
   DataStoreMcpHttpStatus,

@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { DataStoreSidebar } from "./components/data-store-sidebar"
 import { DataTableView } from "./components/data-table-view"
 import type { DataTableViewHandle } from "./components/data-table-view"
@@ -174,6 +175,25 @@ function DataStoreModule() {
     },
     [selectedTable, refreshQuery, refreshTables, showSuccess, showError],
   )
+
+  useEffect(() => {
+    const bridge = requireSynapseBridge()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const runRefresh = () => {
+      timer = null
+      void refreshTables()
+      void refreshQuery()
+      void refreshSchema()
+    }
+    const unsubscribe = bridge.dataStore.onChanged(() => {
+      if (timer !== null) return
+      timer = setTimeout(runRefresh, 150)
+    })
+    return () => {
+      if (timer !== null) clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [refreshTables, refreshQuery, refreshSchema])
 
   const sidebar = (
     <DataStoreSidebar

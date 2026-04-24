@@ -1,9 +1,13 @@
+import { BrowserWindow } from "electron"
 import { dataStoreService } from "./service"
 import { startHttpServer, stopHttpServer } from "./http-server"
 import { startMcpServer, stopMcpServer, getMcpServerPort } from "./mcp-server"
 import { registerDataStoreHandlers } from "./ipc-handlers"
 import { getCliStatus, installCli } from "./cli-installer"
 import { autoRegisterMcp } from "./mcp-installer"
+import { setDataStoreChangeListener } from "./dispatcher"
+import { DATA_STORE_IPC_CHANNELS } from "./channels"
+import { isTrustedRendererContents } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store")
@@ -29,6 +33,13 @@ async function initDataStore(): Promise<void> {
 
   registerDataStoreHandlers()
 
+  setDataStoreChangeListener((event) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!isTrustedRendererContents(window.webContents)) continue
+      window.webContents.send(DATA_STORE_IPC_CHANNELS.changed, event)
+    }
+  })
+
   if (!(await getCliStatus()).installed) {
     try {
       await installCli()
@@ -50,6 +61,7 @@ async function initDataStore(): Promise<void> {
 
 async function shutdownDataStore(): Promise<void> {
   logger.info("Shutting down data store.")
+  setDataStoreChangeListener(null)
   await stopMcpServer()
   await stopHttpServer()
   dataStoreService.close()
