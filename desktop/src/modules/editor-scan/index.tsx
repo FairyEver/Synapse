@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { useAppNotifications } from "@/app-shell/notifications"
 import type { SynapseEditorId } from "@/types/editor"
+import { EDITOR_ORDER } from "@/lib/editor-registry"
 import type { EditorScanRuleItem, EditorScanSkillItem } from "@/types/editor-scan"
 import { useEditorScan } from "./hooks/use-editor-scan"
 import { EditorScanSidebar } from "./components/editor-scan-sidebar"
@@ -22,7 +23,7 @@ function EditorScanModule() {
   const { data, loading, error, refresh } = useEditorScan()
   const { success: showSuccess, error: showError } = useAppNotifications()
   const [selectedEditorId, setSelectedEditorId] =
-    useState<SynapseEditorId>("claude-code")
+    useState<SynapseEditorId>(EDITOR_ORDER[0] ?? "")
   const [contentTab, setContentTab] = useState<ContentTab>("skill")
   const [scopeTab, setScopeTab] = useState<ScopeTab>("global")
   const [detailItem, setDetailItem] = useState<ScanItemForDetail | null>(null)

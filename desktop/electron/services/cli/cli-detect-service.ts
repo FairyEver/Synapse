@@ -4,15 +4,18 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { promisify } from "node:util"
 import type { SynapseCliDetectResult, SynapseCliId } from "../../../src/types/cli"
+import { cliDefinitions } from "../ide-definitions/generated/main-registry"
 import { createMainLogger } from "../log-store"
 
 const execFileAsync = promisify(execFile)
 const logger = createMainLogger("service.cli-detect")
 
-const CLI_DEFINITIONS: ReadonlyArray<{ id: SynapseCliId; label: string; bin: string }> = [
-  { id: "claude-code", label: "Claude Code", bin: "claude" },
-  { id: "codex", label: "Codex", bin: "codex" },
-]
+const CLI_DEFINITIONS: ReadonlyArray<{ id: SynapseCliId; label: string; bin: string }> = cliDefinitions
+  .map((definition) => ({
+    id: definition.id as SynapseCliId,
+    label: definition.label,
+    bin: definition.binaries[0],
+  }))
 
 function getCommonBinDirs(): string[] {
   const home = homedir()

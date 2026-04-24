@@ -1,8 +1,6 @@
 import type { SynapseContentType } from "./content"
 
-export const SYNAPSE_EDITOR_IDS = ["cursor", "codex", "claude-code"] as const
-
-export type SynapseEditorId = (typeof SYNAPSE_EDITOR_IDS)[number]
+export type SynapseEditorId = string & { readonly __brand?: "SynapseEditorId" }
 
 export type SynapseEditorInstallScope = "global" | "project"
 

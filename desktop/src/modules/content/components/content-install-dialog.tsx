@@ -52,6 +52,7 @@ import { ClaudeCodeFrontmatterDialog } from "./claude-code-frontmatter-dialog"
 import { CursorFrontmatterDialog } from "./cursor-frontmatter-dialog"
 import { VariableSubstitutionDialog } from "./variable-substitution-dialog"
 import { detectPlaceholders } from "@/lib/variable-substitution"
+import { installFormDefinitionByEditorId } from "@/ide-definitions/generated/renderer-registry"
 
 const CUSTOM_PROJECT_OPTION = "__custom__"
 
@@ -125,6 +126,7 @@ function ContentInstallDialog({
     !editor?.supportsGlobal || globalTargetState.value?.status === "unsupported"
   const projectScopeDisabled = !editor?.supportsProject
   const canInstall = (activeTarget?.status === "ready" || (activeTarget?.status === "conflict" && item.type === "skill")) && !isInstalling
+  const installFormDefinition = editor ? installFormDefinitionByEditorId.get(editor.id) : undefined
 
   useEffect(() => {
     if (!open) {
@@ -686,20 +688,12 @@ function ContentInstallDialog({
       return
     }
 
-    if (
-      editor?.id === "cursor"
-      && item.type === "rule"
-      && scope === "project"
-    ) {
+    if (item.type === "rule" && scope === "project" && installFormDefinition?.ruleProjectForm === "cursor-frontmatter") {
       await openCursorFrontmatterDialog()
       return
     }
 
-    if (
-      editor?.id === "claude-code"
-      && item.type === "rule"
-      && scope === "project"
-    ) {
+    if (item.type === "rule" && scope === "project" && installFormDefinition?.ruleProjectForm === "claude-code-frontmatter") {
       await openClaudeCodeFrontmatterDialog()
       return
     }

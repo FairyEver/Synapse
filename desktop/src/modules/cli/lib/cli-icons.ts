@@ -1,16 +1,14 @@
-import ccIcon from "@/assets/cc.png"
-import codexIcon from "@/assets/codex.png"
 import type { SynapseCliId } from "@/types/cli"
+import { ideDefinitions } from "@/ide-definitions/generated/renderer-registry"
 
-const cliIconMap: Record<SynapseCliId, string> = {
-  "claude-code": ccIcon,
-  codex: codexIcon,
-}
+const cliIconMap = new Map<string, string>(
+  ideDefinitions.map((definition) => [definition.id, definition.icon]),
+)
 
 const CLI_ICON_CLIP_STYLE: React.CSSProperties = { clipPath: "inset(6%)" }
 
 function getCliIconSrc(cliId: SynapseCliId): string | undefined {
-  return cliIconMap[cliId]
+  return cliIconMap.get(cliId)
 }
 
 export { CLI_ICON_CLIP_STYLE, getCliIconSrc }

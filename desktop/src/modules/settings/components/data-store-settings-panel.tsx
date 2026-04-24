@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
 import { Copy } from "lucide-react"
-import ccIcon from "@/assets/cc.png"
-import codexIcon from "@/assets/codex.png"
-import cursorIcon from "@/assets/cursor.png"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,14 +52,15 @@ import {
 } from "@/modules/data-store/hooks/use-data-store"
 
 import { EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
+import { mcpDefinitions } from "@/ide-definitions/generated/renderer-registry"
 
 const logger = createRendererLogger("settings.data-store")
 
-const MCP_SERVER_META = [
-  { id: "claude" as const, label: "Claude Code", icon: ccIcon },
-  { id: "cursor" as const, label: "Cursor", icon: cursorIcon },
-  { id: "codex" as const, label: "Codex", icon: codexIcon },
-]
+const MCP_SERVER_META = mcpDefinitions.map((definition) => ({
+  id: definition.target,
+  label: definition.label,
+  icon: definition.icon,
+}))
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

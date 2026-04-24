@@ -1,6 +1,4 @@
-export const SYNAPSE_CLI_IDS = ["claude-code", "codex"] as const
-
-export type SynapseCliId = (typeof SYNAPSE_CLI_IDS)[number]
+export type SynapseCliId = string & { readonly __brand?: "SynapseCliId" }
 
 export type SynapseCliDetectResult = {
   id: SynapseCliId

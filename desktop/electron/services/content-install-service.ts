@@ -18,7 +18,7 @@ import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { parseMdcFrontmatter, serializeMdcFrontmatter } from "./editor-adapters/cursor-mdc"
 import { parseClaudeCodeFrontmatter, serializeClaudeCodeFrontmatter } from "./editor-adapters/claude-code-frontmatter"
-import { applyRuleSection } from "./editor-adapters/rule-section"
+import { editorInstallStrategyById } from "./ide-definitions/generated/main-registry"
 import {
   SYNAPSE_SKILL_ID_FILE_NAME,
   findSkillDirectoryByContentId,
@@ -175,29 +175,17 @@ class ContentInstallService {
             ruleBody = applyVariableSubstitutions(ruleBody, payload.variableSubstitutions)
           }
 
-          if (
-            payload.editorId === "cursor"
-            && payload.contentType === "rule"
-          ) {
-            const wrapped = payload.cursorFrontmatter
-              ? serializeMdcFrontmatter(payload.cursorFrontmatter) + ruleBody
+          if (payload.contentType === "rule") {
+            const installStrategy = editorInstallStrategyById.get(payload.editorId)
+            const content = installStrategy
+              ? await installStrategy.prepareRuleFileContent({
+                  payload,
+                  targetPath: target.targetPath,
+                  ruleBody,
+                  readExistingTextFile,
+                })
               : ruleBody
-            await replaceFileAtomically(target.targetPath, wrapped)
-          } else if (
-            payload.editorId === "claude-code"
-            && payload.contentType === "rule"
-          ) {
-            const frontmatterPrefix = payload.claudeCodeFrontmatter
-              ? serializeClaudeCodeFrontmatter(payload.claudeCodeFrontmatter)
-              : ""
-            await replaceFileAtomically(target.targetPath, frontmatterPrefix + ruleBody)
-          } else if (
-            payload.contentType === "rule"
-            && payload.editorId === "codex"
-          ) {
-            const existing = await readExistingTextFile(target.targetPath)
-            const merged = applyRuleSection(existing, payload.contentId, ruleBody)
-            await replaceFileAtomically(target.targetPath, merged)
+            await replaceFileAtomically(target.targetPath, content)
           } else {
             await replaceFileAtomically(target.targetPath, ruleBody)
           }

@@ -1,18 +1,14 @@
-import ccIcon from "@/assets/cc.png"
-import codexIcon from "@/assets/codex.png"
-import cursorIcon from "@/assets/cursor.png"
 import type { SynapseEditorId } from "@/types/editor"
+import { ideDefinitions } from "@/ide-definitions/generated/renderer-registry"
 
-const editorIconMap: Record<SynapseEditorId, string> = {
-  "claude-code": ccIcon,
-  codex: codexIcon,
-  cursor: cursorIcon,
-}
+const editorIconMap = new Map<string, string>(
+  ideDefinitions.map((definition) => [definition.id, definition.icon]),
+)
 
 const EDITOR_ICON_CLIP_STYLE: React.CSSProperties = { clipPath: "inset(6%)" }
 
 function getEditorIconSrc(editorId: SynapseEditorId): string | undefined {
-  return editorIconMap[editorId]
+  return editorIconMap.get(editorId)
 }
 
 export { EDITOR_ICON_CLIP_STYLE, getEditorIconSrc }
