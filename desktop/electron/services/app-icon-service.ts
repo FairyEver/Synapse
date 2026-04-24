@@ -34,4 +34,4 @@ function initializeAppIcon(): void {
   }
 }
 
-export { getWindowIconPath, initializeAppIcon }
+export { getWindowIconPath, initializeAppIcon, resolveRuntimeAssetPath }

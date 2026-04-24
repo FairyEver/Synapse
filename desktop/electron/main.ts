@@ -21,12 +21,22 @@ import { createMainLogger, logStore } from "./services/log-store"
 import { pendingPushesService } from "./services/pending-pushes-service"
 import { repositoryMaintenanceService } from "./services/repository-maintenance-service"
 import { repositoryStore } from "./services/repository-store"
+import { createTray, destroyTray } from "./services/tray-service"
 import { updateService } from "./services/update-service"
 import { initDataStore, shutdownDataStore } from "./data-store"
 
 let mainWindow: BrowserWindow | null = null
 let allowAppQuit = false
 const logger = createMainLogger("main")
+
+function showOrCreateMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show()
+    mainWindow.focus()
+  } else {
+    createMainWindow()
+  }
+}
 
 function createMainWindow() {
   const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
@@ -59,6 +69,13 @@ function createMainWindow() {
   window.once("ready-to-show", () => {
     logger.info("Main window is ready to show.")
     window.show()
+  })
+
+  window.on("close", (event) => {
+    if (!allowAppQuit) {
+      event.preventDefault()
+      window.hide()
+    }
   })
 
   window.on("closed", () => {
@@ -142,6 +159,10 @@ if (!gotSingleInstanceLock) {
       return
     }
 
+    if (!mainWindow.isVisible()) {
+      mainWindow.show()
+    }
+
     if (mainWindow.isMinimized()) {
       mainWindow.restore()
     }
@@ -169,6 +190,7 @@ if (!gotSingleInstanceLock) {
     await configStore.load()
     logger.info("Core config loaded. Creating main window.")
     createMainWindow()
+    createTray(showOrCreateMainWindow)
 
     // --- peripheral: data-store, update, repository watch (failure = degraded) ---
     try {
@@ -212,10 +234,7 @@ if (!gotSingleInstanceLock) {
     })
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        logger.info("App activated with no windows. Recreating main window.")
-        createMainWindow()
-      }
+      showOrCreateMainWindow()
     })
   }).catch((error) => {
     logger.error("Failed to initialize app.", error)
@@ -226,10 +245,7 @@ if (!gotSingleInstanceLock) {
 }
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    logger.info("All windows closed. Quitting app on non-macOS platform.")
-    app.quit()
-  }
+  // 托盘保持运行，不退出
 })
 
 app.on("before-quit", async (event) => {
@@ -237,7 +253,7 @@ app.on("before-quit", async (event) => {
   await updateService.cancelDownload()
 
   if (allowAppQuit) {
-    // 确保日志被刷新
+    destroyTray()
     await shutdownDataStore()
     await logStore.dispose()
     return
@@ -266,6 +282,11 @@ app.on("before-quit", async (event) => {
       }
 
       const ownerWindow = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null
+
+      if (ownerWindow && !ownerWindow.isVisible()) {
+        ownerWindow.show()
+      }
+
       const result = ownerWindow
         ? await dialog.showMessageBox(ownerWindow, {
             type: "warning",
