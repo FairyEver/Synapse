@@ -1,0 +1,13 @@
+:root {
+  --vp-home-hero-image-background-image: none;
+  --vp-home-hero-image-filter: none;
+}
+
+.VPHero .tagline {
+  white-space: pre-line;
+}
+
+.dark {
+  --vp-home-hero-image-background-image: none;
+  --vp-home-hero-image-filter: none;
+}
