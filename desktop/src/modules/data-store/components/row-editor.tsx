@@ -10,16 +10,8 @@ import {
 import { Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Checkbox } from "@/components/ui/checkbox"
 import type { DataStoreColumnInfo } from "@/types/data-store"
+import { DataTableCellEnum } from "./data-table-cell-enum"
 import { DataTableCellInput } from "./data-table-cell-input"
 import {
   DATA_TABLE_COLUMN_CLASS,
@@ -38,6 +30,8 @@ type RowEditorProps = {
 type RowEditorHandle = {
   save: () => Promise<void>
 }
+
+const ROW_EDITOR_EDITABLE_CELL_CLASS = `${DATA_TABLE_COLUMN_CLASS} bg-foreground/5 focus-within:bg-foreground/10 has-[[data-state=open]]:bg-foreground/10`
 
 const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor(
   {
@@ -65,8 +59,6 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
   }, [editableColumns, initialData])
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const activeColumnNameRef = useRef<string | null>(initialFocusColumnName ?? editableColumns[0]?.name ?? null)
-  const lastPointerDownTargetRef = useRef<EventTarget | null>(null)
-  const rowRef = useRef<HTMLTableRowElement | null>(null)
   const savePromiseRef = useRef<Promise<void> | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [values, setValues] = useState<Record<string, string>>(() => initialValues)
@@ -155,17 +147,6 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
     input.select()
   }, [editableColumns, initialFocusColumnName])
 
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      lastPointerDownTargetRef.current = event.target
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown, true)
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true)
-    }
-  }, [])
-
   const handleInputKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") {
@@ -182,41 +163,10 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
     [handleCancel, handleSave],
   )
 
-  const handleRowBlurCapture = useCallback(
-    (event: React.FocusEvent<HTMLTableRowElement>) => {
-      if (isSaving) {
-        return
-      }
-
-      const row = rowRef.current
-      const nextTarget = event.relatedTarget
-      if (row && nextTarget instanceof Node && row.contains(nextTarget)) {
-        return
-      }
-
-      const pointerTarget = lastPointerDownTargetRef.current
-      if (row && pointerTarget instanceof Node && row.contains(pointerTarget)) {
-        return
-      }
-
-      if (nextTarget instanceof HTMLElement && nextTarget.closest("[data-row-editor-portal]")) {
-        return
-      }
-      if (pointerTarget instanceof HTMLElement && (pointerTarget as HTMLElement).closest("[data-row-editor-portal]")) {
-        return
-      }
-
-      void handleSave().catch(() => {})
-    },
-    [handleSave, isSaving],
-  )
-
   return (
     <TableRow
-      ref={rowRef}
       data-row-editor="true"
       className="bg-muted/40 hover:bg-muted/40"
-      onBlurCapture={handleRowBlurCapture}
     >
       <TableCell className={`${DATA_TABLE_COLUMN_CLASS} font-mono text-muted-foreground`}>
         {initialData?.id != null ? String(initialData.id) : ""}
@@ -231,35 +181,18 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
           let selected: string[] = []
           try { selected = JSON.parse(values[col.name] || "[]") } catch { /* empty */ }
           if (!Array.isArray(selected)) selected = []
-          const toggleValue = (v: string) => {
-            const next = selected.includes(v) ? selected.filter((s) => s !== v) : [...selected, v]
-            handleChange(col.name, JSON.stringify(next))
-          }
-          const display = selected.length > 0 ? selected.join(", ") : "选择..."
           return (
-            <TableCell key={col.name} className={DATA_TABLE_COLUMN_CLASS}>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    disabled={isSaving}
-                    className="flex h-6 w-full items-center rounded-md border border-input bg-transparent px-2 text-xs text-left truncate"
-                  >
-                    <span className="truncate">{display}</span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48 p-1" align="start" data-row-editor-portal>
-                  {col.enumValues!.map((v) => (
-                    <label key={v} className="flex items-center gap-2 rounded-sm px-2 py-1 text-xs hover:bg-accent cursor-pointer">
-                      <Checkbox
-                        checked={selected.includes(v)}
-                        onCheckedChange={() => toggleValue(v)}
-                      />
-                      {v}
-                    </label>
-                  ))}
-                </PopoverContent>
-              </Popover>
+            <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
+              <DataTableCellEnum
+                multiple
+                value={selected}
+                options={col.enumValues!}
+                disabled={isSaving}
+                onChange={(next) => handleChange(col.name, JSON.stringify(next))}
+                onFocus={() => {
+                  activeColumnNameRef.current = col.name
+                }}
+              />
             </TableCell>
           )
         }
@@ -269,29 +202,22 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
             ? [{ value: "true", label: "true" }, { value: "false", label: "false" }]
             : col.enumValues!.map((v) => ({ value: v, label: v }))
           return (
-            <TableCell key={col.name} className={DATA_TABLE_COLUMN_CLASS}>
-              <Select
+            <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
+              <DataTableCellEnum
+                value={values[col.name] ?? ""}
+                options={options}
                 disabled={isSaving}
-                value={values[col.name] || undefined}
-                onValueChange={(v) => handleChange(col.name, v)}
-              >
-                <SelectTrigger className="h-6 text-xs">
-                  <SelectValue placeholder="选择..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {options.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(next) => handleChange(col.name, next)}
+                onFocus={() => {
+                  activeColumnNameRef.current = col.name
+                }}
+              />
             </TableCell>
           )
         }
 
         return (
-          <TableCell key={col.name} className={DATA_TABLE_COLUMN_CLASS}>
+          <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
             <DataTableCellInput
               ref={(node) => {
                 inputRefs.current[col.name] = node
@@ -316,11 +242,11 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
         </TableCell>
       ))}
       <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
           <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
+            variant="default"
+            size="icon-xs"
+            className="rounded-sm"
             disabled={isSaving}
             onClick={() => {
               void handleSave().catch(() => {})
@@ -329,9 +255,9 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
             <Check className="size-3.5" />
           </Button>
           <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
+            variant="outline"
+            size="icon-xs"
+            className="rounded-sm"
             disabled={isSaving}
             onClick={handleCancel}
           >

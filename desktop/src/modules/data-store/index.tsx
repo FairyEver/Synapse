@@ -23,7 +23,7 @@ import {
   useDataStoreSchema,
   useDataStoreTables,
 } from "./hooks/use-data-store"
-import type { DataStoreColumnDef, DataStoreColumnType } from "@/types/data-store"
+import type { DataStoreColumnDef, DataStoreColumnType, DataStoreWhereGroup } from "@/types/data-store"
 
 const logger = createRendererLogger("data-store")
 
@@ -33,12 +33,13 @@ function DataStoreModule() {
 
   const [activeTable, setActiveTable] = useState<string | null>(null)
   const [page, setPage] = useState(1)
+  const [filter, setFilter] = useState<DataStoreWhereGroup | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isSchemaSheetOpen, setIsSchemaSheetOpen] = useState(false)
   const dataTableViewRef = useRef<DataTableViewHandle | null>(null)
 
   const selectedTable = activeTable ?? tables[0]?.name ?? null
-  const { rows, total, refresh: refreshQuery, pageSize } = useDataStoreQuery(selectedTable, page)
+  const { rows, total, refresh: refreshQuery, pageSize } = useDataStoreQuery(selectedTable, page, filter)
   const { schema, refresh: refreshSchema } = useDataStoreSchema(selectedTable)
 
   const handleTableSelect = useCallback(
@@ -50,9 +51,15 @@ function DataStoreModule() {
       await dataTableViewRef.current?.commitPendingChanges()
       setActiveTable(name)
       setPage(1)
+      setFilter(null)
     },
     [selectedTable],
   )
+
+  const handleFilterChange = useCallback((nextFilter: DataStoreWhereGroup | null) => {
+    setFilter(nextFilter)
+    setPage(1)
+  }, [])
 
   const handleOpenCreateDialog = useCallback(async () => {
     await dataTableViewRef.current?.commitPendingChanges()
@@ -68,6 +75,7 @@ function DataStoreModule() {
           await refreshTables()
           setActiveTable(name)
           setPage(1)
+          setFilter(null)
         },
         { loading: "正在创建表...", success: `表 "${name}" 已创建` },
       )
@@ -227,6 +235,8 @@ function DataStoreModule() {
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               onShowSchema={() => setIsSchemaSheetOpen(true)}
+              filter={filter}
+              onFilterChange={handleFilterChange}
             />
           </div>
         </div>

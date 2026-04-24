@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, Tray } from "electron"
+import { app, Menu, nativeImage, nativeTheme, Tray } from "electron"
 import { resolveRuntimeAssetPath } from "./app-icon-service"
 import { createMainLogger } from "./log-store"
 
@@ -6,9 +6,47 @@ let tray: Tray | null = null
 const logger = createMainLogger("tray")
 
 let showWindowCallback: (() => void) | null = null
+let themeUpdateHandler: (() => void) | null = null
+
+function resolveTrayIconPath(): string | undefined {
+  if (process.platform === "darwin") {
+    return resolveRuntimeAssetPath("source/tray/tray-Template.png")
+      ?? resolveRuntimeAssetPath("source/icon.png")
+  }
+
+  const variant = nativeTheme.shouldUseDarkColors ? "tray-dark" : "tray-light"
+  return resolveRuntimeAssetPath(`source/tray/${variant}.png`)
+    ?? resolveRuntimeAssetPath("source/icon.png")
+}
+
+function buildTrayImage(iconPath: string) {
+  let icon = nativeImage.createFromPath(iconPath)
+
+  if (process.platform === "darwin") {
+    const { width, height } = icon.getSize()
+    if (width > 16 || height > 16) {
+      icon = icon.resize({ width: 16, height: 16 })
+    }
+    icon.setTemplateImage(true)
+  }
+
+  return icon
+}
+
+function applyCurrentIcon(): void {
+  if (!tray) return
+
+  const iconPath = resolveTrayIconPath()
+  if (!iconPath) {
+    logger.warn("Tray icon not found on theme update. Keeping previous icon.")
+    return
+  }
+
+  tray.setImage(buildTrayImage(iconPath))
+}
 
 function createTray(onShowWindow: () => void): void {
-  const iconPath = resolveRuntimeAssetPath("source/icon.png")
+  const iconPath = resolveTrayIconPath()
 
   if (!iconPath) {
     logger.warn("Tray icon not found. Skipping tray creation.")
@@ -17,14 +55,7 @@ function createTray(onShowWindow: () => void): void {
 
   showWindowCallback = onShowWindow
 
-  let icon = nativeImage.createFromPath(iconPath)
-
-  if (process.platform === "darwin") {
-    icon = icon.resize({ width: 16, height: 16 })
-    icon.setTemplateImage(true)
-  }
-
-  tray = new Tray(icon)
+  tray = new Tray(buildTrayImage(iconPath))
   tray.setToolTip("Synapse")
 
   const contextMenu = Menu.buildFromTemplate([
@@ -45,10 +76,20 @@ function createTray(onShowWindow: () => void): void {
     showWindowCallback?.()
   })
 
+  if (process.platform !== "darwin") {
+    themeUpdateHandler = () => applyCurrentIcon()
+    nativeTheme.on("updated", themeUpdateHandler)
+  }
+
   logger.info("System tray created.")
 }
 
 function destroyTray(): void {
+  if (themeUpdateHandler) {
+    nativeTheme.off("updated", themeUpdateHandler)
+    themeUpdateHandler = null
+  }
+
   if (tray) {
     tray.destroy()
     tray = null

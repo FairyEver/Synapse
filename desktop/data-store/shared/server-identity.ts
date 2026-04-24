@@ -9,7 +9,7 @@
 // 用户下次启动时，autoRegisterMcp() 会先把三个编辑器配置里旧名字的条目
 // 清掉，再用新名字注册，对用户无感。
 
-export const SYNAPSE_DATA_SERVER_NAME = "synapse-data"
+export const SYNAPSE_DATA_SERVER_NAME = "synapse-database"
 
 export const SYNAPSE_DATA_SERVER_IDENTITY = {
   name: SYNAPSE_DATA_SERVER_NAME,
@@ -18,4 +18,4 @@ export const SYNAPSE_DATA_SERVER_IDENTITY = {
 
 // 曾经用过的服务器名字。启动时会从用户编辑器配置里移除这些条目。
 // 不要把当前名字放进来。
-export const SYNAPSE_DATA_LEGACY_SERVER_NAMES: readonly string[] = []
+export const SYNAPSE_DATA_LEGACY_SERVER_NAMES: readonly string[] = ["synapse-data"]

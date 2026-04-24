@@ -13,6 +13,7 @@ import type {
   DataStoreStatus,
   DataStoreTableInfo,
   DataStoreTableSchema,
+  DataStoreWhereClause,
 } from "@/types/data-store"
 
 function useDataStoreTables() {
@@ -37,7 +38,7 @@ function useDataStoreTables() {
   return { tables, loading, refresh }
 }
 
-function useDataStoreQuery(table: string | null, page: number) {
+function useDataStoreQuery(table: string | null, page: number, where?: DataStoreWhereClause | null) {
   const [data, setData] = useState<DataStoreQueryResult>({ rows: [], total: 0 })
   const [loading, setLoading] = useState(false)
   const pageSize = 50
@@ -52,6 +53,7 @@ function useDataStoreQuery(table: string | null, page: number) {
     try {
       const result = await requireSynapseBridge().dataStore.query({
         table,
+        where: where ?? undefined,
         limit: pageSize,
         offset: (page - 1) * pageSize,
       })
@@ -61,7 +63,7 @@ function useDataStoreQuery(table: string | null, page: number) {
     } finally {
       setLoading(false)
     }
-  }, [table, page])
+  }, [table, page, where])
 
   useEffect(() => {
     void refresh()

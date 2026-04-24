@@ -8,9 +8,10 @@ import {
   useRef,
   useState,
 } from "react"
-import { ClipboardCopy, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react"
+import { Funnel, Pencil, SlidersHorizontal, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Menubar } from "@/components/ui/menubar"
 import {
   Table,
   TableBody,
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { RowEditor } from "./row-editor"
 import type { RowEditorHandle } from "./row-editor"
+import { DataTableFilterDialog } from "./data-table-filter-dialog"
 import {
   DATA_TABLE_ACTION_COLUMN_WIDTH,
   DATA_TABLE_COLUMN_CLASS,
@@ -51,8 +53,10 @@ import {
   getColumnWidthStyle,
   getDefaultColumnWidth,
 } from "./data-table-layout"
-import type { DataStoreColumnInfo, DataStoreTableSchema } from "@/types/data-store"
+import type { DataStoreColumnInfo, DataStoreTableSchema, DataStoreWhereGroup } from "@/types/data-store"
 import { SCHEMA_COPY_FORMATS, SCHEMA_COPY_GROUPS } from "./schema-copy-formats"
+import { downloadTableContent, formatTableContent } from "./table-content-formats"
+import type { TableContentFormat, TableDownloadFormat } from "./table-content-formats"
 
 type DataTableViewProps = {
   tableName: string
@@ -67,6 +71,8 @@ type DataTableViewProps = {
   onUpdate: (id: number, data: Record<string, unknown>) => Promise<void> | void
   onDelete: (id: number) => void
   onShowSchema: () => void
+  filter: DataStoreWhereGroup | null
+  onFilterChange: (filter: DataStoreWhereGroup | null) => void
 }
 
 type DataTableViewHandle = {
@@ -87,6 +93,8 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     onUpdate,
     onDelete,
     onShowSchema,
+    filter,
+    onFilterChange,
   },
   ref,
 ) {
@@ -94,6 +102,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   const [editingColumnName, setEditingColumnName] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [resizedColumnWidths, setResizedColumnWidths] = useState<Record<string, number>>({})
   const rowEditorRef = useRef<RowEditorHandle | null>(null)
 
@@ -118,7 +127,14 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     [columnWidths, visibleColumns],
   )
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-
+  const contentColumns = useMemo(
+    () => [{ name: "id", type: "INTEGER" as const }, ...visibleColumns],
+    [visibleColumns],
+  )
+  const tableContentData = useMemo(
+    () => ({ tableName, columns: contentColumns, rows }),
+    [contentColumns, rows, tableName],
+  )
   useEffect(() => {
     setResizedColumnWidths((current) => {
       const visibleColumnNames = new Set(visibleColumns.map((col) => col.name))
@@ -216,6 +232,24 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     [schema],
   )
 
+  const handleCopyContent = useCallback(
+    async (format: TableContentFormat) => {
+      await commitPendingChanges()
+      await navigator.clipboard.writeText(formatTableContent(tableContentData, format))
+      toast(format === "csv" ? "已复制 CSV" : "已复制 Markdown 表格")
+    },
+    [commitPendingChanges, tableContentData],
+  )
+
+  const handleDownloadContent = useCallback(
+    async (format: TableDownloadFormat) => {
+      await commitPendingChanges()
+      downloadTableContent(tableContentData, format)
+      toast(format === "csv" ? "已下载 CSV" : "已下载 Excel")
+    },
+    [commitPendingChanges, tableContentData],
+  )
+
   const handleResizeColumn = useCallback(
     (columnName: string, startClientX: number) => {
       const startWidth = columnWidths[columnName]
@@ -254,12 +288,22 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           >
             <SlidersHorizontal className="size-4" />
           </Button>
+          <Button
+            variant={filter ? "secondary" : "ghost"}
+            size="icon"
+            className="size-7"
+            onClick={() => {
+              void commitPendingChanges().finally(() => setIsFilterDialogOpen(true))
+            }}
+          >
+            <Funnel className="size-4" />
+            <span className="sr-only">筛选</span>
+          </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <Menubar className="w-fit">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <ClipboardCopy className="mr-1 size-4" />
+              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal">
                 复制结构
               </Button>
             </DropdownMenuTrigger>
@@ -287,18 +331,65 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal">
+                复制内容
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onSelect={() => {
+                  void handleCopyContent("csv")
+                }}
+              >
+                复制为 CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void handleCopyContent("markdown")
+                }}
+              >
+                复制为 Markdown 表格
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal">
+                下载
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem
+                onSelect={() => {
+                  void handleDownloadContent("csv")
+                }}
+              >
+                下载为 CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void handleDownloadContent("xlsx")
+                }}
+              >
+                下载为 XLSX
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
-            variant="outline"
+            type="button"
+            variant="ghost"
             size="sm"
+            className="rounded-sm px-1.5"
             onClick={() => {
               void handleStartAdding().catch(() => {})
             }}
             disabled={isAdding}
           >
-            <Plus className="mr-1 size-4" />
             新增行
           </Button>
-        </div>
+        </Menubar>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">
@@ -405,11 +496,11 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                     </TableCell>
                   ))}
                   <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="size-6"
+                        size="icon-xs"
+                        className="rounded-sm"
                         onClick={() => {
                           void beginRowEdit(rowId, editableColumns[0]?.name ?? null).catch(() => {})
                         }}
@@ -418,8 +509,8 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                       </Button>
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="size-6"
+                        size="icon-xs"
+                        className="rounded-sm"
                         onClick={() => setDeleteId(rowId)}
                       >
                         <Trash2 className="size-3" />
@@ -489,6 +580,14 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DataTableFilterDialog
+        open={isFilterDialogOpen}
+        onOpenChange={setIsFilterDialogOpen}
+        columns={columns}
+        value={filter}
+        onApply={onFilterChange}
+      />
     </div>
   )
 })

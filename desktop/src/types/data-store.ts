@@ -39,7 +39,12 @@ type DataStoreWhereCondition = {
   value: unknown
 }
 
-type DataStoreWhereClause = Record<string, unknown> | DataStoreWhereCondition[]
+type DataStoreWhereGroup = {
+  combinator: "all" | "any"
+  conditions: DataStoreWhereCondition[]
+}
+
+type DataStoreWhereClause = Record<string, unknown> | DataStoreWhereCondition[] | DataStoreWhereGroup
 
 type DataStoreOrderBy = string | { field: string; dir: "asc" | "desc" }
 
@@ -149,4 +154,5 @@ export type {
   DataStoreTableSchema,
   DataStoreWhereClause,
   DataStoreWhereCondition,
+  DataStoreWhereGroup,
 }
