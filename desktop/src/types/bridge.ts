@@ -204,6 +204,7 @@ export type SynapseBridge = {
     addColumn: (params: { table: string; column: DataStoreColumnDef & { default?: unknown } }) => Promise<void>
     updateColumnDescription: (params: { table: string; column: string; description: string }) => Promise<void>
     updateColumnEnumValues: (params: { table: string; column: string; values: string[] }) => Promise<void>
+    getColumnValueUsage: (params: { table: string; column: string }) => Promise<Record<string, number>>
     insert: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
     batchInsert: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
     query: (params: DataStoreQueryParams) => Promise<DataStoreQueryResult>

@@ -62,6 +62,13 @@ function registerDataStoreHandlers(): void {
     dataStoreService.updateColumnEnumValues(params.table, params.column, params.values)
   })
 
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getColumnValueUsage, async (_event, params: {
+    table: string
+    column: string
+  }) => {
+    return dataStoreService.getColumnValueUsage(params.table, params.column)
+  })
+
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.insert, async (_event, params: {
     table: string
     data: Record<string, unknown>

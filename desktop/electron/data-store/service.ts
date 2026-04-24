@@ -688,6 +688,48 @@ class DataStoreService {
       .run(table, column, description, table, column)
   }
 
+  getColumnValueUsage(table: string, column: string): Record<string, number> {
+    validateName(table, "table")
+    validateColumnName(column)
+    this.assertTableExists(table)
+
+    const enumCols = this.getEnumColumnsForTable(table)
+    const allowed = enumCols.get(column)
+    if (!allowed) {
+      throw new Error(`Column "${column}" is not an ENUM or MULTI_ENUM column`)
+    }
+
+    const db = this.getDb()
+    const isMultiEnum = this.getMultiEnumColumnsForTable(table).has(column)
+    const usage: Record<string, number> = {}
+    for (const v of allowed) usage[v] = 0
+
+    if (isMultiEnum) {
+      const rows = db.prepare(`SELECT ${q(column)} AS v FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''`).all() as { v: unknown }[]
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(String(row.v))
+          if (!Array.isArray(parsed)) continue
+          const seen = new Set<string>()
+          for (const item of parsed) {
+            const s = String(item)
+            if (seen.has(s)) continue
+            seen.add(s)
+            usage[s] = (usage[s] ?? 0) + 1
+          }
+        } catch { /* ignore malformed JSON */ }
+      }
+    } else {
+      const rows = db.prepare(`SELECT ${q(column)} AS v, COUNT(*) AS c FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != '' GROUP BY ${q(column)}`).all() as { v: unknown; c: number | bigint }[]
+      for (const row of rows) {
+        const s = String(row.v)
+        usage[s] = (usage[s] ?? 0) + toNumber(row.c)
+      }
+    }
+
+    return usage
+  }
+
   updateColumnEnumValues(table: string, column: string, values: string[]): void {
     validateName(table, "table")
     validateColumnName(column)

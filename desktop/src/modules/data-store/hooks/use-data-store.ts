@@ -137,6 +137,10 @@ async function updateColumnEnumValues(table: string, column: string, values: str
   await requireSynapseBridge().dataStore.updateColumnEnumValues({ table, column, values })
 }
 
+async function getColumnValueUsage(table: string, column: string): Promise<Record<string, number>> {
+  return requireSynapseBridge().dataStore.getColumnValueUsage({ table, column })
+}
+
 async function insertRow(table: string, data: Record<string, unknown>): Promise<{ id: number }> {
   return requireSynapseBridge().dataStore.insert({ table, data })
 }
@@ -197,6 +201,7 @@ export {
   exportDB,
   getCliDebugInfo,
   getCliStatus,
+  getColumnValueUsage,
   getMCPServers,
   getMcpHttpStatus,
   getMcpStatus,

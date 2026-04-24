@@ -22,10 +22,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import type { DataStoreColumnInfo } from "@/types/data-store"
 import { DataTableCellInput } from "./data-table-cell-input"
 import {
-  DATA_TABLE_ACTION_COLUMN_CLASS,
-  DATA_TABLE_ID_COLUMN_CLASS,
-  DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS,
-  DATA_TABLE_VALUE_COLUMN_CLASS,
+  DATA_TABLE_COLUMN_CLASS,
+  DATA_TABLE_STICKY_ACTION_COLUMN_CLASS,
+  formatCellValue,
 } from "./data-table-layout"
 
 type RowEditorProps = {
@@ -219,7 +218,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
       className="bg-muted/40 hover:bg-muted/40"
       onBlurCapture={handleRowBlurCapture}
     >
-      <TableCell className={`${DATA_TABLE_ID_COLUMN_CLASS} font-mono text-muted-foreground`}>
+      <TableCell className={`${DATA_TABLE_COLUMN_CLASS} font-mono text-muted-foreground`}>
         {initialData?.id != null ? String(initialData.id) : ""}
       </TableCell>
       {editableColumns.map((col) => {
@@ -238,7 +237,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
           }
           const display = selected.length > 0 ? selected.join(", ") : "选择..."
           return (
-            <TableCell key={col.name} className={DATA_TABLE_VALUE_COLUMN_CLASS}>
+            <TableCell key={col.name} className={DATA_TABLE_COLUMN_CLASS}>
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -270,7 +269,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
             ? [{ value: "true", label: "true" }, { value: "false", label: "false" }]
             : col.enumValues!.map((v) => ({ value: v, label: v }))
           return (
-            <TableCell key={col.name} className={DATA_TABLE_VALUE_COLUMN_CLASS}>
+            <TableCell key={col.name} className={DATA_TABLE_COLUMN_CLASS}>
               <Select
                 disabled={isSaving}
                 value={values[col.name] || undefined}
@@ -292,7 +291,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
         }
 
         return (
-          <TableCell key={col.name} className={DATA_TABLE_VALUE_COLUMN_CLASS}>
+          <TableCell key={col.name} className={DATA_TABLE_COLUMN_CLASS}>
             <DataTableCellInput
               ref={(node) => {
                 inputRefs.current[col.name] = node
@@ -311,12 +310,12 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
       {systemTimeColumns.map((col) => (
         <TableCell
           key={col.name}
-          className={`${DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
+          className={`${DATA_TABLE_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
         >
-          {initialData?.[col.name] != null ? String(initialData[col.name]) : ""}
+          {formatCellValue(initialData?.[col.name], col.type, col.name)}
         </TableCell>
       ))}
-      <TableCell className={`${DATA_TABLE_ACTION_COLUMN_CLASS} py-0.5`}>
+      <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"

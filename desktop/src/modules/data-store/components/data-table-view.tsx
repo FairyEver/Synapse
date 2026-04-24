@@ -2,7 +2,9 @@ import {
   Fragment,
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react"
@@ -39,10 +41,15 @@ import {
 import { RowEditor } from "./row-editor"
 import type { RowEditorHandle } from "./row-editor"
 import {
-  DATA_TABLE_ACTION_COLUMN_CLASS,
-  DATA_TABLE_ID_COLUMN_CLASS,
-  DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS,
-  DATA_TABLE_VALUE_COLUMN_CLASS,
+  DATA_TABLE_ACTION_COLUMN_WIDTH,
+  DATA_TABLE_COLUMN_CLASS,
+  DATA_TABLE_ID_COLUMN_WIDTH,
+  DATA_TABLE_MIN_VALUE_COLUMN_WIDTH,
+  DATA_TABLE_RESIZABLE_HEAD_CLASS,
+  DATA_TABLE_STICKY_ACTION_COLUMN_CLASS,
+  formatCellValue,
+  getColumnWidthStyle,
+  getDefaultColumnWidth,
 } from "./data-table-layout"
 import type { DataStoreColumnInfo, DataStoreTableSchema } from "@/types/data-store"
 import { SCHEMA_COPY_FORMATS, SCHEMA_COPY_GROUPS } from "./schema-copy-formats"
@@ -87,11 +94,43 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   const [editingColumnName, setEditingColumnName] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [resizedColumnWidths, setResizedColumnWidths] = useState<Record<string, number>>({})
   const rowEditorRef = useRef<RowEditorHandle | null>(null)
 
-  const editableColumns = columns.filter((c) => !c.primaryKey && !c.system)
-  const systemTimeColumns = columns.filter((c) => c.system && !c.primaryKey)
+  const editableColumns = useMemo(() => columns.filter((c) => !c.primaryKey && !c.system), [columns])
+  const systemTimeColumns = useMemo(() => columns.filter((c) => c.system && !c.primaryKey), [columns])
+  const visibleColumns = useMemo(
+    () => [...editableColumns, ...systemTimeColumns],
+    [editableColumns, systemTimeColumns],
+  )
+  const columnWidths = useMemo(() => {
+    const widths: Record<string, number> = {}
+    for (const col of visibleColumns) {
+      widths[col.name] = resizedColumnWidths[col.name] ?? getDefaultColumnWidth(col, rows)
+    }
+    return widths
+  }, [resizedColumnWidths, rows, visibleColumns])
+  const tableWidth = useMemo(
+    () => visibleColumns.reduce(
+      (width, col) => width + columnWidths[col.name],
+      DATA_TABLE_ID_COLUMN_WIDTH + DATA_TABLE_ACTION_COLUMN_WIDTH,
+    ),
+    [columnWidths, visibleColumns],
+  )
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  useEffect(() => {
+    setResizedColumnWidths((current) => {
+      const visibleColumnNames = new Set(visibleColumns.map((col) => col.name))
+      const next: Record<string, number> = {}
+      for (const [columnName, width] of Object.entries(current)) {
+        if (visibleColumnNames.has(columnName)) {
+          next[columnName] = width
+        }
+      }
+      return next
+    })
+  }, [visibleColumns])
 
   const handleSaveEdit = useCallback(
     async (data: Record<string, unknown>) => {
@@ -177,6 +216,29 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     [schema],
   )
 
+  const handleResizeColumn = useCallback(
+    (columnName: string, startClientX: number) => {
+      const startWidth = columnWidths[columnName]
+
+      const handlePointerMove = (event: PointerEvent) => {
+        const nextWidth = Math.max(
+          DATA_TABLE_MIN_VALUE_COLUMN_WIDTH,
+          startWidth + event.clientX - startClientX,
+        )
+        setResizedColumnWidths((current) => ({ ...current, [columnName]: nextWidth }))
+      }
+
+      const handlePointerUp = () => {
+        document.removeEventListener("pointermove", handlePointerMove)
+        document.removeEventListener("pointerup", handlePointerUp)
+      }
+
+      document.addEventListener("pointermove", handlePointerMove)
+      document.addEventListener("pointerup", handlePointerUp)
+    },
+    [columnWidths],
+  )
+
   return (
     <div className="flex h-full flex-col gap-2.5">
       <div className="flex items-center justify-between">
@@ -240,31 +302,59 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">
-        <Table className="table-fixed text-xs [&_td]:px-3 [&_td]:py-1 [&_th]:h-7 [&_th]:px-3">
+        <Table
+          className="table-fixed text-xs [&_td]:px-3 [&_td]:py-1 [&_th]:h-7 [&_th]:px-3"
+          style={{ width: tableWidth }}
+        >
+          <colgroup>
+            <col style={getColumnWidthStyle(DATA_TABLE_ID_COLUMN_WIDTH)} />
+            {visibleColumns.map((col) => (
+              <col key={col.name} style={getColumnWidthStyle(columnWidths[col.name])} />
+            ))}
+            <col style={getColumnWidthStyle(DATA_TABLE_ACTION_COLUMN_WIDTH)} />
+          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
-                className={`${DATA_TABLE_ID_COLUMN_CLASS} text-xs font-medium text-muted-foreground`}
+                className={`${DATA_TABLE_COLUMN_CLASS} text-xs font-medium text-muted-foreground`}
               >
                 id
               </TableHead>
               {editableColumns.map((col) => (
                 <TableHead
                   key={col.name}
-                  className={`${DATA_TABLE_VALUE_COLUMN_CLASS} text-xs font-medium text-muted-foreground`}
+                  className={`${DATA_TABLE_COLUMN_CLASS} ${DATA_TABLE_RESIZABLE_HEAD_CLASS} text-xs font-medium text-muted-foreground`}
                 >
-                  {col.name}
+                  <span className="truncate pr-2">{col.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`调整 ${col.name} 列宽`}
+                    className="absolute inset-y-1 right-0 w-2 cursor-col-resize border-r border-border"
+                    onPointerDown={(event) => {
+                      event.preventDefault()
+                      handleResizeColumn(col.name, event.clientX)
+                    }}
+                  />
                 </TableHead>
               ))}
               {systemTimeColumns.map((col) => (
                 <TableHead
                   key={col.name}
-                  className={`${DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS} text-xs font-medium text-muted-foreground`}
+                  className={`${DATA_TABLE_COLUMN_CLASS} ${DATA_TABLE_RESIZABLE_HEAD_CLASS} text-xs font-medium text-muted-foreground`}
                 >
-                  {col.name}
+                  <span className="truncate pr-2">{col.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`调整 ${col.name} 列宽`}
+                    className="absolute inset-y-1 right-0 w-2 cursor-col-resize border-r border-border"
+                    onPointerDown={(event) => {
+                      event.preventDefault()
+                      handleResizeColumn(col.name, event.clientX)
+                    }}
+                  />
                 </TableHead>
               ))}
-              <TableHead className={DATA_TABLE_ACTION_COLUMN_CLASS} />
+              <TableHead className={DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} />
             </TableRow>
           </TableHeader>
           <TableBody className="[&_tr:last-child]:border-b">
@@ -291,30 +381,30 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
               return (
                 <TableRow key={rowId}>
                   <TableCell
-                    className={`${DATA_TABLE_ID_COLUMN_CLASS} font-mono text-muted-foreground`}
+                    className={`${DATA_TABLE_COLUMN_CLASS} font-mono text-muted-foreground`}
                   >
                     {rowId}
                   </TableCell>
                   {editableColumns.map((col) => (
                     <TableCell
                       key={col.name}
-                      className={`${DATA_TABLE_VALUE_COLUMN_CLASS} truncate`}
+                      className={`${DATA_TABLE_COLUMN_CLASS} truncate`}
                       onDoubleClick={() => {
                         void beginRowEdit(rowId, col.name).catch(() => {})
                       }}
                     >
-                      {formatCellValue(row[col.name], col.type)}
+                      {formatCellValue(row[col.name], col.type, col.name)}
                     </TableCell>
                   ))}
                   {systemTimeColumns.map((col) => (
                     <TableCell
                       key={col.name}
-                      className={`${DATA_TABLE_SYSTEM_TIME_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
+                      className={`${DATA_TABLE_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
                     >
-                      {formatCellValue(row[col.name], col.type)}
+                      {formatCellValue(row[col.name], col.type, col.name)}
                     </TableCell>
                   ))}
-                  <TableCell className={`${DATA_TABLE_ACTION_COLUMN_CLASS} py-0.5`}>
+                  <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>
                     <div className="flex items-center gap-0.5">
                       <Button
                         variant="ghost"
@@ -402,18 +492,6 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     </div>
   )
 })
-
-function formatCellValue(value: unknown, type?: string): string {
-  if (value == null) return ""
-  if (type?.toUpperCase() === "BOOLEAN") {
-    return value === true || value === 1 ? "✓" : "✗"
-  }
-  if (type?.toUpperCase() === "MULTI_ENUM" && Array.isArray(value)) {
-    return value.join(", ")
-  }
-  if (typeof value === "object") return JSON.stringify(value)
-  return String(value)
-}
 
 export { DataTableView }
 export type { DataTableViewHandle }

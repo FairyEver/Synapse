@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -40,9 +41,11 @@ import {
 import type { DataStoreColumnType, DataStoreTableSchema } from "@/types/data-store"
 import {
   DATA_STORE_COLUMN_TYPES,
+  formatEnumSummary,
   getDataStoreColumnTypeDisplayName,
   getDataStoreColumnTypeLabel,
 } from "./data-store-column-types"
+import { EnumValuesEditorDialog } from "./enum-values-editor-dialog"
 
 type TableSchemaSheetProps = {
   open: boolean
@@ -50,7 +53,7 @@ type TableSchemaSheetProps = {
   schema: DataStoreTableSchema | null
   onAddColumn: (name: string, type: DataStoreColumnType, description?: string, enumValues?: string[]) => void
   onUpdateColumnDescription: (column: string, description: string) => void
-  onUpdateColumnEnumValues: (column: string, values: string[]) => void
+  onUpdateColumnEnumValues: (column: string, values: string[]) => Promise<void>
   onDropTable: () => void
 }
 
@@ -69,7 +72,13 @@ function TableSchemaSheet({
   const [newColEnumValues, setNewColEnumValues] = useState<string[]>([])
   const [editingCol, setEditingCol] = useState<string | null>(null)
   const [editingDesc, setEditingDesc] = useState("")
+  const [editingEnumCol, setEditingEnumCol] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+
+  const editingEnumColumn = useMemo(
+    () => (schema && editingEnumCol ? schema.columns.find((c) => c.name === editingEnumCol) ?? null : null),
+    [schema, editingEnumCol],
+  )
 
   const handleAddColumn = useCallback(() => {
     const trimmed = newColName.trim()
@@ -123,10 +132,23 @@ function TableSchemaSheet({
                   <TableRow key={col.name}>
                     <TableCell className="font-mono text-sm">{col.name}</TableCell>
                     <TableCell>
-                      {getDataStoreColumnTypeDisplayName(col.type)}
-                      {col.enumValues && col.enumValues.length > 0 ? (
-                        <span className="ml-1 text-xs text-muted-foreground">[{col.enumValues.join(", ")}]</span>
-                      ) : null}
+                      <div className="flex items-center gap-1.5">
+                        <span>{getDataStoreColumnTypeDisplayName(col.type)}</span>
+                        {(col.type === "ENUM" || col.type === "MULTI_ENUM") && col.enumValues && col.enumValues.length > 0 ? (
+                          <>
+                            <span className="text-xs text-muted-foreground">· {formatEnumSummary(col.enumValues)}</span>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-6 text-muted-foreground hover:text-foreground"
+                              onClick={() => setEditingEnumCol(col.name)}
+                              title="编辑枚举选项"
+                            >
+                              <Pencil className="size-3" />
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {col.system ? (
@@ -203,6 +225,18 @@ function TableSchemaSheet({
             ) : null}
           </div>
         </div>
+
+        {editingEnumColumn ? (
+          <EnumValuesEditorDialog
+            open={!!editingEnumCol}
+            onOpenChange={(next) => { if (!next) setEditingEnumCol(null) }}
+            table={schema.name}
+            column={editingEnumColumn.name}
+            columnType={editingEnumColumn.type === "MULTI_ENUM" ? "MULTI_ENUM" : "ENUM"}
+            initialValues={editingEnumColumn.enumValues ?? []}
+            onSave={(values) => onUpdateColumnEnumValues(editingEnumColumn.name, values)}
+          />
+        ) : null}
 
         <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none rounded-b-xl px-5 py-4 sm:items-center sm:justify-between">
           <AlertDialog>
