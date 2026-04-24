@@ -235,7 +235,10 @@ class DataStoreService {
   private needsSchemaRebuild(): boolean {
     const db = this.getDb()
     const metaTable = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_meta_columns'`).get()
-    if (!metaTable) return false
+    if (!metaTable) {
+      const existingTables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`).all() as { name: string }[]
+      return existingTables.length > 0
+    }
 
     const cols = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
     const colNames = new Set(cols.map((col) => col.name))

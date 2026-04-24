@@ -108,6 +108,14 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
+  getColumnChoicesUsage: (params) => ({
+    ok: true,
+    data: dataStoreService.getColumnChoicesUsage(
+      requireString(params, "table"),
+      requireString(params, "column"),
+    ),
+  }),
+
   insert: (params) => {
     const result = dataStoreService.insert(
       requireString(params, "table"),
