@@ -697,6 +697,32 @@ class DataStoreService {
     }
 
     const db = this.getDb()
+    const isMultiEnum = this.getMultiEnumColumnsForTable(table).has(column)
+    const allowed = new Set(values)
+    const existingRows = db.prepare(`SELECT DISTINCT ${q(column)} AS v FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''`).all() as { v: unknown }[]
+    const invalid = new Set<string>()
+    for (const row of existingRows) {
+      if (row.v === null || row.v === undefined) continue
+      if (isMultiEnum) {
+        try {
+          const parsed = JSON.parse(String(row.v))
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              const s = String(item)
+              if (!allowed.has(s)) invalid.add(s)
+            }
+          }
+        } catch { /* ignore malformed JSON */ }
+      } else {
+        const s = String(row.v)
+        if (!allowed.has(s)) invalid.add(s)
+      }
+    }
+    if (invalid.size > 0) {
+      const sorted = Array.from(invalid).sort()
+      throw new Error(`Cannot update enumValues for column "${column}": existing rows contain values not in the new list: ${sorted.join(", ")}. Update or delete those rows first, or keep those values in the new list.`)
+    }
+
     db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, COALESCE((SELECT description FROM "_meta_columns" WHERE table_name = ? AND column_name = ?), ''), ?)`)
       .run(table, column, table, column, JSON.stringify(values))
 
@@ -1207,6 +1233,12 @@ class DataStoreService {
           if (!mCols.has(cond.field)) {
             throw new Error(`CONTAINS operator is only supported on MULTI_ENUM columns. Column "${cond.field}" is not MULTI_ENUM.`)
           }
+          if (cond.value === null || cond.value === undefined) {
+            throw new Error(`CONTAINS operator requires a non-null scalar value for column "${cond.field}".`)
+          }
+          if (typeof cond.value === "object") {
+            throw new Error(`CONTAINS operator requires a scalar value (string, number, or boolean) for column "${cond.field}". Got ${Array.isArray(cond.value) ? "array" : "object"}. Example: { field: "${cond.field}", op: "CONTAINS", value: "<single item>" }`)
+          }
           conditions.push(`EXISTS (SELECT 1 FROM json_each(${q(cond.field)}) WHERE value = ?)`)
           params.push(toSqlValue(cond.value))
           continue
@@ -1214,6 +1246,8 @@ class DataStoreService {
         conditions.push(`${q(cond.field)} ${cond.op} ?`)
         if (bCols.has(cond.field)) {
           params.push(toBooleanInt(cond.value))
+        } else if (mCols.has(cond.field)) {
+          params.push(toSqlValue(JSON.stringify(cond.value)))
         } else {
           const val = jCols.has(cond.field) && cond.value != null && typeof cond.value === "object"
             ? JSON.stringify(cond.value)
@@ -1227,6 +1261,8 @@ class DataStoreService {
         conditions.push(`${q(key)} = ?`)
         if (bCols.has(key)) {
           params.push(toBooleanInt(value))
+        } else if (mCols.has(key)) {
+          params.push(toSqlValue(JSON.stringify(value)))
         } else {
           const val = jCols.has(key) && value != null && typeof value === "object"
             ? JSON.stringify(value)
