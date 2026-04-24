@@ -81,7 +81,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "create_table",
-      description: "Create a new table. System columns 'id' (auto-increment primary key), 'created_at' and 'updated_at' (ISO timestamps, auto-managed) are added automatically — do not include them in columns. Column types: TEXT, INTEGER, REAL, BLOB, DATE (YYYY-MM-DD), DATETIME (YYYY-MM-DD HH:mm:ss), BOOLEAN (true/false, stored as 0/1), JSON (objects/arrays, auto-serialized), ENUM (single-select, requires enumValues array), MULTI_ENUM (multi-select, requires enumValues array, value is a string array). Naming rules: must start with a letter, only letters/digits/underscores, cannot start with '_'. At least one column required.",
+      description: "Create a new table. System columns 'id' (auto-increment primary key), 'created_at' and 'updated_at' (ISO timestamps, auto-managed) are added automatically — do not include them in columns. Choose the column type by user intent, in this priority order: (1) fixed set of allowed values, single choice → ENUM (requires enumValues); (2) fixed set of allowed values, multi-select (e.g. tags, categories, 多选枚举) → MULTI_ENUM (requires enumValues; value is a string array) — do NOT use JSON for this case; (3) free-form object/array with no fixed value set → JSON; (4) plain scalars → TEXT / INTEGER / REAL / BLOB; (5) calendar date → DATE (YYYY-MM-DD); (6) timestamp → DATETIME (YYYY-MM-DD HH:mm:ss); (7) true/false → BOOLEAN (stored as 0/1). Full type list: TEXT, INTEGER, REAL, BLOB, DATE, DATETIME, BOOLEAN, JSON, ENUM, MULTI_ENUM. Naming rules: must start with a letter, only letters/digits/underscores, cannot start with '_'. At least one column required.",
       inputSchema: {
         type: "object",
         properties: {
@@ -117,7 +117,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "add_column",
-      description: "Add a column to an existing table. Column types: TEXT, INTEGER, REAL, BLOB, DATE (YYYY-MM-DD), DATETIME (YYYY-MM-DD HH:mm:ss), BOOLEAN (true/false), JSON, ENUM (single-select, requires enumValues), MULTI_ENUM (multi-select, requires enumValues). Column name: must start with a letter, only letters/digits/underscores, cannot be 'id' or start with '_'. Supports optional default value.",
+      description: "Add a column to an existing table. Choose the column type by user intent, in this priority order: (1) fixed set of allowed values, single choice → ENUM (requires enumValues); (2) fixed set of allowed values, multi-select (e.g. tags, categories, 多选枚举) → MULTI_ENUM (requires enumValues; value is a string array) — do NOT use JSON for this case; (3) free-form object/array with no fixed value set → JSON; (4) plain scalars → TEXT / INTEGER / REAL / BLOB; (5) calendar date → DATE (YYYY-MM-DD); (6) timestamp → DATETIME (YYYY-MM-DD HH:mm:ss); (7) true/false → BOOLEAN (stored as 0/1). Full type list: TEXT, INTEGER, REAL, BLOB, DATE, DATETIME, BOOLEAN, JSON, ENUM, MULTI_ENUM. Column name: must start with a letter, only letters/digits/underscores, cannot be 'id' or start with '_'. Supports optional default value.",
       inputSchema: {
         type: "object",
         properties: {
