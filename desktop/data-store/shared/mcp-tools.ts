@@ -21,26 +21,33 @@ type McpTool = {
 
 const tableNameProp: Record<string, unknown> = {
   type: "string",
-  description: "Table name. If you do not know which tables exist, call list_tables first.",
+  description: "Existing table name. If you do not know which tables exist, call list_tables first.",
 }
 
 const columnTypeEnum = ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN", "ENUM", "MULTI_ENUM"] as const
 
 const whereClauseSchema = {
   oneOf: [
-    { type: "object", description: "Equality filter: { column: value }" },
+    {
+      type: "object",
+      description: "Equality filter object. Each key becomes `column = value`, and multiple keys are combined with AND.",
+    },
     {
       type: "array",
       items: {
         type: "object",
         properties: {
-          field: { type: "string" },
-          op: { type: "string", enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"] },
-          value: {},
+          field: { type: "string", description: "Column name" },
+          op: {
+            type: "string",
+            enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"],
+            description: "Comparison operator. CONTAINS is only valid on MULTI_ENUM columns.",
+          },
+          value: { description: "Comparison value. For CONTAINS, pass one scalar item, not an array or object." },
         },
         required: ["field", "op", "value"],
       },
-      description: "Expression filter: [{ field, op, value }]",
+      description: "Explicit filter expressions combined with AND: [{ field, op, value }].",
     },
   ],
 }
@@ -49,56 +56,68 @@ function buildTools(): McpTool[] {
   return [
     {
       name: "list_tables",
-      description: "List all user tables in the data store. Returns name, description, rowCount, createdAt, updatedAt for each table. Call this whenever you are unsure which tables currently exist.",
+      description: "List all user tables in the data store. Returns an array of { name, description, rowCount, createdAt, updatedAt }.",
       inputSchema: { type: "object", properties: {} },
     },
     {
       name: "create_table",
-      description: "Create a new table. READ THE TYPE SELECTION RULES BELOW BEFORE choosing column types — this store ships with specialized types (ENUM / MULTI_ENUM / BOOLEAN / DATE / DATETIME) that you MUST prefer over plain SQL types when the user's intent matches. Falling back to TEXT / INTEGER / JSON is almost always wrong for typed intents.\n\nTYPE SELECTION RULES (walk top-down; pick the FIRST matching rule, not the closest SQL analog):\n1. Single-choice from a fixed value set (单选枚举 / status / priority / role / 级别) → ENUM with enumValues. Do NOT use TEXT.\n2. Multi-select from a fixed value set (多选枚举 / tags / categories / 分类 / labels) → MULTI_ENUM with enumValues. Values are stored and returned as string arrays. Do NOT use JSON or TEXT.\n3. True/false (布尔 / 是否 / is- / has-) → BOOLEAN. Do NOT use INTEGER.\n4. Calendar date (YYYY-MM-DD) → DATE. Timestamp (YYYY-MM-DD HH:mm:ss) → DATETIME.\n5. Free-form object/array WITHOUT a fixed value set (arbitrary config, nested data) → JSON.\n6. Arbitrary scalar → TEXT / INTEGER / REAL / BLOB.\n\nEXAMPLE — User says: '字段：备注(remark TEXT)、分类(多选枚举, 公司/个人/生活/学习)、优先级(单选枚举, 高/中/低)、是否完成(布尔)'. Correct columns: [{name:'remark',type:'TEXT'},{name:'category',type:'MULTI_ENUM',enumValues:['公司','个人','生活','学习']},{name:'priority',type:'ENUM',enumValues:['高','中','低']},{name:'done',type:'BOOLEAN'}]. WRONG would be category=JSON, priority=TEXT, or done=INTEGER.\n\nSystem columns 'id' (auto-increment primary key), 'created_at', 'updated_at' (ISO timestamps) are added automatically — do not include them. Naming: must start with a letter, only letters/digits/underscores, cannot start with '_'. At least one column required. Full type list: TEXT, INTEGER, REAL, BLOB, DATE, DATETIME, BOOLEAN, JSON, ENUM, MULTI_ENUM.",
+      description: "Create a user table with at least one column; system columns id, created_at, and updated_at are added automatically. Supported column types are TEXT, INTEGER, REAL, BLOB, JSON, DATE, DATETIME, BOOLEAN, ENUM, and MULTI_ENUM; use ENUM for single-choice fields, MULTI_ENUM for fixed multi-select fields, BOOLEAN for true/false, DATE for YYYY-MM-DD, DATETIME for YYYY-MM-DD HH:mm:ss, and JSON for free-form objects or arrays. Table and column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and columns cannot be id, created_at, or updated_at; ENUM and MULTI_ENUM require non-empty enumValues.",
       inputSchema: {
         type: "object",
         properties: {
-          name: { type: "string", description: "Table name" },
+          name: {
+            type: "string",
+            description: "New table name. Must start with a letter, use only letters, digits, or underscores, and not start with _.",
+          },
           columns: {
             type: "array",
             items: {
               type: "object",
               properties: {
-                name: { type: "string" },
+                name: {
+                  type: "string",
+                  description: "Column name. Must start with a letter, use only letters, digits, or underscores, and not be id, created_at, or updated_at.",
+                },
                 type: {
                   type: "string",
                   enum: columnTypeEnum,
-                  description: "Pick by user intent, not by closest SQL analog. Single-choice with fixed values (单选枚举) → ENUM (NOT TEXT). Multi-select with fixed values (多选枚举 / tags / categories / 分类) → MULTI_ENUM (NOT JSON, NOT TEXT). True/false (布尔) → BOOLEAN (NOT INTEGER). Calendar date → DATE. Timestamp → DATETIME. Free-form object/array without a fixed value set → JSON. See the tool description for the full rules.",
+                  description: "Choose by user intent, not by the closest SQL primitive: single-choice fixed values -> ENUM, fixed multi-select -> MULTI_ENUM, true/false -> BOOLEAN, calendar date -> DATE, timestamp -> DATETIME, free-form object/array -> JSON.",
                 },
-                description: { type: "string", description: "Column description (helps AI understand the column's purpose)" },
+                description: {
+                  type: "string",
+                  description: "Optional column description stored in metadata and returned by describe_table.",
+                },
                 enumValues: {
                   type: "array",
                   items: { type: "string" },
-                  description: "REQUIRED when type is ENUM or MULTI_ENUM. List of allowed values. If the user described a fixed set of choices, the correct type is ENUM (single) or MULTI_ENUM (multi) — never TEXT or JSON.",
+                  description: "Required when type is ENUM or MULTI_ENUM. Allowed values for the column.",
                 },
               },
               required: ["name", "type"],
             },
-            description: "Column definitions",
+            description: "User-defined columns to create. Provide at least one; system columns are added automatically.",
           },
-          description: { type: "string", description: "Optional table description" },
+          description: {
+            type: "string",
+            description: "Optional table description stored in metadata and returned by list_tables and describe_table.",
+          },
         },
         required: ["name", "columns"],
       },
     },
     {
       name: "drop_table",
-      description: "Drop a table and all its data. This action is irreversible.",
+      description: "Drop a user table and all of its rows and metadata. This action is irreversible.",
       inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
     },
     {
       name: "describe_table",
-      description: "Get table schema and metadata. Returns columns (name, type, primaryKey, system, description, enumValues), rowCount, description, createdAt, updatedAt.",
+      description: "Return table schema and metadata as { name, description, columns, rowCount, createdAt, updatedAt }. Each column includes { name, type, primaryKey, system?, description, enumValues? }.",
       inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
     },
     {
       name: "add_column",
-      description: "Add a column to an existing table. Apply the SAME TYPE SELECTION RULES as create_table — prefer specialized types over plain SQL analogs when intent matches.\n\nTYPE SELECTION RULES (pick the FIRST matching rule):\n1. Single-choice from a fixed value set (单选枚举 / status / priority / role) → ENUM with enumValues. Do NOT use TEXT.\n2. Multi-select from a fixed value set (多选枚举 / tags / categories / 分类) → MULTI_ENUM with enumValues. Do NOT use JSON or TEXT.\n3. True/false (布尔 / 是否) → BOOLEAN. Do NOT use INTEGER.\n4. Calendar date → DATE (YYYY-MM-DD). Timestamp → DATETIME (YYYY-MM-DD HH:mm:ss).\n5. Free-form object/array WITHOUT a fixed value set → JSON.\n6. Arbitrary scalar → TEXT / INTEGER / REAL / BLOB.\n\nColumn name rules: must start with a letter, only letters/digits/underscores, cannot be 'id' or start with '_'. Supports optional default value. Full type list: TEXT, INTEGER, REAL, BLOB, DATE, DATETIME, BOOLEAN, JSON, ENUM, MULTI_ENUM.",
+      description: "Add one column to an existing table and update table metadata. Supported types are TEXT, INTEGER, REAL, BLOB, JSON, DATE, DATETIME, BOOLEAN, ENUM, and MULTI_ENUM; use the same intent-based type rules as create_table, and ENUM or MULTI_ENUM require non-empty enumValues. Column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, cannot be id, created_at, or updated_at; JSON defaults are serialized, MULTI_ENUM defaults must be arrays, and ENUM or MULTI_ENUM defaults must already appear in enumValues.",
       inputSchema: {
         type: "object",
         properties: {
@@ -106,18 +125,26 @@ function buildTools(): McpTool[] {
           column: {
             type: "object",
             properties: {
-              name: { type: "string" },
+              name: {
+                type: "string",
+                description: "Column name. Must start with a letter, use only letters, digits, or underscores, and not be id, created_at, or updated_at.",
+              },
               type: {
                 type: "string",
                 enum: columnTypeEnum,
-                description: "Pick by user intent, not by closest SQL analog. Single-choice with fixed values (单选枚举) → ENUM (NOT TEXT). Multi-select with fixed values (多选枚举 / tags / categories / 分类) → MULTI_ENUM (NOT JSON, NOT TEXT). True/false (布尔) → BOOLEAN (NOT INTEGER). See the tool description for the full rules.",
+                description: "Choose by user intent, not by the closest SQL primitive: single-choice fixed values -> ENUM, fixed multi-select -> MULTI_ENUM, true/false -> BOOLEAN, calendar date -> DATE, timestamp -> DATETIME, free-form object/array -> JSON.",
               },
-              default: { description: "Default value for the column" },
-              description: { type: "string", description: "Column description" },
+              default: {
+                description: "Optional default value. JSON defaults are serialized, MULTI_ENUM defaults must be arrays, and ENUM or MULTI_ENUM defaults must already exist in enumValues.",
+              },
+              description: {
+                type: "string",
+                description: "Optional column description stored in metadata and returned by describe_table.",
+              },
               enumValues: {
                 type: "array",
                 items: { type: "string" },
-                description: "REQUIRED when type is ENUM or MULTI_ENUM. List of allowed values. If the user described a fixed set of choices, the correct type is ENUM (single) or MULTI_ENUM (multi) — never TEXT or JSON.",
+                description: "Required when type is ENUM or MULTI_ENUM. Allowed values for the column.",
               },
             },
             required: ["name", "type"],
@@ -128,95 +155,115 @@ function buildTools(): McpTool[] {
     },
     {
       name: "update_column_description",
-      description: "Update the description metadata of a column. Does not change the column type or data.",
+      description: "Update the stored description metadata for a user column. This does not change column type or row data.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          column: { type: "string", description: "Column name" },
-          description: { type: "string", description: "New column description" },
+          column: { type: "string", description: "User column name" },
+          description: { type: "string", description: "New description text stored in metadata" },
         },
         required: ["table", "column", "description"],
       },
     },
     {
       name: "update_column_enum_values",
-      description: "Update the allowed values for an ENUM or MULTI_ENUM column. Replaces the entire list. At least one value required.",
+      description: "Replace the allowed-values metadata for an ENUM or MULTI_ENUM column. Requires at least one value and rejects the change if existing rows contain values outside the new list.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
           column: { type: "string", description: "ENUM or MULTI_ENUM column name" },
-          values: { type: "array", items: { type: "string" }, description: "New list of allowed values" },
+          values: {
+            type: "array",
+            items: { type: "string" },
+            description: "Replacement allowed-values list. Must contain at least one string and remain compatible with existing rows.",
+          },
         },
         required: ["table", "column", "values"],
       },
     },
     {
       name: "insert",
-      description: "Insert a single row. Returns { id } of the new row. System columns 'id', 'created_at', 'updated_at' are auto-managed — do not include them. Value formats — DATE: 'YYYY-MM-DD', DATETIME: 'YYYY-MM-DD HH:mm:ss', BOOLEAN: true/false (stored as 0/1), JSON: pass object/array (auto-serialized), ENUM: must match one of the allowed values, MULTI_ENUM: pass a string array where each element matches an allowed value. If you do not know the table's columns or enum values, call describe_table first.",
+      description: "Insert one row and return { id }. Do not send system columns id, created_at, or updated_at; DATE expects YYYY-MM-DD, DATETIME expects YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss, BOOLEAN accepts true/false or 1/0, JSON accepts objects or arrays and is serialized, ENUM must match enumValues, and MULTI_ENUM expects an array of allowed values. Call describe_table first if you do not know the column set or enum values.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          data: { type: "object", description: "Row data as key-value pairs" },
+          data: {
+            type: "object",
+            description: "Row object keyed by column name. Omit id, created_at, and updated_at; MULTI_ENUM values should be arrays, and JSON values may be objects or arrays.",
+          },
         },
         required: ["table", "data"],
       },
     },
     {
       name: "batch_insert",
-      description: "Insert multiple rows in a single transaction. Returns { ids } array. System columns 'id', 'created_at', 'updated_at' are auto-managed — do not include them. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array. If you do not know the table's columns or enum values, call describe_table first.",
+      description: "Insert multiple rows in one transaction and return { ids }. Do not send system columns id, created_at, or updated_at; DATE expects YYYY-MM-DD, DATETIME expects YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss, BOOLEAN accepts true/false or 1/0, JSON accepts objects or arrays and is serialized, ENUM must match enumValues, and MULTI_ENUM expects an array of allowed values. Call describe_table first if you do not know the column set or enum values.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          rows: { type: "array", items: { type: "object" }, description: "Array of row data" },
+          rows: {
+            type: "array",
+            items: { type: "object" },
+            description: "Array of row objects keyed by column name. Each row follows the same value rules as insert.",
+          },
         },
         required: ["table", "rows"],
       },
     },
     {
       name: "query",
-      description: "Query rows from a table with optional filtering, sorting, and pagination. Returns { rows, total }. WHERE supports two forms: object { column: value } for equality, or array [{ field, op, value }] with operators =, !=, >, <, >=, <=, LIKE, CONTAINS. CONTAINS is only valid on MULTI_ENUM columns and matches rows whose array contains the given value, e.g. { field: 'category', op: 'CONTAINS', value: '公司' }. OrderBy: string (column name, ascending) or { field, dir: 'asc'|'desc' }. Default limit: 100. JSON and MULTI_ENUM columns are auto-parsed, BOOLEAN columns return true/false. If you do not know the table's columns, call describe_table first.",
+      description: "Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts either an equality object { column: value } or an array of ANDed expressions [{ field, op, value }] where op is =, !=, >, <, >=, <=, LIKE, or CONTAINS; CONTAINS only works on MULTI_ENUM columns and its value must be a single scalar. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to 100, offset defaults to 0, JSON and MULTI_ENUM values are parsed on read, and BOOLEAN values are returned as true/false.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          where: { description: "Filter conditions (object for equality, array for expressions)", ...whereClauseSchema },
+          where: {
+            description: "Optional filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
+            ...whereClauseSchema,
+          },
           orderBy: {
-            description: "Sort order (string or {field, dir})",
+            description: "Optional sort order: a column name for ascending sort, or { field, dir }.",
             oneOf: [
               { type: "string", description: "Column name (ascending)" },
               {
                 type: "object",
-                properties: { field: { type: "string" }, dir: { type: "string", enum: ["asc", "desc"] } },
+                properties: {
+                  field: { type: "string", description: "Column name" },
+                  dir: { type: "string", enum: ["asc", "desc"], description: "Sort direction" },
+                },
                 required: ["field", "dir"],
               },
             ],
           },
-          limit: { type: "number", description: "Max rows to return (default 100)" },
-          offset: { type: "number", description: "Number of rows to skip" },
+          limit: { type: "number", description: "Maximum rows to return. Defaults to 100." },
+          offset: { type: "number", description: "Rows to skip before returning results. Defaults to 0." },
         },
         required: ["table"],
       },
     },
     {
       name: "update",
-      description: "Update a row by id (partial update). Returns { affected } count. The 'updated_at' column is auto-updated — do not include it. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array. If you do not know the table's columns or enum values, call describe_table first.",
+      description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same DATE, DATETIME, BOOLEAN, JSON, ENUM, and MULTI_ENUM value rules as insert apply. Call describe_table first if you do not know the column set or enum values.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
           id: { type: "number", description: "Row id" },
-          data: { type: "object", description: "Fields to update" },
+          data: {
+            type: "object",
+            description: "Partial update object keyed by column name. Omit updated_at; MULTI_ENUM values should be arrays, and JSON values may be objects or arrays.",
+          },
         },
         required: ["table", "id", "data"],
       },
     },
     {
       name: "delete",
-      description: "Delete a row by id. Returns { affected } count (0 if row not found).",
+      description: "Delete one row by id and return { affected }, where 0 means no row matched.",
       inputSchema: {
         type: "object",
         properties: {
@@ -228,86 +275,104 @@ function buildTools(): McpTool[] {
     },
     {
       name: "update_where",
-      description: "Update every row matching a where clause. Returns { affected, ids } — count and the ids of updated rows. 'where' is required and must be non-empty; for a single row by id use 'update' instead. The 'updated_at' column is auto-managed — do not include it. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns. If you do not know the table's columns or enum values, call describe_table first.",
+      description: "Partially update every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for MULTI_ENUM columns, updated_at is rewritten automatically, and the same write-value rules as insert apply. Use update for a single row by id.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          where: { description: "Non-empty filter (object for equality, array for expressions)", ...whereClauseSchema },
-          data: { type: "object", description: "Fields to update (partial)" },
+          where: {
+            description: "Required non-empty filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
+            ...whereClauseSchema,
+          },
+          data: {
+            type: "object",
+            description: "Partial update object keyed by column name. Omit updated_at; MULTI_ENUM values should be arrays, and JSON values may be objects or arrays.",
+          },
         },
         required: ["table", "where", "data"],
       },
     },
     {
       name: "delete_where",
-      description: "Delete every row matching a where clause. Returns { affected, ids } — count and the ids of deleted rows. 'where' is required and must be non-empty; for a single row by id use 'delete' instead. To clear all rows of a table, drop and recreate it. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns. If you do not know the table's columns, call describe_table first.",
+      description: "Delete every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for MULTI_ENUM columns. Use delete for a single row by id; to clear a whole table, drop and recreate it.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          where: { description: "Non-empty filter (object for equality, array for expressions)", ...whereClauseSchema },
+          where: {
+            description: "Required non-empty filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
+            ...whereClauseSchema,
+          },
         },
         required: ["table", "where"],
       },
     },
     {
       name: "count",
-      description: "Count rows in a table with optional filter. Returns { count }. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns. Use this instead of query+limit when you only need the number of matching rows.",
+      description: "Count rows in a table with an optional where clause and return { count }. where uses the same shapes and operators as query, including CONTAINS for MULTI_ENUM columns. Use this instead of query when you only need the number of matching rows.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          where: { description: "Optional filter (object for equality, array for expressions)", ...whereClauseSchema },
+          where: {
+            description: "Optional filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
+            ...whereClauseSchema,
+          },
         },
         required: ["table"],
       },
     },
     {
       name: "rename_table",
-      description: "Rename a table. Fails if the target name already exists. System columns and metadata are preserved automatically. Naming: must start with a letter, only letters/digits/underscores, cannot start with '_'.",
+      description: "Rename a table without changing its rows, system columns, or stored metadata. The target name must not already exist and must start with a letter, contain only letters, digits, or underscores, and not start with _.",
       inputSchema: {
         type: "object",
         properties: {
           from: { type: "string", description: "Current table name" },
-          to: { type: "string", description: "New table name" },
+          to: {
+            type: "string",
+            description: "New table name. Must start with a letter, use only letters, digits, or underscores, and not start with _.",
+          },
         },
         required: ["from", "to"],
       },
     },
     {
       name: "rename_column",
-      description: "Rename a column in a table. Fails if the target column already exists. Cannot rename system columns (id / created_at / updated_at), and the new name must not be a reserved system column name. Column description and enum values are preserved.",
+      description: "Rename a user column without changing its data, description metadata, or enumValues. The target column must not already exist, and both names follow the normal column rules: start with a letter, use only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          from: { type: "string", description: "Current column name" },
-          to: { type: "string", description: "New column name" },
+          from: { type: "string", description: "Current user column name" },
+          to: {
+            type: "string",
+            description: "New column name. Must start with a letter, use only letters, digits, or underscores, and not be id, created_at, or updated_at.",
+          },
         },
         required: ["table", "from", "to"],
       },
     },
     {
       name: "drop_column",
-      description: "Drop a column from a table (irreversible — all values in that column are lost). Cannot drop system columns (id / created_at / updated_at). Refuses to drop the last user column of a table — drop the table instead.",
+      description: "Drop one user column and all values stored in it. Cannot target id, created_at, or updated_at, and refuses to remove the last non-system column of a table.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          column: { type: "string", description: "Column name" },
+          column: { type: "string", description: "User column name" },
         },
         required: ["table", "column"],
       },
     },
     {
       name: "raw_sql",
-      description: "Execute raw SQL. Cannot access system tables (prefixed with '_') or use ATTACH/DETACH. SELECT/PRAGMA/EXPLAIN returns { rows }. INSERT/UPDATE/DELETE returns { changes, lastInsertRowid }. DDL (CREATE/DROP/ALTER TABLE) auto-syncs metadata. Prefer structured tools over raw_sql when possible. If you need to inspect existing tables, call list_tables and describe_table first.",
+      description: "Execute raw SQL with optional positional bind params. System tables prefixed with _ and ATTACH or DETACH are blocked; SELECT, PRAGMA, and EXPLAIN return { rows }, INSERT, UPDATE, and DELETE return { changes, lastInsertRowid }, and CREATE, DROP, or ALTER TABLE resync table and column metadata automatically. Prefer structured tools when possible.",
       inputSchema: {
         type: "object",
         properties: {
-          sql: { type: "string", description: "SQL statement" },
-          params: { type: "array", description: "Bind parameters" },
+          sql: { type: "string", description: "SQL statement to execute" },
+          params: { type: "array", description: "Optional positional bind parameters for the prepared statement" },
         },
         required: ["sql"],
       },
