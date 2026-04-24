@@ -59,6 +59,7 @@ type DataStoreStatus = {
   running: boolean
   dbSize: number
   tableCount: number
+  dbDirectoryPath: string
 }
 
 type DataStoreServerInfo = {

@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog } from "electron"
+import path from "node:path"
 import { DATA_STORE_IPC_CHANNELS } from "./channels"
 import { dataStoreService } from "./service"
 import { getHttpPort } from "./http-server"
@@ -154,11 +155,14 @@ function registerDataStoreHandlers(): void {
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getStatus, async () => {
+    const dbPath = dataStoreService.getDbPath()
+
     return {
       port: getHttpPort(),
       running: getHttpPort() > 0,
       dbSize: dataStoreService.getDbSize(),
       tableCount: dataStoreService.getTableCount(),
+      dbDirectoryPath: path.dirname(dbPath),
     }
   })
 

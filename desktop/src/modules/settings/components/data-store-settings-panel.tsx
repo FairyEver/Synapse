@@ -342,6 +342,12 @@ function DataStoreSettingsPanel() {
     )
   }, [promise, refreshStatus])
 
+  const handleOpenDbDirectory = useCallback(() => {
+    if (!status?.dbDirectoryPath) return
+    logger.info("Opening data store directory.", { path: status.dbDirectoryPath })
+    window.synapse?.shell.showItemInFolder(status.dbDirectoryPath)
+  }, [status?.dbDirectoryPath])
+
   const mcpServers = MCP_SERVER_META.map((server) => {
     const state = mcpServersByTarget[server.id]
     return {
@@ -499,7 +505,7 @@ function DataStoreSettingsPanel() {
         <CardHeader className="pb-0">
           <CardTitle>数据管理</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleExport}>
               导出数据库
@@ -525,6 +531,22 @@ function DataStoreSettingsPanel() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          </div>
+          <Separator />
+          <div className="flex items-start gap-4 text-sm">
+            <span className="shrink-0 text-muted-foreground">数据库目录</span>
+            {status?.dbDirectoryPath ? (
+              <button
+                type="button"
+                className="min-w-0 flex-1 break-all text-right text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                title={status.dbDirectoryPath}
+                onClick={handleOpenDbDirectory}
+              >
+                {status.dbDirectoryPath}
+              </button>
+            ) : (
+              <span className="min-w-0 flex-1 break-all text-right text-muted-foreground">—</span>
+            )}
           </div>
         </CardContent>
       </Card>
