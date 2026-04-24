@@ -26,54 +26,20 @@ type McpTool = {
   }
 }
 
-type TableInfo = { name: string; description: string; rowCount: number }
-type ColumnInfo = { name: string; type: string; primaryKey: boolean; description: string; enumValues?: string[] }
-type TableSchema = TableInfo & { columns: ColumnInfo[] }
+// Tool schemas are intentionally stateless: they describe capability, never runtime state.
+// Clients discover which tables exist by calling list_tables, and inspect column/enum details by calling describe_table.
+// This ensures the schema never goes stale after DDL operations, and keeps the contract valid on strict MCP clients (e.g. Codex) that enforce inputSchema enums client-side.
 
-function buildTableSummary(schemas: TableSchema[]): string {
-  if (schemas.length === 0) return "\n\nNo tables exist yet."
-  const lines = ["\n\nAvailable tables:"]
-  for (const t of schemas) {
-    const desc = t.description ? ` — ${t.description}` : ""
-    lines.push(`\n- ${t.name} (${t.rowCount} rows)${desc}`)
-    for (const c of t.columns) {
-      const cdesc = c.description ? ` — ${c.description}` : ""
-      const pk = c.primaryKey ? " [PK]" : ""
-      const enumSuffix = c.enumValues && c.enumValues.length > 0 ? ` [${c.enumValues.join(", ")}]` : ""
-      lines.push(`    ${c.name}: ${c.type}${pk}${enumSuffix}${cdesc}`)
-    }
-  }
-  return lines.join("\n")
+const tableNameProp: Record<string, unknown> = {
+  type: "string",
+  description: "Table name. If you do not know which tables exist, call list_tables first.",
 }
 
-async function fetchTableSchemas(info: ServerInfo): Promise<TableSchema[]> {
-  const listResult = await apiCall(info, "listTables") as { data: TableInfo[] }
-  const tables = listResult.data ?? []
-  if (tables.length === 0) return []
-
-  const schemas: TableSchema[] = []
-  for (const t of tables) {
-    try {
-      const desc = await apiCall(info, "describeTable", { name: t.name }) as { data: TableSchema }
-      schemas.push(desc.data)
-    } catch {
-      schemas.push({ ...t, columns: [] })
-    }
-  }
-  return schemas
-}
-
-function buildTools(schemas: TableSchema[]): McpTool[] {
-  const summary = buildTableSummary(schemas)
-  const tableNames = schemas.map((t) => t.name)
-  const tableNameProp: Record<string, unknown> = tableNames.length > 0
-    ? { type: "string", description: "Table name", enum: tableNames }
-    : { type: "string", description: "Table name" }
-
+function buildTools(): McpTool[] {
   return [
     {
       name: "list_tables",
-      description: "List all user tables in the data store. Returns name, description, rowCount, createdAt, updatedAt for each table." + summary,
+      description: "List all user tables in the data store. Returns name, description, rowCount, createdAt, updatedAt for each table. Call this whenever you are unsure which tables currently exist.",
       inputSchema: { type: "object", properties: {} },
     },
     {
@@ -186,7 +152,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "insert",
-      description: "Insert a single row. Returns { id } of the new row. System columns 'id', 'created_at', 'updated_at' are auto-managed — do not include them. Value formats — DATE: 'YYYY-MM-DD', DATETIME: 'YYYY-MM-DD HH:mm:ss', BOOLEAN: true/false (stored as 0/1), JSON: pass object/array (auto-serialized), ENUM: must match one of the allowed values, MULTI_ENUM: pass a string array where each element matches an allowed value." + summary,
+      description: "Insert a single row. Returns { id } of the new row. System columns 'id', 'created_at', 'updated_at' are auto-managed — do not include them. Value formats — DATE: 'YYYY-MM-DD', DATETIME: 'YYYY-MM-DD HH:mm:ss', BOOLEAN: true/false (stored as 0/1), JSON: pass object/array (auto-serialized), ENUM: must match one of the allowed values, MULTI_ENUM: pass a string array where each element matches an allowed value. If you do not know the table's columns or enum values, call describe_table first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -198,7 +164,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "batch_insert",
-      description: "Insert multiple rows in a single transaction. Returns { ids } array. System columns 'id', 'created_at', 'updated_at' are auto-managed — do not include them. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array." + summary,
+      description: "Insert multiple rows in a single transaction. Returns { ids } array. System columns 'id', 'created_at', 'updated_at' are auto-managed — do not include them. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array. If you do not know the table's columns or enum values, call describe_table first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -210,7 +176,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "query",
-      description: "Query rows from a table with optional filtering, sorting, and pagination. Returns { rows, total }. WHERE supports two forms: object { column: value } for equality, or array [{ field, op, value }] with operators =, !=, >, <, >=, <=, LIKE, CONTAINS. CONTAINS is only valid on MULTI_ENUM columns and matches rows whose array contains the given value, e.g. { field: 'category', op: 'CONTAINS', value: '公司' }. OrderBy: string (column name, ascending) or { field, dir: 'asc'|'desc' }. Default limit: 100. JSON and MULTI_ENUM columns are auto-parsed, BOOLEAN columns return true/false." + summary,
+      description: "Query rows from a table with optional filtering, sorting, and pagination. Returns { rows, total }. WHERE supports two forms: object { column: value } for equality, or array [{ field, op, value }] with operators =, !=, >, <, >=, <=, LIKE, CONTAINS. CONTAINS is only valid on MULTI_ENUM columns and matches rows whose array contains the given value, e.g. { field: 'category', op: 'CONTAINS', value: '公司' }. OrderBy: string (column name, ascending) or { field, dir: 'asc'|'desc' }. Default limit: 100. JSON and MULTI_ENUM columns are auto-parsed, BOOLEAN columns return true/false. If you do not know the table's columns, call describe_table first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -256,7 +222,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "update",
-      description: "Update a row by id (partial update). Returns { affected } count. The 'updated_at' column is auto-updated — do not include it. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array." + summary,
+      description: "Update a row by id (partial update). Returns { affected } count. The 'updated_at' column is auto-updated — do not include it. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array. If you do not know the table's columns or enum values, call describe_table first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -281,7 +247,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "update_where",
-      description: "Update every row matching a where clause. Returns { affected, ids } — count and the ids of updated rows. 'where' is required and must be non-empty; for a single row by id use 'update' instead. The 'updated_at' column is auto-managed — do not include it. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns." + summary,
+      description: "Update every row matching a where clause. Returns { affected, ids } — count and the ids of updated rows. 'where' is required and must be non-empty; for a single row by id use 'update' instead. The 'updated_at' column is auto-managed — do not include it. Same value format rules as insert: DATE 'YYYY-MM-DD', DATETIME 'YYYY-MM-DD HH:mm:ss', BOOLEAN true/false, JSON as object/array, ENUM must match allowed values, MULTI_ENUM pass string array. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns. If you do not know the table's columns or enum values, call describe_table first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -312,7 +278,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "delete_where",
-      description: "Delete every row matching a where clause. Returns { affected, ids } — count and the ids of deleted rows. 'where' is required and must be non-empty; for a single row by id use 'delete' instead. To clear all rows of a table, drop and recreate it. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns." + summary,
+      description: "Delete every row matching a where clause. Returns { affected, ids } — count and the ids of deleted rows. 'where' is required and must be non-empty; for a single row by id use 'delete' instead. To clear all rows of a table, drop and recreate it. 'where' supports the same shape as query's where, including CONTAINS for MULTI_ENUM columns. If you do not know the table's columns, call describe_table first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -342,7 +308,7 @@ function buildTools(schemas: TableSchema[]): McpTool[] {
     },
     {
       name: "raw_sql",
-      description: "Execute raw SQL. Cannot access system tables (prefixed with '_') or use ATTACH/DETACH. SELECT/PRAGMA/EXPLAIN returns { rows }. INSERT/UPDATE/DELETE returns { changes, lastInsertRowid }. DDL (CREATE/DROP/ALTER TABLE) auto-syncs metadata." + summary,
+      description: "Execute raw SQL. Cannot access system tables (prefixed with '_') or use ATTACH/DETACH. SELECT/PRAGMA/EXPLAIN returns { rows }. INSERT/UPDATE/DELETE returns { changes, lastInsertRowid }. DDL (CREATE/DROP/ALTER TABLE) auto-syncs metadata. Prefer structured tools over raw_sql when possible. If you need to inspect existing tables, call list_tables and describe_table first.",
       inputSchema: {
         type: "object",
         properties: {
@@ -432,15 +398,7 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
   }
 
   if (method === "tools/list") {
-    let tools: McpTool[]
-    try {
-      const info = getServerInfo()
-      const schemas = await fetchTableSchemas(info)
-      tools = buildTools(schemas)
-    } catch {
-      tools = buildTools([])
-    }
-    sendResponse(id, { tools })
+    sendResponse(id, { tools: buildTools() })
     return
   }
 
