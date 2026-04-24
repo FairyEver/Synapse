@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto"
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
-import type { DataStoreQueryParams } from "../../src/types/data-store"
+import type { DataStoreQueryParams, DataStoreWhereClause } from "../../src/types/data-store"
 import { dataStoreService } from "./service"
 import type { DataStoreServerInfo } from "./types"
 import { createMainLogger } from "../services/log-store"
@@ -180,6 +180,27 @@ function dispatch(action: string, params: Record<string, unknown>): unknown {
     case "delete": {
       const deleteResult = dataStoreService.delete(assertString(params, "table"), assertNumber(params, "id"))
       return { ok: true, data: { id: params.id }, affected: deleteResult.affected }
+    }
+
+    case "updateWhere": {
+      const whereVal = params.where
+      if (whereVal === undefined || whereVal === null) throw new Error("Missing 'where': expected non-empty object or array")
+      const result = dataStoreService.updateWhere(
+        assertString(params, "table"),
+        whereVal as DataStoreWhereClause,
+        assertObject(params, "data"),
+      )
+      return { ok: true, data: { ids: result.ids }, affected: result.affected }
+    }
+
+    case "deleteWhere": {
+      const whereVal = params.where
+      if (whereVal === undefined || whereVal === null) throw new Error("Missing 'where': expected non-empty object or array")
+      const result = dataStoreService.deleteWhere(
+        assertString(params, "table"),
+        whereVal as DataStoreWhereClause,
+      )
+      return { ok: true, data: { ids: result.ids }, affected: result.affected }
     }
 
     case "rawSQL": {

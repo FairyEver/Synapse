@@ -35,7 +35,7 @@ type DataStoreTableSchema = {
 
 type DataStoreWhereCondition = {
   field: string
-  op: "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE"
+  op: "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE" | "CONTAINS"
   value: unknown
 }
 

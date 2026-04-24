@@ -26,7 +26,7 @@ const DATETIME_COLUMN_TYPE = "DATETIME"
 const ENUM_COLUMN_TYPE = "ENUM"
 const MULTI_ENUM_COLUMN_TYPE = "MULTI_ENUM"
 const VALID_COLUMN_TYPES = new Set(["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN", "ENUM", "MULTI_ENUM"])
-const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE"])
+const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"])
 const VALID_ORDER_DIRS = new Set(["ASC", "DESC"])
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}$/
@@ -743,7 +743,7 @@ class DataStoreService {
     const jsonCols = this.getJsonColumnsForTable(params.table)
     const boolCols = this.getBooleanColumnsForTable(params.table)
     const multiEnumCols = this.getMultiEnumColumnsForTable(params.table)
-    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols, boolCols)
+    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols, boolCols, multiEnumCols)
     const orderSQL = this.buildOrderBy(params.orderBy)
     const limit = params.limit ?? 100
     const offset = params.offset ?? 0
@@ -815,6 +815,95 @@ class DataStoreService {
     const db = this.getDb()
     const result = db.prepare(`DELETE FROM ${q(table)} WHERE "id" = ?`).run(id)
     return { affected: toNumber(result.changes) }
+  }
+
+  updateWhere(table: string, where: DataStoreWhereClause, data: Record<string, unknown>): { affected: number; ids: number[] } {
+    validateName(table, "table")
+    this.assertTableExists(table)
+
+    const whereEmpty = !where
+      || (Array.isArray(where) ? where.length === 0 : Object.keys(where).length === 0)
+    if (whereEmpty) {
+      throw new Error("updateWhere requires a non-empty where clause. Use 'update' to target a single row by id.")
+    }
+
+    const db = this.getDb()
+    const jsonCols = this.getJsonColumnsForTable(table)
+    const boolCols = this.getBooleanColumnsForTable(table)
+    const dateCols = this.getDateColumnsForTable(table)
+    const dtCols = this.getDatetimeColumnsForTable(table)
+    const enumCols = this.getEnumColumnsForTable(table)
+    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
+
+    const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
+    const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
+    const keys = Object.keys(withTimestamp)
+    if (keys.length === 0) return { affected: 0, ids: [] }
+    for (const k of keys) {
+      if (k !== "updated_at") {
+        validateColumnName(k)
+        if (multiEnumCols.has(k)) {
+          this.validateMultiEnumValue(k, withTimestamp[k], enumCols)
+        } else {
+          this.validateEnumValue(k, withTimestamp[k], enumCols)
+        }
+      }
+    }
+
+    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiEnumCols)
+    const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
+    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, dtCols, multiEnumCols))
+
+    db.exec("BEGIN")
+    try {
+      const idRows = db.prepare(`SELECT "id" FROM ${q(table)}${whereSQL}`).all(...whereParams) as { id: number | bigint }[]
+      const ids = idRows.map((r) => toNumber(r.id))
+      if (ids.length === 0) {
+        db.exec("COMMIT")
+        return { affected: 0, ids: [] }
+      }
+      const inPlaceholders = ids.map(() => "?").join(", ")
+      db.prepare(`UPDATE ${q(table)} SET ${setClauses} WHERE "id" IN (${inPlaceholders})`).run(...values, ...ids)
+      db.exec("COMMIT")
+      return { affected: ids.length, ids }
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
+  }
+
+  deleteWhere(table: string, where: DataStoreWhereClause): { affected: number; ids: number[] } {
+    validateName(table, "table")
+    this.assertTableExists(table)
+
+    const whereEmpty = !where
+      || (Array.isArray(where) ? where.length === 0 : Object.keys(where).length === 0)
+    if (whereEmpty) {
+      throw new Error("deleteWhere requires a non-empty where clause. Use 'delete' to target a single row by id, or drop and recreate the table to clear it.")
+    }
+
+    const db = this.getDb()
+    const jsonCols = this.getJsonColumnsForTable(table)
+    const boolCols = this.getBooleanColumnsForTable(table)
+    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
+    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiEnumCols)
+
+    db.exec("BEGIN")
+    try {
+      const idRows = db.prepare(`SELECT "id" FROM ${q(table)}${whereSQL}`).all(...whereParams) as { id: number | bigint }[]
+      const ids = idRows.map((r) => toNumber(r.id))
+      if (ids.length === 0) {
+        db.exec("COMMIT")
+        return { affected: 0, ids: [] }
+      }
+      const inPlaceholders = ids.map(() => "?").join(", ")
+      db.prepare(`DELETE FROM ${q(table)} WHERE "id" IN (${inPlaceholders})`).run(...ids)
+      db.exec("COMMIT")
+      return { affected: ids.length, ids }
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
   }
 
   rawSQL(sql: string, params?: unknown[]): { rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number } {
@@ -929,19 +1018,28 @@ class DataStoreService {
     return this.dbPath
   }
 
-  private buildWhere(where?: DataStoreWhereClause, jsonCols?: Set<string>, boolCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
+  private buildWhere(where?: DataStoreWhereClause, jsonCols?: Set<string>, boolCols?: Set<string>, multiEnumCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
     if (!where) return { whereSQL: "", whereParams: [] }
 
     const conditions: string[] = []
     const params: SQLInputValue[] = []
     const jCols = jsonCols ?? new Set<string>()
     const bCols = boolCols ?? new Set<string>()
+    const mCols = multiEnumCols ?? new Set<string>()
 
     if (Array.isArray(where)) {
       for (const cond of where as DataStoreWhereCondition[]) {
         validateName(cond.field, "column")
         if (!VALID_WHERE_OPS.has(cond.op)) {
-          throw new Error(`Invalid where operator "${cond.op}": must be one of =, !=, >, <, >=, <=, LIKE`)
+          throw new Error(`Invalid where operator "${cond.op}": must be one of =, !=, >, <, >=, <=, LIKE, CONTAINS`)
+        }
+        if (cond.op === "CONTAINS") {
+          if (!mCols.has(cond.field)) {
+            throw new Error(`CONTAINS operator is only supported on MULTI_ENUM columns. Column "${cond.field}" is not MULTI_ENUM.`)
+          }
+          conditions.push(`EXISTS (SELECT 1 FROM json_each(${q(cond.field)}) WHERE value = ?)`)
+          params.push(toSqlValue(cond.value))
+          continue
         }
         conditions.push(`${q(cond.field)} ${cond.op} ?`)
         if (bCols.has(cond.field)) {
