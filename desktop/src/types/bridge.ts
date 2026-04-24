@@ -6,7 +6,7 @@ import type {
   DataStoreMcpServerInfo,
   DataStoreMcpStatus,
   DataStoreMcpTarget,
-  DataStoreColumnDef,
+  Column,
   DataStoreQueryParams,
   DataStoreQueryResult,
   DataStoreStatus,
@@ -198,13 +198,13 @@ export type SynapseBridge = {
   }
   dataStore: {
     listTables: () => Promise<DataStoreTableInfo[]>
-    createTable: (params: { name: string; description?: string; columns: DataStoreColumnDef[] }) => Promise<void>
+    createTable: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
     dropTable: (name: string) => Promise<void>
     describeTable: (name: string) => Promise<DataStoreTableSchema>
-    addColumn: (params: { table: string; column: DataStoreColumnDef & { default?: unknown } }) => Promise<void>
+    addColumn: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
     updateColumnDescription: (params: { table: string; column: string; description: string }) => Promise<void>
-    updateColumnEnumValues: (params: { table: string; column: string; values: string[] }) => Promise<void>
-    getColumnValueUsage: (params: { table: string; column: string }) => Promise<Record<string, number>>
+    updateColumnChoices: (params: { table: string; column: string; choices: string[] }) => Promise<void>
+    getColumnChoicesUsage: (params: { table: string; column: string }) => Promise<Record<string, number>>
     insert: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
     batchInsert: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
     query: (params: DataStoreQueryParams) => Promise<DataStoreQueryResult>

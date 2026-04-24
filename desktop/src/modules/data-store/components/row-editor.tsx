@@ -10,8 +10,8 @@ import {
 import { Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
-import type { DataStoreColumnInfo } from "@/types/data-store"
-import { DataTableCellEnum } from "./data-table-cell-enum"
+import type { Column } from "@/types/data-store"
+import { DataTableCellChoice } from "./data-table-cell-choice"
 import { DataTableCellInput } from "./data-table-cell-input"
 import {
   DATA_TABLE_COLUMN_CLASS,
@@ -20,7 +20,7 @@ import {
 } from "./data-table-layout"
 
 type RowEditorProps = {
-  columns: DataStoreColumnInfo[]
+  columns: Column[]
   initialData?: Record<string, unknown>
   initialFocusColumnName?: string | null
   onSave: (data: Record<string, unknown>) => Promise<void> | void
@@ -49,7 +49,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
     const init: Record<string, string> = {}
     for (const col of editableColumns) {
       const val = initialData?.[col.name]
-      if (col.type.toUpperCase() === "MULTI_ENUM" && Array.isArray(val)) {
+      if (col.kind === "multi_choice" && Array.isArray(val)) {
         init[col.name] = JSON.stringify(val)
       } else {
         init[col.name] = val != null ? String(val) : ""
@@ -92,22 +92,21 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
     const data: Record<string, unknown> = {}
     for (const col of editableColumns) {
       const raw = values[col.name] ?? ""
-      const upper = col.type.toUpperCase()
-      if (upper === "INTEGER") {
+      if (col.kind === "integer") {
         data[col.name] = raw ? parseInt(raw, 10) : null
-      } else if (upper === "REAL") {
+      } else if (col.kind === "decimal") {
         data[col.name] = raw ? parseFloat(raw) : null
-      } else if (upper === "JSON") {
+      } else if (col.kind === "json") {
         try {
           data[col.name] = raw ? JSON.parse(raw) : null
         } catch {
           data[col.name] = raw
         }
-      } else if (upper === "BOOLEAN") {
+      } else if (col.kind === "boolean") {
         if (raw === "true") data[col.name] = true
         else if (raw === "false") data[col.name] = false
         else data[col.name] = null
-      } else if (upper === "MULTI_ENUM") {
+      } else if (col.kind === "multi_choice") {
         try {
           const parsed = raw ? JSON.parse(raw) : []
           data[col.name] = Array.isArray(parsed) ? parsed : []
@@ -172,21 +171,20 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
         {initialData?.id != null ? String(initialData.id) : ""}
       </TableCell>
       {editableColumns.map((col) => {
-        const upper = col.type.toUpperCase()
-        const isEnum = upper === "ENUM" && col.enumValues && col.enumValues.length > 0
-        const isMultiEnum = upper === "MULTI_ENUM" && col.enumValues && col.enumValues.length > 0
-        const isBool = upper === "BOOLEAN"
+        const isSingleChoice = col.kind === "single_choice" && col.choices && col.choices.length > 0
+        const isMultiChoice = col.kind === "multi_choice" && col.choices && col.choices.length > 0
+        const isBool = col.kind === "boolean"
 
-        if (isMultiEnum) {
+        if (isMultiChoice) {
           let selected: string[] = []
           try { selected = JSON.parse(values[col.name] || "[]") } catch { /* empty */ }
           if (!Array.isArray(selected)) selected = []
           return (
             <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
-              <DataTableCellEnum
+              <DataTableCellChoice
                 multiple
                 value={selected}
-                options={col.enumValues!}
+                options={col.choices!}
                 disabled={isSaving}
                 onChange={(next) => handleChange(col.name, JSON.stringify(next))}
                 onFocus={() => {
@@ -197,13 +195,13 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
           )
         }
 
-        if (isEnum || isBool) {
+        if (isSingleChoice || isBool) {
           const options = isBool
             ? [{ value: "true", label: "true" }, { value: "false", label: "false" }]
-            : col.enumValues!.map((v) => ({ value: v, label: v }))
+            : col.choices!.map((v) => ({ value: v, label: v }))
           return (
             <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
-              <DataTableCellEnum
+              <DataTableCellChoice
                 value={values[col.name] ?? ""}
                 options={options}
                 disabled={isSaving}
@@ -238,7 +236,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
           key={col.name}
           className={`${DATA_TABLE_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
         >
-          {formatCellValue(initialData?.[col.name], col.type, col.name)}
+          {formatCellValue(initialData?.[col.name], col.kind, col.name)}
         </TableCell>
       ))}
       <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>

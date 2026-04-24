@@ -8,7 +8,7 @@ import { getMcpServerPort, isMcpServerRunning, getMcpServerUrl } from "./mcp-ser
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
 import type {
-  DataStoreColumnDef,
+  Column,
   DataStoreQueryParams,
   DataStoreWhereClause,
 } from "./types"
@@ -26,7 +26,7 @@ function registerDataStoreHandlers(): void {
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.createTable, async (_event, params: {
     name: string
     description?: string
-    columns: DataStoreColumnDef[]
+    columns: Column[]
   }) => {
     dataStoreService.createTable(params.name, params.columns, params.description)
   })
@@ -41,7 +41,7 @@ function registerDataStoreHandlers(): void {
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.addColumn, async (_event, params: {
     table: string
-    column: DataStoreColumnDef & { default?: unknown }
+    column: Column & { default?: unknown }
   }) => {
     dataStoreService.addColumn(params.table, params.column)
   })
@@ -54,19 +54,19 @@ function registerDataStoreHandlers(): void {
     dataStoreService.updateColumnDescription(params.table, params.column, params.description)
   })
 
-  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateColumnEnumValues, async (_event, params: {
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateColumnChoices, async (_event, params: {
     table: string
     column: string
-    values: string[]
+    choices: string[]
   }) => {
-    dataStoreService.updateColumnEnumValues(params.table, params.column, params.values)
+    dataStoreService.updateColumnChoices(params.table, params.column, params.choices)
   })
 
-  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getColumnValueUsage, async (_event, params: {
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getColumnChoicesUsage, async (_event, params: {
     table: string
     column: string
   }) => {
-    return dataStoreService.getColumnValueUsage(params.table, params.column)
+    return dataStoreService.getColumnChoicesUsage(params.table, params.column)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.insert, async (_event, params: {

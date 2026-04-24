@@ -15,6 +15,7 @@
     "desktop:build:renderer": "pnpm --filter @synapse/desktop run build:renderer",
     "desktop:build:electron": "pnpm --filter @synapse/desktop run build:electron",
     "desktop:build:data-store": "pnpm --filter @synapse/desktop run build:data-store",
+    "desktop:data-store:import-legacy": "pnpm --filter @synapse/desktop run data-store:import-legacy",
     "desktop:package:mac": "pnpm --filter @synapse/desktop run package:mac",
     "desktop:package:win": "pnpm --filter @synapse/desktop run package:win",
     "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",

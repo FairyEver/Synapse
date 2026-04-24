@@ -1,10 +1,10 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
 import { app } from "electron"
-import { copyFileSync, renameSync, statSync, unlinkSync } from "node:fs"
+import { copyFileSync, existsSync, renameSync, statSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import type {
-  DataStoreColumnDef,
-  DataStoreColumnInfo,
+  Column,
+  ColumnKind,
   DataStoreOrderBy,
   DataStoreQueryParams,
   DataStoreQueryResult,
@@ -13,23 +13,28 @@ import type {
   DataStoreWhereClause,
   DataStoreWhereCondition,
 } from "./types"
+import {
+  COLUMN_KINDS,
+  affinityToKind,
+  isBooleanKind,
+  isChoiceKind,
+  isColumnKind,
+  isDateKind,
+  isJsonSerializedKind,
+  isMultiChoiceKind,
+  isTimestampKind,
+  kindToAffinity,
+} from "./column-kind"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store.service")
 
 const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 const RESERVED_PREFIX = "_"
-const JSON_COLUMN_TYPE = "JSON"
-const BOOLEAN_COLUMN_TYPE = "BOOLEAN"
-const DATE_COLUMN_TYPE = "DATE"
-const DATETIME_COLUMN_TYPE = "DATETIME"
-const ENUM_COLUMN_TYPE = "ENUM"
-const MULTI_ENUM_COLUMN_TYPE = "MULTI_ENUM"
-const VALID_COLUMN_TYPES = new Set(["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN", "ENUM", "MULTI_ENUM"])
 const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"])
 const VALID_ORDER_DIRS = new Set(["ASC", "DESC"])
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}$/
+const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/
 
 function isWhereGroup(where: DataStoreWhereClause): where is { combinator: "all" | "any"; conditions: DataStoreWhereCondition[] } {
   return typeof where === "object"
@@ -56,55 +61,65 @@ function validateColumnName(name: string): void {
   }
 }
 
-function validateColumnType(type: string): void {
-  if (!VALID_COLUMN_TYPES.has(type.toUpperCase())) {
-    throw new Error(`Invalid column type "${type}": must be one of TEXT, INTEGER, REAL, BLOB, JSON, ENUM, MULTI_ENUM`)
+function validateColumnKind(kind: unknown): asserts kind is ColumnKind {
+  if (typeof kind !== "string" || !isColumnKind(kind)) {
+    throw new Error(`Invalid column kind "${String(kind)}": must be one of ${COLUMN_KINDS.join(", ")}`)
   }
 }
 
-const MULTI_ENUM_NAME_SIGNALS = ["tags", "labels", "categories", "标签", "分类", "类别"]
-const ENUM_NAME_SIGNALS = ["status", "priority", "level", "role", "severity", "gender", "优先级", "级别", "状态", "角色", "等级", "性别"]
-const ENUM_OR_MULTI_NAME_SIGNALS = ["category", "type", "kind", "tag", "label", "种类"]
+function validateChoicesConsistency(col: Column): void {
+  if (isChoiceKind(col.kind)) {
+    if (!Array.isArray(col.choices) || col.choices.length === 0) {
+      throw new Error(`kind="${col.kind}" column "${col.name}" requires non-empty choices`)
+    }
+    const invalid = col.choices.find((choice) => typeof choice !== "string" || choice.length === 0)
+    if (invalid !== undefined) {
+      throw new Error(`kind="${col.kind}" column "${col.name}" choices must be non-empty strings`)
+    }
+    return
+  }
+
+  if (col.choices !== undefined) {
+    throw new Error(`Column "${col.name}" has choices but kind="${col.kind}". choices only applies to single_choice or multi_choice`)
+  }
+}
+
+const MULTI_CHOICE_NAME_HINTS = ["tags", "labels", "categories", "标签", "分类", "类别"]
+const SINGLE_CHOICE_NAME_HINTS = ["status", "priority", "level", "role", "severity", "gender", "优先级", "级别", "状态", "角色", "等级", "性别"]
+const CHOICE_AMBIGUOUS_NAME_HINTS = ["category", "type", "kind", "tag", "label", "种类"]
 const BOOLEAN_NAME_EXACT = ["done", "enabled", "active", "visible", "archived", "deleted", "published", "completed", "locked", "pinned", "starred", "favorite", "read"]
 const BOOLEAN_NAME_PREFIXES = ["is_", "has_", "can_", "should_"]
 const BOOLEAN_NAME_PREFIXES_CN = ["是否"]
 
-function assertSemanticallyCorrectColumn(col: DataStoreColumnDef): void {
-  const type = col.type.toUpperCase()
+function assertSemanticallyCorrectColumn(col: Column): void {
   const lower = col.name.toLowerCase()
 
-  if (col.enumValues && col.enumValues.length > 0 && type !== ENUM_COLUMN_TYPE && type !== MULTI_ENUM_COLUMN_TYPE) {
+  if ((col.kind === "json" || col.kind === "text") && (MULTI_CHOICE_NAME_HINTS.includes(lower) || MULTI_CHOICE_NAME_HINTS.includes(col.name))) {
     throw new Error(
-      `Column "${col.name}" has enumValues but type is ${type}. enumValues only applies to ENUM (single-choice) or MULTI_ENUM (multi-select). Change type to "ENUM" or "MULTI_ENUM" based on whether the user wants single or multiple selection.`,
+      `Column "${col.name}" is a multi-select field. Use kind="multi_choice" with choices=[...].`,
     )
   }
 
-  if ((type === "JSON" || type === "TEXT") && (MULTI_ENUM_NAME_SIGNALS.includes(lower) || MULTI_ENUM_NAME_SIGNALS.includes(col.name))) {
+  if ((col.kind === "json" || col.kind === "text") && (SINGLE_CHOICE_NAME_HINTS.includes(lower) || SINGLE_CHOICE_NAME_HINTS.includes(col.name))) {
     throw new Error(
-      `Column "${col.name}" is a multi-select field. Use type="MULTI_ENUM" with enumValues=[...allowed values...], not ${type}. Example: { name: "${col.name}", type: "MULTI_ENUM", enumValues: ["选项1", "选项2"] }. If the user genuinely needs free-form data without a fixed value set, rename the column to avoid multi-select keywords.`,
+      `Column "${col.name}" is a single-choice field. Use kind="single_choice" with choices=[...].`,
     )
   }
 
-  if (type === "TEXT" && (ENUM_NAME_SIGNALS.includes(lower) || ENUM_NAME_SIGNALS.includes(col.name))) {
+  if ((col.kind === "json" || col.kind === "text") && CHOICE_AMBIGUOUS_NAME_HINTS.includes(lower)) {
     throw new Error(
-      `Column "${col.name}" is a single-choice enum field. Use type="ENUM" with enumValues=[...allowed values...], not TEXT. Example: { name: "${col.name}", type: "ENUM", enumValues: ["值1", "值2", "值3"] }.`,
+      `Column "${col.name}" looks like a choice field. Use kind="single_choice" with choices=[...] or kind="multi_choice" with choices=[...].`,
     )
   }
 
-  if ((type === "JSON" || type === "TEXT") && ENUM_OR_MULTI_NAME_SIGNALS.includes(lower)) {
-    throw new Error(
-      `Column "${col.name}" looks like an enum-like field. Use type="ENUM" (if each row has ONE value) or type="MULTI_ENUM" (if each row can hold multiple values) with enumValues=[...allowed values...], not ${type}.`,
-    )
-  }
-
-  if (type === "INTEGER") {
+  if (col.kind === "integer") {
     const looksBool =
       BOOLEAN_NAME_EXACT.includes(lower)
       || BOOLEAN_NAME_PREFIXES.some((p) => lower.startsWith(p))
       || BOOLEAN_NAME_PREFIXES_CN.some((p) => col.name.startsWith(p))
     if (looksBool) {
       throw new Error(
-        `Column "${col.name}" is a boolean field. Use type="BOOLEAN" (stored as 0/1, returned as true/false), not INTEGER.`,
+        `Column "${col.name}" is a boolean field. Use kind="boolean".`,
       )
     }
   }
@@ -125,10 +140,17 @@ function toNumber(v: number | bigint): number {
   return typeof v === "bigint" ? Number(v) : v
 }
 
+function formatSqlDefault(v: SQLInputValue): string {
+  if (v === null) return "NULL"
+  if (typeof v === "number" || typeof v === "bigint") return String(v)
+  if (typeof v === "string") return `'${v.replace(/'/g, "''")}'`
+  throw new Error("Default value for binary columns is not supported")
+}
+
 function toBooleanInt(v: unknown): number {
-  if (v === true || v === 1 || v === "true" || v === "1") return 1
-  if (v === false || v === 0 || v === "false" || v === "0" || v === null || v === undefined) return 0
-  throw new Error(`Invalid boolean value: ${JSON.stringify(v)}. Expected true/false, 1/0, "true"/"false"`)
+  if (v === true) return 1
+  if (v === false) return 0
+  throw new Error(`Invalid boolean value: ${JSON.stringify(v)}. Expected true or false`)
 }
 
 function validateDateString(v: unknown): string {
@@ -145,33 +167,19 @@ function validateDateString(v: unknown): string {
   return s
 }
 
-function validateDateTimeString(v: unknown): string {
+function validateTimestampString(v: unknown): string {
   if (v === null || v === undefined) return ""
   const s = String(v)
-  if (!DATETIME_PATTERN.test(s)) {
-    throw new Error(`Invalid datetime format: "${s}". Expected YYYY-MM-DD HH:mm:ss`)
+  if (!TIMESTAMP_PATTERN.test(s) || Number.isNaN(Date.parse(s))) {
+    throw new Error(`Invalid timestamp format: "${s}". Expected ISO 8601`)
   }
-  const normalized = s.replace("T", " ")
-  const [datePart, timePart] = normalized.split(" ")
-  const [y, m, d] = datePart.split("-").map(Number)
-  const [hh, mm, ss] = timePart.split(":").map(Number)
-  const date = new Date(y, m - 1, d, hh, mm, ss)
-  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d
-    || date.getHours() !== hh || date.getMinutes() !== mm || date.getSeconds() !== ss) {
-    throw new Error(`Invalid datetime: "${s}"`)
-  }
-  return normalized
+  return s
 }
 
 class DataStoreService {
   private db: DatabaseSync | null = null
   private dbPath: string = ""
-  private jsonColumns = new Map<string, Set<string>>()
-  private booleanColumns = new Map<string, Set<string>>()
-  private dateColumns = new Map<string, Set<string>>()
-  private datetimeColumns = new Map<string, Set<string>>()
-  private enumColumns = new Map<string, Map<string, string[]>>()
-  private multiEnumColumns = new Map<string, Set<string>>()
+  private columnMeta: Map<string, Map<string, { kind: ColumnKind; choices?: string[] }>> = new Map()
 
   open(): { corrupted: boolean } {
     this.dbPath = path.join(app.getPath("userData"), "synapse-data.db")
@@ -192,25 +200,18 @@ class DataStoreService {
     } catch (error) {
       logger.warn("Database corrupted. Creating fresh database.", { error })
       corrupted = true
+      this.backupAndReopenDatabase("corrupt")
+    }
 
-      try { this.db.close() } catch { /* ignore */ }
-
-      const timestamp = Date.now()
-      try {
-        renameSync(this.dbPath, `${this.dbPath}.corrupt.${timestamp}`)
-        const walPath = `${this.dbPath}-wal`
-        const shmPath = `${this.dbPath}-shm`
-        try { renameSync(walPath, `${walPath}.corrupt.${timestamp}`) } catch { /* may not exist */ }
-        try { renameSync(shmPath, `${shmPath}.corrupt.${timestamp}`) } catch { /* may not exist */ }
-      } catch { /* ignore */ }
-
-      this.db = new DatabaseSync(this.dbPath)
-      this.db.exec("PRAGMA journal_mode=WAL")
+    if (this.needsSchemaRebuild()) {
+      logger.warn("Legacy data store schema detected. Backing up and creating a fresh database.")
+      this.backupAndReopenDatabase("legacy")
     }
 
     this.ensureSystemSchema()
     this.syncMetaTables()
-    this.refreshJsonColumnCache()
+    this.syncMetaColumns()
+    this.refreshColumnMetaCache()
 
     logger.info("Data store opened.", { path: this.dbPath, corrupted })
     return { corrupted }
@@ -231,6 +232,35 @@ class DataStoreService {
     return this.db
   }
 
+  private needsSchemaRebuild(): boolean {
+    const db = this.getDb()
+    const metaTable = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_meta_columns'`).get()
+    if (!metaTable) return false
+
+    const cols = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
+    const colNames = new Set(cols.map((col) => col.name))
+    return !["table_name", "column_name", "kind", "choices", "description"].every((name) => colNames.has(name))
+  }
+
+  private backupAndReopenDatabase(reason: "legacy" | "corrupt"): void {
+    try { this.db?.close() } catch { /* ignore */ }
+    this.db = null
+
+    const timestamp = Date.now()
+    const suffix = reason === "legacy" ? `legacy.${timestamp}` : `corrupt.${timestamp}`
+    const walPath = `${this.dbPath}-wal`
+    const shmPath = `${this.dbPath}-shm`
+
+    try {
+      if (existsSync(this.dbPath)) renameSync(this.dbPath, `${this.dbPath}.${suffix}`)
+      if (existsSync(walPath)) renameSync(walPath, `${walPath}.${suffix}`)
+      if (existsSync(shmPath)) renameSync(shmPath, `${shmPath}.${suffix}`)
+    } catch { /* best effort backup */ }
+
+    this.db = new DatabaseSync(this.dbPath)
+    this.db.exec("PRAGMA journal_mode=WAL")
+  }
+
   private ensureSystemSchema(): void {
     const db = this.getDb()
     db.exec(`
@@ -245,15 +275,12 @@ class DataStoreService {
       CREATE TABLE IF NOT EXISTS "_meta_columns" (
         table_name TEXT NOT NULL,
         column_name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        choices TEXT,
         description TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (table_name, column_name)
       )
     `)
-    const cols = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
-    const colNames = new Set(cols.map((c) => c.name))
-    if (!colNames.has("enum_values")) {
-      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN enum_values TEXT NOT NULL DEFAULT ''`)
-    }
   }
 
   private syncMetaTables(): void {
@@ -284,109 +311,124 @@ class DataStoreService {
     }
   }
 
-  private refreshJsonColumnCache(): void {
-    this.jsonColumns.clear()
-    this.booleanColumns.clear()
-    this.dateColumns.clear()
-    this.datetimeColumns.clear()
-    this.enumColumns.clear()
-    this.multiEnumColumns.clear()
+  private syncMetaColumns(): void {
     const db = this.getDb()
     const tables = db.prepare(`SELECT name FROM "_meta_tables"`).all() as { name: string }[]
 
     for (const { name } of tables) {
       try {
         const columns = db.prepare(`PRAGMA table_info(${q(name)})`).all() as { name: string; type: string }[]
-        const jsonCols = new Set<string>()
-        const boolCols = new Set<string>()
-        const dateCols = new Set<string>()
-        const dtCols = new Set<string>()
-        const enumCols = new Map<string, string[]>()
-        const multiEnumCols = new Set<string>()
-        for (const col of columns) {
-          const upper = col.type.toUpperCase()
-          if (upper === JSON_COLUMN_TYPE) jsonCols.add(col.name)
-          else if (upper === BOOLEAN_COLUMN_TYPE) boolCols.add(col.name)
-          else if (upper === DATETIME_COLUMN_TYPE) dtCols.add(col.name)
-          else if (upper === DATE_COLUMN_TYPE) dateCols.add(col.name)
-          else if (upper === ENUM_COLUMN_TYPE) enumCols.set(col.name, [])
-          else if (upper === MULTI_ENUM_COLUMN_TYPE) { enumCols.set(col.name, []); multiEnumCols.add(col.name) }
+        const userColumns = columns.filter((col) => col.name !== "id" && col.name !== "created_at" && col.name !== "updated_at")
+        const actual = new Set(userColumns.map((col) => col.name))
+        const tracked = db.prepare(`SELECT column_name FROM "_meta_columns" WHERE table_name = ?`).all(name) as { column_name: string }[]
+        for (const row of tracked) {
+          if (!actual.has(row.column_name)) {
+            db.prepare(`DELETE FROM "_meta_columns" WHERE table_name = ? AND column_name = ?`).run(name, row.column_name)
+          }
         }
-        if (jsonCols.size > 0) this.jsonColumns.set(name, jsonCols)
-        if (boolCols.size > 0) this.booleanColumns.set(name, boolCols)
-        if (dateCols.size > 0) this.dateColumns.set(name, dateCols)
-        if (dtCols.size > 0) this.datetimeColumns.set(name, dtCols)
-        if (enumCols.size > 0) this.enumColumns.set(name, enumCols)
-        if (multiEnumCols.size > 0) this.multiEnumColumns.set(name, multiEnumCols)
+        for (const col of columns) {
+          if (col.name === "id" || col.name === "created_at" || col.name === "updated_at") continue
+          db.prepare(`
+            INSERT OR IGNORE INTO "_meta_columns" (table_name, column_name, kind, choices, description)
+            VALUES (?, ?, ?, NULL, '')
+          `).run(name, col.name, affinityToKind(col.type))
+        }
       } catch { /* table might not exist */ }
     }
+  }
 
-    try {
-      const metaRows = db.prepare(`SELECT table_name, column_name, enum_values FROM "_meta_columns" WHERE enum_values != ''`).all() as {
-        table_name: string
-        column_name: string
-        enum_values: string
-      }[]
-      for (const row of metaRows) {
+  private refreshColumnMetaCache(): void {
+    this.columnMeta.clear()
+    const db = this.getDb()
+    const metaRows = db.prepare(`SELECT table_name, column_name, kind, choices FROM "_meta_columns"`).all() as {
+      table_name: string
+      column_name: string
+      kind: string
+      choices: string | null
+    }[]
+
+    for (const row of metaRows) {
+      if (!isColumnKind(row.kind)) continue
+      let choices: string[] | undefined
+      if (row.choices) {
         try {
-          const values = JSON.parse(row.enum_values) as string[]
-          if (!Array.isArray(values)) continue
-          let tableMap = this.enumColumns.get(row.table_name)
-          if (!tableMap) {
-            tableMap = new Map()
-            this.enumColumns.set(row.table_name, tableMap)
+          const parsed = JSON.parse(row.choices) as unknown
+          if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+            choices = parsed
           }
-          tableMap.set(row.column_name, values)
         } catch { /* invalid JSON, skip */ }
       }
-    } catch { /* _meta_columns might not have enum_values column yet */ }
+
+      let tableMeta = this.columnMeta.get(row.table_name)
+      if (!tableMeta) {
+        tableMeta = new Map()
+        this.columnMeta.set(row.table_name, tableMeta)
+      }
+      tableMeta.set(row.column_name, choices && isChoiceKind(row.kind) ? { kind: row.kind, choices } : { kind: row.kind })
+    }
+  }
+
+  private getColumnMetaForTable(table: string): Map<string, { kind: ColumnKind; choices?: string[] }> {
+    return this.columnMeta.get(table) ?? new Map()
+  }
+
+  private getColumnsForTable(table: string, predicate: (kind: ColumnKind) => boolean): Set<string> {
+    const result = new Set<string>()
+    for (const [name, meta] of this.getColumnMetaForTable(table)) {
+      if (predicate(meta.kind)) result.add(name)
+    }
+    return result
   }
 
   private getJsonColumnsForTable(table: string): Set<string> {
-    return this.jsonColumns.get(table) ?? new Set()
+    return this.getColumnsForTable(table, isJsonSerializedKind)
   }
 
   private getBooleanColumnsForTable(table: string): Set<string> {
-    return this.booleanColumns.get(table) ?? new Set()
+    return this.getColumnsForTable(table, isBooleanKind)
   }
 
   private getDateColumnsForTable(table: string): Set<string> {
-    return this.dateColumns.get(table) ?? new Set()
+    return this.getColumnsForTable(table, isDateKind)
   }
 
-  private getDatetimeColumnsForTable(table: string): Set<string> {
-    return this.datetimeColumns.get(table) ?? new Set()
+  private getTimestampColumnsForTable(table: string): Set<string> {
+    return this.getColumnsForTable(table, isTimestampKind)
   }
 
-  private getEnumColumnsForTable(table: string): Map<string, string[]> {
-    return this.enumColumns.get(table) ?? new Map()
+  private getChoiceColumnsForTable(table: string): Map<string, string[]> {
+    const result = new Map<string, string[]>()
+    for (const [name, meta] of this.getColumnMetaForTable(table)) {
+      if (isChoiceKind(meta.kind) && meta.choices) result.set(name, meta.choices)
+    }
+    return result
   }
 
-  private getMultiEnumColumnsForTable(table: string): Set<string> {
-    return this.multiEnumColumns.get(table) ?? new Set()
+  private getMultiChoiceColumnsForTable(table: string): Set<string> {
+    return this.getColumnsForTable(table, isMultiChoiceKind)
   }
 
-  private validateEnumValue(key: string, value: unknown, enumCols: Map<string, string[]>): void {
-    const allowed = enumCols.get(key)
+  private validateSingleChoiceValue(key: string, value: unknown, choiceCols: Map<string, string[]>): void {
+    const allowed = choiceCols.get(key)
     if (!allowed) return
     if (value === null || value === undefined || value === "") return
     const s = String(value)
     if (!allowed.includes(s)) {
-      throw new Error(`Invalid value "${s}" for ENUM column "${key}". Allowed: ${allowed.join(", ")}`)
+      throw new Error(`Invalid value "${s}" for single_choice column "${key}". Allowed: ${allowed.join(", ")}`)
     }
   }
 
-  private validateMultiEnumValue(key: string, value: unknown, enumCols: Map<string, string[]>): void {
-    const allowed = enumCols.get(key)
+  private validateMultiChoiceValue(key: string, value: unknown, choiceCols: Map<string, string[]>): void {
+    const allowed = choiceCols.get(key)
     if (!allowed) return
     if (value === null || value === undefined) return
     if (!Array.isArray(value)) {
-      throw new Error(`MULTI_ENUM column "${key}" requires an array value`)
+      throw new Error(`multi_choice column "${key}" requires an array value`)
     }
     for (const item of value) {
       const s = String(item)
       if (!allowed.includes(s)) {
-        throw new Error(`Invalid value "${s}" for MULTI_ENUM column "${key}". Allowed: ${allowed.join(", ")}`)
+        throw new Error(`Invalid value "${s}" for multi_choice column "${key}". Allowed: ${allowed.join(", ")}`)
       }
     }
   }
@@ -397,17 +439,18 @@ class DataStoreService {
     jsonCols: Set<string>,
     boolCols: Set<string>,
     dateCols: Set<string>,
-    dtCols: Set<string>,
-    multiEnumCols?: Set<string>,
+    timestampCols: Set<string>,
+    multiChoiceCols?: Set<string>,
   ): SQLInputValue {
-    if (multiEnumCols?.has(key)) return toSqlValue(JSON.stringify(value))
+    if (value === null || value === undefined) return null
+    if (multiChoiceCols?.has(key)) return toSqlValue(JSON.stringify(value))
     if (jsonCols.has(key)) return toSqlValue(JSON.stringify(value))
     if (boolCols.has(key)) return toBooleanInt(value)
     if (dateCols.has(key) && value !== null && value !== undefined && value !== "") {
       return validateDateString(value)
     }
-    if (dtCols.has(key) && value !== null && value !== undefined && value !== "") {
-      return validateDateTimeString(value)
+    if (timestampCols.has(key) && value !== null && value !== undefined && value !== "") {
+      return validateTimestampString(value)
     }
     return toSqlValue(value)
   }
@@ -446,7 +489,7 @@ class DataStoreService {
     })
   }
 
-  createTable(name: string, columns: DataStoreColumnDef[], description?: string): void {
+  createTable(name: string, columns: Column[], description?: string): void {
     validateName(name, "table")
     if (columns.length === 0) {
       throw new Error("At least one column is required")
@@ -455,25 +498,20 @@ class DataStoreService {
     const seenColumns = new Set<string>()
     for (const col of columns) {
       validateColumnName(col.name)
-      validateColumnType(col.type)
+      validateColumnKind(col.kind)
+      validateChoicesConsistency(col)
       const lower = col.name.toLowerCase()
       if (seenColumns.has(lower)) {
         throw new Error(`Duplicate column name "${col.name}"`)
       }
       seenColumns.add(lower)
-      const upperType = col.type.toUpperCase()
-      if (upperType === ENUM_COLUMN_TYPE || upperType === MULTI_ENUM_COLUMN_TYPE) {
-        if (!col.enumValues || col.enumValues.length === 0) {
-          throw new Error(`${upperType} column "${col.name}" requires at least one value in enumValues`)
-        }
-      }
       assertSemanticallyCorrectColumn(col)
     }
 
     const db = this.getDb()
     const now = new Date().toISOString()
 
-    const columnDefs = columns.map((col) => `${q(col.name)} ${col.type}`).join(", ")
+    const columnDefs = columns.map((col) => `${q(col.name)} ${kindToAffinity(col.kind)}`).join(", ")
     const createSQL = `CREATE TABLE ${q(name)} ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "created_at" TEXT NOT NULL DEFAULT '', "updated_at" TEXT NOT NULL DEFAULT '', ${columnDefs})`
 
     db.exec("BEGIN")
@@ -482,12 +520,8 @@ class DataStoreService {
       db.prepare(`INSERT INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
         .run(name, description ?? "", now, now)
       for (const col of columns) {
-        const hasDesc = !!col.description
-        const hasEnum = (col.type.toUpperCase() === ENUM_COLUMN_TYPE || col.type.toUpperCase() === MULTI_ENUM_COLUMN_TYPE) && col.enumValues
-        if (hasDesc || hasEnum) {
-          db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, ?, ?)`)
-            .run(name, col.name, col.description ?? "", hasEnum ? JSON.stringify(col.enumValues) : "")
-        }
+        db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, kind, choices, description) VALUES (?, ?, ?, ?, ?)`)
+          .run(name, col.name, col.kind, col.choices ? JSON.stringify(col.choices) : null, col.description ?? "")
       }
       db.exec("COMMIT")
     } catch (error) {
@@ -495,27 +529,7 @@ class DataStoreService {
       throw error
     }
 
-    const jsonCols = new Set<string>()
-    const boolCols = new Set<string>()
-    const dateCols = new Set<string>()
-    const dtCols = new Set<string>()
-    const enumCols = new Map<string, string[]>()
-    const multiEnumCols = new Set<string>()
-    for (const col of columns) {
-      const upper = col.type.toUpperCase()
-      if (upper === JSON_COLUMN_TYPE) jsonCols.add(col.name)
-      else if (upper === BOOLEAN_COLUMN_TYPE) boolCols.add(col.name)
-      else if (upper === DATETIME_COLUMN_TYPE) dtCols.add(col.name)
-      else if (upper === DATE_COLUMN_TYPE) dateCols.add(col.name)
-      else if (upper === ENUM_COLUMN_TYPE && col.enumValues) enumCols.set(col.name, col.enumValues)
-      else if (upper === MULTI_ENUM_COLUMN_TYPE && col.enumValues) { enumCols.set(col.name, col.enumValues); multiEnumCols.add(col.name) }
-    }
-    if (jsonCols.size > 0) this.jsonColumns.set(name, jsonCols)
-    if (boolCols.size > 0) this.booleanColumns.set(name, boolCols)
-    if (dateCols.size > 0) this.dateColumns.set(name, dateCols)
-    if (dtCols.size > 0) this.datetimeColumns.set(name, dtCols)
-    if (enumCols.size > 0) this.enumColumns.set(name, enumCols)
-    if (multiEnumCols.size > 0) this.multiEnumColumns.set(name, multiEnumCols)
+    this.refreshColumnMetaCache()
   }
 
   dropTable(name: string): void {
@@ -534,12 +548,7 @@ class DataStoreService {
       throw error
     }
 
-    this.jsonColumns.delete(name)
-    this.booleanColumns.delete(name)
-    this.dateColumns.delete(name)
-    this.datetimeColumns.delete(name)
-    this.enumColumns.delete(name)
-    this.multiEnumColumns.delete(name)
+    this.columnMeta.delete(name)
   }
 
   describeTable(name: string): DataStoreTableSchema {
@@ -552,34 +561,57 @@ class DataStoreService {
       pk: number
     }[]
 
-    const colMetaRows = db.prepare(`SELECT column_name, description, enum_values FROM "_meta_columns" WHERE table_name = ?`).all(name) as {
+    const colMetaRows = db.prepare(`SELECT column_name, kind, choices, description FROM "_meta_columns" WHERE table_name = ?`).all(name) as {
       column_name: string
+      kind: string
+      choices: string | null
       description: string
-      enum_values: string
     }[]
-    const colDescMap = new Map(colMetaRows.map((r) => [r.column_name, r.description]))
-    const colEnumMap = new Map<string, string[]>()
+    const colMetaMap = new Map<string, { kind: ColumnKind; choices?: string[]; description: string }>()
     for (const r of colMetaRows) {
-      if (r.enum_values) {
+      if (!isColumnKind(r.kind)) continue
+      let choices: string[] | undefined
+      if (r.choices) {
         try {
-          const vals = JSON.parse(r.enum_values)
-          if (Array.isArray(vals)) colEnumMap.set(r.column_name, vals)
+          const parsed = JSON.parse(r.choices) as unknown
+          if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+            choices = parsed
+          }
         } catch { /* skip */ }
       }
+      colMetaMap.set(r.column_name, choices ? { kind: r.kind, choices, description: r.description } : { kind: r.kind, description: r.description })
     }
 
     const SYSTEM_COLUMNS = new Set(["id", "created_at", "updated_at"])
 
-    const columns: DataStoreColumnInfo[] = pragmaRows.map((r) => {
-      const info: DataStoreColumnInfo = {
-        name: r.name,
-        type: r.type,
-        primaryKey: r.pk === 1,
-        description: colDescMap.get(r.name) ?? "",
+    const columns: Column[] = pragmaRows.map((r) => {
+      if (r.name === "id") {
+        return {
+          name: r.name,
+          kind: "integer",
+          primaryKey: true,
+          system: true,
+          description: "",
+        }
       }
+      if (r.name === "created_at" || r.name === "updated_at") {
+        return {
+          name: r.name,
+          kind: "timestamp",
+          system: true,
+          description: "",
+        }
+      }
+
+      const meta = colMetaMap.get(r.name)
+      const info: Column = {
+        name: r.name,
+        kind: meta?.kind ?? affinityToKind(r.type),
+        description: meta?.description ?? "",
+      }
+      if (r.pk === 1) info.primaryKey = true
       if (SYSTEM_COLUMNS.has(r.name)) info.system = true
-      const ev = colEnumMap.get(r.name)
-      if (ev) info.enumValues = ev
+      if (meta?.choices && isChoiceKind(info.kind)) info.choices = meta.choices
       return info
     })
 
@@ -601,89 +633,67 @@ class DataStoreService {
     }
   }
 
-  addColumn(table: string, column: DataStoreColumnDef & { default?: unknown }): void {
+  addColumn(table: string, column: Column & { default?: unknown }): void {
     validateName(table, "table")
     validateColumnName(column.name)
-    validateColumnType(column.type)
+    validateColumnKind(column.kind)
+    validateChoicesConsistency(column)
     assertSemanticallyCorrectColumn(column)
     this.assertTableExists(table)
 
-    const upper = column.type.toUpperCase()
-    const isEnum = upper === ENUM_COLUMN_TYPE
-    const isMultiEnum = upper === MULTI_ENUM_COLUMN_TYPE
-    if (isEnum || isMultiEnum) {
-      if (!column.enumValues || column.enumValues.length === 0) {
-        throw new Error(`${upper} column "${column.name}" requires at least one value in enumValues`)
-      }
+    if (isChoiceKind(column.kind)) {
+      const choices = column.choices ?? []
       if (column.default !== undefined && column.default !== null && column.default !== "") {
-        if (isMultiEnum) {
+        if (isMultiChoiceKind(column.kind)) {
           if (!Array.isArray(column.default)) {
-            throw new Error(`Default value for MULTI_ENUM column "${column.name}" must be an array`)
+            throw new Error(`Default value for multi_choice column "${column.name}" must be an array`)
           }
           for (const v of column.default as unknown[]) {
-            if (!column.enumValues.includes(String(v))) {
-              throw new Error(`Default value "${v}" is not in enumValues: ${column.enumValues.join(", ")}`)
+            if (!choices.includes(String(v))) {
+              throw new Error(`Default value "${v}" is not in choices: ${choices.join(", ")}`)
             }
           }
         } else {
-          if (!column.enumValues.includes(String(column.default))) {
-            throw new Error(`Default value "${column.default}" is not in enumValues: ${column.enumValues.join(", ")}`)
+          if (!choices.includes(String(column.default))) {
+            throw new Error(`Default value "${column.default}" is not in choices: ${choices.join(", ")}`)
           }
         }
       }
     }
 
     const db = this.getDb()
-    let sql = `ALTER TABLE ${q(table)} ADD COLUMN ${q(column.name)} ${column.type}`
+    let sql = `ALTER TABLE ${q(table)} ADD COLUMN ${q(column.name)} ${kindToAffinity(column.kind)}`
     if (column.default !== undefined) {
-      const defaultVal = upper === JSON_COLUMN_TYPE
-        ? JSON.stringify(column.default)
-        : column.default
-      sql += ` DEFAULT ${typeof defaultVal === "string" ? `'${defaultVal.replace(/'/g, "''")}'` : defaultVal}`
+      let defaultVal: SQLInputValue
+      if (column.default === null) {
+        defaultVal = null
+      } else if (isMultiChoiceKind(column.kind) || column.kind === "json") {
+        defaultVal = toSqlValue(JSON.stringify(column.default))
+      } else if (isBooleanKind(column.kind)) {
+        defaultVal = toBooleanInt(column.default)
+      } else if (isDateKind(column.kind) && column.default !== null && column.default !== "") {
+        defaultVal = validateDateString(column.default)
+      } else if (isTimestampKind(column.kind) && column.default !== null && column.default !== "") {
+        defaultVal = validateTimestampString(column.default)
+      } else {
+        defaultVal = toSqlValue(column.default)
+      }
+      sql += ` DEFAULT ${formatSqlDefault(defaultVal)}`
     }
 
     db.exec("BEGIN")
     try {
       db.exec(sql)
       db.prepare(`UPDATE "_meta_tables" SET updated_at = ? WHERE name = ?`).run(new Date().toISOString(), table)
-      if (column.description || isEnum || isMultiEnum) {
-        db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, ?, ?)`)
-          .run(table, column.name, column.description ?? "", (isEnum || isMultiEnum) ? JSON.stringify(column.enumValues) : "")
-      }
+      db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, kind, choices, description) VALUES (?, ?, ?, ?, ?)`)
+        .run(table, column.name, column.kind, column.choices ? JSON.stringify(column.choices) : null, column.description ?? "")
       db.exec("COMMIT")
     } catch (error) {
       db.exec("ROLLBACK")
       throw error
     }
 
-    if (upper === JSON_COLUMN_TYPE) {
-      const existing = this.jsonColumns.get(table) ?? new Set()
-      existing.add(column.name)
-      this.jsonColumns.set(table, existing)
-    } else if (upper === BOOLEAN_COLUMN_TYPE) {
-      const existing = this.booleanColumns.get(table) ?? new Set()
-      existing.add(column.name)
-      this.booleanColumns.set(table, existing)
-    } else if (upper === DATE_COLUMN_TYPE) {
-      const existing = this.dateColumns.get(table) ?? new Set()
-      existing.add(column.name)
-      this.dateColumns.set(table, existing)
-    } else if (upper === DATETIME_COLUMN_TYPE) {
-      const existing = this.datetimeColumns.get(table) ?? new Set()
-      existing.add(column.name)
-      this.datetimeColumns.set(table, existing)
-    } else if (isEnum && column.enumValues) {
-      const existing = this.enumColumns.get(table) ?? new Map()
-      existing.set(column.name, column.enumValues)
-      this.enumColumns.set(table, existing)
-    } else if (isMultiEnum && column.enumValues) {
-      const existingEnum = this.enumColumns.get(table) ?? new Map()
-      existingEnum.set(column.name, column.enumValues)
-      this.enumColumns.set(table, existingEnum)
-      const existingMulti = this.multiEnumColumns.get(table) ?? new Set()
-      existingMulti.add(column.name)
-      this.multiEnumColumns.set(table, existingMulti)
-    }
+    this.refreshColumnMetaCache()
   }
 
   updateColumnDescription(table: string, column: string, description: string): void {
@@ -692,27 +702,35 @@ class DataStoreService {
     this.assertTableExists(table)
 
     const db = this.getDb()
-    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, ?, COALESCE((SELECT enum_values FROM "_meta_columns" WHERE table_name = ? AND column_name = ?), ''))`)
-      .run(table, column, description, table, column)
+    const existing = db.prepare(`SELECT kind, choices FROM "_meta_columns" WHERE table_name = ? AND column_name = ?`).get(table, column) as {
+      kind: string
+      choices: string | null
+    } | undefined
+    if (!existing) {
+      throw new Error(`Column "${column}" not found in table "${table}"`)
+    }
+    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, kind, choices, description) VALUES (?, ?, ?, ?, ?)`)
+      .run(table, column, existing.kind, existing.choices, description)
+    this.refreshColumnMetaCache()
   }
 
-  getColumnValueUsage(table: string, column: string): Record<string, number> {
+  getColumnChoicesUsage(table: string, column: string): Record<string, number> {
     validateName(table, "table")
     validateColumnName(column)
     this.assertTableExists(table)
 
-    const enumCols = this.getEnumColumnsForTable(table)
-    const allowed = enumCols.get(column)
+    const choiceCols = this.getChoiceColumnsForTable(table)
+    const allowed = choiceCols.get(column)
     if (!allowed) {
-      throw new Error(`Column "${column}" is not an ENUM or MULTI_ENUM column`)
+      throw new Error(`Column "${column}" is not a single_choice or multi_choice column`)
     }
 
     const db = this.getDb()
-    const isMultiEnum = this.getMultiEnumColumnsForTable(table).has(column)
+    const isMultiChoice = this.getMultiChoiceColumnsForTable(table).has(column)
     const usage: Record<string, number> = {}
     for (const v of allowed) usage[v] = 0
 
-    if (isMultiEnum) {
+    if (isMultiChoice) {
       const rows = db.prepare(`SELECT ${q(column)} AS v FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''`).all() as { v: unknown }[]
       for (const row of rows) {
         try {
@@ -738,22 +756,30 @@ class DataStoreService {
     return usage
   }
 
-  updateColumnEnumValues(table: string, column: string, values: string[]): void {
+  updateColumnChoices(table: string, column: string, choices: string[]): void {
     validateName(table, "table")
     validateColumnName(column)
     this.assertTableExists(table)
-    if (values.length === 0) {
-      throw new Error("ENUM values list cannot be empty")
+    if (choices.length === 0) {
+      throw new Error("choices list cannot be empty")
+    }
+    if (choices.some((choice) => typeof choice !== "string" || choice.length === 0)) {
+      throw new Error("choices must be non-empty strings")
     }
 
     const db = this.getDb()
-    const isMultiEnum = this.getMultiEnumColumnsForTable(table).has(column)
-    const allowed = new Set(values)
+    const meta = this.getColumnMetaForTable(table).get(column)
+    if (!meta || !isChoiceKind(meta.kind)) {
+      throw new Error(`Column "${column}" is not a single_choice or multi_choice column`)
+    }
+
+    const isMultiChoice = isMultiChoiceKind(meta.kind)
+    const allowed = new Set(choices)
     const existingRows = db.prepare(`SELECT DISTINCT ${q(column)} AS v FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''`).all() as { v: unknown }[]
     const invalid = new Set<string>()
     for (const row of existingRows) {
       if (row.v === null || row.v === undefined) continue
-      if (isMultiEnum) {
+      if (isMultiChoice) {
         try {
           const parsed = JSON.parse(String(row.v))
           if (Array.isArray(parsed)) {
@@ -770,15 +796,15 @@ class DataStoreService {
     }
     if (invalid.size > 0) {
       const sorted = Array.from(invalid).sort()
-      throw new Error(`Cannot update enumValues for column "${column}": existing rows contain values not in the new list: ${sorted.join(", ")}. Update or delete those rows first, or keep those values in the new list.`)
+      throw new Error(`Cannot update choices for column "${column}": existing rows contain values not in the new list: ${sorted.join(", ")}. Update or delete those rows first, or keep those values in the new list.`)
     }
 
-    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, description, enum_values) VALUES (?, ?, COALESCE((SELECT description FROM "_meta_columns" WHERE table_name = ? AND column_name = ?), ''), ?)`)
-      .run(table, column, table, column, JSON.stringify(values))
+    db.prepare(`INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, kind, choices, description) VALUES (?, ?, ?, ?, COALESCE((SELECT description FROM "_meta_columns" WHERE table_name = ? AND column_name = ?), ''))`)
+      .run(table, column, meta.kind, JSON.stringify(choices), table, column)
 
-    const existing = this.enumColumns.get(table) ?? new Map()
-    existing.set(column, values)
-    this.enumColumns.set(table, existing)
+    const existing = this.columnMeta.get(table) ?? new Map()
+    existing.set(column, { kind: meta.kind, choices })
+    this.columnMeta.set(table, existing)
   }
 
   insert(table: string, data: Record<string, unknown>): { id: number } {
@@ -789,9 +815,9 @@ class DataStoreService {
     const jsonCols = this.getJsonColumnsForTable(table)
     const boolCols = this.getBooleanColumnsForTable(table)
     const dateCols = this.getDateColumnsForTable(table)
-    const dtCols = this.getDatetimeColumnsForTable(table)
-    const enumCols = this.getEnumColumnsForTable(table)
-    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
+    const timestampCols = this.getTimestampColumnsForTable(table)
+    const choiceCols = this.getChoiceColumnsForTable(table)
+    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
     const now = new Date().toISOString()
     const withTimestamps: Record<string, unknown> = { created_at: now, updated_at: now, ...filtered }
@@ -799,14 +825,14 @@ class DataStoreService {
     for (const k of keys) {
       if (k !== "created_at" && k !== "updated_at") {
         validateColumnName(k)
-        if (multiEnumCols.has(k)) {
-          this.validateMultiEnumValue(k, withTimestamps[k], enumCols)
+        if (multiChoiceCols.has(k)) {
+          this.validateMultiChoiceValue(k, withTimestamps[k], choiceCols)
         } else {
-          this.validateEnumValue(k, withTimestamps[k], enumCols)
+          this.validateSingleChoiceValue(k, withTimestamps[k], choiceCols)
         }
       }
     }
-    const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, dtCols, multiEnumCols))
+    const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
     const placeholders = keys.map(() => "?").join(", ")
     const columnList = keys.map(q).join(", ")
 
@@ -827,9 +853,9 @@ class DataStoreService {
       const jsonCols = this.getJsonColumnsForTable(table)
       const boolCols = this.getBooleanColumnsForTable(table)
       const dateCols = this.getDateColumnsForTable(table)
-      const dtCols = this.getDatetimeColumnsForTable(table)
-      const enumCols = this.getEnumColumnsForTable(table)
-      const multiEnumCols = this.getMultiEnumColumnsForTable(table)
+      const timestampCols = this.getTimestampColumnsForTable(table)
+      const choiceCols = this.getChoiceColumnsForTable(table)
+      const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
       for (const row of rows) {
         const filtered = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "created_at" && k !== "updated_at"))
         const now = new Date().toISOString()
@@ -838,14 +864,14 @@ class DataStoreService {
         for (const k of keys) {
           if (k !== "created_at" && k !== "updated_at") {
             validateColumnName(k)
-            if (multiEnumCols.has(k)) {
-              this.validateMultiEnumValue(k, withTimestamps[k], enumCols)
+            if (multiChoiceCols.has(k)) {
+              this.validateMultiChoiceValue(k, withTimestamps[k], choiceCols)
             } else {
-              this.validateEnumValue(k, withTimestamps[k], enumCols)
+              this.validateSingleChoiceValue(k, withTimestamps[k], choiceCols)
             }
           }
         }
-        const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, dtCols, multiEnumCols))
+        const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
         const placeholders = keys.map(() => "?").join(", ")
         const columnList = keys.map(q).join(", ")
 
@@ -868,8 +894,8 @@ class DataStoreService {
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(params.table)
     const boolCols = this.getBooleanColumnsForTable(params.table)
-    const multiEnumCols = this.getMultiEnumColumnsForTable(params.table)
-    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols, boolCols, multiEnumCols)
+    const multiChoiceCols = this.getMultiChoiceColumnsForTable(params.table)
+    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols, boolCols, multiChoiceCols)
     const orderSQL = this.buildOrderBy(params.orderBy)
     const limit = params.limit ?? 100
     const offset = params.offset ?? 0
@@ -891,7 +917,7 @@ class DataStoreService {
           row[col] = row[col] === 1 || row[col] === true
         }
       }
-      for (const col of multiEnumCols) {
+      for (const col of multiChoiceCols) {
         if (col in row && typeof row[col] === "string") {
           try { row[col] = JSON.parse(row[col] as string) } catch { /* keep as string */ }
         }
@@ -909,9 +935,9 @@ class DataStoreService {
     const jsonCols = this.getJsonColumnsForTable(table)
     const boolCols = this.getBooleanColumnsForTable(table)
     const dateCols = this.getDateColumnsForTable(table)
-    const dtCols = this.getDatetimeColumnsForTable(table)
-    const enumCols = this.getEnumColumnsForTable(table)
-    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
+    const timestampCols = this.getTimestampColumnsForTable(table)
+    const choiceCols = this.getChoiceColumnsForTable(table)
+    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
     const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
     const keys = Object.keys(withTimestamp)
@@ -919,16 +945,16 @@ class DataStoreService {
     for (const k of keys) {
       if (k !== "updated_at") {
         validateColumnName(k)
-        if (multiEnumCols.has(k)) {
-          this.validateMultiEnumValue(k, withTimestamp[k], enumCols)
+        if (multiChoiceCols.has(k)) {
+          this.validateMultiChoiceValue(k, withTimestamp[k], choiceCols)
         } else {
-          this.validateEnumValue(k, withTimestamp[k], enumCols)
+          this.validateSingleChoiceValue(k, withTimestamp[k], choiceCols)
         }
       }
     }
 
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
-    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, dtCols, multiEnumCols))
+    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
 
     const result = db.prepare(`UPDATE ${q(table)} SET ${setClauses} WHERE "id" = ?`).run(...values, id)
     return { affected: toNumber(result.changes) }
@@ -957,9 +983,9 @@ class DataStoreService {
     const jsonCols = this.getJsonColumnsForTable(table)
     const boolCols = this.getBooleanColumnsForTable(table)
     const dateCols = this.getDateColumnsForTable(table)
-    const dtCols = this.getDatetimeColumnsForTable(table)
-    const enumCols = this.getEnumColumnsForTable(table)
-    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
+    const timestampCols = this.getTimestampColumnsForTable(table)
+    const choiceCols = this.getChoiceColumnsForTable(table)
+    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
 
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
     const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
@@ -968,17 +994,17 @@ class DataStoreService {
     for (const k of keys) {
       if (k !== "updated_at") {
         validateColumnName(k)
-        if (multiEnumCols.has(k)) {
-          this.validateMultiEnumValue(k, withTimestamp[k], enumCols)
+        if (multiChoiceCols.has(k)) {
+          this.validateMultiChoiceValue(k, withTimestamp[k], choiceCols)
         } else {
-          this.validateEnumValue(k, withTimestamp[k], enumCols)
+          this.validateSingleChoiceValue(k, withTimestamp[k], choiceCols)
         }
       }
     }
 
-    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiEnumCols)
+    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
-    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, dtCols, multiEnumCols))
+    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
 
     db.exec("BEGIN")
     try {
@@ -1011,8 +1037,8 @@ class DataStoreService {
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(table)
     const boolCols = this.getBooleanColumnsForTable(table)
-    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
-    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiEnumCols)
+    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
+    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
 
     db.exec("BEGIN")
     try {
@@ -1056,7 +1082,8 @@ class DataStoreService {
 
     if (isDDL) {
       this.syncMetaTables()
-      this.refreshJsonColumnCache()
+      this.syncMetaColumns()
+      this.refreshColumnMetaCache()
     }
 
     return { changes: toNumber(result.changes), lastInsertRowid: toNumber(result.lastInsertRowid) }
@@ -1069,8 +1096,8 @@ class DataStoreService {
     const db = this.getDb()
     const jsonCols = this.getJsonColumnsForTable(table)
     const boolCols = this.getBooleanColumnsForTable(table)
-    const multiEnumCols = this.getMultiEnumColumnsForTable(table)
-    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiEnumCols)
+    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
+    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
     const row = db.prepare(`SELECT COUNT(*) as count FROM ${q(table)}${whereSQL}`).get(...whereParams) as { count: number | bigint }
     return { count: toNumber(row.count) }
   }
@@ -1099,24 +1126,10 @@ class DataStoreService {
       throw error
     }
 
-    const typeCaches: Map<string, Set<string>>[] = [
-      this.jsonColumns,
-      this.booleanColumns,
-      this.dateColumns,
-      this.datetimeColumns,
-      this.multiEnumColumns,
-    ]
-    for (const cache of typeCaches) {
-      const value = cache.get(from)
-      if (value) {
-        cache.set(to, value)
-        cache.delete(from)
-      }
-    }
-    const enumValue = this.enumColumns.get(from)
-    if (enumValue) {
-      this.enumColumns.set(to, enumValue)
-      this.enumColumns.delete(from)
+    const meta = this.columnMeta.get(from)
+    if (meta) {
+      this.columnMeta.set(to, meta)
+      this.columnMeta.delete(from)
     }
   }
 
@@ -1149,7 +1162,7 @@ class DataStoreService {
       throw error
     }
 
-    this.refreshJsonColumnCache()
+    this.refreshColumnMetaCache()
   }
 
   dropColumn(table: string, column: string): void {
@@ -1179,7 +1192,7 @@ class DataStoreService {
       throw error
     }
 
-    this.refreshJsonColumnCache()
+    this.refreshColumnMetaCache()
   }
 
   getDbSize(): number {
@@ -1217,6 +1230,13 @@ class DataStoreService {
           throw new Error(`Invalid database: _meta_tables missing column "${required}"`)
         }
       }
+      const metaColumns = tempDb.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
+      const metaColumnNames = new Set(metaColumns.map((c) => c.name))
+      for (const required of ["table_name", "column_name", "kind", "choices", "description"]) {
+        if (!metaColumnNames.has(required)) {
+          throw new Error(`Invalid database: _meta_columns missing column "${required}"`)
+        }
+      }
     } finally {
       tempDb?.close()
     }
@@ -1241,14 +1261,18 @@ class DataStoreService {
       this.db = new DatabaseSync(this.dbPath)
       this.db.exec("PRAGMA journal_mode=WAL")
       this.ensureSystemSchema()
-      this.refreshJsonColumnCache()
+      this.syncMetaTables()
+      this.syncMetaColumns()
+      this.refreshColumnMetaCache()
     } catch (error) {
       try {
         copyFileSync(backupPath, this.dbPath)
         this.db = new DatabaseSync(this.dbPath)
         this.db.exec("PRAGMA journal_mode=WAL")
         this.ensureSystemSchema()
-        this.refreshJsonColumnCache()
+        this.syncMetaTables()
+        this.syncMetaColumns()
+        this.refreshColumnMetaCache()
       } catch (restoreError) {
         logger.error("Failed to restore backup after import failure.", { restoreError })
       }
@@ -1264,14 +1288,14 @@ class DataStoreService {
     return this.dbPath
   }
 
-  private buildWhere(where?: DataStoreWhereClause, jsonCols?: Set<string>, boolCols?: Set<string>, multiEnumCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
+  private buildWhere(where?: DataStoreWhereClause, jsonCols?: Set<string>, boolCols?: Set<string>, multiChoiceCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
     if (!where) return { whereSQL: "", whereParams: [] }
 
     const conditions: string[] = []
     const params: SQLInputValue[] = []
     const jCols = jsonCols ?? new Set<string>()
     const bCols = boolCols ?? new Set<string>()
-    const mCols = multiEnumCols ?? new Set<string>()
+    const mCols = multiChoiceCols ?? new Set<string>()
 
     const appendCondition = (cond: DataStoreWhereCondition) => {
       validateName(cond.field, "column")
@@ -1280,7 +1304,7 @@ class DataStoreService {
       }
       if (cond.op === "CONTAINS") {
         if (!mCols.has(cond.field)) {
-          throw new Error(`CONTAINS operator is only supported on MULTI_ENUM columns. Column "${cond.field}" is not MULTI_ENUM.`)
+          throw new Error(`CONTAINS operator is only supported on multi_choice columns. Column "${cond.field}" is not multi_choice.`)
         }
         if (cond.value === null || cond.value === undefined) {
           throw new Error(`CONTAINS operator requires a non-null scalar value for column "${cond.field}".`)

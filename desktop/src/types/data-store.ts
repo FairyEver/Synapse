@@ -1,19 +1,22 @@
-type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"
+type ColumnKind =
+  | "text"
+  | "integer"
+  | "decimal"
+  | "boolean"
+  | "date"
+  | "timestamp"
+  | "single_choice"
+  | "multi_choice"
+  | "json"
+  | "binary"
 
-type DataStoreColumnDef = {
+type Column = {
   name: string
-  type: DataStoreColumnType
-  description?: string
-  enumValues?: string[]
-}
-
-type DataStoreColumnInfo = {
-  name: string
-  type: string
-  primaryKey: boolean
+  kind: ColumnKind
+  choices?: string[]
   system?: boolean
-  description: string
-  enumValues?: string[]
+  description?: string
+  primaryKey?: true
 }
 
 type DataStoreTableInfo = {
@@ -27,7 +30,7 @@ type DataStoreTableInfo = {
 type DataStoreTableSchema = {
   name: string
   description: string
-  columns: DataStoreColumnInfo[]
+  columns: Column[]
   rowCount: number
   createdAt: string
   updatedAt: string
@@ -143,9 +146,8 @@ export type {
   DataStoreMcpServerInfo,
   DataStoreMcpStatus,
   DataStoreMcpTarget,
-  DataStoreColumnDef,
-  DataStoreColumnInfo,
-  DataStoreColumnType,
+  Column,
+  ColumnKind,
   DataStoreOrderBy,
   DataStoreQueryParams,
   DataStoreQueryResult,

@@ -53,14 +53,14 @@ import {
   getColumnWidthStyle,
   getDefaultColumnWidth,
 } from "./data-table-layout"
-import type { DataStoreColumnInfo, DataStoreTableSchema, DataStoreWhereGroup } from "@/types/data-store"
+import type { Column, DataStoreTableSchema, DataStoreWhereGroup } from "@/types/data-store"
 import { SCHEMA_COPY_FORMATS, SCHEMA_COPY_GROUPS } from "./schema-copy-formats"
 import { downloadTableContent, formatTableContent } from "./table-content-formats"
 import type { TableContentFormat, TableDownloadFormat } from "./table-content-formats"
 
 type DataTableViewProps = {
   tableName: string
-  columns: DataStoreColumnInfo[]
+  columns: Column[]
   schema: DataStoreTableSchema | null
   rows: Record<string, unknown>[]
   total: number
@@ -128,7 +128,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   )
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const contentColumns = useMemo(
-    () => [{ name: "id", type: "INTEGER" as const }, ...visibleColumns],
+    () => [{ name: "id", kind: "integer" as const }, ...visibleColumns],
     [visibleColumns],
   )
   const tableContentData = useMemo(
@@ -484,7 +484,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         void beginRowEdit(rowId, col.name).catch(() => {})
                       }}
                     >
-                      {formatCellValue(row[col.name], col.type, col.name)}
+                      {formatCellValue(row[col.name], col.kind, col.name)}
                     </TableCell>
                   ))}
                   {systemTimeColumns.map((col) => (
@@ -492,7 +492,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                       key={col.name}
                       className={`${DATA_TABLE_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
                     >
-                      {formatCellValue(row[col.name], col.type, col.name)}
+                      {formatCellValue(row[col.name], col.kind, col.name)}
                     </TableCell>
                   ))}
                   <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>

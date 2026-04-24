@@ -38,22 +38,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { DataStoreColumnType, DataStoreTableSchema } from "@/types/data-store"
+import type { ColumnKind, DataStoreTableSchema } from "@/types/data-store"
 import {
-  DATA_STORE_COLUMN_TYPES,
-  formatEnumSummary,
-  getDataStoreColumnTypeDisplayName,
-  getDataStoreColumnTypeLabel,
+  COLUMN_KINDS,
+  formatChoicesSummary,
+  getColumnKindDisplayName,
+  getColumnKindLabel,
 } from "./data-store-column-types"
-import { EnumValuesEditorDialog } from "./enum-values-editor-dialog"
+import { ChoicesEditorDialog } from "./choices-editor-dialog"
 
 type TableSchemaSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   schema: DataStoreTableSchema | null
-  onAddColumn: (name: string, type: DataStoreColumnType, description?: string, enumValues?: string[]) => void
+  onAddColumn: (name: string, kind: ColumnKind, description?: string, choices?: string[]) => void
   onUpdateColumnDescription: (column: string, description: string) => void
-  onUpdateColumnEnumValues: (column: string, values: string[]) => Promise<void>
+  onUpdateColumnChoices: (column: string, choices: string[]) => Promise<void>
   onDropTable: () => void
 }
 
@@ -63,37 +63,37 @@ function TableSchemaSheet({
   schema,
   onAddColumn,
   onUpdateColumnDescription,
-  onUpdateColumnEnumValues,
+  onUpdateColumnChoices,
   onDropTable,
 }: TableSchemaSheetProps) {
   const [newColName, setNewColName] = useState("")
-  const [newColType, setNewColType] = useState<DataStoreColumnType>("TEXT")
+  const [newColKind, setNewColKind] = useState<ColumnKind>("text")
   const [newColDesc, setNewColDesc] = useState("")
-  const [newColEnumValues, setNewColEnumValues] = useState<string[]>([])
+  const [newColChoices, setNewColChoices] = useState<string[]>([])
   const [editingCol, setEditingCol] = useState<string | null>(null)
   const [editingDesc, setEditingDesc] = useState("")
-  const [editingEnumCol, setEditingEnumCol] = useState<string | null>(null)
+  const [editingChoicesCol, setEditingChoicesCol] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
-  const editingEnumColumn = useMemo(
-    () => (schema && editingEnumCol ? schema.columns.find((c) => c.name === editingEnumCol) ?? null : null),
-    [schema, editingEnumCol],
+  const editingChoicesColumn = useMemo(
+    () => (schema && editingChoicesCol ? schema.columns.find((c) => c.name === editingChoicesCol) ?? null : null),
+    [schema, editingChoicesCol],
   )
 
   const handleAddColumn = useCallback(() => {
     const trimmed = newColName.trim()
     if (!trimmed) return
-    const isEnumLike = newColType === "ENUM" || newColType === "MULTI_ENUM"
-    const enumVals = isEnumLike && newColEnumValues.length > 0
-      ? newColEnumValues
+    const isChoiceKind = newColKind === "single_choice" || newColKind === "multi_choice"
+    const choices = isChoiceKind && newColChoices.length > 0
+      ? newColChoices
       : undefined
-    if (isEnumLike && (!enumVals || enumVals.length === 0)) return
-    onAddColumn(trimmed, newColType, newColDesc.trim() || undefined, enumVals)
+    if (isChoiceKind && (!choices || choices.length === 0)) return
+    onAddColumn(trimmed, newColKind, newColDesc.trim() || undefined, choices)
     setNewColName("")
-    setNewColType("TEXT")
+    setNewColKind("text")
     setNewColDesc("")
-    setNewColEnumValues([])
-  }, [newColName, newColType, newColDesc, newColEnumValues, onAddColumn])
+    setNewColChoices([])
+  }, [newColName, newColKind, newColDesc, newColChoices, onAddColumn])
 
   const startEditDescription = useCallback((colName: string, currentDesc: string) => {
     setEditingCol(colName)
@@ -133,16 +133,16 @@ function TableSchemaSheet({
                     <TableCell className="font-mono text-sm">{col.name}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5">
-                        <span>{getDataStoreColumnTypeDisplayName(col.type)}</span>
-                        {(col.type === "ENUM" || col.type === "MULTI_ENUM") && col.enumValues && col.enumValues.length > 0 ? (
+                        <span>{getColumnKindDisplayName(col.kind)}</span>
+                        {(col.kind === "single_choice" || col.kind === "multi_choice") && col.choices && col.choices.length > 0 ? (
                           <>
-                            <span className="text-xs text-muted-foreground">· {formatEnumSummary(col.enumValues)}</span>
+                            <span className="text-xs text-muted-foreground">· {formatChoicesSummary(col.choices)}</span>
                             <Button
                               size="icon"
                               variant="ghost"
                               className="size-6 text-muted-foreground hover:text-foreground"
-                              onClick={() => setEditingEnumCol(col.name)}
-                              title="编辑枚举选项"
+                              onClick={() => setEditingChoicesCol(col.name)}
+                              title="编辑选项"
                             >
                               <Pencil className="size-3" />
                             </Button>
@@ -169,7 +169,7 @@ function TableSchemaSheet({
                       ) : (
                         <span
                           className="cursor-pointer rounded px-1 py-0.5 hover:bg-muted"
-                          onClick={() => startEditDescription(col.name, col.description)}
+                          onClick={() => startEditDescription(col.name, col.description ?? "")}
                         >
                           {col.description || "点击添加说明"}
                         </span>
@@ -189,14 +189,14 @@ function TableSchemaSheet({
                 onChange={(e) => setNewColName(e.target.value)}
                 placeholder="列名"
               />
-              <Select value={newColType} onValueChange={(v) => setNewColType(v as DataStoreColumnType)}>
+              <Select value={newColKind} onValueChange={(v) => setNewColKind(v as ColumnKind)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue>{getDataStoreColumnTypeLabel(newColType)}</SelectValue>
+                  <SelectValue>{getColumnKindLabel(newColKind)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {DATA_STORE_COLUMN_TYPES.map((t) => (
+                  {COLUMN_KINDS.map((t) => (
                     <SelectItem key={t} value={t}>
-                      {getDataStoreColumnTypeLabel(t)}
+                      {getColumnKindLabel(t)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -215,10 +215,10 @@ function TableSchemaSheet({
                 添加
               </Button>
             </div>
-            {newColType === "ENUM" || newColType === "MULTI_ENUM" ? (
+            {newColKind === "single_choice" || newColKind === "multi_choice" ? (
               <TagInput
-                value={newColEnumValues}
-                onChange={setNewColEnumValues}
+                value={newColChoices}
+                onChange={setNewColChoices}
                 placeholder="输入后按回车添加"
                 className="text-xs"
               />
@@ -226,15 +226,15 @@ function TableSchemaSheet({
           </div>
         </div>
 
-        {editingEnumColumn ? (
-          <EnumValuesEditorDialog
-            open={!!editingEnumCol}
-            onOpenChange={(next) => { if (!next) setEditingEnumCol(null) }}
+        {editingChoicesColumn ? (
+          <ChoicesEditorDialog
+            open={!!editingChoicesCol}
+            onOpenChange={(next) => { if (!next) setEditingChoicesCol(null) }}
             table={schema.name}
-            column={editingEnumColumn.name}
-            columnType={editingEnumColumn.type === "MULTI_ENUM" ? "MULTI_ENUM" : "ENUM"}
-            initialValues={editingEnumColumn.enumValues ?? []}
-            onSave={(values) => onUpdateColumnEnumValues(editingEnumColumn.name, values)}
+            column={editingChoicesColumn.name}
+            kind={editingChoicesColumn.kind === "multi_choice" ? "multi_choice" : "single_choice"}
+            initialChoices={editingChoicesColumn.choices ?? []}
+            onSave={(choices) => onUpdateColumnChoices(editingChoicesColumn.name, choices)}
           />
         ) : null}
 

@@ -33,13 +33,64 @@ function formatValue(v: unknown): string {
   return String(v)
 }
 
-function parseColDef(s: string): { name: string; type: string } {
-  const [name, type] = s.split(":")
-  if (!name || !type) {
-    console.error(`Invalid column definition: "${s}". Expected format: name:type`)
+const COLUMN_KINDS = new Set([
+  "text",
+  "integer",
+  "decimal",
+  "boolean",
+  "date",
+  "timestamp",
+  "single_choice",
+  "multi_choice",
+  "json",
+  "binary",
+])
+
+const OLD_KIND_HINTS: Record<string, string> = {
+  TEXT: "text",
+  INTEGER: "integer",
+  REAL: "decimal",
+  BOOLEAN: "boolean",
+  DATE: "date",
+  DATETIME: "timestamp",
+  ENUM: "single_choice",
+  MULTI_ENUM: "multi_choice",
+  JSON: "json",
+  BLOB: "binary",
+}
+
+function parseColDef(s: string): { name: string; kind: string; choices?: string[] } {
+  const parts = s.split(":")
+  const [name, kind, choicesRaw] = parts
+  if (!name || !kind || parts.length > 3) {
+    console.error(`Invalid column definition: "${s}". Expected format: name:kind or name:kind:v1,v2,v3`)
     process.exit(1)
   }
-  return { name, type: type.toUpperCase() }
+
+  if (!COLUMN_KINDS.has(kind)) {
+    const replacement = OLD_KIND_HINTS[kind.toUpperCase()]
+    if (replacement) {
+      console.error(`Unsupported column kind "${kind}". Use "${replacement}" instead.`)
+    } else {
+      console.error(`Unsupported column kind "${kind}". Use one of: ${Array.from(COLUMN_KINDS).join(", ")}`)
+    }
+    process.exit(1)
+  }
+
+  const isChoiceKind = kind === "single_choice" || kind === "multi_choice"
+  const choices = choicesRaw
+    ? choicesRaw.split(",").map((item) => item.trim()).filter(Boolean)
+    : undefined
+  if (isChoiceKind && (!choices || choices.length === 0)) {
+    console.error(`Column "${name}" with kind "${kind}" requires choices: ${name}:${kind}:v1,v2,v3`)
+    process.exit(1)
+  }
+  if (!isChoiceKind && choicesRaw !== undefined) {
+    console.error(`Column "${name}" has choices but kind "${kind}" does not use choices.`)
+    process.exit(1)
+  }
+
+  return choices ? { name, kind, choices } : { name, kind }
 }
 
 async function main(): Promise<void> {
@@ -51,10 +102,10 @@ async function main(): Promise<void> {
 
 Usage:
   synapse tables                                     List all tables
-  synapse create <name> <col:type> [col:type...]     Create a table
+  synapse create <name> <col:kind> [col:kind...]     Create a table
   synapse drop <name>                                Drop a table
   synapse describe <name>                            Describe table schema
-  synapse add-column <table> <col:type>              Add a column
+  synapse add-column <table> <col:kind>              Add a column
   synapse drop-column <table> <column>               Drop a column
   synapse rename-table <from> <to>                   Rename a table
   synapse rename-column <table> <from> <to>          Rename a column
@@ -66,7 +117,14 @@ Usage:
   synapse update <table> <id> --data '{"k":"v"}'     Update a row
   synapse delete <table> <id>                        Delete a row
   synapse sql '<SQL>'                                Execute raw SQL
-  synapse status                                     Show service status`)
+  synapse status                                     Show service status
+
+Column kinds:
+  text, integer, decimal, boolean, date, timestamp,
+  single_choice, multi_choice, json, binary
+
+Choice columns:
+  synapse create todo title:text priority:single_choice:high,medium,low tags:multi_choice:work,study,home done:boolean due:date`)
     return
   }
 
@@ -123,7 +181,7 @@ Usage:
         const name = args[1]
         const colDefs = args.slice(2).map(parseColDef)
         if (!name || colDefs.length === 0) {
-          console.error("Usage: synapse create <name> <col:type> [col:type...]")
+          console.error("Usage: synapse create <name> <col:kind> [col:kind...]")
           process.exit(1)
         }
         await apiCall(info, "createTable", { name, columns: colDefs })
@@ -150,7 +208,7 @@ Usage:
       case "add-column": {
         const table = args[1]
         const colDef = args[2]
-        if (!table || !colDef) { console.error("Usage: synapse add-column <table> <col:type>"); process.exit(1) }
+        if (!table || !colDef) { console.error("Usage: synapse add-column <table> <col:kind>"); process.exit(1) }
         const col = parseColDef(colDef)
         await apiCall(info, "addColumn", { table, column: col })
         console.log(`Column "${col.name}" added to "${table}".`)

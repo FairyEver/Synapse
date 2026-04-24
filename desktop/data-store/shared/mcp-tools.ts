@@ -5,9 +5,9 @@
 //
 // Tool schemas are intentionally stateless: they describe capability, never
 // runtime state. Clients discover which tables exist by calling list_tables,
-// and inspect column/enum details by calling describe_table. This keeps the
+// and inspect column choices by calling describe_table. This keeps the
 // schema valid on strict MCP clients (e.g. Codex) that enforce inputSchema
-// enums client-side, even after DDL operations.
+// allowed values client-side, even after DDL operations.
 
 type McpTool = {
   name: string
@@ -24,7 +24,20 @@ const tableNameProp: Record<string, unknown> = {
   description: "Existing table name. If you do not know which tables exist, call list_tables first.",
 }
 
-const columnTypeEnum = ["TEXT", "INTEGER", "REAL", "BLOB", "JSON", "DATE", "DATETIME", "BOOLEAN", "ENUM", "MULTI_ENUM"] as const
+const columnKindEnum = ["text", "integer", "decimal", "boolean", "date", "timestamp", "single_choice", "multi_choice", "json", "binary"] as const
+
+const kindDescription = [
+  "text           Free-form string",
+  "integer        Whole number",
+  "decimal        Fractional number",
+  "boolean        true or false",
+  "date           YYYY-MM-DD",
+  "timestamp      ISO 8601 timestamp",
+  "single_choice  One value from a fixed list; requires non-empty choices",
+  "multi_choice   Multiple values from a fixed list; requires non-empty choices",
+  "json           Free-form object or array (use only when value has no fixed structure)",
+  "binary         Raw bytes",
+].join("\n")
 
 const whereClauseSchema = {
   oneOf: [
@@ -41,7 +54,7 @@ const whereClauseSchema = {
           op: {
             type: "string",
             enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"],
-            description: "Comparison operator. CONTAINS is only valid on MULTI_ENUM columns.",
+            description: "Comparison operator. CONTAINS is only valid on multi_choice columns.",
           },
           value: { description: "Comparison value. For CONTAINS, pass one scalar item, not an array or object." },
         },
@@ -61,7 +74,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "create_table",
-      description: "Create a user table with at least one column; system columns id, created_at, and updated_at are added automatically. Supported column types are TEXT, INTEGER, REAL, BLOB, JSON, DATE, DATETIME, BOOLEAN, ENUM, and MULTI_ENUM; use ENUM for single-choice fields, MULTI_ENUM for fixed multi-select fields, BOOLEAN for true/false, DATE for YYYY-MM-DD, DATETIME for YYYY-MM-DD HH:mm:ss, and JSON for free-form objects or arrays. Table and column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and columns cannot be id, created_at, or updated_at; ENUM and MULTI_ENUM require non-empty enumValues.",
+      description: `Create a user table with at least one column; system columns id, created_at, and updated_at are added automatically. Column kinds:\n${kindDescription}\nTable and column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and columns cannot be id, created_at, or updated_at.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -78,22 +91,22 @@ function buildTools(): McpTool[] {
                   type: "string",
                   description: "Column name. Must start with a letter, use only letters, digits, or underscores, and not be id, created_at, or updated_at.",
                 },
-                type: {
+                kind: {
                   type: "string",
-                  enum: columnTypeEnum,
-                  description: "Choose by user intent, not by the closest SQL primitive: single-choice fixed values -> ENUM, fixed multi-select -> MULTI_ENUM, true/false -> BOOLEAN, calendar date -> DATE, timestamp -> DATETIME, free-form object/array -> JSON.",
+                  enum: columnKindEnum,
+                  description: "Choose by user intent, not by storage format.",
                 },
                 description: {
                   type: "string",
                   description: "Optional column description stored in metadata and returned by describe_table.",
                 },
-                enumValues: {
+                choices: {
                   type: "array",
                   items: { type: "string" },
-                  description: "Required when type is ENUM or MULTI_ENUM. Allowed values for the column.",
+                  description: "Required for single_choice or multi_choice. Allowed values for the column.",
                 },
               },
-              required: ["name", "type"],
+              required: ["name", "kind"],
             },
             description: "User-defined columns to create. Provide at least one; system columns are added automatically.",
           },
@@ -112,12 +125,12 @@ function buildTools(): McpTool[] {
     },
     {
       name: "describe_table",
-      description: "Return table schema and metadata as { name, description, columns, rowCount, createdAt, updatedAt }. Each column includes { name, type, primaryKey, system?, description, enumValues? }.",
+      description: "Return table schema and metadata as { name, description, columns, rowCount, createdAt, updatedAt }. Each column includes { name, kind, choices?, description?, primaryKey?, system? }.",
       inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
     },
     {
       name: "add_column",
-      description: "Add one column to an existing table and update table metadata. Supported types are TEXT, INTEGER, REAL, BLOB, JSON, DATE, DATETIME, BOOLEAN, ENUM, and MULTI_ENUM; use the same intent-based type rules as create_table, and ENUM or MULTI_ENUM require non-empty enumValues. Column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, cannot be id, created_at, or updated_at; JSON defaults are serialized, MULTI_ENUM defaults must be arrays, and ENUM or MULTI_ENUM defaults must already appear in enumValues.",
+      description: `Add one column to an existing table and update table metadata. Use the same kind rules as create_table:\n${kindDescription}\nColumn names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at. Defaults for multi_choice must be arrays, and choice defaults must already appear in choices.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -129,25 +142,25 @@ function buildTools(): McpTool[] {
                 type: "string",
                 description: "Column name. Must start with a letter, use only letters, digits, or underscores, and not be id, created_at, or updated_at.",
               },
-              type: {
+              kind: {
                 type: "string",
-                enum: columnTypeEnum,
-                description: "Choose by user intent, not by the closest SQL primitive: single-choice fixed values -> ENUM, fixed multi-select -> MULTI_ENUM, true/false -> BOOLEAN, calendar date -> DATE, timestamp -> DATETIME, free-form object/array -> JSON.",
+                enum: columnKindEnum,
+                description: "Choose by user intent, not by storage format.",
               },
               default: {
-                description: "Optional default value. JSON defaults are serialized, MULTI_ENUM defaults must be arrays, and ENUM or MULTI_ENUM defaults must already exist in enumValues.",
+                description: "Optional default value. multi_choice defaults must be arrays, and choice defaults must already exist in choices.",
               },
               description: {
                 type: "string",
                 description: "Optional column description stored in metadata and returned by describe_table.",
               },
-              enumValues: {
+              choices: {
                 type: "array",
                 items: { type: "string" },
-                description: "Required when type is ENUM or MULTI_ENUM. Allowed values for the column.",
+                description: "Required for single_choice or multi_choice. Allowed values for the column.",
               },
             },
-            required: ["name", "type"],
+            required: ["name", "kind"],
           },
         },
         required: ["table", "column"],
@@ -155,7 +168,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "update_column_description",
-      description: "Update the stored description metadata for a user column. This does not change column type or row data.",
+      description: "Update the stored description metadata for a user column. This does not change column kind or row data.",
       inputSchema: {
         type: "object",
         properties: {
@@ -167,32 +180,32 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "update_column_enum_values",
-      description: "Replace the allowed-values metadata for an ENUM or MULTI_ENUM column. Requires at least one value and rejects the change if existing rows contain values outside the new list.",
+      name: "update_column_choices",
+      description: "Replace the choices metadata for a single_choice or multi_choice column. Requires at least one choice and rejects the change if existing rows contain values outside the new list.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
-          column: { type: "string", description: "ENUM or MULTI_ENUM column name" },
-          values: {
+          column: { type: "string", description: "single_choice or multi_choice column name" },
+          choices: {
             type: "array",
             items: { type: "string" },
-            description: "Replacement allowed-values list. Must contain at least one string and remain compatible with existing rows.",
+            description: "Replacement choices list. Must contain at least one string and remain compatible with existing rows.",
           },
         },
-        required: ["table", "column", "values"],
+        required: ["table", "column", "choices"],
       },
     },
     {
       name: "insert",
-      description: "Insert one row and return { id }. Do not send system columns id, created_at, or updated_at; DATE expects YYYY-MM-DD, DATETIME expects YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss, BOOLEAN accepts true/false or 1/0, JSON accepts objects or arrays and is serialized, ENUM must match enumValues, and MULTI_ENUM expects an array of allowed values. Call describe_table first if you do not know the column set or enum values.",
+      description: "Insert one row and return { id }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call describe_table first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
         properties: {
           table: tableNameProp,
           data: {
             type: "object",
-            description: "Row object keyed by column name. Omit id, created_at, and updated_at; MULTI_ENUM values should be arrays, and JSON values may be objects or arrays.",
+            description: "Row object keyed by column name. Omit id, created_at, and updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
           },
         },
         required: ["table", "data"],
@@ -200,7 +213,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "batch_insert",
-      description: "Insert multiple rows in one transaction and return { ids }. Do not send system columns id, created_at, or updated_at; DATE expects YYYY-MM-DD, DATETIME expects YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss, BOOLEAN accepts true/false or 1/0, JSON accepts objects or arrays and is serialized, ENUM must match enumValues, and MULTI_ENUM expects an array of allowed values. Call describe_table first if you do not know the column set or enum values.",
+      description: "Insert multiple rows in one transaction and return { ids }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call describe_table first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
         properties: {
@@ -216,7 +229,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "query",
-      description: "Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts either an equality object { column: value } or an array of ANDed expressions [{ field, op, value }] where op is =, !=, >, <, >=, <=, LIKE, or CONTAINS; CONTAINS only works on MULTI_ENUM columns and its value must be a single scalar. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to 100, offset defaults to 0, JSON and MULTI_ENUM values are parsed on read, and BOOLEAN values are returned as true/false.",
+      description: "Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts either an equality object { column: value } or an array of ANDed expressions [{ field, op, value }] where op is =, !=, >, <, >=, <=, LIKE, or CONTAINS; CONTAINS only works on multi_choice columns and its value must be a single scalar. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to 100, offset defaults to 0, json and multi_choice values are parsed on read, and boolean values are returned as true or false.",
       inputSchema: {
         type: "object",
         properties: {
@@ -247,7 +260,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "update",
-      description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same DATE, DATETIME, BOOLEAN, JSON, ENUM, and MULTI_ENUM value rules as insert apply. Call describe_table first if you do not know the column set or enum values.",
+      description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same value rules as insert apply. Call describe_table first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
         properties: {
@@ -255,7 +268,7 @@ function buildTools(): McpTool[] {
           id: { type: "number", description: "Row id" },
           data: {
             type: "object",
-            description: "Partial update object keyed by column name. Omit updated_at; MULTI_ENUM values should be arrays, and JSON values may be objects or arrays.",
+            description: "Partial update object keyed by column name. Omit updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
           },
         },
         required: ["table", "id", "data"],
@@ -275,7 +288,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "update_where",
-      description: "Partially update every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for MULTI_ENUM columns, updated_at is rewritten automatically, and the same write-value rules as insert apply. Use update for a single row by id.",
+      description: "Partially update every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns, updated_at is rewritten automatically, and the same write-value rules as insert apply. Use update for a single row by id.",
       inputSchema: {
         type: "object",
         properties: {
@@ -286,7 +299,7 @@ function buildTools(): McpTool[] {
           },
           data: {
             type: "object",
-            description: "Partial update object keyed by column name. Omit updated_at; MULTI_ENUM values should be arrays, and JSON values may be objects or arrays.",
+            description: "Partial update object keyed by column name. Omit updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
           },
         },
         required: ["table", "where", "data"],
@@ -294,7 +307,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "delete_where",
-      description: "Delete every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for MULTI_ENUM columns. Use delete for a single row by id; to clear a whole table, drop and recreate it.",
+      description: "Delete every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns. Use delete for a single row by id; to clear a whole table, drop and recreate it.",
       inputSchema: {
         type: "object",
         properties: {
@@ -309,7 +322,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "count",
-      description: "Count rows in a table with an optional where clause and return { count }. where uses the same shapes and operators as query, including CONTAINS for MULTI_ENUM columns. Use this instead of query when you only need the number of matching rows.",
+      description: "Count rows in a table with an optional where clause and return { count }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns. Use this instead of query when you only need the number of matching rows.",
       inputSchema: {
         type: "object",
         properties: {
@@ -339,7 +352,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "rename_column",
-      description: "Rename a user column without changing its data, description metadata, or enumValues. The target column must not already exist, and both names follow the normal column rules: start with a letter, use only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at.",
+      description: "Rename a user column without changing its data, description metadata, kind, or choices. The target column must not already exist, and both names follow the normal column rules: start with a letter, use only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at.",
       inputSchema: {
         type: "object",
         properties: {
@@ -390,7 +403,7 @@ const MCP_TOOL_ACTIONS: Record<string, string> = {
   describe_table: "describeTable",
   add_column: "addColumn",
   update_column_description: "updateColumnDescription",
-  update_column_enum_values: "updateColumnEnumValues",
+  update_column_choices: "updateColumnChoices",
   insert: "insert",
   batch_insert: "batchInsert",
   query: "query",

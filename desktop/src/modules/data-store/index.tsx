@@ -17,13 +17,13 @@ import {
   dropTable,
   insertRow,
   updateColumnDescription,
-  updateColumnEnumValues,
+  updateColumnChoices,
   updateRow,
   useDataStoreQuery,
   useDataStoreSchema,
   useDataStoreTables,
 } from "./hooks/use-data-store"
-import type { DataStoreColumnDef, DataStoreColumnType, DataStoreWhereGroup } from "@/types/data-store"
+import type { Column, ColumnKind, DataStoreWhereGroup } from "@/types/data-store"
 
 const logger = createRendererLogger("data-store")
 
@@ -67,7 +67,7 @@ function DataStoreModule() {
   }, [])
 
   const handleCreateTable = useCallback(
-    async (name: string, columns: DataStoreColumnDef[], description?: string) => {
+    async (name: string, columns: Column[], description?: string) => {
       await promise(
         async () => {
           await createTable(name, columns, description)
@@ -98,11 +98,11 @@ function DataStoreModule() {
   }, [selectedTable, promise, refreshTables])
 
   const handleAddColumn = useCallback(
-    async (name: string, type: DataStoreColumnType, description?: string, enumValues?: string[]) => {
+    async (name: string, kind: ColumnKind, description?: string, choices?: string[]) => {
       if (!selectedTable) return
       await promise(
         async () => {
-          await addColumn(selectedTable, { name, type, description, enumValues })
+          await addColumn(selectedTable, { name, kind, description, choices })
           logger.info("Column added.", { table: selectedTable, column: name })
           await refreshSchema()
           await refreshQuery()
@@ -122,15 +122,15 @@ function DataStoreModule() {
     [selectedTable, refreshSchema],
   )
 
-  const handleUpdateColumnEnumValues = useCallback(
-    async (column: string, values: string[]) => {
+  const handleUpdateColumnChoices = useCallback(
+    async (column: string, choices: string[]) => {
       if (!selectedTable) return
       await promise(
         async () => {
-          await updateColumnEnumValues(selectedTable, column, values)
+          await updateColumnChoices(selectedTable, column, choices)
           await refreshSchema()
         },
-        { loading: "正在更新枚举值...", success: "枚举值已更新" },
+        { loading: "正在更新选项...", success: "选项已更新" },
       )
     },
     [selectedTable, promise, refreshSchema],
@@ -273,7 +273,7 @@ function DataStoreModule() {
         schema={schema}
         onAddColumn={handleAddColumn}
         onUpdateColumnDescription={handleUpdateColumnDescription}
-        onUpdateColumnEnumValues={handleUpdateColumnEnumValues}
+        onUpdateColumnChoices={handleUpdateColumnChoices}
         onDropTable={handleDropTable}
       />
     </SidebarContentLayout>

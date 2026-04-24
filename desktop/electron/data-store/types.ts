@@ -1,19 +1,12 @@
-type DataStoreColumnType = "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"
+import type { ColumnKind } from "./column-kind"
 
-type DataStoreColumnDef = {
+type Column = {
   name: string
-  type: DataStoreColumnType
+  kind: ColumnKind
+  choices?: string[]
   description?: string
-  enumValues?: string[]
-}
-
-type DataStoreColumnInfo = {
-  name: string
-  type: string
-  primaryKey: boolean
-  system?: boolean
-  description: string
-  enumValues?: string[]
+  primaryKey?: true
+  system?: true
 }
 
 type DataStoreTableInfo = {
@@ -27,7 +20,7 @@ type DataStoreTableInfo = {
 type DataStoreTableSchema = {
   name: string
   description: string
-  columns: DataStoreColumnInfo[]
+  columns: Column[]
   rowCount: number
   createdAt: string
   updatedAt: string
@@ -76,9 +69,8 @@ type DataStoreServerInfo = {
 }
 
 export type {
-  DataStoreColumnDef,
-  DataStoreColumnInfo,
-  DataStoreColumnType,
+  Column,
+  ColumnKind,
   DataStoreOrderBy,
   DataStoreQueryParams,
   DataStoreQueryResult,

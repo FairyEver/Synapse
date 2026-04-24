@@ -1,6 +1,6 @@
-import type { DataStoreColumnInfo } from "@/types/data-store"
+import type { Column } from "@/types/data-store"
 
-type TableContentColumn = Pick<DataStoreColumnInfo, "name" | "type">
+type TableContentColumn = Pick<Column, "name" | "kind">
 
 type TableContentFormat = "csv" | "markdown"
 type TableDownloadFormat = "csv" | "xlsx"

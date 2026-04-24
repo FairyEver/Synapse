@@ -3,7 +3,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
-  DataStoreColumnDef,
+  Column,
   DataStoreMcpHttpStatus,
   DataStoreMcpServerInfo,
   DataStoreMcpStatus,
@@ -119,7 +119,7 @@ function useDataStoreSchema(table: string | null) {
   return { schema, loading, refresh }
 }
 
-async function createTable(name: string, columns: DataStoreColumnDef[], description?: string): Promise<void> {
+async function createTable(name: string, columns: Column[], description?: string): Promise<void> {
   await requireSynapseBridge().dataStore.createTable({ name, columns, description })
 }
 
@@ -127,7 +127,7 @@ async function dropTable(name: string): Promise<void> {
   await requireSynapseBridge().dataStore.dropTable(name)
 }
 
-async function addColumn(table: string, column: DataStoreColumnDef & { default?: unknown }): Promise<void> {
+async function addColumn(table: string, column: Column & { default?: unknown }): Promise<void> {
   await requireSynapseBridge().dataStore.addColumn({ table, column })
 }
 
@@ -135,12 +135,12 @@ async function updateColumnDescription(table: string, column: string, descriptio
   await requireSynapseBridge().dataStore.updateColumnDescription({ table, column, description })
 }
 
-async function updateColumnEnumValues(table: string, column: string, values: string[]): Promise<void> {
-  await requireSynapseBridge().dataStore.updateColumnEnumValues({ table, column, values })
+async function updateColumnChoices(table: string, column: string, choices: string[]): Promise<void> {
+  await requireSynapseBridge().dataStore.updateColumnChoices({ table, column, choices })
 }
 
-async function getColumnValueUsage(table: string, column: string): Promise<Record<string, number>> {
-  return requireSynapseBridge().dataStore.getColumnValueUsage({ table, column })
+async function getColumnChoicesUsage(table: string, column: string): Promise<Record<string, number>> {
+  return requireSynapseBridge().dataStore.getColumnChoicesUsage({ table, column })
 }
 
 async function insertRow(table: string, data: Record<string, unknown>): Promise<{ id: number }> {
@@ -203,7 +203,7 @@ export {
   exportDB,
   getCliDebugInfo,
   getCliStatus,
-  getColumnValueUsage,
+  getColumnChoicesUsage,
   getMCPServers,
   getMcpHttpStatus,
   getMcpStatus,
@@ -213,7 +213,7 @@ export {
   openMCPSettings,
   registerMCP,
   updateColumnDescription,
-  updateColumnEnumValues,
+  updateColumnChoices,
   updateRow,
   useDataStoreQuery,
   useDataStoreSchema,

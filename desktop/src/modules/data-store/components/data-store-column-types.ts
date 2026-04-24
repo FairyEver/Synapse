@@ -1,34 +1,45 @@
-import type { DataStoreColumnType } from "@/types/data-store"
+import type { ColumnKind } from "@/types/data-store"
 
-const DATA_STORE_COLUMN_TYPES: DataStoreColumnType[] = ["TEXT", "INTEGER", "REAL", "DATE", "DATETIME", "BOOLEAN", "ENUM", "MULTI_ENUM", "JSON", "BLOB"]
+const COLUMN_KINDS: ColumnKind[] = [
+  "text",
+  "integer",
+  "decimal",
+  "boolean",
+  "date",
+  "timestamp",
+  "single_choice",
+  "multi_choice",
+  "json",
+  "binary",
+]
 
-const DATA_STORE_COLUMN_TYPE_LABELS: Record<DataStoreColumnType, string> = {
-  TEXT: "文本",
-  INTEGER: "整数",
-  REAL: "小数",
-  DATE: "日期",
-  DATETIME: "日期时间",
-  BOOLEAN: "布尔",
-  ENUM: "枚举",
-  MULTI_ENUM: "多选枚举",
-  BLOB: "二进制",
-  JSON: "JSON",
+const COLUMN_KIND_LABELS: Record<ColumnKind, string> = {
+  text: "文本",
+  integer: "整数",
+  decimal: "小数",
+  boolean: "是/否",
+  date: "日期",
+  timestamp: "时间戳",
+  single_choice: "单选",
+  multi_choice: "多选",
+  json: "JSON",
+  binary: "二进制",
 }
 
-function getDataStoreColumnTypeLabel(type: DataStoreColumnType): string {
-  return DATA_STORE_COLUMN_TYPE_LABELS[type]
+function getColumnKindLabel(kind: ColumnKind): string {
+  return COLUMN_KIND_LABELS[kind]
 }
 
-function getDataStoreColumnTypeDisplayName(type: string): string {
-  if (type in DATA_STORE_COLUMN_TYPE_LABELS) {
-    return DATA_STORE_COLUMN_TYPE_LABELS[type as DataStoreColumnType]
+function getColumnKindDisplayName(kind: string): string {
+  if (kind in COLUMN_KIND_LABELS) {
+    return COLUMN_KIND_LABELS[kind as ColumnKind]
   }
-  return type
+  return kind
 }
 
-const ENUM_SUMMARY_MAX_DISPLAY = 4
+const CHOICES_SUMMARY_MAX_DISPLAY = 4
 
-function formatEnumSummary(values: string[] | undefined | null, maxDisplay: number = ENUM_SUMMARY_MAX_DISPLAY): string | null {
+function formatChoicesSummary(values: string[] | undefined | null, maxDisplay: number = CHOICES_SUMMARY_MAX_DISPLAY): string | null {
   if (!values || values.length === 0) return null
   if (values.length <= maxDisplay) return values.join(", ")
   const shown = values.slice(0, maxDisplay).join(", ")
@@ -36,10 +47,10 @@ function formatEnumSummary(values: string[] | undefined | null, maxDisplay: numb
 }
 
 export {
-  DATA_STORE_COLUMN_TYPES,
-  DATA_STORE_COLUMN_TYPE_LABELS,
-  ENUM_SUMMARY_MAX_DISPLAY,
-  formatEnumSummary,
-  getDataStoreColumnTypeDisplayName,
-  getDataStoreColumnTypeLabel,
+  CHOICES_SUMMARY_MAX_DISPLAY,
+  COLUMN_KINDS,
+  COLUMN_KIND_LABELS,
+  formatChoicesSummary,
+  getColumnKindDisplayName,
+  getColumnKindLabel,
 }

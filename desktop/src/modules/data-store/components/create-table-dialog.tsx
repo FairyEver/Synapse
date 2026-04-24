@@ -18,24 +18,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { DataStoreColumnDef, DataStoreColumnType } from "@/types/data-store"
+import type { Column, ColumnKind } from "@/types/data-store"
 import {
-  DATA_STORE_COLUMN_TYPES,
-  getDataStoreColumnTypeLabel,
+  COLUMN_KINDS,
+  getColumnKindLabel,
 } from "./data-store-column-types"
 
 type ColumnRow = {
   key: number
   name: string
-  type: DataStoreColumnType
+  kind: ColumnKind
   description: string
-  enumValues: string[]
+  choices: string[]
 }
 
 type CreateTableDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (name: string, columns: DataStoreColumnDef[], description?: string) => void
+  onSubmit: (name: string, columns: Column[], description?: string) => void
 }
 
 const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
@@ -46,14 +46,14 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [columns, setColumns] = useState<ColumnRow[]>([
-    { key: ++nextKey, name: "", type: "TEXT", description: "", enumValues: [] },
+    { key: ++nextKey, name: "", kind: "text", description: "", choices: [] },
   ])
   const [error, setError] = useState("")
 
   const reset = useCallback(() => {
     setName("")
     setDescription("")
-    setColumns([{ key: ++nextKey, name: "", type: "TEXT", description: "", enumValues: [] }])
+    setColumns([{ key: ++nextKey, name: "", kind: "text", description: "", choices: [] }])
     setError("")
   }, [])
 
@@ -66,7 +66,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
   )
 
   const addColumn = useCallback(() => {
-    setColumns((prev) => [...prev, { key: ++nextKey, name: "", type: "TEXT", description: "", enumValues: [] }])
+    setColumns((prev) => [...prev, { key: ++nextKey, name: "", kind: "text", description: "", choices: [] }])
   }, [])
 
   const removeColumn = useCallback((key: number) => {
@@ -113,22 +113,22 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       return
     }
 
-    const emptyEnum = validColumns.find((c) => (c.type === "ENUM" || c.type === "MULTI_ENUM") && c.enumValues.length === 0)
-    if (emptyEnum) {
-      setError(`枚举列 "${emptyEnum.name.trim()}" 需要填写允许的值`)
+    const emptyChoices = validColumns.find((c) => (c.kind === "single_choice" || c.kind === "multi_choice") && c.choices.length === 0)
+    if (emptyChoices) {
+      setError(`列 "${emptyChoices.name.trim()}" 需要填写选项`)
       return
     }
 
     onSubmit(
       trimmedName,
       validColumns.map((c) => {
-        const def: DataStoreColumnDef = {
+        const def: Column = {
           name: c.name.trim(),
-          type: c.type,
+          kind: c.kind,
           description: c.description.trim() || undefined,
         }
-        if ((c.type === "ENUM" || c.type === "MULTI_ENUM") && c.enumValues.length > 0) {
-          def.enumValues = c.enumValues
+        if ((c.kind === "single_choice" || c.kind === "multi_choice") && c.choices.length > 0) {
+          def.choices = c.choices
         }
         return def
       }),
@@ -195,16 +195,16 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                       placeholder="列名"
                     />
                     <Select
-                      value={col.type}
-                      onValueChange={(v) => updateColumn(col.key, "type", v)}
+                      value={col.kind}
+                      onValueChange={(v) => updateColumn(col.key, "kind", v)}
                     >
                       <SelectTrigger className="w-28">
-                        <SelectValue>{getDataStoreColumnTypeLabel(col.type)}</SelectValue>
+                        <SelectValue>{getColumnKindLabel(col.kind)}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {DATA_STORE_COLUMN_TYPES.map((t) => (
+                        {COLUMN_KINDS.map((t) => (
                           <SelectItem key={t} value={t}>
-                            {getDataStoreColumnTypeLabel(t)}
+                            {getColumnKindLabel(t)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -224,11 +224,11 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                     onChange={(e) => updateColumn(col.key, "description", e.target.value)}
                     placeholder="用途说明，帮助 AI 理解此列"
                   />
-                  {col.type === "ENUM" || col.type === "MULTI_ENUM" ? (
+                  {col.kind === "single_choice" || col.kind === "multi_choice" ? (
                     <TagInput
                       className="text-xs"
-                      value={col.enumValues}
-                      onChange={(v) => updateColumn(col.key, "enumValues", v)}
+                      value={col.choices}
+                      onChange={(v) => updateColumn(col.key, "choices", v)}
                       placeholder="输入后按回车添加"
                     />
                   ) : null}

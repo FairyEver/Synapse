@@ -1,4 +1,4 @@
-import type { DataStoreColumnInfo, DataStoreTableSchema } from "@/types/data-store"
+import type { Column, DataStoreTableSchema } from "@/types/data-store"
 
 type SchemaCopyFormat = {
   key: string
@@ -13,41 +13,44 @@ type SchemaCopyGroup = {
   formats: SchemaCopyFormat[]
 }
 
-function sqlType(col: DataStoreColumnInfo): string {
+function sqlType(col: Column): string {
   if (col.primaryKey) return "INTEGER PRIMARY KEY AUTOINCREMENT"
-  if (col.type === "DATE" || col.type === "DATETIME") return "TEXT"
-  if (col.type === "BOOLEAN") return "INTEGER"
-  if (col.type === "ENUM") return "TEXT"
-  if (col.type === "MULTI_ENUM") return "TEXT"
-  return col.type
+  switch (col.kind) {
+    case "integer":
+    case "boolean":
+      return "INTEGER"
+    case "decimal":
+      return "REAL"
+    case "binary":
+      return "BLOB"
+    default:
+      return "TEXT"
+  }
 }
 
-function tsType(col: DataStoreColumnInfo): string {
-  switch (col.type) {
-    case "INTEGER":
+function tsType(col: Column): string {
+  switch (col.kind) {
+    case "integer":
+    case "decimal":
       return "number"
-    case "REAL":
-      return "number"
-    case "TEXT":
+    case "text":
+    case "date":
+    case "timestamp":
       return "string"
-    case "DATE":
-      return "string"
-    case "DATETIME":
-      return "string"
-    case "BOOLEAN":
+    case "boolean":
       return "boolean"
-    case "BLOB":
+    case "binary":
       return "Buffer"
-    case "JSON":
+    case "json":
       return "Record<string, unknown>"
-    case "ENUM":
-      if (col.enumValues && col.enumValues.length > 0) {
-        return col.enumValues.map((v) => `"${v}"`).join(" | ")
+    case "single_choice":
+      if (col.choices && col.choices.length > 0) {
+        return col.choices.map((v) => `"${v}"`).join(" | ")
       }
       return "string"
-    case "MULTI_ENUM":
-      if (col.enumValues && col.enumValues.length > 0) {
-        return `(${col.enumValues.map((v) => `"${v}"`).join(" | ")})[]`
+    case "multi_choice":
+      if (col.choices && col.choices.length > 0) {
+        return `(${col.choices.map((v) => `"${v}"`).join(" | ")})[]`
       }
       return "string[]"
     default:
@@ -55,7 +58,7 @@ function tsType(col: DataStoreColumnInfo): string {
   }
 }
 
-function systemColumnDescription(col: DataStoreColumnInfo): string {
+function systemColumnDescription(col: Column): string {
   if (col.primaryKey) return "主键，自增"
   if (col.name === "created_at") return "创建时间，自动生成"
   if (col.name === "updated_at") return "更新时间，自动更新"
@@ -71,9 +74,9 @@ function generateMarkdown(schema: DataStoreTableSchema): string {
   const header = "| 列名 | 类型 | 说明 |"
   const separator = "| --- | --- | --- |"
   const rows = schema.columns.map((col) => {
-    const typeDisplay = (col.type === "ENUM" || col.type === "MULTI_ENUM") && col.enumValues && col.enumValues.length > 0
-      ? `${col.type} [${col.enumValues.join(", ")}]`
-      : col.type
+    const typeDisplay = (col.kind === "single_choice" || col.kind === "multi_choice") && col.choices && col.choices.length > 0
+      ? `${col.kind} [${col.choices.join(", ")}]`
+      : col.kind
     return `| ${col.name} | ${typeDisplay} | ${col.system ? systemColumnDescription(col) : col.description || ""} |`
   })
   const lines = [`## ${schema.name}`, ""]
@@ -104,19 +107,19 @@ function generateJSONSchema(schema: DataStoreTableSchema): string {
   const properties: Record<string, { type: string; format?: string; description?: string; enum?: string[]; items?: { type: string; enum?: string[] } }> = {}
   for (const col of schema.columns) {
     const prop: { type: string; format?: string; description?: string; enum?: string[]; items?: { type: string; enum?: string[] } } = {
-      type: col.type === "INTEGER" || col.type === "REAL" ? "number"
-        : col.type === "BOOLEAN" ? "boolean"
-        : col.type === "JSON" ? "object"
-        : col.type === "MULTI_ENUM" ? "array"
+      type: col.kind === "integer" || col.kind === "decimal" ? "number"
+        : col.kind === "boolean" ? "boolean"
+        : col.kind === "json" ? "object"
+        : col.kind === "multi_choice" ? "array"
         : "string",
     }
-    if (col.type === "DATE") prop.format = "date"
-    if (col.type === "DATETIME") prop.format = "date-time"
-    if (col.type === "ENUM" && col.enumValues && col.enumValues.length > 0) {
-      prop.enum = col.enumValues
+    if (col.kind === "date") prop.format = "date"
+    if (col.kind === "timestamp") prop.format = "date-time"
+    if (col.kind === "single_choice" && col.choices && col.choices.length > 0) {
+      prop.enum = col.choices
     }
-    if (col.type === "MULTI_ENUM" && col.enumValues && col.enumValues.length > 0) {
-      prop.items = { type: "string", enum: col.enumValues }
+    if (col.kind === "multi_choice" && col.choices && col.choices.length > 0) {
+      prop.items = { type: "string", enum: col.choices }
     }
     if (col.primaryKey) prop.description = "Auto-increment primary key"
     else if (col.system) prop.description = col.name === "created_at" ? "Auto-generated creation timestamp" : "Auto-updated modification timestamp"
@@ -133,40 +136,40 @@ function generateJSONSchema(schema: DataStoreTableSchema): string {
   return JSON.stringify(obj, null, 2)
 }
 
-function formatTypeLabel(col: DataStoreColumnInfo): string {
-  if ((col.type === "ENUM" || col.type === "MULTI_ENUM") && col.enumValues && col.enumValues.length > 0) {
-    return `${col.type}: ${col.enumValues.join(" | ")}`
+function formatTypeLabel(col: Column): string {
+  if ((col.kind === "single_choice" || col.kind === "multi_choice") && col.choices && col.choices.length > 0) {
+    return `${col.kind}: ${col.choices.join(" | ")}`
   }
-  return col.type
+  return col.kind
 }
 
-function buildSampleRow(cols: DataStoreColumnInfo[]): Record<string, unknown> {
+function buildSampleRow(cols: Column[]): Record<string, unknown> {
   const data: Record<string, unknown> = {}
   for (const col of cols) {
-    switch (col.type) {
-      case "INTEGER":
-      case "REAL":
+    switch (col.kind) {
+      case "integer":
+      case "decimal":
         data[col.name] = 0
         break
-      case "BOOLEAN":
+      case "boolean":
         data[col.name] = true
         break
-      case "DATE":
+      case "date":
         data[col.name] = "YYYY-MM-DD"
         break
-      case "DATETIME":
-        data[col.name] = "YYYY-MM-DD HH:mm:ss"
+      case "timestamp":
+        data[col.name] = "2026-04-24T15:30:00"
         break
-      case "JSON":
+      case "json":
         data[col.name] = {}
         break
-      case "ENUM":
-        data[col.name] = col.enumValues && col.enumValues.length > 0 ? col.enumValues[0] : "..."
+      case "single_choice":
+        data[col.name] = col.choices && col.choices.length > 0 ? col.choices[0] : "..."
         break
-      case "MULTI_ENUM":
-        data[col.name] = col.enumValues && col.enumValues.length > 0 ? [col.enumValues[0]] : []
+      case "multi_choice":
+        data[col.name] = col.choices && col.choices.length > 0 ? [col.choices[0]] : []
         break
-      case "BLOB":
+      case "binary":
         data[col.name] = ""
         break
       default:
@@ -180,7 +183,7 @@ function stringifyJson(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
-function formatColumnLines(cols: DataStoreColumnInfo[]): string[] {
+function formatColumnLines(cols: Column[]): string[] {
   if (cols.length === 0) {
     return ["_（暂无业务列）_"]
   }
@@ -208,11 +211,12 @@ function generateMCPExample(schema: DataStoreTableSchema): string {
     ...formatColumnLines(editableCols),
     ``,
     `## 取值规则`,
-    `- BOOLEAN：\`true\` / \`false\`（不是 0/1）`,
-    `- DATE：\`"YYYY-MM-DD"\`；DATETIME：\`"YYYY-MM-DD HH:mm:ss"\``,
-    `- ENUM：必须精确匹配允许值之一`,
-    `- MULTI_ENUM：字符串数组，每项必须在允许值中`,
-    `- JSON：传对象或数组，系统自动序列化`,
+    `- boolean：\`true\` / \`false\``,
+    `- date：\`"YYYY-MM-DD"\``,
+    `- timestamp：ISO 8601，例如 \`"2026-04-24T15:30:00"\``,
+    `- single_choice：必须精确匹配选项之一`,
+    `- multi_choice：字符串数组，每项必须在选项中`,
+    `- json：传对象或数组`,
     ``,
     `## 常用调用`,
     ``,
@@ -239,7 +243,7 @@ function generateMCPExample(schema: DataStoreTableSchema): string {
     `## where 用法`,
     `- 等值对象：\`{ "status": "todo" }\``,
     `- 多条件数组：\`[{ "field": "...", "op": "=|!=|>|<|>=|<=|LIKE|CONTAINS", "value": ... }]\``,
-    `- **CONTAINS 仅用于 MULTI_ENUM**：\`[{ "field": "tags", "op": "CONTAINS", "value": "紧急" }]\``,
+    `- **CONTAINS 仅用于 multi_choice**：\`[{ "field": "tags", "op": "CONTAINS", "value": "紧急" }]\``,
   )
 
   return lines.join("\n")
@@ -263,9 +267,9 @@ function generateSkillContext(schema: DataStoreTableSchema): string {
     `## 列结构`,
     ``,
     `### 系统列（自动维护，插入/更新时不要传）`,
-    `- \`id\` (INTEGER) — 自增主键`,
-    `- \`created_at\` (DATETIME) — 创建时间，插入时自动写入`,
-    `- \`updated_at\` (DATETIME) — 更新时间，每次 update 自动刷新`,
+    `- \`id\` (integer) — 自增主键`,
+    `- \`created_at\` (timestamp) — 创建时间，插入时自动写入`,
+    `- \`updated_at\` (timestamp) — 更新时间，每次 update 自动刷新`,
     ``,
     `### 业务列`,
     ...formatColumnLines(editableCols),
@@ -275,7 +279,7 @@ function generateSkillContext(schema: DataStoreTableSchema): string {
     `**读取**`,
     `- \`query\` — 条件查询 \`{ table, where?, orderBy?, limit?, offset? }\`（默认上限 100 行）`,
     `- \`count\` — 计数 \`{ table, where? }\``,
-    `- \`describe_table\` — 查看最新结构 \`{ name }\`（确认 ENUM / MULTI_ENUM 当前允许值）`,
+    `- \`describe_table\` — 查看最新结构 \`{ name }\`（确认 choices 当前值）`,
     ``,
     `**写入**`,
     `- \`insert\` — 插入一行 \`{ table, data }\`，返回 \`{ id }\``,
@@ -287,12 +291,12 @@ function generateSkillContext(schema: DataStoreTableSchema): string {
     ``,
     `## 字段取值规则`,
     ``,
-    `- **BOOLEAN**：传 \`true\` / \`false\`（不要传 0/1）`,
-    `- **DATE**：\`"YYYY-MM-DD"\``,
-    `- **DATETIME**：\`"YYYY-MM-DD HH:mm:ss"\``,
-    `- **ENUM**：必须精确匹配声明的允许值之一`,
-    `- **MULTI_ENUM**：传字符串数组，每项必须在允许值中；读出时同样是数组`,
-    `- **JSON**：传对象或数组，系统自动序列化/反序列化`,
+    `- **boolean**：传 \`true\` / \`false\``,
+    `- **date**：\`"YYYY-MM-DD"\``,
+    `- **timestamp**：ISO 8601，例如 \`"2026-04-24T15:30:00"\``,
+    `- **single_choice**：必须精确匹配选项之一`,
+    `- **multi_choice**：传字符串数组，每项必须在选项中；读出时同样是数组`,
+    `- **json**：传对象或数组`,
     ``,
     `## where 子句`,
     ``,
@@ -302,7 +306,7 @@ function generateSkillContext(schema: DataStoreTableSchema): string {
     ``,
     `\`op\` 支持 \`=\`, \`!=\`, \`>\`, \`<\`, \`>=\`, \`<=\`, \`LIKE\`, \`CONTAINS\`。`,
     ``,
-    `**CONTAINS 仅适用于 MULTI_ENUM 列**，匹配数组中包含给定值的行，例如 \`[{ "field": "tags", "op": "CONTAINS", "value": "紧急" }]\`。`,
+    `**CONTAINS 仅适用于 multi_choice 列**，匹配数组中包含给定值的行，例如 \`[{ "field": "tags", "op": "CONTAINS", "value": "紧急" }]\`。`,
     ``,
     `## 调用示例`,
     ``,
@@ -318,33 +322,33 @@ function generateSkillContext(schema: DataStoreTableSchema): string {
     ``,
   )
 
-  const enumCol = editableCols.find(
-    (c) => c.type === "ENUM" && c.enumValues && c.enumValues.length > 0,
+  const singleChoiceCol = editableCols.find(
+    (c) => c.kind === "single_choice" && c.choices && c.choices.length > 0,
   )
-  if (enumCol && enumCol.enumValues) {
+  if (singleChoiceCol && singleChoiceCol.choices) {
     lines.push(
-      `### 按 \`${enumCol.name}\` 过滤 · \`query\``,
+      `### 按 \`${singleChoiceCol.name}\` 过滤 · \`query\``,
       "```json",
       stringifyJson({
         table: schema.name,
-        where: { [enumCol.name]: enumCol.enumValues[0] },
+        where: { [singleChoiceCol.name]: singleChoiceCol.choices[0] },
       }),
       "```",
       ``,
     )
   }
 
-  const multiEnumCol = editableCols.find(
-    (c) => c.type === "MULTI_ENUM" && c.enumValues && c.enumValues.length > 0,
+  const multiChoiceCol = editableCols.find(
+    (c) => c.kind === "multi_choice" && c.choices && c.choices.length > 0,
   )
-  if (multiEnumCol && multiEnumCol.enumValues) {
+  if (multiChoiceCol && multiChoiceCol.choices) {
     lines.push(
-      `### 按 \`${multiEnumCol.name}\` 包含过滤 · \`query\``,
+      `### 按 \`${multiChoiceCol.name}\` 包含过滤 · \`query\``,
       "```json",
       stringifyJson({
         table: schema.name,
         where: [
-          { field: multiEnumCol.name, op: "CONTAINS", value: multiEnumCol.enumValues[0] },
+          { field: multiChoiceCol.name, op: "CONTAINS", value: multiChoiceCol.choices[0] },
         ],
       }),
       "```",

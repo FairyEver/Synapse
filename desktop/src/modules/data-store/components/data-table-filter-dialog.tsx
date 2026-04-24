@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type {
-  DataStoreColumnInfo,
+  Column,
   DataStoreWhereCondition,
   DataStoreWhereGroup,
 } from "@/types/data-store"
@@ -27,7 +27,7 @@ import type {
 type DataTableFilterDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  columns: DataStoreColumnInfo[]
+  columns: Column[]
   value: DataStoreWhereGroup | null
   onApply: (filter: DataStoreWhereGroup | null) => void
 }
@@ -61,65 +61,65 @@ const BOOLEAN_OPERATORS: Array<{ value: DataStoreWhereCondition["op"]; label: st
 
 const DEFAULT_COMBINATOR: DataStoreWhereGroup["combinator"] = "all"
 
-function createCondition(column: DataStoreColumnInfo): DraftCondition {
+function createCondition(column: Column): DraftCondition {
   return {
     id: crypto.randomUUID(),
     field: column.name,
     op: getDefaultOperator(column),
-    value: column.type === "BOOLEAN" ? false : "",
+    value: column.kind === "boolean" ? false : "",
   }
 }
 
-function getDefaultOperator(column: DataStoreColumnInfo): DataStoreWhereCondition["op"] {
-  return column.type === "MULTI_ENUM" ? "CONTAINS" : "="
+function getDefaultOperator(column: Column): DataStoreWhereCondition["op"] {
+  return column.kind === "multi_choice" ? "CONTAINS" : "="
 }
 
-function getOperators(column: DataStoreColumnInfo) {
-  if (column.type === "INTEGER" || column.type === "REAL" || column.type === "DATE" || column.type === "DATETIME") {
+function getOperators(column: Column) {
+  if (column.kind === "integer" || column.kind === "decimal" || column.kind === "date" || column.kind === "timestamp") {
     return NUMBER_OPERATORS
   }
-  if (column.type === "BOOLEAN") {
+  if (column.kind === "boolean") {
     return BOOLEAN_OPERATORS
   }
-  if (column.type === "MULTI_ENUM") {
+  if (column.kind === "multi_choice") {
     return [{ value: "CONTAINS" as const, label: "包含" }]
   }
   return TEXT_OPERATORS
 }
 
-function normalizeOperator(column: DataStoreColumnInfo, op: DataStoreWhereCondition["op"]) {
+function normalizeOperator(column: Column, op: DataStoreWhereCondition["op"]) {
   const operators = getOperators(column)
   return operators.some((item) => item.value === op) ? op : operators[0].value
 }
 
-function parseDraftValue(column: DataStoreColumnInfo, value: string | boolean) {
-  if (column.type === "BOOLEAN") {
+function parseDraftValue(column: Column, value: string | boolean) {
+  if (column.kind === "boolean") {
     return Boolean(value)
   }
-  if (column.type === "INTEGER") {
+  if (column.kind === "integer") {
     return Number.parseInt(String(value), 10)
   }
-  if (column.type === "REAL") {
+  if (column.kind === "decimal") {
     return Number.parseFloat(String(value))
   }
-  if (column.type === "MULTI_ENUM") {
+  if (column.kind === "multi_choice") {
     return String(value)
   }
-  if (column.type === "JSON") {
+  if (column.kind === "json") {
     try {
       return JSON.parse(String(value))
     } catch {
       return String(value)
     }
   }
-  if (column.type === "TEXT" && typeof value === "string") {
+  if (column.kind === "text" && typeof value === "string") {
     return value
   }
   return value
 }
 
-function formatDraftValue(column: DataStoreColumnInfo, value: unknown) {
-  if (column.type === "BOOLEAN") {
+function formatDraftValue(column: Column, value: unknown) {
+  if (column.kind === "boolean") {
     return Boolean(value)
   }
   if (typeof value === "string") {
@@ -134,8 +134,8 @@ function formatDraftValue(column: DataStoreColumnInfo, value: unknown) {
   return String(value)
 }
 
-function isEmptyDraftValue(column: DataStoreColumnInfo, value: string | boolean) {
-  if (column.type === "BOOLEAN") {
+function isEmptyDraftValue(column: Column, value: string | boolean) {
+  if (column.kind === "boolean") {
     return false
   }
   return String(value).trim() === ""
@@ -193,7 +193,7 @@ function DataTableFilterDialog({
       }
       setConditions((current) => current.map((condition) => (
         condition.id === id
-          ? { ...condition, field, op: getDefaultOperator(column), value: column.type === "BOOLEAN" ? false : "" }
+          ? { ...condition, field, op: getDefaultOperator(column), value: column.kind === "boolean" ? false : "" }
           : condition
       )))
     },
@@ -207,7 +207,7 @@ function DataTableFilterDialog({
         return []
       }
       const parsedValue = parseDraftValue(column, condition.value)
-      if ((column.type === "INTEGER" || column.type === "REAL") && Number.isNaN(parsedValue)) {
+      if ((column.kind === "integer" || column.kind === "decimal") && Number.isNaN(parsedValue)) {
         return []
       }
       const queryValue = condition.op === "LIKE" ? `%${String(parsedValue)}%` : parsedValue
@@ -292,7 +292,7 @@ function DataTableFilterDialog({
                     </SelectContent>
                   </Select>
 
-                  {column.type === "BOOLEAN" ? (
+                  {column.kind === "boolean" ? (
                     <label className="flex h-7 items-center gap-2 rounded-lg border border-input px-2.5 text-sm">
                       <Checkbox
                         checked={Boolean(condition.value)}
@@ -304,7 +304,7 @@ function DataTableFilterDialog({
                       />
                       已勾选
                     </label>
-                  ) : column.enumValues && column.enumValues.length > 0 ? (
+                  ) : column.choices && column.choices.length > 0 ? (
                     <Select
                       value={String(condition.value)}
                       onValueChange={(nextValue) => {
@@ -318,8 +318,8 @@ function DataTableFilterDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          {column.enumValues.map((enumValue) => (
-                            <SelectItem key={enumValue} value={enumValue}>{enumValue}</SelectItem>
+                          {column.choices.map((choice) => (
+                            <SelectItem key={choice} value={choice}>{choice}</SelectItem>
                           ))}
                         </SelectGroup>
                       </SelectContent>
@@ -328,7 +328,7 @@ function DataTableFilterDialog({
                     <Input
                       className="h-7"
                       value={String(condition.value)}
-                      type={column.type === "INTEGER" || column.type === "REAL" ? "number" : "text"}
+                      type={column.kind === "integer" || column.kind === "decimal" ? "number" : "text"}
                       placeholder="输入值"
                       onChange={(event) => {
                         setConditions((current) => current.map((item) => (

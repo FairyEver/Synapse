@@ -8,7 +8,7 @@
 // Transport layers wrap errors in their own protocol format.
 
 import { dataStoreService } from "./service"
-import type { DataStoreQueryParams, DataStoreWhereClause } from "./types"
+import type { Column, DataStoreQueryParams, DataStoreWhereClause } from "./types"
 
 type DispatchResult = {
   ok: true
@@ -61,7 +61,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   createTable: (params) => {
     dataStoreService.createTable(
       requireString(params, "name"),
-      requireArray(params, "columns") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; enumValues?: string[] }[],
+      requireArray(params, "columns") as Column[],
       params.description as string | undefined,
     )
     return { ok: true }
@@ -85,7 +85,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     }
     dataStoreService.addColumn(
       tableRaw,
-      requireObject(params, "column") as { name: string; type: "TEXT" | "INTEGER" | "REAL" | "BLOB" | "JSON" | "DATE" | "DATETIME" | "BOOLEAN" | "ENUM" | "MULTI_ENUM"; default?: unknown; description?: string; enumValues?: string[] },
+      requireObject(params, "column") as Column & { default?: unknown },
     )
     return { ok: true }
   },
@@ -99,11 +99,11 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  updateColumnEnumValues: (params) => {
-    dataStoreService.updateColumnEnumValues(
+  updateColumnChoices: (params) => {
+    dataStoreService.updateColumnChoices(
       requireString(params, "table"),
       requireString(params, "column"),
-      requireArray(params, "values") as string[],
+      requireArray(params, "choices") as string[],
     )
     return { ok: true }
   },
@@ -210,7 +210,7 @@ const MUTATING_ACTIONS = new Set<string>([
   "dropTable",
   "addColumn",
   "updateColumnDescription",
-  "updateColumnEnumValues",
+  "updateColumnChoices",
   "insert",
   "batchInsert",
   "update",

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react"
-import type { DataStoreColumnInfo } from "@/types/data-store"
+import type { Column } from "@/types/data-store"
 
 const DATA_TABLE_ID_COLUMN_WIDTH = 56
 const DATA_TABLE_ACTION_COLUMN_WIDTH = 72
@@ -44,10 +44,10 @@ function formatCellValue(value: unknown, type?: string, columnName?: string): st
   if (columnName === "created_at" || columnName === "updated_at") {
     return formatSystemTime(value)
   }
-  if (type?.toUpperCase() === "BOOLEAN") {
+  if (type === "boolean") {
     return value === true || value === 1 ? "✓" : "✗"
   }
-  if (type?.toUpperCase() === "MULTI_ENUM" && Array.isArray(value)) {
+  if (type === "multi_choice" && Array.isArray(value)) {
     return value.join(", ")
   }
   if (typeof value === "object") return JSON.stringify(value)
@@ -74,7 +74,7 @@ function padDatePart(value: number): string {
 }
 
 function getDefaultColumnWidth(
-  column: DataStoreColumnInfo,
+  column: Column,
   rows: Record<string, unknown>[],
 ): number {
   if (column.system && !column.primaryKey) {
@@ -83,7 +83,7 @@ function getDefaultColumnWidth(
 
   const headerWidth = measureTableTextWidth(column.name) + DATA_TABLE_HEADER_EXTRA_WIDTH
   const contentWidth = rows.reduce((maxWidth, row) => {
-    const valueText = formatCellValue(row[column.name], column.type, column.name)
+    const valueText = formatCellValue(row[column.name], column.kind, column.name)
     return Math.max(maxWidth, measureTableTextWidth(valueText) + DATA_TABLE_CELL_EXTRA_WIDTH)
   }, 0)
 

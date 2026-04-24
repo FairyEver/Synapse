@@ -13,49 +13,49 @@ import {
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { createRendererLogger } from "@/app-shell/logging"
-import { getColumnValueUsage } from "../hooks/use-data-store"
+import { getColumnChoicesUsage } from "../hooks/use-data-store"
 
-type EnumRowStatus = "existing" | "new" | "deleted"
+type ChoiceRowStatus = "existing" | "new" | "deleted"
 
-type EnumRow = {
+type ChoiceRow = {
   value: string
-  status: EnumRowStatus
+  status: ChoiceRowStatus
 }
 
-type EnumValuesEditorDialogProps = {
+type ChoicesEditorDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   table: string
   column: string
-  columnType: "ENUM" | "MULTI_ENUM"
-  initialValues: string[]
-  onSave: (values: string[]) => Promise<void>
+  kind: "single_choice" | "multi_choice"
+  initialChoices: string[]
+  onSave: (choices: string[]) => Promise<void>
 }
 
-const logger = createRendererLogger("data-store.enum-editor")
+const logger = createRendererLogger("data-store.choices-editor")
 
-function EnumValuesEditorDialog({
+function ChoicesEditorDialog({
   open,
   onOpenChange,
   table,
   column,
-  columnType,
-  initialValues,
+  kind,
+  initialChoices,
   onSave,
-}: EnumValuesEditorDialogProps) {
-  const [rows, setRows] = useState<EnumRow[]>([])
+}: ChoicesEditorDialogProps) {
+  const [rows, setRows] = useState<ChoiceRow[]>([])
   const [inputValue, setInputValue] = useState("")
   const [usage, setUsage] = useState<Record<string, number>>({})
   const [usageLoading, setUsageLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
-  const initialValuesRef = useRef(initialValues)
-  initialValuesRef.current = initialValues
+  const initialChoicesRef = useRef(initialChoices)
+  initialChoicesRef.current = initialChoices
 
   useEffect(() => {
     if (!open) return
-    setRows(initialValuesRef.current.map((v) => ({ value: v, status: "existing" })))
+    setRows(initialChoicesRef.current.map((v) => ({ value: v, status: "existing" })))
     setInputValue("")
     setError("")
     setSaving(false)
@@ -63,13 +63,13 @@ function EnumValuesEditorDialog({
     setUsageLoading(true)
 
     let cancelled = false
-    getColumnValueUsage(table, column)
+    getColumnChoicesUsage(table, column)
       .then((data) => {
         if (!cancelled) setUsage(data)
       })
       .catch((err) => {
         if (cancelled) return
-        logger.warn("Failed to load enum value usage.", { err })
+        logger.warn("Failed to load choice usage.", { err })
       })
       .finally(() => {
         if (!cancelled) setUsageLoading(false)
@@ -151,9 +151,9 @@ function EnumValuesEditorDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>编辑枚举选项 · {column}</DialogTitle>
+          <DialogTitle>编辑选项 · {column}</DialogTitle>
           <DialogDescription>
-            {columnType === "MULTI_ENUM"
+            {kind === "multi_choice"
               ? "此列为多选，用户可选择多个值。"
               : "此列为单选，用户只能选择一个值。"}
           </DialogDescription>
@@ -282,4 +282,4 @@ function EnumValuesEditorDialog({
   )
 }
 
-export { EnumValuesEditorDialog }
+export { ChoicesEditorDialog }

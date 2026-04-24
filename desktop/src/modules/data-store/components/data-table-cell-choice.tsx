@@ -8,41 +8,41 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
-type DataTableCellEnumOption = { value: string; label: string }
+type DataTableCellChoiceOption = { value: string; label: string }
 
-type DataTableCellEnumCommonProps = {
-  options: readonly (string | DataTableCellEnumOption)[]
+type DataTableCellChoiceCommonProps = {
+  options: readonly (string | DataTableCellChoiceOption)[]
   placeholder?: string
   disabled?: boolean
   onFocus?: () => void
   className?: string
 }
 
-type DataTableCellEnumSingleProps = DataTableCellEnumCommonProps & {
+type DataTableCellChoiceSingleProps = DataTableCellChoiceCommonProps & {
   multiple?: false
   value: string
   onChange: (value: string) => void
 }
 
-type DataTableCellEnumMultipleProps = DataTableCellEnumCommonProps & {
+type DataTableCellChoiceMultipleProps = DataTableCellChoiceCommonProps & {
   multiple: true
   value: readonly string[]
   onChange: (value: string[]) => void
 }
 
-type DataTableCellEnumProps =
-  | DataTableCellEnumSingleProps
-  | DataTableCellEnumMultipleProps
+type DataTableCellChoiceProps =
+  | DataTableCellChoiceSingleProps
+  | DataTableCellChoiceMultipleProps
 
-function normalizeOption(option: string | DataTableCellEnumOption): DataTableCellEnumOption {
+function normalizeOption(option: string | DataTableCellChoiceOption): DataTableCellChoiceOption {
   return typeof option === "string" ? { value: option, label: option } : option
 }
 
-const DATA_TABLE_CELL_ENUM_CONTENT_MAX_HEIGHT =
+const DATA_TABLE_CELL_CHOICE_CONTENT_MAX_HEIGHT =
   "min(300px, var(--radix-dropdown-menu-content-available-height))"
 
-const DataTableCellEnum = forwardRef<HTMLButtonElement, DataTableCellEnumProps>(
-  function DataTableCellEnum(props, ref) {
+const DataTableCellChoice = forwardRef<HTMLButtonElement, DataTableCellChoiceProps>(
+  function DataTableCellChoice(props, ref) {
     const { options, placeholder = "选择...", disabled, onFocus, className } = props
     const normalizedOptions = options.map(normalizeOption)
 
@@ -61,7 +61,7 @@ const DataTableCellEnum = forwardRef<HTMLButtonElement, DataTableCellEnumProps>(
           <button
             ref={ref}
             type="button"
-            data-slot="data-table-cell-enum"
+            data-slot="data-table-cell-choice"
             onFocus={onFocus}
             className={cn(
               "block w-full appearance-none border-0 bg-transparent p-0 text-left disabled:cursor-not-allowed disabled:opacity-50",
@@ -75,7 +75,7 @@ const DataTableCellEnum = forwardRef<HTMLButtonElement, DataTableCellEnumProps>(
         </DropdownMenuTrigger>
         <DropdownMenuContent
           className="w-48"
-          style={{ maxHeight: DATA_TABLE_CELL_ENUM_CONTENT_MAX_HEIGHT }}
+          style={{ maxHeight: DATA_TABLE_CELL_CHOICE_CONTENT_MAX_HEIGHT }}
         >
           {props.multiple
             ? normalizedOptions.map((opt) => {
@@ -110,7 +110,7 @@ const DataTableCellEnum = forwardRef<HTMLButtonElement, DataTableCellEnumProps>(
   },
 )
 
-DataTableCellEnum.displayName = "DataTableCellEnum"
+DataTableCellChoice.displayName = "DataTableCellChoice"
 
-export { DataTableCellEnum }
-export type { DataTableCellEnumOption, DataTableCellEnumProps }
+export { DataTableCellChoice }
+export type { DataTableCellChoiceOption, DataTableCellChoiceProps }
