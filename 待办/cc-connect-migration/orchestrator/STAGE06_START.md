@@ -2,11 +2,20 @@
 
 把下面整段发送给 Codex，即可启动 stage 06 代码执行器。这个入口会在用户明确启动后持续按批次写代码，直到完成、遇到阻塞、上下文中断或需要用户确认。
 
-```text
+````text
 请在 `/Users/liyang/Documents/code/github/Synapse` 仓库中启动 CC Connect 迁移 stage 06 代码执行器。
 
 目标：
 按照 `待办/cc-connect-migration/artifacts/5.1-development-plan.md`，把 CC Connect 的正式功能全集分批迁移到 3S。你需要持续执行小批次，实现代码、补测试、运行验证、回写状态和生成报告，直到 stage 06 全部完成或遇到必须暂停的情况。
+
+核心迁移方式：
+计划文件决定本批做什么、放哪里、如何验收；CC Connect 原源码和测试决定具体行为、字段默认值、边界条件、错误处理和状态机；3S 当前代码决定如何落到 Electron/TypeScript 架构里。写任何新代码前，必须先读取本批对应的 CC Connect 原源码和测试文件，不允许只根据计划文件重建相似功能。
+
+CC Connect 原项目资产路径固定为：
+
+```text
+/Users/liyang/Desktop/code-guide/cc-connect-main
+```
 
 角色与职责：
 你是 stage 06 代码执行负责人，具备 Electron、React、TypeScript、shadcn/Radix、桌面应用安全边界、迁移工程和测试验证经验。你的首要职责不是快，而是可恢复、可验收、可追踪。你必须使用文件状态作为长期记忆，不依赖当前会话记忆。
@@ -36,24 +45,34 @@
 2. 确认 `5.2-development-plan-review.md` 结论为 pass。
 3. 确认 CC Connect 真实项目资产路径存在：`/Users/liyang/Desktop/code-guide/cc-connect-main`。
 4. 运行 `git status --short`。
-5. 如果 `desktop/` 下存在启动前未记录的脏改，暂停并汇报，不要继续。
-6. 如果只有 `待办/cc-connect-migration/` 下的提示词、orchestrator 或 artifacts 文档改动，可以继续，但要记录在 `6.0-code-runner-state.md`。
+5. 正式启动 stage 06 写代码前，`git status --short` 必须为空。
+6. 如果存在任何未提交改动，暂停并要求用户先提交或清理。不要把启动前已有改动混入 `stage06(S06-B01)` 或后续批次 commit。
+7. 只有在用户明确说“允许带着这些未提交改动继续”时，才可继续；继续前必须把这些改动写入 `6.0-code-runner-state.md` 的启动前脏改记录。
 
 执行流程：
 
 1. 如果 `待办/cc-connect-migration/artifacts/6.0-code-runner-state.md` 已存在，说明执行器可能已经启动过。请切换为恢复流程，读取 `STAGE06_RESUME.md`，不要重启。
 2. 如果 `待办/cc-connect-migration/artifacts/6.0-dev-batch-plan.md` 不存在，先根据 `5.1-development-plan.md` 生成它。
+   批次计划中的每个小批次必须包含：
+   - 必须读取的 CC Connect 源码
+   - 必须读取的 CC Connect 测试
+   - 源码搜索关键词
+   - 原逻辑还原重点
+   - 本批 commit message 模板
 3. 创建或更新：
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-state.md`
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-log.md`
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-resume-prompt.md`
 4. 从 `6.0-dev-batch-plan.md` 中选择第一个 planned 批次执行。
-5. 每个批次执行前，更新 state 为 `in_progress`，并写好 resume prompt。
-6. 每个批次只实现本批次覆盖的 CC ID。
-7. 每个批次完成后，必须更新 manifest、verification ledger、manual acceptance、development plan、decision log、release/rollback plan 中与本批次相关的状态和证据。
-8. 每个批次完成后，生成 `6.x-execution-report-<batch-id>-<short-name>.md`。
-9. 每个批次完成后，继续执行下一个 planned 批次，直到全部完成或遇到暂停条件。
-10. stage 06 全部完成后，执行 `待办/cc-connect-migration/prompts/07-收口审计.md`，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`。
+5. 每个批次执行前，从 `1.2-feature-manifest.md` 和 `4.2-golden-test-cases.md` 提取本批 CC ID 对应的 CC Connect 源码/测试路径，并用 `rg` 在 `/Users/liyang/Desktop/code-guide/cc-connect-main` 中补充相关源码。
+6. 每个批次写代码前，必须读取本批相关 CC Connect 源码和测试文件，并把已读取路径记录到 state、log 和执行报告。
+7. 每个批次执行前，更新 state 为 `in_progress`，并写好 resume prompt。
+8. 每个批次只实现本批次覆盖的 CC ID。
+9. 每个批次完成后，必须更新 manifest、verification ledger、manual acceptance、development plan、decision log、release/rollback plan 中与本批次相关的状态和证据。
+10. 每个批次完成后，生成 `6.x-execution-report-<batch-id>-<short-name>.md`，报告必须包含“原源码对照”章节。
+11. 每个批次验证通过后，必须创建一个 git commit，commit message 必须使用 `stage06(<批次编号>): <批次名称> [<CC ID 列表>]` 格式。
+12. 每个批次 commit 后，如果没有触发暂停条件，继续执行下一个 planned 批次，直到全部完成。
+13. stage 06 全部完成后，执行 `待办/cc-connect-migration/prompts/07-收口审计.md`，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`。
 
 验证要求：
 
@@ -71,10 +90,18 @@ pnpm desktop:check:ipc-codegen
 2. 不启动 Electron 应用。
 3. 不打开浏览器或 Playwright。
 4. 不执行 destructive git 操作。
-5. 不提交、不推送。
-6. 不新增依赖，除非暂停并获得用户确认。
-7. 不把任何 CC ID 标记为 dropped，除非用户明确确认。
-8. 不绕过 AGENTS.md 中的 Electron、安全、UI 和工程约束。
+5. 不推送。
+6. 不跳过每批 commit。
+7. 不新增依赖，除非暂停并获得用户确认；已知例外：S06-B03 / CC-005 允许通过 `pnpm --filter @synapse/desktop add smol-toml` 添加 `smol-toml`，仅用于旧 `config.toml` 导入。
+8. 不把任何 CC ID 标记为 dropped，除非用户明确确认。
+9. 不绕过 AGENTS.md 中的 Electron、安全、UI 和工程约束。
+
+已知处理方式：
+
+1. 不要因为 CC Connect 源码路径不明确暂停；正式路径就是 `/Users/liyang/Desktop/code-guide/cc-connect-main`，除非该路径不存在。
+2. 不要在 S06-B03 因为 TOML parser 暂停；用户已预授权 `smol-toml`。
+3. 不要因为完成一个批次而暂停；用户要求连续执行。
+4. 不要因为需要创建 git commit 暂停；每批 commit 是必需动作。
 
 暂停条件：
 
@@ -83,4 +110,4 @@ pnpm desktop:check:ipc-codegen
 开始执行：
 
 现在执行启动前检查。检查通过后，生成或读取 `6.0-dev-batch-plan.md`，然后从第一个 planned 小批次开始持续执行。
-```
+````

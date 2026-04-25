@@ -2,11 +2,20 @@
 
 如果 stage 06 代码执行器因为断网、任务取消、上下文压缩、Codex 崩溃或手动停止而中断，把下面整段发送给新的 Codex 对话。
 
-```text
+````text
 请在 `/Users/liyang/Documents/code/github/Synapse` 仓库中恢复 CC Connect 迁移 stage 06 代码执行器。
 
 目标：
 不要从头开始。请根据文件状态恢复到中断前的 stage 06 小批次，继续完成代码迁移、验证、状态回写和报告生成。
+
+核心迁移方式：
+计划文件决定本批做什么、放哪里、如何验收；CC Connect 原源码和测试决定具体行为、字段默认值、边界条件、错误处理和状态机；3S 当前代码决定如何落到 Electron/TypeScript 架构里。恢复后继续写任何新代码前，必须先确认当前批次已经读取对应 CC Connect 原源码和测试文件；如果没有，先补读源码和测试，再继续实现或修正。
+
+CC Connect 原项目资产路径固定为：
+
+```text
+/Users/liyang/Desktop/code-guide/cc-connect-main
+```
 
 角色与职责：
 你是 stage 06 代码执行恢复负责人。你的职责是先恢复上下文，再继续执行。你必须以磁盘状态为准，不依赖用户口述摘要，不重复已经 done 的批次。
@@ -35,6 +44,7 @@
 6. 如果 state 显示当前批次为 `verification_failed`，先读取最近失败日志或验证报告，再修复。
 7. 如果 state 显示当前批次为 `done`，选择 `6.0-dev-batch-plan.md` 中下一个 planned 批次。
 8. 如果 `6.0-code-runner-state.md` 不存在，不要猜测；读取 `STAGE06_START.md` 并执行启动前检查。
+9. 如果当前批次 state/log/report 没有列出“已读取的 CC Connect 源码/测试路径”，必须先从 `1.2-feature-manifest.md` 和 `4.2-golden-test-cases.md` 提取路径并读取原源码，再继续。
 
 继续执行规则：
 
@@ -43,13 +53,19 @@
 3. 不重新生成 `6.0-dev-batch-plan.md`，除非该文件不存在或明显损坏。
 4. 每次继续前都更新 `6.0-code-runner-resume-prompt.md`。
 5. 每完成一个批次，更新 manifest、verification ledger、manual acceptance、development plan、decision log、release/rollback plan 和执行报告。
-6. 每个批次最多 3 次修复尝试，超过则暂停。
+6. 每个批次执行报告必须包含“原源码对照”章节，列出读取过的 CC Connect 源码和测试文件。
+7. 每完成一个批次且验证通过后，必须创建一个 git commit，commit message 使用 `stage06(<批次编号>): <批次名称> [<CC ID 列表>]` 格式。
+8. 每个批次最多 3 次修复尝试，超过则暂停。
+9. 用户已预授权 S06-B03 / CC-005 使用 `smol-toml` 解析旧 `config.toml`，不要因此再次暂停。
+10. 用户要求连续执行；不要因为完成一个批次而暂停。
 
 暂停条件：
 
 如果需要用户确认、发现未知脏改、验证连续 3 次失败、需要新增依赖、需要真实账号/secret/扫码/系统服务操作，必须暂停，并更新 state/log/resume prompt。
 
+例外：S06-B03 / CC-005 使用已预授权的 `smol-toml` 不属于需要暂停的新增依赖。
+
 开始恢复：
 
 现在先读取上述文件并运行 `git status --short`。根据 state 判断当前批次和下一步动作，然后继续执行。
-```
+````

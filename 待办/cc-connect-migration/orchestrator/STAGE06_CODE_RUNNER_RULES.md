@@ -19,9 +19,12 @@
 4. 每个小批次都必须有实现、验证、证据回写和执行报告。
 5. 任何重要状态都写入 artifacts，不依赖会话记忆。
 6. 不启动 Electron 应用、dev server、浏览器、Playwright 或运行时预览，除非用户明确要求。
-7. 不执行破坏性 git 操作，不提交、不推送、不重置。
-8. 不新增依赖，除非某个批次无法完成且用户明确批准。
-9. 不扩大当前批次范围。发现遗漏时先记录 candidate/open question，不顺手实现。
+7. 不执行破坏性 git 操作，不推送、不重置。
+8. 每个小批次验证通过后必须提交一次 git commit，提交信息必须能看出 stage、批次编号、批次名称和覆盖 CC ID。
+9. 不新增依赖，除非某个批次无法完成且用户明确批准。已知例外见“已知暂停点和预授权处理”。
+10. 不扩大当前批次范围。发现遗漏时先记录 candidate/open question，不顺手实现。
+11. 写代码前必须读取对应 CC Connect 原源码和测试文件。计划文件只决定做什么，原源码和测试决定怎么做。
+12. 迁移实现应尽可能用 TypeScript 还原 CC Connect 已跑通的函数逻辑、字段默认值、边界条件、错误处理和状态机，不允许只根据计划文件凭空重建相似功能。
 
 ## 3. 状态文件
 
@@ -71,6 +74,8 @@ stage 06 执行器必须维护以下文件：
 已更新 CC ID：
 最近验证命令：
 最近修改文件：
+最近读取的 CC Connect 源码：
+最近提交：
 下一步动作：
 恢复提示文件：
 最后更新时间：
@@ -100,6 +105,50 @@ skipped_with_user_confirmation
 7. 运行 `git status --short`。
 8. 如果存在 `desktop/` 下未记录在 `6.0-code-runner-state.md` 的脏改，必须暂停。
 9. 如果只存在迁移提示词、orchestrator 或 artifacts 文档改动，可以继续，但必须写入 state。
+
+## 5A. 已知暂停点和预授权处理
+
+以下问题在历史执行中已经出现过，并已有明确处理方式。再次运行时按本节处理，不要重复暂停。
+
+### 5A.1 CC Connect 项目资产路径
+
+正式 CC Connect 项目资产路径固定为：
+
+```text
+/Users/liyang/Desktop/code-guide/cc-connect-main
+```
+
+如果该路径存在，并包含 README、go.mod、core、web、npm、daemon、config、tests 等项目资产，不要再因为“源码路径不明确”暂停。
+
+如果该路径不存在，才暂停并要求用户确认路径。
+
+### 5A.2 S06-B03 / CC-005 TOML parser 依赖
+
+用户已确认允许为 CC-005 旧 `config.toml` 导入新增一个 TOML parser 依赖。
+
+预授权依赖：
+
+```text
+smol-toml
+```
+
+处理方式：
+
+1. 仅允许通过 `pnpm --filter @synapse/desktop add smol-toml` 添加到 `@synapse/desktop`。
+2. 不修改根 `package.json`。
+3. 不手写 `pnpm-lock.yaml`。
+4. 仅用于解析旧 CC Connect `config.toml`。
+5. 仍需在 S06-B03 报告和 commit message 中说明该依赖来自用户预授权。
+
+除 `smol-toml` 之外的任何新增依赖仍必须暂停确认。
+
+### 5A.3 连续执行模式
+
+用户已确认需要连续执行。完成一个小批次后，如果验证通过且没有触发“必须暂停的情况”，不要因为批次完成而暂停，必须自动进入下一个 planned 批次。
+
+### 5A.4 每批次提交
+
+用户已要求每完成一个小批次提交一次代码。不要因为“需要 git commit”暂停。提交是本执行器的必需动作。
 
 ## 6. 批次计划
 
@@ -136,28 +185,88 @@ skipped_with_user_confirmation
 
 1. 读取本规则、`6.0-code-runner-state.md`、`6.0-dev-batch-plan.md`。
 2. 读取本批次对应的 `1.2`、`2.2`、`3.1`、`3.2`、`3.3`、`4.1`、`4.2`、`4.3`、`5.1`、`5.3`、`5.4` 条目。
-3. 检查前置批次是否完成。
-4. 更新 state：当前批次 `in_progress`。
-5. 写入 resume prompt，确保中断后能回到当前批次。
-6. 检查现有代码结构，复用已有模块、服务、hook、组件和 typed API。
-7. 进行最小范围代码修改。
-8. 增加或更新本批次必要测试。
-9. 运行本批次验证命令。
-10. 运行通用验证命令：
+3. 从 `1.2-feature-manifest.md` 和 `4.2-golden-test-cases.md` 提取本批次 CC ID 对应的 CC Connect 源码和测试路径。
+4. 在 `/Users/liyang/Desktop/code-guide/cc-connect-main` 中用 `rg` 搜索本批次关键词、函数名、配置字段、命令名和测试名，补充必须阅读的源码路径。
+5. 写代码前读取本批次相关 CC Connect 源码和测试文件。至少要覆盖：
+   - `1.2-feature-manifest.md` 中本批次 CC ID 的来源证据文件。
+   - `4.2-golden-test-cases.md` 中本批次 CC ID 的 Go 测试或 fixture。
+   - `config.example.toml` / docs / web 源码中与本批次字段、页面、API 相关的片段。
+6. 在 `6.x-execution-report-*` 中新增“原源码对照”章节，列出已读取的 CC Connect 源码/测试路径，并说明迁移时复用了哪些行为、默认值、边界和错误处理。
+7. 如果无法找到对应原源码或测试，必须暂停并写入 blocker，不得只按计划文件写代码。
+8. 检查前置批次是否完成。
+9. 更新 state：当前批次 `in_progress`，并记录“最近读取的 CC Connect 源码”。
+10. 写入 resume prompt，确保中断后能回到当前批次。
+11. 检查现有 3S 代码结构，复用已有模块、服务、hook、组件和 typed API。
+12. 基于 CC Connect 原源码逻辑进行最小范围 TypeScript 迁移，不做盲目重建。
+13. 增加或更新本批次必要测试，测试样本优先来自 CC Connect 原测试、fixtures 和源码边界条件。
+14. 运行本批次验证命令。
+15. 运行通用验证命令：
     - `pnpm desktop:typecheck`
     - `pnpm desktop:check:hard-constraints`
     - `pnpm desktop:check:ipc-codegen`
-11. 如果验证失败，诊断并修复，最多 3 次。
-12. 验证通过后更新：
+16. 如果验证失败，诊断并修复，最多 3 次。
+17. 验证通过后更新：
     - `1.2-feature-manifest.md`
     - `4.1-verification-ledger.md`
     - `4.3-manual-acceptance-script.md`
     - `5.1-development-plan.md`
     - `5.3-decision-log.md`
     - `5.4-release-and-rollback-plan.md`
-13. 生成 `6.x-execution-report-*`。
-14. 更新 state/log/resume prompt。
-15. 进入下一个 planned 批次。
+18. 生成 `6.x-execution-report-*`，报告必须包含“原源码对照”和“本批 commit message”。
+19. 更新 state/log/resume prompt。
+20. 运行 `git status --short`，确认只有当前批次相关文件发生变化；如出现未知无关变更，必须暂停。
+21. 使用 `git add` 暂存当前批次的代码、测试、lockfile、artifacts 和状态文件。
+22. 提交当前批次 commit。
+23. 进入下一个 planned 批次。
+
+## 7A. Git 提交规则
+
+每个小批次验证通过并完成状态回写后，必须提交一次 commit。
+
+禁止：
+
+1. 禁止跳过 commit 进入下一批次。
+2. 禁止把多个批次合并到一个 commit。
+3. 禁止提交与当前批次无关的文件。
+4. 禁止 push。
+5. 禁止 amend 已完成批次的 commit，除非当前批次 commit 失败且尚未进入下一批次。
+
+提交前必须运行：
+
+```text
+git status --short
+```
+
+如果出现不属于当前批次的未知改动，必须暂停。
+
+commit message 格式：
+
+```text
+stage06(<批次编号>): <批次名称> [<CC ID 列表>]
+```
+
+示例：
+
+```text
+stage06(S06-B03): 配置导入与 Provider 数据模型 [CC-005 CC-014]
+stage06(S06-B05): Connector 注册、能力矩阵与入站模型 [CC-002 CC-008]
+```
+
+commit body 必须包含：
+
+```text
+Source: <本批读取的 CC Connect 源码/测试路径摘要>
+Verify: <本批验证命令摘要>
+Report: <6.x-execution-report 文件路径>
+```
+
+提交后必须确认：
+
+```text
+git status --short
+```
+
+如果提交后仍有未提交改动，必须暂停，不得进入下一批次。
 
 ## 8. 三次失败协议
 
@@ -180,7 +289,7 @@ skipped_with_user_confirmation
 
 1. 需要真实第三方账号、token、secret、二维码扫码或人工授权。
 2. 需要安装/卸载系统服务、写入系统目录、修改 shell profile 或启动真实 daemon。
-3. 需要新增依赖。
+3. 需要新增依赖，但 `smol-toml` 用于 S06-B03 / CC-005 旧 TOML 导入除外。
 4. 需要修改 stage 01 到 stage 05A 的正式范围定义。
 5. 需要把正式 CC ID 标记为 dropped。
 6. 发现 CC Connect 源码证据与已生成 manifest 明显冲突。
@@ -188,6 +297,8 @@ skipped_with_user_confirmation
 8. 验证连续 3 次失败。
 9. 类型检查、hard constraints 或 IPC codegen 出现无法归因到当前批次的失败。
 10. 上下文不足以判断安全边界。
+11. 本批次找不到对应 CC Connect 原源码或测试证据。
+12. commit 前后存在无法归属于当前批次的未提交改动。
 
 ## 10. 允许无人值守继续的情况
 
@@ -198,6 +309,8 @@ skipped_with_user_confirmation
 3. 需要补充当前批次的单元测试、golden 测试或 mock。
 4. 需要更新当前批次对应的状态、验收和报告文件。
 5. 需要拆分当前批次内部函数或文件，但不改变对外范围。
+6. S06-B03 为 CC-005 导入使用已预授权的 `smol-toml`。
+7. 当前批次完成后按规则创建 git commit。
 
 ## 11. 中断恢复规则
 
@@ -221,11 +334,13 @@ stage 06 完成必须同时满足：
 1. `1.2-feature-manifest.md` 中所有正式 CC ID 均为 `done`、`merged`、`replaced`，或用户确认的 `dropped`。
 2. `4.1-verification-ledger.md` 中所有正式 CC ID 验收项均为 `pass`，或有用户确认豁免。
 3. 每个批次都有 `6.x-execution-report-*`。
-4. `pnpm desktop:typecheck` 通过。
-5. `pnpm desktop:check:hard-constraints` 通过。
-6. `pnpm desktop:check:ipc-codegen` 通过。
-7. 没有 orphan UI/API/service。
-8. 执行 stage 07，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`。
+4. 每个批次执行报告都列出本批读取的 CC Connect 原源码和测试路径。
+5. 每个批次都有独立 git commit，commit message 能看出 stage、批次编号、批次名称和 CC ID。
+6. `pnpm desktop:typecheck` 通过。
+7. `pnpm desktop:check:hard-constraints` 通过。
+8. `pnpm desktop:check:ipc-codegen` 通过。
+9. 没有 orphan UI/API/service。
+10. 执行 stage 07，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`。
 
 ## 13. 汇报格式
 
@@ -234,8 +349,10 @@ stage 06 完成必须同时满足：
 ```text
 当前批次：
 覆盖 CC ID：
+读取 CC Connect 源码：
 修改文件：
 验证结果：
+提交：
 状态更新：
 下一批次：
 是否需要用户确认：
