@@ -15,3 +15,15 @@ export * from "./types"
 export * from "./errors"
 export { AbstractDataNamespace } from "./namespace-base"
 export type { NamespaceBaseDeps } from "./namespace-base"
+export { JsonNamespace } from "./backends/json"
+export type { JsonBackendDeps, JsonFileEnvelope } from "./backends/json"
+export {
+  copyToTimestampedBackup,
+  fileExists,
+  readBinaryFile,
+  readJsonFile,
+  readTextFile,
+  writeBinaryFileAtomic,
+  writeJsonFileAtomic,
+  writeTextFileAtomic,
+} from "./atomic-io"
