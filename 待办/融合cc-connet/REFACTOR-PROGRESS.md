@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:48:00+08:00
+last_updated: 2026-04-25T12:51:00+08:00
 current_phase: 0.6
-current_task: T6.6
+current_task: T6.10
 status: in_progress
 task_counts:
   total: 71
-  completed: 47
+  completed: 51
   blocked: 11
-  pending: 13
+  pending: 9
 audit:
   rounds: 0
   last_status: not_started
@@ -98,10 +98,10 @@ audit:
 - [x] T6.3 实现 runtime/observability/tracer.ts Tracer + Span + 单测
 - [x] T6.4 实现 runtime/observability/health.ts HealthCheckAggregator + 单测
 - [x] T6.5 实现 runtime/observability/diagnostics.ts DiagnosticsCollector + 单测
-- [ ] T6.6 实现 runtime/security/permission-guard.ts + 默认策略 + 单测
-- [ ] T6.7 实现 runtime/security/audit-sink.ts + 单测
-- [ ] T6.8 实现 runtime/scheduling/ TaskQueue + RateLimiter + CircuitBreaker + 单测
-- [ ] T6.9 实现 runtime/extension/ ExtensionRegistry + ExtensionPoint + 单测
+- [x] T6.6 实现 runtime/security/permission-guard.ts + 默认策略 + 单测
+- [x] T6.7 实现 runtime/security/audit-sink.ts + 单测
+- [x] T6.8 实现 runtime/scheduling/ TaskQueue + RateLimiter + CircuitBreaker + 单测
+- [x] T6.9 实现 runtime/extension/ ExtensionRegistry + ExtensionPoint + 单测
 - [ ] T6.10 迁移 content types / editors / editor-scan providers 到 ExtensionPoint
 - [ ] T6.11 实现 desktop/src/runtime/i18n.ts + theme.ts 接口占位
 - [ ] T6.12 实现 desktop/src/runtime/debug-panel.tsx 骨架（dev-only）

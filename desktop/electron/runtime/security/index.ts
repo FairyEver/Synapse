@@ -1,0 +1,17 @@
+export {
+  InMemoryAuditSink,
+  PermissionGuardImpl,
+  createPermissionGuard,
+  userInitiatedAllowPolicy,
+} from "./permission-guard"
+export type {
+  ActorIdentity,
+  AuditEvent,
+  AuditSink,
+  PermissionAction,
+  PermissionDecision,
+  PermissionGuard,
+  PermissionPolicy,
+  PermissionRequest,
+  PermissionResult,
+} from "./permission-guard"
