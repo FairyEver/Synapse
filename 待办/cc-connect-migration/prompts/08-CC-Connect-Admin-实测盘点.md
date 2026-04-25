@@ -16,7 +16,17 @@ CC Connect 源码路径: /Users/liyang/Desktop/code-guide/cc-connect-main
 3S/Synapse 仓库路径: 当前仓库
 ```
 
-请优先使用可用的浏览器/桌面观察能力打开并操作 `http://localhost:9820/`。如果当前浏览器已经打开该页面，可以继续使用当前页面。若无法通过浏览器工具操作页面，必须停止并在输出文件中记录阻塞原因，不允许凭空补全。
+请优先使用用户已经打开并且已经登录成功的 Google Chrome 窗口操作 `http://localhost:9820/`，不要优先使用 Codex 内置浏览器或新的隔离浏览器 profile。原因：Codex 内置浏览器通常没有用户 Chrome 中的 cookie、localStorage 和 Admin API token，会被重定向到登录/令牌页，导致无法实测真实后台功能。
+
+如果当前 Chrome 已经打开 `http://localhost:9820/` 且能看到 CC Connect Admin 菜单，应继续使用这个已登录窗口完成实测。只有在无法访问已登录 Chrome 的情况下，才可以打开新的浏览器页面。
+
+如果进入的是“输入服务器地址 / API 令牌”的页面，必须先判断这是否是因为浏览器 profile 隔离导致登录态缺失：
+
+1. 如果用户已有 Chrome 窗口能正常使用 Admin，则切换到该 Chrome 窗口继续，不要在隔离浏览器中继续。
+2. 如果无法切换到已登录 Chrome，暂停并请求用户授权下一步，不要自行读取、猜测、复制或输入 API token。
+3. 不要把“隔离浏览器缺少 token”记录为 CC Connect Admin 功能阻塞，也不要据此判定后台不可用；只能记录为“实测工具登录态不可用”。
+
+若无法通过浏览器或桌面工具操作已登录页面，必须停止并在输出文件中记录阻塞原因，不允许凭空补全。
 
 安全边界：
 
