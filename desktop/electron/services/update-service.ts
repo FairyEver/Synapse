@@ -8,7 +8,11 @@ import type {
   UpdateInfo,
 } from "electron-updater"
 import type { SynapseAppUpdateState } from "../../src/types/update"
-import { SYNAPSE_IPC_CHANNELS } from "../ipc/channels"
+// FIXME: Temporary inline channels - will be replaced with WindowManager.broadcast in Task 2
+const UPDATE_CHANNELS = {
+  stateChanged: "synapse:update:state-changed",
+  openUpdatePage: "synapse:update:open-update-page",
+} as const
 import { isTrustedRendererContents } from "../ipc/validated-ipc"
 import { createMainLogger } from "./log-store"
 
@@ -395,7 +399,7 @@ class UpdateService {
         continue
       }
 
-      window.webContents.send(SYNAPSE_IPC_CHANNELS.update.stateChanged, nextState)
+      window.webContents.send(UPDATE_CHANNELS.stateChanged, nextState)
     }
   }
 
@@ -450,7 +454,7 @@ class UpdateService {
 
         window.restore()
         window.focus()
-        window.webContents.send(SYNAPSE_IPC_CHANNELS.update.openUpdatePage)
+        window.webContents.send(UPDATE_CHANNELS.openUpdatePage)
       }
 
       if (BrowserWindow.getAllWindows().length === 0) {

@@ -20,7 +20,6 @@ import {
   createIpcRegistry,
   createMainWindow,
   createMainWindowState,
-  registerAllIpcHandlers,
   showOrCreateMainWindow,
 } from "./bootstrap"
 
@@ -52,8 +51,7 @@ if (!gotSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
-      logger.info("Electron app is ready. Registering IPC handlers.")
-      registerAllIpcHandlers()
+      logger.info("Electron app is ready. Initializing IPC registry.")
 
       const registry = buildServiceRegistry({
         trayShowOrCreate: focusOrCreateMainWindow,

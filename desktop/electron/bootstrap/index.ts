@@ -37,7 +37,6 @@ export { clearStaleSingletonLock } from "./singleton-lock"
 export { attachBeforeQuitHandler } from "./before-quit"
 export type { BeforeQuitDeps } from "./before-quit"
 
-export { registerAllIpcHandlers } from "./ipc-handlers"
 export { createIpcRegistry, registeredIpcModules } from "./ipc-registry"
 
 export {

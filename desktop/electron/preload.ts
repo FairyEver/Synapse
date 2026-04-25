@@ -1,139 +1,77 @@
-import { contextBridge, ipcRenderer } from "electron"
-import type { SynapseBridge } from "../src/types/bridge"
-import type { SynapseAllChannels } from "./ipc/channels"
+/**
+ * Phase 0.3 — Minimal preload bridge.
+ *
+ * Re-exports generated IPC channels and creates a type-safe bridge
+ * for renderer-to-main communication.
+ */
 
-// Sandbox preload cannot require local modules at runtime, so channel strings
-// stay inline. The `satisfies SynapseAllChannels` assertion ensures they stay
-// in sync with the canonical definitions in ./ipc/channels.ts at compile time.
-const SYNAPSE_PRELOAD_CHANNELS = {
-  content: {
-    list: "synapse:content:list",
-    getContent: "synapse:content:get-content",
-    getDetail: "synapse:content:get-detail",
-    getHistory: "synapse:content:get-history",
-    getHistoryVersion: "synapse:content:get-history-version",
-    create: "synapse:content:create",
-    update: "synapse:content:update",
-    deleteContent: "synapse:content:delete-content",
-    listDeleted: "synapse:content:list-deleted",
-    restore: "synapse:content:restore",
-    purge: "synapse:content:purge",
-    download: "synapse:content:download",
-    openDetailWindow: "synapse:content:open-detail-window",
-    getEditorAdapters: "synapse:content:get-editor-adapters",
-    installToEditor: "synapse:content:install-to-editor",
-    readEditorInstallFormValues: "synapse:content:read-editor-install-form-values",
-    readIconImage: "synapse:content:read-icon-image",
-    resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
-  },
-  cli: {
-    detect: "synapse:cli:detect",
-  },
-  config: {
-    exportBackup: "synapse:config:export-backup",
-    get: "synapse:config:get",
-    importBackup: "synapse:config:import-backup",
-    resetApp: "synapse:config:reset-app",
-    update: "synapse:config:update",
-  },
-  identity: {
-    adoptExistingUserId: "synapse:identity:adopt-existing-user-id",
-    generateNewId: "synapse:identity:generate-new-id",
-    getLocalState: "synapse:identity:get-local-state",
-  },
-  userProfile: {
-    getRepoState: "synapse:user-profile:get-repo-state",
-    listRepoProfiles: "synapse:user-profile:list-repo-profiles",
-    updateDisplayName: "synapse:user-profile:update-display-name",
-  },
-  log: {
-    clear: "synapse:log:clear",
-    export: "synapse:log:export",
-    listFiles: "synapse:log:list-files",
-    readAll: "synapse:log:read-all",
-    readFiles: "synapse:log:read-files",
-    write: "synapse:log:write",
-  },
+import { contextBridge, ipcRenderer } from "electron"
+import { IPC_CHANNELS } from "./generated/ipc-channels.generated"
+import type { SynapseBridge } from "../src/types/bridge"
+
+// Event channels (not in generated IPC_CHANNELS because they're events, not methods)
+const EVENT_CHANNELS = {
   repository: {
-    checkInitializationPreview: "synapse:repository:check-initialization-preview",
-    createLocalRepository: "synapse:repository:create-local-repository",
-    chooseDirectory: "synapse:repository:choose-directory",
-    flushPendingPushes: "synapse:repository:flush-pending-pushes",
-    getPendingPushes: "synapse:repository:get-pending-pushes",
-    getStates: "synapse:repository:get-states",
-    initializeStructure: "synapse:repository:initialize-structure",
     pendingPushesUpdated: "synapse:repository:pending-pushes-updated",
-    runMaintenance: "synapse:repository:run-maintenance",
-    sync: "synapse:repository:sync",
     progress: "synapse:repository:progress",
     updated: "synapse:repository:updated",
-    validateDirectory: "synapse:repository:validate-directory",
-  },
-  editor: {
-    getGlobalDirectories: "synapse:editor:get-global-directories",
-    createDirectory: "synapse:editor:create-directory",
-  },
-  editorScan: {
-    scanAll: "synapse:editor-scan:scan-all",
-    readItemContent: "synapse:editor-scan:read-item-content",
-    listSkillFiles: "synapse:editor-scan:list-skill-files",
-  },
-  shell: {
-    showItemInFolder: "synapse:shell:show-item-in-folder",
   },
   update: {
-    cancelDownload: "synapse:update:cancel-download",
-    checkForUpdates: "synapse:update:check-for-updates",
-    getState: "synapse:update:get-state",
-    installUpdate: "synapse:update:install-update",
-    openUpdatePage: "synapse:update:open-update-page",
     stateChanged: "synapse:update:state-changed",
+    openUpdatePage: "synapse:update:open-update-page",
   },
   dataStore: {
-    listTables: "synapse:data-store:list-tables",
-    createTable: "synapse:data-store:create-table",
-    dropTable: "synapse:data-store:drop-table",
-    describeTable: "synapse:data-store:describe-table",
-    addColumn: "synapse:data-store:add-column",
-    updateColumnDescription: "synapse:data-store:update-column-description",
-    updateColumnChoices: "synapse:data-store:update-column-choices",
-    getColumnChoicesUsage: "synapse:data-store:get-column-choices-usage",
-    insert: "synapse:data-store:insert",
-    batchInsert: "synapse:data-store:batch-insert",
-    query: "synapse:data-store:query",
-    update: "synapse:data-store:update",
-    delete: "synapse:data-store:delete",
-    updateWhere: "synapse:data-store:update-where",
-    deleteWhere: "synapse:data-store:delete-where",
-    count: "synapse:data-store:count",
-    renameTable: "synapse:data-store:rename-table",
-    renameColumn: "synapse:data-store:rename-column",
-    dropColumn: "synapse:data-store:drop-column",
-    rawSQL: "synapse:data-store:raw-sql",
-    getStatus: "synapse:data-store:get-status",
-    exportDB: "synapse:data-store:export-db",
-    importDB: "synapse:data-store:import-db",
-    installCLI: "synapse:data-store:install-cli",
-    getCliStatus: "synapse:data-store:get-cli-status",
-    getCliDebugInfo: "synapse:data-store:get-cli-debug-info",
-    getMcpHttpStatus: "synapse:data-store:get-mcp-http-status",
-    getMcpStatus: "synapse:data-store:get-mcp-status",
-    getMCPServers: "synapse:data-store:get-mcp-servers",
-    openMCPSettings: "synapse:data-store:open-mcp-settings",
-    registerMCP: "synapse:data-store:register-mcp",
     changed: "synapse:data-store:changed",
   },
-} as const satisfies SynapseAllChannels
+}
 
-function subscribeToChannel<T>(channel: string, listener: (payload: T) => void): () => void {
-  const wrappedListener = (_event: Electron.IpcRendererEvent, payload: T) => {
-    listener(payload)
-  }
+// Data store channels (not yet migrated to IpcModule)
+const DATA_STORE_CHANNELS = {
+  listTables: "synapse:data-store:list-tables",
+  createTable: "synapse:data-store:create-table",
+  dropTable: "synapse:data-store:drop-table",
+  describeTable: "synapse:data-store:describe-table",
+  addColumn: "synapse:data-store:add-column",
+  updateColumnDescription: "synapse:data-store:update-column-description",
+  updateColumnChoices: "synapse:data-store:update-column-choices",
+  getColumnChoicesUsage: "synapse:data-store:get-column-choices-usage",
+  insert: "synapse:data-store:insert",
+  batchInsert: "synapse:data-store:batch-insert",
+  query: "synapse:data-store:query",
+  update: "synapse:data-store:update",
+  delete: "synapse:data-store:delete",
+  updateWhere: "synapse:data-store:update-where",
+  deleteWhere: "synapse:data-store:delete-where",
+  count: "synapse:data-store:count",
+  renameTable: "synapse:data-store:rename-table",
+  renameColumn: "synapse:data-store:rename-column",
+  dropColumn: "synapse:data-store:drop-column",
+  rawSQL: "synapse:data-store:raw-sql",
+  getStatus: "synapse:data-store:get-status",
+  exportDB: "synapse:data-store:export-db",
+  importDB: "synapse:data-store:import-db",
+  installCLI: "synapse:data-store:install-cli",
+  getCliStatus: "synapse:data-store:get-cli-status",
+  getCliDebugInfo: "synapse:data-store:get-cli-debug-info",
+  getMcpHttpStatus: "synapse:data-store:get-mcp-http-status",
+  getMcpStatus: "synapse:data-store:get-mcp-status",
+  getMCPServers: "synapse:data-store:get-mcp-servers",
+  openMCPSettings: "synapse:data-store:open-mcp-settings",
+  registerMCP: "synapse:data-store:register-mcp",
+} as const
 
-  ipcRenderer.on(channel, wrappedListener)
+// Helper to create invoke wrapper
+const invoke = (channel: string) => (args?: unknown) => ipcRenderer.invoke(channel, args)
 
-  return () => {
-    ipcRenderer.removeListener(channel, wrappedListener)
+// Helper to create send wrapper
+const send = (channel: string) => (args?: unknown) => ipcRenderer.send(channel, args)
+
+// Helper to create subscription
+const subscribe = (channel: string) => (listener: (payload: unknown) => void) => {
+  const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown) => listener(payload)
+  ipcRenderer.on(channel, wrapped)
+  return (): void => {
+    ipcRenderer.removeListener(channel, wrapped)
   }
 }
 
@@ -145,147 +83,134 @@ const synapseBridge: SynapseBridge = {
     node: process.versions.node,
   },
   content: {
-    list: (args) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.list, args),
-    getContent: (args) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getContent, args),
-    getDetail: (args) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getDetail, args),
-    getHistory: (args) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getHistory, args),
-    getHistoryVersion: (args) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getHistoryVersion, args),
-    create: (request) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.create, request),
-    update: (request) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.update, request),
-    deleteContent: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.deleteContent, payload),
-    listDeleted: (args) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.listDeleted, args),
-    restore: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.restore, payload),
-    purge: (payload) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.purge, payload),
-    download: (args) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.download, args),
-    openDetailWindow: (payload) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.openDetailWindow, payload),
-    getEditorAdapters: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getEditorAdapters),
-    installToEditor: (payload) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.installToEditor, payload),
-    readEditorInstallFormValues: (payload) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.readEditorInstallFormValues, payload),
-    readIconImage: (args) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.readIconImage, args),
-    resolveEditorInstallTarget: (payload) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.resolveEditorInstallTarget, payload),
+    list: invoke(IPC_CHANNELS.content.list),
+    getContent: invoke(IPC_CHANNELS.content.getContent),
+    getDetail: invoke(IPC_CHANNELS.content.getDetail),
+    getHistory: invoke(IPC_CHANNELS.content.getHistory),
+    getHistoryVersion: invoke(IPC_CHANNELS.content.getHistoryVersion),
+    create: invoke(IPC_CHANNELS.content.create),
+    update: invoke(IPC_CHANNELS.content.update),
+    deleteContent: invoke(IPC_CHANNELS.content.deleteContent),
+    listDeleted: invoke(IPC_CHANNELS.content.listDeleted),
+    restore: invoke(IPC_CHANNELS.content.restore),
+    purge: invoke(IPC_CHANNELS.content.purge),
+    download: invoke(IPC_CHANNELS.content.download),
+    openDetailWindow: invoke(IPC_CHANNELS.content.openDetailWindow),
+    getEditorAdapters: invoke(IPC_CHANNELS.content.getEditorAdapters),
+    installToEditor: invoke(IPC_CHANNELS.content.installToEditor),
+    readEditorInstallFormValues: invoke(IPC_CHANNELS.content.readEditorInstallFormValues),
+    readIconImage: invoke(IPC_CHANNELS.content.readIconImage),
+    resolveEditorInstallTarget: invoke(IPC_CHANNELS.content.resolveEditorInstallTarget),
   },
   cli: {
-    detect: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.cli.detect),
+    detect: invoke(IPC_CHANNELS.cli.detect),
   },
   config: {
-    exportBackup: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.exportBackup),
-    get: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.get),
-    importBackup: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.importBackup),
-    resetApp: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.resetApp),
-    update: (patch) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.config.update, patch),
+    exportBackup: invoke(IPC_CHANNELS.config.exportBackup),
+    get: invoke(IPC_CHANNELS.config.get),
+    importBackup: invoke(IPC_CHANNELS.config.importBackup),
+    resetApp: invoke(IPC_CHANNELS.config.resetApp),
+    update: invoke(IPC_CHANNELS.config.update),
   },
   identity: {
     adoptExistingUserId: (userId, repoId) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.adoptExistingUserId, { repoId, userId }),
-    generateNewId: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.generateNewId),
-    getLocalState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.identity.getLocalState),
+      invoke(IPC_CHANNELS.identity.adoptExistingUserId)({ repoId, userId }),
+    generateNewId: invoke(IPC_CHANNELS.identity.generateNewId),
+    getLocalState: invoke(IPC_CHANNELS.identity.getLocalState),
   },
   userProfile: {
-    getRepoState: (repoId) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.userProfile.getRepoState, { repoId }),
-    listRepoProfiles: (repoId) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.userProfile.listRepoProfiles, { repoId }),
+    getRepoState: (repoId) => invoke(IPC_CHANNELS["user-profile"].getRepoState)({ repoId }),
+    listRepoProfiles: (repoId) => invoke(IPC_CHANNELS["user-profile"].listRepoProfiles)({ repoId }),
     updateDisplayName: (repoId, displayName) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.userProfile.updateDisplayName, {
-        displayName,
-        repoId,
-      }),
+      invoke(IPC_CHANNELS["user-profile"].updateDisplayName)({ displayName, repoId }),
   },
   log: {
-    clear: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.clear),
-    export: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.export),
-    listFiles: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.listFiles),
-    readAll: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.readAll),
-    readFiles: (fileNames: string[]) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.log.readFiles, fileNames),
-    write: (payload) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.log.write, payload),
+    clear: invoke(IPC_CHANNELS.log.clear),
+    export: invoke(IPC_CHANNELS.log.export),
+    listFiles: invoke(IPC_CHANNELS.log.listFiles),
+    readAll: invoke(IPC_CHANNELS.log.readAll),
+    readFiles: (fileNames: string[]) => invoke(IPC_CHANNELS.log.readFiles)(fileNames),
+    write: send(IPC_CHANNELS.log.write),
   },
   editor: {
-    getGlobalDirectories: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editor.getGlobalDirectories),
-    createDirectory: (dirPath: string) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editor.createDirectory, dirPath),
+    getGlobalDirectories: invoke(IPC_CHANNELS.editor.getGlobalDirectories),
+    createDirectory: (dirPath: string) => invoke(IPC_CHANNELS.editor.createDirectory)(dirPath),
   },
   editorScan: {
-    scanAll: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editorScan.scanAll),
-    readItemContent: (filePath: string) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editorScan.readItemContent, filePath),
-    listSkillFiles: (dirPath: string) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.editorScan.listSkillFiles, dirPath),
+    scanAll: invoke(IPC_CHANNELS["editor-scan"].scanAll),
+    readItemContent: (filePath: string) => invoke(IPC_CHANNELS["editor-scan"].readItemContent)(filePath),
+    listSkillFiles: (dirPath: string) => invoke(IPC_CHANNELS["editor-scan"].listSkillFiles)(dirPath),
   },
   shell: {
-    showItemInFolder: (filePath: string) => ipcRenderer.send(SYNAPSE_PRELOAD_CHANNELS.shell.showItemInFolder, filePath),
+    showItemInFolder: (filePath: string) => send(IPC_CHANNELS.shell.showItemInFolder)(filePath),
   },
   repository: {
     checkInitializationPreview: (repositoryUuid) =>
-      ipcRenderer.invoke(
-        SYNAPSE_PRELOAD_CHANNELS.repository.checkInitializationPreview,
-        repositoryUuid,
-      ),
+      invoke(IPC_CHANNELS.repository.checkInitializationPreview)(repositoryUuid),
     createLocalRepository: (payload) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.createLocalRepository, payload),
-    chooseDirectory: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.chooseDirectory),
+      invoke(IPC_CHANNELS.repository.createLocalRepository)(payload),
+    chooseDirectory: invoke(IPC_CHANNELS.repository.chooseDirectory),
     flushPendingPushes: (repositoryUuid) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.flushPendingPushes, repositoryUuid),
+      invoke(IPC_CHANNELS.repository.flushPendingPushes)(repositoryUuid),
     getPendingPushes: (repositoryUuid) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.getPendingPushes, repositoryUuid),
-    getStates: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.getStates),
+      invoke(IPC_CHANNELS.repository.getPendingPushes)(repositoryUuid),
+    getStates: invoke(IPC_CHANNELS.repository.getStates),
     initializeStructure: (repositoryUuid) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.initializeStructure, repositoryUuid),
-    onPendingPushesUpdated: (listener) =>
-      subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.pendingPushesUpdated, listener),
+      invoke(IPC_CHANNELS.repository.initializeStructure)(repositoryUuid),
+    onPendingPushesUpdated: subscribe(EVENT_CHANNELS.repository.pendingPushesUpdated) as unknown as SynapseBridge["repository"]["onPendingPushesUpdated"],
     runMaintenance: (repositoryUuid) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.runMaintenance, repositoryUuid),
-    sync: (repositoryUuid) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.sync, repositoryUuid),
-    onProgress: (listener) =>
-      subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.progress, listener),
-    onUpdated: (listener) => subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.repository.updated, listener),
-    validateDirectory: (targetPath) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.repository.validateDirectory, targetPath),
+      invoke(IPC_CHANNELS.repository.runMaintenance)(repositoryUuid),
+    sync: (repositoryUuid) => invoke(IPC_CHANNELS.repository.sync)(repositoryUuid),
+    onProgress: subscribe(EVENT_CHANNELS.repository.progress) as unknown as SynapseBridge["repository"]["onProgress"],
+    onUpdated: subscribe(EVENT_CHANNELS.repository.updated) as unknown as SynapseBridge["repository"]["onUpdated"],
+    validateDirectory: (targetPath) =>
+      invoke(IPC_CHANNELS.repository.validateDirectory)(targetPath),
   },
   updater: {
-    cancelDownload: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.cancelDownload),
-    checkForUpdates: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.checkForUpdates),
-    getState: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.getState),
-    installUpdate: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.update.installUpdate),
-    onStateChanged: (listener) =>
-      subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.stateChanged, listener),
-    onOpenUpdatePage: (listener) =>
-      subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.update.openUpdatePage, listener),
+    cancelDownload: invoke(IPC_CHANNELS.update.cancelDownload),
+    checkForUpdates: invoke(IPC_CHANNELS.update.checkForUpdates),
+    getState: invoke(IPC_CHANNELS.update.getState),
+    installUpdate: invoke(IPC_CHANNELS.update.installUpdate),
+    onStateChanged: subscribe(EVENT_CHANNELS.update.stateChanged) as unknown as SynapseBridge["updater"]["onStateChanged"],
+    onOpenUpdatePage: subscribe(EVENT_CHANNELS.update.openUpdatePage) as unknown as SynapseBridge["updater"]["onOpenUpdatePage"],
   },
   dataStore: {
-    listTables: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.listTables),
-    createTable: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.createTable, params),
-    dropTable: (name) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.dropTable, name),
-    describeTable: (name) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.describeTable, name),
-    addColumn: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.addColumn, params),
-    updateColumnDescription: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.updateColumnDescription, params),
-    updateColumnChoices: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.updateColumnChoices, params),
-    getColumnChoicesUsage: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getColumnChoicesUsage, params),
-    insert: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.insert, params),
-    batchInsert: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.batchInsert, params),
-    query: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.query, params),
-    update: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.update, params),
-    delete: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.delete, params),
-    updateWhere: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.updateWhere, params),
-    deleteWhere: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.deleteWhere, params),
-    count: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.count, params),
-    renameTable: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.renameTable, params),
-    renameColumn: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.renameColumn, params),
-    dropColumn: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.dropColumn, params),
-    rawSQL: (params) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.rawSQL, params),
-    getStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getStatus),
-    exportDB: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.exportDB),
-    importDB: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.importDB),
-    installCLI: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.installCLI),
-    getCliStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getCliStatus),
-    getCliDebugInfo: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getCliDebugInfo),
-    getMcpHttpStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getMcpHttpStatus),
-    getMcpStatus: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getMcpStatus),
-    getMCPServers: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.getMCPServers),
-    openMCPSettings: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.openMCPSettings, target),
-    registerMCP: (target) => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.dataStore.registerMCP, target),
-    onChanged: (listener) => subscribeToChannel(SYNAPSE_PRELOAD_CHANNELS.dataStore.changed, listener),
+    listTables: invoke(DATA_STORE_CHANNELS.listTables),
+    createTable: (params) => invoke(DATA_STORE_CHANNELS.createTable)(params),
+    dropTable: (name) => invoke(DATA_STORE_CHANNELS.dropTable)(name),
+    describeTable: (name) => invoke(DATA_STORE_CHANNELS.describeTable)(name),
+    addColumn: (params) => invoke(DATA_STORE_CHANNELS.addColumn)(params),
+    updateColumnDescription: (params) =>
+      invoke(DATA_STORE_CHANNELS.updateColumnDescription)(params),
+    updateColumnChoices: (params) =>
+      invoke(DATA_STORE_CHANNELS.updateColumnChoices)(params),
+    getColumnChoicesUsage: (params) =>
+      invoke(DATA_STORE_CHANNELS.getColumnChoicesUsage)(params),
+    insert: (params) => invoke(DATA_STORE_CHANNELS.insert)(params),
+    batchInsert: (params) => invoke(DATA_STORE_CHANNELS.batchInsert)(params),
+    query: (params) => invoke(DATA_STORE_CHANNELS.query)(params),
+    update: (params) => invoke(DATA_STORE_CHANNELS.update)(params),
+    delete: (params) => invoke(DATA_STORE_CHANNELS.delete)(params),
+    updateWhere: (params) => invoke(DATA_STORE_CHANNELS.updateWhere)(params),
+    deleteWhere: (params) => invoke(DATA_STORE_CHANNELS.deleteWhere)(params),
+    count: (params) => invoke(DATA_STORE_CHANNELS.count)(params),
+    renameTable: (params) => invoke(DATA_STORE_CHANNELS.renameTable)(params),
+    renameColumn: (params) => invoke(DATA_STORE_CHANNELS.renameColumn)(params),
+    dropColumn: (params) => invoke(DATA_STORE_CHANNELS.dropColumn)(params),
+    rawSQL: (params) => invoke(DATA_STORE_CHANNELS.rawSQL)(params),
+    getStatus: invoke(DATA_STORE_CHANNELS.getStatus),
+    exportDB: invoke(DATA_STORE_CHANNELS.exportDB),
+    importDB: invoke(DATA_STORE_CHANNELS.importDB),
+    installCLI: invoke(DATA_STORE_CHANNELS.installCLI),
+    getCliStatus: invoke(DATA_STORE_CHANNELS.getCliStatus),
+    getCliDebugInfo: invoke(DATA_STORE_CHANNELS.getCliDebugInfo),
+    getMcpHttpStatus: invoke(DATA_STORE_CHANNELS.getMcpHttpStatus),
+    getMcpStatus: invoke(DATA_STORE_CHANNELS.getMcpStatus),
+    getMCPServers: invoke(DATA_STORE_CHANNELS.getMCPServers),
+    openMCPSettings: (target) =>
+      invoke(DATA_STORE_CHANNELS.openMCPSettings)(target),
+    registerMCP: (target) => invoke(DATA_STORE_CHANNELS.registerMCP)(target),
+    onChanged: subscribe(EVENT_CHANNELS.dataStore.changed) as unknown as SynapseBridge["dataStore"]["onChanged"],
   },
 }
 
