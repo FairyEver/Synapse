@@ -19,15 +19,9 @@ import {
 } from "../../electron/runtime/project-container"
 import { createMainProcessRuntime } from "../../electron/runtime/process"
 import { bootstrap } from "../../electron/runtime/runtime-mode"
+import { createNoopLogger } from "../../electron/runtime/lib/test-helpers"
 
-const noopLogger = () => {
-  const noop = () => {}
-  const l = {
-    trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop,
-    child: () => l,
-  }
-  return l
-}
+const noopLogger = createNoopLogger
 
 describe("Phase 0.5 integration (T5.7)", () => {
   it("bootstrap('gui') returns a RuntimeContext with the registries provided", async () => {

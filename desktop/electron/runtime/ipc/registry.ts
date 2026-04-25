@@ -21,6 +21,7 @@ import type {
   IpcRegistry,
 } from "./types"
 import { tryValidateResponse, validateRequest } from "./validation"
+import { makeIdempotentDisposer } from "../lib"
 
 /**
  * Transport callback: the IpcRegistry calls this once per registered method
@@ -65,12 +66,22 @@ export class IpcRegistryImpl implements IpcRegistry {
     for (const [methodName, descriptor] of Object.entries(module.methods)) {
       const channel = descriptor.channel
       if (this.channelOwner.has(channel)) {
-        // Roll back partial install before rethrowing.
+        // Roll back partial install before rethrowing. The error's details
+        // record how many handlers were rolled back so consumers can
+        // distinguish "first method conflicted" from "later method
+        // conflicted, several already installed".
+        const rolledBack = entry.disposers.length
         for (const dispose of entry.disposers) dispose()
         throw new IpcRuntimeError(
           "ipc/channel-collision",
           `Channel "${channel}" is already owned by module "${this.channelOwner.get(channel)}" — cannot register for "${module.id}.${methodName}"`,
-          { details: { channel, ownerModuleId: this.channelOwner.get(channel) } },
+          {
+            details: {
+              channel,
+              ownerModuleId: this.channelOwner.get(channel),
+              rolledBackCount: rolledBack,
+            },
+          },
         )
       }
       const dispose = this.installMethod(channel, descriptor, ctx)
@@ -92,12 +103,12 @@ export class IpcRegistryImpl implements IpcRegistry {
 
     return {
       moduleId: module.id,
-      unregister: () => {
+      unregister: makeIdempotentDisposer(() => {
         const current = this.modules.get(module.id)
         if (!current) return
         for (const dispose of current.disposers) dispose()
         this.modules.delete(module.id)
-      },
+      }),
     }
   }
 

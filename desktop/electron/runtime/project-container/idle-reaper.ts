@@ -8,6 +8,7 @@
  */
 
 import type { ProjectContainerRegistry } from "./types"
+import { makeUnrefInterval } from "../lib"
 
 export interface IdleReaperOptions {
   readonly idleTimeoutMs?: number
@@ -21,7 +22,7 @@ export class IdleReaper {
   private readonly checkIntervalMs: number
   private readonly now: () => number
   private readonly lastActiveAt = new Map<string, number>()
-  private timer: ReturnType<typeof setInterval> | null = null
+  private cancelTimer: (() => void) | null = null
 
   constructor(registry: ProjectContainerRegistry, options: IdleReaperOptions = {}) {
     this.registry = registry
@@ -31,18 +32,15 @@ export class IdleReaper {
   }
 
   start(): void {
-    if (this.timer) return
-    this.timer = setInterval(() => {
+    if (this.cancelTimer) return
+    this.cancelTimer = makeUnrefInterval(this.checkIntervalMs, () => {
       void this.sweep()
-    }, this.checkIntervalMs)
-    if (typeof this.timer.unref === "function") this.timer.unref()
+    })
   }
 
   stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer)
-      this.timer = null
-    }
+    this.cancelTimer?.()
+    this.cancelTimer = null
   }
 
   markActive(projectId: string): void {

@@ -262,4 +262,53 @@ describe("DataRepositoryImpl (T2.13)", () => {
       }),
     ).rejects.toThrow(/Unexpected backup format/)
   })
+
+  it("importAll() drops items that fail the schema validate() — does not corrupt the namespace", async () => {
+    const dir = await tempDir()
+    try {
+      const repo = createDataRepository()
+      const handle = new JsonNamespace<CoreConfigV1>({
+        name: coreConfigSchema.name,
+        schemaVersion: coreConfigSchema.currentVersion,
+        backend: "json",
+        filePath: path.join(dir, "core.config.json"),
+        validate: coreConfigSchema.validate,
+      })
+      repo.register(coreConfigSchema, handle)
+
+      // Seed with a valid singleton.
+      await handle.setSingleton({
+        schemaVersion: 1,
+        activeRepoUuid: "old",
+        repositories: [],
+        global: {},
+      })
+
+      // Import payload contains a malformed singleton (missing required fields).
+      // Without schema validation the cast `as never` would happily call
+      // setSingleton with garbage and corrupt the namespace.
+      await repo.importAll({
+        format: "synapse-backup-v1",
+        exportedAt: "2026-04-25T00:00:00Z",
+        namespaces: [
+          {
+            name: coreConfigSchema.name,
+            schemaVersion: 1,
+            encrypted: false,
+            data: {
+              singleton: { activeRepoUuid: "no-schema-version-marker" },
+              items: [],
+            },
+          },
+        ],
+      })
+
+      // The malformed singleton was rejected by validate(), so the namespace
+      // still holds the original "old" singleton (no corruption).
+      const result = await handle.getSingleton()
+      expect(result?.activeRepoUuid).toBe("old")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

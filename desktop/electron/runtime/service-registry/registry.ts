@@ -11,6 +11,7 @@ import {
   ServiceStopTimeoutError,
 } from "./errors"
 import { descriptorAsNode, reverseTopoSort, topoSort } from "./topo"
+import { makeUnrefTimeout } from "../lib"
 import type {
   DegradedServiceFailure,
   ServiceContext,
@@ -175,14 +176,23 @@ export class ServiceRegistryImpl implements ServiceRegistry {
     }
 
     // Reverse topo order, but include any partially-running services.
+    // If startAll succeeded the graph must be valid, so we don't have a real
+    // "invalid graph at stop time" path. The fallback below covers the
+    // pathological case where stopAll is called without a prior successful
+    // startAll (e.g. tests that exercise stopAll on a partially-registered
+    // registry); we surface it via lastError on the first entry so callers
+    // can find it via inspect() afterwards.
     let order: ServiceDescriptor<unknown>[]
     try {
       order = [...reverseTopoSort(this.order.map((id) => descriptorAsNode(this.requireEntry(id).descriptor)))].map(
         (n) => this.requireEntry(n.id).descriptor,
       )
-    } catch {
-      // If the graph is invalid (shouldn't happen after startAll, but be defensive),
-      // fall back to insertion-order reverse.
+    } catch (err) {
+      const wrapped = err instanceof Error ? err : new Error(String(err))
+      if (this.order.length > 0) {
+        const firstEntry = this.entries.get(this.order[0]!)
+        if (firstEntry) firstEntry.lastError = wrapped
+      }
       order = [...this.order].reverse().map((id) => this.requireEntry(id).descriptor)
     }
 
@@ -201,7 +211,9 @@ export class ServiceRegistryImpl implements ServiceRegistry {
       }
 
       const remaining = Math.max(0, deadline - Date.now())
-      const limit = Math.min(perServiceTimeout, remaining || perServiceTimeout)
+      // remaining can be 0 when the global deadline elapsed; runWithTimeout
+      // will reject immediately in that case via its own zero-check.
+      const limit = remaining === 0 ? 0 : Math.min(perServiceTimeout, remaining)
 
       try {
         if (descriptor.stop && entry.instance !== undefined) {
@@ -264,16 +276,14 @@ async function runWithTimeout<T>(
   if (timeoutMs <= 0) {
     throw buildTimeoutError()
   }
-  let timer: ReturnType<typeof setTimeout> | null = null
+  let cancel: () => void = () => {}
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(buildTimeoutError()), timeoutMs)
-    // Avoid keeping the event loop alive for tests.
-    if (timer && typeof timer.unref === "function") timer.unref()
+    cancel = makeUnrefTimeout(timeoutMs, () => reject(buildTimeoutError()))
   })
   try {
     return await Promise.race([fn(), timeout])
   } finally {
-    if (timer) clearTimeout(timer)
+    cancel()
   }
 }
 

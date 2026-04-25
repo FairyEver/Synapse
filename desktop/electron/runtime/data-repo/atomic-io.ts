@@ -71,25 +71,9 @@ export async function writeTextFileAtomic(
   text: string,
   options: AtomicWriteOptions = {},
 ): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true })
-
-  const dir = path.dirname(filePath)
-  const base = path.basename(filePath)
-  const tmpName = `.${base}.tmp-${randomBytes(TMP_SUFFIX_BYTES).toString("hex")}`
-  const tmpPath = path.join(dir, tmpName)
-
-  try {
+  await writeAtomic(filePath, options, async (tmpPath) => {
     await writeFile(tmpPath, text, { encoding: "utf8", mode: options.mode })
-    await rename(tmpPath, filePath)
-  } catch (err) {
-    // Best effort: clean up the partial tmp file before re-throwing.
-    try {
-      await rm(tmpPath, { force: true })
-    } catch {
-      // ignore — original error matters more
-    }
-    throw err
-  }
+  })
 }
 
 export async function writeBinaryFileAtomic(
@@ -97,22 +81,39 @@ export async function writeBinaryFileAtomic(
   bytes: Uint8Array,
   options: AtomicWriteOptions = {},
 ): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true })
+  await writeAtomic(filePath, options, async (tmpPath) => {
+    await writeFile(tmpPath, bytes, { mode: options.mode })
+  })
+}
 
+/**
+ * Internal helper: prepare a temp path next to `filePath`, hand it to the
+ * caller-provided writer, then rename atomically. On any failure, best-effort
+ * remove the partial tmp file (best-effort failure is logged via the
+ * `unhandledRejection` handler in main.ts; we deliberately don't surface a
+ * second error here because the original write failure is what callers care
+ * about).
+ */
+async function writeAtomic(
+  filePath: string,
+  _options: AtomicWriteOptions,
+  writeBody: (tmpPath: string) => Promise<void>,
+): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true })
   const dir = path.dirname(filePath)
   const base = path.basename(filePath)
-  const tmpName = `.${base}.tmp-${randomBytes(TMP_SUFFIX_BYTES).toString("hex")}`
-  const tmpPath = path.join(dir, tmpName)
-
+  const tmpPath = path.join(
+    dir,
+    `.${base}.tmp-${randomBytes(TMP_SUFFIX_BYTES).toString("hex")}`,
+  )
   try {
-    await writeFile(tmpPath, bytes, { mode: options.mode })
+    await writeBody(tmpPath)
     await rename(tmpPath, filePath)
   } catch (err) {
-    try {
-      await rm(tmpPath, { force: true })
-    } catch {
-      // ignore
-    }
+    await rm(tmpPath, { force: true }).catch(() => {
+      // The original write/rename error is the meaningful one; cleanup
+      // failures here are noise. Caller still sees the throw on the next line.
+    })
     throw err
   }
 }

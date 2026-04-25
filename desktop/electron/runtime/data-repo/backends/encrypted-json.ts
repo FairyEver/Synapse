@@ -27,6 +27,7 @@ import {
   InvalidNamespaceDataError,
 } from "../errors"
 import type { JsonFileEnvelope } from "./json"
+import { isEnvelopeShape } from "../envelope"
 
 export interface SafeStorage {
   isEncryptionAvailable(): boolean
@@ -185,13 +186,4 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     await this.persist()
     this.emit({ kind: "remove", id, previous })
   }
-}
-
-function isEnvelopeShape<T>(value: unknown): value is JsonFileEnvelope<T> {
-  if (typeof value !== "object" || value === null) return false
-  const v = value as Record<string, unknown>
-  if (typeof v.schemaVersion !== "number") return false
-  if (!("singleton" in v)) return false
-  if (typeof v.items !== "object" || v.items === null || Array.isArray(v.items)) return false
-  return true
 }

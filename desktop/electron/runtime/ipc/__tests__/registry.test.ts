@@ -183,4 +183,50 @@ describe("IpcRegistryImpl (T3.2)", () => {
     expect(out).toBe("done")
     expect(Date.now() - t0).toBeGreaterThanOrEqual(8)
   })
+
+  it("unregister() is idempotent — calling twice does not throw or re-detach", () => {
+    const harness = createInMemoryHarness()
+    const result = harness.registry.register(demoModule(), ctx)
+    result.unregister()
+    expect(() => result.unregister()).not.toThrow()
+    expect(harness.registry.list()).toEqual([])
+  })
+
+  it("channel collision rolls back ALL partial installs and reports the count", () => {
+    const harness = createInMemoryHarness()
+    harness.registry.register(demoModule(), ctx)
+    try {
+      harness.registry.register(
+        {
+          id: "second",
+          methods: {
+            okay: {
+              kind: "invoke",
+              channel: "synapse:second:okay",
+              request: z.object({}),
+              response: z.string(),
+              handler: () => "ok",
+            },
+            collide: {
+              kind: "invoke",
+              channel: "synapse:demo:greet", // collision after `okay` was installed
+              request: z.object({}),
+              response: z.string(),
+              handler: () => "shadow",
+            },
+          },
+          events: {},
+        },
+        { ...ctx, moduleId: "second" },
+      )
+      throw new Error("expected to throw")
+    } catch (err) {
+      const e = err as { code: string; details?: { rolledBackCount?: number } }
+      expect(e.code).toBe("ipc/channel-collision")
+      expect(e.details?.rolledBackCount).toBe(1)
+    }
+    // First install survives, second module never registered, channel "okay"
+    // freed by the rollback.
+    expect(harness.registry.list().map((m) => m.moduleId)).toEqual(["demo"])
+  })
 })

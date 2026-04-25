@@ -1,0 +1,28 @@
+/**
+ * Phase 0 — 共享测试 helper.
+ *
+ * 单测不应该重复实现 noop logger、stub safeStorage 之类。这里集中管理。
+ * 仅供 vitest 使用；不会进入产物（tsconfig.test.json 包含但 build:electron 排除）。
+ */
+
+import type { StructuredLogger } from "../service-registry/types"
+
+/**
+ * 满足 StructuredLogger 占位接口的 noop logger。
+ * 每个 child(prefix) 返回同一个实例（避免内存增长）。
+ */
+export function createNoopLogger(): StructuredLogger {
+  const noop = () => {
+    /* intentional no-op */
+  }
+  const logger: StructuredLogger = {
+    trace: noop,
+    debug: noop,
+    info: noop,
+    warn: noop,
+    error: noop,
+    fatal: noop,
+    child: () => logger,
+  }
+  return logger
+}

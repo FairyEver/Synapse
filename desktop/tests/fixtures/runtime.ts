@@ -13,6 +13,7 @@ import {
   type ProjectContainerRegistry,
 } from "../../electron/runtime/project-container"
 import { createInMemoryHarness, type InMemoryIpcHarness } from "../../electron/runtime/ipc"
+import { createNoopLogger } from "../../electron/runtime/lib/test-helpers"
 
 export interface RuntimeFixture {
   readonly serviceRegistry: ReturnType<typeof createServiceRegistry>
@@ -20,20 +21,6 @@ export interface RuntimeFixture {
   readonly dataRepo: ReturnType<typeof createDataRepository>
   readonly container: ProjectContainerRegistry
   readonly ipc: InMemoryIpcHarness
-}
-
-const noopLogger = () => {
-  const noop = () => {}
-  const l = {
-    trace: noop,
-    debug: noop,
-    info: noop,
-    warn: noop,
-    error: noop,
-    fatal: noop,
-    child: () => l,
-  }
-  return l
 }
 
 export function createRuntimeFixture(): RuntimeFixture {
@@ -44,11 +31,11 @@ export function createRuntimeFixture(): RuntimeFixture {
     globalRegistry: serviceRegistry,
     globalEventBus: eventBus,
     globalDataRepo: dataRepo,
-    buildLogger: () => noopLogger(),
+    buildLogger: () => createNoopLogger(),
   })
   const ipc = createInMemoryHarness()
   return { serviceRegistry, eventBus, dataRepo, container, ipc }
 }
 
 /** Convenience: a noop StructuredLogger usable in any test. */
-export const testLogger = noopLogger()
+export const testLogger = createNoopLogger()

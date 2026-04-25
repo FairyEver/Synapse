@@ -47,6 +47,13 @@ export interface WindowDescriptor {
 
 export interface WindowManager {
   register(descriptor: WindowDescriptor): void
+  /**
+   * Open the window registered under `id`. `payload` is opaque — each
+   * descriptor's `create` callback owns the schema; the manager passes it
+   * through unchanged. Descriptors that need a strict shape should validate
+   * inside their own `create` (e.g. via zod) rather than relying on a
+   * manager-level check, since payload shapes differ per window role.
+   */
   open(id: string, payload?: unknown): ManagedWindow
   close(id: string): void
   list(): ReadonlyArray<{ id: string; role: WindowRole; webContentsId: number }>

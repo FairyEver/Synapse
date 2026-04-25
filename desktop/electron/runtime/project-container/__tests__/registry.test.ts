@@ -7,15 +7,9 @@ import {
 import { createEventBus } from "../../event-bus"
 import { createDataRepository } from "../../data-repo"
 import { createServiceRegistry } from "../../service-registry"
+import { createNoopLogger } from "../../lib/test-helpers"
 
-const noopLogger = () => {
-  const noop = () => {}
-  const l = {
-    trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop,
-    child: () => l,
-  }
-  return l
-}
+const noopLogger = createNoopLogger
 
 describe("ProjectContainerRegistry (T5.1 + T5.2)", () => {
   it("opens a container with no scoped services and emits project.activated", async () => {

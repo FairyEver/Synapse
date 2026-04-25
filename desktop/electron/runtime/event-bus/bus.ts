@@ -23,6 +23,7 @@ import type {
   EventListener,
   Unsubscribe,
 } from "./types"
+import { buildKey, makeUnrefTimeout } from "../lib"
 
 const DEFAULT_COALESCE_WINDOW_MS = 16
 
@@ -44,10 +45,10 @@ export class EventBusImpl implements EventBus {
   private nextListenerId = 1
   private readonly broadcaster: EventBroadcaster | null
   private readonly defaultBackpressure: BackpressurePolicy
-  /** Per-coalesce-key timer state. */
+  /** Per-coalesce-key timer state. `cancel` stops the underlying setTimeout. */
   private readonly coalesceTimers = new Map<
     string,
-    { timer: ReturnType<typeof setTimeout>; latestEvent: DomainEvent; options: EventBusEmitOptions }
+    { cancel: () => void; latestEvent: DomainEvent; options: EventBusEmitOptions }
   >()
 
   constructor(options: EventBusOptions = {}) {
@@ -133,23 +134,27 @@ export class EventBusImpl implements EventBus {
       existing.latestEvent = event
       return
     }
-    const timer = setTimeout(() => {
+    const cancel = makeUnrefTimeout(window, () => {
       const slot = this.coalesceTimers.get(key)
       if (!slot) return
       this.coalesceTimers.delete(key)
       this.dispatch(slot.latestEvent)
-    }, window)
-    if (typeof timer.unref === "function") timer.unref()
-    this.coalesceTimers.set(key, { timer, latestEvent: event, options })
+    })
+    this.coalesceTimers.set(key, { cancel, latestEvent: event, options })
   }
 
-  /** Test helper: stop all pending coalesced timers. */
+  /**
+   * Test helper: cancel all pending coalesced timers and synchronously
+   * dispatch their latest events. Snapshot the slots first so a listener
+   * that re-emits during dispatch can't observe a half-cleared map.
+   */
   flushAllForTests(): void {
-    for (const [, slot] of this.coalesceTimers) {
-      clearTimeout(slot.timer)
+    const slots = [...this.coalesceTimers.values()]
+    this.coalesceTimers.clear()
+    for (const slot of slots) {
+      slot.cancel()
       this.dispatch(slot.latestEvent)
     }
-    this.coalesceTimers.clear()
   }
 }
 
@@ -158,14 +163,13 @@ export function channelForDomain(domain: EventDomain): string {
 }
 
 function coalesceKey(event: DomainEvent): string {
-  const scope = event.scope
-  return [
+  return buildKey([
     event.domain,
     event.type,
-    scope?.projectId ?? "",
-    scope?.sessionId ?? "",
-    scope?.repositoryId ?? "",
-  ].join("|")
+    event.scope?.projectId,
+    event.scope?.sessionId,
+    event.scope?.repositoryId,
+  ])
 }
 
 export function createEventBus(options?: EventBusOptions): EventBusImpl {

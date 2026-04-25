@@ -9,6 +9,8 @@
  * Phase 0 keeps these in-memory and dependency-free.
  */
 
+import { makeUnrefTimeout } from "../lib"
+
 // ----- TaskQueue ----------------------------------------------------
 
 export type Priority = "low" | "normal" | "high"
@@ -111,19 +113,20 @@ export class TaskQueueImpl implements TaskQueue {
 
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       const controller = new AbortController()
-      let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+      let cancelTimeout: (() => void) | null = null
       if (entry.job.timeout) {
-        timeoutHandle = setTimeout(() => controller.abort(new Error("Job timed out")), entry.job.timeout)
-        if (typeof timeoutHandle.unref === "function") timeoutHandle.unref()
+        cancelTimeout = makeUnrefTimeout(entry.job.timeout, () =>
+          controller.abort(new Error("Job timed out")),
+        )
       }
       try {
         const result = await entry.job.run(controller.signal)
-        if (timeoutHandle) clearTimeout(timeoutHandle)
+        cancelTimeout?.()
         entry.resolve(result)
         return
       } catch (err) {
         lastErr = err
-        if (timeoutHandle) clearTimeout(timeoutHandle)
+        cancelTimeout?.()
         if (attempt < totalAttempts - 1) {
           await sleep(delay)
           delay = Math.min(delay * backoff || 1, maxDelay)
@@ -135,13 +138,12 @@ export class TaskQueueImpl implements TaskQueue {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise<void>((resolve) => {
     if (ms <= 0) {
       resolve()
       return
     }
-    const t = setTimeout(resolve, ms)
-    if (typeof t.unref === "function") t.unref()
+    makeUnrefTimeout(ms, () => resolve())
   })
 }
 

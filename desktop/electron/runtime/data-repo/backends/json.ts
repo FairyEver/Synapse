@@ -21,6 +21,7 @@ import {
   writeJsonFileAtomic,
 } from "../atomic-io"
 import { InvalidNamespaceDataError } from "../errors"
+import { isEnvelopeShape } from "../envelope"
 
 export interface JsonFileEnvelope<T> {
   readonly schemaVersion: number
@@ -169,13 +170,4 @@ export class JsonNamespace<T extends Record<string, unknown>>
     if (!this.cache) return 0
     return Object.keys(this.cache.items).length + (this.cache.singleton ? 1 : 0)
   }
-}
-
-function isEnvelopeShape<T>(value: unknown): value is JsonFileEnvelope<T> {
-  if (typeof value !== "object" || value === null) return false
-  const v = value as Record<string, unknown>
-  if (typeof v.schemaVersion !== "number") return false
-  if (!("singleton" in v)) return false
-  if (typeof v.items !== "object" || v.items === null || Array.isArray(v.items)) return false
-  return true
 }
