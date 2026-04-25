@@ -11,9 +11,10 @@ import { detectClis } from "../../services/cli/cli-detect-service"
 
 // Schema for CLI detection result
 const cliInfoSchema = z.object({
-  name: z.string(),
-  version: z.string().optional(),
-  path: z.string().optional(),
+  id: z.string(),
+  label: z.string(),
+  installed: z.boolean(),
+  path: z.string().nullable(),
 })
 
 export const cliIpcModule: IpcModule = {

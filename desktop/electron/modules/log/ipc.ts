@@ -28,16 +28,7 @@ const exportResultSchema = z.object({
 
 const logFileInfoSchema = z.object({
   name: z.string(),
-  size: z.number(),
-  modifiedAt: z.string(),
-})
-
-const logEntrySchema = z.object({
-  timestamp: z.string(),
-  level: z.string(),
-  category: z.string(),
-  message: z.string(),
-  details: z.unknown().optional(),
+  sizeBytes: z.number(),
 })
 
 export const logIpcModule: IpcModule = {
@@ -99,7 +90,7 @@ export const logIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:log:read-all",
       request: z.void(),
-      response: z.array(logEntrySchema),
+      response: z.string(),
       handler: async (_ctx) => {
         return logStore.readAllLogs()
       },
@@ -117,7 +108,7 @@ export const logIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:log:read-files",
       request: z.array(z.string()),
-      response: z.array(logEntrySchema),
+      response: z.string(),
       handler: async (_ctx, fileNames: string[]) => {
         return logStore.readLogsByNames(fileNames)
       },

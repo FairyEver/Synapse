@@ -11,31 +11,29 @@ import { updateService } from "../../services/update-service"
 
 // Schemas
 const updateStateSchema = z.enum([
+  "unsupported",
   "idle",
   "checking",
-  "update-available",
-  "update-not-available",
+  "available",
   "downloading",
-  "ready-to-install",
+  "downloaded",
+  "not-available",
   "error",
 ])
 
-const updateInfoSchema = z.object({
-  version: z.string().optional(),
-  releaseDate: z.string().optional(),
-  releaseNotes: z.string().optional(),
-})
-
 const updateStateResponseSchema = z.object({
-  state: updateStateSchema,
-  info: updateInfoSchema.optional(),
-  progress: z.object({
-    percent: z.number(),
-    bytesPerSecond: z.number(),
-    total: z.number(),
-    transferred: z.number(),
-  }).optional(),
-  error: z.string().optional(),
+  currentVersion: z.string(),
+  releaseVersion: z.string().nullable(),
+  status: updateStateSchema,
+  message: z.string(),
+  error: z.string().nullable(),
+  downloadPercent: z.number().nullable(),
+  bytesPerSecond: z.number().nullable(),
+  transferredBytes: z.number().nullable(),
+  totalBytes: z.number().nullable(),
+  lastCheckedAt: z.string().nullable(),
+  canCheck: z.boolean(),
+  downloadedFilePath: z.string().nullable(),
 })
 
 export const updateIpcModule: IpcModule = {
@@ -54,10 +52,7 @@ export const updateIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:update:check-for-updates",
       request: z.void(),
-      response: z.object({
-        updateAvailable: z.boolean(),
-        version: z.string().optional(),
-      }),
+      response: updateStateResponseSchema,
       handler: async (_ctx) => {
         return updateService.checkForUpdates()
       },

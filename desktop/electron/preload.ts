@@ -143,9 +143,6 @@ const DATA_STORE_CHANNELS = {
 // Helper to create invoke wrapper
 const invoke = (channel: string) => (args?: unknown) => ipcRenderer.invoke(channel, args)
 
-// Helper to create send wrapper
-const send = (channel: string) => (args?: unknown) => ipcRenderer.send(channel, args)
-
 // Helper to create subscription
 const subscribe = (channel: string) => (listener: (payload: unknown) => void) => {
   const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown) => listener(payload)
@@ -210,41 +207,47 @@ const synapseBridge: SynapseBridge = {
     listFiles: invoke(IPC_CHANNELS.log.listFiles),
     readAll: invoke(IPC_CHANNELS.log.readAll),
     readFiles: (fileNames: string[]) => invoke(IPC_CHANNELS.log.readFiles)(fileNames),
-    write: send(IPC_CHANNELS.log.write),
+    write: (payload) => {
+      void invoke(IPC_CHANNELS.log.write)(payload)
+    },
   },
   editor: {
     getGlobalDirectories: invoke(IPC_CHANNELS.editor.getGlobalDirectories),
-    createDirectory: (dirPath: string) => invoke(IPC_CHANNELS.editor.createDirectory)(dirPath),
+    createDirectory: (dirPath: string) => invoke(IPC_CHANNELS.editor.createDirectory)({ dirPath }),
   },
   editorScan: {
     scanAll: invoke(IPC_CHANNELS["editor-scan"].scanAll),
-    readItemContent: (filePath: string) => invoke(IPC_CHANNELS["editor-scan"].readItemContent)(filePath),
-    listSkillFiles: (dirPath: string) => invoke(IPC_CHANNELS["editor-scan"].listSkillFiles)(dirPath),
+    readItemContent: (filePath: string) =>
+      invoke(IPC_CHANNELS["editor-scan"].readItemContent)({ filePath }),
+    listSkillFiles: (dirPath: string) =>
+      invoke(IPC_CHANNELS["editor-scan"].listSkillFiles)({ dirPath }),
   },
   shell: {
-    showItemInFolder: (filePath: string) => send(IPC_CHANNELS.shell.showItemInFolder)(filePath),
+    showItemInFolder: (filePath: string) => {
+      void invoke(IPC_CHANNELS.shell.showItemInFolder)({ fullPath: filePath })
+    },
   },
   repository: {
     checkInitializationPreview: (repositoryUuid) =>
-      invoke(IPC_CHANNELS.repository.checkInitializationPreview)(repositoryUuid),
+      invoke(IPC_CHANNELS.repository.checkInitializationPreview)({ repositoryUuid }),
     createLocalRepository: (payload) =>
       invoke(IPC_CHANNELS.repository.createLocalRepository)(payload),
     chooseDirectory: invoke(IPC_CHANNELS.repository.chooseDirectory),
     flushPendingPushes: (repositoryUuid) =>
-      invoke(IPC_CHANNELS.repository.flushPendingPushes)(repositoryUuid),
+      invoke(IPC_CHANNELS.repository.flushPendingPushes)({ repositoryUuid }),
     getPendingPushes: (repositoryUuid) =>
-      invoke(IPC_CHANNELS.repository.getPendingPushes)(repositoryUuid),
+      invoke(IPC_CHANNELS.repository.getPendingPushes)({ repositoryUuid }),
     getStates: invoke(IPC_CHANNELS.repository.getStates),
     initializeStructure: (repositoryUuid) =>
-      invoke(IPC_CHANNELS.repository.initializeStructure)(repositoryUuid),
+      invoke(IPC_CHANNELS.repository.initializeStructure)({ repositoryUuid }),
     onPendingPushesUpdated: subscribe(EVENT_CHANNELS.repository.pendingPushesUpdated) as unknown as SynapseBridge["repository"]["onPendingPushesUpdated"],
     runMaintenance: (repositoryUuid) =>
-      invoke(IPC_CHANNELS.repository.runMaintenance)(repositoryUuid),
-    sync: (repositoryUuid) => invoke(IPC_CHANNELS.repository.sync)(repositoryUuid),
+      invoke(IPC_CHANNELS.repository.runMaintenance)({ repositoryUuid }),
+    sync: (repositoryUuid) => invoke(IPC_CHANNELS.repository.sync)({ repositoryUuid }),
     onProgress: subscribe(EVENT_CHANNELS.repository.progress) as unknown as SynapseBridge["repository"]["onProgress"],
     onUpdated: subscribe(EVENT_CHANNELS.repository.updated) as unknown as SynapseBridge["repository"]["onUpdated"],
     validateDirectory: (targetPath) =>
-      invoke(IPC_CHANNELS.repository.validateDirectory)(targetPath),
+      invoke(IPC_CHANNELS.repository.validateDirectory)({ targetPath }),
   },
   updater: {
     cancelDownload: invoke(IPC_CHANNELS.update.cancelDownload),

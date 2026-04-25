@@ -51,9 +51,9 @@ async function createAndOpenDirectory(dirPath: string): Promise<void> {
 const globalDirectorySchema = z.object({
   editorId: z.string(),
   label: z.string(),
-  rulesPath: z.string().optional(),
+  rulesPath: z.string().nullable(),
   rulesExists: z.boolean(),
-  skillsPath: z.string().optional(),
+  skillsPath: z.string().nullable(),
   skillsExists: z.boolean(),
 })
 
