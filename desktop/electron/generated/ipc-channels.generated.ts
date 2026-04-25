@@ -65,6 +65,26 @@ export const IPC_CHANNELS = {
     "runMaintenance": "synapse:repository:run-maintenance",
     "flushPendingPushes": "synapse:repository:flush-pending-pushes",
   },
+  "content": {
+    "list": "synapse:content:list",
+    "getContent": "synapse:content:get-content",
+    "getDetail": "synapse:content:get-detail",
+    "getHistory": "synapse:content:get-history",
+    "getHistoryVersion": "synapse:content:get-history-version",
+    "getEditorAdapters": "synapse:content:get-editor-adapters",
+    "create": "synapse:content:create",
+    "update": "synapse:content:update",
+    "deleteContent": "synapse:content:delete-content",
+    "listDeleted": "synapse:content:list-deleted",
+    "restore": "synapse:content:restore",
+    "purge": "synapse:content:purge",
+    "download": "synapse:content:download",
+    "readIconImage": "synapse:content:read-icon-image",
+    "openDetailWindow": "synapse:content:open-detail-window",
+    "resolveEditorInstallTarget": "synapse:content:resolve-editor-install-target",
+    "installToEditor": "synapse:content:install-to-editor",
+    "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

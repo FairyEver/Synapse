@@ -17,6 +17,7 @@ import { editorScanIpcModule } from "../modules/editor-scan/ipc"
 import { editorIpcModule } from "../modules/editor/ipc"
 import { configIpcModule } from "../modules/config/ipc"
 import { repositoryIpcModule } from "../modules/repository/ipc"
+import { contentIpcModule } from "../modules/content/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -37,6 +38,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(editorIpcModule, ctx)
   registry.register(configIpcModule, ctx)
   registry.register(repositoryIpcModule, ctx)
+  registry.register(contentIpcModule, ctx)
 
   return registry
 }
@@ -55,4 +57,5 @@ export const registeredIpcModules: readonly IpcModule[] = [
   editorIpcModule,
   configIpcModule,
   repositoryIpcModule,
+  contentIpcModule,
 ]
