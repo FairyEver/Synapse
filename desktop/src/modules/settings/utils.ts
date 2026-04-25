@@ -1,5 +1,6 @@
 import type {
   SynapseConfigPatch,
+  SynapseLocale,
   SynapseProjectConfig,
   SynapseRepositoryConfig,
   SynapseThemeMode,
@@ -10,6 +11,8 @@ function getGlobalSettingValue(key: string, context: SettingsContext, fallback: 
   switch (key) {
     case "themeMode":
       return context.config.global.themeMode
+    case "locale":
+      return context.config.global.locale
     case "projects":
       return context.config.global.projects
     default:
@@ -21,6 +24,8 @@ function createGlobalSettingPatch(key: string, value: unknown): SynapseConfigPat
   switch (key) {
     case "themeMode":
       return { global: { themeMode: String(value ?? "") as SynapseThemeMode } }
+    case "locale":
+      return { global: { locale: String(value ?? "") as SynapseLocale } }
     case "projects":
       return { global: { projects: value as SynapseProjectConfig[] } }
     default:

@@ -13,6 +13,10 @@ export const SYNAPSE_THEME_MODE_OPTIONS = ["light", "dark", "system"] as const
 
 export type SynapseThemeMode = (typeof SYNAPSE_THEME_MODE_OPTIONS)[number]
 
+export const SYNAPSE_LOCALE_OPTIONS = ["auto", "en", "zh", "zh-TW", "ja", "es"] as const
+
+export type SynapseLocale = (typeof SYNAPSE_LOCALE_OPTIONS)[number]
+
 export type SynapseProjectMode = "single" | "multi-workspace"
 
 export type SynapseWorkspaceBinding = {
@@ -66,6 +70,7 @@ export type SynapseRepositoryConfig = {
 
 export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
+  locale: SynapseLocale
   projects: SynapseProjectConfig[]
   defaultProjectId: string | null
   workspaceBindings: SynapseWorkspaceBinding[]

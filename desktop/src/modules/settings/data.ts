@@ -13,7 +13,8 @@ import {
   DEFAULT_GLOBAL_CONFIG,
 } from "@/constants/defaults"
 import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
-import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
+import { SYNAPSE_LOCALE_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
+import { getLocaleDisplayName } from "@/lib/locale"
 
 const settingsCategories: SettingsCategory[] = [
   {
@@ -86,6 +87,18 @@ const settingsItems: SettingItem[] = [
           : value === "dark"
             ? "深色"
             : "跟随系统",
+      value,
+    })),
+    scope: "global",
+  },
+  {
+    key: "global.locale",
+    label: "语言",
+    category: "general",
+    type: "select",
+    defaultValue: DEFAULT_GLOBAL_CONFIG.locale,
+    options: SYNAPSE_LOCALE_OPTIONS.map((value) => ({
+      label: getLocaleDisplayName(value),
       value,
     })),
     scope: "global",

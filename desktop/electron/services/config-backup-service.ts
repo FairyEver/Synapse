@@ -7,7 +7,7 @@ import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "../../src/types/backup"
-import { SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
+import { SYNAPSE_LOCALE_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
 import type { SynapseFavorites, SynapseWorkspaceBinding } from "../../src/types/config"
 import type { SynapseContentType } from "../../src/types/content"
 import { configStore } from "./config-store"
@@ -251,6 +251,7 @@ function validateConfig(
   }
 
   const themeMode = readRequiredField(global, "themeMode", "config.global", errors)
+  const locale = "locale" in global ? global.locale : "auto"
   const projects = readRequiredField(global, "projects", "config.global", errors)
   const workspaceBindings = Array.isArray(global.workspaceBindings)
     ? global.workspaceBindings.map(validateWorkspaceBinding).filter((value): value is SynapseWorkspaceBinding => value !== null)
@@ -261,6 +262,13 @@ function validateConfig(
     || !SYNAPSE_THEME_MODE_OPTIONS.includes(themeMode as (typeof SYNAPSE_THEME_MODE_OPTIONS)[number])
   ) {
     errors.push(`config.global.themeMode 必须是 ${SYNAPSE_THEME_MODE_OPTIONS.join(" / ")} 之一。`)
+  }
+
+  if (
+    typeof locale !== "string"
+    || !SYNAPSE_LOCALE_OPTIONS.includes(locale as (typeof SYNAPSE_LOCALE_OPTIONS)[number])
+  ) {
+    errors.push(`config.global.locale 必须是 ${SYNAPSE_LOCALE_OPTIONS.join(" / ")} 之一。`)
   }
 
   const normalizedProjects: SynapseConfigBackup["config"]["global"]["projects"] = []
@@ -312,11 +320,19 @@ function validateConfig(
     return null
   }
 
+  if (
+    typeof locale !== "string"
+    || !SYNAPSE_LOCALE_OPTIONS.includes(locale as (typeof SYNAPSE_LOCALE_OPTIONS)[number])
+  ) {
+    return null
+  }
+
   return {
     activeRepoUuid: activeRepoUuid === null ? null : activeRepoUuid?.trim() ?? null,
     repositories: normalizedRepositories,
     global: {
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
+      locale: locale as SynapseConfigBackup["config"]["global"]["locale"],
       projects: normalizedProjects,
       defaultProjectId: isNonEmptyString(global.defaultProjectId) && projectIdSet.has(global.defaultProjectId.trim())
         ? global.defaultProjectId.trim()

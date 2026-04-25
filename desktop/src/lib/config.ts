@@ -3,6 +3,7 @@ import {
   DEFAULT_CONTENT_SORT_ORDER,
   DEFAULT_FAVORITES,
   DEFAULT_GLOBAL_CONFIG,
+  DEFAULT_LOCALE,
   DEFAULT_RECENTLY_VIEWED,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
   DEFAULT_THEME_MODE,
@@ -11,7 +12,8 @@ import {
   CONTENT_TYPE_DEFINITIONS,
   getContentTypeDefinition,
 } from "../config/content-types"
-import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
+import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_LOCALE_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
+import { normalizeSynapseLocale } from "./locale"
 import type { SynapseContentType } from "../types/content"
 import type {
   SynapseConfig,
@@ -19,6 +21,7 @@ import type {
   SynapseContentSortOrder,
   SynapseFavorites,
   SynapseGlobalConfig,
+  SynapseLocale,
   SynapseProjectConfig,
   SynapseWorkspaceBinding,
   SynapseRecentlyViewed,
@@ -45,6 +48,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isSynapseThemeMode(value: unknown): value is SynapseThemeMode {
   return typeof value === "string" && SYNAPSE_THEME_MODE_OPTIONS.includes(value as SynapseThemeMode)
+}
+
+function isSynapseLocale(value: unknown): value is SynapseLocale {
+  return typeof value === "string" && SYNAPSE_LOCALE_OPTIONS.includes(value as SynapseLocale)
 }
 
 function isSynapseContentSortOrder(value: unknown): value is SynapseContentSortOrder {
@@ -198,6 +205,10 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "themeMode") && typeof value.themeMode !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "locale") && typeof value.locale !== "string") {
     return true
   }
 
@@ -475,6 +486,9 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
 
   return {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
+    locale: isSynapseLocale(value.locale)
+      ? value.locale
+      : normalizeSynapseLocale(value.language, DEFAULT_LOCALE),
     projects,
     defaultProjectId,
     workspaceBindings,

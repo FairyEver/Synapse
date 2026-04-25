@@ -4,6 +4,7 @@ import type {
   SynapseFavorites,
   SynapseGlobalConfig,
   SynapseRecentlyViewed,
+  SynapseLocale,
   SynapseThemeMode,
 } from "../types/config"
 import type { SynapseContentType } from "../types/content"
@@ -26,6 +27,8 @@ export const DEFAULT_WINDOW_BOUNDS = {
 
 export const DEFAULT_THEME_MODE: SynapseThemeMode = "light"
 
+export const DEFAULT_LOCALE: SynapseLocale = "auto"
+
 export const DEFAULT_FAVORITES = {
   rule: [],
   skill: [],
@@ -42,6 +45,7 @@ export const DEFAULT_CONTENT_SORT_ORDER: SynapseContentSortOrder = "modified-des
 
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
+  locale: DEFAULT_LOCALE,
   projects: [],
   defaultProjectId: null,
   workspaceBindings: [],
