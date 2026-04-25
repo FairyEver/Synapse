@@ -39,6 +39,8 @@ export {
 
 export { InMemoryLayeredConfig } from "./layered-config"
 
+export { DataRepositoryImpl, createDataRepository } from "./repository"
+
 export {
   allSchemas,
   auditSchema,

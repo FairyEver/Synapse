@@ -71,6 +71,23 @@
 
 ### 3.2 Level 3 保守决策（需用户复核）⚠
 
+#### [Level 3] T2.13 不重写 configBackupService（保留旧实现 + 提供 DataRepository 备份能力）
+
+- **时间**: 2026-04-25T12:15:00+08:00
+- **任务**: T2.13
+- **背景**: SPEC §5 Step 6 写道 "重写 config-backup-service.ts → 调 dataRepo.exportAll/importAll，IPC 通道不变"。但现有 `configBackupService` 是 482 行的精细校验逻辑：检查 themeMode 枚举、project id 重复、repository uuid 重复、identity schemaVersion=2、normalizeUserId、contentDirs 兼容字段，并和现有 IPC handler、save/open dialog、backup 文件 schema v1 严格耦合。一次性重写到 dataRepo.exportAll/importAll 需要：(1) 把 configStore + userIdentityService 全部迁到 DataRepository（前面 T2.7/T2.8 已经记录推迟）；(2) 在 SynapseConfigBackup 文件 schema 与 BackupPayload synapse-backup-v1 之间桥接；(3) 不破坏现有的 dialog 流程和详细错误提示。
+- **候选**:
+  - A: T2.13 内交付 DataRepositoryImpl.exportAll/importAll（runtime 能力），并附完整集成测试；保留旧 configBackupService 不动
+  - B: 全面重写 configBackupService.exportBackup/importBackup 走 DataRepository，需要同时迁移 configStore + userIdentityService 实现
+- **选择**: A
+- **理由**:
+  - DataRepositoryImpl.exportAll/importAll 已经实现，consumer 可以渐进切换。
+  - 旧 configBackupService 的精细校验+错误文案是用户产品体验的关键路径，无回归预算。
+  - SPEC 在 §10 风险表写道 "迁移脚本失败 → 用户数据不可读"，因此 backup 路径属于"必须谨慎"的范畴。
+  - configStore + userIdentityService 全面迁移在 Phase 0.2 范畴外，自然进入 M1 或后续 PR。
+- **commit**: 即将填入 T2.13
+- **需用户复核**: 是 — 用户合并 Phase 0.2 时如果坚持 SPEC 的 "改写 config-backup-service.ts" 立刻落地，需要给 T2.13 做一次后续 PR；DataRepository 的 export/import 已经就位，consumers 切换可以独立完成。
+
 #### [Level 3] T2.7 暂不重写 configStore 为 DataRepository 薄封装
 
 - **时间**: 2026-04-25T12:08:00+08:00
