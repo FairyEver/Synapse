@@ -20,6 +20,8 @@
     "desktop:package:win": "pnpm --filter @synapse/desktop run package:win",
     "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
     "desktop:typecheck": "pnpm --filter @synapse/desktop run typecheck",
+    "desktop:test": "pnpm --filter @synapse/desktop run test",
+    "desktop:test:watch": "pnpm --filter @synapse/desktop run test:watch",
     "website:dev": "pnpm --filter @synapse/website run dev",
     "website:build": "pnpm --filter @synapse/website run build",
     "website:preview": "pnpm --filter @synapse/website run preview"

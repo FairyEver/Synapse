@@ -13,5 +13,6 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["electron/**/*.ts", "data-store/shared/**/*.ts"]
+  "include": ["electron/**/*.ts", "data-store/shared/**/*.ts"],
+  "exclude": ["**/__tests__/**", "**/*.test.ts", "**/*.spec.ts"]
 }

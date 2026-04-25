@@ -1,0 +1,22 @@
+import { defineConfig } from "vitest/config"
+import path from "node:path"
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+    },
+  },
+  test: {
+    globals: false,
+    environment: "node",
+    include: [
+      "electron/**/__tests__/**/*.{test,spec}.ts",
+      "src/**/__tests__/**/*.{test,spec}.{ts,tsx}",
+      "tests/unit/**/*.{test,spec}.ts",
+      "tests/ipc/**/*.{test,spec}.ts",
+    ],
+    exclude: ["node_modules", "dist", "dist-electron", "dist-data-store"],
+    reporters: process.env.CI ? ["default"] : ["default"],
+  },
+})
