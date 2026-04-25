@@ -19,6 +19,8 @@ export { JsonNamespace } from "./backends/json"
 export type { JsonBackendDeps, JsonFileEnvelope } from "./backends/json"
 export { EncryptedJsonNamespace } from "./backends/encrypted-json"
 export type { EncryptedJsonBackendDeps, SafeStorage } from "./backends/encrypted-json"
+export { JsonLinesNamespace } from "./backends/jsonl"
+export type { JsonLinesBackendDeps } from "./backends/jsonl"
 export {
   copyToTimestampedBackup,
   fileExists,
