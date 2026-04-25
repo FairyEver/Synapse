@@ -20,7 +20,27 @@
 
 ### Phase 0.1 ServiceRegistry
 
-（每个 Phase 完成时追加）
+**状态**: 完成（9/9 任务）。
+**Commit 范围**: 229b7ed..3f7a146（外加 T1.9 待 commit）。
+**测试**: 52 通过，typecheck 通过。
+
+**新增**：
+- `desktop/electron/runtime/service-registry/{types,errors,topo,registry,index}.ts` — 完整 SPEC §4 接口和实现。
+- `desktop/electron/bootstrap/` — 9 个 ServiceDescriptor + buildServiceRegistry + main 入口拆出来的子模块（main-window / singleton-lock / before-quit / app-events / ipc-handlers）。
+- `desktop/tests/unit/phase-0.1-integration.test.ts` — 9 服务全生命周期集成测试。
+- `desktop/vitest.config.ts`、`desktop/tsconfig.test.json`、`desktop:test` script — 全套测试基础设施。
+
+**关键设计**：
+- ServiceRegistry 用 Kahn 拓扑（registration order 稳定 tie-break），fatal 失败抛 `FatalServiceFailureError`，degraded 失败收集到 `result.degraded[]`，跳过依赖失败的服务（无论上游是 fatal 还是 degraded）。
+- stop 反向拓扑、per-service 5s 超时（可配置）、总 deadline 15s；stop 错误只记录到 `entry.lastError`，不阻塞其他服务关闭。
+- bootstrap 层是「胶水」：runtime/* 不依赖 services/*，符合 SPEC §1 "runtime 不依赖 modules"。
+- main.ts 从 326 行减到 107 行，仅 orchestrate `whenReady → IPC handlers → registry.startAll → 创建主窗口 → before-quit`。
+- before-quit 复用 `registry.stopAll(15000)` 完成所有服务的反向拓扑关闭。
+
+**意外发现 / 临时妥协**：
+- `desktop/package.json` 没有 `test` / `lint` script、根 package.json 没有 `desktop:test` 转发——T1.1 内一并补上。已写入"决策记录" Level 2。
+- `webContents.send`（仓库消失广播）在 main.ts 内刻意保留，待 Phase 0.4 EventBus 替换；移到 bootstrap/ 会触发 hard-constraint grep 但 Phase 0.4 才能正确解决。
+- `createMainLogger` 没有 `trace`/`fatal` 级别，bootstrap/registry.ts 用 adapter 把这两个 level 路由到 debug/error；Phase 0.6 实现真 StructuredLogger 时一并升级。
 
 ### Phase 0.2 DataRepository
 

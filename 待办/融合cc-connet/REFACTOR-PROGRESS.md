@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T11:55:00+08:00
-current_phase: 0.1
-current_task: T1.9
+last_updated: 2026-04-25T11:57:00+08:00
+current_phase: 0.2
+current_task: T2.1
 status: in_progress
 task_counts:
   total: 71
-  completed: 8
+  completed: 9
   blocked: 0
-  pending: 63
+  pending: 62
 audit:
   rounds: 0
   last_status: not_started
@@ -32,7 +32,7 @@ audit:
 - [x] T1.6 迁移 core.data-store / core.update / core.app-icon 为 ServiceDescriptor
 - [x] T1.7 迁移 repo.watch / repo.maintenance / repo.pending-pushes / ui.tray 为 ServiceDescriptor
 - [x] T1.8 改写 desktop/electron/main.ts 为 registry 启停钩子（< 120 行）
-- [ ] T1.9 Phase 0.1 集成测试
+- [x] T1.9 Phase 0.1 集成测试
 
 ### Phase 0.2 DataRepository（14 任务）
 
@@ -113,8 +113,8 @@ audit:
 
 ## 当前任务
 
-- task: T1.9
-- started_at: 2026-04-25T11:55:00+08:00
+- task: T2.1
+- started_at: 2026-04-25T11:57:00+08:00
 - status: in_progress
 
 ## 已完成
@@ -149,7 +149,32 @@ audit:
 
 ### T1.8 改写 main.ts 为 registry 启停钩子（< 120 行）
 - completed_at: 2026-04-25T11:55:00+08:00
+- commit: 3f7a146
+
+### T1.9 Phase 0.1 集成测试（lifecycle full-graph）
+- completed_at: 2026-04-25T11:57:00+08:00
 - commit: （即将填入）
+- files_changed:
+  - desktop/tests/unit/phase-0.1-integration.test.ts (new, 2 tests)
+- tests_passed: 52 / 52
+- typecheck: passed
+- 验证: 9 个合成 descriptor 跑完 startAll → 全 running → stopAll(15000) → 全 stopped；
+  start 拓扑顺序、stop 反向拓扑顺序、deadline < 15s 都被断言
+
+## Phase 记录
+
+### Phase 0.1 完成
+- 时间: 2026-04-25T11:35:00 → 11:57:00 (约 22 分钟)
+- 完成任务: T1.1–T1.9 (9/9)
+- commit: 229b7ed → 即将填入 T1.9 (共 9 个 commit)
+- 总测试数: 52 通过
+- main.ts: 326 行 → 107 行（< 120 SPEC 阈值）
+- 新建目录: desktop/electron/runtime/service-registry/, desktop/electron/bootstrap/, desktop/tests/unit/
+- 关键产物:
+  - ServiceRegistry：拓扑启停 + 超时 + reload + degraded 收集
+  - 9 个 ServiceDescriptor 包装现有 services（保留单例内部）
+  - main.ts 收敛为 lifecycle orchestrator
+  - 测试基础设施（vitest + zod + tsconfig.test.json）
 - main.ts: 326 → 107 行
 - files_changed:
   - desktop/electron/main.ts (rewrite to 107 lines)
