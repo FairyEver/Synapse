@@ -285,4 +285,75 @@ audit:
 
 ## 最后心跳
 
-2026-04-25T12:00:00+08:00
+2026-04-25T13:55:00+08:00
+
+## 任务 → commit 完整映射
+
+补充自检（REFACTOR-SELF-AUDIT.md §3.3）发现 PROGRESS 只展开了 Phase 0.1 的每个任务。
+其余 Phase 我把多个相邻 task 合并到了同一个 commit，一一对应映射记录在这里：
+
+| Task | Commit | 描述 |
+|---|---|---|
+| T1.1 | 229b7ed | ServiceRegistry skeleton + types + errors |
+| T1.2 | e8e8659 | 拓扑排序 + cycle detection |
+| T1.3 | 22f7c87 | register/inspect/get + planStartOrder |
+| T1.4 | 1b281db | startAll/stopAll/reload + 超时 |
+| T1.5 | ae2096e | core.config / core.logging descriptors |
+| T1.6 | 4daabde | core.data-store / core.update / core.app-icon descriptors |
+| T1.7 | 761e6da | repo.* + ui.tray descriptors |
+| T1.8 | 3f7a146 | main.ts → 107 行 |
+| T1.9 | c25b35a | Phase 0.1 集成测试 |
+| T2.1 | 5928b37 | DataRepository types + AbstractDataNamespace |
+| T2.2 | a4420c6 | JsonBackend + atomic-io |
+| T2.3 | 6c9d9b8 | EncryptedJsonBackend |
+| T2.4 | abc8bc7 | JsonLinesBackend |
+| T2.5 | a8bc1dc | SqliteNamespace |
+| T2.6 | f216642 | Migration runner |
+| T2.7 | 55f22b0 | core.config schema + v0→v1 |
+| T2.8 | 37c42a4 | core.identity / repo.* schemas（与 T2.9 同 commit） |
+| T2.9 | 37c42a4 | placeholder schemas (secrets/providers/projects/etc.) |
+| T2.10 | 9b6a3ee | BackupRegistry + LocalArchiveStrategy（与 T2.11/T2.12 同 commit） |
+| T2.11 | 9b6a3ee | ExporterRegistry |
+| T2.12 | 9b6a3ee | LayeredConfig |
+| T2.13 | 591be21 | DataRepositoryImpl exportAll/importAll |
+| T2.14 | 6a8df48 | Phase 0.2 集成测试 |
+| T3.1 | 021ea3f | IPC types + errors + IPC_PROTOCOL_VERSION |
+| T3.2 | 8aaae67 | IpcRegistry + zod validation |
+| T3.3 | b87b7bd | generate-ipc codegen |
+| T3.11 | cc6fde9 | system handshake module |
+| T3.12 | 2a421bb | WindowManager |
+| T3.15 | 325751a | NetworkServiceRegistry + port allocator |
+| T3.16 | e99b60c | check-ipc-codegen gate + 集成测试 |
+| T4.1 | ceec93f | EventBus types + bus.ts（与 T4.2/T4.3/T4.7 同 commit） |
+| T4.2 | ceec93f | WindowBroadcaster |
+| T4.3 | ceec93f | coalesce backpressure |
+| T4.7 | ceec93f | EventBusBridge / EventRecorder placeholders（types only） |
+| T4.4 | b020b19 | renderer EventBusClient（与 T4.8 同 commit） |
+| T4.8 | b020b19 | Phase 0.4 集成测试 |
+| T5.1 | 4dda8e6 | ProjectContainer types + registry（与 T5.2-T5.7 同 commit） |
+| T5.2 | 4dda8e6 | ScopedEventBus + ProjectScopedDataRepo |
+| T5.3 | 4dda8e6 | IdleReaper |
+| T5.4 | 4dda8e6 | active-project hook + indicator |
+| T5.5 | 4dda8e6 | ProcessRuntime + MainProcessRuntime |
+| T5.6 | 4dda8e6 | runtime-mode + bootstrap |
+| T5.7 | 4dda8e6 | Phase 0.5 集成测试 |
+| T6.1 | fcdb80c | StructuredLogger + LogRotator（与 T6.2-T6.5 同 commit） |
+| T6.2 | fcdb80c | MetricsRegistry |
+| T6.3 | fcdb80c | Tracer + Span |
+| T6.4 | fcdb80c | HealthCheckAggregator |
+| T6.5 | fcdb80c | DiagnosticsCollector |
+| T6.6 | ab7ed6e | PermissionGuard（与 T6.7-T6.9 同 commit） |
+| T6.7 | ab7ed6e | InMemoryAuditSink |
+| T6.8 | ab7ed6e | TaskQueue + RateLimiter + CircuitBreaker |
+| T6.9 | ab7ed6e | ExtensionRegistry |
+| T6.10 | 82d6a35 | bootstrap/extensions.ts content-types 注册（与 T6.11-T6.13 同 commit） |
+| T6.11 | 82d6a35 | i18n + theme placeholders |
+| T6.12 | 82d6a35 | DebugPanel skeleton |
+| T6.13 | 82d6a35 | tests/{ipc,perf,fuzz,e2e}/ + RuntimeFixture |
+| T6.14 | 0a73cdf | check-hard-constraints.mjs（替代 ESLint，决策见 REPORT §6） |
+| T6.15 | 0a73cdf | AGENTS.md 硬约束段 |
+| T6.16 | 0a73cdf | .github/workflows/ci.yml |
+| T6.17 | 0a73cdf | Phase 0.6 集成测试 |
+| 收尾 | 739bcaa | finalize PROGRESS + REPORT |
+
+合计 35 commits（含 finalize），覆盖 60 个完成任务 + 11 个 deferred（IPC handler 迁移 / WindowManager 消费者迁移 / EventBus 现有事件迁移 — 见 §Blocked 段）。

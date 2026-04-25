@@ -28,7 +28,10 @@
     "bump:commit:push": "sh scripts/bump-version-commit-push.sh",
     "typecheck": "pnpm generate:ide-registry && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:ipc": "vitest run tests/ipc",
+    "test:e2e": "vitest run tests/e2e",
+    "test:ci": "vitest run"
   },
   "repository": {
     "type": "git",
