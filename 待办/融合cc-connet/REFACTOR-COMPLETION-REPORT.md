@@ -103,6 +103,24 @@
 
 ### Phase 0.4 EventBus
 
+**状态**: 运行时部分完成（6/8 任务）。T4.5/T4.6（迁移 5 个现有事件 + 删 sendToRenderer 辅助）推迟到 follow-up PR（REPORT 3.2 Level 3 决策）。
+**测试**: 215 通过，typecheck 通过。
+
+**新增**:
+- `runtime/event-bus/{types,bus,broadcaster,index}.ts` — domain/type 事件模型 + EventBusImpl + WindowBroadcaster + 占位接口（EventBusBridge, EventRecorder, EventFilter）
+- `desktop/src/runtime/event-bus-client.ts` — 渲染端客户端，支持 on/onType/onScoped + transport 注入
+- `tests/unit/phase-0.4-integration.test.ts` — 多窗口广播 + scope 过滤 + coalesce 折叠
+
+**关键设计**:
+- coalesce 默认 16ms 窗口（约 60fps），key 是 `domain|type|projectId|sessionId|repositoryId`，所以同 session 高频 message.delta 会自动 fold 到一次 dispatch。
+- WindowBroadcaster 是 EventBus → WindowManager.broadcast 的桥，唯一允许通过的 webContents.send 入口（SPEC §1 #3 硬约束）。
+- 渲染端 EventBusClient 每 domain 只订阅一次 IPC 频道，所有 listener 共享一个 transport callback；listener 全部 unsubscribe 后自动 detach。
+- emitInternal 不到 broadcaster——为业务侧 main 进程内通讯保留同步路径。
+
+**deferred (Level 3 → REPORT 3.2)**:
+- T4.5: 迁移 repository.updated/progress/pending-pushes-updated, update.state-changed/open-page, data-store.changed 到 EventBus
+- T4.6: 删除现有 sendToRenderer 辅助函数
+
 ### Phase 0.5 ProjectContainer + ProcessRuntime
 
 ### Phase 0.6 工程规范与可观测性

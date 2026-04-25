@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:36:00+08:00
-current_phase: 0.4
-current_task: T4.4
+last_updated: 2026-04-25T12:38:00+08:00
+current_phase: 0.5
+current_task: T5.1
 status: in_progress
 task_counts:
   total: 71
-  completed: 33
+  completed: 35
   blocked: 11
-  pending: 27
+  pending: 25
 audit:
   rounds: 0
   last_status: not_started
@@ -75,11 +75,11 @@ audit:
 - [x] T4.1 建 runtime/event-bus/ 类型 + bus 核心实现 + 单测
 - [x] T4.2 实现 scope 过滤 + WindowManager 广播桥接
 - [x] T4.3 实现 coalesce 背压策略 + 单测
-- [ ] T4.4 渲染端 src/runtime/event-bus-client.ts + EventRouter
+- [x] T4.4 渲染端 src/runtime/event-bus-client.ts + EventRouter
 - [ ] T4.5 迁移 5 个现有事件到 domain+type 模型 (deferred → REPORT 3.2)
 - [ ] T4.6 删旧 sendToRenderer 辅助函数 (deferred → REPORT 3.2)
 - [x] T4.7 预留 EventBusBridge / EventRecorder 接口占位
-- [ ] T4.8 Phase 0.4 集成测试
+- [x] T4.8 Phase 0.4 集成测试
 
 ### Phase 0.5 ProjectContainer + ProcessRuntime（7 任务）
 
