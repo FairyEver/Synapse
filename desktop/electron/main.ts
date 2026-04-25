@@ -1,150 +1,41 @@
-import { app, BrowserWindow, dialog } from "electron"
-import { existsSync, readlinkSync, rmSync } from "node:fs"
-import path from "node:path"
-import { DEFAULT_WINDOW_BOUNDS } from "../src/constants/defaults"
+/**
+ * Synapse main process entry point.
+ *
+ * Phase 0.1 (T1.8): main.ts orchestrates lifecycle, everything else lives in
+ * `bootstrap/*` and `runtime/*`. SPEC §3 requires this file < 120 lines.
+ */
+
+import { BrowserWindow, app, dialog } from "electron"
 import { SYNAPSE_IPC_CHANNELS } from "./ipc/channels"
-import { registerCliHandlers } from "./ipc/cli-handlers"
-import { registerContentHandlers } from "./ipc/content-handlers"
-import { registerConfigHandlers } from "./ipc/config-handlers"
-import { registerEditorHandlers } from "./ipc/editor-handlers"
-import { registerEditorScanHandlers } from "./ipc/editor-scan-handlers"
-import { registerIdentityHandlers } from "./ipc/identity-handlers"
-import { registerLogHandlers } from "./ipc/log-handlers"
-import { registerRepositoryHandlers } from "./ipc/repository-handlers"
-import { registerShellHandlers } from "./ipc/shell-handlers"
-import { registerUpdateHandlers } from "./ipc/update-handlers"
-import { registerUserProfileHandlers } from "./ipc/user-profile-handlers"
-import { getWindowIconPath, initializeAppIcon } from "./services/app-icon-service"
-import { configStore } from "./services/config-store"
-import { contentSubmissionService } from "./services/content-submission-service"
-import { createMainLogger, logStore } from "./services/log-store"
-import { pendingPushesService } from "./services/pending-pushes-service"
-import { repositoryMaintenanceService } from "./services/repository-maintenance-service"
+import { createMainLogger } from "./services/log-store"
 import { repositoryStore } from "./services/repository-store"
-import { createTray, destroyTray } from "./services/tray-service"
-import { updateService } from "./services/update-service"
-import { initDataStore, shutdownDataStore } from "./data-store"
+import {
+  attachActivateHandler,
+  attachBeforeQuitHandler,
+  attachProcessLevelLogging,
+  attachSecondInstanceFocus,
+  buildServiceRegistry,
+  clearStaleSingletonLock,
+  createMainWindow,
+  createMainWindowState,
+  registerAllIpcHandlers,
+  showOrCreateMainWindow,
+} from "./bootstrap"
 
-let mainWindow: BrowserWindow | null = null
-let allowAppQuit = false
 const logger = createMainLogger("main")
+const mainWindowState = createMainWindowState()
+let allowAppQuit = false
 
-function showOrCreateMainWindow() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show()
-    mainWindow.focus()
-  } else {
-    createMainWindow()
-  }
-}
+attachProcessLevelLogging()
 
-function createMainWindow() {
-  const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
-  const icon = getWindowIconPath()
-  const window = new BrowserWindow({
-    width,
-    height,
-    minWidth,
-    minHeight,
-    show: false,
-    title: "Synapse",
-    ...(icon ? { icon } : {}),
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+function focusOrCreateMainWindow(): void {
+  showOrCreateMainWindow({
+    state: mainWindowState,
+    isAppQuitting: () => allowAppQuit,
   })
-
-  mainWindow = window
-
-  window.webContents.on("preload-error", (_event, preloadPath, error) => {
-    logger.error("Preload script failed.", {
-      error,
-      preloadPath,
-    })
-  })
-
-  window.once("ready-to-show", () => {
-    logger.info("Main window is ready to show.")
-    window.show()
-  })
-
-  window.on("close", (event) => {
-    if (!allowAppQuit) {
-      event.preventDefault()
-      window.hide()
-    }
-  })
-
-  window.on("closed", () => {
-    logger.info("Main window closed.")
-    mainWindow = null
-  })
-
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL
-
-  if (devServerUrl) {
-    logger.info("Loading renderer from Vite dev server.", { devServerUrl })
-    void window.loadURL(devServerUrl)
-  } else {
-    logger.info("Loading renderer from built files.")
-    void window.loadFile(path.join(__dirname, "../../dist/index.html"))
-  }
-}
-
-process.on("uncaughtException", (error) => {
-  logger.error("Uncaught exception in main process.", error)
-})
-
-process.on("unhandledRejection", (reason) => {
-  logger.error("Unhandled rejection in main process.", reason)
-})
-
-function clearStaleSingletonLock(): boolean {
-  const lockPath = path.join(app.getPath("userData"), "SingletonLock")
-
-  if (!existsSync(lockPath)) {
-    return false
-  }
-
-  try {
-    const target = readlinkSync(lockPath)
-    const match = target.match(/-(\d+)$/)
-
-    if (!match) {
-      return false
-    }
-
-    const pid = Number.parseInt(match[1], 10)
-
-    try {
-      process.kill(pid, 0)
-      return false
-    } catch {
-      // process doesn't exist — lock is stale
-    }
-  } catch {
-    // not a symlink or unreadable — treat as stale
-  }
-
-  const userData = app.getPath("userData")
-
-  for (const file of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) {
-    try {
-      rmSync(path.join(userData, file), { force: true })
-    } catch {
-      // best-effort cleanup
-    }
-  }
-
-  logger.warn("Cleared stale singleton lock files from a previous crash.")
-  return true
 }
 
 let gotSingleInstanceLock = app.requestSingleInstanceLock()
-
 if (!gotSingleInstanceLock && clearStaleSingletonLock()) {
   gotSingleInstanceLock = app.requestSingleInstanceLock()
 }
@@ -154,172 +45,63 @@ if (!gotSingleInstanceLock) {
   logger.warn("Another Synapse instance is already running. Exiting current process.")
   app.quit()
 } else {
-  app.on("second-instance", () => {
-    if (!mainWindow) {
-      return
-    }
+  attachSecondInstanceFocus(mainWindowState)
 
-    if (!mainWindow.isVisible()) {
-      mainWindow.show()
-    }
+  app
+    .whenReady()
+    .then(async () => {
+      logger.info("Electron app is ready. Registering IPC handlers.")
+      registerAllIpcHandlers()
 
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore()
-    }
+      const registry = buildServiceRegistry({
+        trayShowOrCreate: focusOrCreateMainWindow,
+      })
 
-    logger.info("A second instance was requested. Focusing the existing window.")
-    mainWindow.focus()
-  })
-
-  app.whenReady().then(async () => {
-    logger.info("Electron app is ready. Registering IPC handlers.")
-    initializeAppIcon()
-    registerCliHandlers()
-    registerContentHandlers()
-    registerEditorHandlers()
-    registerEditorScanHandlers()
-    registerLogHandlers()
-    registerConfigHandlers()
-    registerIdentityHandlers()
-    registerShellHandlers()
-    registerUserProfileHandlers()
-    registerRepositoryHandlers()
-    registerUpdateHandlers()
-
-    // --- core: config + window (failure = fatal) ---
-    await configStore.load()
-    logger.info("Core config loaded. Creating main window.")
-    createMainWindow()
-    createTray(showOrCreateMainWindow)
-
-    // --- peripheral: data-store, update, repository watch (failure = degraded) ---
-    try {
-      await initDataStore()
-    } catch (error) {
-      logger.error("Data store initialization failed. CLI/MCP will be unavailable.", error)
-    }
-
-    try {
-      updateService.initialize()
-      updateService.startAutoCheck()
-    } catch (error) {
-      logger.error("Update service initialization failed. Auto-update disabled.", error)
-    }
-
-    void (async () => {
-      try {
-        const config = await configStore.load()
-
-        for (const repository of config.repositories) {
-          repositoryStore.watchRepository(repository)
-
-          try {
-            await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
-          } catch (error) {
-            logger.warn("Scheduled repository maintenance failed.", {
-              error,
-              repositoryUuid: repository.uuid,
-            })
-          }
+      const result = await registry.startAll()
+      if (result.degraded.length > 0) {
+        for (const failure of result.degraded) {
+          logger.warn("Service started in degraded state.", {
+            id: failure.id,
+            error: failure.error,
+          })
         }
-      } catch (error) {
-        logger.error("Repository watch setup failed.", error)
       }
-    })()
 
-    repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        window.webContents.send(SYNAPSE_IPC_CHANNELS.repository.updated, repositoryUuid)
-      }
-    })
+      logger.info("Service registry started. Creating main window.")
+      createMainWindow({
+        state: mainWindowState,
+        isAppQuitting: () => allowAppQuit,
+      })
 
-    app.on("activate", () => {
-      showOrCreateMainWindow()
+      attachActivateHandler(focusOrCreateMainWindow)
+
+      // Phase 0.4 (T4.5) replaces this direct webContents.send with EventBus.
+      repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.webContents.send(SYNAPSE_IPC_CHANNELS.repository.updated, repositoryUuid)
+        }
+      })
+
+      attachBeforeQuitHandler({
+        state: mainWindowState,
+        registry,
+        setAllowQuit: (v) => {
+          allowAppQuit = v
+        },
+        isAllowedToQuit: () => allowAppQuit,
+      })
     })
-  }).catch((error) => {
-    logger.error("Failed to initialize app.", error)
-    const message = error instanceof Error ? error.message : String(error)
-    dialog.showErrorBox("Synapse 启动失败", `初始化时遇到错误：\n\n${message}\n\n请检查磁盘空间和文件权限。`)
-    app.quit()
-  })
+    .catch((error) => {
+      logger.error("Failed to initialize app.", error)
+      const message = error instanceof Error ? error.message : String(error)
+      dialog.showErrorBox(
+        "Synapse 启动失败",
+        `初始化时遇到错误：\n\n${message}\n\n请检查磁盘空间和文件权限。`,
+      )
+      app.quit()
+    })
 }
 
 app.on("window-all-closed", () => {
   // 托盘保持运行，不退出
-})
-
-app.on("before-quit", async (event) => {
-  // 取消正在进行的下载并清理临时文件
-  await updateService.cancelDownload()
-
-  if (allowAppQuit) {
-    destroyTray()
-    await shutdownDataStore()
-    await logStore.dispose()
-    return
-  }
-
-  event.preventDefault()
-
-  void (async () => {
-    try {
-      const quitTimeout = setTimeout(() => {
-        logger.warn("Before-quit flow timed out after 15s. Force quitting.")
-        allowAppQuit = true
-        app.quit()
-      }, 15_000)
-
-      await logStore.flush()
-
-      const config = await configStore.load()
-      const pendingPushCount = await pendingPushesService.countAll(config.repositories)
-
-      if (pendingPushCount === 0) {
-        clearTimeout(quitTimeout)
-        allowAppQuit = true
-        app.quit()
-        return
-      }
-
-      const ownerWindow = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null
-
-      if (ownerWindow && !ownerWindow.isVisible()) {
-        ownerWindow.show()
-      }
-
-      const result = ownerWindow
-        ? await dialog.showMessageBox(ownerWindow, {
-            type: "warning",
-            title: "还有未同步的变更",
-            message: `你有 ${pendingPushCount} 条变更未同步到仓库。`,
-            detail: "下次启动时可以继续推送。",
-            buttons: ["先同步", "继续退出"],
-            defaultId: 0,
-            cancelId: 1,
-          })
-        : await dialog.showMessageBox({
-            type: "warning",
-            title: "还有未同步的变更",
-            message: `你有 ${pendingPushCount} 条变更未同步到仓库。`,
-            detail: "下次启动时可以继续推送。",
-            buttons: ["先同步", "继续退出"],
-            defaultId: 0,
-            cancelId: 1,
-          })
-
-      if (result.response === 0) {
-        for (const repository of config.repositories) {
-          await contentSubmissionService.flushPendingPushes(repository)
-        }
-      }
-
-      clearTimeout(quitTimeout)
-      allowAppQuit = true
-      app.quit()
-    } catch (error) {
-      logger.error("Failed to resolve before-quit pending pushes flow.", error)
-      allowAppQuit = true
-      app.quit()
-    }
-  })()
 })

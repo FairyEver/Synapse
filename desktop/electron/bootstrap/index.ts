@@ -21,3 +21,26 @@ export {
   repoWatchDescriptor,
 } from "./descriptors"
 export type { TrayShowOrCreateCallback } from "./descriptors"
+
+export { buildServiceRegistry } from "./registry"
+export type { BuildServiceRegistryOptions } from "./registry"
+
+export {
+  createMainWindow,
+  createMainWindowState,
+  showOrCreateMainWindow,
+} from "./main-window"
+export type { MainWindowDeps, MainWindowState } from "./main-window"
+
+export { clearStaleSingletonLock } from "./singleton-lock"
+
+export { attachBeforeQuitHandler } from "./before-quit"
+export type { BeforeQuitDeps } from "./before-quit"
+
+export { registerAllIpcHandlers } from "./ipc-handlers"
+
+export {
+  attachActivateHandler,
+  attachProcessLevelLogging,
+  attachSecondInstanceFocus,
+} from "./app-events"

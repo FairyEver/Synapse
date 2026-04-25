@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T11:53:00+08:00
+last_updated: 2026-04-25T11:55:00+08:00
 current_phase: 0.1
-current_task: T1.8
+current_task: T1.9
 status: in_progress
 task_counts:
   total: 71
-  completed: 7
+  completed: 8
   blocked: 0
-  pending: 64
+  pending: 63
 audit:
   rounds: 0
   last_status: not_started
@@ -31,7 +31,7 @@ audit:
 - [x] T1.5 迁移 core.config / core.logging 为 ServiceDescriptor
 - [x] T1.6 迁移 core.data-store / core.update / core.app-icon 为 ServiceDescriptor
 - [x] T1.7 迁移 repo.watch / repo.maintenance / repo.pending-pushes / ui.tray 为 ServiceDescriptor
-- [ ] T1.8 改写 desktop/electron/main.ts 为 registry 启停钩子（< 120 行）
+- [x] T1.8 改写 desktop/electron/main.ts 为 registry 启停钩子（< 120 行）
 - [ ] T1.9 Phase 0.1 集成测试
 
 ### Phase 0.2 DataRepository（14 任务）
@@ -113,8 +113,8 @@ audit:
 
 ## 当前任务
 
-- task: T1.8
-- started_at: 2026-04-25T11:53:00+08:00
+- task: T1.9
+- started_at: 2026-04-25T11:55:00+08:00
 - status: in_progress
 
 ## 已完成
@@ -145,7 +145,28 @@ audit:
 
 ### T1.7 repo.watch / repo.maintenance / repo.pending-pushes / ui.tray 为 ServiceDescriptor
 - completed_at: 2026-04-25T11:53:00+08:00
+- commit: 761e6da
+
+### T1.8 改写 main.ts 为 registry 启停钩子（< 120 行）
+- completed_at: 2026-04-25T11:55:00+08:00
 - commit: （即将填入）
+- main.ts: 326 → 107 行
+- files_changed:
+  - desktop/electron/main.ts (rewrite to 107 lines)
+  - desktop/electron/bootstrap/registry.ts (new, buildServiceRegistry + StructuredLogger adapter)
+  - desktop/electron/bootstrap/main-window.ts (extracted)
+  - desktop/electron/bootstrap/singleton-lock.ts (extracted)
+  - desktop/electron/bootstrap/before-quit.ts (extracted; reuses registry.stopAll)
+  - desktop/electron/bootstrap/ipc-handlers.ts (single registerAllIpcHandlers)
+  - desktop/electron/bootstrap/app-events.ts (process logging + second-instance + activate)
+  - desktop/electron/bootstrap/index.ts (re-export everything)
+  - desktop/electron/bootstrap/__tests__/registry.test.ts (3 new tests on graph shape)
+- tests_passed: 50 / 50
+- typecheck: passed
+- 设计要点:
+  - main.ts 仅 orchestrate：单实例锁 → IPC handlers → registry.startAll → 创建主窗口 → before-quit
+  - before-quit 复用 registry.stopAll(15000) 实现服务的反向拓扑关闭
+  - webContents.send（仓库消失广播）刻意保留在 main.ts 直到 Phase 0.4 用 EventBus 替换
 - files_changed:
   - desktop/electron/bootstrap/descriptors.ts (extend with 4 new descriptors)
   - desktop/electron/bootstrap/index.ts (export them)
