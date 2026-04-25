@@ -1,57 +1,165 @@
 import { app } from "electron"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { existsSync } from "node:fs"
+import { readFile, rename, writeFile } from "node:fs/promises"
 import {
   applySynapseConfigPatch,
   createDefaultConfig,
-  hasRecoverableSynapseConfigFormatError,
   sanitizeSynapseConfig,
 } from "../../src/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "../../src/types/config"
-import { isFileNotFoundError } from "./fs-utils"
 import { createMainLogger } from "./log-store"
+import { JsonNamespace } from "../runtime/data-repo/backends/json"
 
-const CONFIG_FILE_NAME = "config.json"
 const logger = createMainLogger("service.config-store")
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+// Schema version for core.config namespace
+const CORE_CONFIG_SCHEMA_VERSION = 1
+
+// Namespace name for config in DataRepository
+const CORE_CONFIG_NAMESPACE = "core.config"
+
+// Legacy config file path (for migration)
+const LEGACY_CONFIG_FILE_NAME = "config.json"
+
+// Create DataRepository and config namespace
+function createConfigNamespace(): JsonNamespace<SynapseConfig> {
+  const userDataPath = app.getPath("userData")
+  const dataV1Path = path.join(userDataPath, "data-v1")
+  const filePath = path.join(dataV1Path, `${CORE_CONFIG_NAMESPACE}.json`)
+
+  return new JsonNamespace({
+    name: CORE_CONFIG_NAMESPACE,
+    schemaVersion: CORE_CONFIG_SCHEMA_VERSION,
+    backend: "json",
+    filePath,
+    defaults: createDefaultConfig,
+  })
 }
 
-function createBackupFilePath(filePath: string): string {
-  const extension = path.extname(filePath)
-  const baseName = path.basename(filePath, extension)
-  const directory = path.dirname(filePath)
+// Migrate legacy config.json to DataRepository
+async function migrateConfigIfNeeded(namespace: JsonNamespace<SynapseConfig>): Promise<void> {
+  const userDataPath = app.getPath("userData")
+  const legacyConfigPath = path.join(userDataPath, LEGACY_CONFIG_FILE_NAME)
 
-  return path.join(directory, `${baseName}.invalid-${Date.now()}${extension}`)
+  if (!existsSync(legacyConfigPath)) {
+    // No legacy config to migrate
+    return
+  }
+
+  // Check if config already exists in DataRepository
+  const existing = await namespace.getSingleton()
+  if (existing !== null) {
+    // Config already migrated, just rename the legacy file
+    try {
+      await rename(legacyConfigPath, `${legacyConfigPath}.migrated`)
+      logger.info("Legacy config file already migrated, renamed to .migrated")
+    } catch {
+      // Ignore errors
+    }
+    return
+  }
+
+  logger.info("[migration] Found legacy config.json, starting migration to DataRepository")
+
+  try {
+    // Read legacy config
+    const legacyContent = await readFile(legacyConfigPath, "utf8")
+    const legacyConfig = JSON.parse(legacyContent) as unknown
+
+    // Backup legacy config
+    const backupPath = `${legacyConfigPath}.v0.bak`
+    await writeFile(backupPath, legacyContent)
+    logger.info("[migration] Legacy config backed up to config.json.v0.bak")
+
+    // Validate and sanitize
+    const normalizedConfig = sanitizeSynapseConfig(legacyConfig)
+
+    // Write to DataRepository
+    await namespace.setSingleton(normalizedConfig)
+    logger.info("[migration] Config migrated to DataRepository namespace", {
+      namespace: CORE_CONFIG_NAMESPACE,
+    })
+
+    // Rename legacy file to prevent re-migration
+    await rename(legacyConfigPath, `${legacyConfigPath}.migrated`)
+    logger.info("[migration] Legacy config renamed to config.json.migrated")
+
+    logger.info("[migration] config v0 → v1, backup: config.json.v0.bak")
+  } catch (error) {
+    logger.error("[migration] Failed to migrate legacy config", { error })
+    // Continue with default config - migration failure shouldn't block startup
+  }
 }
 
 class ConfigStore {
   private cachedConfig: SynapseConfig | null = null
+  private namespace: JsonNamespace<SynapseConfig> | null = null
+  private initialized = false
 
-  getFilePath(): string {
-    return path.join(app.getPath("userData"), CONFIG_FILE_NAME)
+  private getNamespace(): JsonNamespace<SynapseConfig> {
+    if (!this.namespace) {
+      this.namespace = createConfigNamespace()
+    }
+    return this.namespace
+  }
+
+  async initialize(): Promise<void> {
+    if (this.initialized) {
+      return
+    }
+
+    const namespace = this.getNamespace()
+
+    // Run migration from legacy config.json if needed
+    await migrateConfigIfNeeded(namespace)
+
+    // Ensure namespace has data (create default if empty)
+    const existing = await namespace.getSingleton()
+    if (existing === null) {
+      logger.info("No existing config found, creating default config")
+      const defaultConfig = createDefaultConfig()
+      await namespace.setSingleton(defaultConfig)
+    }
+
+    this.initialized = true
+    logger.info("ConfigStore initialized")
   }
 
   async load(): Promise<SynapseConfig> {
+    await this.initialize()
+
     if (this.cachedConfig) {
       logger.debug("Returning cached config.")
       return structuredClone(this.cachedConfig)
     }
 
-    logger.info("Loading config from disk.")
-    const config = await this.readFromDisk()
-    this.cachedConfig = config
+    logger.info("Loading config from DataRepository.")
+    const namespace = this.getNamespace()
+    const config = await namespace.getSingleton()
 
+    if (config === null) {
+      // This shouldn't happen after initialization, but handle it gracefully
+      logger.warn("Config not found in DataRepository, creating default")
+      const defaultConfig = createDefaultConfig()
+      await namespace.setSingleton(defaultConfig)
+      this.cachedConfig = defaultConfig
+      return structuredClone(defaultConfig)
+    }
+
+    this.cachedConfig = config
     return structuredClone(config)
   }
 
   async update(patch: SynapseConfigPatch): Promise<SynapseConfig> {
+    await this.initialize()
+
     logger.info("Updating config.", patch)
-    const currentConfig = await this.readCachedOrDisk()
+    const currentConfig = await this.readCachedOrNamespace()
     const nextConfig = applySynapseConfigPatch(currentConfig, patch)
 
-    await this.persist(nextConfig)
+    const namespace = this.getNamespace()
+    await namespace.setSingleton(nextConfig)
     this.cachedConfig = nextConfig
 
     logger.info("Config persisted after update.", {
@@ -63,13 +171,16 @@ class ConfigStore {
   }
 
   async replace(rawConfig: unknown): Promise<SynapseConfig> {
-    if (!isRecord(rawConfig)) {
+    await this.initialize()
+
+    if (typeof rawConfig !== "object" || rawConfig === null) {
       throw new Error("备份文件里的配置格式不对。")
     }
 
     const nextConfig = sanitizeSynapseConfig(rawConfig)
 
-    await this.persist(nextConfig)
+    const namespace = this.getNamespace()
+    await namespace.setSingleton(nextConfig)
     this.cachedConfig = nextConfig
 
     logger.info("Config replaced from backup.", {
@@ -80,85 +191,90 @@ class ConfigStore {
     return structuredClone(nextConfig)
   }
 
-  private async readCachedOrDisk(): Promise<SynapseConfig> {
+  // Export config for backup (DataRepository format)
+  async exportForBackup(): Promise<{
+    format: "synapse-backup-v1"
+    exportedAt: string
+    namespaces: Array<{
+      name: string
+      schemaVersion: number
+      encrypted: boolean
+      data: { singleton: SynapseConfig; items: [] }
+    }>
+  }> {
+    await this.initialize()
+
+    const config = await this.load()
+
+    return {
+      format: "synapse-backup-v1",
+      exportedAt: new Date().toISOString(),
+      namespaces: [
+        {
+          name: CORE_CONFIG_NAMESPACE,
+          schemaVersion: CORE_CONFIG_SCHEMA_VERSION,
+          encrypted: false,
+          data: {
+            singleton: config,
+            items: [],
+          },
+        },
+      ],
+    }
+  }
+
+  // Import config from backup (DataRepository format)
+  async importFromBackup(payload: {
+    format: string
+    namespaces: Array<{
+      name: string
+      data?: { singleton?: SynapseConfig }
+    }>
+  }): Promise<SynapseConfig> {
+    await this.initialize()
+
+    if (payload.format !== "synapse-backup-v1") {
+      throw new Error(`不支持的备份格式: ${payload.format}`)
+    }
+
+    const configEntry = payload.namespaces.find((n) => n.name === CORE_CONFIG_NAMESPACE)
+    if (!configEntry?.data?.singleton) {
+      throw new Error("备份文件中未找到配置数据")
+    }
+
+    const config = configEntry.data.singleton
+    const normalizedConfig = sanitizeSynapseConfig(config)
+
+    const namespace = this.getNamespace()
+    await namespace.setSingleton(normalizedConfig)
+    this.cachedConfig = normalizedConfig
+
+    logger.info("Config imported from backup.", {
+      activeRepoUuid: normalizedConfig.activeRepoUuid,
+      repositoryCount: normalizedConfig.repositories.length,
+    })
+
+    return structuredClone(normalizedConfig)
+  }
+
+  private async readCachedOrNamespace(): Promise<SynapseConfig> {
     if (this.cachedConfig) {
       return this.cachedConfig
     }
 
-    const config = await this.readFromDisk()
+    const namespace = this.getNamespace()
+    const config = await namespace.getSingleton()
+
+    if (config === null) {
+      const defaultConfig = createDefaultConfig()
+      this.cachedConfig = defaultConfig
+      return defaultConfig
+    }
+
     this.cachedConfig = config
-
     return config
-  }
-
-  private async readFromDisk(): Promise<SynapseConfig> {
-    const filePath = this.getFilePath()
-
-    await mkdir(path.dirname(filePath), { recursive: true })
-
-    try {
-      logger.debug("Reading config file.", { filePath })
-      const fileContent = await readFile(filePath, "utf8")
-      const parsedConfig = JSON.parse(fileContent) as unknown
-      const shouldBackupConfig = hasRecoverableSynapseConfigFormatError(parsedConfig)
-
-      if (shouldBackupConfig) {
-        logger.warn("Config file has recoverable format issues. Backing it up.", { filePath })
-        await this.backupInvalidConfig(filePath)
-      }
-
-      const normalizedConfig = sanitizeSynapseConfig(parsedConfig)
-
-      await this.persist(normalizedConfig)
-      logger.info("Config file sanitized and loaded.", {
-        activeRepoUuid: normalizedConfig.activeRepoUuid,
-        repositoryCount: normalizedConfig.repositories.length,
-      })
-
-      return normalizedConfig
-    } catch (error) {
-      if (isFileNotFoundError(error)) {
-        logger.warn("Config file not found. Creating default config.", { filePath })
-        const defaultConfig = createDefaultConfig()
-
-        await this.persist(defaultConfig)
-
-        return defaultConfig
-      }
-
-      if (error instanceof SyntaxError) {
-        logger.error("Config file contains invalid JSON. Backing it up and resetting.", error)
-        await this.backupInvalidConfig(filePath)
-
-        const defaultConfig = createDefaultConfig()
-
-        await this.persist(defaultConfig)
-
-        return defaultConfig
-      }
-
-      logger.error("Failed to read config file.", error)
-      throw error
-    }
-  }
-
-  private async backupInvalidConfig(filePath: string): Promise<void> {
-    try {
-      await rename(filePath, createBackupFilePath(filePath))
-      logger.info("Backed up invalid config file.", { filePath })
-    } catch {
-      // Best effort backup. Persisting a fresh config still keeps the app usable.
-      logger.warn("Failed to back up invalid config file.", { filePath })
-    }
-  }
-
-  private async persist(config: SynapseConfig): Promise<void> {
-    const filePath = this.getFilePath()
-
-    await mkdir(path.dirname(filePath), { recursive: true })
-    await writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf8")
-    logger.debug("Config written to disk.", { filePath })
   }
 }
 
+// Singleton instance
 export const configStore = new ConfigStore()

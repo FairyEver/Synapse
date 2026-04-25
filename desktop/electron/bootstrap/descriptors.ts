@@ -58,8 +58,8 @@ export const coreLoggingDescriptor: ServiceDescriptor<typeof logStore> = {
 }
 
 /**
- * core.config — wraps the existing `configStore` singleton and pre-loads the
- * config file during start. Mirrors today's `main.ts:190 await configStore.load()`.
+ * core.config — wraps the existing `configStore` singleton and initializes the
+ * DataRepository-backed config during start.
  *
  * Status: fatal — SPEC §4 mapping table.
  */
@@ -67,6 +67,7 @@ export const coreConfigDescriptor: ServiceDescriptor<typeof configStore> = {
   id: "core.config",
   criticality: "fatal",
   async create() {
+    await configStore.initialize()
     await configStore.load()
     return configStore
   },
