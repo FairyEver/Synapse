@@ -26,6 +26,20 @@ export type { SqliteBackendDeps } from "./backends/sqlite"
 export { runMigrations, migration } from "./migrations"
 export type { RunMigrationsArgs } from "./migrations"
 export {
+  InMemoryBackupRegistry,
+  LocalArchiveStrategy,
+} from "./backup"
+export type { LocalArchiveStrategyDeps } from "./backup"
+
+export {
+  InMemoryExporterRegistry,
+  csvExporterFor,
+  jsonExporterFor,
+} from "./exporters"
+
+export { InMemoryLayeredConfig } from "./layered-config"
+
+export {
   allSchemas,
   auditSchema,
   connectorsSchema,
