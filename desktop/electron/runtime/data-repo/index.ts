@@ -23,6 +23,8 @@ export { JsonLinesNamespace } from "./backends/jsonl"
 export type { JsonLinesBackendDeps } from "./backends/jsonl"
 export { SqliteNamespace, openSqliteDatabase } from "./backends/sqlite"
 export type { SqliteBackendDeps } from "./backends/sqlite"
+export { runMigrations, migration } from "./migrations"
+export type { RunMigrationsArgs } from "./migrations"
 export {
   copyToTimestampedBackup,
   fileExists,

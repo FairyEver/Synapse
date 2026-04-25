@@ -6,13 +6,13 @@ mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
 last_updated: 2026-04-25T12:08:00+08:00
 current_phase: 0.2
-current_task: T2.6
+current_task: T2.7
 status: in_progress
 task_counts:
   total: 71
-  completed: 14
+  completed: 15
   blocked: 0
-  pending: 57
+  pending: 56
 audit:
   rounds: 0
   last_status: not_started
@@ -41,7 +41,7 @@ audit:
 - [x] T2.3 实现 EncryptedJsonBackend + 单测
 - [x] T2.4 实现 JsonLinesBackend + 单测
 - [x] T2.5 实现 SqliteBackend 包装现有 data-store + 单测
-- [ ] T2.6 实现 Migration 框架 + NamespaceSchema + 单测
+- [x] T2.6 实现 Migration 框架 + NamespaceSchema + 单测
 - [ ] T2.7 迁移 core.config namespace + v0→v1 迁移脚本 + 迁移测试
 - [ ] T2.8 迁移 core.identity / repo.pending-pushes / repo.repositories
 - [ ] T2.9 预留 secrets / providers / projects / connectors / conversations / audit / outbox 等 namespace schema
