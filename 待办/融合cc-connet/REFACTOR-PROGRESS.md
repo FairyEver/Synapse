@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T11:57:00+08:00
+last_updated: 2026-04-25T12:00:00+08:00
 current_phase: 0.2
-current_task: T2.1
+current_task: T2.2
 status: in_progress
 task_counts:
   total: 71
-  completed: 9
+  completed: 10
   blocked: 0
-  pending: 62
+  pending: 61
 audit:
   rounds: 0
   last_status: not_started
@@ -36,7 +36,7 @@ audit:
 
 ### Phase 0.2 DataRepository（14 任务）
 
-- [ ] T2.1 建 runtime/data-repo/ 类型 + DataNamespace 抽象 + 单测
+- [x] T2.1 建 runtime/data-repo/ 类型 + DataNamespace 抽象 + 单测
 - [ ] T2.2 实现 JsonBackend + 原子写 + 单测
 - [ ] T2.3 实现 EncryptedJsonBackend + 单测
 - [ ] T2.4 实现 JsonLinesBackend + 单测
@@ -113,8 +113,8 @@ audit:
 
 ## 当前任务
 
-- task: T2.1
-- started_at: 2026-04-25T11:57:00+08:00
+- task: T2.2
+- started_at: 2026-04-25T12:00:00+08:00
 - status: in_progress
 
 ## 已完成
@@ -153,7 +153,7 @@ audit:
 
 ### T1.9 Phase 0.1 集成测试（lifecycle full-graph）
 - completed_at: 2026-04-25T11:57:00+08:00
-- commit: （即将填入）
+- commit: c25b35a
 - files_changed:
   - desktop/tests/unit/phase-0.1-integration.test.ts (new, 2 tests)
 - tests_passed: 52 / 52
@@ -271,4 +271,4 @@ audit:
 
 ## 最后心跳
 
-2026-04-25T11:30:00+08:00
+2026-04-25T12:00:00+08:00
