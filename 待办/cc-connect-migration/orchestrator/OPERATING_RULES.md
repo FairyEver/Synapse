@@ -28,6 +28,16 @@
 必要的状态文件
 ```
 
+stage 01 的正式项目资产路径是：
+
+```text
+/Users/liyang/Desktop/code-guide/cc-connect-main
+```
+
+stage 01 必须扫描完整项目资产，包括 Go、Web、npm、daemon、config、core、README 和测试。不要只扫描 Go。
+
+不要用 `.ai-runs` 摘要替代真实项目资产；历史摘要只能作为辅助线索或 candidate 参考。
+
 ## 3. 验收循环
 
 每个阶段遵循：
@@ -50,7 +60,7 @@
 
 ```text
 needs-user-confirmation
-CC Connect 源码路径不明确
+CC Connect 项目资产路径不明确
 用户确认项没有决定
 00A 裁决要求用户选择
 即将进入 stage 06 代码迁移
@@ -73,4 +83,3 @@ CC Connect 源码路径不明确
 下一步
 是否需要用户确认
 ```
-

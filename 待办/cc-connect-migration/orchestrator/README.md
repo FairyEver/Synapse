@@ -22,6 +22,16 @@ Codex 应按 `START_HERE.md` 的状态机自动推进：
 → pass 后进入下一阶段
 ```
 
+## CC Connect 来源路径
+
+正式项目资产路径：
+
+```text
+/Users/liyang/Desktop/code-guide/cc-connect-main
+```
+
+stage 01 必须以该目录为正式来源证据，并扫描完整项目资产，包括 Go、Web、npm、daemon、config、core、README 和测试。不要只扫描 Go。
+
 ## 状态文件
 
 编排器必须维护这些文件：
@@ -52,9 +62,8 @@ Codex 应按 `START_HERE.md` 的状态机自动推进：
 
 ```text
 needs-user-confirmation
-源码路径或 CC Connect 项目位置缺失
+项目资产路径或 CC Connect 项目位置缺失
 需要用户决定纳入 / 合并 / 替代 / 丢弃 / 暂缓
 00A 裁决结果需要用户取舍
 执行迁移代码前的最终确认
 ```
-

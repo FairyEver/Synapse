@@ -40,13 +40,16 @@
    - 06-分批执行迁移.md
    - 07-收口审计.md
 4. 如果 待办/cc-connect-migration/artifacts/ 不存在，创建它。
-5. 如果 待办/cc-connect-migration/artifacts/0.0-orchestrator-state.md 已存在，先读取它并从记录的 next_action 恢复，不要从头开始。
-6. 如果 state 不存在，按下面阶段顺序从 01 开始。
+5. 确认 CC Connect 真实项目资产目录存在：/Users/liyang/Desktop/code-guide/cc-connect-main。
+6. 确认该目录包含可扫描的项目资产，例如 README、go.mod、core、web、npm、daemon、config、测试文件。不要把 go.mod 作为唯一有效性标准。
+7. 如果 待办/cc-connect-migration/artifacts/0.0-orchestrator-state.md 已存在，先读取它并从记录的 next_action 恢复，不要从头开始。
+8. 如果 state 不存在，按下面阶段顺序从 01 开始。
 
 阶段顺序：
 
 stage 01：
 执行 待办/cc-connect-migration/prompts/01-功能全集盘点.md。
+正式项目资产路径：/Users/liyang/Desktop/code-guide/cc-connect-main。必须扫描完整项目资产，包括 Go、Web、npm、daemon、config、core、README 和测试。
 验收 待办/cc-connect-migration/prompts/00-阶段验收门.md。
 目标产物：
 - 待办/cc-connect-migration/artifacts/1.1-source-inventory.md
@@ -146,4 +149,3 @@ stage 07：
 
 现在先执行“启动前检查”。如果状态文件不存在，从 stage 01 开始。每完成一个阶段或遇到阻塞，都简短汇报当前阶段、结论和下一步。
 ```
-
