@@ -21,6 +21,8 @@ export { EncryptedJsonNamespace } from "./backends/encrypted-json"
 export type { EncryptedJsonBackendDeps, SafeStorage } from "./backends/encrypted-json"
 export { JsonLinesNamespace } from "./backends/jsonl"
 export type { JsonLinesBackendDeps } from "./backends/jsonl"
+export { SqliteNamespace, openSqliteDatabase } from "./backends/sqlite"
+export type { SqliteBackendDeps } from "./backends/sqlite"
 export {
   copyToTimestampedBackup,
   fileExists,

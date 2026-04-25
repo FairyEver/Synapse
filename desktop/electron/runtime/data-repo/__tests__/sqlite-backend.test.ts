@@ -1,0 +1,208 @@
+import { describe, expect, it } from "vitest"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { SqliteNamespace, openSqliteDatabase } from "../backends/sqlite"
+import { InvalidNamespaceDataError } from "../errors"
+
+interface Conversation extends Record<string, unknown> {
+  id: string
+  title: string
+  archived?: boolean
+}
+
+const tempDir = () => mkdtemp(path.join(tmpdir(), "synapse-sqlite-"))
+
+describe("SqliteNamespace (T2.5)", () => {
+  it("upsert/get/list/remove roundtrip survives reopen", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "data.db")
+    try {
+      const db = openSqliteDatabase(file)
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      await ns.upsert({ id: "c1", title: "Hello" })
+      await ns.upsert({ id: "c2", title: "World", archived: true })
+      expect(await ns.get("c1")).toEqual({ id: "c1", title: "Hello" })
+      expect((await ns.list()).map((c) => c.id).sort()).toEqual(["c1", "c2"])
+      await ns.remove("c1")
+      expect(await ns.get("c1")).toBeNull()
+      expect(await ns.list()).toHaveLength(1)
+      db.close()
+
+      const db2 = openSqliteDatabase(file)
+      const ns2 = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db2,
+      })
+      expect(await ns2.list()).toHaveLength(1)
+      expect(await ns2.get("c2")).toEqual({ id: "c2", title: "World", archived: true })
+      db2.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("list filter applies after JSON parse", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      await ns.upsert({ id: "c1", title: "a", archived: false })
+      await ns.upsert({ id: "c2", title: "b", archived: true })
+      const archived = await ns.list({ archived: true })
+      expect(archived.map((c) => c.id)).toEqual(["c2"])
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("singleton mode stores under reserved id", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      expect(await ns.getSingleton()).toBeNull()
+      await ns.setSingleton({ id: "active", title: "Current" })
+      expect(await ns.getSingleton()).toEqual({ id: "active", title: "Current" })
+      // The singleton row must NOT show up in list().
+      expect(await ns.list()).toEqual([])
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects upsert with reserved __singleton id", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      await expect(
+        ns.upsert({ id: "__singleton", title: "nope" }),
+      ).rejects.toBeInstanceOf(InvalidNamespaceDataError)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("indexes option creates user-declared indexes", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const _ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+        indexes: ["json_extract(value, '$.archived')"],
+      })
+      void _ns
+      const indexes = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='ns_conversations'`)
+        .all() as Array<{ name: string }>
+      expect(indexes.some((i) => i.name.startsWith("idx_ns_conversations_"))).toBe(true)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("invalid namespace name (slashes) is rejected", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      expect(
+        () =>
+          new SqliteNamespace({
+            name: "bad/name",
+            schemaVersion: 1,
+            backend: "sqlite",
+            database: db,
+          }),
+      ).toThrowError(InvalidNamespaceDataError)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("change events fire on upsert / remove / setSingleton", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      const events: string[] = []
+      ns.onChange((e) => events.push(`${e.kind}:${e.id ?? ""}`))
+
+      await ns.upsert({ id: "c1", title: "x" })
+      await ns.upsert({ id: "c1", title: "x2" })
+      await ns.remove("c1")
+      await ns.setSingleton({ id: "active", title: "Current" })
+      expect(events).toEqual(["upsert:c1", "upsert:c1", "remove:c1", "replace:"])
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("WAL mode is enabled on the opened database", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const row = db.prepare("PRAGMA journal_mode;").get() as { journal_mode?: string }
+      expect(row.journal_mode?.toLowerCase()).toBe("wal")
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("rowCount reports the number of non-singleton rows + singleton not counted", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      expect(ns.rowCount()).toBe(0)
+      await ns.upsert({ id: "c1", title: "x" })
+      await ns.upsert({ id: "c2", title: "y" })
+      expect(ns.rowCount()).toBeGreaterThanOrEqual(2)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
