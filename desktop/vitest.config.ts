@@ -21,5 +21,11 @@ export default defineConfig({
     ],
     exclude: ["node_modules", "dist", "dist-electron", "dist-data-store"],
     reporters: process.env.CI ? ["default"] : ["default"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary"],
+      include: ["electron/runtime/**/*", "electron/services/**/*"],
+      exclude: ["**/__tests__/**", "**/*.test.ts", "**/*.spec.ts"],
+    },
   },
 })
