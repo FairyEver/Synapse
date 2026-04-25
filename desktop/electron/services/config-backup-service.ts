@@ -8,7 +8,7 @@ import type {
   SynapseConfigBackupImportResult,
 } from "../../src/types/backup"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
-import type { SynapseFavorites } from "../../src/types/config"
+import type { SynapseFavorites, SynapseWorkspaceBinding } from "../../src/types/config"
 import type { SynapseContentType } from "../../src/types/content"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
@@ -87,6 +87,47 @@ function validateProject(
     id: id.trim(),
     name: name.trim(),
     path: projectPath.trim(),
+    ...(rawValue.mode === "single" || rawValue.mode === "multi-workspace" ? { mode: rawValue.mode } : undefined),
+    ...(isNonEmptyString(rawValue.workDir) ? { workDir: rawValue.workDir.trim() } : undefined),
+    ...(isNonEmptyString(rawValue.workDirOverride) ? { workDirOverride: rawValue.workDirOverride.trim() } : undefined),
+    ...(isNonEmptyString(rawValue.baseDir) ? { baseDir: rawValue.baseDir.trim() } : undefined),
+    ...(rawValue.source === "cc-connect" ? { source: "cc-connect" as const } : undefined),
+    ...(isRecord(rawValue.workspaceDirOverrides)
+      ? {
+          workspaceDirOverrides: Object.fromEntries(
+            Object.entries(rawValue.workspaceDirOverrides)
+              .flatMap(([key, value]) =>
+                key.trim().length > 0 && isNonEmptyString(value)
+                  ? [[key.trim(), value.trim()] as const]
+                  : []
+              ),
+          ),
+        }
+      : undefined),
+  }
+}
+
+function validateWorkspaceBinding(rawValue: unknown): SynapseWorkspaceBinding | null {
+  if (!isRecord(rawValue)) {
+    return null
+  }
+
+  if (
+    !isNonEmptyString(rawValue.id)
+    || !isNonEmptyString(rawValue.channelKey)
+    || !isNonEmptyString(rawValue.workspacePath)
+    || !isNonEmptyString(rawValue.boundAt)
+  ) {
+    return null
+  }
+
+  return {
+    id: rawValue.id.trim(),
+    projectId: isNonEmptyString(rawValue.projectId) ? rawValue.projectId.trim() : null,
+    channelKey: rawValue.channelKey.trim(),
+    channelName: isNonEmptyString(rawValue.channelName) ? rawValue.channelName.trim() : "",
+    workspacePath: rawValue.workspacePath.trim(),
+    boundAt: rawValue.boundAt.trim(),
   }
 }
 
@@ -211,6 +252,9 @@ function validateConfig(
 
   const themeMode = readRequiredField(global, "themeMode", "config.global", errors)
   const projects = readRequiredField(global, "projects", "config.global", errors)
+  const workspaceBindings = Array.isArray(global.workspaceBindings)
+    ? global.workspaceBindings.map(validateWorkspaceBinding).filter((value): value is SynapseWorkspaceBinding => value !== null)
+    : []
 
   if (
     typeof themeMode !== "string"
@@ -274,6 +318,10 @@ function validateConfig(
     global: {
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
       projects: normalizedProjects,
+      defaultProjectId: isNonEmptyString(global.defaultProjectId) && projectIdSet.has(global.defaultProjectId.trim())
+        ? global.defaultProjectId.trim()
+        : null,
+      workspaceBindings,
       favorites: {
         rule: [],
         skill: [],

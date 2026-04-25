@@ -20,6 +20,7 @@ import type {
   SynapseFavorites,
   SynapseGlobalConfig,
   SynapseProjectConfig,
+  SynapseWorkspaceBinding,
   SynapseRecentlyViewed,
   SynapseRepositoryConfig,
   SynapseThemeMode,
@@ -112,6 +113,30 @@ function hasProjectConfigFormatError(value: unknown): boolean {
     return true
   }
 
+  if (hasOwnKey(value, "mode") && typeof value.mode !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "workDir") && typeof value.workDir !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "workDirOverride") && typeof value.workDirOverride !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "baseDir") && typeof value.baseDir !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "source") && typeof value.source !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "workspaceDirOverrides") && !isRecord(value.workspaceDirOverrides)) {
+    return true
+  }
+
   return false
 }
 
@@ -181,7 +206,7 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (!hasOwnKey(value, "projects")) {
-    return false
+    return hasOwnKey(value, "workspaceBindings") && !Array.isArray(value.workspaceBindings)
   }
 
   if (!Array.isArray(value.projects)) {
@@ -189,6 +214,7 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   return value.projects.some(hasProjectConfigFormatError)
+    || (hasOwnKey(value, "workspaceBindings") && !Array.isArray(value.workspaceBindings))
 }
 
 export function hasRecoverableSynapseConfigFormatError(value: unknown): boolean {
@@ -238,7 +264,23 @@ function normalizeProjectConfig(value: unknown): SynapseProjectConfig | null {
     id,
     name,
     path: projectPath,
+    ...(value.mode === "multi-workspace" || value.mode === "single" ? { mode: value.mode } : undefined),
+    ...(isNonEmptyString(value.workDir) ? { workDir: value.workDir.trim() } : undefined),
+    ...(isNonEmptyString(value.workDirOverride) ? { workDirOverride: value.workDirOverride.trim() } : undefined),
+    ...(isNonEmptyString(value.baseDir) ? { baseDir: value.baseDir.trim() } : undefined),
+    ...(value.source === "cc-connect" ? { source: "cc-connect" as const } : undefined),
+    ...(isRecord(value.workspaceDirOverrides)
+      ? { workspaceDirOverrides: normalizeStringRecord(value.workspaceDirOverrides) }
+      : undefined),
   }
+}
+
+function normalizeStringRecord(value: Record<string, unknown>): Record<string, string> | undefined {
+  const entries = Object.entries(value)
+    .map(([key, item]) => [key.trim(), typeof item === "string" ? item.trim() : ""] as const)
+    .filter(([key, item]) => key.length > 0 && item.length > 0)
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
 const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
@@ -338,6 +380,43 @@ function normalizeProjects(value: unknown): SynapseProjectConfig[] {
   )
 }
 
+function normalizeWorkspaceBinding(value: unknown): SynapseWorkspaceBinding | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const id = asTrimmedString(value.id)
+  const projectId = value.projectId === null ? null : asTrimmedString(value.projectId)
+  const channelKey = asTrimmedString(value.channelKey)
+  const channelName = asTrimmedString(value.channelName)
+  const workspacePath = asTrimmedString(value.workspacePath)
+  const boundAt = asTrimmedString(value.boundAt)
+
+  if (!id || !channelKey || !workspacePath || !boundAt) {
+    return null
+  }
+
+  return {
+    id,
+    projectId: projectId || null,
+    channelKey,
+    channelName,
+    workspacePath,
+    boundAt,
+  }
+}
+
+function normalizeWorkspaceBindings(value: unknown): SynapseWorkspaceBinding[] {
+  if (!Array.isArray(value)) {
+    return structuredClone(DEFAULT_GLOBAL_CONFIG.workspaceBindings)
+  }
+
+  return dedupeByKey(
+    value.map(normalizeWorkspaceBinding).filter(isDefined),
+    (binding) => binding.id,
+  )
+}
+
 function normalizeRepositories(value: unknown): SynapseRepositoryConfig[] {
   if (!Array.isArray(value)) {
     return structuredClone(DEFAULT_CONFIG.repositories)
@@ -386,9 +465,19 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     return structuredClone(DEFAULT_GLOBAL_CONFIG)
   }
 
+  const projects = normalizeProjects(value.projects)
+  const workspaceBindings = normalizeWorkspaceBindings(value.workspaceBindings)
+  const requestedDefaultProjectId = value.defaultProjectId
+  const defaultProjectId = isNonEmptyString(requestedDefaultProjectId)
+    && projects.some((project) => project.id === requestedDefaultProjectId.trim())
+    ? requestedDefaultProjectId.trim()
+    : null
+
   return {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
-    projects: normalizeProjects(value.projects),
+    projects,
+    defaultProjectId,
+    workspaceBindings,
     favorites: normalizeFavorites(value.favorites),
     recentlyViewed: normalizeRecentlyViewed(value.recentlyViewed),
     contentSortOrder: isSynapseContentSortOrder(value.contentSortOrder)
@@ -456,6 +545,7 @@ export function applySynapseConfigPatch(
         ...config.global,
         ...patch.global,
         projects: patch.global.projects ?? config.global.projects,
+        workspaceBindings: patch.global.workspaceBindings ?? config.global.workspaceBindings,
       }
     : config.global
 

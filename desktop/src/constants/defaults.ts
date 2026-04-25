@@ -43,6 +43,8 @@ export const DEFAULT_CONTENT_SORT_ORDER: SynapseContentSortOrder = "modified-des
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
   projects: [],
+  defaultProjectId: null,
+  workspaceBindings: [],
   favorites: DEFAULT_FAVORITES,
   recentlyViewed: DEFAULT_RECENTLY_VIEWED,
   contentSortOrder: DEFAULT_CONTENT_SORT_ORDER,

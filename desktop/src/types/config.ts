@@ -13,10 +13,27 @@ export const SYNAPSE_THEME_MODE_OPTIONS = ["light", "dark", "system"] as const
 
 export type SynapseThemeMode = (typeof SYNAPSE_THEME_MODE_OPTIONS)[number]
 
+export type SynapseProjectMode = "single" | "multi-workspace"
+
+export type SynapseWorkspaceBinding = {
+  id: string
+  projectId: string | null
+  channelKey: string
+  channelName: string
+  workspacePath: string
+  boundAt: string
+}
+
 export type SynapseProjectConfig = {
   id: string
   name: string
   path: string
+  mode?: SynapseProjectMode
+  workDir?: string
+  workDirOverride?: string
+  baseDir?: string
+  source?: "synapse" | "cc-connect"
+  workspaceDirOverrides?: Record<string, string>
 }
 
 export type SynapseFavorites = {
@@ -50,6 +67,8 @@ export type SynapseRepositoryConfig = {
 export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
   projects: SynapseProjectConfig[]
+  defaultProjectId: string | null
+  workspaceBindings: SynapseWorkspaceBinding[]
   favorites: SynapseFavorites
   recentlyViewed: SynapseRecentlyViewed
   contentSortOrder: SynapseContentSortOrder
