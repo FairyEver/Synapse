@@ -32,9 +32,24 @@ export type SynapseInstallSourceMetadata = {
   message: string
 }
 
+export type SynapseLegacyUpdateCompatibilityStatus =
+  | "skipped"
+  | "unknown"
+  | "current"
+  | "available"
+
+export type SynapseLegacyUpdateCompatibility = {
+  status: SynapseLegacyUpdateCompatibilityStatus
+  currentVersion: string
+  latestVersion: string | null
+  commandHint: string | null
+  message: string
+}
+
 export type SynapseAppUpdateState = {
   currentVersion: string
   installSource: SynapseInstallSourceMetadata
+  legacyUpdateCompatibility: SynapseLegacyUpdateCompatibility
   releaseVersion: string | null
   status: SynapseAppUpdateStatus
   message: string

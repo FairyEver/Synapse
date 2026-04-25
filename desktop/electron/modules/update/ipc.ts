@@ -33,6 +33,13 @@ const updateStateResponseSchema = z.object({
     versionStatus: z.enum(["matching", "newer-or-equal", "outdated", "missing", "unknown"]),
     message: z.string(),
   }),
+  legacyUpdateCompatibility: z.object({
+    status: z.enum(["skipped", "unknown", "current", "available"]),
+    currentVersion: z.string(),
+    latestVersion: z.string().nullable(),
+    commandHint: z.string().nullable(),
+    message: z.string(),
+  }),
   releaseVersion: z.string().nullable(),
   status: updateStateSchema,
   message: z.string(),

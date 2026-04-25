@@ -10,6 +10,7 @@ import type {
 import type { SynapseAppUpdateState } from "../../src/types/update"
 import type { WindowManager } from "../runtime/window"
 import { createInstallSourceMetadata } from "./install-source-metadata"
+import { createLegacyUpdateCompatibility } from "./update-compatibility"
 
 // Update event channels for broadcasting state changes
 const UPDATE_CHANNELS = {
@@ -43,14 +44,19 @@ function createUnsupportedMessage(): string {
 
 function createBaseState(): SynapseAppUpdateState {
   const isSupported = isUpdateSupportedInCurrentEnvironment()
+  const currentVersion = app.getVersion()
 
   return {
-    currentVersion: app.getVersion(),
+    currentVersion,
     installSource: createInstallSourceMetadata({
-      appVersion: app.getVersion(),
+      appVersion: currentVersion,
       execPath: process.execPath,
       isPackaged: app.isPackaged,
       platform: process.platform,
+    }),
+    legacyUpdateCompatibility: createLegacyUpdateCompatibility({
+      currentVersion,
+      latestVersion: null,
     }),
     releaseVersion: null,
     status: isSupported ? "idle" : "unsupported",
@@ -400,15 +406,22 @@ class UpdateService {
   }
 
   private setState(patch: Partial<SynapseAppUpdateState>): void {
+    const currentVersion = app.getVersion()
+    const releaseVersion = patch.releaseVersion ?? this.state.releaseVersion
+
     this.state = {
       ...this.state,
       ...patch,
-      currentVersion: app.getVersion(),
+      currentVersion,
       installSource: createInstallSourceMetadata({
-        appVersion: app.getVersion(),
+        appVersion: currentVersion,
         execPath: process.execPath,
         isPackaged: app.isPackaged,
         platform: process.platform,
+      }),
+      legacyUpdateCompatibility: createLegacyUpdateCompatibility({
+        currentVersion,
+        latestVersion: releaseVersion,
       }),
     }
 

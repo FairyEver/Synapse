@@ -23,6 +23,13 @@ const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
     versionStatus: "unknown",
     message: "安装来源未知。",
   },
+  legacyUpdateCompatibility: {
+    status: "unknown",
+    currentVersion: "0.0.0",
+    latestVersion: null,
+    commandHint: null,
+    message: "尚未获取最新版本。",
+  },
   releaseVersion: null,
   status: "idle",
   message: "正在读取更新信息...",
