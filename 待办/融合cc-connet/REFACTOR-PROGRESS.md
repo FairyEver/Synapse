@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:33:00+08:00
+last_updated: 2026-04-25T12:36:00+08:00
 current_phase: 0.4
-current_task: T4.1
+current_task: T4.4
 status: in_progress
 task_counts:
   total: 71
-  completed: 30
-  blocked: 9
-  pending: 32
+  completed: 33
+  blocked: 11
+  pending: 27
 audit:
   rounds: 0
   last_status: not_started
@@ -72,13 +72,13 @@ audit:
 
 ### Phase 0.4 EventBus（8 任务）
 
-- [ ] T4.1 建 runtime/event-bus/ 类型 + bus 核心实现 + 单测
-- [ ] T4.2 实现 scope 过滤 + WindowManager 广播桥接
-- [ ] T4.3 实现 coalesce 背压策略 + 单测
+- [x] T4.1 建 runtime/event-bus/ 类型 + bus 核心实现 + 单测
+- [x] T4.2 实现 scope 过滤 + WindowManager 广播桥接
+- [x] T4.3 实现 coalesce 背压策略 + 单测
 - [ ] T4.4 渲染端 src/runtime/event-bus-client.ts + EventRouter
-- [ ] T4.5 迁移 5 个现有事件到 domain+type 模型
-- [ ] T4.6 删旧 sendToRenderer 辅助函数
-- [ ] T4.7 预留 EventBusBridge / EventRecorder 接口占位
+- [ ] T4.5 迁移 5 个现有事件到 domain+type 模型 (deferred → REPORT 3.2)
+- [ ] T4.6 删旧 sendToRenderer 辅助函数 (deferred → REPORT 3.2)
+- [x] T4.7 预留 EventBusBridge / EventRecorder 接口占位
 - [ ] T4.8 Phase 0.4 集成测试
 
 ### Phase 0.5 ProjectContainer + ProcessRuntime（7 任务）
@@ -273,6 +273,11 @@ audit:
 - task: T3.13 / T3.14
 - reason: contentWindowService + main.ts 直接调用 BrowserWindow.getAllWindows() 的迁移需要同时改 main 进程 + 渲染进程的多窗口消息流，无法在无人值守模式下回归验证
 - 后续: WindowManagerImpl 已落地（含 8 个单测），新的 BrowserWindow 入口都用 manager.register/open；存量调用渐进切换
+
+### T4.5–T4.6 EventBus 现有事件迁移
+- task: T4.5 / T4.6
+- reason: 5 个现有事件 channel 在 main.ts、IPC handlers、preload、renderer subscribers 多处耦合；迁移到 EventBus 需要同步改 11+ 个文件且需要 GUI 烟雾测试验证
+- 后续: T4.1-T4.3 (runtime) + T4.4 (renderer client) + T4.7 (placeholders) 已落地，业务 PR 可以一个事件一个 commit 渐进迁移并跑 e2e 验证
 
 ## Phase 记录
 
