@@ -123,6 +123,21 @@
 
 ### Phase 0.5 ProjectContainer + ProcessRuntime
 
+**状态**: 完成（7/7 任务）。
+**测试**: 237 通过。
+
+**新增**:
+- `runtime/project-container/` — types + registry + scoped-event-bus + scoped-data-repo + idle-reaper
+- `runtime/process/` — ProcessRuntime 接口 + MainProcessRuntime 实现（仅 kind: "main"，未来 PR 加 utility/worker/child）
+- `runtime/{bootstrap,runtime-mode}.ts` — RuntimeMode + bootstrap("gui" | "headless" | "cli")
+- `desktop/src/app-shell/{use-active-project.ts, active-project.tsx}` — 渲染端 active project hook + 占位指示器组件
+
+**关键设计**:
+- ProjectContainer 在 `open(projectId)` 时拓扑启动 scoped services；scoped service 的 ctx 自带 `projectId`-aware EventBus 和 DataRepo（Phase 0.5 是 pass-through，M1 把数据真落盘到 `projects/<id>/`）。
+- IdleReaper 用注入式 `now()` 接受时间，便于单测；生产用 setInterval（unref 默认开），不阻塞退出。
+- ProcessRuntime 在 Phase 0.5 只支持 `main`，但接口已经覆盖 utility/worker/child；未来 PR 需要时只加分支。
+- bootstrap 三种 mode 都返回相同结构的 RuntimeContext，UI 入口和 headless 入口共享同一份 registry 配置。
+
 ### Phase 0.6 工程规范与可观测性
 
 ## 3. 决策记录

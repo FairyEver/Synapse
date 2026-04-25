@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:38:00+08:00
-current_phase: 0.5
-current_task: T5.1
+last_updated: 2026-04-25T12:45:00+08:00
+current_phase: 0.6
+current_task: T6.1
 status: in_progress
 task_counts:
   total: 71
-  completed: 35
+  completed: 42
   blocked: 11
-  pending: 25
+  pending: 18
 audit:
   rounds: 0
   last_status: not_started
@@ -83,13 +83,13 @@ audit:
 
 ### Phase 0.5 ProjectContainer + ProcessRuntime（7 任务）
 
-- [ ] T5.1 建 runtime/project-container/ 类型 + registry 骨架 + 单测
-- [ ] T5.2 实现 ScopedEventBus + ProjectScopedDataRepo + 单测
-- [ ] T5.3 实现 idle-reaper 全局服务
-- [ ] T5.4 渲染端 app-shell/active-project.tsx + use-active-project.ts
-- [ ] T5.5 建 runtime/process/ ProcessRuntime 接口 + main 直跑实现 + 单测
-- [ ] T5.6 建 runtime/runtime-mode.ts + bootstrap.ts
-- [ ] T5.7 Phase 0.5 集成测试
+- [x] T5.1 建 runtime/project-container/ 类型 + registry 骨架 + 单测
+- [x] T5.2 实现 ScopedEventBus + ProjectScopedDataRepo + 单测
+- [x] T5.3 实现 idle-reaper 全局服务
+- [x] T5.4 渲染端 app-shell/active-project.tsx + use-active-project.ts
+- [x] T5.5 建 runtime/process/ ProcessRuntime 接口 + main 直跑实现 + 单测
+- [x] T5.6 建 runtime/runtime-mode.ts + bootstrap.ts
+- [x] T5.7 Phase 0.5 集成测试
 
 ### Phase 0.6 工程规范与可观测性（17 任务）
 
