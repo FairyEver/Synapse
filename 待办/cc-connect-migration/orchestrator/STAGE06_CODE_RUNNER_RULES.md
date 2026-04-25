@@ -35,6 +35,7 @@ stage 06 执行器必须维护以下文件：
 待办/cc-connect-migration/artifacts/6.0-code-runner-state.md
 待办/cc-connect-migration/artifacts/6.0-code-runner-log.md
 待办/cc-connect-migration/artifacts/6.0-code-runner-resume-prompt.md
+待办/cc-connect-migration/artifacts/6.0-overnight-summary.md
 ```
 
 每个小批次完成后生成：
@@ -77,6 +78,7 @@ stage 06 执行器必须维护以下文件：
 最近读取的 CC Connect 源码：
 最近提交：
 下一步动作：
+明早第一步：
 恢复提示文件：
 最后更新时间：
 ```
@@ -214,10 +216,63 @@ smol-toml
     - `5.4-release-and-rollback-plan.md`
 18. 生成 `6.x-execution-report-*`，报告必须包含“原源码对照”和“本批 commit message”。
 19. 更新 state/log/resume prompt。
-20. 运行 `git status --short`，确认只有当前批次相关文件发生变化；如出现未知无关变更，必须暂停。
-21. 使用 `git add` 暂存当前批次的代码、测试、lockfile、artifacts 和状态文件。
-22. 提交当前批次 commit。
-23. 进入下一个 planned 批次。
+20. 更新 `6.0-overnight-summary.md`，让用户第二天第一眼能看到完成了什么、阻塞了什么、下一步要决定什么。
+21. 运行 `git status --short`，确认只有当前批次相关文件发生变化；如出现未知无关变更，必须暂停。
+22. 使用 `git add` 暂存当前批次的代码、测试、lockfile、artifacts 和状态文件。
+23. 提交当前批次 commit。
+24. 进入下一个 planned 批次。
+
+## 7B. Overnight Summary 规则
+
+无人值守执行期间必须持续维护：
+
+```text
+待办/cc-connect-migration/artifacts/6.0-overnight-summary.md
+```
+
+更新时机：
+
+1. 启动 stage 06 后立即创建。
+2. 每完成一个小批次后更新。
+3. 每次暂停前更新。
+4. stage 06 全部完成后更新。
+5. stage 07 完成后更新。
+
+文件必须包含：
+
+```text
+# Overnight Summary
+
+## 当前结论
+complete / blocked / in_progress
+
+## 已完成批次
+批次、CC ID、commit、执行报告、验证摘要
+
+## 当前批次
+批次、状态、正在做什么
+
+## 未执行批次
+批次、CC ID、原因
+
+## 跳过或暂缓项
+项目、原因、是否需要用户确认
+
+## 阻塞问题
+需要用户决定什么、选项、推荐选择、影响
+
+## 明早第一步
+用户应该先回复什么
+
+## 恢复提示
+可直接复制给 Codex 的恢复提示
+```
+
+如果触发必须暂停条件，`6.0-overnight-summary.md` 必须把“明早第一步”写成可直接复制的短提示词。
+
+如果没有阻塞但仍在执行中，`6.0-overnight-summary.md` 必须写清楚当前批次和下一批次。
+
+如果全部完成，`6.0-overnight-summary.md` 必须写清楚最终审计结论、最终 commit 范围和是否还需要用户人工检查。
 
 ## 7A. Git 提交规则
 
@@ -283,6 +338,16 @@ git status --short
 需要用户确认：是
 ```
 
+暂停前必须同时更新：
+
+```text
+6.0-code-runner-state.md
+6.0-code-runner-log.md
+6.0-code-runner-resume-prompt.md
+6.0-overnight-summary.md
+6.x-blocker.md
+```
+
 ## 9. 必须暂停的情况
 
 遇到以下情况必须暂停，不得无人值守继续：
@@ -326,6 +391,7 @@ git status --short
 8. 如果当前批次是 `done`，选择下一个 planned 批次。
 9. 不重复已经 done 的批次。
 10. 不重新生成 `6.0-dev-batch-plan.md`，除非文件不存在或明确损坏。
+11. 恢复时必须先读取 `6.0-overnight-summary.md`；如果该文件不存在，先根据 state/log/report 重建它。
 
 ## 12. 完成定义
 
@@ -336,11 +402,12 @@ stage 06 完成必须同时满足：
 3. 每个批次都有 `6.x-execution-report-*`。
 4. 每个批次执行报告都列出本批读取的 CC Connect 原源码和测试路径。
 5. 每个批次都有独立 git commit，commit message 能看出 stage、批次编号、批次名称和 CC ID。
-6. `pnpm desktop:typecheck` 通过。
-7. `pnpm desktop:check:hard-constraints` 通过。
-8. `pnpm desktop:check:ipc-codegen` 通过。
-9. 没有 orphan UI/API/service。
-10. 执行 stage 07，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`。
+6. `6.0-overnight-summary.md` 已更新为最终状态。
+7. `pnpm desktop:typecheck` 通过。
+8. `pnpm desktop:check:hard-constraints` 通过。
+9. `pnpm desktop:check:ipc-codegen` 通过。
+10. 没有 orphan UI/API/service。
+11. 执行 stage 07，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`。
 
 ## 13. 汇报格式
 
@@ -353,6 +420,7 @@ stage 06 完成必须同时满足：
 修改文件：
 验证结果：
 提交：
+Overnight Summary：
 状态更新：
 下一批次：
 是否需要用户确认：

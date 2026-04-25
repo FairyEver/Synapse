@@ -28,11 +28,12 @@ CC Connect 原项目资产路径固定为：
 4. `待办/cc-connect-migration/artifacts/6.0-code-runner-log.md`
 5. `待办/cc-connect-migration/artifacts/6.0-code-runner-resume-prompt.md`
 6. `待办/cc-connect-migration/artifacts/6.0-dev-batch-plan.md`
-7. `待办/cc-connect-migration/artifacts/1.2-feature-manifest.md`
-8. `待办/cc-connect-migration/artifacts/4.1-verification-ledger.md`
-9. `待办/cc-connect-migration/artifacts/5.1-development-plan.md`
-10. `待办/cc-connect-migration/artifacts/5.3-decision-log.md`
-11. `待办/cc-connect-migration/artifacts/5.4-release-and-rollback-plan.md`
+7. `待办/cc-connect-migration/artifacts/6.0-overnight-summary.md`
+8. `待办/cc-connect-migration/artifacts/1.2-feature-manifest.md`
+9. `待办/cc-connect-migration/artifacts/4.1-verification-ledger.md`
+10. `待办/cc-connect-migration/artifacts/5.1-development-plan.md`
+11. `待办/cc-connect-migration/artifacts/5.3-decision-log.md`
+12. `待办/cc-connect-migration/artifacts/5.4-release-and-rollback-plan.md`
 
 恢复检查：
 
@@ -45,6 +46,7 @@ CC Connect 原项目资产路径固定为：
 7. 如果 state 显示当前批次为 `done`，选择 `6.0-dev-batch-plan.md` 中下一个 planned 批次。
 8. 如果 `6.0-code-runner-state.md` 不存在，不要猜测；读取 `STAGE06_START.md` 并执行启动前检查。
 9. 如果当前批次 state/log/report 没有列出“已读取的 CC Connect 源码/测试路径”，必须先从 `1.2-feature-manifest.md` 和 `4.2-golden-test-cases.md` 提取路径并读取原源码，再继续。
+10. 如果 `6.0-overnight-summary.md` 不存在，先根据 state/log/report 重建它。
 
 继续执行规则：
 
@@ -52,18 +54,21 @@ CC Connect 原项目资产路径固定为：
 2. 不重复已经 done 的批次。
 3. 不重新生成 `6.0-dev-batch-plan.md`，除非该文件不存在或明显损坏。
 4. 每次继续前都更新 `6.0-code-runner-resume-prompt.md`。
-5. 每完成一个批次，更新 manifest、verification ledger、manual acceptance、development plan、decision log、release/rollback plan 和执行报告。
-6. 每个批次执行报告必须包含“原源码对照”章节，列出读取过的 CC Connect 源码和测试文件。
-7. 每完成一个批次且验证通过后，必须创建一个 git commit，commit message 使用 `stage06(<批次编号>): <批次名称> [<CC ID 列表>]` 格式。
-8. 每个批次最多 3 次修复尝试，超过则暂停。
-9. 用户已预授权 S06-B03 / CC-005 使用 `smol-toml` 解析旧 `config.toml`，不要因此再次暂停。
-10. 用户要求连续执行；不要因为完成一个批次而暂停。
+5. 每次继续前都更新 `6.0-overnight-summary.md`。
+6. 每完成一个批次，更新 manifest、verification ledger、manual acceptance、development plan、decision log、release/rollback plan 和执行报告。
+7. 每个批次执行报告必须包含“原源码对照”章节，列出读取过的 CC Connect 源码和测试文件。
+8. 每完成一个批次且验证通过后，必须创建一个 git commit，commit message 使用 `stage06(<批次编号>): <批次名称> [<CC ID 列表>]` 格式。
+9. 每个批次最多 3 次修复尝试，超过则暂停。
+10. 用户已预授权 S06-B03 / CC-005 使用 `smol-toml` 解析旧 `config.toml`，不要因此再次暂停。
+11. 用户要求连续执行；不要因为完成一个批次而暂停。
 
 暂停条件：
 
 如果需要用户确认、发现未知脏改、验证连续 3 次失败、需要新增依赖、需要真实账号/secret/扫码/系统服务操作，必须暂停，并更新 state/log/resume prompt。
 
 例外：S06-B03 / CC-005 使用已预授权的 `smol-toml` 不属于需要暂停的新增依赖。
+
+暂停前必须更新 `6.0-overnight-summary.md`，写清楚“需要用户决定什么、选项、推荐选择、影响、明早第一步”。
 
 开始恢复：
 

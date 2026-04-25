@@ -63,16 +63,19 @@ CC Connect 原项目资产路径固定为：
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-state.md`
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-log.md`
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-resume-prompt.md`
-4. 从 `6.0-dev-batch-plan.md` 中选择第一个 planned 批次执行。
-5. 每个批次执行前，从 `1.2-feature-manifest.md` 和 `4.2-golden-test-cases.md` 提取本批 CC ID 对应的 CC Connect 源码/测试路径，并用 `rg` 在 `/Users/liyang/Desktop/code-guide/cc-connect-main` 中补充相关源码。
-6. 每个批次写代码前，必须读取本批相关 CC Connect 源码和测试文件，并把已读取路径记录到 state、log 和执行报告。
-7. 每个批次执行前，更新 state 为 `in_progress`，并写好 resume prompt。
-8. 每个批次只实现本批次覆盖的 CC ID。
-9. 每个批次完成后，必须更新 manifest、verification ledger、manual acceptance、development plan、decision log、release/rollback plan 中与本批次相关的状态和证据。
-10. 每个批次完成后，生成 `6.x-execution-report-<batch-id>-<short-name>.md`，报告必须包含“原源码对照”章节。
-11. 每个批次验证通过后，必须创建一个 git commit，commit message 必须使用 `stage06(<批次编号>): <批次名称> [<CC ID 列表>]` 格式。
-12. 每个批次 commit 后，如果没有触发暂停条件，继续执行下一个 planned 批次，直到全部完成。
-13. stage 06 全部完成后，执行 `待办/cc-connect-migration/prompts/07-收口审计.md`，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`。
+   - `待办/cc-connect-migration/artifacts/6.0-overnight-summary.md`
+4. 启动后立即创建或更新 `6.0-overnight-summary.md`。
+5. 从 `6.0-dev-batch-plan.md` 中选择第一个 planned 批次执行。
+6. 每个批次执行前，从 `1.2-feature-manifest.md` 和 `4.2-golden-test-cases.md` 提取本批 CC ID 对应的 CC Connect 源码/测试路径，并用 `rg` 在 `/Users/liyang/Desktop/code-guide/cc-connect-main` 中补充相关源码。
+7. 每个批次写代码前，必须读取本批相关 CC Connect 源码和测试文件，并把已读取路径记录到 state、log、overnight summary 和执行报告。
+8. 每个批次执行前，更新 state 为 `in_progress`，并写好 resume prompt。
+9. 每个批次只实现本批次覆盖的 CC ID。
+10. 每个批次完成后，必须更新 manifest、verification ledger、manual acceptance、development plan、decision log、release/rollback plan 中与本批次相关的状态和证据。
+11. 每个批次完成后，生成 `6.x-execution-report-<batch-id>-<short-name>.md`，报告必须包含“原源码对照”章节。
+12. 每个批次完成后，必须更新 `6.0-overnight-summary.md`。
+13. 每个批次验证通过后，必须创建一个 git commit，commit message 必须使用 `stage06(<批次编号>): <批次名称> [<CC ID 列表>]` 格式。
+14. 每个批次 commit 后，如果没有触发暂停条件，继续执行下一个 planned 批次，直到全部完成。
+15. stage 06 全部完成后，执行 `待办/cc-connect-migration/prompts/07-收口审计.md`，生成 `7.1-final-audit.md` 和 `7.2-reverse-coverage-check.md`，并更新 `6.0-overnight-summary.md`。
 
 验证要求：
 
@@ -106,6 +109,12 @@ pnpm desktop:check:ipc-codegen
 暂停条件：
 
 严格遵守 `STAGE06_CODE_RUNNER_RULES.md` 的“必须暂停的情况”。暂停前必须更新 state/log/resume prompt，并说明用户应该下一步输入什么。
+
+夜间无人值守要求：
+
+1. 如果遇到必须用户决定的问题，停止前必须更新 `6.0-overnight-summary.md`，写清楚“需要用户决定什么、选项、推荐选择、影响、明早第一步”。
+2. 如果全部完成，必须在 `6.0-overnight-summary.md` 写清楚完成批次、commit 范围、最终审计结论和是否还需要人工检查。
+3. 用户明早只看 `6.0-overnight-summary.md` 就应该知道当前状态和下一步该回复什么。
 
 开始执行：
 
