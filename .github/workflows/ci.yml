@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  desktop:
+    name: Desktop typecheck + tests + hard-constraints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm desktop:typecheck
+      - name: Run tests
+        run: pnpm desktop:test
+      - name: Verify IPC codegen drift
+        run: pnpm desktop:check:ipc-codegen
+      - name: Verify Phase 0 hard constraints
+        run: pnpm desktop:check:hard-constraints

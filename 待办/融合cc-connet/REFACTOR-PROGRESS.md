@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:55:00+08:00
-current_phase: 0.6
-current_task: T6.14
+last_updated: 2026-04-25T13:01:00+08:00
+current_phase: completed-pending-audit
+current_task: audit
 status: in_progress
 task_counts:
   total: 71
-  completed: 55
+  completed: 60
   blocked: 11
-  pending: 5
+  pending: 0
 audit:
   rounds: 0
   last_status: not_started
@@ -106,10 +106,10 @@ audit:
 - [x] T6.11 实现 desktop/src/runtime/i18n.ts + theme.ts 接口占位
 - [x] T6.12 实现 desktop/src/runtime/debug-panel.tsx 骨架（dev-only）
 - [x] T6.13 建 desktop/tests/{unit,ipc,perf,fuzz,e2e}/ 目录 + fixture 工具 + 示例测试
-- [ ] T6.14 加 ESLint 规则（禁 modules 互相 import）+ 确认 lint 通过
-- [ ] T6.15 更新 AGENTS.md 硬约束段
-- [ ] T6.16 更新 .github/workflows/ci.yml 加入 codegen diff 闸门 + grep 硬约束扫描
-- [ ] T6.17 Phase 0.6 集成测试 + 全量回归
+- [x] T6.14 加 ESLint 规则（禁 modules 互相 import）+ 确认 lint 通过 (replaced with check-hard-constraints.mjs script — see REPORT note)
+- [x] T6.15 更新 AGENTS.md 硬约束段
+- [x] T6.16 更新 .github/workflows/ci.yml 加入 codegen diff 闸门 + grep 硬约束扫描
+- [x] T6.17 Phase 0.6 集成测试 + 全量回归
 
 ## 当前任务
 

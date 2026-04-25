@@ -24,6 +24,7 @@
     "desktop:test:watch": "pnpm --filter @synapse/desktop run test:watch",
     "desktop:generate:ipc": "pnpm --filter @synapse/desktop run generate:ipc",
     "desktop:check:ipc-codegen": "pnpm --filter @synapse/desktop run check:ipc-codegen",
+    "desktop:check:hard-constraints": "pnpm --filter @synapse/desktop run check:hard-constraints",
     "website:dev": "pnpm --filter @synapse/website run dev",
     "website:build": "pnpm --filter @synapse/website run build",
     "website:preview": "pnpm --filter @synapse/website run preview"

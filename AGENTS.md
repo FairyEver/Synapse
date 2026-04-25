@@ -48,6 +48,25 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 - Use function components only. Keep components and hooks pure.
 - Put side effects in event handlers, effects, Electron main-process code, or dedicated services.
 - Use strict TypeScript. Avoid `any`; if it is truly unavoidable, isolate it and explain it.
+
+## Phase 0 architecture hard constraints (SPEC §1)
+
+These must hold for every PR. The `desktop:check:hard-constraints` script
+enforces them; CI runs it on push.
+
+1. **No global singletons in new code**: never write `export default new XxxService()` in `desktop/electron/runtime/` or `desktop/electron/bootstrap/`. Wire services through `ServiceRegistry` (see `desktop/electron/runtime/service-registry`).
+2. **No bare `ipcMain.handle/on`**: only `desktop/electron/runtime/ipc/` may call these. Other code registers via `IpcRegistry.register(IpcModule, ctx)`.
+3. **No bare `webContents.send`**: only `desktop/electron/runtime/event-bus/` (via `WindowBroadcaster`) and `desktop/electron/runtime/window/` (via `WindowManager.broadcast`) may call this. Cross-renderer notifications go through EventBus.
+4. **No bare `http/net/https.createServer`**: only `desktop/electron/runtime/network/` may bind ports. Use `NetworkServiceRegistry.register(descriptor)`.
+5. **No bare `fs.writeFile` for business data**: persist through `DataRepository.namespace(name).upsert/setSingleton`.
+6. **No `modules/A` importing `modules/B/internal`**: cross-module communication goes through `ServiceRegistry.get<T>(id)` or `EventBus`. Shared types live in `src/types/`.
+7. **No empty `catch {}`**: handle, log via `StructuredLogger.warn(...)`, or rethrow with context. Never silently swallow.
+8. **Renderer**: only `window.synapse.*` for Electron capabilities. No direct `ipcRenderer` use.
+9. **`runtime/*` is pure infrastructure**: it never imports `desktop/electron/services/*`, `desktop/electron/data-store/*`, or business code. Glue lives in `desktop/electron/bootstrap/`.
+10. **Sensitive operations** (shell, file write outside userData, network connect, extension load, agent spawn, secret access): go through `PermissionGuard.check()` and record on `AuditSink`.
+11. **Extensible enums** (content types, editor adapters, connectors, providers, hook types, UI panels): register via `ExtensionPoint`. New hardcoded enums need explicit approval.
+
+When in doubt run `pnpm desktop:check:hard-constraints` and `pnpm desktop:test`.
 - Keep renderer, preload, and main-process boundaries strict.
 - Filesystem, git, installation, download, dialog, updater, and OS logic belong in Electron main-process code, never in React components.
 - Renderer code may only access privileged capabilities through narrow, typed preload APIs.

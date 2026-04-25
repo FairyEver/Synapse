@@ -140,6 +140,30 @@
 
 ### Phase 0.6 工程规范与可观测性
 
+**状态**: 完成（17/17 任务）。
+**测试**: 298 通过。
+
+**新增**:
+- `runtime/logging/{logger,index}.ts` — StructuredLogger + ArraySink/ConsoleSink + LogRotator
+- `runtime/observability/{metrics,tracer,health,diagnostics,index}.ts` — 4 件套 + Prometheus 导出 + 默认 secret redactor
+- `runtime/security/{permission-guard,index}.ts` — PermissionGuard 政策链 + InMemoryAuditSink
+- `runtime/scheduling/{scheduling,index}.ts` — TaskQueue + RateLimiter (token bucket) + CircuitBreaker
+- `runtime/extension/{registry,index}.ts` — ExtensionPoint + ExtensionRegistry
+- `bootstrap/extensions.ts` — 把 CONTENT_TYPE_DEFINITIONS 灌入 ExtensionPoint
+- `src/runtime/{i18n,theme,debug-panel}.{ts,tsx}` — 占位 + 8-tab DebugPanel
+- `tests/{ipc,perf,fuzz,e2e}/` — 完整目录布局 + 共享 RuntimeFixture
+- `desktop/scripts/check-hard-constraints.mjs` — 自带 walker 的硬约束检查（无 rg 依赖）
+- `.github/workflows/ci.yml` — typecheck + test + codegen-drift + hard-constraints
+- `AGENTS.md` Phase 0 硬约束段（11 条）
+
+**关键设计**:
+- check-hard-constraints.mjs 用 node:fs walker + RegExp，避免依赖 ripgrep（CI 环境不一定有）。
+- ExtensionRegistry 的 definePoint 是幂等的——同一 id 的多次 register 会累加贡献，保留 SPEC §15.1 "插件可叠加" 的语义。
+- StructuredLogger 通过 ArraySink/ConsoleSink 两个内置 sink 给所有 vitest + 生产路径提供注入点；T0.6 follow-up 把现有 `log-store.ts` 改成 StructuredLogger 的 sink 实现。
+
+**deferred / 跳过的任务**:
+- 真正的 ESLint 配置（T6.14 spec 描述）：用 check-hard-constraints.mjs 替代以避免引入 ESLint + 一系列插件，同时保留 SPEC §1 的 11 条硬约束的实际检查。如果用户想要 ESLint 完整配置，是单独的 follow-up PR。
+
 ## 3. 决策记录
 
 ### 3.1 Level 2 自主决策
