@@ -47,10 +47,11 @@ async function migrateConfigIfNeeded(namespace: JsonNamespace<SynapseConfig>): P
     return
   }
 
-  // Check if config already exists in DataRepository
+  // Check if config already exists in DataRepository with actual user data
   const existing = await namespace.getSingleton()
-  if (existing !== null) {
-    // Config already migrated, just rename the legacy file
+  const hasActualUserData = existing !== null && existing.repositories.length > 0
+  if (hasActualUserData) {
+    // Config already migrated (has repositories), just rename the legacy file
     try {
       await rename(legacyConfigPath, `${legacyConfigPath}.migrated`)
       logger.info("Legacy config file already migrated, renamed to .migrated")
