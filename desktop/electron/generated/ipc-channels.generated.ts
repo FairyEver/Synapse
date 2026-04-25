@@ -86,6 +86,11 @@ export const IPC_CHANNELS = {
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
   },
+  "connectors": {
+    "listDescriptors": "synapse:connectors:list-descriptors",
+    "createDraft": "synapse:connectors:create-draft",
+    "normalizeInbound": "synapse:connectors:normalize-inbound",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

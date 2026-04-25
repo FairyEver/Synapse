@@ -50,6 +50,7 @@ const MODULE_SOURCES = [
   { id: "shell", importPath: "../electron/modules/shell/ipc.ts" },
   { id: "repository", importPath: "../electron/modules/repository/ipc.ts" },
   { id: "update", importPath: "../electron/modules/update/ipc.ts" },
+  { id: "connectors", importPath: "../electron/modules/connectors/ipc.ts" },
 ]
 
 const OUTPUT_PATH = path.resolve(

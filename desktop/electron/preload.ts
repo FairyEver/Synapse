@@ -88,6 +88,11 @@ const IPC_CHANNELS = {
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
   },
+  "connectors": {
+    "listDescriptors": "synapse:connectors:list-descriptors",
+    "createDraft": "synapse:connectors:create-draft",
+    "normalizeInbound": "synapse:connectors:normalize-inbound",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -258,6 +263,11 @@ const synapseBridge: SynapseBridge = {
     installUpdate: invoke(IPC_CHANNELS.update.installUpdate),
     onStateChanged: subscribe(EVENT_CHANNELS.update.stateChanged) as unknown as SynapseBridge["updater"]["onStateChanged"],
     onOpenUpdatePage: subscribe(EVENT_CHANNELS.update.openUpdatePage) as unknown as SynapseBridge["updater"]["onOpenUpdatePage"],
+  },
+  connectors: {
+    listDescriptors: invoke(IPC_CHANNELS.connectors.listDescriptors),
+    createDraft: (payload) => invoke(IPC_CHANNELS.connectors.createDraft)(payload),
+    normalizeInbound: (payload) => invoke(IPC_CHANNELS.connectors.normalizeInbound)(payload),
   },
   dataStore: {
     listTables: invoke(DATA_STORE_CHANNELS.listTables),

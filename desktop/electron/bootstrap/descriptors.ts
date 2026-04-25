@@ -33,6 +33,7 @@ import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
+import { createDefaultConnectorRegistryService } from "../services/connector-registry-service"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -203,6 +204,12 @@ export const repoPendingPushesDescriptor: ServiceDescriptor<typeof pendingPushes
   criticality: "degraded",
   dependsOn: ["core.data-store"],
   create: () => pendingPushesService,
+}
+
+export const connectorsRegistryDescriptor: ServiceDescriptor<ReturnType<typeof createDefaultConnectorRegistryService>> = {
+  id: "connectors.registry",
+  criticality: "degraded",
+  create: () => createDefaultConnectorRegistryService(),
 }
 
 /**

@@ -25,6 +25,11 @@ import type {
   SynapseLegacyCcConfigImportPreview,
 } from "./config"
 import type {
+  SynapseConnectorDescriptor,
+  SynapseConnectorDraft,
+  SynapseInboundNormalizationResult,
+} from "./connector"
+import type {
   SynapseContentDownloadResult,
   SynapseContentDetail,
   SynapseContentHistoryEntry,
@@ -197,6 +202,24 @@ export type SynapseBridge = {
     installUpdate: () => Promise<void>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
     onOpenUpdatePage: (listener: () => void) => () => void
+  }
+  connectors: {
+    listDescriptors: () => Promise<SynapseConnectorDescriptor[]>
+    createDraft: (payload: {
+      type: string
+      name?: string
+      enabled?: boolean
+      options?: Record<string, unknown>
+      secretRefs?: Record<string, string>
+    }) => Promise<SynapseConnectorDraft>
+    normalizeInbound: (payload: {
+      raw: unknown
+      connectorId?: string
+      platform?: string
+      allowFrom?: string
+      shareSessionInChannel?: boolean
+      threadIsolation?: boolean
+    }) => Promise<SynapseInboundNormalizationResult>
   }
   dataStore: {
     listTables: () => Promise<DataStoreTableInfo[]>
