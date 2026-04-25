@@ -19,6 +19,7 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "generate:ide-registry": "node scripts/generate-ide-registry.mjs",
     "generate:ipc": "node scripts/generate-ipc.mjs",
+    "check:ipc-codegen": "node scripts/check-ipc-codegen.mjs",
     "build:data-store": "esbuild data-store/cli/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/cli/index.js --format=cjs && esbuild data-store/mcp/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/mcp/index.js --format=cjs",
     "data-store:import-legacy": "node --no-warnings scripts/import-legacy-data-store.mjs",
     "package:mac": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",

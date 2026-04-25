@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:31:00+08:00
-current_phase: 0.3
-current_task: T3.16
+last_updated: 2026-04-25T12:33:00+08:00
+current_phase: 0.4
+current_task: T4.1
 status: in_progress
 task_counts:
   total: 71
-  completed: 29
+  completed: 30
   blocked: 9
-  pending: 33
+  pending: 32
 audit:
   rounds: 0
   last_status: not_started
@@ -68,7 +68,7 @@ audit:
 - [ ] T3.13 迁移 contentWindowService 到 WindowManager (deferred → REPORT 3.2)
 - [ ] T3.14 替换所有 BrowserWindow.getAllWindows() 为 WindowManager.broadcast (deferred → REPORT 3.2)
 - [x] T3.15 建 runtime/network/ NetworkServiceRegistry 骨架 + 单测
-- [ ] T3.16 Phase 0.3 集成测试 + codegen CI 闸门脚本
+- [x] T3.16 Phase 0.3 集成测试 + codegen CI 闸门脚本
 
 ### Phase 0.4 EventBus（8 任务）
 

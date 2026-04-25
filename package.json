@@ -23,6 +23,7 @@
     "desktop:test": "pnpm --filter @synapse/desktop run test",
     "desktop:test:watch": "pnpm --filter @synapse/desktop run test:watch",
     "desktop:generate:ipc": "pnpm --filter @synapse/desktop run generate:ipc",
+    "desktop:check:ipc-codegen": "pnpm --filter @synapse/desktop run check:ipc-codegen",
     "website:dev": "pnpm --filter @synapse/website run dev",
     "website:build": "pnpm --filter @synapse/website run build",
     "website:preview": "pnpm --filter @synapse/website run preview"

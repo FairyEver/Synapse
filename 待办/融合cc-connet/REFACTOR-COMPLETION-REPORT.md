@@ -76,6 +76,31 @@
 
 ### Phase 0.3 IPC Codegen + WindowManager + NetworkServiceRegistry
 
+**状态**: 运行时部分完成（9/16 任务）。7 个 handler 迁移任务推迟到 follow-up PR（REPORT 3.2 Level 3 决策）。
+**Commit 范围**: ad… 至 待 commit。
+**测试**: 195 通过，typecheck 通过。
+
+**新增**:
+- `runtime/ipc/{types,errors,registry,validation,handshake,index}.ts` — 完整 IpcRegistry + IPC_PROTOCOL_VERSION + 系统 handshake
+- `runtime/window/{manager,index}.ts` — WindowManager 抽象，通过 ManagedWindow 接口与 BrowserWindow 解耦，便于 vitest
+- `runtime/network/{registry,ports,index}.ts` — NetworkServiceRegistry + 端口分配 (only `net.createServer` allowed home)
+- `desktop/scripts/generate-ipc.mjs` + `desktop/scripts/check-ipc-codegen.mjs` — codegen + CI 闸门
+- `desktop/electron/generated/ipc-channels.generated.ts` — codegen 产物（当前空，等 handler 迁移 PR 填）
+- `tests/unit/phase-0.3-integration.test.ts` — 4 个集成场景
+
+**关键设计**:
+- IPC: transport-agnostic 设计——`IpcRegistry` 调 `IpcTransportInstall(channel, invoker)`；生产侧 `ipcMain.handle` 在 follow-up PR 集成；`createInMemoryHarness()` 给 vitest 用。
+- Window: BrowserWindow 通过 `ManagedWindow` 接口注入；`broadcast` 是 EventBus 唯一允许调 `webContents.send` 的入口。
+- Network: 同进程多 service 可同 `preferredPort`，registry 自动 dedup（in-memory `allocatedPorts` Set）+ `next-available` 扫描。
+- Codegen: 不引入 ts-morph；descriptor 是 truth source，TypeScript 编译已经做交叉检查。CI 跑 `check:ipc-codegen` 比对 git diff。
+
+**deferred (Level 3 → REPORT 3.2)**:
+- T3.4-T3.10: 12 个 IPC handler 文件迁移 + 删旧 channels.ts/preload.ts/bridge.ts
+- T3.13: contentWindowService 迁到 WindowManager
+- T3.14: 替换所有 `BrowserWindow.getAllWindows()` 调用
+
+这些 deferred 任务的 runtime 完全就位，每个 handler 迁移可以一个 PR 一个 commit 渐进做，并跑 e2e 验证。
+
 ### Phase 0.4 EventBus
 
 ### Phase 0.5 ProjectContainer + ProcessRuntime
