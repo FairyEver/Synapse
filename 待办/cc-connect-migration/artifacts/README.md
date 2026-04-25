@@ -26,3 +26,14 @@
 ```
 
 除本 README 外，所有产物都应由对应阶段提示词生成或更新。
+
+编排器状态文件使用 `0.0-*` 和 `0.<阶段编号>-validation-*` 命名，例如：
+
+```text
+0.0-orchestrator-state.md
+0.0-orchestrator-log.md
+0.0-resume-prompt.md
+0.0-user-decisions.md
+0.1-validation-attempt-1.md
+0.1-validation-decision.md
+```
