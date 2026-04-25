@@ -37,7 +37,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
  * once a module is migrated. The codegen accepts the source file (or a manifest
  * value) and pulls IpcModule from a default export named identically.
  */
-const MODULE_SOURCES = []
+const MODULE_SOURCES = [
+  { id: "shell", importPath: "../electron/modules/shell/ipc.ts" },
+  { id: "cli", importPath: "../electron/modules/cli/ipc.ts" },
+  { id: "identity", importPath: "../electron/modules/identity/ipc.ts" },
+  { id: "user-profile", importPath: "../electron/modules/user-profile/ipc.ts" },
+]
 
 const OUTPUT_PATH = path.resolve(
   __dirname,

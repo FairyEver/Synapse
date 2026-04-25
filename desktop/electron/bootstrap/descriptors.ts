@@ -34,6 +34,11 @@ import { repositoryMaintenanceService } from "../services/repository-maintenance
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
 import { BrowserWindow } from "electron"
+import type { WindowManager } from "../runtime/window"
+import { createWindowManager } from "../runtime/window"
+import type { EventBus } from "../runtime/event-bus"
+import { createEventBus } from "../runtime/event-bus/bus"
+import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
 
 /**
  * core.logging — wraps the existing `logStore` singleton.
@@ -232,4 +237,36 @@ function defaultShowOrCreate(): void {
   if (!target) return
   if (!target.isVisible()) target.show()
   target.focus()
+}
+
+/**
+ * core.window-manager — centralizes window lifecycle and broadcast.
+ * Phase 0.4 requirement: the only allowed home for webContents.send.
+ *
+ * Status: fatal — EventBus depends on this for cross-window broadcast.
+ */
+export const coreWindowManagerDescriptor: ServiceDescriptor<WindowManager> = {
+  id: "core.window-manager",
+  criticality: "fatal",
+  create() {
+    return createWindowManager()
+  },
+}
+
+/**
+ * core.event-bus — in-process pub/sub with optional WindowManager broadcast.
+ * Phase 0.4 requirement: replaces direct webContents.send calls.
+ *
+ * Status: fatal — repository updates and other events flow through here.
+ */
+export const coreEventBusDescriptor: ServiceDescriptor<EventBus> = {
+  id: "core.event-bus",
+  criticality: "fatal",
+  dependsOn: ["core.window-manager"],
+  create(ctx) {
+    const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
+    return createEventBus({
+      broadcaster: new WindowBroadcaster(windowManager),
+    })
+  },
 }

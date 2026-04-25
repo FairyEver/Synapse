@@ -38,10 +38,10 @@ export function clearStaleSingletonLock(): boolean {
       process.kill(pid, 0)
       return false
     } catch {
-      // Process doesn't exist — lock is stale.
+      logger.debug("Process doesn't exist — lock is stale.", { pid })
     }
-  } catch {
-    // Not a symlink or unreadable — treat as stale.
+  } catch (err) {
+    logger.debug("Not a symlink or unreadable — treat as stale.", { err })
   }
 
   const userData = app.getPath("userData")
@@ -49,8 +49,8 @@ export function clearStaleSingletonLock(): boolean {
   for (const file of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) {
     try {
       rmSync(path.join(userData, file), { force: true })
-    } catch {
-      // Best-effort cleanup.
+    } catch (err) {
+      logger.debug("Best-effort cleanup failed.", { file, err })
     }
   }
 

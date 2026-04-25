@@ -6,9 +6,10 @@
  */
 
 import { BrowserWindow, app, dialog } from "electron"
-import { SYNAPSE_IPC_CHANNELS } from "./ipc/channels"
 import { createMainLogger } from "./services/log-store"
 import { repositoryStore } from "./services/repository-store"
+import type { EventBus } from "./runtime/event-bus"
+import type { IpcHandlerContext } from "./runtime/ipc/types"
 import {
   attachActivateHandler,
   attachBeforeQuitHandler,
@@ -16,6 +17,7 @@ import {
   attachSecondInstanceFocus,
   buildServiceRegistry,
   clearStaleSingletonLock,
+  createIpcRegistry,
   createMainWindow,
   createMainWindowState,
   registerAllIpcHandlers,
@@ -57,6 +59,13 @@ if (!gotSingleInstanceLock) {
         trayShowOrCreate: focusOrCreateMainWindow,
       })
 
+      // Register new IpcModules (Phase 0.3)
+      const ipcCtx: IpcHandlerContext = {
+        moduleId: "main",
+        resolve: (serviceId) => registry.get(serviceId),
+      }
+      createIpcRegistry(ipcCtx)
+
       const result = await registry.startAll()
       if (result.degraded.length > 0) {
         for (const failure of result.degraded) {
@@ -75,11 +84,15 @@ if (!gotSingleInstanceLock) {
 
       attachActivateHandler(focusOrCreateMainWindow)
 
-      // Phase 0.4 (T4.5) replaces this direct webContents.send with EventBus.
+      // Phase 0.4: Use EventBus for cross-window repository update notifications.
+      const eventBus = registry.get<EventBus>("core.event-bus")
       repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
-        for (const window of BrowserWindow.getAllWindows()) {
-          window.webContents.send(SYNAPSE_IPC_CHANNELS.repository.updated, repositoryUuid)
-        }
+        eventBus.emit({
+          domain: "repository",
+          type: "repository.disappeared",
+          payload: { repositoryUuid },
+          timestamp: new Date().toISOString(),
+        })
       })
 
       attachBeforeQuitHandler({

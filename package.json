@@ -25,6 +25,8 @@
     "desktop:test:ipc": "pnpm --filter @synapse/desktop run test:ipc",
     "desktop:test:e2e": "pnpm --filter @synapse/desktop run test:e2e",
     "desktop:test:ci": "pnpm --filter @synapse/desktop run test:ci",
+    "desktop:lint": "pnpm --filter @synapse/desktop run lint",
+    "desktop:lint:fix": "pnpm --filter @synapse/desktop run lint:fix",
     "desktop:generate:ipc": "pnpm --filter @synapse/desktop run generate:ipc",
     "desktop:check:ipc-codegen": "pnpm --filter @synapse/desktop run check:ipc-codegen",
     "desktop:check:hard-constraints": "pnpm --filter @synapse/desktop run check:hard-constraints",

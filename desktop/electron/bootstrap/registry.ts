@@ -18,8 +18,10 @@ import {
   coreAppIconDescriptor,
   coreConfigDescriptor,
   coreDataStoreDescriptor,
+  coreEventBusDescriptor,
   coreLoggingDescriptor,
   coreUpdateDescriptor,
+  coreWindowManagerDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
@@ -42,6 +44,8 @@ export function buildServiceRegistry(
   registry.register(coreLoggingDescriptor)
   registry.register(coreConfigDescriptor)
   registry.register(coreAppIconDescriptor)
+  registry.register(coreWindowManagerDescriptor)
+  registry.register(coreEventBusDescriptor)
   registry.register(coreDataStoreDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)
