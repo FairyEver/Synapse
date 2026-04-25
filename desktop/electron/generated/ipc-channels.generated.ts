@@ -53,6 +53,18 @@ export const IPC_CHANNELS = {
     "importBackup": "synapse:config:import-backup",
     "resetApp": "synapse:config:reset-app",
   },
+  "repository": {
+    "getStates": "synapse:repository:get-states",
+    "checkInitializationPreview": "synapse:repository:check-initialization-preview",
+    "createLocalRepository": "synapse:repository:create-local-repository",
+    "getPendingPushes": "synapse:repository:get-pending-pushes",
+    "initializeStructure": "synapse:repository:initialize-structure",
+    "chooseDirectory": "synapse:repository:choose-directory",
+    "validateDirectory": "synapse:repository:validate-directory",
+    "sync": "synapse:repository:sync",
+    "runMaintenance": "synapse:repository:run-maintenance",
+    "flushPendingPushes": "synapse:repository:flush-pending-pushes",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS
