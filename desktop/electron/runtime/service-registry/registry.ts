@@ -1,18 +1,18 @@
 /**
  * Phase 0.1 — ServiceRegistry runtime.
  * SPEC §4.
- *
- * T1.3 lands register/inspect/get/has/planStartOrder.
- * T1.4 will land startAll/stopAll/reload on top of these primitives.
  */
 
 import {
   DuplicateServiceError,
+  FatalServiceFailureError,
   ServiceNotFoundError,
   ServiceNotRunningError,
+  ServiceStopTimeoutError,
 } from "./errors"
-import { descriptorAsNode, topoSort } from "./topo"
+import { descriptorAsNode, reverseTopoSort, topoSort } from "./topo"
 import type {
+  DegradedServiceFailure,
   ServiceContext,
   ServiceDescriptor,
   ServiceInspectEntry,
@@ -31,19 +31,26 @@ export interface RegistryEntry {
 }
 
 export interface ServiceRegistryOptions {
-  /** Injected when starting; allows tests to provide stub context. */
+  /** Returns a per-startAll context. Called once and cached for the run. */
   readonly contextProvider: (registry: ServiceRegistry) => ServiceContext
+  /** SPEC §4: per-service stop timeout default 5000ms; tests override. */
+  readonly perServiceStopTimeoutMs?: number
 }
+
+const DEFAULT_PER_SERVICE_STOP_TIMEOUT_MS = 5000
 
 export class ServiceRegistryImpl implements ServiceRegistry {
   protected readonly entries = new Map<string, RegistryEntry>()
-  /** Insertion order — Kahn's tie-breaks on this. */
   protected readonly order: string[] = []
   protected readonly contextProvider: (registry: ServiceRegistry) => ServiceContext
+  protected readonly perServiceStopTimeoutMs: number
   protected sealed = false
+  protected cachedContext: ServiceContext | null = null
 
   constructor(options: ServiceRegistryOptions) {
     this.contextProvider = options.contextProvider
+    this.perServiceStopTimeoutMs =
+      options.perServiceStopTimeoutMs ?? DEFAULT_PER_SERVICE_STOP_TIMEOUT_MS
   }
 
   register<T>(descriptor: ServiceDescriptor<T>): void {
@@ -82,10 +89,7 @@ export class ServiceRegistryImpl implements ServiceRegistry {
 
   inspect(): readonly ServiceInspectEntry[] {
     return this.order.map((id) => {
-      const entry = this.entries.get(id)
-      if (!entry) {
-        throw new Error(`registry order/entries out of sync at id="${id}"`)
-      }
+      const entry = this.requireEntry(id)
       const runIn: ServiceProcessKind = entry.descriptor.runIn ?? "main"
       return {
         id,
@@ -98,81 +102,181 @@ export class ServiceRegistryImpl implements ServiceRegistry {
     })
   }
 
-  /**
-   * Validate dependency graph (no instantiation). Throws
-   * CircularDependencyError / UnknownDependencyError on bad graphs.
-   * Returns descriptors in start order (deps first).
-   */
   planStartOrder(): readonly ServiceDescriptor<unknown>[] {
-    const nodes = this.order.map((id) => {
-      const entry = this.entries.get(id)
-      if (!entry) {
-        throw new Error(`registry order/entries out of sync at id="${id}"`)
-      }
-      return descriptorAsNode(entry.descriptor)
-    })
+    const nodes = this.order.map((id) => descriptorAsNode(this.requireEntry(id).descriptor))
     const sorted = topoSort(nodes)
-    return sorted.map((n) => {
-      const entry = this.entries.get(n.id)
-      if (!entry) {
-        throw new Error(`registry order/entries out of sync at id="${n.id}"`)
-      }
-      return entry.descriptor
-    })
+    return sorted.map((n) => this.requireEntry(n.id).descriptor)
   }
 
-  /** T1.4 lands the real impl. T1.3 stub keeps the interface complete. */
   async startAll(): Promise<StartAllResult> {
-    throw new Error("ServiceRegistry.startAll not implemented (T1.4)")
+    this.sealed = true
+    const order = this.planStartOrder()
+    const context = this.getContext()
+
+    const degraded: DegradedServiceFailure[] = []
+    const failedFatalIds = new Set<string>()
+    const failedOrSkippedIds = new Set<string>()
+
+    for (const descriptor of order) {
+      const entry = this.requireEntry(descriptor.id)
+
+      // If any of this service's deps failed (fatal-failed or degraded-failed),
+      // propagate.
+      const depFailed = (descriptor.dependsOn ?? []).some((dep) =>
+        failedOrSkippedIds.has(dep),
+      )
+      if (depFailed) {
+        const cause = new Error(`dependency failed for "${descriptor.id}"`)
+        entry.status = "failed"
+        entry.lastError = cause
+        if (descriptor.criticality === "fatal") {
+          failedFatalIds.add(descriptor.id)
+          failedOrSkippedIds.add(descriptor.id)
+          throw new FatalServiceFailureError(descriptor.id, "create", cause)
+        }
+        failedOrSkippedIds.add(descriptor.id)
+        degraded.push({ id: descriptor.id, error: cause })
+        continue
+      }
+
+      entry.status = "starting"
+      try {
+        const instance = await descriptor.create(context)
+        entry.instance = instance
+        if (descriptor.start) {
+          await descriptor.start(instance, context)
+        }
+        entry.status = "running"
+        entry.startedAt = Date.now()
+      } catch (rawErr) {
+        const err = rawErr instanceof Error ? rawErr : new Error(String(rawErr))
+        entry.status = "failed"
+        entry.lastError = err
+        if (descriptor.criticality === "fatal") {
+          failedFatalIds.add(descriptor.id)
+          failedOrSkippedIds.add(descriptor.id)
+          throw new FatalServiceFailureError(
+            descriptor.id,
+            entry.instance === undefined ? "create" : "start",
+            err,
+          )
+        }
+        failedOrSkippedIds.add(descriptor.id)
+        degraded.push({ id: descriptor.id, error: err })
+      }
+    }
+
+    return { degraded }
   }
 
   async stopAll(timeoutMs: number): Promise<void> {
-    void timeoutMs
-    throw new Error("ServiceRegistry.stopAll not implemented (T1.4)")
+    if (timeoutMs <= 0) {
+      throw new Error("stopAll timeoutMs must be > 0")
+    }
+
+    // Reverse topo order, but include any partially-running services.
+    let order: ServiceDescriptor<unknown>[]
+    try {
+      order = [...reverseTopoSort(this.order.map((id) => descriptorAsNode(this.requireEntry(id).descriptor)))].map(
+        (n) => this.requireEntry(n.id).descriptor,
+      )
+    } catch {
+      // If the graph is invalid (shouldn't happen after startAll, but be defensive),
+      // fall back to insertion-order reverse.
+      order = [...this.order].reverse().map((id) => this.requireEntry(id).descriptor)
+    }
+
+    const context = this.getContext()
+    const deadline = Date.now() + timeoutMs
+    const perServiceTimeout = this.perServiceStopTimeoutMs
+
+    for (const descriptor of order) {
+      const entry = this.requireEntry(descriptor.id)
+      if (entry.status !== "running" && entry.status !== "starting") {
+        // Already stopped/failed/pending. Mark stopped if it was created but never started.
+        if (entry.instance !== undefined && entry.status !== "stopped") {
+          entry.status = "stopped"
+        }
+        continue
+      }
+
+      const remaining = Math.max(0, deadline - Date.now())
+      const limit = Math.min(perServiceTimeout, remaining || perServiceTimeout)
+
+      try {
+        if (descriptor.stop && entry.instance !== undefined) {
+          await runWithTimeout(
+            () => Promise.resolve(descriptor.stop!(entry.instance, context, limit)),
+            limit,
+            () => new ServiceStopTimeoutError(descriptor.id, limit),
+          )
+        }
+        entry.status = "stopped"
+      } catch (rawErr) {
+        const err = rawErr instanceof Error ? rawErr : new Error(String(rawErr))
+        entry.status = "failed"
+        entry.lastError = err
+        // SPEC §4: stop errors are logged but never re-thrown — they must not
+        // block other services from shutting down. The caller can inspect()
+        // afterwards.
+      }
+    }
   }
 
   async reload(id: string): Promise<void> {
-    void id
-    throw new Error("ServiceRegistry.reload not implemented (T1.4)")
-  }
-
-  // -------- protected helpers for T1.4 ---------------------------------
-
-  protected getEntry(id: string): RegistryEntry | undefined {
-    return this.entries.get(id)
-  }
-
-  protected setStatus(id: string, status: ServiceStatus, error?: Error): void {
     const entry = this.entries.get(id)
-    if (!entry) return
-    entry.status = status
-    if (error) entry.lastError = error
+    if (!entry) {
+      throw new ServiceNotFoundError(id)
+    }
+    if (entry.status !== "running") {
+      throw new ServiceNotRunningError(id, entry.status)
+    }
+    if (!entry.descriptor.reload) {
+      throw new Error(`Service "${id}" does not declare reload()`)
+    }
+    const context = this.getContext()
+    await entry.descriptor.reload(entry.instance, context)
   }
 
-  protected listEntries(): RegistryEntry[] {
-    return this.order.map((id) => {
-      const entry = this.entries.get(id)
-      if (!entry) {
-        throw new Error(`registry order/entries out of sync at id="${id}"`)
-      }
-      return entry
-    })
-  }
+  // -------- helpers ----------------------------------------------------
 
-  protected seal(): void {
-    this.sealed = true
+  protected requireEntry(id: string): RegistryEntry {
+    const entry = this.entries.get(id)
+    if (!entry) {
+      throw new Error(`registry order/entries out of sync at id="${id}"`)
+    }
+    return entry
   }
 
   protected getContext(): ServiceContext {
-    return this.contextProvider(this)
+    if (!this.cachedContext) {
+      this.cachedContext = this.contextProvider(this)
+    }
+    return this.cachedContext
   }
 }
 
-/**
- * Factory used by tests and (later) by buildServiceRegistry in main.ts.
- * Falls back to a noop context if the caller does not provide one — the
- * registry only invokes contextProvider during startAll.
- */
+async function runWithTimeout<T>(
+  fn: () => Promise<T>,
+  timeoutMs: number,
+  buildTimeoutError: () => Error,
+): Promise<T> {
+  if (timeoutMs <= 0) {
+    throw buildTimeoutError()
+  }
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(buildTimeoutError()), timeoutMs)
+    // Avoid keeping the event loop alive for tests.
+    if (timer && typeof timer.unref === "function") timer.unref()
+  })
+  try {
+    return await Promise.race([fn(), timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export function createServiceRegistry(
   options?: Partial<ServiceRegistryOptions>,
 ): ServiceRegistryImpl {
@@ -188,7 +292,10 @@ export function createServiceRegistry(
       permissionGuard: { __placeholder: undefined },
       processRuntime: { __placeholder: undefined },
     }))
-  return new ServiceRegistryImpl({ contextProvider })
+  return new ServiceRegistryImpl({
+    contextProvider,
+    perServiceStopTimeoutMs: options?.perServiceStopTimeoutMs,
+  })
 }
 
 function createNullLogger(): ServiceContext["logger"] {

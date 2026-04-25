@@ -128,22 +128,46 @@ describe("ServiceRegistry register/inspect (T1.3)", () => {
 })
 
 describe("ServiceRegistryImpl T1.4 stubs (still throw)", () => {
-  it("startAll throws not-implemented (placeholder until T1.4)", async () => {
-    const registry = new ServiceRegistryImpl({
-      contextProvider: () => {
-        throw new Error("unused in this test")
-      },
+  it("startAll succeeds with empty registry (no services)", async () => {
+    const registry: ServiceRegistryImpl = new ServiceRegistryImpl({
+      contextProvider: (r) => ({
+        logger: makeNullLogger(),
+        dataRepo: {} as never,
+        eventBus: {} as never,
+        registry: r,
+        metrics: {} as never,
+        tracer: {} as never,
+        permissionGuard: {} as never,
+        processRuntime: {} as never,
+      }),
     })
-    await expect(registry.startAll()).rejects.toThrow(/T1\.4/)
+    const result = await registry.startAll()
+    expect(result.degraded).toEqual([])
   })
 
-  it("stopAll throws not-implemented (placeholder until T1.4)", async () => {
+  it("stopAll succeeds with empty registry", async () => {
     const registry = createServiceRegistry()
-    await expect(registry.stopAll(15000)).rejects.toThrow(/T1\.4/)
+    await expect(registry.stopAll(15000)).resolves.toBeUndefined()
   })
 
-  it("reload throws not-implemented (placeholder until T1.4)", async () => {
+  it("reload throws when descriptor lacks reload()", async () => {
     const registry = createServiceRegistry()
-    await expect(registry.reload("a")).rejects.toThrow(/T1\.4/)
+    registry.register(fixtureDescriptor("a"))
+    await registry.startAll()
+    await expect(registry.reload("a")).rejects.toThrow(/does not declare reload/)
   })
 })
+
+function makeNullLogger() {
+  const noop = () => {}
+  const l = {
+    trace: noop,
+    debug: noop,
+    info: noop,
+    warn: noop,
+    error: noop,
+    fatal: noop,
+    child: () => l,
+  }
+  return l
+}
