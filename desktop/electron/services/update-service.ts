@@ -9,6 +9,7 @@ import type {
 } from "electron-updater"
 import type { SynapseAppUpdateState } from "../../src/types/update"
 import type { WindowManager } from "../runtime/window"
+import { createInstallSourceMetadata } from "./install-source-metadata"
 
 // Update event channels for broadcasting state changes
 const UPDATE_CHANNELS = {
@@ -45,6 +46,12 @@ function createBaseState(): SynapseAppUpdateState {
 
   return {
     currentVersion: app.getVersion(),
+    installSource: createInstallSourceMetadata({
+      appVersion: app.getVersion(),
+      execPath: process.execPath,
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+    }),
     releaseVersion: null,
     status: isSupported ? "idle" : "unsupported",
     message: isSupported ? "可以检查新版本。" : createUnsupportedMessage(),
@@ -397,6 +404,12 @@ class UpdateService {
       ...this.state,
       ...patch,
       currentVersion: app.getVersion(),
+      installSource: createInstallSourceMetadata({
+        appVersion: app.getVersion(),
+        execPath: process.execPath,
+        isPackaged: app.isPackaged,
+        platform: process.platform,
+      }),
     }
 
     const nextState = cloneState(this.state)
