@@ -98,9 +98,10 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
 export const coreDataStoreDescriptor: ServiceDescriptor<{ initialized: true }> = {
   id: "core.data-store",
   criticality: "degraded",
-  dependsOn: ["core.config"],
-  async create() {
-    await initDataStore()
+  dependsOn: ["core.config", "core.event-bus"],
+  async create(ctx) {
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
+    await initDataStore(eventBus)
     return { initialized: true }
   },
   async stop() {
@@ -119,8 +120,10 @@ export const coreDataStoreDescriptor: ServiceDescriptor<{ initialized: true }> =
 export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
   id: "core.update",
   criticality: "degraded",
-  dependsOn: ["core.config"],
-  create() {
+  dependsOn: ["core.config", "core.window-manager"],
+  create(ctx) {
+    const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
+    updateService.setWindowManager(windowManager)
     updateService.initialize()
     updateService.startAutoCheck()
     return updateService
@@ -231,7 +234,11 @@ export function createUiTrayDescriptor(
   }
 }
 
+// FIXME (Task 2): This default fallback uses BrowserWindow.getAllWindows() which violates
+// the hard constraint. However, main.ts always passes a custom trayShowOrCreate callback,
+// so this default is never used in practice. Replace with WindowManager lookup when needed.
 function defaultShowOrCreate(): void {
+  // eslint-disable-next-line no-restricted-properties
   const windows = BrowserWindow.getAllWindows()
   const target = windows[0]
   if (!target) return

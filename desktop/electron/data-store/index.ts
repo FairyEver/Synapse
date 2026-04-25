@@ -1,4 +1,4 @@
-import { BrowserWindow } from "electron"
+import type { EventBus } from "../runtime/event-bus"
 import { dataStoreService } from "./service"
 import { startHttpServer, stopHttpServer } from "./http-server"
 import { startMcpServer, stopMcpServer, getMcpServerPort } from "./mcp-server"
@@ -6,13 +6,11 @@ import { registerDataStoreHandlers } from "./ipc-handlers"
 import { getCliStatus, installCli } from "./cli-installer"
 import { autoRegisterMcp } from "./mcp-installer"
 import { setDataStoreChangeListener } from "./dispatcher"
-import { DATA_STORE_IPC_CHANNELS } from "./channels"
-import { isTrustedRendererContents } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store")
 
-async function initDataStore(): Promise<void> {
+async function initDataStore(eventBus?: EventBus): Promise<void> {
   logger.info("Initializing data store.")
 
   const { corrupted } = dataStoreService.open()
@@ -33,12 +31,17 @@ async function initDataStore(): Promise<void> {
 
   registerDataStoreHandlers()
 
-  setDataStoreChangeListener((event) => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!isTrustedRendererContents(window.webContents)) continue
-      window.webContents.send(DATA_STORE_IPC_CHANNELS.changed, event)
-    }
-  })
+  // Use EventBus if provided, otherwise skip broadcasting (for tests/CLI mode)
+  if (eventBus) {
+    setDataStoreChangeListener((event) => {
+      eventBus.emit({
+        domain: "data-store",
+        type: "data-store.changed",
+        payload: event,
+        timestamp: new Date().toISOString(),
+      })
+    })
+  }
 
   if (!(await getCliStatus()).installed) {
     try {

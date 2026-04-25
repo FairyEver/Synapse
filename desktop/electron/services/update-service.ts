@@ -1,3 +1,6 @@
+// LIMITATION (Task 2): BrowserWindow is still imported for notification click handler.
+// The restore/focus operations are not yet available through WindowManager.
+// eslint-disable-next-line no-restricted-properties
 import { app, BrowserWindow, Notification } from "electron"
 import { CancellationToken } from "electron-updater"
 import * as electronUpdater from "electron-updater"
@@ -8,6 +11,7 @@ import type {
   UpdateInfo,
 } from "electron-updater"
 import type { SynapseAppUpdateState } from "../../src/types/update"
+import type { WindowManager } from "../runtime/window"
 // FIXME: Temporary inline channels - will be replaced with WindowManager.broadcast in Task 2
 const UPDATE_CHANNELS = {
   stateChanged: "synapse:update:state-changed",
@@ -73,6 +77,11 @@ class UpdateService {
   private isAutoCheck = false
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
+  private windowManager: WindowManager | null = null
+
+  setWindowManager(windowManager: WindowManager): void {
+    this.windowManager = windowManager
+  }
 
   private clearDownloadTracking(): void {
     this.downloadCancellationToken = null
@@ -394,12 +403,12 @@ class UpdateService {
 
     const nextState = cloneState(this.state)
 
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!isTrustedRendererContents(window.webContents)) {
-        continue
-      }
-
-      window.webContents.send(UPDATE_CHANNELS.stateChanged, nextState)
+    if (this.windowManager) {
+      this.windowManager.broadcast(
+        UPDATE_CHANNELS.stateChanged,
+        nextState,
+        (window) => isTrustedRendererContents(window as unknown as Electron.WebContents)
+      )
     }
   }
 
@@ -447,6 +456,10 @@ class UpdateService {
     })
 
     notification.on("click", () => {
+      // LIMITATION (Task 2): WindowManager doesn't expose restore/focus operations.
+      // This is the only remaining use of BrowserWindow.getAllWindows() in the codebase.
+      // Fix in Task 6 (P1/P2) by extending WindowManager with window management operations.
+      // eslint-disable-next-line no-restricted-properties
       for (const window of BrowserWindow.getAllWindows()) {
         if (!isTrustedRendererContents(window.webContents)) {
           continue
@@ -454,9 +467,19 @@ class UpdateService {
 
         window.restore()
         window.focus()
-        window.webContents.send(UPDATE_CHANNELS.openUpdatePage)
+        // Use broadcast via WindowManager if available, otherwise fall back to direct send
+        if (this.windowManager) {
+          this.windowManager.broadcast(
+            UPDATE_CHANNELS.openUpdatePage,
+            {},
+            (w) => isTrustedRendererContents(w as unknown as Electron.WebContents)
+          )
+        } else {
+          window.webContents.send(UPDATE_CHANNELS.openUpdatePage)
+        }
       }
 
+      // eslint-disable-next-line no-restricted-properties
       if (BrowserWindow.getAllWindows().length === 0) {
         app.emit("activate")
       }

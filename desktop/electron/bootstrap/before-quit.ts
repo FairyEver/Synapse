@@ -5,7 +5,7 @@
  * may move this into a project-scoped service once the project container exists.
  */
 
-import { BrowserWindow, app, dialog } from "electron"
+import { app, dialog } from "electron"
 import { configStore } from "../services/config-store"
 import { contentSubmissionService } from "../services/content-submission-service"
 import { createMainLogger, logStore } from "../services/log-store"
@@ -74,7 +74,8 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
       return
     }
 
-    const ownerWindow = deps.state.current ?? BrowserWindow.getAllWindows()[0] ?? null
+    // Use main window from state; if not available, dialog will be shown without parent
+    const ownerWindow = deps.state.current
 
     if (ownerWindow && !ownerWindow.isVisible()) {
       ownerWindow.show()
