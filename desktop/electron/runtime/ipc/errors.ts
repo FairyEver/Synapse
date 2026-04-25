@@ -35,10 +35,10 @@ export class IpcRuntimeError extends Error {
 }
 
 export class IpcValidationError extends IpcRuntimeError {
-  constructor(channel: string, issues: readonly { path: readonly (string | number)[]; message: string }[]) {
+  constructor(channel: string, issues: readonly { path: readonly PropertyKey[]; message: string }[]) {
     super(
       "ipc/validation",
-      `Validation failed for "${channel}": ${issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      `Validation failed for "${channel}": ${issues.map((i) => `${i.path.map(String).join(".")}: ${i.message}`).join("; ")}`,
       { details: { channel, issues } },
     )
     this.name = "IpcValidationError"

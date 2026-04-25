@@ -10,3 +10,13 @@
 
 export * from "./types"
 export * from "./errors"
+export {
+  IpcRegistryImpl,
+  createInMemoryHarness,
+} from "./registry"
+export type { IpcRegistryDeps, IpcTransportInstall, InMemoryIpcHarness } from "./registry"
+export {
+  validateRequest,
+  tryValidateResponse,
+} from "./validation"
+export type { ValidationResult } from "./validation"
