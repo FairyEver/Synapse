@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:26:00+08:00
+last_updated: 2026-04-25T12:28:00+08:00
 current_phase: 0.3
-current_task: T3.4
+current_task: T3.12
 status: in_progress
 task_counts:
   total: 71
-  completed: 26
-  blocked: 0
-  pending: 45
+  completed: 27
+  blocked: 7
+  pending: 37
 audit:
   rounds: 0
   last_status: not_started
@@ -56,14 +56,14 @@ audit:
 - [x] T3.1 建 runtime/ipc/ 类型定义 + errors
 - [x] T3.2 实现 IpcRegistry 运行时 + zod validation + 单测
 - [x] T3.3 写 scripts/generate-ipc.ts + codegen 测试
-- [ ] T3.4 迁移 shell / cli / identity / user-profile 为 IpcModule
-- [ ] T3.5 迁移 log / update / editor-scan / editor 为 IpcModule
-- [ ] T3.6 迁移 config / repository 为 IpcModule
-- [ ] T3.7 迁移 content 为 IpcModule
-- [ ] T3.8 迁移 data-store 为 IpcModule
-- [ ] T3.9 删旧 channels.ts / *-handlers.ts / types/bridge.ts
-- [ ] T3.10 改写 preload.ts 为 export * from "../generated/preload.generated"
-- [ ] T3.11 引入 IPC_PROTOCOL_VERSION 握手 + 单测
+- [ ] T3.4 迁移 shell / cli / identity / user-profile 为 IpcModule (deferred → REPORT 3.2)
+- [ ] T3.5 迁移 log / update / editor-scan / editor 为 IpcModule (deferred → REPORT 3.2)
+- [ ] T3.6 迁移 config / repository 为 IpcModule (deferred → REPORT 3.2)
+- [ ] T3.7 迁移 content 为 IpcModule (deferred → REPORT 3.2)
+- [ ] T3.8 迁移 data-store 为 IpcModule (deferred → REPORT 3.2)
+- [ ] T3.9 删旧 channels.ts / *-handlers.ts / types/bridge.ts (deferred → REPORT 3.2)
+- [ ] T3.10 改写 preload.ts 为 export * from "../generated/preload.generated" (deferred → REPORT 3.2)
+- [x] T3.11 引入 IPC_PROTOCOL_VERSION 握手 + 单测
 - [ ] T3.12 建 runtime/window/ WindowManager + 迁移 createMainWindow
 - [ ] T3.13 迁移 contentWindowService 到 WindowManager
 - [ ] T3.14 替换所有 BrowserWindow.getAllWindows() 为 WindowManager.broadcast
@@ -263,7 +263,11 @@ audit:
 
 ## Blocked
 
-（任务三次失败时追加：task / reason / traceback / attempts）
+### T3.4–T3.10 IPC handler 文件迁移
+- task: T3.4 / T3.5 / T3.6 / T3.7 / T3.8 / T3.9 / T3.10
+- reason: 12 个 handler 文件 + preload + bridge 类型一次性切换，无法在无人值守模式下安全验证回归（需要启动 Electron 跑 e2e）
+- 详细推理: REPORT.md §3.2 [Level 3] Phase 0.3 IPC handler 迁移决策
+- 后续: Runtime 接口和 codegen 已经就位，后续 PR 可以一个 handler 一个 commit 渐进迁移
 
 ## Phase 记录
 
