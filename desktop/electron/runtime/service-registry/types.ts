@@ -2,21 +2,21 @@
  * Phase 0.1 — ServiceRegistry public types.
  * SPEC §4.
  *
- * Cross-phase placeholder interfaces (StructuredLogger, DataRepository, EventBus,
- * MetricsRegistry, Tracer, PermissionGuard, ProcessRuntime, HealthStatus) are kept
- * here as minimal forward-declarations until their owning phase lands. Each later
- * Phase upgrades the placeholder to its real interface and updates downstream
- * consumers via re-export. Do not flesh these placeholders out here.
+ * Cross-phase placeholder interfaces (DataRepository, EventBus, MetricsRegistry,
+ * Tracer, PermissionGuard, ProcessRuntime, HealthStatus) are kept here as minimal
+ * forward-declarations until their owning phase lands. Each later Phase upgrades
+ * the placeholder to its real interface and updates downstream consumers via
+ * re-export. Do not flesh these placeholders out here.
  */
 
-/** Phase 0.6 — replaced by runtime/logging/types.ts. */
+/** Phase 0.6 — unified StructuredLogger interface (also re-exported by runtime/logging). */
 export interface StructuredLogger {
-  trace(message: string, meta?: Record<string, unknown>): void
-  debug(message: string, meta?: Record<string, unknown>): void
-  info(message: string, meta?: Record<string, unknown>): void
-  warn(message: string, meta?: Record<string, unknown>): void
-  error(message: string, meta?: Record<string, unknown>): void
-  fatal(message: string, meta?: Record<string, unknown>): void
+  trace(message: string, meta?: Record<string, unknown> | unknown): void
+  debug(message: string, meta?: Record<string, unknown> | unknown): void
+  info(message: string, meta?: Record<string, unknown> | unknown): void
+  warn(message: string, meta?: Record<string, unknown> | unknown): void
+  error(message: string, meta?: Record<string, unknown> | unknown): void
+  fatal(message: string, meta?: Record<string, unknown> | unknown): void
   child(prefix: string, bindings?: Record<string, unknown>): StructuredLogger
 }
 

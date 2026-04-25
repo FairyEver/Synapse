@@ -61,7 +61,7 @@ vi.mock("electron", () => ({
 }))
 
 describe("buildServiceRegistry (T1.8)", () => {
-  it("registers all 9 SPEC §4 services with correct dependsOn graph", async () => {
+  it("registers all 11 SPEC §4 services with correct dependsOn graph", async () => {
     const { buildServiceRegistry } = await import("../registry")
     const registry = buildServiceRegistry({
       trayShowOrCreate: () => {},
@@ -74,8 +74,10 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.app-icon",
         "core.config",
         "core.data-store",
+        "core.event-bus",
         "core.logging",
         "core.update",
+        "core.window-manager",
         "repo.maintenance",
         "repo.pending-pushes",
         "repo.watch",
@@ -87,8 +89,10 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.config")?.dependsOn).toEqual([])
     expect(byId.get("core.logging")?.dependsOn).toEqual([])
     expect(byId.get("core.app-icon")?.dependsOn).toEqual([])
-    expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config"])
-    expect(byId.get("core.update")?.dependsOn).toEqual(["core.config"])
+    expect(byId.get("core.window-manager")?.dependsOn).toEqual([])
+    expect(byId.get("core.event-bus")?.dependsOn).toEqual(["core.window-manager"])
+    expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
+    expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config"])
     expect(byId.get("repo.maintenance")?.dependsOn).toEqual(["repo.watch"])
     expect(byId.get("repo.pending-pushes")?.dependsOn).toEqual(["core.data-store"])
@@ -112,11 +116,11 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.app-icon")).toBeLessThan(idx("ui.tray"))
   })
 
-  it("fatal services include core.config and core.logging only", async () => {
+  it("fatal services include core.config, core.logging, core.window-manager, and core.event-bus", async () => {
     const { buildServiceRegistry } = await import("../registry")
     const registry = buildServiceRegistry({ trayShowOrCreate: () => {} })
     const inspected = registry.inspect()
     const fatals = inspected.filter((e) => e.criticality === "fatal").map((e) => e.id).sort()
-    expect(fatals).toEqual(["core.config", "core.logging"].sort())
+    expect(fatals).toEqual(["core.config", "core.event-bus", "core.logging", "core.window-manager"].sort())
   })
 })

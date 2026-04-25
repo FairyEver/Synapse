@@ -17,6 +17,7 @@
 
 import { existsSync, statSync } from "node:fs"
 import path from "node:path"
+import type { StructuredLogger } from "../service-registry/types"
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal"
 
@@ -46,15 +47,8 @@ export interface LogSink {
   close?(): Promise<void> | void
 }
 
-export interface StructuredLogger {
-  trace(message: string, context?: Record<string, unknown> | unknown): void
-  debug(message: string, context?: Record<string, unknown> | unknown): void
-  info(message: string, context?: Record<string, unknown> | unknown): void
-  warn(message: string, context?: Record<string, unknown> | unknown): void
-  error(message: string, context?: Record<string, unknown> | unknown): void
-  fatal(message: string, context?: Record<string, unknown> | unknown): void
-  child(prefix: string, bindings?: Record<string, unknown>): StructuredLogger
-}
+// Re-export StructuredLogger from service-registry/types.ts for unified interface.
+export type { StructuredLogger }
 
 export interface LoggerOptions {
   readonly module: string

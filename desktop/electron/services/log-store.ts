@@ -22,6 +22,8 @@ import type {
   SynapseLogLevel,
   SynapseLogSource,
 } from "../../src/types/log"
+import type { LogSink, LogRecord, StructuredLogger } from "../runtime/logging"
+import { createLogger } from "../runtime/logging"
 
 const LOG_DIR_NAME = "logs"
 const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -256,6 +258,36 @@ async function createZipArchive(sourceDirectoryPath: string, outputFilePath: str
   )
 }
 
+/**
+ * LogSink adapter that writes to LogService.
+ * Bridges runtime/logging/LogSink to the existing LogService implementation.
+ */
+class LogServiceSink implements LogSink {
+  constructor(private service: LogService) {}
+
+  write(record: LogRecord): void {
+    // Map LogRecord to SynapseLogEntry format
+    const level = record.level === "trace" ? "debug" : record.level
+    const synapseLevel = level as SynapseLogLevel
+
+    this.service.write({
+      source: "main",
+      level: synapseLevel,
+      category: record.module,
+      message: record.message,
+      details: record.context,
+    })
+  }
+
+  flush(): Promise<void> {
+    return this.service.flush()
+  }
+
+  close(): Promise<void> {
+    return this.service.dispose()
+  }
+}
+
 class LogService {
   private currentStream: WriteStream | null = null
   private currentFilePath: string | null = null
@@ -472,17 +504,8 @@ class LogService {
     return entry
   }
 
-  createLogger(source: SynapseLogSource, category: string) {
-    return {
-      debug: (message: unknown, details?: unknown) =>
-        this.write({ source, level: "debug", category, message, details }),
-      info: (message: unknown, details?: unknown) =>
-        this.write({ source, level: "info", category, message, details }),
-      warn: (message: unknown, details?: unknown) =>
-        this.write({ source, level: "warn", category, message, details }),
-      error: (message: unknown, details?: unknown) =>
-        this.write({ source, level: "error", category, message, details }),
-    }
+  createSink(): LogSink {
+    return new LogServiceSink(this)
   }
 
   async flush(): Promise<void> {
@@ -619,6 +642,14 @@ class LogService {
 
 export const logStore = new LogService()
 
-export function createMainLogger(category: string) {
-  return logStore.createLogger("main", category)
+/**
+ * Creates a StructuredLogger for the given module category.
+ * Phase 0.6 — now returns runtime/logging/StructuredLogger interface.
+ */
+export function createMainLogger(category: string): StructuredLogger {
+  return createLogger({
+    module: category,
+    sink: logStore.createSink(),
+    minLevel: "info",
+  })
 }

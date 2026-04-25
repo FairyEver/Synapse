@@ -11,5 +11,6 @@ export type {
   LogRotatorOptions,
   LogSink,
   LoggerOptions,
-  StructuredLogger,
 } from "./logger"
+// StructuredLogger is re-exported from service-registry/types.ts for unified interface.
+export type { StructuredLogger } from "../service-registry/types"

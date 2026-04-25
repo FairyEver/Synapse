@@ -105,19 +105,19 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAppIconDescriptor.dependsOn).toBeUndefined()
   })
 
-  it("coreDataStoreDescriptor is degraded, depends on core.config, has stop", async () => {
+  it("coreDataStoreDescriptor is degraded, depends on core.config + core.event-bus, has stop", async () => {
     const { coreDataStoreDescriptor } = await importBootstrap()
     expect(coreDataStoreDescriptor.id).toBe("core.data-store")
     expect(coreDataStoreDescriptor.criticality).toBe("degraded")
-    expect(coreDataStoreDescriptor.dependsOn).toEqual(["core.config"])
+    expect(coreDataStoreDescriptor.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(coreDataStoreDescriptor.stop).toBeTypeOf("function")
   })
 
-  it("coreUpdateDescriptor is degraded and depends on core.config", async () => {
+  it("coreUpdateDescriptor is degraded and depends on core.config + core.window-manager", async () => {
     const { coreUpdateDescriptor } = await importBootstrap()
     expect(coreUpdateDescriptor.id).toBe("core.update")
     expect(coreUpdateDescriptor.criticality).toBe("degraded")
-    expect(coreUpdateDescriptor.dependsOn).toEqual(["core.config"])
+    expect(coreUpdateDescriptor.dependsOn).toEqual(["core.config", "core.window-manager"])
   })
 
   it("repoWatchDescriptor depends on core.config and exposes stop", async () => {
