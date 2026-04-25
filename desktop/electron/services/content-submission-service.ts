@@ -30,6 +30,7 @@ import { userIdentityService } from "./user-identity-service"
 const SYNAPSE_BOT_NAME = "Synapse Bot"
 const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const logger = createMainLogger("service.content-submit")
+const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
 type PushProgressListener = (statusText: string) => void
 
@@ -72,6 +73,10 @@ function runRepositoryGitCommand(
   args: string[],
   fallbackMessage: string,
   onOutput?: (line: string) => void,
+  options: {
+    timeoutMessage?: string
+    timeoutMs?: number
+  } = {},
 ): Promise<GitCommandResult> {
   return runGitCommand({
     args,
@@ -81,6 +86,8 @@ function runRepositoryGitCommand(
     onLine: (line) => {
       onOutput?.(line)
     },
+    timeoutMessage: options.timeoutMessage,
+    timeoutMs: options.timeoutMs,
   })
 }
 
@@ -142,6 +149,10 @@ async function pullWithRebase(
       (line) => {
         onProgress?.(line)
       },
+      {
+        timeoutMessage: "同步仓库超时，请检查网络后重试。",
+        timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+      },
     )
   } catch (error) {
     await abortRebaseIfNeeded(repository.localPath)
@@ -197,6 +208,10 @@ async function pushRepository(
     "推送到仓库失败。",
     (line) => {
       onProgress?.(line)
+    },
+    {
+      timeoutMessage: "同步变更超时，请检查网络后重试。",
+      timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
     },
   )
 }

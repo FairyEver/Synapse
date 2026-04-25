@@ -14,6 +14,8 @@ type GitCommandOptions = {
   formatFailureMessage?: (output: string, fallbackMessage: string) => string
   formatSpawnError?: (error: unknown) => string
   onLine?: (line: string, source: GitCommandSource) => void
+  timeoutMessage?: string
+  timeoutMs?: number
 }
 
 function formatDefaultGitSpawnError(error: unknown): string {
@@ -63,6 +65,8 @@ function runGitCommand({
   formatFailureMessage,
   formatSpawnError,
   onLine,
+  timeoutMessage,
+  timeoutMs,
 }: GitCommandOptions): Promise<GitCommandResult> {
   return new Promise((resolve, reject) => {
     const childProcess = spawn("git", args, {
@@ -78,8 +82,16 @@ function runGitCommand({
     let stdout = ""
     let stderr = ""
     let combinedOutput = ""
+    let settled = false
     const stdoutProcessor = createLineProcessor("stdout", onLine)
     const stderrProcessor = createLineProcessor("stderr", onLine)
+    const timeout = timeoutMs && timeoutMs > 0
+      ? setTimeout(() => {
+          settled = true
+          childProcess.kill("SIGTERM")
+          reject(new Error(timeoutMessage ?? fallbackMessage))
+        }, timeoutMs)
+      : null
 
     childProcess.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8")
@@ -98,10 +110,26 @@ function runGitCommand({
     })
 
     childProcess.on("error", (error) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      if (timeout) {
+        clearTimeout(timeout)
+      }
       reject(new Error((formatSpawnError ?? formatDefaultGitSpawnError)(error)))
     })
 
     childProcess.on("close", (code) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      if (timeout) {
+        clearTimeout(timeout)
+      }
       stdoutProcessor.flush()
       stderrProcessor.flush()
 

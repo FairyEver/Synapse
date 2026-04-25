@@ -436,17 +436,9 @@ class ConfigBackupService {
   ): Promise<SynapseConfigBackupImportResult | null> {
     const result = ownerWindow
       ? await dialog.showOpenDialog(ownerWindow, {
-          filters: [
-            { name: "JSON", extensions: ["json"] },
-            { name: "所有文件", extensions: ["*"] },
-          ],
           properties: ["openFile"],
         })
       : await dialog.showOpenDialog({
-          filters: [
-            { name: "JSON", extensions: ["json"] },
-            { name: "所有文件", extensions: ["*"] },
-          ],
           properties: ["openFile"],
         })
 

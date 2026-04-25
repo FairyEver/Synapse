@@ -385,7 +385,18 @@ function buildTools(): McpTool[] {
         type: "object",
         properties: {
           sql: { type: "string", description: "SQL statement to execute" },
-          params: { type: "array", description: "Optional positional bind parameters for the prepared statement" },
+          params: {
+            type: "array",
+            items: {
+              anyOf: [
+                { type: "string" },
+                { type: "number" },
+                { type: "boolean" },
+                { type: "null" },
+              ],
+            },
+            description: "Optional positional bind parameters for the prepared statement",
+          },
         },
         required: ["sql"],
       },

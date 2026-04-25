@@ -11,6 +11,7 @@ import { repositoryStore } from "./repository-store"
 
 type ProgressListener = (event: SynapseRepositoryProgressEvent) => void
 const logger = createMainLogger("service.repository-git")
+const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
 function extractPercent(line: string): number | null {
   const match = line.match(/(\d+)%/)
@@ -151,6 +152,8 @@ async function runRepositoryGitCommand(
         options.onProgress(progressEvent)
       }
     },
+    timeoutMessage: "仓库同步超时，请检查网络后重试。",
+    timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
   })
 }
 
