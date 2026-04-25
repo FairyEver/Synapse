@@ -26,6 +26,11 @@ export type { SqliteBackendDeps } from "./backends/sqlite"
 export { runMigrations, migration } from "./migrations"
 export type { RunMigrationsArgs } from "./migrations"
 export {
+  coreConfigSchema,
+  isLegacyCoreConfigV0,
+  type CoreConfigV1,
+} from "./schemas"
+export {
   copyToTimestampedBackup,
   fileExists,
   readBinaryFile,

@@ -71,7 +71,21 @@
 
 ### 3.2 Level 3 保守决策（需用户复核）⚠
 
-（每次 Level 3 决策立即追加 + 高亮）
+#### [Level 3] T2.7 暂不重写 configStore 为 DataRepository 薄封装
+
+- **时间**: 2026-04-25T12:08:00+08:00
+- **任务**: T2.7
+- **背景**: SPEC §5 Step 2 写道 "configStore 改为薄封装调 dataRepo.namespace('core.config')"。但 `configStore` 被 main.ts、IPC handlers、bootstrap descriptors、备份服务、main-window 创建等多处直接调用 `configStore.load()` / `configStore.update()`。重写为薄封装会触发跨多个 Phase 的连锁 IPC handler 改造，远超 T2.7 的原子任务范畴。
+- **候选**:
+  - A: T2.7 内完成 schema + migration + 单测；`configStore` 内部维持原 JSON IO，不接 DataRepository
+  - B: T2.7 内同时把 `configStore.load()` / `update()` / `replace()` 切到 dataRepo.namespace("core.config")，连带改 bootstrap、IPC handler、备份服务
+- **选择**: A
+- **理由**:
+  - 用户数据格式当前是 v0（无 schemaVersion）。T2.13 的 config-backup-service 重写是天然的集成点——届时会同步把读写也搬过去。
+  - 走 B 会一次性触发约 10 个文件的迁移，超出原子任务边界，风险面大。
+  - SPEC §1 硬约束 #4「禁止裸 fs.writeFile 持久化业务数据」不会因 A 加重——`configStore.persist` 已经存在。
+- **commit**: 即将填入 T2.7
+- **需用户复核**: 是 — 用户合并 Phase 0.2 时需确认这条偏离。如果坚持 SPEC 的"薄封装"立刻落地，可在 T2.13 之前做一次切换；否则 T2.13 会把 configStore.load/update/replace 也一并搬到 DataRepository.exportAll/importAll。
 
 ## 4. 自检循环日志
 
