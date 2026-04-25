@@ -39,7 +39,7 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
     title: "Synapse",
     ...(icon ? { icon } : {}),
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "..", "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -75,7 +75,7 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
     void window.loadURL(devServerUrl)
   } else {
     logger.info("Loading renderer from built files.")
-    void window.loadFile(path.join(__dirname, "../../dist/index.html"))
+    void window.loadFile(path.join(__dirname, "../../../dist/index.html"))
   }
 
   return window
