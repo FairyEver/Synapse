@@ -26,9 +26,30 @@ export type { SqliteBackendDeps } from "./backends/sqlite"
 export { runMigrations, migration } from "./migrations"
 export type { RunMigrationsArgs } from "./migrations"
 export {
+  allSchemas,
+  auditSchema,
+  connectorsSchema,
+  conversationsSchema,
   coreConfigSchema,
+  coreIdentitySchema,
   isLegacyCoreConfigV0,
+  outboxSchema,
+  projectsSchema,
+  providersSchema,
+  repoPendingPushesSchema,
+  repoRepositoriesSchema,
+  secretsSchema,
+  type AuditEntryV1,
+  type ConnectorEntryV1,
+  type ConversationEntryV1,
   type CoreConfigV1,
+  type CoreIdentityV2,
+  type OutboxEntryV1,
+  type ProjectEntryV1,
+  type ProviderEntryV1,
+  type RepoPendingPushV1,
+  type RepoRepositoryV1,
+  type SecretEntryV1,
 } from "./schemas"
 export {
   copyToTimestampedBackup,

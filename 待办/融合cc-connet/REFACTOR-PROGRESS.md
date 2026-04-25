@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:11:00+08:00
+last_updated: 2026-04-25T12:13:00+08:00
 current_phase: 0.2
-current_task: T2.8
+current_task: T2.10
 status: in_progress
 task_counts:
   total: 71
-  completed: 16
+  completed: 18
   blocked: 0
-  pending: 55
+  pending: 53
 audit:
   rounds: 0
   last_status: not_started
@@ -43,8 +43,8 @@ audit:
 - [x] T2.5 实现 SqliteBackend 包装现有 data-store + 单测
 - [x] T2.6 实现 Migration 框架 + NamespaceSchema + 单测
 - [x] T2.7 迁移 core.config namespace + v0→v1 迁移脚本 + 迁移测试
-- [ ] T2.8 迁移 core.identity / repo.pending-pushes / repo.repositories
-- [ ] T2.9 预留 secrets / providers / projects / connectors / conversations / audit / outbox 等 namespace schema
+- [x] T2.8 迁移 core.identity / repo.pending-pushes / repo.repositories
+- [x] T2.9 预留 secrets / providers / projects / connectors / conversations / audit / outbox 等 namespace schema
 - [ ] T2.10 实现 BackupStrategy + BackupRegistry + local-zip 默认实现
 - [ ] T2.11 实现 NamespaceExporter + ExporterRegistry 骨架
 - [ ] T2.12 实现 LayeredConfig 接口占位 + 单测
