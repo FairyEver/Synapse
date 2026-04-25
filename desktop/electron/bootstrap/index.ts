@@ -44,3 +44,10 @@ export {
   attachProcessLevelLogging,
   attachSecondInstanceFocus,
 } from "./app-events"
+
+export { registerCoreExtensions, EXTENSION_POINT_IDS } from "./extensions"
+export type {
+  BootstrapContentType,
+  BootstrapEditorAdapter,
+  BootstrapEditorScanProvider,
+} from "./extensions"

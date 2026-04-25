@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:51:00+08:00
+last_updated: 2026-04-25T12:55:00+08:00
 current_phase: 0.6
-current_task: T6.10
+current_task: T6.14
 status: in_progress
 task_counts:
   total: 71
-  completed: 51
+  completed: 55
   blocked: 11
-  pending: 9
+  pending: 5
 audit:
   rounds: 0
   last_status: not_started
@@ -102,10 +102,10 @@ audit:
 - [x] T6.7 实现 runtime/security/audit-sink.ts + 单测
 - [x] T6.8 实现 runtime/scheduling/ TaskQueue + RateLimiter + CircuitBreaker + 单测
 - [x] T6.9 实现 runtime/extension/ ExtensionRegistry + ExtensionPoint + 单测
-- [ ] T6.10 迁移 content types / editors / editor-scan providers 到 ExtensionPoint
-- [ ] T6.11 实现 desktop/src/runtime/i18n.ts + theme.ts 接口占位
-- [ ] T6.12 实现 desktop/src/runtime/debug-panel.tsx 骨架（dev-only）
-- [ ] T6.13 建 desktop/tests/{unit,ipc,perf,fuzz,e2e}/ 目录 + fixture 工具 + 示例测试
+- [x] T6.10 迁移 content types / editors / editor-scan providers 到 ExtensionPoint
+- [x] T6.11 实现 desktop/src/runtime/i18n.ts + theme.ts 接口占位
+- [x] T6.12 实现 desktop/src/runtime/debug-panel.tsx 骨架（dev-only）
+- [x] T6.13 建 desktop/tests/{unit,ipc,perf,fuzz,e2e}/ 目录 + fixture 工具 + 示例测试
 - [ ] T6.14 加 ESLint 规则（禁 modules 互相 import）+ 确认 lint 通过
 - [ ] T6.15 更新 AGENTS.md 硬约束段
 - [ ] T6.16 更新 .github/workflows/ci.yml 加入 codegen diff 闸门 + grep 硬约束扫描
