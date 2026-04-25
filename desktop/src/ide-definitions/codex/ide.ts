@@ -1,4 +1,4 @@
-import codexIcon from "../../assets/codex.png"
+import codexIcon from "./icon.png"
 import type { SynapseIdeDefinition } from "../types"
 
 export const ideDefinition = {

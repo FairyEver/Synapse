@@ -6,29 +6,20 @@ import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type {
   SynapseContentInstallResult,
   SynapseInstallToEditorPayload,
-  SynapsePeekClaudeCodeFrontmatterPayload,
-  SynapsePeekClaudeCodeFrontmatterResult,
-  SynapsePeekCursorFrontmatterPayload,
-  SynapsePeekCursorFrontmatterResult,
+  SynapseReadEditorInstallFormValuesPayload,
+  SynapseReadEditorInstallFormValuesResult,
 } from "../../src/types/editor"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
-import { parseMdcFrontmatter, serializeMdcFrontmatter } from "./editor-adapters/cursor-mdc"
-import { parseClaudeCodeFrontmatter, serializeClaudeCodeFrontmatter } from "./editor-adapters/claude-code-frontmatter"
 import { editorInstallStrategyById } from "./ide-definitions/generated/main-registry"
-import {
-  SYNAPSE_SKILL_ID_FILE_NAME,
-  findSkillDirectoryByContentId,
-} from "./editor-adapters/skill-identity"
-import { serializeSkillFrontmatter } from "./editor-adapters/skill-frontmatter"
+import { findSkillDirectoryByContentId } from "./editor-adapters/skill-identity"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
-const INSTALLED_SKILL_MAIN_FILE_NAME = "SKILL.md"
 const logger = createMainLogger("service.content-install")
 
 function normalizeMarkdownContent(content: string): string {
@@ -197,8 +188,19 @@ class ContentInstallService {
             throw new Error(`当前编辑器没有返回合法的 ${definition.singularLabel} 安装目标。`)
           }
 
+          if (payload.contentType !== "skill") {
+            throw new Error(`当前编辑器没有提供 ${definition.singularLabel} 安装策略。`)
+          }
+
+          const installStrategy = editorInstallStrategyById.get(payload.editorId)
+
+          if (!installStrategy?.prepareSkillDirectory) {
+            throw new Error(`当前编辑器没有提供 ${definition.singularLabel} 安装策略。`)
+          }
+
+          const prepareSkillDirectory = installStrategy.prepareSkillDirectory
           const repositoryRootPath = await getActiveRepositoryRootPath()
-          const detail = await contentService.getDetail(payload.contentType, payload.contentId)
+          const detail = await contentService.getSkillDetail(payload.contentId)
           const parentDirectoryPath = path.dirname(target.targetPath)
           const previousSkillDirectoryPath = payload.contentType === "skill"
             ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
@@ -215,48 +217,36 @@ class ContentInstallService {
             }
           }
 
-          let detailContent = detail.content
-
-          if (payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0) {
-            detailContent = applyVariableSubstitutions(detailContent, payload.variableSubstitutions)
-          }
-
-          const skillMainContent = payload.contentType === "skill"
-            ? serializeSkillFrontmatter({
-                description: detail.description,
-                name: path.basename(target.targetPath),
-              }) + detailContent
-            : detailContent
+          const detailWithSubstitutions = payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0
+            ? {
+                ...detail,
+                content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions),
+              }
+            : detail
 
           await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
-            const skillMainFilePath = path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME)
-            await writeFile(
-              skillMainFilePath,
-              normalizeMarkdownContent(skillMainContent),
-              "utf8",
-            )
-            logger.info("Staged skill main file.", { filePath: skillMainFilePath })
-
-            if (payload.contentType === "skill") {
-              const meta = { id: payload.contentId }
-              const idFilePath = path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME)
-              await writeFile(
-                idFilePath,
-                JSON.stringify(meta, null, 2),
-                "utf8",
-              )
-              logger.info("Staged skill identity file.", { filePath: idFilePath })
-            }
-
-            for (const attachment of detail.attachments) {
-              const attachmentTargetPath = path.join(stagingDirectoryPath, attachment.originalName)
-              await attachmentsPoolService.copyAttachmentToPath(
-                repositoryRootPath,
-                attachment,
-                attachmentTargetPath,
-              )
-              logger.info("Staged skill attachment.", { filePath: attachmentTargetPath, originalName: attachment.originalName })
-            }
+            await prepareSkillDirectory({
+              payload,
+              targetPath: target.targetPath,
+              stagingDirectoryPath,
+              detail: detailWithSubstitutions,
+              repositoryRootPath,
+              writeTextFile: async (filePath, content) => {
+                await writeFile(filePath, normalizeMarkdownContent(content), "utf8")
+                logger.info("Staged skill file.", { filePath })
+              },
+              copyAttachment: async (attachment, attachmentTargetPath) => {
+                await attachmentsPoolService.copyAttachmentToPath(
+                  repositoryRootPath,
+                  attachment,
+                  attachmentTargetPath,
+                )
+                logger.info("Staged skill attachment.", {
+                  filePath: attachmentTargetPath,
+                  originalName: attachment.originalName,
+                })
+              },
+            })
           })
 
           if (
@@ -295,34 +285,21 @@ class ContentInstallService {
     }
   }
 
-  async peekCursorFrontmatter(
-    payload: SynapsePeekCursorFrontmatterPayload,
-  ): Promise<SynapsePeekCursorFrontmatterResult> {
-    try {
-      const existing = await readFile(payload.targetPath, "utf8")
-      return { frontmatter: parseMdcFrontmatter(existing) }
-    } catch (error) {
-      if (isFileNotFoundError(error)) {
-        return { frontmatter: null }
-      }
+  async readEditorInstallFormValues(
+    payload: SynapseReadEditorInstallFormValuesPayload,
+  ): Promise<SynapseReadEditorInstallFormValuesResult> {
+    const installStrategy = editorInstallStrategyById.get(payload.editorId)
 
-      throw error
+    if (!installStrategy?.readRuleProjectFormValues) {
+      return { values: null }
     }
-  }
 
-  async peekClaudeCodeFrontmatter(
-    payload: SynapsePeekClaudeCodeFrontmatterPayload,
-  ): Promise<SynapsePeekClaudeCodeFrontmatterResult> {
-    try {
-      const existing = await readFile(payload.targetPath, "utf8")
-      return { frontmatter: parseClaudeCodeFrontmatter(existing) }
-    } catch (error) {
-      if (isFileNotFoundError(error)) {
-        return { frontmatter: null }
-      }
+    const values = await installStrategy.readRuleProjectFormValues({
+      targetPath: payload.targetPath,
+      readExistingTextFile,
+    })
 
-      throw error
-    }
+    return { values }
   }
 }
 

@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FolderOpen, LoaderCircle } from "lucide-react"
 import {
   installToEditor,
-  peekClaudeCodeFrontmatter,
-  peekCursorFrontmatter,
   readContent,
   resolveEditorInstallTarget,
 } from "@/app-shell/content"
@@ -43,13 +41,10 @@ import { getContentTypeDefinition } from "@/config/content-types"
 import type { SynapseProjectConfig, SynapseVariable } from "@/types/config"
 import type { SynapseContentMeta } from "@/types/content"
 import type {
-  ClaudeCodeRuleFrontmatter,
-  CursorRuleFrontmatter,
   SynapseEditorAdapterSummary,
+  SynapseEditorInstallFormValues,
   SynapseEditorResolvedTarget,
 } from "@/types/editor"
-import { ClaudeCodeFrontmatterDialog } from "./claude-code-frontmatter-dialog"
-import { CursorFrontmatterDialog } from "./cursor-frontmatter-dialog"
 import { VariableSubstitutionDialog } from "./variable-substitution-dialog"
 import { detectPlaceholders } from "@/lib/variable-substitution"
 import { installFormDefinitionByEditorId } from "@/ide-definitions/generated/renderer-registry"
@@ -107,12 +102,7 @@ function ContentInstallDialog({
   const [isInstalling, setIsInstalling] = useState(false)
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false)
   const [isConflictConfirmOpen, setIsConflictConfirmOpen] = useState(false)
-  const [isCursorFrontmatterOpen, setIsCursorFrontmatterOpen] = useState(false)
-  const [cursorFrontmatterDefaults, setCursorFrontmatterDefaults] =
-    useState<CursorRuleFrontmatter | null>(null)
-  const [isClaudeCodeFrontmatterOpen, setIsClaudeCodeFrontmatterOpen] = useState(false)
-  const [claudeCodeFrontmatterDefaults, setClaudeCodeFrontmatterDefaults] =
-    useState<ClaudeCodeRuleFrontmatter | null>(null)
+  const [isRuleProjectInstallFormOpen, setIsRuleProjectInstallFormOpen] = useState(false)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const selectedProject = projects.find((project) => project.id === projectSelection) ?? null
@@ -127,6 +117,7 @@ function ContentInstallDialog({
   const projectScopeDisabled = !editor?.supportsProject
   const canInstall = (activeTarget?.status === "ready" || (activeTarget?.status === "conflict" && item.type === "skill")) && !isInstalling
   const installFormDefinition = editor ? installFormDefinitionByEditorId.get(editor.id) : undefined
+  const RuleProjectInstallForm = installFormDefinition?.RuleProjectInstallForm
 
   useEffect(() => {
     if (!open) {
@@ -142,10 +133,7 @@ function ContentInstallDialog({
     setIsInstalling(false)
     setIsOverwriteConfirmOpen(false)
     setIsConflictConfirmOpen(false)
-    setIsCursorFrontmatterOpen(false)
-    setCursorFrontmatterDefaults(null)
-    setIsClaudeCodeFrontmatterOpen(false)
-    setClaudeCodeFrontmatterDefaults(null)
+    setIsRuleProjectInstallFormOpen(false)
     setPreloadedContent(null)
     setIsVariableConfirmOpen(false)
     setDetectedPlaceholders([])
@@ -402,9 +390,8 @@ function ContentInstallDialog({
   }
 
   const runInstall = async (
-    cursorFrontmatter?: CursorRuleFrontmatter,
+    installFormValues?: SynapseEditorInstallFormValues,
     replaceConfirmed?: boolean,
-    claudeCodeFrontmatter?: ClaudeCodeRuleFrontmatter,
   ) => {
     if (!editor) {
       return
@@ -428,7 +415,7 @@ function ContentInstallDialog({
       contentId: item.id,
       contentType: item.type,
       editorId: editor.id,
-      hasCursorFrontmatter: Boolean(cursorFrontmatter),
+      hasInstallFormValues: Boolean(installFormValues),
       hasVariableSubstitutions: Boolean(pendingSubstitutionsRef.current),
       replaceConfirmed: Boolean(replaceConfirmed),
       scope,
@@ -446,8 +433,7 @@ function ContentInstallDialog({
           skillName: item.type === "skill" ? item.name : undefined,
           skillTitle: item.type === "skill" ? item.title : undefined,
           ruleName: item.type === "rule" ? item.name : undefined,
-          cursorFrontmatter,
-          claudeCodeFrontmatter,
+          installFormValues,
           replaceConfirmed,
           variableSubstitutions: pendingSubstitutionsRef.current,
         }),
@@ -467,8 +453,7 @@ function ContentInstallDialog({
         scope,
         targetPath: result.targetPath,
       })
-      setIsCursorFrontmatterOpen(false)
-      setIsClaudeCodeFrontmatterOpen(false)
+      setIsRuleProjectInstallFormOpen(false)
       onOpenChange(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : "安装失败。"
@@ -490,117 +475,9 @@ function ContentInstallDialog({
     }
   }
 
-  const openCursorFrontmatterDialog = async () => {
-    if (!activeTarget || activeTarget.status !== "ready") {
-      setInstallError("当前还没有可用的安装目标。")
-      return
-    }
-
-    setInstallError(null)
-    setIsInstalling(true)
-    const startedAt = performance.now()
-
-    logger.info("Reading Cursor frontmatter from install target.", {
-      contentId: item.id,
-      contentType: item.type,
-      editorId: editor?.id ?? null,
-      scope,
-      targetPath: activeTarget.targetPath,
-    })
-
-    try {
-      const { frontmatter: existing } = await peekCursorFrontmatter({
-        targetPath: activeTarget.targetPath,
-      })
-
-      setCursorFrontmatterDefaults(
-        existing ?? {
-          alwaysApply: false,
-          description: item.description ?? "",
-          globs: "",
-        },
-      )
-      logger.info("Cursor frontmatter dialog opened.", {
-        contentId: item.id,
-        contentType: item.type,
-        elapsedMs: Math.round(performance.now() - startedAt),
-        editorId: editor?.id ?? null,
-        hasExistingFrontmatter: Boolean(existing),
-        scope,
-        targetPath: activeTarget.targetPath,
-      })
-      setIsCursorFrontmatterOpen(true)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "读取现有规则元数据失败。"
-
-      logger.error("Failed to peek Cursor frontmatter.", {
-        contentId: item.id,
-        contentType: item.type,
-        elapsedMs: Math.round(performance.now() - startedAt),
-        editorId: editor?.id ?? null,
-        error,
-        scope,
-        targetPath: activeTarget.targetPath,
-      })
-
-      setInstallError(message)
-    } finally {
-      setIsInstalling(false)
-    }
-  }
-
-  const openClaudeCodeFrontmatterDialog = async () => {
-    if (!activeTarget || activeTarget.status !== "ready") {
-      setInstallError("当前还没有可用的安装目标。")
-      return
-    }
-
-    setInstallError(null)
-    setIsInstalling(true)
-    const startedAt = performance.now()
-
-    logger.info("Reading Claude Code frontmatter from install target.", {
-      contentId: item.id,
-      contentType: item.type,
-      editorId: editor?.id ?? null,
-      scope,
-      targetPath: activeTarget.targetPath,
-    })
-
-    try {
-      const { frontmatter: existing } = await peekClaudeCodeFrontmatter({
-        targetPath: activeTarget.targetPath,
-      })
-
-      setClaudeCodeFrontmatterDefaults(existing ?? { paths: "" })
-      logger.info("Claude Code frontmatter dialog opened.", {
-        contentId: item.id,
-        contentType: item.type,
-        elapsedMs: Math.round(performance.now() - startedAt),
-        editorId: editor?.id ?? null,
-        hasExistingFrontmatter: Boolean(existing),
-        scope,
-        targetPath: activeTarget.targetPath,
-      })
-      setIsClaudeCodeFrontmatterOpen(true)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "读取现有规则元数据失败。"
-
-      logger.error("Failed to peek Claude Code frontmatter.", {
-        contentId: item.id,
-        contentType: item.type,
-        elapsedMs: Math.round(performance.now() - startedAt),
-        editorId: editor?.id ?? null,
-        error,
-        scope,
-        targetPath: activeTarget.targetPath,
-      })
-
-      setInstallError(message)
-    } finally {
-      setIsInstalling(false)
-    }
-  }
+  const handleInstallFormError = useCallback((message: string) => {
+    setInstallError(message)
+  }, [])
 
   const handleVariableConfirm = async (
     substitutions: Record<string, string>,
@@ -688,13 +565,14 @@ function ContentInstallDialog({
       return
     }
 
-    if (item.type === "rule" && scope === "project" && installFormDefinition?.ruleProjectForm === "cursor-frontmatter") {
-      await openCursorFrontmatterDialog()
-      return
-    }
+    if (item.type === "rule" && scope === "project" && RuleProjectInstallForm) {
+      if (!activeTarget || activeTarget.status !== "ready") {
+        setInstallError("当前还没有可用的安装目标。")
+        return
+      }
 
-    if (item.type === "rule" && scope === "project" && installFormDefinition?.ruleProjectForm === "claude-code-frontmatter") {
-      await openClaudeCodeFrontmatterDialog()
+      setInstallError(null)
+      setIsRuleProjectInstallFormOpen(true)
       return
     }
 
@@ -723,77 +601,30 @@ function ContentInstallDialog({
         }}
       />
 
-      {cursorFrontmatterDefaults ? (
-        <CursorFrontmatterDialog
-          defaults={cursorFrontmatterDefaults}
+      {RuleProjectInstallForm && item.type === "rule" ? (
+        <RuleProjectInstallForm
+          editorId={editor.id}
+          item={item}
           isSubmitting={isInstalling}
-          onConfirm={(frontmatter) => {
-            logger.info("Cursor frontmatter confirmed.", {
-              alwaysApply: frontmatter.alwaysApply,
+          onConfirm={(values) => {
+            logger.info("Rule project install form confirmed.", {
               contentId: item.id,
               contentType: item.type,
-              editorId: editor?.id ?? null,
-              hasDescription: frontmatter.description.trim().length > 0,
-              hasGlobs: frontmatter.globs.trim().length > 0,
+              editorId: editor.id,
               scope,
               targetPath: activeTarget?.status === "ready" ? activeTarget.targetPath : null,
             })
-            void runInstall(frontmatter)
+            void runInstall(values)
           }}
+          onError={handleInstallFormError}
           onOpenChange={(next) => {
             if (isInstalling) {
               return
             }
-
-            if (!next) {
-              logger.info("Cursor frontmatter dialog closed.", {
-                contentId: item.id,
-                contentType: item.type,
-                editorId: editor?.id ?? null,
-                scope,
-                targetPath: activeTarget?.status === "ready" ? activeTarget.targetPath : null,
-              })
-            }
-            setIsCursorFrontmatterOpen(next)
+            setIsRuleProjectInstallFormOpen(next)
           }}
-          open={isCursorFrontmatterOpen}
-          targetPath={activeTarget?.status === "ready" ? activeTarget.targetPath : null}
-        />
-      ) : null}
-
-      {claudeCodeFrontmatterDefaults ? (
-        <ClaudeCodeFrontmatterDialog
-          defaults={claudeCodeFrontmatterDefaults}
-          isSubmitting={isInstalling}
-          onConfirm={(frontmatter) => {
-            logger.info("Claude Code frontmatter confirmed.", {
-              contentId: item.id,
-              contentType: item.type,
-              editorId: editor?.id ?? null,
-              hasPaths: frontmatter.paths.trim().length > 0,
-              scope,
-              targetPath: activeTarget?.status === "ready" ? activeTarget.targetPath : null,
-            })
-            void runInstall(undefined, undefined, frontmatter)
-          }}
-          onOpenChange={(next) => {
-            if (isInstalling) {
-              return
-            }
-
-            if (!next) {
-              logger.info("Claude Code frontmatter dialog closed.", {
-                contentId: item.id,
-                contentType: item.type,
-                editorId: editor?.id ?? null,
-                scope,
-                targetPath: activeTarget?.status === "ready" ? activeTarget.targetPath : null,
-              })
-            }
-            setIsClaudeCodeFrontmatterOpen(next)
-          }}
-          open={isClaudeCodeFrontmatterOpen}
-          targetPath={activeTarget?.status === "ready" ? activeTarget.targetPath : null}
+          open={isRuleProjectInstallFormOpen}
+          target={activeTarget?.status === "ready" ? activeTarget : null}
         />
       ) : null}
 

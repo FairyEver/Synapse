@@ -1,7 +1,7 @@
 import path from "node:path"
-import type { EditorAdapter } from "./types"
-import { resolveSkillSlug } from "./skill-slug"
-import { checkSkillNameConflict, resolveSkillTargetPath } from "./skill-identity"
+import type { EditorAdapter } from "../main-types"
+import { resolveSkillSlug } from "../../../electron/services/editor-adapters/skill-slug"
+import { checkSkillNameConflict } from "../../../electron/services/editor-adapters/skill-identity"
 import {
   createConflictTarget,
   createReadyTarget,
@@ -13,7 +13,7 @@ import {
   isSupportedEditorPlatform,
   pathExists,
   resolveExistingProjectPath,
-} from "./utils"
+} from "../../../electron/services/editor-adapters/utils"
 
 // Source of truth: document/不同编辑器存储规则.md (official-doc review, 2026-04-18).
 const cursorAdapter: EditorAdapter = {
@@ -173,4 +173,6 @@ const cursorAdapter: EditorAdapter = {
   },
 }
 
-export { cursorAdapter }
+const editorAdapter = cursorAdapter
+
+export { cursorAdapter, editorAdapter }

@@ -3,11 +3,13 @@ import path from "node:path"
 import { homedir } from "node:os"
 import { app, shell } from "electron"
 import { createMainLogger } from "../services/log-store"
+import { mcpDefinitions } from "../services/ide-definitions/generated/main-registry"
+import type { SynapseMcpDefinition } from "../../src/ide-definitions/types"
 import { SYNAPSE_DATA_SERVER_NAME, SYNAPSE_DATA_LEGACY_SERVER_NAMES } from "../../data-store/shared/server-identity"
 
 const logger = createMainLogger("data-store.mcp-installer")
 
-type McpTarget = "claude" | "codex" | "cursor"
+type McpTarget = string
 type McpRegistrationMode = "http" | "stdio" | null
 type McpStatus = Record<McpTarget, boolean>
 type McpServerInfo = {
@@ -19,17 +21,43 @@ type McpServerInfo = {
   url: string | null
 }
 
-const MCP_TARGETS: McpTarget[] = ["claude", "codex", "cursor"]
+const MCP_DEFINITIONS = mcpDefinitions
+const MCP_TARGETS: McpTarget[] = MCP_DEFINITIONS.map((definition) => definition.target)
 
-function getSettingsPath(target: McpTarget): string {
-  const home = homedir()
-  if (target === "claude") {
-    return path.join(home, ".claude", "settings.json")
+function getMcpDefinition(target: McpTarget): SynapseMcpDefinition | null {
+  return MCP_DEFINITIONS.find((definition) => definition.target === target) ?? null
+}
+
+function requireMcpDefinition(target: McpTarget): SynapseMcpDefinition {
+  const definition = getMcpDefinition(target)
+
+  if (!definition) {
+    throw new Error(`未知 MCP 目标：${target}`)
   }
-  if (target === "cursor") {
-    return path.join(home, ".cursor", "mcp.json")
+
+  return definition
+}
+
+function getSettingsPath(definition: SynapseMcpDefinition): string {
+  return path.join(homedir(), ...definition.settingsPathSegments)
+}
+
+function usesJsonSettings(definition: SynapseMcpDefinition): boolean {
+  return definition.settingsFormat === "json-mcp-servers"
+}
+
+function usesCodexTomlSettings(definition: SynapseMcpDefinition): boolean {
+  return definition.settingsFormat === "codex-toml"
+}
+
+function getTargetSettingsPath(target: McpTarget): string {
+  return getSettingsPath(requireMcpDefinition(target))
+}
+
+function assertSupportedSettingsFormat(definition: SynapseMcpDefinition): void {
+  if (!usesJsonSettings(definition) && !usesCodexTomlSettings(definition)) {
+    throw new Error(`不支持的 MCP 设置格式：${definition.settingsFormat}`)
   }
-  return path.join(home, ".codex", "config.toml")
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -226,13 +254,15 @@ function registerCodexMcp(settingsPath: string, mcpUrl: string): void {
 }
 
 function registerMcp(target: McpTarget, mcpPort: number): { success: boolean; error?: string } {
-  const settingsPath = getSettingsPath(target)
-  const mcpUrl = getMcpUrl(mcpPort)
-
   try {
+    const definition = requireMcpDefinition(target)
+    assertSupportedSettingsFormat(definition)
+    const settingsPath = getSettingsPath(definition)
+    const mcpUrl = getMcpUrl(mcpPort)
+
     ensureParentDirectory(settingsPath)
 
-    if (target === "claude" || target === "cursor") {
+    if (usesJsonSettings(definition)) {
       registerJsonMcp(settingsPath, mcpUrl)
     } else {
       registerCodexMcp(settingsPath, mcpUrl)
@@ -272,9 +302,11 @@ function removeCodexMcp(settingsPath: string, serverName: string): boolean {
 }
 
 function unregisterMcp(target: McpTarget, serverName: string): { success: boolean; modified: boolean; error?: string } {
-  const settingsPath = getSettingsPath(target)
   try {
-    const modified = target === "codex"
+    const definition = requireMcpDefinition(target)
+    assertSupportedSettingsFormat(definition)
+    const settingsPath = getSettingsPath(definition)
+    const modified = usesCodexTomlSettings(definition)
       ? removeCodexMcp(settingsPath, serverName)
       : removeJsonMcp(settingsPath, serverName)
     return { success: true, modified }
@@ -299,8 +331,9 @@ function cleanupLegacyMcpNames(): void {
 }
 
 function getMcpServers(): McpServerInfo[] {
-  return MCP_TARGETS.map((target) => {
-    const settingsPath = getSettingsPath(target)
+  return MCP_DEFINITIONS.map((definition) => {
+    const target = definition.target
+    const settingsPath = getSettingsPath(definition)
     const settingsFileExists = existsSync(settingsPath)
     const base = { target, settingsPath, settingsFileExists, registered: false, mode: null as McpRegistrationMode, url: null as string | null }
 
@@ -309,7 +342,7 @@ function getMcpServers(): McpServerInfo[] {
 
       let detection: { registered: boolean; mode: McpRegistrationMode; url: string | null }
 
-      if (target === "claude" || target === "cursor") {
+      if (usesJsonSettings(definition)) {
         const settings = readJsonSettings(settingsPath)
         detection = detectJsonRegistration(settings)
       } else {
@@ -330,12 +363,12 @@ function getMcpStatus(): McpStatus {
       result[server.target] = server.registered
       return result
     },
-    { claude: false, codex: false, cursor: false },
+    {},
   )
 }
 
 async function openMcpSettings(target: McpTarget): Promise<{ success: boolean; error?: string }> {
-  const settingsPath = getSettingsPath(target)
+  const settingsPath = getTargetSettingsPath(target)
 
   if (!existsSync(settingsPath)) {
     return { success: false, error: "配置文件不存在。" }
@@ -361,9 +394,11 @@ function autoRegisterMcp(mcpPort: number): void {
   cleanupLegacyMcpNames()
   const mcpUrl = getMcpUrl(mcpPort)
 
-  for (const target of MCP_TARGETS) {
+  for (const definition of MCP_DEFINITIONS) {
+    const target = definition.target
     try {
-      const settingsPath = getSettingsPath(target)
+      assertSupportedSettingsFormat(definition)
+      const settingsPath = getSettingsPath(definition)
       const settingsDir = path.dirname(settingsPath)
       if (!existsSync(settingsDir)) continue
 
@@ -371,7 +406,7 @@ function autoRegisterMcp(mcpPort: number): void {
       let detection: { registered: boolean; mode: McpRegistrationMode; url: string | null } = { registered: false, mode: null, url: null }
 
       if (settingsFileExists) {
-        if (target === "claude" || target === "cursor") {
+        if (usesJsonSettings(definition)) {
           detection = detectJsonRegistration(readJsonSettings(settingsPath))
         } else {
           detection = detectCodexRegistration(readFileSync(settingsPath, "utf-8"))

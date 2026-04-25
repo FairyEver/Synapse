@@ -1,5 +1,11 @@
+import type { ComponentType } from "react"
+import type { SynapseContentMeta } from "../types/content"
 import type { SynapseContentType } from "../types/content"
 import type { DataStoreMcpTarget } from "../types/data-store"
+import type {
+  SynapseEditorInstallFormValues,
+  SynapseEditorResolvedTarget,
+} from "../types/editor"
 
 export type SynapseIdeDefinition = {
   id: string
@@ -22,11 +28,25 @@ export type SynapseMcpDefinition = {
   target: DataStoreMcpTarget
   label: string
   order: number
+  settingsPathSegments: readonly string[]
+  settingsFormat: "json-mcp-servers" | "codex-toml"
+}
+
+export type SynapseRendererMcpDefinition = SynapseMcpDefinition & {
   icon: string
 }
 
-export type SynapseInstallRuleProjectForm = "cursor-frontmatter" | "claude-code-frontmatter"
+export type SynapseRuleProjectInstallFormProps = {
+  editorId: string
+  item: SynapseContentMeta<"rule">
+  isSubmitting: boolean
+  onConfirm: (values: SynapseEditorInstallFormValues) => void
+  onError: (message: string) => void
+  onOpenChange: (open: boolean) => void
+  open: boolean
+  target: Extract<SynapseEditorResolvedTarget, { status: "ready" }> | null
+}
 
 export type SynapseInstallFormDefinition = {
-  ruleProjectForm: SynapseInstallRuleProjectForm
+  RuleProjectInstallForm: ComponentType<SynapseRuleProjectInstallFormProps>
 }

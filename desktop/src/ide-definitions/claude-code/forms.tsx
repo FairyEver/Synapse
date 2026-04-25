@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
 import { LoaderCircle } from "lucide-react"
+import { readEditorInstallFormValues } from "@/app-shell/content"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -7,35 +9,73 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { ClaudeCodeRuleFrontmatter } from "@/types/editor"
+import type { SynapseRuleProjectInstallFormProps } from "../types"
+import type { ClaudeCodeRuleFrontmatter } from "./frontmatter"
 
-type ClaudeCodeFrontmatterDialogProps = {
-  defaults: ClaudeCodeRuleFrontmatter
-  isSubmitting: boolean
-  onConfirm: (frontmatter: ClaudeCodeRuleFrontmatter) => void
-  onOpenChange: (open: boolean) => void
-  open: boolean
-  targetPath?: string | null
+function readClaudeCodeFrontmatterValues(value: unknown): ClaudeCodeRuleFrontmatter | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+
+  return {
+    paths: typeof record.paths === "string" ? record.paths : "",
+  }
 }
 
-function ClaudeCodeFrontmatterDialog({
-  defaults,
+function ClaudeCodeRuleProjectInstallForm({
+  editorId,
   isSubmitting,
   onConfirm,
+  onError,
   onOpenChange,
   open,
-  targetPath,
-}: ClaudeCodeFrontmatterDialogProps) {
-  const [paths, setPaths] = useState(defaults.paths)
+  target,
+}: SynapseRuleProjectInstallFormProps) {
+  const [paths, setPaths] = useState("")
 
   useEffect(() => {
-    if (open) {
-      setPaths(defaults.paths)
+    if (!open) {
+      return
     }
-  }, [open, defaults.paths])
+
+    let cancelled = false
+    setPaths("")
+
+    if (!target) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void readEditorInstallFormValues({
+      editorId,
+      targetPath: target.targetPath,
+    })
+      .then(({ values }) => {
+        if (cancelled) {
+          return
+        }
+
+        const existing = readClaudeCodeFrontmatterValues(values)
+
+        if (existing) {
+          setPaths(existing.paths)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          onError(error instanceof Error ? error.message : "读取规则元数据失败。")
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [editorId, onError, open, target])
 
   const handleConfirm = () => {
     onConfirm({ paths: paths.trim() })
@@ -64,8 +104,8 @@ function ClaudeCodeFrontmatterDialog({
 
           <div className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
             <p>当前组合：{paths.trim() ? "按路径匹配 — 仅在匹配文件进入 context 时加载。" : "全局生效 — 每次会话都注入。"}</p>
-            {targetPath ? (
-              <p className="mt-1 break-all">目标文件：{targetPath}</p>
+            {target ? (
+              <p className="mt-1 break-all">目标文件：{target.targetPath}</p>
             ) : null}
           </div>
         </div>
@@ -95,4 +135,6 @@ function ClaudeCodeFrontmatterDialog({
   )
 }
 
-export { ClaudeCodeFrontmatterDialog }
+export const installFormDefinition = {
+  RuleProjectInstallForm: ClaudeCodeRuleProjectInstallForm,
+} as const

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
 import { LoaderCircle } from "lucide-react"
+import { readEditorInstallFormValues } from "@/app-shell/content"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -7,19 +9,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import type { CursorRuleFrontmatter } from "@/types/editor"
+import type { SynapseRuleProjectInstallFormProps } from "../types"
+import type { CursorRuleFrontmatter } from "./frontmatter"
 
-type CursorFrontmatterDialogProps = {
-  defaults: CursorRuleFrontmatter
-  isSubmitting: boolean
-  onConfirm: (frontmatter: CursorRuleFrontmatter) => void
-  onOpenChange: (open: boolean) => void
-  open: boolean
-  targetPath?: string | null
+function readCursorFrontmatterValues(value: unknown): CursorRuleFrontmatter | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+
+  return {
+    alwaysApply: record.alwaysApply === true,
+    description: typeof record.description === "string" ? record.description : "",
+    globs: typeof record.globs === "string" ? record.globs : "",
+  }
 }
 
 function describeRuleType(frontmatter: CursorRuleFrontmatter): string {
@@ -41,25 +48,65 @@ function describeRuleType(frontmatter: CursorRuleFrontmatter): string {
   return "Manual — 仅在你主动 @ 引用时加载。"
 }
 
-function CursorFrontmatterDialog({
-  defaults,
+function CursorRuleProjectInstallForm({
+  editorId,
+  item,
   isSubmitting,
   onConfirm,
+  onError,
   onOpenChange,
   open,
-  targetPath,
-}: CursorFrontmatterDialogProps) {
-  const [description, setDescription] = useState(defaults.description)
-  const [globs, setGlobs] = useState(defaults.globs)
-  const [alwaysApply, setAlwaysApply] = useState(defaults.alwaysApply)
+  target,
+}: SynapseRuleProjectInstallFormProps) {
+  const [description, setDescription] = useState(item.description)
+  const [globs, setGlobs] = useState("")
+  const [alwaysApply, setAlwaysApply] = useState(false)
 
   useEffect(() => {
-    if (open) {
-      setDescription(defaults.description)
-      setGlobs(defaults.globs)
-      setAlwaysApply(defaults.alwaysApply)
+    if (!open) {
+      return
     }
-  }, [open, defaults.description, defaults.globs, defaults.alwaysApply])
+
+    let cancelled = false
+    setDescription(item.description)
+    setGlobs("")
+    setAlwaysApply(false)
+
+    if (!target) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void readEditorInstallFormValues({
+      editorId,
+      targetPath: target.targetPath,
+    })
+      .then(({ values }) => {
+        if (cancelled) {
+          return
+        }
+
+        const existing = readCursorFrontmatterValues(values)
+
+        if (!existing) {
+          return
+        }
+
+        setDescription(existing.description)
+        setGlobs(existing.globs)
+        setAlwaysApply(existing.alwaysApply)
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          onError(error instanceof Error ? error.message : "读取规则元数据失败。")
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [editorId, item.description, onError, open, target])
 
   const currentValues: CursorRuleFrontmatter = {
     alwaysApply,
@@ -127,8 +174,8 @@ function CursorFrontmatterDialog({
 
           <div className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
             <p>当前组合：{describeRuleType(currentValues)}</p>
-            {targetPath ? (
-              <p className="mt-1 break-all">目标文件：{targetPath}</p>
+            {target ? (
+              <p className="mt-1 break-all">目标文件：{target.targetPath}</p>
             ) : null}
           </div>
         </div>
@@ -158,4 +205,6 @@ function CursorFrontmatterDialog({
   )
 }
 
-export { CursorFrontmatterDialog }
+export const installFormDefinition = {
+  RuleProjectInstallForm: CursorRuleProjectInstallForm,
+} as const

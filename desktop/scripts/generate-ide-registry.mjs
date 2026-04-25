@@ -5,9 +5,8 @@ import { fileURLToPath } from "node:url"
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(scriptDir, "..")
 const definitionsRoot = path.join(packageRoot, "src", "ide-definitions")
-const mainDefinitionsRoot = path.join(packageRoot, "electron", "services", "ide-definitions")
 const rendererGeneratedDir = path.join(definitionsRoot, "generated")
-const mainGeneratedDir = path.join(mainDefinitionsRoot, "generated")
+const mainGeneratedDir = path.join(packageRoot, "electron", "services", "ide-definitions", "generated")
 
 async function pathExists(filePath) {
   try {
@@ -58,7 +57,7 @@ function renderRendererRegistry(definitionDirs, cliDirs, mcpDirs, formDirs) {
 ${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${formImports.join("\n")}
-import type { SynapseCliDefinition, SynapseIdeDefinition, SynapseInstallFormDefinition, SynapseMcpDefinition } from "../types"
+import type { SynapseCliDefinition, SynapseIdeDefinition, SynapseInstallFormDefinition, SynapseRendererMcpDefinition } from "../types"
 
 export const ideDefinitions = [
 ${definitionDirs.map((dir) => `  ${toIdentifier(dir)}IdeDefinition,`).join("\n")}
@@ -69,8 +68,8 @@ ${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseCliDefinition[]
 
 export const mcpDefinitions = [
-${mcpDirs.map((dir) => `  ${toIdentifier(dir)}McpDefinition,`).join("\n")}
-].sort((left, right) => left.order - right.order) satisfies SynapseMcpDefinition[]
+${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, icon: ${toIdentifier(dir)}IdeDefinition.icon },`).join("\n")}
+].sort((left, right) => left.order - right.order) satisfies SynapseRendererMcpDefinition[]
 
 export const installFormDefinitionByEditorId = new Map<string, SynapseInstallFormDefinition>([
 ${formDirs.map((dir) => `  ["${dir}", ${toIdentifier(dir)}InstallFormDefinition],`).join("\n")}
@@ -78,30 +77,35 @@ ${formDirs.map((dir) => `  ["${dir}", ${toIdentifier(dir)}InstallFormDefinition]
 `
 }
 
-function renderMainRegistry(adapterDirs, cliDirs) {
+function renderMainRegistry(adapterDirs, cliDirs, mcpDirs) {
   const adapterImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}EditorAdapter`
-    return `import { editorAdapter as ${name} } from "../${dir}/adapter"`
+    return `import { editorAdapter as ${name} } from "../../../../src/ide-definitions/${dir}/adapter"`
   })
   const cliImports = cliDirs.map((dir) => {
     const name = `${toIdentifier(dir)}CliDefinition`
     return `import { cliDefinition as ${name} } from "../../../../src/ide-definitions/${dir}/cli"`
   })
+  const mcpImports = mcpDirs.map((dir) => {
+    const name = `${toIdentifier(dir)}McpDefinition`
+    return `import { mcpDefinition as ${name} } from "../../../../src/ide-definitions/${dir}/mcp"`
+  })
   const installImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}InstallStrategy`
-    return `import { installStrategy as ${name} } from "../${dir}/install"`
+    return `import { installStrategy as ${name} } from "../../../../src/ide-definitions/${dir}/install"`
   })
   const scanImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}ScanStrategy`
-    return `import { scanStrategy as ${name} } from "../${dir}/scan"`
+    return `import { scanStrategy as ${name} } from "../../../../src/ide-definitions/${dir}/scan"`
   })
 
   return `${adapterImports.join("\n")}
 ${cliImports.join("\n")}
+${mcpImports.join("\n")}
 ${installImports.join("\n")}
 ${scanImports.join("\n")}
-import type { EditorAdapter } from "../../editor-adapters/types"
-import type { EditorInstallStrategy, EditorScanStrategy } from "../types"
+import type { EditorAdapter, EditorInstallStrategy, EditorScanStrategy } from "../../../../src/ide-definitions/main-types"
+import type { SynapseMcpDefinition } from "../../../../src/ide-definitions/types"
 
 export const editorAdapters = [
 ${adapterDirs.map((dir) => `  ${toIdentifier(dir)}EditorAdapter,`).join("\n")}
@@ -114,6 +118,10 @@ export const editorAdapterById = new Map(
 export const cliDefinitions = [
 ${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order)
+
+export const mcpDefinitions = [
+${mcpDirs.map((dir) => `  ${toIdentifier(dir)}McpDefinition,`).join("\n")}
+].sort((left, right) => left.order - right.order) satisfies SynapseMcpDefinition[]
 
 export const editorInstallStrategyById = new Map<string, EditorInstallStrategy>([
 ${adapterDirs.map((dir) => `  [${toIdentifier(dir)}EditorAdapter.id, ${toIdentifier(dir)}InstallStrategy],`).join("\n")}
@@ -133,17 +141,22 @@ async function main() {
   const importableFormDirs = []
 
   for (const dir of definitionDirs) {
-    if (await pathExists(path.join(mainDefinitionsRoot, dir, "adapter.ts"))) adapterDirs.push(dir)
+    if (await pathExists(path.join(definitionsRoot, dir, "adapter.ts"))) adapterDirs.push(dir)
     if (await pathExists(path.join(definitionsRoot, dir, "cli.ts"))) importableCliDirs.push(dir)
     if (await pathExists(path.join(definitionsRoot, dir, "mcp.ts"))) importableMcpDirs.push(dir)
-    if (await pathExists(path.join(definitionsRoot, dir, "forms.ts"))) importableFormDirs.push(dir)
+    if (
+      await pathExists(path.join(definitionsRoot, dir, "forms.ts"))
+      || await pathExists(path.join(definitionsRoot, dir, "forms.tsx"))
+    ) {
+      importableFormDirs.push(dir)
+    }
   }
 
   await mkdir(rendererGeneratedDir, { recursive: true })
   await mkdir(mainGeneratedDir, { recursive: true })
 
   await writeFile(path.join(rendererGeneratedDir, "renderer-registry.ts"), renderRendererRegistry(definitionDirs, importableCliDirs, importableMcpDirs, importableFormDirs), "utf8")
-  await writeFile(path.join(mainGeneratedDir, "main-registry.ts"), renderMainRegistry(adapterDirs, importableCliDirs), "utf8")
+  await writeFile(path.join(mainGeneratedDir, "main-registry.ts"), renderMainRegistry(adapterDirs, importableCliDirs, importableMcpDirs), "utf8")
 }
 
 main().catch((error) => {

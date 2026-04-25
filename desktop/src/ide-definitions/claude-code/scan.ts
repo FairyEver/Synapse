@@ -1,5 +1,5 @@
-import type { EditorScanStrategy } from "../types"
-import { scanClaudeCodeRules } from "../rule-scanners"
+import type { EditorScanStrategy } from "../main-types"
+import { scanClaudeCodeRules } from "../shared-rule-scanners"
 
 export const scanStrategy: EditorScanStrategy = {
   async scanRules(rulesPath) {

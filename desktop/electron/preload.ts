@@ -22,8 +22,7 @@ const SYNAPSE_PRELOAD_CHANNELS = {
     openDetailWindow: "synapse:content:open-detail-window",
     getEditorAdapters: "synapse:content:get-editor-adapters",
     installToEditor: "synapse:content:install-to-editor",
-    peekCursorFrontmatter: "synapse:content:peek-cursor-frontmatter",
-    peekClaudeCodeFrontmatter: "synapse:content:peek-claude-code-frontmatter",
+    readEditorInstallFormValues: "synapse:content:read-editor-install-form-values",
     readIconImage: "synapse:content:read-icon-image",
     resolveEditorInstallTarget: "synapse:content:resolve-editor-install-target",
   },
@@ -164,10 +163,8 @@ const synapseBridge: SynapseBridge = {
     getEditorAdapters: () => ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.getEditorAdapters),
     installToEditor: (payload) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.installToEditor, payload),
-    peekCursorFrontmatter: (payload) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.peekCursorFrontmatter, payload),
-    peekClaudeCodeFrontmatter: (payload) =>
-      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.peekClaudeCodeFrontmatter, payload),
+    readEditorInstallFormValues: (payload) =>
+      ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.readEditorInstallFormValues, payload),
     readIconImage: (args) =>
       ipcRenderer.invoke(SYNAPSE_PRELOAD_CHANNELS.content.readIconImage, args),
     resolveEditorInstallTarget: (payload) =>

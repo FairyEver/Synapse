@@ -96,19 +96,19 @@ function assertSemanticallyCorrectColumn(col: Column): void {
 
   if ((col.kind === "json" || col.kind === "text") && (MULTI_CHOICE_NAME_HINTS.includes(lower) || MULTI_CHOICE_NAME_HINTS.includes(col.name))) {
     throw new Error(
-      `Column "${col.name}" is a multi-select field. Use kind="multi_choice" with choices=[...].`,
+      `Column "${col.name}" is a multi-select field. Replace with: { name: "${col.name}", kind: "multi_choice", choices: ["..."] }.`,
     )
   }
 
   if ((col.kind === "json" || col.kind === "text") && (SINGLE_CHOICE_NAME_HINTS.includes(lower) || SINGLE_CHOICE_NAME_HINTS.includes(col.name))) {
     throw new Error(
-      `Column "${col.name}" is a single-choice field. Use kind="single_choice" with choices=[...].`,
+      `Column "${col.name}" is a single-choice field. Replace with: { name: "${col.name}", kind: "single_choice", choices: ["..."] }.`,
     )
   }
 
   if ((col.kind === "json" || col.kind === "text") && CHOICE_AMBIGUOUS_NAME_HINTS.includes(lower)) {
     throw new Error(
-      `Column "${col.name}" looks like a choice field. Use kind="single_choice" with choices=[...] or kind="multi_choice" with choices=[...].`,
+      `Column "${col.name}" looks like a choice field. Replace with: { name: "${col.name}", kind: "single_choice", choices: ["..."] } or { name: "${col.name}", kind: "multi_choice", choices: ["..."] }.`,
     )
   }
 
@@ -119,7 +119,7 @@ function assertSemanticallyCorrectColumn(col: Column): void {
       || BOOLEAN_NAME_PREFIXES_CN.some((p) => col.name.startsWith(p))
     if (looksBool) {
       throw new Error(
-        `Column "${col.name}" is a boolean field. Use kind="boolean".`,
+        `Column "${col.name}" is a boolean field. Replace with: { name: "${col.name}", kind: "boolean" }.`,
       )
     }
   }

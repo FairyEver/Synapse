@@ -111,13 +111,9 @@ type DataStoreCliDebugInfo = {
   status: DataStoreCliStatus
 }
 
-type DataStoreMcpStatus = {
-  claude: boolean
-  codex: boolean
-  cursor: boolean
-}
+type DataStoreMcpStatus = Record<string, boolean>
 
-type DataStoreMcpTarget = "claude" | "codex" | "cursor"
+type DataStoreMcpTarget = string & { readonly __brand?: "DataStoreMcpTarget" }
 
 type DataStoreMcpServerInfo = {
   target: DataStoreMcpTarget

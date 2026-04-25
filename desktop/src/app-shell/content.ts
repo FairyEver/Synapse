@@ -26,10 +26,8 @@ import type {
   SynapseContentInstallResult,
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
-  SynapsePeekClaudeCodeFrontmatterPayload,
-  SynapsePeekClaudeCodeFrontmatterResult,
-  SynapsePeekCursorFrontmatterPayload,
-  SynapsePeekCursorFrontmatterResult,
+  SynapseReadEditorInstallFormValuesPayload,
+  SynapseReadEditorInstallFormValuesResult,
   SynapseResolveEditorTargetPayload,
 } from "@/types/editor"
 
@@ -156,16 +154,10 @@ async function resolveEditorInstallTarget(
   return requireContentBridge().resolveEditorInstallTarget(payload)
 }
 
-async function peekCursorFrontmatter(
-  payload: SynapsePeekCursorFrontmatterPayload,
-): Promise<SynapsePeekCursorFrontmatterResult> {
-  return requireContentBridge().peekCursorFrontmatter(payload)
-}
-
-async function peekClaudeCodeFrontmatter(
-  payload: SynapsePeekClaudeCodeFrontmatterPayload,
-): Promise<SynapsePeekClaudeCodeFrontmatterResult> {
-  return requireContentBridge().peekClaudeCodeFrontmatter(payload)
+async function readEditorInstallFormValues(
+  payload: SynapseReadEditorInstallFormValuesPayload,
+): Promise<SynapseReadEditorInstallFormValuesResult> {
+  return requireContentBridge().readEditorInstallFormValues(payload)
 }
 
 const createRule = (payload: SynapseCreateRulePayload) => createContent("rule", payload)
@@ -201,8 +193,7 @@ export {
   listContent,
   listDeletedContent,
   openContentDetailWindow,
-  peekClaudeCodeFrontmatter,
-  peekCursorFrontmatter,
+  readEditorInstallFormValues,
   purgeContent,
   readContent,
   readDetail,

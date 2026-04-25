@@ -1,8 +1,8 @@
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
-import type { EditorScanRuleItem } from "../../../src/types/editor-scan"
-import { extractContentIdFromSynapseFile, isSynapseFile, pathExists } from "../editor-adapters/utils"
-import { createMainLogger } from "../log-store"
+import type { EditorScanRuleItem } from "../types/editor-scan"
+import { extractContentIdFromSynapseFile, isSynapseFile, pathExists } from "../../electron/services/editor-adapters/utils"
+import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("service.editor-scan")
 const SYNAPSE_RULE_BEGIN_RE = /<!--\s*synapse-rule:([^:]+):begin\s*-->/

@@ -8,6 +8,8 @@ export type SynapseEditorInstallTargetKind = "file" | "directory"
 
 export type SynapseEditorResolvedTargetStatus = "ready" | "unsupported" | "unavailable" | "conflict"
 
+export type SynapseEditorInstallFormValues = Record<string, unknown>
+
 export type SynapseEditorAdapterSummary = {
   id: SynapseEditorId
   label: string
@@ -39,19 +41,8 @@ export type SynapseResolveEditorTargetPayload = {
   ruleName?: string
 }
 
-export type CursorRuleFrontmatter = {
-  description: string
-  globs: string
-  alwaysApply: boolean
-}
-
-export type ClaudeCodeRuleFrontmatter = {
-  paths: string
-}
-
 export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & {
-  cursorFrontmatter?: CursorRuleFrontmatter
-  claudeCodeFrontmatter?: ClaudeCodeRuleFrontmatter
+  installFormValues?: SynapseEditorInstallFormValues
   /**
    * When true, indicates user has confirmed replacing an existing Skill.
    * The existing Skill directory will be backed up before installation.
@@ -60,12 +51,13 @@ export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & 
   variableSubstitutions?: Record<string, string>
 }
 
-export type SynapsePeekCursorFrontmatterPayload = {
+export type SynapseReadEditorInstallFormValuesPayload = {
+  editorId: SynapseEditorId
   targetPath: string
 }
 
-export type SynapsePeekCursorFrontmatterResult = {
-  frontmatter: CursorRuleFrontmatter | null
+export type SynapseReadEditorInstallFormValuesResult = {
+  values: SynapseEditorInstallFormValues | null
 }
 
 type SynapseEditorResolvedTargetBase = {
@@ -103,14 +95,6 @@ export type SynapseContentInstallResult = {
   contentId: string
   targetKind: SynapseEditorInstallTargetKind
   targetPath: string
-}
-
-export type SynapsePeekClaudeCodeFrontmatterPayload = {
-  targetPath: string
-}
-
-export type SynapsePeekClaudeCodeFrontmatterResult = {
-  frontmatter: ClaudeCodeRuleFrontmatter | null
 }
 
 export type SynapseEditorGlobalDirectory = {

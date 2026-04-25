@@ -1,5 +1,8 @@
-import type { ClaudeCodeRuleFrontmatter } from "../../../src/types/editor"
-import { decodeYamlScalar, encodeYamlScalar } from "./yaml-scalar"
+import { decodeYamlScalar, encodeYamlScalar } from "../shared-yaml-scalar"
+
+type ClaudeCodeRuleFrontmatter = {
+  paths: string
+}
 
 const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/
 
@@ -68,3 +71,4 @@ function stripClaudeCodeFrontmatter(fileContent: string): string {
 }
 
 export { parseClaudeCodeFrontmatter, serializeClaudeCodeFrontmatter, stripClaudeCodeFrontmatter }
+export type { ClaudeCodeRuleFrontmatter }

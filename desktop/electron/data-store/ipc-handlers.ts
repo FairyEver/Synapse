@@ -8,6 +8,7 @@ import { getMcpServers, getMcpStatus, openMcpSettings, registerMcp } from "./mcp
 import { getMcpServerPort, isMcpServerRunning, getMcpServerUrl } from "./mcp-server"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
+import type { DataStoreMcpTarget } from "../../src/types/data-store"
 import type {
   Column,
   DataStoreQueryParams,
@@ -227,11 +228,11 @@ function registerDataStoreHandlers(): void {
     return getMcpServers()
   })
 
-  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.openMCPSettings, async (_event, target: "claude" | "codex" | "cursor") => {
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.openMCPSettings, async (_event, target: DataStoreMcpTarget) => {
     return openMcpSettings(target)
   })
 
-  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.registerMCP, async (_event, target: "claude" | "codex" | "cursor") => {
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.registerMCP, async (_event, target: DataStoreMcpTarget) => {
     return registerMcp(target, getMcpServerPort())
   })
 

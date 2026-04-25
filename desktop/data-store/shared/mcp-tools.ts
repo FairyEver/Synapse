@@ -74,7 +74,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "create_table",
-      description: `Create a user table with at least one column; system columns id, created_at, and updated_at are added automatically. Column kinds:\n${kindDescription}\nTable and column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and columns cannot be id, created_at, or updated_at.`,
+      description: `Create a user table with at least one column; system columns id, created_at, and updated_at are added automatically. Column kinds:\n${kindDescription}\nTable and column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and columns cannot be id, created_at, or updated_at. Provide a one-line description for each column to capture user intent.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -98,7 +98,7 @@ function buildTools(): McpTool[] {
                 },
                 description: {
                   type: "string",
-                  description: "Optional column description stored in metadata and returned by describe_table.",
+                  description: "Recommended one-line description of the column's intent. Stored in metadata and returned by describe_table.",
                 },
                 choices: {
                   type: "array",
@@ -130,7 +130,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "add_column",
-      description: `Add one column to an existing table and update table metadata. Use the same kind rules as create_table:\n${kindDescription}\nColumn names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at. Defaults for multi_choice must be arrays, and choice defaults must already appear in choices.`,
+      description: `Add one column to an existing table and update table metadata. Use the same kind rules as create_table:\n${kindDescription}\nColumn names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at. Defaults for multi_choice must be arrays, and choice defaults must already appear in choices. Provide a one-line description for the column to capture user intent.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -152,7 +152,7 @@ function buildTools(): McpTool[] {
               },
               description: {
                 type: "string",
-                description: "Optional column description stored in metadata and returned by describe_table.",
+                description: "Recommended one-line description of the column's intent. Stored in metadata and returned by describe_table.",
               },
               choices: {
                 type: "array",

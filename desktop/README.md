@@ -58,6 +58,7 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | Claude Code | 全局 / 项目 | 规则、技能 |
 | Codex | 全局 / 项目 | 规则、技能 |
 | Cursor | 全局（仅技能） / 项目 | 规则、技能 |
+| Windsurf | 全局 / 项目 | 规则、技能 |
 
 平台支持：macOS、Linux、Windows。
 
@@ -96,9 +97,35 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | 技能 | 全局 | `~/.cursor/skills/{skillName}/` |
 | 技能 | 项目 | `{projectPath}/.cursor/skills/{skillName}/` |
 
+#### Windsurf
+
+官方依据：
+
+- [Memories & Rules](https://docs.windsurf.com/windsurf/cascade/memories)：Rules 支持 global / workspace / system；全局规则文件为 `~/.codeium/windsurf/memories/global_rules.md`；workspace 规则位于 `.windsurf/rules/*.md`，通过 frontmatter 的 `trigger` 字段声明激活模式。
+- [Cascade Skills](https://docs.windsurf.com/windsurf/cascade/skills)：workspace Skill 位于 `.windsurf/skills/<skill-name>/`；global Skill 位于 `~/.codeium/windsurf/skills/<skill-name>/`；每个 Skill 目录必须包含带 YAML frontmatter 的 `SKILL.md`。
+- [AGENTS.md](https://docs.windsurf.com/windsurf/cascade/agents-md)：`AGENTS.md` / `agents.md` 会被 Windsurf 自动发现并进入同一套 Rules 引擎，按文件位置自动作用域；Synapse 当前优先使用 `.windsurf/rules/`，因为它能显式设置激活模式。
+
+| 类型 | 范围 | 目标路径 | 写入策略 |
+| --- | --- | --- | --- |
+| 规则 | 全局 | `~/.codeium/windsurf/memories/global_rules.md` | 单文件合并写入，用 Synapse 注释块分隔 |
+| 规则 | 项目 | `{projectPath}/.windsurf/rules/{name}.md` | 独立 Markdown 文件，写入 `trigger` frontmatter |
+| 技能 | 全局 | `~/.codeium/windsurf/skills/{skillName}/` | 目录，包含 `SKILL.md` 与附件 |
+| 技能 | 项目 | `{projectPath}/.windsurf/skills/{skillName}/` | 目录，包含 `SKILL.md` 与附件 |
+
+Windsurf 项目规则的 `trigger` 支持：
+
+| `trigger` | 含义 |
+| --- | --- |
+| `always_on` | 每次消息都加载完整规则 |
+| `model_decision` | 先把 `description` 放入上下文，由 Cascade 判断是否读取完整规则 |
+| `glob` | 当 Cascade 读取或编辑匹配 `globs` 的文件时加载 |
+| `manual` | 不自动注入，需要在 Cascade 输入框里手动 `@rule-name` |
+
+Windsurf 官方还支持目录中的 `AGENTS.md` / `agents.md`。这类文件不使用 frontmatter，根目录文件 always-on，子目录文件按位置自动作用域。Synapse 的规则安装入口暂不写 `AGENTS.md`，避免和 `.windsurf/rules/` 的显式触发模式混用。
+
 ### 规则与技能的写入形式
 
-- **规则**：写入单个 Markdown 文件。Claude Code 项目规则写入 `.claude/rules/{name}.md`（独立文件，支持可选的 `paths` frontmatter）；Claude Code 全局规则和 Codex 规则合并写入 `CLAUDE.md` / `AGENTS.md`（用 HTML 注释标记分隔）；Cursor 规则写入 `{contentId}.mdc`（Cursor 原生 MDC 规则格式）。
+- **规则**：写入单个 Markdown 文件。Claude Code 项目规则写入 `.claude/rules/{name}.md`（独立文件，支持可选的 `paths` frontmatter）；Claude Code 全局规则和 Codex 规则合并写入 `CLAUDE.md` / `AGENTS.md`（用 HTML 注释标记分隔）；Cursor 规则写入 `{contentId}.mdc`（Cursor 原生 MDC 规则格式）；Windsurf 全局规则合并写入 `global_rules.md`，项目规则写入 `.windsurf/rules/{name}.md` 并带 `trigger` frontmatter。
 - **技能**：写入一个完整目录，目录中包含 `SKILL.md` 主文件和全部附件（附件保留原文件名）。
 
 所有写入都是原子操作：新内容先写入临时位置，就绪后再整体替换目标；失败会自动回滚，不会留下半坏的文件或目录。
@@ -117,6 +144,183 @@ UI 会根据状态启用或禁用安装按钮，并给出相应提示。
 
 ---
 
+## IDE 扩展
+
+新增 IDE 的固定目录是：
+
+```text
+desktop/src/ide-definitions/<ide-id>/
+```
+
+普通 IDE 只需要在这个目录中补齐定义文件。不要手改生成文件，也不要改 `editor-adapters/index.ts`、安装菜单、扫描服务、CLI 检测或 MCP 设置面板。`pnpm desktop:typecheck` 会先运行 `generate:ide-registry`，自动刷新 renderer / Electron 两侧 registry。
+
+### 文件职责
+
+| 文件 | 必需 | 职责 |
+| --- | --- | --- |
+| `ide.ts` | 是 | IDE 展示元数据：`id`、`label`、`order`、`icon`、支持范围、支持内容类型 |
+| `adapter.ts` | 是 | 解析全局 / 项目安装目标，导出 `editorAdapter` |
+| `install.ts` | 是 | Rule / Skill 写入策略，导出 `installStrategy` |
+| `scan.ts` | 是 | Rule 扫描策略，导出 `scanStrategy` |
+| `forms.tsx` | 否 | 项目 Rule 安装前表单；没有额外元数据就不创建 |
+| `cli.ts` | 否 | 配套 CLI 检测定义；没有 CLI 就不创建 |
+| `mcp.ts` | 否 | MCP 注册定义；没有 MCP 就不创建 |
+
+生成入口：
+
+```text
+desktop/scripts/generate-ide-registry.mjs
+desktop/src/ide-definitions/generated/renderer-registry.ts
+desktop/electron/services/ide-definitions/generated/main-registry.ts
+```
+
+`generated/*` 只由脚本维护。
+
+### 新增一个普通 IDE
+
+假设新增 `windsorf`，且它支持 Rule / Skill、没有 CLI、没有 MCP、没有安装前表单：
+
+```text
+desktop/src/ide-definitions/windsorf/
+  icon.png
+  ide.ts
+  adapter.ts
+  install.ts
+  scan.ts
+```
+
+`ide.ts` 只放展示与能力元数据：
+
+```ts
+import icon from "./icon.png"
+import type { SynapseIdeDefinition } from "../types"
+
+export const ideDefinition = {
+  id: "windsorf",
+  label: "Windsorf",
+  order: 40,
+  icon,
+  supportsGlobal: true,
+  supportsProject: true,
+  supportedContentTypes: ["rule", "skill"],
+} as const satisfies SynapseIdeDefinition
+```
+
+`adapter.ts` 必须导出 `editorAdapter`，由统一服务调用：
+
+```ts
+import type { EditorAdapter } from "../main-types"
+
+const windsorfAdapter: EditorAdapter = {
+  id: "windsorf",
+  label: "Windsorf",
+  supportsGlobal: true,
+  supportsProject: true,
+  supportedContentTypes: ["rule", "skill"],
+  resolveGlobalDirectoryPaths() {
+    return { rulesPath: null, skillsPath: null }
+  },
+  async resolveGlobalTarget(context) {
+    // 返回 createReadyTarget / createUnsupportedTarget / createUnavailableTarget
+  },
+  async resolveProjectTarget(projectPath, context) {
+    // 返回项目级 Rule / Skill 的目标文件或目录
+  },
+  getScanPathConfig() {
+    return {
+      globalSkillsPath: null,
+      globalRulesPath: null,
+      rulesSupported: true,
+      detectionDir: "",
+      projectPaths: (projectPath) => ({
+        skillsPath: `${projectPath}/.windsorf/skills`,
+        rulesPath: `${projectPath}/.windsorf/rules`,
+      }),
+    }
+  },
+}
+
+export const editorAdapter = windsorfAdapter
+```
+
+`install.ts` 负责写入格式。普通 Skill 可以复用 Synapse 标准目录写入：
+
+```ts
+import type { EditorInstallStrategy } from "../main-types"
+import { writeSynapseSkillDirectory } from "../shared-skill-directory"
+
+export const installStrategy: EditorInstallStrategy = {
+  async prepareRuleFileContent({ ruleBody }) {
+    return ruleBody
+  },
+  async prepareSkillDirectory(context) {
+    await writeSynapseSkillDirectory(context)
+  },
+}
+```
+
+`scan.ts` 负责把 IDE 的 Rule 文件解析成 `EditorScanRuleItem[]`。如果规则就是独立 Markdown 文件，可以参考 Claude Code；如果是单文件多段规则，可以参考 Codex。
+
+新增后运行：
+
+```bash
+pnpm desktop:typecheck
+```
+
+### 可选能力
+
+有配套 CLI 时，在同一目录增加 `cli.ts`：
+
+```ts
+import type { SynapseCliDefinition } from "../types"
+
+export const cliDefinition = {
+  id: "windsorf",
+  label: "Windsorf",
+  order: 40,
+  binaries: ["windsorf"],
+} as const satisfies SynapseCliDefinition
+```
+
+有 MCP 注册能力时，增加 `mcp.ts`。`mcp.ts` 不导入图标，renderer 会自动使用 `ide.ts` 的 icon：
+
+```ts
+import type { SynapseMcpDefinition } from "../types"
+
+export const mcpDefinition = {
+  target: "windsorf",
+  label: "Windsorf",
+  order: 40,
+  settingsPathSegments: [".windsorf", "mcp.json"],
+  settingsFormat: "json-mcp-servers",
+} as const satisfies SynapseMcpDefinition
+```
+
+当前支持的 MCP 写入格式：
+
+| `settingsFormat` | 行为 |
+| --- | --- |
+| `json-mcp-servers` | 写入 JSON 配置的 `mcpServers.synapse-data` |
+| `codex-toml` | 写入 Codex TOML 的 `[mcp_servers.synapse-data]` |
+
+项目 Rule 安装前需要额外表单时，增加 `forms.tsx`，导出 `installFormDefinition`：
+
+```tsx
+import type { SynapseRuleProjectInstallFormProps } from "../types"
+
+function WindsorfRuleProjectInstallForm(props: SynapseRuleProjectInstallFormProps) {
+  // 表单确认后调用 props.onConfirm(values)
+}
+
+export const installFormDefinition = {
+  RuleProjectInstallForm: WindsorfRuleProjectInstallForm,
+} as const
+```
+
+对应的 `install.ts` 从 `payload.installFormValues` 读取表单值；如果需要读取目标文件里的旧值，实现 `readRuleProjectFormValues()`。
+
+---
+
 ## 数据表能力对比
 
 以下对比的是 Synapse 数据存储模块在 `CLI`、`MCP`、`API` 三条入口上的能力覆盖情况。
@@ -127,14 +331,17 @@ UI 会根据状态启用或禁用安装按钮，并给出相应提示。
 
 | 编辑器 | 全局配置文件 | 写入格式 |
 | --- | --- | --- |
-| Claude Code | `~/.claude.json` | JSON，写入顶层 `mcpServers.synapse-data` |
+| Claude Code | `~/.claude/settings.json` | JSON，写入 `mcpServers.synapse-data` |
+| Cursor | `~/.cursor/mcp.json` | JSON，写入 `mcpServers.synapse-data` |
 | Codex | `~/.codex/config.toml` | TOML，写入 `[mcp_servers.synapse-data]` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON，写入 `mcpServers.synapse-data` |
 
 写入规则：
 
-- Claude Code 会写入 JSON 结构，包含 `"type": "stdio"`、`"command": "node"`、`"args": [MCP 脚本路径]`，并保留 `~/.claude.json` 中其他已有配置。
+- JSON 配置会保留原文件中的其他字段，只增量写入 `mcpServers.synapse-data.url`。
 - Codex 会在 `~/.codex/config.toml` 中增量更新 `synapse-data` 对应的 table，不会覆盖其他如 `model`、`profiles`、审批策略等现有配置。
 - "重新注册"只更新 `synapse-data` 这一项；"打开文件"打开的也是上述官方全局配置文件。
+- Windsurf 的 MCP 配置路径与 JSON 结构依据官方 [Cascade MCP Integration](https://docs.windsurf.com/windsurf/cascade/mcp) 文档。
 
 说明：
 

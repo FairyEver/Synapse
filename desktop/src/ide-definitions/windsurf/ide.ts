@@ -1,11 +1,11 @@
-import ccIcon from "./icon.png"
+import windsurfIcon from "./icon.png"
 import type { SynapseIdeDefinition } from "../types"
 
 export const ideDefinition = {
-  id: "claude-code",
-  label: "Claude Code",
-  order: 30,
-  icon: ccIcon,
+  id: "windsurf",
+  label: "Windsurf",
+  order: 40,
+  icon: windsurfIcon,
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],

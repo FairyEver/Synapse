@@ -14,10 +14,8 @@ import type {
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseInstallToEditorPayload,
-  SynapsePeekClaudeCodeFrontmatterPayload,
-  SynapsePeekClaudeCodeFrontmatterResult,
-  SynapsePeekCursorFrontmatterPayload,
-  SynapsePeekCursorFrontmatterResult,
+  SynapseReadEditorInstallFormValuesPayload,
+  SynapseReadEditorInstallFormValuesResult,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
 import { SYNAPSE_IPC_CHANNELS } from "./channels"
@@ -373,22 +371,12 @@ function registerContentHandlers() {
   )
 
   handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.peekCursorFrontmatter,
+    SYNAPSE_IPC_CHANNELS.content.readEditorInstallFormValues,
     async (
       _event,
-      payload: SynapsePeekCursorFrontmatterPayload,
-    ): Promise<SynapsePeekCursorFrontmatterResult> => {
-      return contentInstallService.peekCursorFrontmatter(payload)
-    },
-  )
-
-  handleValidatedIpc(
-    SYNAPSE_IPC_CHANNELS.content.peekClaudeCodeFrontmatter,
-    async (
-      _event,
-      payload: SynapsePeekClaudeCodeFrontmatterPayload,
-    ): Promise<SynapsePeekClaudeCodeFrontmatterResult> => {
-      return contentInstallService.peekClaudeCodeFrontmatter(payload)
+      payload: SynapseReadEditorInstallFormValuesPayload,
+    ): Promise<SynapseReadEditorInstallFormValuesResult> => {
+      return contentInstallService.readEditorInstallFormValues(payload)
     },
   )
 

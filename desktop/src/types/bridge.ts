@@ -47,10 +47,8 @@ import type {
   SynapseEditorGlobalDirectory,
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
-  SynapsePeekClaudeCodeFrontmatterPayload,
-  SynapsePeekClaudeCodeFrontmatterResult,
-  SynapsePeekCursorFrontmatterPayload,
-  SynapsePeekCursorFrontmatterResult,
+  SynapseReadEditorInstallFormValuesPayload,
+  SynapseReadEditorInstallFormValuesResult,
   SynapseResolveEditorTargetPayload,
 } from "./editor"
 import type { EditorScanResult, EditorScanSkillFileEntry } from "./editor-scan"
@@ -114,12 +112,9 @@ export type SynapseBridge = {
     installToEditor: (
       payload: SynapseInstallToEditorPayload,
     ) => Promise<SynapseContentInstallResult>
-    peekCursorFrontmatter: (
-      payload: SynapsePeekCursorFrontmatterPayload,
-    ) => Promise<SynapsePeekCursorFrontmatterResult>
-    peekClaudeCodeFrontmatter: (
-      payload: SynapsePeekClaudeCodeFrontmatterPayload,
-    ) => Promise<SynapsePeekClaudeCodeFrontmatterResult>
+    readEditorInstallFormValues: (
+      payload: SynapseReadEditorInstallFormValuesPayload,
+    ) => Promise<SynapseReadEditorInstallFormValuesResult>
     readIconImage: (
       args: { contentType: SynapseContentType; id: string },
     ) => Promise<string | null>

@@ -1,5 +1,10 @@
-import type { CursorRuleFrontmatter } from "../../../src/types/editor"
-import { decodeYamlScalar, encodeYamlScalar } from "./yaml-scalar"
+import { decodeYamlScalar, encodeYamlScalar } from "../shared-yaml-scalar"
+
+type CursorRuleFrontmatter = {
+  description: string
+  globs: string
+  alwaysApply: boolean
+}
 
 const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/
 
@@ -55,3 +60,4 @@ function stripMdcFrontmatter(fileContent: string): string {
 }
 
 export { parseMdcFrontmatter, serializeMdcFrontmatter, stripMdcFrontmatter }
+export type { CursorRuleFrontmatter }

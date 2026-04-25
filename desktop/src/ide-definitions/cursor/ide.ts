@@ -1,4 +1,4 @@
-import cursorIcon from "../../assets/cursor.png"
+import cursorIcon from "./icon.png"
 import type { SynapseIdeDefinition } from "../types"
 
 export const ideDefinition = {
