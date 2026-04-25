@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:28:00+08:00
+last_updated: 2026-04-25T12:29:00+08:00
 current_phase: 0.3
-current_task: T3.12
+current_task: T3.15
 status: in_progress
 task_counts:
   total: 71
-  completed: 27
-  blocked: 7
-  pending: 37
+  completed: 28
+  blocked: 9
+  pending: 34
 audit:
   rounds: 0
   last_status: not_started
@@ -64,9 +64,9 @@ audit:
 - [ ] T3.9 删旧 channels.ts / *-handlers.ts / types/bridge.ts (deferred → REPORT 3.2)
 - [ ] T3.10 改写 preload.ts 为 export * from "../generated/preload.generated" (deferred → REPORT 3.2)
 - [x] T3.11 引入 IPC_PROTOCOL_VERSION 握手 + 单测
-- [ ] T3.12 建 runtime/window/ WindowManager + 迁移 createMainWindow
-- [ ] T3.13 迁移 contentWindowService 到 WindowManager
-- [ ] T3.14 替换所有 BrowserWindow.getAllWindows() 为 WindowManager.broadcast
+- [x] T3.12 建 runtime/window/ WindowManager + 迁移 createMainWindow (T3.12 builds the runtime; createMainWindow consumer migration deferred per REPORT 3.2)
+- [ ] T3.13 迁移 contentWindowService 到 WindowManager (deferred → REPORT 3.2)
+- [ ] T3.14 替换所有 BrowserWindow.getAllWindows() 为 WindowManager.broadcast (deferred → REPORT 3.2)
 - [ ] T3.15 建 runtime/network/ NetworkServiceRegistry 骨架 + 单测
 - [ ] T3.16 Phase 0.3 集成测试 + codegen CI 闸门脚本
 
@@ -268,6 +268,11 @@ audit:
 - reason: 12 个 handler 文件 + preload + bridge 类型一次性切换，无法在无人值守模式下安全验证回归（需要启动 Electron 跑 e2e）
 - 详细推理: REPORT.md §3.2 [Level 3] Phase 0.3 IPC handler 迁移决策
 - 后续: Runtime 接口和 codegen 已经就位，后续 PR 可以一个 handler 一个 commit 渐进迁移
+
+### T3.13–T3.14 WindowManager 消费者迁移
+- task: T3.13 / T3.14
+- reason: contentWindowService + main.ts 直接调用 BrowserWindow.getAllWindows() 的迁移需要同时改 main 进程 + 渲染进程的多窗口消息流，无法在无人值守模式下回归验证
+- 后续: WindowManagerImpl 已落地（含 8 个单测），新的 BrowserWindow 入口都用 manager.register/open；存量调用渐进切换
 
 ## Phase 记录
 
