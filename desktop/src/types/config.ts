@@ -68,3 +68,42 @@ export type SynapseConfigPatch = {
     projects?: SynapseProjectConfig[]
   }
 }
+
+export type SynapseLegacyCcProviderPreview = {
+  name: string
+  source: "global" | "project"
+  projectName: string | null
+  baseUrl: string | null
+  model: string | null
+  agentTypes: string[]
+  hasApiKey: boolean
+}
+
+export type SynapseLegacyCcProjectPreview = {
+  name: string
+  mode: string | null
+  workDir: string | null
+  baseDir: string | null
+  agentType: string | null
+  providerRefs: string[]
+  activeProvider: string | null
+  platformTypes: string[]
+  runAsUser: string | null
+  runAsEnv: string[]
+  issues: string[]
+}
+
+export type SynapseLegacyCcConfigImportPreview = {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+  ignoredTopLevelKeys: string[]
+  global: {
+    dataDir: string
+    language: string | null
+    attachmentSend: "on" | "off"
+    logLevel: string
+  }
+  projects: SynapseLegacyCcProjectPreview[]
+  providers: SynapseLegacyCcProviderPreview[]
+}

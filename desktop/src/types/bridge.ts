@@ -19,7 +19,11 @@ import type {
   SynapseConfigBackupImportResult,
 } from "./backup"
 import type { SynapseCliDetectResult } from "./cli"
-import type { SynapseConfig, SynapseConfigPatch } from "./config"
+import type {
+  SynapseConfig,
+  SynapseConfigPatch,
+  SynapseLegacyCcConfigImportPreview,
+} from "./config"
 import type {
   SynapseContentDownloadResult,
   SynapseContentDetail,
@@ -129,6 +133,9 @@ export type SynapseBridge = {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>
     get: () => Promise<SynapseConfig>
     importBackup: () => Promise<SynapseConfigBackupImportResult | null>
+    previewLegacyCcConfigImport: (
+      payload: { toml: string },
+    ) => Promise<SynapseLegacyCcConfigImportPreview>
     resetApp: () => Promise<void>
     update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
   }

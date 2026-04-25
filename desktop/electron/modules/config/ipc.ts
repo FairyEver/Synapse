@@ -12,6 +12,7 @@ import path from "node:path"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { SynapseConfigPatch } from "../../../src/types/config"
 import { configBackupService } from "../../services/config-backup-service"
+import { previewLegacyCcConfigImport } from "../../services/legacy-cc-config-import"
 import { configStore } from "../../services/config-store"
 import { createMainLogger, logStore } from "../../services/log-store"
 import { repositoryStore } from "../../services/repository-store"
@@ -44,6 +45,41 @@ const exportResultSchema = z.object({
 const importResultSchema = z.object({
   success: z.boolean(),
   message: z.optional(z.string()),
+})
+
+const legacyCcConfigImportPreviewSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(z.string()),
+  warnings: z.array(z.string()),
+  ignoredTopLevelKeys: z.array(z.string()),
+  global: z.object({
+    dataDir: z.string(),
+    language: z.string().nullable(),
+    attachmentSend: z.enum(["on", "off"]),
+    logLevel: z.string(),
+  }),
+  projects: z.array(z.object({
+    name: z.string(),
+    mode: z.string().nullable(),
+    workDir: z.string().nullable(),
+    baseDir: z.string().nullable(),
+    agentType: z.string().nullable(),
+    providerRefs: z.array(z.string()),
+    activeProvider: z.string().nullable(),
+    platformTypes: z.array(z.string()),
+    runAsUser: z.string().nullable(),
+    runAsEnv: z.array(z.string()),
+    issues: z.array(z.string()),
+  })),
+  providers: z.array(z.object({
+    name: z.string(),
+    source: z.enum(["global", "project"]),
+    projectName: z.string().nullable(),
+    baseUrl: z.string().nullable(),
+    model: z.string().nullable(),
+    agentTypes: z.array(z.string()),
+    hasApiKey: z.boolean(),
+  })),
 })
 
 export const configIpcModule: IpcModule = {
@@ -107,6 +143,19 @@ export const configIpcModule: IpcModule = {
           return { success: false, message: "用户取消了导入操作。" }
         }
         return { success: true, message: "配置已成功导入。" }
+      },
+    },
+    previewLegacyCcConfigImport: {
+      kind: "invoke",
+      channel: "synapse:config:preview-legacy-cc-config-import",
+      request: z.object({ toml: z.string() }),
+      response: legacyCcConfigImportPreviewSchema,
+      handler: async (_ctx, payload: { toml: string }) => {
+        logger.info("Handling config.previewLegacyCcConfigImport request.")
+        return previewLegacyCcConfigImport(payload.toml, {
+          homeDir: app.getPath("home"),
+          platform: process.platform,
+        })
       },
     },
     resetApp: {

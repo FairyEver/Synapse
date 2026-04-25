@@ -35,6 +35,7 @@ export const IPC_CHANNELS = {
     "update": "synapse:config:update",
     "exportBackup": "synapse:config:export-backup",
     "importBackup": "synapse:config:import-backup",
+    "previewLegacyCcConfigImport": "synapse:config:preview-legacy-cc-config-import",
     "resetApp": "synapse:config:reset-app",
   },
   "identity": {

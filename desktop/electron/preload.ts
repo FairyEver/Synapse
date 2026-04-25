@@ -37,6 +37,7 @@ const IPC_CHANNELS = {
     "update": "synapse:config:update",
     "exportBackup": "synapse:config:export-backup",
     "importBackup": "synapse:config:import-backup",
+    "previewLegacyCcConfigImport": "synapse:config:preview-legacy-cc-config-import",
     "resetApp": "synapse:config:reset-app",
   },
   "identity": {
@@ -186,6 +187,7 @@ const synapseBridge: SynapseBridge = {
     exportBackup: invoke(IPC_CHANNELS.config.exportBackup),
     get: invoke(IPC_CHANNELS.config.get),
     importBackup: invoke(IPC_CHANNELS.config.importBackup),
+    previewLegacyCcConfigImport: invoke(IPC_CHANNELS.config.previewLegacyCcConfigImport),
     resetApp: invoke(IPC_CHANNELS.config.resetApp),
     update: invoke(IPC_CHANNELS.config.update),
   },
