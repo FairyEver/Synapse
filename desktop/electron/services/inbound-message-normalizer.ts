@@ -85,8 +85,8 @@ function attachmentFrom(value: unknown, kind: SynapseInboundAttachmentKind): Syn
     return { kind, ref: String(value) }
   }
 
-  const name = readString(value, ["Name", "name", "FileName", "fileName", "filename"])
-  const mimeType = readString(value, ["MimeType", "mimeType", "mediaType", "ContentType", "contentType"])
+  const name = readString(value, ["Name", "name", "FileName", "fileName", "file_name", "filename"])
+  const mimeType = readString(value, ["MimeType", "mimeType", "mime_type", "mediaType", "ContentType", "contentType"])
   const ref = readString(value, ["Ref", "ref", "FileID", "fileId", "MediaID", "mediaId", "ID", "id"])
   const url = readString(value, ["URL", "url", "DownloadURL", "downloadUrl"])
   const size = readNumber(value, ["Size", "size", "Bytes", "bytes"])
