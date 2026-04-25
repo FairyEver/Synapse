@@ -1,0 +1,97 @@
+---
+schema_version: 1
+task_id: connet
+title: "[填写任务标题]"
+project_root: /Users/liyang/Documents/code/github/Synapse
+
+mode: unattended
+language: zh-CN
+
+git:
+  base_branch: "[填写当前基线分支]"
+  work_branch: codex/unattended-connet
+  commit_policy: commit_per_task
+  pre_run_snapshot: require_clean
+  push_allowed: false
+
+risk_budget:
+  allow_dependency_install: false
+  allow_schema_migration: false
+  allow_destructive_file_ops: false
+  allow_dev_server: false
+  allow_gui_smoke_test: false
+  allow_network_access: false
+  allow_commit: true
+  allow_push: false
+
+limits:
+  max_task_attempts: 3
+  max_audit_rounds: 10
+  heartbeat_interval_seconds: 60
+
+gates:
+  typecheck: "[填写类型检查命令，缺失则写 null]"
+  test: "[填写测试命令，缺失则写 null]"
+  lint: "[填写 lint 命令，缺失则写 null]"
+  build: "[填写构建命令，缺失则写 null]"
+---
+
+# 无人值守任务模板
+
+## 1. 背景
+
+[说明为什么要做这件事。]
+
+## 2. 目标
+
+- [目标 1]
+- [目标 2]
+- [目标 3]
+
+## 3. 非目标
+
+- [这次明确不做什么]
+
+## 4. 输入文档
+
+- 上游任务 Markdown: `[填写路径，例如 docs/xxx-plan.md；没有则写 null]`
+- SPEC: `[填写路径；没有则写 null]`
+- 项目约束: `[填写路径，例如 AGENTS.md]`
+- 其他参考: `[填写路径；没有则写 null]`
+
+## 4.1 上游 Markdown 合并摘要
+
+[如果本模板来自已有 Markdown，在这里概括：原始文档的核心诉求、已采纳内容、未采纳内容和原因。]
+
+## 5. 允许修改范围
+
+- `[填写目录或文件]`
+
+## 6. 禁止修改范围
+
+- `[填写目录或文件]`
+
+## 7. 任务拆分要求
+
+[说明希望如何拆 Phase、拆原子任务。]
+
+## 8. 验收标准
+
+- [验收标准 1]
+- [验收标准 2]
+
+## 9. 风险点
+
+- [风险点 1]
+- [风险点 2]
+
+## 10. Blocked 策略
+
+单任务失败 3 次后标记 blocked，写入报告，继续后续任务。需要被禁用能力支持的任务应 deferred，不要硬做。
+
+## 11. 最终产物
+
+- `reports/COMPLETION-REPORT.md`
+- `reports/SELF-AUDIT.md`
+- `reports/FOLLOW-UP-PLAN.md`
+- `state/PROGRESS.md`
