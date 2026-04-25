@@ -44,6 +44,36 @@
 
 ### Phase 0.2 DataRepository
 
+**状态**: 完成（14/14 任务）。
+**Commit 范围**: 5928b37..591be21（外加 T2.14 待 commit）。
+**测试**: 146 通过，typecheck 通过。
+
+**新增**：
+- `runtime/data-repo/{types,errors,namespace-base,migrations,layered-config,backup,exporters,repository,index}.ts` — 完整 SPEC §5 + §15.8/§15.11 接口和实现。
+- `runtime/data-repo/atomic-io.ts` — temp-file + rename 原子写工具。
+- `runtime/data-repo/backends/{json,encrypted-json,jsonl,sqlite}.ts` — 4 个 backend。
+- `runtime/data-repo/schemas/{core-config,core-identity,repo-pending-pushes,repo-repositories,placeholders}.ts` — 11 个 NamespaceSchema（v0→v1 migration 写在 core-config 里）。
+- `tests/unit/phase-0.2-integration.test.ts` — v0→v1 migration on disk + 4 backend round-trip + encrypted unavailable + merge import。
+
+**关键设计**：
+- 4 个 backend 共享 `AbstractDataNamespace` 基类（listener 隔离 + 时间戳事件 + partial-equality filter）。
+- `DataRepositoryImpl.exportAll/importAll` 实现 synapse-backup-v1 格式；encrypted namespace 默认在导出时数据被空，需要 `includeSecrets:true` 显式包含。
+- Migration runner 仅向前迁移，wraps step errors as `MigrationFailedError`，禁止重复 `from` 版本和非递增的 `to`。
+- SqliteBackend 在 namespace name 上做严格正则验证防止 SQL 注入；启用 `journal_mode=WAL`+`synchronous=NORMAL`。
+- EncryptedJsonBackend 通过 SafeStorage 接口注入，便于在 vitest 中跑（生产侧绑 Electron `safeStorage`）；isEncryptionAvailable=false 时所有写路径抛 `EncryptionUnavailableError`，绝不退化为明文。
+
+**意外发现 / 临时妥协（Level 3 决策已记录）**：
+- T2.7：configStore 没有切到 DataRepository，仅落地了 v0→v1 schema 和 reviveEnvelope 测试。
+- T2.13：configBackupService 没有重写为 dataRepo.exportAll/importAll，仅交付了 DataRepository 的 export/import 能力。两者都是因为牵涉过多 IPC handler + 错误文案的精细路径，超出原子任务边界。
+
+**未作为消费者落地（runtime 接口齐备但暂无 caller）**：
+- BackupRegistry / LocalArchiveStrategy
+- ExporterRegistry
+- LayeredConfig
+- 7 个 placeholder schema（secrets / providers / projects / connectors / conversations / audit / outbox）
+
+这些未落地是 SPEC §15.14 "首位消费者"对齐的一部分——它们的真实消费者在 M1 之后。
+
 ### Phase 0.3 IPC Codegen + WindowManager + NetworkServiceRegistry
 
 ### Phase 0.4 EventBus

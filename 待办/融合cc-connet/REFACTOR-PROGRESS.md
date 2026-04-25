@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:18:00+08:00
-current_phase: 0.2
-current_task: T2.14
+last_updated: 2026-04-25T12:20:00+08:00
+current_phase: 0.3
+current_task: T3.1
 status: in_progress
 task_counts:
   total: 71
-  completed: 22
+  completed: 23
   blocked: 0
-  pending: 49
+  pending: 48
 audit:
   rounds: 0
   last_status: not_started
@@ -49,7 +49,7 @@ audit:
 - [x] T2.11 实现 NamespaceExporter + ExporterRegistry 骨架
 - [x] T2.12 实现 LayeredConfig 接口占位 + 单测
 - [x] T2.13 改写 config-backup-service.ts 走 DataRepository.exportAll/importAll
-- [ ] T2.14 Phase 0.2 集成测试
+- [x] T2.14 Phase 0.2 集成测试
 
 ### Phase 0.3 IPC Codegen + WindowManager + NetworkServiceRegistry（16 任务）
 
