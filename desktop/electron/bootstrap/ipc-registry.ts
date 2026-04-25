@@ -15,6 +15,7 @@ import { logIpcModule } from "../modules/log/ipc"
 import { updateIpcModule } from "../modules/update/ipc"
 import { editorScanIpcModule } from "../modules/editor-scan/ipc"
 import { editorIpcModule } from "../modules/editor/ipc"
+import { configIpcModule } from "../modules/config/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -33,6 +34,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(updateIpcModule, ctx)
   registry.register(editorScanIpcModule, ctx)
   registry.register(editorIpcModule, ctx)
+  registry.register(configIpcModule, ctx)
 
   return registry
 }
@@ -49,4 +51,5 @@ export const registeredIpcModules: readonly IpcModule[] = [
   updateIpcModule,
   editorScanIpcModule,
   editorIpcModule,
+  configIpcModule,
 ]

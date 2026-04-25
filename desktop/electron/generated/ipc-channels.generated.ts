@@ -46,6 +46,13 @@ export const IPC_CHANNELS = {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
     "createDirectory": "synapse:editor:create-directory",
   },
+  "config": {
+    "get": "synapse:config:get",
+    "update": "synapse:config:update",
+    "exportBackup": "synapse:config:export-backup",
+    "importBackup": "synapse:config:import-backup",
+    "resetApp": "synapse:config:reset-app",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS
