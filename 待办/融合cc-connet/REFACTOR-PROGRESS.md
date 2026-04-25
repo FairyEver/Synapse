@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:20:00+08:00
+last_updated: 2026-04-25T12:21:00+08:00
 current_phase: 0.3
-current_task: T3.1
+current_task: T3.2
 status: in_progress
 task_counts:
   total: 71
-  completed: 23
+  completed: 24
   blocked: 0
-  pending: 48
+  pending: 47
 audit:
   rounds: 0
   last_status: not_started
@@ -53,7 +53,7 @@ audit:
 
 ### Phase 0.3 IPC Codegen + WindowManager + NetworkServiceRegistry（16 任务）
 
-- [ ] T3.1 建 runtime/ipc/ 类型定义 + errors
+- [x] T3.1 建 runtime/ipc/ 类型定义 + errors
 - [ ] T3.2 实现 IpcRegistry 运行时 + zod validation + 单测
 - [ ] T3.3 写 scripts/generate-ipc.ts + codegen 测试
 - [ ] T3.4 迁移 shell / cli / identity / user-profile 为 IpcModule

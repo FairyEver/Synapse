@@ -101,6 +101,24 @@
 
 ### 3.2 Level 3 保守决策（需用户复核）⚠
 
+#### [Level 3] Phase 0.3 IPC handler 迁移（T3.4–T3.10）作为 follow-up PR
+
+- **时间**: 2026-04-25T12:20:00+08:00
+- **任务**: T3.4 / T3.5 / T3.6 / T3.7 / T3.8 / T3.9 / T3.10
+- **背景**: SPEC §6 Step 3 要求把 12 个现有 handler 文件（cli / content / editor / editor-scan / identity / log / repository / shell / update / user-profile / config / data-store）逐个迁移到新的 IpcModule 格式 + 删除旧 channels/preload/types/bridge.ts，并改写 preload.ts 为 generated re-export。这些 handler 文件单文件数百行，IPC channel 名称、参数 schema、bridge 类型、renderer 调用站点之间高度耦合。
+  
+  在无人值守模式下要把 12 个 handler 全部 migrate 而不破坏功能、不漏掉一个 channel、不改变行为，需要：(1) 为每个 channel 写 zod schema；(2) 写完整 codegen 工具（ts-morph 解析 IpcModule → 生成 channels.ts/preload.generated.ts/bridge-types.generated.ts）并验证产物；(3) 修改 12 个 handler 文件 + 整个 renderer 调用链；(4) 删除 4 个旧文件；(5) 重写 preload.ts。任何一步差错都会导致渲染进程整体不可用。
+- **候选**:
+  - A: T3.1–T3.3 落地 IPC runtime + 单 module 示例 + codegen 工具（ts-morph 解析 IpcModule） + CI 闸门；T3.11 / T3.12 / T3.15 落地 protocol-version / WindowManager / NetworkServiceRegistry。把 T3.4–T3.10 标为 follow-up，留给用户在合并 Phase 0 之前安排专门 PR。
+  - B: 在无人值守模式下尝试一次性迁移 12 个 handler + 删除 4 个旧文件 + 重写 preload。无法跑 GUI 验证，回归风险极高。
+- **选择**: A
+- **理由**:
+  - SPEC §10 风险表 "Codegen bug → IPC 全面失效" 提示这是高风险路径。
+  - 单元测试无法覆盖渲染端实际 IPC 调用——需要 GUI smoke 测试，但本模式不能启动 Electron 窗口。
+  - 走 A 后用户可以一个 handler 一个 PR 增量迁移、每次跑 e2e 验证；走 B 出现回归无法逐步定位。
+- **commit**: 即将填入 T3.x
+- **需用户复核**: 是 — Phase 0.3 完成后必须有专门 PR 完成 T3.4–T3.10。Runtime 接口和 codegen 已经就位，每个 handler 的迁移工作量大约 1-2 个文件。
+
 #### [Level 3] T2.13 不重写 configBackupService（保留旧实现 + 提供 DataRepository 备份能力）
 
 - **时间**: 2026-04-25T12:15:00+08:00

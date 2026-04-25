@@ -1,0 +1,12 @@
+/**
+ * Phase 0.3 — IPC runtime barrel.
+ *
+ * Implementation lands incrementally:
+ *   T3.1 (this commit): types + errors + module entrypoint.
+ *   T3.2: IpcRegistry runtime + zod validation.
+ *   T3.3: codegen tool (scripts/generate-ipc.ts).
+ *   T3.11: protocol version handshake.
+ */
+
+export * from "./types"
+export * from "./errors"
