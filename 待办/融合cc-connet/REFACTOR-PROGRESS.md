@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:02:00+08:00
+last_updated: 2026-04-25T12:04:00+08:00
 current_phase: 0.2
-current_task: T2.3
+current_task: T2.4
 status: in_progress
 task_counts:
   total: 71
-  completed: 11
+  completed: 12
   blocked: 0
-  pending: 60
+  pending: 59
 audit:
   rounds: 0
   last_status: not_started
@@ -38,7 +38,7 @@ audit:
 
 - [x] T2.1 建 runtime/data-repo/ 类型 + DataNamespace 抽象 + 单测
 - [x] T2.2 实现 JsonBackend + 原子写 + 单测
-- [ ] T2.3 实现 EncryptedJsonBackend + 单测
+- [x] T2.3 实现 EncryptedJsonBackend + 单测
 - [ ] T2.4 实现 JsonLinesBackend + 单测
 - [ ] T2.5 实现 SqliteBackend 包装现有 data-store + 单测
 - [ ] T2.6 实现 Migration 框架 + NamespaceSchema + 单测

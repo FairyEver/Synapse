@@ -17,6 +17,8 @@ export { AbstractDataNamespace } from "./namespace-base"
 export type { NamespaceBaseDeps } from "./namespace-base"
 export { JsonNamespace } from "./backends/json"
 export type { JsonBackendDeps, JsonFileEnvelope } from "./backends/json"
+export { EncryptedJsonNamespace } from "./backends/encrypted-json"
+export type { EncryptedJsonBackendDeps, SafeStorage } from "./backends/encrypted-json"
 export {
   copyToTimestampedBackup,
   fileExists,
