@@ -119,6 +119,38 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreUpdateDescriptor.criticality).toBe("degraded")
     expect(coreUpdateDescriptor.dependsOn).toEqual(["core.config"])
   })
+
+  it("repoWatchDescriptor depends on core.config and exposes stop", async () => {
+    const { repoWatchDescriptor } = await importBootstrap()
+    expect(repoWatchDescriptor.id).toBe("repo.watch")
+    expect(repoWatchDescriptor.criticality).toBe("degraded")
+    expect(repoWatchDescriptor.dependsOn).toEqual(["core.config"])
+    expect(repoWatchDescriptor.stop).toBeTypeOf("function")
+  })
+
+  it("repoMaintenanceDescriptor depends on repo.watch", async () => {
+    const { repoMaintenanceDescriptor } = await importBootstrap()
+    expect(repoMaintenanceDescriptor.id).toBe("repo.maintenance")
+    expect(repoMaintenanceDescriptor.criticality).toBe("degraded")
+    expect(repoMaintenanceDescriptor.dependsOn).toEqual(["repo.watch"])
+  })
+
+  it("repoPendingPushesDescriptor depends on core.data-store", async () => {
+    const { repoPendingPushesDescriptor } = await importBootstrap()
+    expect(repoPendingPushesDescriptor.id).toBe("repo.pending-pushes")
+    expect(repoPendingPushesDescriptor.criticality).toBe("degraded")
+    expect(repoPendingPushesDescriptor.dependsOn).toEqual(["core.data-store"])
+  })
+
+  it("createUiTrayDescriptor produces a degraded descriptor depending on core.app-icon", async () => {
+    const { createUiTrayDescriptor } = await importBootstrap()
+    const cb = vi.fn()
+    const desc = createUiTrayDescriptor(cb)
+    expect(desc.id).toBe("ui.tray")
+    expect(desc.criticality).toBe("degraded")
+    expect(desc.dependsOn).toEqual(["core.app-icon"])
+    expect(desc.stop).toBeTypeOf("function")
+  })
 })
 
 function makeFakeContext() {

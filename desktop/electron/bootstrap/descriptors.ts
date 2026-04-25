@@ -29,6 +29,11 @@ import { logStore } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { initDataStore, shutdownDataStore } from "../data-store"
+import { repositoryStore } from "../services/repository-store"
+import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
+import { pendingPushesService } from "../services/pending-pushes-service"
+import { createTray, destroyTray } from "../services/tray-service"
+import { BrowserWindow } from "electron"
 
 /**
  * core.logging — wraps the existing `logStore` singleton.
@@ -115,4 +120,102 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
     updateService.startAutoCheck()
     return updateService
   },
+}
+
+/**
+ * repo.watch — sets up filesystem watchers for every configured repository,
+ * mirroring `main.ts:213 repositoryStore.watchRepository(repository)` for each
+ * configured entry. Status: degraded — a watch failure for one repo must not
+ * tank startup.
+ *
+ * stop(): unwatchAll().
+ */
+export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
+  id: "repo.watch",
+  criticality: "degraded",
+  dependsOn: ["core.config"],
+  async create() {
+    const config = await configStore.load()
+    for (const repository of config.repositories) {
+      repositoryStore.watchRepository(repository)
+    }
+    return repositoryStore
+  },
+  stop() {
+    repositoryStore.unwatchAll()
+  },
+}
+
+/**
+ * repo.maintenance — runs scheduled-due maintenance once per repo at startup.
+ * SPEC §4 lists this as `repo.watch`-dependent. Status: degraded.
+ */
+export const repoMaintenanceDescriptor: ServiceDescriptor<typeof repositoryMaintenanceService> = {
+  id: "repo.maintenance",
+  criticality: "degraded",
+  dependsOn: ["repo.watch"],
+  async create(ctx) {
+    const config = await configStore.load()
+    for (const repository of config.repositories) {
+      try {
+        await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
+      } catch (error) {
+        ctx.logger.warn("Scheduled repository maintenance failed.", {
+          error,
+          repositoryUuid: repository.uuid,
+        })
+      }
+    }
+    return repositoryMaintenanceService
+  },
+}
+
+/**
+ * repo.pending-pushes — exposes the pending-pushes service to the registry.
+ * The service itself is stateless (queries SQLite per call); this descriptor
+ * is mostly a registration record so other services / IPC modules can depend
+ * on it via `registry.get("repo.pending-pushes")`.
+ */
+export const repoPendingPushesDescriptor: ServiceDescriptor<typeof pendingPushesService> = {
+  id: "repo.pending-pushes",
+  criticality: "degraded",
+  dependsOn: ["core.data-store"],
+  create: () => pendingPushesService,
+}
+
+/**
+ * ui.tray — creates the system tray icon. Wraps `createTray()` and pairs it
+ * with `destroyTray()` on stop.
+ *
+ * The tray needs a "show or create" callback to focus / re-create the main
+ * window on click. We accept this callback through descriptor metadata; the
+ * default falls back to focusing the first available BrowserWindow. The real
+ * wiring (with the proper showOrCreateMainWindow) lands in T1.8 when main.ts
+ * builds the registry.
+ */
+export type TrayShowOrCreateCallback = () => void
+
+export function createUiTrayDescriptor(
+  showOrCreate: TrayShowOrCreateCallback = defaultShowOrCreate,
+): ServiceDescriptor<{ initialized: true }> {
+  return {
+    id: "ui.tray",
+    criticality: "degraded",
+    dependsOn: ["core.app-icon"],
+    create() {
+      createTray(showOrCreate)
+      return { initialized: true }
+    },
+    stop() {
+      destroyTray()
+    },
+  }
+}
+
+function defaultShowOrCreate(): void {
+  const windows = BrowserWindow.getAllWindows()
+  const target = windows[0]
+  if (!target) return
+  if (!target.isVisible()) target.show()
+  target.focus()
 }

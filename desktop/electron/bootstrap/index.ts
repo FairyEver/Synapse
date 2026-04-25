@@ -15,4 +15,9 @@ export {
   coreDataStoreDescriptor,
   coreLoggingDescriptor,
   coreUpdateDescriptor,
+  createUiTrayDescriptor,
+  repoMaintenanceDescriptor,
+  repoPendingPushesDescriptor,
+  repoWatchDescriptor,
 } from "./descriptors"
+export type { TrayShowOrCreateCallback } from "./descriptors"
