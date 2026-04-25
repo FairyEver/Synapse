@@ -147,25 +147,39 @@ export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
 }
 
 /**
- * repo.maintenance — runs scheduled-due maintenance once per repo at startup.
- * SPEC §4 lists this as `repo.watch`-dependent. Status: degraded.
+ * repo.maintenance — runs scheduled-due maintenance for each configured repo
+ * at startup. SPEC §4 lists this as `repo.watch`-dependent. Status: degraded.
+ *
+ * IMPORTANT: maintenance runs `git fetch` per repo, which can hang for many
+ * seconds on slow networks. The original main.ts:209 used
+ * `void (async () => {...})()` to fire-and-forget so the main window could
+ * appear immediately. We preserve that exact behaviour here: the descriptor
+ * itself returns synchronously, and the actual maintenance work is launched
+ * in the background. Errors are logged via ctx.logger.warn() and do NOT
+ * surface as a startAll() failure.
  */
 export const repoMaintenanceDescriptor: ServiceDescriptor<typeof repositoryMaintenanceService> = {
   id: "repo.maintenance",
   criticality: "degraded",
   dependsOn: ["repo.watch"],
-  async create(ctx) {
-    const config = await configStore.load()
-    for (const repository of config.repositories) {
+  create(ctx) {
+    void (async () => {
       try {
-        await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
+        const config = await configStore.load()
+        for (const repository of config.repositories) {
+          try {
+            await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
+          } catch (error) {
+            ctx.logger.warn("Scheduled repository maintenance failed.", {
+              error,
+              repositoryUuid: repository.uuid,
+            })
+          }
+        }
       } catch (error) {
-        ctx.logger.warn("Scheduled repository maintenance failed.", {
-          error,
-          repositoryUuid: repository.uuid,
-        })
+        ctx.logger.error("Repository maintenance scheduler failed.", { error })
       }
-    }
+    })()
     return repositoryMaintenanceService
   },
 }
