@@ -22,6 +22,7 @@
     "desktop:typecheck": "pnpm --filter @synapse/desktop run typecheck",
     "desktop:test": "pnpm --filter @synapse/desktop run test",
     "desktop:test:watch": "pnpm --filter @synapse/desktop run test:watch",
+    "desktop:generate:ipc": "pnpm --filter @synapse/desktop run generate:ipc",
     "website:dev": "pnpm --filter @synapse/website run dev",
     "website:build": "pnpm --filter @synapse/website run build",
     "website:preview": "pnpm --filter @synapse/website run preview"

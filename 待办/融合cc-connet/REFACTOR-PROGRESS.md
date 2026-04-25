@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:23:00+08:00
+last_updated: 2026-04-25T12:26:00+08:00
 current_phase: 0.3
-current_task: T3.3
+current_task: T3.4
 status: in_progress
 task_counts:
   total: 71
-  completed: 25
+  completed: 26
   blocked: 0
-  pending: 46
+  pending: 45
 audit:
   rounds: 0
   last_status: not_started
@@ -55,7 +55,7 @@ audit:
 
 - [x] T3.1 建 runtime/ipc/ 类型定义 + errors
 - [x] T3.2 实现 IpcRegistry 运行时 + zod validation + 单测
-- [ ] T3.3 写 scripts/generate-ipc.ts + codegen 测试
+- [x] T3.3 写 scripts/generate-ipc.ts + codegen 测试
 - [ ] T3.4 迁移 shell / cli / identity / user-profile 为 IpcModule
 - [ ] T3.5 迁移 log / update / editor-scan / editor 为 IpcModule
 - [ ] T3.6 迁移 config / repository 为 IpcModule
