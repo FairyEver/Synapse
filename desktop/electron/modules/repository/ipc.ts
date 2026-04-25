@@ -6,10 +6,9 @@
  */
 
 import { z } from "zod"
-import { dialog, type OpenDialogOptions } from "electron"
+import { BrowserWindow, dialog, type OpenDialogOptions } from "electron"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
-import type { WindowManager } from "../../runtime/window"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
 import type { SynapseCreateLocalRepositoryPayload, SynapseRepositoryValidationResult } from "../../../src/types/repository"
 import { configStore } from "../../services/config-store"
@@ -38,19 +37,16 @@ async function resolveRepositoryConfig(repositoryUuid: string): Promise<SynapseR
 
 // Schemas
 const repositoryStateSchema = z.object({
-  uuid: z.string(),
-  name: z.string(),
+  repositoryUuid: z.string(),
   localPath: z.string(),
-  aheadCount: z.number(),
-  behindCount: z.number(),
-  hasUncommittedChanges: z.boolean(),
-  lastCommitAt: z.string().nullable(),
-  lastCommitMessage: z.string().nullable(),
+  status: z.enum(["missing", "ready"]),
+  isGitRepository: z.boolean(),
+  gitRootPath: z.string().nullable(),
 })
 
 const initializationPreviewSchema = z.object({
-  willCreateDirs: z.array(z.string()),
-  willCreateFiles: z.array(z.string()),
+  isEmpty: z.boolean(),
+  nonGitEntries: z.array(z.string()),
 })
 
 const createLocalRepositoryPayloadSchema = z.object({
@@ -58,24 +54,61 @@ const createLocalRepositoryPayloadSchema = z.object({
   parentPath: z.string(),
 })
 
+const repositoryConfigSchema = z.object({
+  uuid: z.string(),
+  name: z.string(),
+  localPath: z.string(),
+  contentDirs: z.record(z.string(), z.string()),
+  rulesDir: z.string().optional(),
+  skillsDir: z.string().optional(),
+  variables: z.array(z.object({
+    name: z.string(),
+    value: z.string(),
+    description: z.string().optional(),
+  })).optional(),
+})
+
+const createLocalRepositoryResultSchema = z.object({
+  createdAt: z.string(),
+  message: z.string().optional(),
+  repository: repositoryConfigSchema,
+})
+
+const pendingPushEntrySchema = z.object({
+  id: z.number(),
+  commitHash: z.string().nullable(),
+  action: z.string(),
+  targetId: z.string(),
+  createdAt: z.string(),
+  retryCount: z.number(),
+  lastError: z.string().nullable(),
+  title: z.string().nullable(),
+})
+
 const pendingPushesSchema = z.object({
-  pendingCount: z.number(),
-  items: z.array(z.any()),
+  count: z.number(),
+  items: z.array(pendingPushEntrySchema),
 })
 
 const initializeResultSchema = z.object({
   initializedAt: z.string(),
-  message: z.string(),
+  message: z.string().optional(),
+  pendingPushCount: z.number().optional(),
+  repository: repositoryStateSchema,
 })
 
 const validationResultSchema = z.object({
-  valid: z.boolean(),
-  errors: z.array(z.string()),
+  isValid: z.boolean(),
+  missingDirectories: z.array(z.string()),
+  message: z.string(),
 })
 
 const syncResultSchema = z.object({
   operation: z.enum(["pull", "push", "sync"]),
+  repository: repositoryStateSchema,
   completedAt: z.string(),
+  message: z.string().optional(),
+  pendingPushCount: z.number().optional(),
 })
 
 const maintenanceResultSchema = z.object({
@@ -126,7 +159,7 @@ export const repositoryIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:repository:create-local-repository",
       request: createLocalRepositoryPayloadSchema,
-      response: z.object({ repository: z.any() }),
+      response: createLocalRepositoryResultSchema,
       handler: async (_ctx, payload: SynapseCreateLocalRepositoryPayload) => {
         logger.info(`Handling repository.createLocalRepository request. name: ${payload.name}, parentPath: ${payload.parentPath}`)
         return repositoryStructureService.createLocalRepository(payload)
@@ -195,16 +228,19 @@ export const repositoryIpcModule: IpcModule = {
       channel: "synapse:repository:choose-directory",
       request: z.void(),
       response: z.string().nullable(),
-      handler: async (ctx) => {
+      handler: async (_ctx) => {
         logger.info("Opening native directory picker.")
-        const windowManager = ctx.resolve<WindowManager>("core.window-manager")
-        const windows = windowManager.list()
-        const mainWindow = windows.find((w) => w.role === "main")
 
         const options: OpenDialogOptions = {
           properties: ["openDirectory"],
         }
-        const result = await dialog.showOpenDialog(options)
+
+        // Get parent window for modal dialog - try focused first, then any visible window
+        const parentWindow = BrowserWindow.getFocusedWindow()
+          ?? BrowserWindow.getAllWindows().find(w => w.isVisible() && !w.isDestroyed())
+          ?? undefined
+
+        const result = await dialog.showOpenDialog(parentWindow as unknown as Electron.BaseWindow, options)
 
         const selectedPath = result.canceled ? null : result.filePaths[0] ?? null
 

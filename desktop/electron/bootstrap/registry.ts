@@ -9,7 +9,6 @@
 import {
   type ServiceContext,
   type ServiceRegistry,
-  type StructuredLogger,
   ServiceRegistryImpl,
 } from "../runtime/service-registry"
 import { createMainLogger } from "../services/log-store"

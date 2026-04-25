@@ -1,7 +1,4 @@
-// LIMITATION (Task 2): BrowserWindow is still imported for notification click handler.
-// The restore/focus operations are not yet available through WindowManager.
-// eslint-disable-next-line no-restricted-properties
-import { app, BrowserWindow, Notification } from "electron"
+import { app, Notification } from "electron"
 import { CancellationToken } from "electron-updater"
 import * as electronUpdater from "electron-updater"
 import type {
@@ -12,7 +9,8 @@ import type {
 } from "electron-updater"
 import type { SynapseAppUpdateState } from "../../src/types/update"
 import type { WindowManager } from "../runtime/window"
-// FIXME: Temporary inline channels - will be replaced with WindowManager.broadcast in Task 2
+
+// Update event channels for broadcasting state changes
 const UPDATE_CHANNELS = {
   stateChanged: "synapse:update:state-changed",
   openUpdatePage: "synapse:update:open-update-page",
@@ -456,31 +454,36 @@ class UpdateService {
     })
 
     notification.on("click", () => {
-      // LIMITATION (Task 2): WindowManager doesn't expose restore/focus operations.
-      // This is the only remaining use of BrowserWindow.getAllWindows() in the codebase.
-      // Fix in Task 6 (P1/P2) by extending WindowManager with window management operations.
-      // eslint-disable-next-line no-restricted-properties
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (!isTrustedRendererContents(window.webContents)) {
+      if (!this.windowManager) {
+        app.emit("activate")
+        return
+      }
+
+      const windows = this.windowManager.getAllWindows()
+      let hasVisibleWindow = false
+
+      for (const window of windows) {
+        if (window.isDestroyed()) {
           continue
         }
 
-        window.restore()
-        window.focus()
-        // Use broadcast via WindowManager if available, otherwise fall back to direct send
-        if (this.windowManager) {
-          this.windowManager.broadcast(
-            UPDATE_CHANNELS.openUpdatePage,
-            {},
-            (w) => isTrustedRendererContents(w as unknown as Electron.WebContents)
-          )
-        } else {
-          window.webContents.send(UPDATE_CHANNELS.openUpdatePage)
+        hasVisibleWindow = true
+        if (window.isMinimized()) {
+          window.restore()
         }
+        if (!window.isVisible()) {
+          window.show()
+        }
+        window.focus()
       }
 
-      // eslint-disable-next-line no-restricted-properties
-      if (BrowserWindow.getAllWindows().length === 0) {
+      this.windowManager.broadcast(
+        UPDATE_CHANNELS.openUpdatePage,
+        {},
+        (w) => isTrustedRendererContents(w as unknown as Electron.WebContents)
+      )
+
+      if (!hasVisibleWindow) {
         app.emit("activate")
       }
     })

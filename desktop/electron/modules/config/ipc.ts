@@ -10,7 +10,6 @@ import { app } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
 import type { IpcModule } from "../../runtime/ipc/types"
-import type { WindowManager } from "../../runtime/window"
 import type { SynapseConfigPatch } from "../../../src/types/config"
 import { configBackupService } from "../../services/config-backup-service"
 import { configStore } from "../../services/config-store"
@@ -87,17 +86,13 @@ export const configIpcModule: IpcModule = {
       channel: "synapse:config:export-backup",
       request: z.void(),
       response: exportResultSchema,
-      handler: async (ctx) => {
+      handler: async (_ctx) => {
         logger.info("Handling config.exportBackup request.")
-        const windowManager = ctx.resolve<WindowManager>("core.window-manager")
-        // Note: configBackupService expects a BrowserWindow, but we now use WindowManager
-        // This is a temporary adapter - the service should be updated to use WindowManager
-        const windows = windowManager.list()
-        // For now, return a mock result - the service needs to be refactored
-        return {
-          success: true,
-          message: "Export not yet fully migrated to WindowManager",
+        const result = await configBackupService.exportBackup()
+        if (result === null) {
+          return { success: false, message: "用户取消了导出操作。" }
         }
+        return { success: true, filePath: result.filePath }
       },
     },
     importBackup: {
@@ -105,13 +100,13 @@ export const configIpcModule: IpcModule = {
       channel: "synapse:config:import-backup",
       request: z.void(),
       response: importResultSchema,
-      handler: async (ctx) => {
+      handler: async (_ctx) => {
         logger.info("Handling config.importBackup request.")
-        // Similar to exportBackup - needs service refactoring
-        return {
-          success: true,
-          message: "Import not yet fully migrated to WindowManager",
+        const result = await configBackupService.importBackup()
+        if (result === null) {
+          return { success: false, message: "用户取消了导入操作。" }
         }
+        return { success: true, message: "配置已成功导入。" }
       },
     },
     resetApp: {

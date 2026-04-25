@@ -5,6 +5,7 @@ interface FakeWindow extends ManagedWindow {
   destroyed: boolean
   visible: boolean
   focused: boolean
+  minimized: boolean
   sent: Array<{ channel: string; payload: unknown }>
 }
 
@@ -15,14 +16,20 @@ const makeFakeWindow = (id: number): FakeWindow => {
     destroyed: false,
     visible: false,
     focused: false,
+    minimized: false,
     sent: [],
     isDestroyed: () => win.destroyed,
     isVisible: () => win.visible,
+    isMinimized: () => win.minimized,
     show: () => {
       win.visible = true
     },
     focus: () => {
       win.focused = true
+    },
+    restore: () => {
+      win.minimized = false
+      win.visible = true
     },
     send: (channel, payload) => {
       win.sent.push({ channel, payload })

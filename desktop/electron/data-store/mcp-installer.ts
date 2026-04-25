@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { homedir } from "node:os"
-import { app, shell } from "electron"
+import { shell } from "electron"
 import { createMainLogger } from "../services/log-store"
 import { mcpDefinitions } from "../services/ide-definitions/generated/main-registry"
 import type { SynapseMcpDefinition } from "../../src/ide-definitions/types"

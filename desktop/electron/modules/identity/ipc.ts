@@ -11,18 +11,24 @@ import { userIdentityService } from "../../services/user-identity-service"
 
 // Schemas
 const localIdentitySchema = z.object({
+  schemaVersion: z.literal(2),
   userId: z.string(),
-  displayName: z.string(),
-  avatarPath: z.string().nullable(),
+  generatedAt: z.string(),
 })
+
+const localIdentityStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ready"),
+    identity: localIdentitySchema,
+  }),
+  z.object({
+    status: z.literal("needs-recovery"),
+    invalidUserId: z.string().nullable(),
+  }),
+])
 
 const adoptIdentityRequestSchema = z.object({
   repoId: z.string(),
-  userId: z.string(),
-})
-
-const adoptIdentityResponseSchema = z.object({
-  success: z.boolean(),
   userId: z.string(),
 })
 
@@ -33,7 +39,7 @@ export const identityIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:identity:get-local-state",
       request: z.void(),
-      response: localIdentitySchema,
+      response: localIdentityStateSchema,
       handler: async (_ctx) => {
         return userIdentityService.loadLocalIdentity()
       },
@@ -42,7 +48,7 @@ export const identityIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:identity:adopt-existing-user-id",
       request: adoptIdentityRequestSchema,
-      response: adoptIdentityResponseSchema,
+      response: localIdentityStateSchema,
       handler: async (_ctx, request: { repoId: string; userId: string }) => {
         return userIdentityService.adoptExistingUserId(request.userId, request.repoId)
       },
@@ -51,7 +57,7 @@ export const identityIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:identity:generate-new-id",
       request: z.void(),
-      response: localIdentitySchema,
+      response: localIdentityStateSchema,
       handler: async (_ctx) => {
         return userIdentityService.generateNewIdentity()
       },

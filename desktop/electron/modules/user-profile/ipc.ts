@@ -13,19 +13,26 @@ import { userIdentityService } from "../../services/user-identity-service"
 import { userProfileService } from "../../services/user-profile-service"
 
 // Schemas
-const repoProfileStateSchema = z.object({
+const userProfileSchema = z.object({
+  schemaVersion: z.literal(1),
   userId: z.string(),
   displayName: z.string(),
-  avatarPath: z.string().nullable(),
+  updatedAt: z.string(),
 })
 
-const listRepoProfilesResponseSchema = z.array(
+const repoProfileStateSchema = z.discriminatedUnion("status", [
   z.object({
-    userId: z.string(),
-    displayName: z.string(),
-    avatarPath: z.string().nullable(),
+    status: z.literal("ready"),
+    profile: userProfileSchema,
   }),
-)
+  z.object({
+    status: z.literal("needs-onboarding"),
+    repoId: z.string(),
+    userId: z.string(),
+  }),
+])
+
+const listRepoProfilesResponseSchema = z.map(z.string(), userProfileSchema)
 
 const updateDisplayNameRequestSchema = z.object({
   repoId: z.string(),
@@ -63,7 +70,7 @@ export const userProfileIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:user-profile:update-display-name",
       request: updateDisplayNameRequestSchema,
-      response: repoProfileStateSchema,
+      response: userProfileSchema,
       handler: async (_ctx, request: { repoId: string; displayName: string }) => {
         const localIdentityState = await userIdentityService.loadLocalIdentity()
 

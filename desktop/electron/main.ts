@@ -5,7 +5,7 @@
  * `bootstrap/*` and `runtime/*`. SPEC §3 requires this file < 120 lines.
  */
 
-import { BrowserWindow, app, dialog } from "electron"
+import { app, dialog } from "electron"
 import { createMainLogger } from "./services/log-store"
 import { repositoryStore } from "./services/repository-store"
 import type { EventBus } from "./runtime/event-bus"

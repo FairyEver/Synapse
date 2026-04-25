@@ -16,6 +16,7 @@ const electronEntryFiles = [
   "preload.js",
   "electron/main.js",
   "electron/preload.js",
+  "electron/generated/ipc-channels.generated.js",
 ]
 
 let activeChild = null
@@ -69,6 +70,7 @@ const waitCode = await runPnpm([
   `tcp:127.0.0.1:${port}`,
   "file:dist-electron/electron/main.js",
   "file:dist-electron/electron/preload.js",
+  "file:dist-electron/electron/generated/ipc-channels.generated.js",
 ])
 
 if (isStopping) {

@@ -26,9 +26,10 @@
  * extra check that's already covered by `tsc --noEmit`.
  */
 
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import { fileURLToPath } from "node:url"
+import ts from "typescript"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -38,10 +39,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
  * value) and pulls IpcModule from a default export named identically.
  */
 const MODULE_SOURCES = [
-  { id: "shell", importPath: "../electron/modules/shell/ipc.ts" },
+  { id: "content", importPath: "../electron/modules/content/ipc.ts" },
   { id: "cli", importPath: "../electron/modules/cli/ipc.ts" },
+  { id: "config", importPath: "../electron/modules/config/ipc.ts" },
   { id: "identity", importPath: "../electron/modules/identity/ipc.ts" },
   { id: "user-profile", importPath: "../electron/modules/user-profile/ipc.ts" },
+  { id: "log", importPath: "../electron/modules/log/ipc.ts" },
+  { id: "editor-scan", importPath: "../electron/modules/editor-scan/ipc.ts" },
+  { id: "editor", importPath: "../electron/modules/editor/ipc.ts" },
+  { id: "shell", importPath: "../electron/modules/shell/ipc.ts" },
+  { id: "repository", importPath: "../electron/modules/repository/ipc.ts" },
+  { id: "update", importPath: "../electron/modules/update/ipc.ts" },
 ]
 
 const OUTPUT_PATH = path.resolve(
@@ -54,18 +62,101 @@ const OUTPUT_PATH = path.resolve(
 
 async function loadModuleDescriptor(importPath) {
   const resolved = path.resolve(__dirname, importPath)
-  const url = pathToFileURL(resolved).href
-  const mod = await import(url)
-  const candidate = mod.default ?? Object.values(mod).find(isIpcModuleShape)
-  if (!candidate) {
-    throw new Error(`No IpcModule export found in ${importPath}`)
+  const source = await readFile(resolved, "utf8")
+  const sourceFile = ts.createSourceFile(
+    resolved,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  )
+  const descriptor = findIpcModuleObject(sourceFile, importPath)
+  const id = readStringProperty(descriptor, "id", sourceFile, importPath)
+  const methods = readObjectProperty(descriptor, "methods", sourceFile, importPath)
+  const events = readObjectProperty(descriptor, "events", sourceFile, importPath)
+
+  return {
+    id,
+    methods: extractChannels(methods, sourceFile),
+    events: extractChannels(events, sourceFile),
   }
-  return candidate
 }
 
-function isIpcModuleShape(value) {
-  if (typeof value !== "object" || value === null) return false
-  return typeof value.id === "string" && typeof value.methods === "object" && typeof value.events === "object"
+function findIpcModuleObject(sourceFile, importPath) {
+  let descriptor = null
+
+  function visit(node) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.type?.getText(sourceFile) === "IpcModule" &&
+      node.initializer &&
+      ts.isObjectLiteralExpression(node.initializer)
+    ) {
+      descriptor = node.initializer
+      return
+    }
+
+    ts.forEachChild(node, visit)
+  }
+
+  visit(sourceFile)
+
+  if (!descriptor) {
+    throw new Error(`No IpcModule declaration found in ${importPath}`)
+  }
+
+  return descriptor
+}
+
+function readStringProperty(objectLiteral, propertyName, sourceFile, importPath) {
+  const property = findObjectProperty(objectLiteral, propertyName, sourceFile)
+  if (!property || !ts.isStringLiteral(property.initializer)) {
+    throw new Error(`Missing "${propertyName}" string property in ${importPath}`)
+  }
+  return property.initializer.text
+}
+
+function readObjectProperty(objectLiteral, propertyName, sourceFile, importPath) {
+  const property = findObjectProperty(objectLiteral, propertyName, sourceFile)
+  if (!property || !ts.isObjectLiteralExpression(property.initializer)) {
+    throw new Error(`Missing "${propertyName}" object property in ${importPath}`)
+  }
+  return property.initializer
+}
+
+function findObjectProperty(objectLiteral, propertyName, sourceFile) {
+  return objectLiteral.properties.find((property) => {
+    return ts.isPropertyAssignment(property) && getPropertyName(property.name, sourceFile) === propertyName
+  })
+}
+
+function extractChannels(objectLiteral, sourceFile) {
+  const channels = {}
+
+  for (const property of objectLiteral.properties) {
+    if (!ts.isPropertyAssignment(property) || !ts.isObjectLiteralExpression(property.initializer)) {
+      continue
+    }
+
+    const name = getPropertyName(property.name, sourceFile)
+    const channel = findObjectProperty(property.initializer, "channel", sourceFile)
+
+    if (name && channel && ts.isStringLiteral(channel.initializer)) {
+      channels[name] = {
+        channel: channel.initializer.text,
+      }
+    }
+  }
+
+  return channels
+}
+
+function getPropertyName(name, sourceFile) {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text
+  }
+
+  return name.getText(sourceFile)
 }
 
 async function generate() {
@@ -120,7 +211,7 @@ function quote(value) {
   return JSON.stringify(value)
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   generate().catch((err) => {
     console.error(err)
     process.exit(1)

@@ -1,7 +1,7 @@
 import type { EventBus } from "../runtime/event-bus"
 import { dataStoreService } from "./service"
 import { startHttpServer, stopHttpServer } from "./http-server"
-import { startMcpServer, stopMcpServer, getMcpServerPort } from "./mcp-server"
+import { startMcpServer, stopMcpServer } from "./mcp-server"
 import { registerDataStoreHandlers } from "./ipc-handlers"
 import { getCliStatus, installCli } from "./cli-installer"
 import { autoRegisterMcp } from "./mcp-installer"

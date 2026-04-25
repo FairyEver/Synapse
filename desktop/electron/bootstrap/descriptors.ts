@@ -33,7 +33,6 @@ import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
-import { BrowserWindow } from "electron"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -219,7 +218,7 @@ export const repoPendingPushesDescriptor: ServiceDescriptor<typeof pendingPushes
 export type TrayShowOrCreateCallback = () => void
 
 export function createUiTrayDescriptor(
-  showOrCreate: TrayShowOrCreateCallback = defaultShowOrCreate,
+  showOrCreate: TrayShowOrCreateCallback,
 ): ServiceDescriptor<{ initialized: true }> {
   return {
     id: "ui.tray",
@@ -233,18 +232,6 @@ export function createUiTrayDescriptor(
       destroyTray()
     },
   }
-}
-
-// FIXME (Task 2): This default fallback uses BrowserWindow.getAllWindows() which violates
-// the hard constraint. However, main.ts always passes a custom trayShowOrCreate callback,
-// so this default is never used in practice. Replace with WindowManager lookup when needed.
-function defaultShowOrCreate(): void {
-  // eslint-disable-next-line no-restricted-properties
-  const windows = BrowserWindow.getAllWindows()
-  const target = windows[0]
-  if (!target) return
-  if (!target.isVisible()) target.show()
-  target.focus()
 }
 
 /**

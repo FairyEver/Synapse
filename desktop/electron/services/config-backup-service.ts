@@ -1,4 +1,4 @@
-import { app, dialog, type BrowserWindow } from "electron"
+import { app, dialog } from "electron"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
@@ -386,9 +386,14 @@ async function writeBackupFile(filePath: string, backup: SynapseConfigBackup): P
   await writeFile(filePath, `${JSON.stringify(backup, null, 2)}\n`, "utf8")
 }
 
+export interface ConfigBackupContext {
+  /** Optional browser window for dialog parenting. If not provided, dialog may not be modal. */
+  getParentWindow?: () => Electron.BrowserWindow | null
+}
+
 class ConfigBackupService {
   async exportBackup(
-    ownerWindow: BrowserWindow | null,
+    ctx?: ConfigBackupContext,
   ): Promise<SynapseConfigBackupExportResult | null> {
     const config = await configStore.load()
     const backup: SynapseConfigBackup = {
@@ -406,8 +411,9 @@ class ConfigBackupService {
       identity: await userIdentityService.exportIdentity(),
     }
     const defaultPath = path.join(app.getPath("downloads"), createBackupFileName())
-    const result = ownerWindow
-      ? await dialog.showSaveDialog(ownerWindow, {
+    const parentWindow = ctx?.getParentWindow?.()
+    const result = parentWindow
+      ? await dialog.showSaveDialog(parentWindow, {
           defaultPath,
           filters: [{ name: "JSON", extensions: ["json"] }],
         })
@@ -432,10 +438,11 @@ class ConfigBackupService {
   }
 
   async importBackup(
-    ownerWindow: BrowserWindow | null,
+    ctx?: ConfigBackupContext,
   ): Promise<SynapseConfigBackupImportResult | null> {
-    const result = ownerWindow
-      ? await dialog.showOpenDialog(ownerWindow, {
+    const parentWindow = ctx?.getParentWindow?.()
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, {
           properties: ["openFile"],
         })
       : await dialog.showOpenDialog({

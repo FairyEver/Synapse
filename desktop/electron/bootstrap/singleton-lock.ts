@@ -50,7 +50,7 @@ export function clearStaleSingletonLock(): boolean {
     try {
       rmSync(path.join(userData, file), { force: true })
     } catch (err) {
-      logger.debug("Best-effort cleanup failed.", { file, err })
+      logger.warn("Best-effort cleanup failed.", { file, err })
     }
   }
 

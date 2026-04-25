@@ -20,8 +20,10 @@ export interface ManagedWindow {
   readonly role: WindowRole
   readonly isDestroyed: () => boolean
   readonly isVisible: () => boolean
+  readonly isMinimized: () => boolean
   readonly show: () => void
   readonly focus: () => void
+  readonly restore: () => void
   /** Pushes a payload through the underlying webContents. EventBus uses this. */
   readonly send: (channel: string, payload: unknown) => void
   readonly close: () => void
@@ -57,6 +59,11 @@ export interface WindowManager {
   open(id: string, payload?: unknown): ManagedWindow
   close(id: string): void
   list(): ReadonlyArray<{ id: string; role: WindowRole; webContentsId: number }>
+  /**
+   * Get all alive windows managed by this manager.
+   * Used for operations that need to iterate over all windows (e.g., notification click handling).
+   */
+  getAllWindows(): ReadonlyArray<ManagedWindow>
   /**
    * Broadcast a payload on a channel to all alive windows that pass the
    * filter. EventBus (Phase 0.4) calls into this; Phase 0.3 only publishes
@@ -122,6 +129,16 @@ export class WindowManagerImpl implements WindowManager {
       const handle = entry.handle
       if (!handle || handle.isDestroyed()) continue
       result.push({ id, role: entry.descriptor.role, webContentsId: handle.id })
+    }
+    return result
+  }
+
+  getAllWindows(): ReadonlyArray<ManagedWindow> {
+    const result: Array<ManagedWindow> = []
+    for (const entry of this.windows.values()) {
+      const handle = entry.handle
+      if (!handle || handle.isDestroyed()) continue
+      result.push(handle)
     }
     return result
   }

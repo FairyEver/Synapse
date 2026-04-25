@@ -11,12 +11,12 @@
   "scripts": {
     "dev": "node scripts/generate-ide-registry.mjs && node scripts/dev.mjs",
     "dev:renderer": "node scripts/generate-ide-registry.mjs && node scripts/dev-renderer.mjs",
-    "dev:electron:build": "node scripts/generate-ide-registry.mjs && tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
+    "dev:electron:build": "node scripts/generate-ide-registry.mjs && node scripts/generate-ipc.mjs && tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:electron:app": "node scripts/dev-electron-app.mjs",
     "icons": "node scripts/build-icons.mjs",
     "build": "pnpm generate:ide-registry && pnpm build:renderer && pnpm build:electron && pnpm build:data-store",
     "build:renderer": "vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "node scripts/generate-ipc.mjs && tsc -p tsconfig.electron.json",
     "generate:ide-registry": "node scripts/generate-ide-registry.mjs",
     "generate:ipc": "node scripts/generate-ipc.mjs",
     "check:ipc-codegen": "node scripts/check-ipc-codegen.mjs",
@@ -32,8 +32,8 @@
     "test:ipc": "vitest run tests/ipc",
     "test:e2e": "vitest run tests/e2e",
     "test:ci": "vitest run",
-    "lint": "eslint electron/ src/ --ext .ts,.tsx",
-    "lint:fix": "eslint electron/ src/ --ext .ts,.tsx --fix"
+    "lint": "eslint",
+    "lint:fix": "eslint --fix"
   },
   "repository": {
     "type": "git",
@@ -66,6 +66,8 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "2": "^3.0.0",
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "4.2.2",
     "@types/markdown-it": "^14.1.2",
     "@types/markdown-it-container": "^4.0.0",
@@ -87,6 +89,7 @@
     "shadcn": "4.2.0",
     "tailwindcss": "4.2.2",
     "typescript": "6.0.2",
+    "typescript-eslint": "^8.59.0",
     "vite": "8.0.8",
     "vitest": "^4.1.5",
     "wait-on": "9.0.5",
