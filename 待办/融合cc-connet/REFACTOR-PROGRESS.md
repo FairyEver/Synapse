@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T11:35:00+08:00
+last_updated: 2026-04-25T11:38:00+08:00
 current_phase: 0.1
-current_task: T1.2
+current_task: T1.3
 status: in_progress
 task_counts:
   total: 71
-  completed: 1
+  completed: 2
   blocked: 0
-  pending: 70
+  pending: 69
 audit:
   rounds: 0
   last_status: not_started
@@ -25,7 +25,7 @@ audit:
 ### Phase 0.1 ServiceRegistry（9 任务）
 
 - [x] T1.1 建 desktop/electron/runtime/service-registry/ 骨架 + types.ts + errors.ts
-- [ ] T1.2 实现 topo.ts 拓扑排序 + 单测（含循环检测）
+- [x] T1.2 实现 topo.ts 拓扑排序 + 单测（含循环检测）
 - [ ] T1.3 实现 registry.ts register/inspect + 单测
 - [ ] T1.4 实现 startAll/stopAll 含超时控制 + 单测
 - [ ] T1.5 迁移 core.config / core.logging 为 ServiceDescriptor
@@ -113,15 +113,25 @@ audit:
 
 ## 当前任务
 
-- task: T1.2
-- started_at: 2026-04-25T11:35:00+08:00
+- task: T1.3
+- started_at: 2026-04-25T11:38:00+08:00
 - status: in_progress
 
 ## 已完成
 
 ### T1.1 建 service-registry 骨架 + types.ts + errors.ts
 - completed_at: 2026-04-25T11:35:00+08:00
+- commit: 229b7ed
+
+### T1.2 拓扑排序 (topo.ts) + 9 个单测
+- completed_at: 2026-04-25T11:38:00+08:00
 - commit: （即将填入）
+- files_changed:
+  - desktop/electron/runtime/service-registry/topo.ts (new)
+  - desktop/electron/runtime/service-registry/__tests__/topo.test.ts (new)
+  - desktop/electron/runtime/service-registry/index.ts (re-export topo helpers)
+- tests_passed: 12 / 12 (全量)
+- typecheck: passed
 - files_changed:
   - desktop/electron/runtime/service-registry/types.ts (new)
   - desktop/electron/runtime/service-registry/errors.ts (new)

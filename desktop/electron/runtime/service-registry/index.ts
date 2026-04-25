@@ -11,3 +11,5 @@
 
 export * from "./types"
 export * from "./errors"
+export { topoSort, reverseTopoSort, descriptorAsNode } from "./topo"
+export type { TopoNode } from "./topo"
