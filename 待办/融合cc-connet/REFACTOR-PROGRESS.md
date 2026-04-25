@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T12:45:00+08:00
+last_updated: 2026-04-25T12:48:00+08:00
 current_phase: 0.6
-current_task: T6.1
+current_task: T6.6
 status: in_progress
 task_counts:
   total: 71
-  completed: 42
+  completed: 47
   blocked: 11
-  pending: 18
+  pending: 13
 audit:
   rounds: 0
   last_status: not_started
@@ -93,11 +93,11 @@ audit:
 
 ### Phase 0.6 工程规范与可观测性（17 任务）
 
-- [ ] T6.1 实现 runtime/logging/ StructuredLogger + 轮转 + 单测
-- [ ] T6.2 实现 runtime/observability/metrics.ts MetricsRegistry + 单测
-- [ ] T6.3 实现 runtime/observability/tracer.ts Tracer + Span + 单测
-- [ ] T6.4 实现 runtime/observability/health.ts HealthCheckAggregator + 单测
-- [ ] T6.5 实现 runtime/observability/diagnostics.ts DiagnosticsCollector + 单测
+- [x] T6.1 实现 runtime/logging/ StructuredLogger + 轮转 + 单测
+- [x] T6.2 实现 runtime/observability/metrics.ts MetricsRegistry + 单测
+- [x] T6.3 实现 runtime/observability/tracer.ts Tracer + Span + 单测
+- [x] T6.4 实现 runtime/observability/health.ts HealthCheckAggregator + 单测
+- [x] T6.5 实现 runtime/observability/diagnostics.ts DiagnosticsCollector + 单测
 - [ ] T6.6 实现 runtime/security/permission-guard.ts + 默认策略 + 单测
 - [ ] T6.7 实现 runtime/security/audit-sink.ts + 单测
 - [ ] T6.8 实现 runtime/scheduling/ TaskQueue + RateLimiter + CircuitBreaker + 单测
