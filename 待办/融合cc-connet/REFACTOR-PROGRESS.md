@@ -4,15 +4,15 @@ spec_revision: 2
 branch: feat/phase-0/architecture-foundation-20260425
 mode: autonomous
 started_at: 2026-04-25T11:30:00+08:00
-last_updated: 2026-04-25T11:48:00+08:00
+last_updated: 2026-04-25T11:51:00+08:00
 current_phase: 0.1
-current_task: T1.6
+current_task: T1.7
 status: in_progress
 task_counts:
   total: 71
-  completed: 5
+  completed: 6
   blocked: 0
-  pending: 66
+  pending: 65
 audit:
   rounds: 0
   last_status: not_started
@@ -29,7 +29,7 @@ audit:
 - [x] T1.3 实现 registry.ts register/inspect + 单测
 - [x] T1.4 实现 startAll/stopAll 含超时控制 + 单测
 - [x] T1.5 迁移 core.config / core.logging 为 ServiceDescriptor
-- [ ] T1.6 迁移 core.data-store / core.update / core.app-icon 为 ServiceDescriptor
+- [x] T1.6 迁移 core.data-store / core.update / core.app-icon 为 ServiceDescriptor
 - [ ] T1.7 迁移 repo.watch / repo.maintenance / repo.pending-pushes / ui.tray 为 ServiceDescriptor
 - [ ] T1.8 改写 desktop/electron/main.ts 为 registry 启停钩子（< 120 行）
 - [ ] T1.9 Phase 0.1 集成测试
@@ -113,8 +113,8 @@ audit:
 
 ## 当前任务
 
-- task: T1.6
-- started_at: 2026-04-25T11:48:00+08:00
+- task: T1.7
+- started_at: 2026-04-25T11:51:00+08:00
 - status: in_progress
 
 ## 已完成
@@ -137,7 +137,21 @@ audit:
 
 ### T1.5 core.config / core.logging 为 ServiceDescriptor
 - completed_at: 2026-04-25T11:48:00+08:00
+- commit: ae2096e
+
+### T1.6 core.data-store / core.update / core.app-icon 为 ServiceDescriptor
+- completed_at: 2026-04-25T11:51:00+08:00
 - commit: （即将填入）
+- files_changed:
+  - desktop/electron/bootstrap/descriptors.ts (extend)
+  - desktop/electron/bootstrap/index.ts (extend barrel)
+  - desktop/electron/bootstrap/__tests__/descriptors.test.ts (mock electron-updater + 4 new tests)
+- tests_passed: 43 / 43
+- typecheck: passed
+- 设计要点:
+  - core.data-store 依赖 core.config，包含 stop（调用 shutdownDataStore）
+  - core.update 依赖 core.config；UpdateService 没有显式 stop（auto-check timer 进程退出时清理）
+  - core.app-icon 无依赖、无 stop（initializeAppIcon 内部已防重入）
 - files_changed:
   - desktop/electron/bootstrap/descriptors.ts (new)
   - desktop/electron/bootstrap/index.ts (new barrel)

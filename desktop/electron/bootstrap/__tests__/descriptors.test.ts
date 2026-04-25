@@ -10,26 +10,58 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
 
-// Stub electron before any module loads it.
-const tmpUserData = "/tmp/synapse-test-userdata-" + Date.now()
-vi.mock("electron", () => ({
-  app: {
-    getPath: (which: string) =>
-      which === "userData" ? tmpUserData : `/tmp/synapse-test-${which}`,
-    getName: () => "synapse-test",
+vi.mock("electron-updater", () => ({
+  autoUpdater: {
     on: () => {},
     once: () => {},
+    setFeedURL: () => {},
+    checkForUpdates: () => Promise.resolve(null),
+    downloadUpdate: () => Promise.resolve([]),
+    quitAndInstall: () => {},
+    autoDownload: false,
+    autoInstallOnAppQuit: false,
+    allowPrerelease: false,
+    fullChangelog: false,
+    forceDevUpdateConfig: false,
+    logger: null,
   },
-  BrowserWindow: class {},
-  dialog: {},
-  ipcMain: { handle: () => {}, on: () => {} },
-  shell: {},
-  Tray: class {},
-  Menu: { buildFromTemplate: () => ({}) },
-  nativeImage: { createFromPath: () => ({ isEmpty: () => false }) },
-  safeStorage: { isEncryptionAvailable: () => false },
-  webContents: {},
+  CancellationToken: class {},
 }))
+const tmpUserData = "/tmp/synapse-test-userdata-" + Date.now()
+vi.mock("electron", () => {
+  const Notification = class {
+    static isSupported() {
+      return false
+    }
+    on() {}
+  }
+  return {
+    app: {
+      getPath: (which: string) =>
+        which === "userData" ? tmpUserData : `/tmp/synapse-test-${which}`,
+      getName: () => "synapse-test",
+      getVersion: () => "0.0.0-test",
+      getAppPath: () => "/tmp/synapse-test-app",
+      isPackaged: false,
+      on: () => {},
+      once: () => {},
+    },
+    BrowserWindow: class {
+      static getAllWindows() {
+        return []
+      }
+    },
+    dialog: {},
+    ipcMain: { handle: () => {}, on: () => {} },
+    shell: {},
+    Tray: class {},
+    Menu: { buildFromTemplate: () => ({}) },
+    Notification,
+    nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
+    safeStorage: { isEncryptionAvailable: () => false },
+    webContents: {},
+  }
+})
 
 // Lazy import after the mock.
 async function importBootstrap() {
@@ -64,6 +96,28 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { coreConfigDescriptor } = await importBootstrap()
     expect(coreConfigDescriptor.id).toBe("core.config")
     expect(coreConfigDescriptor.criticality).toBe("fatal")
+  })
+
+  it("coreAppIconDescriptor is degraded with id 'core.app-icon' and no deps", async () => {
+    const { coreAppIconDescriptor } = await importBootstrap()
+    expect(coreAppIconDescriptor.id).toBe("core.app-icon")
+    expect(coreAppIconDescriptor.criticality).toBe("degraded")
+    expect(coreAppIconDescriptor.dependsOn).toBeUndefined()
+  })
+
+  it("coreDataStoreDescriptor is degraded, depends on core.config, has stop", async () => {
+    const { coreDataStoreDescriptor } = await importBootstrap()
+    expect(coreDataStoreDescriptor.id).toBe("core.data-store")
+    expect(coreDataStoreDescriptor.criticality).toBe("degraded")
+    expect(coreDataStoreDescriptor.dependsOn).toEqual(["core.config"])
+    expect(coreDataStoreDescriptor.stop).toBeTypeOf("function")
+  })
+
+  it("coreUpdateDescriptor is degraded and depends on core.config", async () => {
+    const { coreUpdateDescriptor } = await importBootstrap()
+    expect(coreUpdateDescriptor.id).toBe("core.update")
+    expect(coreUpdateDescriptor.criticality).toBe("degraded")
+    expect(coreUpdateDescriptor.dependsOn).toEqual(["core.config"])
   })
 })
 

@@ -9,4 +9,10 @@
  *  - T1.8: buildServiceRegistry() that registers all of them
  */
 
-export { coreConfigDescriptor, coreLoggingDescriptor } from "./descriptors"
+export {
+  coreAppIconDescriptor,
+  coreConfigDescriptor,
+  coreDataStoreDescriptor,
+  coreLoggingDescriptor,
+  coreUpdateDescriptor,
+} from "./descriptors"
