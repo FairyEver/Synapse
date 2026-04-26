@@ -36,6 +36,8 @@ describe("CC Connect product entries", () => {
       error: null,
       isReady: true,
       onCreateProject: async () => undefined,
+      onDeleteProject: async () => undefined,
+      onUpdateProject: async () => undefined,
       projects: [],
     }))
 

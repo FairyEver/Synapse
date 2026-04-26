@@ -34,6 +34,15 @@ export type SynapseProjectPlatformConnection = {
   updatedAt: string
 }
 
+export type SynapseProjectHeartbeatConfig = {
+  enabled: boolean
+  paused?: boolean
+  intervalMins?: number
+  sessionKey?: string
+  lastRunAt?: string
+  lastError?: string
+}
+
 export type SynapseWorkspaceBinding = {
   id: string
   projectId: string | null
@@ -48,6 +57,15 @@ export type SynapseProjectConfig = {
   name: string
   path: string
   agentType?: string
+  permissionMode?: string
+  language?: string
+  adminFrom?: string
+  disabledCommands?: string[]
+  showContextIndicator?: boolean
+  replyFooter?: boolean
+  injectSender?: boolean
+  providerRefs?: string[]
+  heartbeat?: SynapseProjectHeartbeatConfig
   mode?: SynapseProjectMode
   workDir?: string
   workDirOverride?: string

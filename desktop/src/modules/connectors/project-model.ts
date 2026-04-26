@@ -17,8 +17,31 @@ type ConnectorProjectSummary = {
   name: string
   workDir: string
   agentType: string | null
+  permissionMode: string
+  language: string | null
+  adminFrom: string
+  disabledCommands: string[]
+  providerRefs: string[]
+  heartbeatEnabled: boolean
   platformCount: number
+  platforms: {
+    id: string
+    type: string
+    name: string
+    status: string
+    enabled: boolean
+    allowFrom: string | null
+  }[]
   sessionCount: number | null
+}
+
+type UpdateCcConnectProjectSettingsInput = {
+  agentType: string
+  workDir: string
+  permissionMode: string
+  language: string
+  adminFrom: string
+  disabledCommands: string
 }
 
 const CC_CONNECT_AGENT_OPTIONS: AgentOption[] = [
@@ -56,7 +79,35 @@ function createCcConnectProjectDraft(input: CreateCcConnectProjectInput): Synaps
     agentType,
     mode: "single",
     source: "cc-connect",
+    permissionMode: "default",
+    disabledCommands: [],
+    providerRefs: [],
     platformConnections: [],
+  }
+}
+
+function parseDisabledCommands(value: string): string[] {
+  return value
+    .split(",")
+    .map((command) => command.trim())
+    .filter(Boolean)
+}
+
+function updateCcConnectProjectSettings(
+  project: SynapseProjectConfig,
+  input: UpdateCcConnectProjectSettingsInput,
+): SynapseProjectConfig {
+  const workDir = input.workDir.trim()
+
+  return {
+    ...project,
+    path: workDir,
+    workDir,
+    agentType: input.agentType.trim() || DEFAULT_AGENT_TYPE,
+    permissionMode: input.permissionMode.trim() || "default",
+    language: input.language.trim() || undefined,
+    adminFrom: input.adminFrom.trim(),
+    disabledCommands: parseDisabledCommands(input.disabledCommands),
   }
 }
 
@@ -68,7 +119,21 @@ function summarizeCcConnectProjects(
     name: project.name,
     workDir: getProjectWorkDir(project),
     agentType: project.agentType ?? null,
+    permissionMode: project.permissionMode ?? "default",
+    language: project.language ?? null,
+    adminFrom: project.adminFrom ?? "",
+    disabledCommands: project.disabledCommands ?? [],
+    providerRefs: project.providerRefs ?? [],
+    heartbeatEnabled: project.heartbeat?.enabled ?? false,
     platformCount: project.platformConnections?.length ?? 0,
+    platforms: (project.platformConnections ?? []).map((platform) => ({
+      id: platform.id,
+      type: platform.type,
+      name: platform.name,
+      status: platform.status,
+      enabled: platform.enabled,
+      allowFrom: platform.allowFrom ?? null,
+    })),
     sessionCount: null,
   }))
 }
@@ -78,7 +143,9 @@ export {
   DEFAULT_AGENT_TYPE,
   createCcConnectProjectDraft,
   getProjectWorkDir,
+  parseDisabledCommands,
   sanitizeCcProjectName,
   summarizeCcConnectProjects,
+  updateCcConnectProjectSettings,
 }
 export type { ConnectorProjectSummary }

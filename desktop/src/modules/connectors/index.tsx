@@ -1,8 +1,19 @@
-import { FolderKanban, Plug, Plus, Server } from "lucide-react"
-import { useMemo, useState } from "react"
+import { FolderKanban, Plug, Plus, Server, Trash2 } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import {
   Card,
   CardContent,
@@ -30,6 +41,7 @@ import { Field, FieldError, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { SynapseProjectConfig } from "@/types/config"
 import {
   CC_CONNECT_AGENT_OPTIONS,
@@ -37,6 +49,7 @@ import {
   createCcConnectProjectDraft,
   sanitizeCcProjectName,
   summarizeCcConnectProjects,
+  updateCcConnectProjectSettings,
   type ConnectorProjectSummary,
 } from "./project-model"
 
@@ -51,6 +64,8 @@ type ConnectorsProjectViewProps = {
   isReady: boolean
   error: string | null
   onCreateProject: (draft: ProjectDraft) => Promise<void>
+  onUpdateProject: (projectId: string, project: SynapseProjectConfig) => Promise<void>
+  onDeleteProject: (projectId: string) => Promise<void>
   onChooseDirectory?: () => Promise<string | null>
 }
 
@@ -73,6 +88,28 @@ function ConnectorsModule() {
     })
   }
 
+  const handleUpdateProject = async (projectId: string, nextProject: SynapseProjectConfig) => {
+    await updateConfig({
+      global: {
+        projects: config.global.projects.map((project) =>
+          project.id === projectId ? nextProject : project
+        ),
+      },
+    })
+  }
+
+  const handleDeleteProject = async (projectId: string) => {
+    const nextProjects = config.global.projects.filter((project) => project.id !== projectId)
+    await updateConfig({
+      global: {
+        projects: nextProjects,
+        defaultProjectId: config.global.defaultProjectId === projectId
+          ? nextProjects[0]?.id ?? null
+          : config.global.defaultProjectId,
+      },
+    })
+  }
+
   const handleChooseDirectory = async () => {
     return window.synapse?.repository.chooseDirectory() ?? null
   }
@@ -83,6 +120,8 @@ function ConnectorsModule() {
       isReady={isReady}
       error={error}
       onCreateProject={handleCreateProject}
+      onUpdateProject={handleUpdateProject}
+      onDeleteProject={handleDeleteProject}
       onChooseDirectory={handleChooseDirectory}
     />
   )
@@ -93,6 +132,8 @@ function ConnectorsProjectView({
   isReady,
   error,
   onCreateProject,
+  onUpdateProject,
+  onDeleteProject,
   onChooseDirectory,
 }: ConnectorsProjectViewProps) {
   const projectSummaries = useMemo(() => summarizeCcConnectProjects(projects), [projects])
@@ -180,7 +221,13 @@ function ConnectorsProjectView({
             </CardContent>
           </Card>
 
-          <ProjectDetailPreview project={selectedProject} />
+          <ProjectDetailPanel
+            project={selectedProject}
+            sourceProject={projects.find((project) => project.id === selectedProject?.id) ?? null}
+            onUpdateProject={onUpdateProject}
+            onDeleteProject={onDeleteProject}
+            onDeleted={() => setSelectedProjectId(null)}
+          />
         </div>
       )}
     </section>
@@ -231,9 +278,62 @@ function ProjectCard({
   )
 }
 
-function ProjectDetailPreview({ project }: { project: ConnectorProjectSummary | null }) {
+function ProjectDetailPanel({
+  project,
+  sourceProject,
+  onUpdateProject,
+  onDeleteProject,
+  onDeleted,
+}: {
+  project: ConnectorProjectSummary | null
+  sourceProject: SynapseProjectConfig | null
+  onUpdateProject: (projectId: string, project: SynapseProjectConfig) => Promise<void>
+  onDeleteProject: (projectId: string) => Promise<void>
+  onDeleted: () => void
+}) {
+  const [settingsDraft, setSettingsDraft] = useState(() => createSettingsDraft(project))
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    setSettingsDraft(createSettingsDraft(project))
+    setSettingsError(null)
+  }, [project?.id])
+
   if (!project) {
     return null
+  }
+
+  const syncSettingsDraft = () => {
+    setSettingsDraft(createSettingsDraft(project))
+    setSettingsError(null)
+  }
+
+  const handleSaveSettings = async () => {
+    if (!sourceProject) {
+      return
+    }
+
+    if (!settingsDraft.workDir.trim()) {
+      setSettingsError("工作目录不能为空。")
+      return
+    }
+
+    setIsSaving(true)
+    setSettingsError(null)
+
+    try {
+      await onUpdateProject(project.id, updateCcConnectProjectSettings(sourceProject, settingsDraft))
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : "保存失败。")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    await onDeleteProject(project.id)
+    onDeleted()
   }
 
   return (
@@ -245,14 +345,214 @@ function ProjectDetailPreview({ project }: { project: ConnectorProjectSummary | 
         </CardTitle>
         <CardDescription>{project.name}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2">
-        <DetailItem label="Agent" value={project.agentType ?? "未设置"} />
-        <DetailItem label="平台" value={`${project.platformCount} 个`} />
-        <DetailItem label="工作目录" value={project.workDir} />
-        <DetailItem label="会话" value="待接入" />
+      <CardContent>
+        <Tabs defaultValue="overview">
+          <TabsList>
+            <TabsTrigger value="overview">概览</TabsTrigger>
+            <TabsTrigger value="platforms">平台</TabsTrigger>
+            <TabsTrigger value="providers">服务商</TabsTrigger>
+            <TabsTrigger value="heartbeat">Heartbeat</TabsTrigger>
+            <TabsTrigger value="settings">设置</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <DetailItem label="Agent" value={project.agentType ?? "未设置"} />
+              <DetailItem label="平台" value={`${project.platformCount} 个`} />
+              <DetailItem label="工作目录" value={project.workDir} />
+              <DetailItem label="会话" value="待接入" />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="platforms" className="mt-4">
+            {project.platforms.length === 0 ? (
+              <Empty className="min-h-48">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Plug />
+                  </EmptyMedia>
+                  <EmptyTitle>暂无平台</EmptyTitle>
+                  <EmptyDescription>添加平台后显示连接状态。</EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent />
+              </Empty>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {project.platforms.map((platform) => (
+                  <Card key={platform.id} size="sm">
+                    <CardHeader>
+                      <CardTitle>{platform.name}</CardTitle>
+                      <CardDescription>{platform.type}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-wrap gap-2">
+                      <Badge variant="outline">{platform.status}</Badge>
+                      <Badge variant="outline">{platform.enabled ? "启用" : "停用"}</Badge>
+                      {platform.allowFrom ? <Badge variant="outline">{platform.allowFrom}</Badge> : null}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="providers" className="mt-4">
+            {project.providerRefs.length === 0 ? (
+              <Empty className="min-h-48">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Server />
+                  </EmptyMedia>
+                  <EmptyTitle>未绑定服务商</EmptyTitle>
+                </EmptyHeader>
+                <EmptyContent />
+              </Empty>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {project.providerRefs.map((provider) => (
+                  <Badge key={provider} variant="outline">{provider}</Badge>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="heartbeat" className="mt-4">
+            <DetailItem label="状态" value={project.heartbeatEnabled ? "已启用" : "未启用"} />
+          </TabsContent>
+
+          <TabsContent value="settings" className="mt-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field>
+                <Label htmlFor="project-detail-agent">Agent 类型</Label>
+                <NativeSelect
+                  id="project-detail-agent"
+                  className="w-full"
+                  value={settingsDraft.agentType}
+                  onChange={(event) => {
+                    setSettingsDraft((current) => ({ ...current, agentType: event.target.value }))
+                  }}
+                  disabled={isSaving}
+                >
+                  {CC_CONNECT_AGENT_OPTIONS.map((agent) => (
+                    <NativeSelectOption key={agent.value} value={agent.value}>
+                      {agent.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <Label htmlFor="project-detail-permission">权限模式</Label>
+                <NativeSelect
+                  id="project-detail-permission"
+                  className="w-full"
+                  value={settingsDraft.permissionMode}
+                  onChange={(event) => {
+                    setSettingsDraft((current) => ({ ...current, permissionMode: event.target.value }))
+                  }}
+                  disabled={isSaving}
+                >
+                  <NativeSelectOption value="default">default</NativeSelectOption>
+                  <NativeSelectOption value="acceptEdits">acceptEdits</NativeSelectOption>
+                  <NativeSelectOption value="plan">plan</NativeSelectOption>
+                  <NativeSelectOption value="bypassPermissions">bypassPermissions</NativeSelectOption>
+                  <NativeSelectOption value="dontAsk">dontAsk</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              <Field className="md:col-span-2">
+                <Label htmlFor="project-detail-workdir">工作目录</Label>
+                <Input
+                  id="project-detail-workdir"
+                  value={settingsDraft.workDir}
+                  onChange={(event) => {
+                    setSettingsDraft((current) => ({ ...current, workDir: event.target.value }))
+                  }}
+                  disabled={isSaving}
+                />
+              </Field>
+              <Field>
+                <Label htmlFor="project-detail-language">语言</Label>
+                <Input
+                  id="project-detail-language"
+                  value={settingsDraft.language}
+                  onChange={(event) => {
+                    setSettingsDraft((current) => ({ ...current, language: event.target.value }))
+                  }}
+                  placeholder="zh"
+                  disabled={isSaving}
+                />
+              </Field>
+              <Field>
+                <Label htmlFor="project-detail-admin">管理来源</Label>
+                <Input
+                  id="project-detail-admin"
+                  value={settingsDraft.adminFrom}
+                  onChange={(event) => {
+                    setSettingsDraft((current) => ({ ...current, adminFrom: event.target.value }))
+                  }}
+                  placeholder="user1,user2"
+                  disabled={isSaving}
+                />
+              </Field>
+              <Field className="md:col-span-2">
+                <Label htmlFor="project-detail-disabled-commands">禁用命令</Label>
+                <Input
+                  id="project-detail-disabled-commands"
+                  value={settingsDraft.disabledCommands}
+                  onChange={(event) => {
+                    setSettingsDraft((current) => ({ ...current, disabledCommands: event.target.value }))
+                  }}
+                  placeholder="restart,upgrade"
+                  disabled={isSaving}
+                />
+              </Field>
+              <FieldError className="md:col-span-2">{settingsError}</FieldError>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={() => void handleSaveSettings()} disabled={isSaving}>
+                {isSaving ? "保存中..." : "保存"}
+              </Button>
+              <Button variant="outline" onClick={syncSettingsDraft} disabled={isSaving}>
+                重置
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" disabled={isSaving}>
+                    <Trash2 />
+                    删除项目
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>删除项目</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      删除后会从本地配置中移除该项目。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => void handleDeleteProject()}>
+                      删除
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   )
+}
+
+function createSettingsDraft(project: ConnectorProjectSummary | null) {
+  return {
+    agentType: project?.agentType ?? DEFAULT_AGENT_TYPE,
+    workDir: project?.workDir ?? "",
+    permissionMode: project?.permissionMode ?? "default",
+    language: project?.language ?? "",
+    adminFrom: project?.adminFrom ?? "",
+    disabledCommands: project?.disabledCommands.join(",") ?? "",
+  }
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {
