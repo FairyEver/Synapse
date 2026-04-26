@@ -1,4 +1,5 @@
 import type { ActorIdentity } from "../../runtime/security"
+import type { ControlledProcessIsolationOptions } from "../../runtime/process"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
@@ -116,6 +117,7 @@ export interface AgentExecutionContext {
   readonly threadId?: string
   readonly agentSessionId?: string
   readonly sessionEnv?: Record<string, string>
+  readonly processIsolation?: ControlledProcessIsolationOptions
   readonly actor: ActorIdentity
   onEvent?(event: AgentEvent): void
 }
@@ -130,6 +132,7 @@ export interface AgentExecutionResult {
 
 export interface AgentAdapter {
   readonly agentType: string
+  readonly compressionCommand?: string
   execute(
     message: AgentMessage,
     context: AgentExecutionContext,
@@ -185,4 +188,9 @@ export interface AgentRuntimeTurnResult {
   readonly agentSessionId?: string
   readonly threadId?: string
   readonly error?: string
+}
+
+export interface AgentRuntimeRelayResult extends AgentRuntimeTurnResult {
+  readonly timedOut: boolean
+  readonly partialText?: string
 }

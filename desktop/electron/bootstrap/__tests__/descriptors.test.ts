@@ -152,6 +152,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.execution-isolation",
     ])
     expect(coreSideChannelDescriptor.start).toBeTypeOf("function")
     expect(coreSideChannelDescriptor.stop).toBeTypeOf("function")

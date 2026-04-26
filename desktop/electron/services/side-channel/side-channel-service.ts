@@ -12,6 +12,7 @@ import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AgentEvent } from "../agent-runtime"
+import type { ProcessIsolationResolver } from "../execution-isolation"
 import { ReplyOutboxService, type ReplyTarget } from "../reply-target"
 import { AttachmentPolicyError, prepareSideChannelAttachments } from "./attachment-policy"
 import type {
@@ -19,6 +20,8 @@ import type {
   SideChannelCronAddHandler,
   ReplyTransportDispatcher,
   SideChannelCronAddRequest,
+  SideChannelRelaySendHandler,
+  SideChannelRelaySendRequest,
   SideChannelSendRequest,
   SideChannelSendResult,
   SideChannelStatus,
@@ -37,17 +40,22 @@ export interface SideChannelServiceDeps {
   readonly listProjects: () => Promise<readonly SideChannelProjectSummary[]>
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
+  readonly executionIsolation?: ProcessIsolationResolver
   readonly logger?: StructuredLogger
   readonly token?: string
   readonly preferredPort?: number
   readonly bindAddress?: string
   readonly sendPath?: string
   readonly cronAddPath?: string
+  readonly relaySendPath?: string
   readonly maxBodyBytes?: number
+  readonly rateLimitPerMinute?: number
 }
 
 const DEFAULT_SEND_PATH = "/send"
 const DEFAULT_CRON_ADD_PATH = "/cron/add"
+const DEFAULT_RELAY_SEND_PATH = "/relay/send"
+const DEFAULT_RATE_LIMIT_PER_MINUTE = 120
 const NETWORK_SERVICE_ID = "side-channel.send"
 
 export class SideChannelService implements ReplyTargetRuntime {
@@ -55,9 +63,12 @@ export class SideChannelService implements ReplyTargetRuntime {
   private readonly token: string
   private readonly sendPath: string
   private readonly cronAddPath: string
+  private readonly relaySendPath: string
   private readonly targets = new Map<string, ReplyTarget>()
   private readonly dispatchers = new Map<string, ReplyTransportDispatcher>()
+  private readonly rateLimiter = new Map<string, number[]>()
   private cronAddHandler: SideChannelCronAddHandler | undefined
+  private relaySendHandler: SideChannelRelaySendHandler | undefined
   private binding: ResolvedNetworkBinding | undefined
 
   constructor(deps: SideChannelServiceDeps) {
@@ -65,6 +76,7 @@ export class SideChannelService implements ReplyTargetRuntime {
     this.token = deps.token ?? randomUUID()
     this.sendPath = deps.sendPath ?? DEFAULT_SEND_PATH
     this.cronAddPath = deps.cronAddPath ?? DEFAULT_CRON_ADD_PATH
+    this.relaySendPath = deps.relaySendPath ?? DEFAULT_RELAY_SEND_PATH
   }
 
   async start(): Promise<void> {
@@ -118,6 +130,7 @@ export class SideChannelService implements ReplyTargetRuntime {
       port: this.binding?.port,
       sendPath: this.sendPath,
       cronAddPath: this.cronAddPath,
+      relaySendPath: this.relaySendPath,
     }
   }
 
@@ -133,12 +146,17 @@ export class SideChannelService implements ReplyTargetRuntime {
       SYNAPSE_SIDE_CHANNEL_BASE_URL: baseUrl,
       SYNAPSE_SIDE_CHANNEL_URL: url,
       SYNAPSE_CRON_ADD_URL: `${baseUrl}${this.cronAddPath}`,
+      SYNAPSE_RELAY_SEND_URL: `${baseUrl}${this.relaySendPath}`,
       SYNAPSE_SIDE_CHANNEL_TOKEN: this.token,
     }
   }
 
   rememberReplyTarget(target: ReplyTarget): void {
     this.targets.set(targetKey(target.projectId, target.sessionKey), target)
+  }
+
+  getReplyTarget(projectId: string, sessionKey: string): ReplyTarget | undefined {
+    return this.targets.get(targetKey(projectId, sessionKey))
   }
 
   registerDispatcher(kind: string, dispatcher: ReplyTransportDispatcher): () => void {
@@ -155,6 +173,15 @@ export class SideChannelService implements ReplyTargetRuntime {
     return () => {
       if (this.cronAddHandler === handler) {
         this.cronAddHandler = undefined
+      }
+    }
+  }
+
+  registerRelaySendHandler(handler: SideChannelRelaySendHandler): () => void {
+    this.relaySendHandler = handler
+    return () => {
+      if (this.relaySendHandler === handler) {
+        this.relaySendHandler = undefined
       }
     }
   }
@@ -227,28 +254,46 @@ export class SideChannelService implements ReplyTargetRuntime {
 
   private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
     const url = new URL(request.url, "http://127.0.0.1")
-    if (url.pathname !== this.sendPath && url.pathname !== this.cronAddPath) {
+    if (
+      url.pathname !== this.sendPath
+      && url.pathname !== this.cronAddPath
+      && url.pathname !== this.relaySendPath
+    ) {
       return jsonResponse(404, false, undefined, {
         code: "not_found",
         message: "not found",
       })
     }
+    if (!this.consumeRateLimit(request, url.pathname)) {
+      this.recordIngressAudit("denied", url.pathname, { reason: "rate_limited" })
+      return jsonResponse(429, false, undefined, {
+        code: "rate_limited",
+        message: "rate limited",
+      })
+    }
     if (!this.authenticated(request, url)) {
+      this.recordIngressAudit("denied", url.pathname, { reason: "unauthorized" })
       return jsonResponse(401, false, undefined, {
         code: "unauthorized",
         message: "unauthorized",
       })
     }
     if (request.method !== "POST") {
+      this.recordIngressAudit("denied", url.pathname, { reason: "method_not_allowed" })
       return jsonResponse(405, false, undefined, {
         code: "method_not_allowed",
         message: "POST only",
       })
     }
+    this.recordIngressAudit("allowed", url.pathname, { method: request.method })
     try {
       const body = parseJsonBody(request.body)
       if (url.pathname === this.cronAddPath) {
         const result = await this.handleCronAdd(body)
+        return jsonResponse(200, true, result)
+      }
+      if (url.pathname === this.relaySendPath) {
+        const result = await this.handleRelaySend(body)
         return jsonResponse(200, true, result)
       }
       const result = await this.send(body)
@@ -267,6 +312,22 @@ export class SideChannelService implements ReplyTargetRuntime {
       ?? firstHeader(request.headers["x-synapse-token"])
       ?? url.searchParams.get("token")
     return token !== null && token !== undefined && timingSafeEqualText(token, this.token)
+  }
+
+  private consumeRateLimit(request: LocalHttpRequest, path: string): boolean {
+    const limit = this.deps.rateLimitPerMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE
+    if (limit <= 0) return true
+    const key = `${firstHeader(request.headers["x-forwarded-for"]) ?? "local"}:${path}`
+    const now = Date.now()
+    const cutoff = now - 60_000
+    const values = (this.rateLimiter.get(key) ?? []).filter((value) => value >= cutoff)
+    if (values.length >= limit) {
+      this.rateLimiter.set(key, values)
+      return false
+    }
+    values.push(now)
+    this.rateLimiter.set(key, values)
+    return true
   }
 
   private async resolveProject(projectId: string | undefined): Promise<SideChannelProjectSummary> {
@@ -302,6 +363,30 @@ export class SideChannelService implements ReplyTargetRuntime {
       projectId: project.projectId,
       sessionKey,
       target,
+    })
+  }
+
+  private async handleRelaySend(request: SideChannelRelaySendRequest): Promise<unknown> {
+    if (!this.relaySendHandler) {
+      throw new SideChannelError("relay_unavailable", "relay send handler is unavailable", 503)
+    }
+    const project = await this.resolveProject(request.sourceProjectId ?? request.source_project)
+    const sessionKey = this.resolveSessionKey(
+      project.projectId,
+      request.sourceSessionKey ?? request.source_session_key,
+    )
+    const sourceTarget = this.targets.get(targetKey(project.projectId, sessionKey))
+    if (!sourceTarget) {
+      throw new SideChannelError("source_session_not_found", "source session was not found", 404)
+    }
+    if (!relayMessage(request).trim()) {
+      throw new SideChannelError("empty_payload", "message is required", 400)
+    }
+    return this.relaySendHandler({
+      request,
+      sourceProjectId: project.projectId,
+      sourceSessionKey: sessionKey,
+      sourceTarget,
     })
   }
 
@@ -385,6 +470,20 @@ export class SideChannelService implements ReplyTargetRuntime {
       },
     })
   }
+
+  private recordIngressAudit(
+    outcome: "allowed" | "denied",
+    path: string,
+    metadata: Record<string, unknown>,
+  ): void {
+    this.deps.auditSink?.record({
+      action: "network.connect",
+      actor: { kind: "agent", id: "side-channel" },
+      resource: `side-channel:${path}`,
+      outcome,
+      metadata,
+    })
+  }
 }
 
 function outboxPayload(
@@ -409,13 +508,15 @@ function outboxPayload(
   }
 }
 
-function parseJsonBody(body: Buffer): SideChannelSendRequest & SideChannelCronAddRequest {
+function parseJsonBody(
+  body: Buffer,
+): SideChannelSendRequest & SideChannelCronAddRequest & SideChannelRelaySendRequest {
   try {
     const value = JSON.parse(body.toString("utf8")) as unknown
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new Error("JSON body must be an object")
     }
-    return value as SideChannelSendRequest & SideChannelCronAddRequest
+    return value as SideChannelSendRequest & SideChannelCronAddRequest & SideChannelRelaySendRequest
   } catch (error) {
     throw new SideChannelError(
       "invalid_json",
@@ -481,6 +582,10 @@ function targetKey(projectId: string, sessionKey: string): string {
 
 function isMutedTarget(target: ReplyTarget): boolean {
   return target.metadata?.muted === true || target.replyCtx?.muted === true
+}
+
+function relayMessage(request: SideChannelRelaySendRequest): string {
+  return request.message ?? ""
 }
 
 export class SideChannelError extends Error {

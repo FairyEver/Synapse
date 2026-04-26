@@ -12,6 +12,7 @@ import {
 } from "../agent-runtime"
 import type { FeishuConnectorService } from "../connectors"
 import { reconstructFeishuReplyContext } from "../connectors"
+import type { ProcessIsolationResolver } from "../execution-isolation"
 import type { ReplyTarget } from "../reply-target"
 import type { SideChannelService } from "../side-channel"
 import { WorkspaceBindingRepository, isDirectory, normalizeWorkspacePath } from "../workspaces"
@@ -30,6 +31,7 @@ export interface CronExecutionServiceDeps {
   readonly projectContainers: ProjectContainerRegistry
   readonly dataRepository: DataRepository
   readonly processRunner: ControlledProcessRunner
+  readonly executionIsolation?: ProcessIsolationResolver
   readonly sideChannel: SideChannelService
   readonly feishuConnector: FeishuConnectorService
   readonly listProjects: () => Promise<readonly SchedulerProjectSummary[]>
@@ -219,6 +221,10 @@ export class CronExecutionService {
       cwd: context.workDir,
       env,
       envAllowlist: env ? Object.keys(env) : undefined,
+      isolation: await this.deps.executionIsolation?.resolveProcessIsolation(
+        job.projectId,
+        Object.keys(env ?? {}),
+      ),
       timeoutMs,
       output: {
         stdout: "buffer",

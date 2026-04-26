@@ -59,6 +59,23 @@ export interface SideChannelCronAddRequest {
   readonly timeout_mins?: number
 }
 
+export interface SideChannelRelaySendRequest {
+  readonly to?: string
+  readonly toProjectId?: string
+  readonly targetProjectId?: string
+  readonly message?: string
+  readonly sourceProjectId?: string
+  readonly source_project?: string
+  readonly sourceSessionKey?: string
+  readonly source_session_key?: string
+  readonly workspaceKey?: string
+  readonly workspacePath?: string
+  readonly timeoutMins?: number
+  readonly timeout_mins?: number
+  readonly visible?: boolean
+  readonly metadata?: Record<string, unknown>
+}
+
 export interface SideChannelCronAddContext {
   readonly request: SideChannelCronAddRequest
   readonly projectId: string
@@ -78,12 +95,36 @@ export type SideChannelCronAddHandler = (
   context: SideChannelCronAddContext,
 ) => Promise<SideChannelCronAddResult>
 
+export interface SideChannelRelaySendContext {
+  readonly request: SideChannelRelaySendRequest
+  readonly sourceProjectId: string
+  readonly sourceSessionKey: string
+  readonly sourceTarget: ReplyTarget
+}
+
+export interface SideChannelRelaySendResult {
+  readonly ok: true
+  readonly runId: string
+  readonly sourceProjectId: string
+  readonly targetProjectId: string
+  readonly targetSessionKey: string
+  readonly timedOut: boolean
+  readonly resultText?: string
+  readonly partialText?: string
+  readonly error?: string
+}
+
+export type SideChannelRelaySendHandler = (
+  context: SideChannelRelaySendContext,
+) => Promise<SideChannelRelaySendResult>
+
 export interface SideChannelStatus {
   readonly enabled: boolean
   readonly bindAddress?: string
   readonly port?: number
   readonly sendPath: string
   readonly cronAddPath: string
+  readonly relaySendPath: string
 }
 
 export interface ReplyTransportDispatcher {

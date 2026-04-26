@@ -40,6 +40,9 @@ import { createProviderConfigProjectService } from "../services/provider-config"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { FeishuConnectorService } from "../services/connectors"
 import { SideChannelService } from "../services/side-channel"
+import { ExecutionIsolationService } from "../services/execution-isolation"
+import { AgentRelayService } from "../services/relay"
+import { AutomationIngressService } from "../services/automation-ingress"
 import {
   CronExecutionService,
   HeartbeatRepository,
@@ -359,6 +362,28 @@ export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectCo
   },
 }
 
+export const coreExecutionIsolationDescriptor: ServiceDescriptor<ExecutionIsolationService> = {
+  id: "core.execution-isolation",
+  criticality: "degraded",
+  dependsOn: [
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return new ExecutionIsolationService({
+      configs: dataRepository.namespace("run_as.config"),
+      preflights: dataRepository.namespace("run_as.preflight"),
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      auditSink,
+      logger: ctx.logger.child("execution-isolation"),
+    })
+  },
+}
+
 async function listConfiguredProjects() {
   const config = await configStore.load()
   return config.repositories.map((repository) => ({
@@ -377,6 +402,7 @@ export const coreSideChannelDescriptor: ServiceDescriptor<SideChannelService> = 
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
+    "core.execution-isolation",
   ],
   create(ctx) {
     return new SideChannelService({
@@ -386,6 +412,7 @@ export const coreSideChannelDescriptor: ServiceDescriptor<SideChannelService> = 
       listProjects: listConfiguredProjects,
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      executionIsolation: ctx.registry.get<ExecutionIsolationService>("core.execution-isolation"),
       logger: ctx.logger.child("side-channel"),
     })
   },
@@ -424,6 +451,97 @@ export const coreBridgeAdapterDescriptor: ServiceDescriptor<BridgeAdapterService
   stop(service) {
     return service.stop()
   },
+}
+
+export const coreRelayDescriptor: ServiceDescriptor<AgentRelayService> = {
+  id: "core.relay",
+  criticality: "degraded",
+  dependsOn: [
+    "core.project-containers",
+    "core.side-channel",
+    "core.feishu-connector",
+    "core.data-repository",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const sideChannel = ctx.registry.get<SideChannelService>("core.side-channel")
+    const feishuConnector = ctx.registry.get<FeishuConnectorService>("core.feishu-connector")
+    const service = new AgentRelayService({
+      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+      bindings: dataRepository.namespace("relay.bindings"),
+      runs: dataRepository.namespace("relay.runs"),
+      sideChannel,
+      feishuConnector,
+      listProjects: listConfiguredProjects,
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("relay"),
+    })
+    sideChannel.registerRelaySendHandler((context) => {
+      const targetProjectId = context.request.targetProjectId
+        ?? context.request.toProjectId
+        ?? context.request.to
+      if (!targetProjectId) {
+        throw new Error("targetProjectId is required")
+      }
+      return service.send({
+        sourceProjectId: context.sourceProjectId,
+        sourceSessionKey: context.sourceSessionKey,
+        targetProjectId,
+        message: context.request.message ?? "",
+        timeoutMs: timeoutMinsToMs(context.request.timeoutMins ?? context.request.timeout_mins),
+        visible: context.request.visible,
+        workspaceKey: context.request.workspaceKey,
+        workspacePath: context.request.workspacePath,
+        metadata: context.request.metadata,
+      })
+    })
+    feishuConnector.registerRelayService(service)
+    return service
+  },
+}
+
+export const coreAutomationIngressDescriptor: ServiceDescriptor<AutomationIngressService> = {
+  id: "core.automation-ingress",
+  criticality: "degraded",
+  dependsOn: [
+    "core.network-registry",
+    "core.project-containers",
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+    "core.execution-isolation",
+    "core.feishu-connector",
+  ],
+  create(ctx) {
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return new AutomationIngressService({
+      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+      networkRegistry: ctx.registry.get<NetworkServiceRegistry>("core.network-registry"),
+      configs: dataRepository.namespace("webhook.config"),
+      runs: dataRepository.namespace("webhook.runs"),
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      listProjects: listConfiguredProjects,
+      permissionGuard,
+      auditSink,
+      executionIsolation: ctx.registry.get<ExecutionIsolationService>("core.execution-isolation"),
+      feishuConnector: ctx.registry.get<FeishuConnectorService>("core.feishu-connector"),
+      logger: ctx.logger.child("automation-ingress"),
+    })
+  },
+  start(service) {
+    return service.start()
+  },
+  stop(service) {
+    return service.stop()
+  },
+}
+
+function timeoutMinsToMs(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  return value * 60_000
 }
 
 export const coreFeishuConnectorDescriptor: ServiceDescriptor<FeishuConnectorService> = {
@@ -465,6 +583,7 @@ export const coreSchedulerDescriptor: ServiceDescriptor<SchedulerService> = {
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
+    "core.execution-isolation",
   ],
   create(ctx) {
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
@@ -476,6 +595,7 @@ export const coreSchedulerDescriptor: ServiceDescriptor<SchedulerService> = {
       projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
       dataRepository,
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      executionIsolation: ctx.registry.get<ExecutionIsolationService>("core.execution-isolation"),
       sideChannel,
       feishuConnector,
       listProjects: listConfiguredProjects,
@@ -510,6 +630,7 @@ export const coreHeartbeatDescriptor: ServiceDescriptor<HeartbeatService> = {
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
+    "core.execution-isolation",
   ],
   create(ctx) {
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
@@ -521,6 +642,7 @@ export const coreHeartbeatDescriptor: ServiceDescriptor<HeartbeatService> = {
       projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
       dataRepository,
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      executionIsolation: ctx.registry.get<ExecutionIsolationService>("core.execution-isolation"),
       sideChannel,
       feishuConnector,
       listProjects: listConfiguredProjects,

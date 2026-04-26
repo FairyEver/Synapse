@@ -73,11 +73,13 @@ describe("buildServiceRegistry (T1.8)", () => {
       [
         "core.audit-sink",
         "core.app-icon",
+        "core.automation-ingress",
         "core.bridge-adapter",
         "core.config",
         "core.data-repository",
         "core.data-store",
         "core.event-bus",
+        "core.execution-isolation",
         "core.feishu-connector",
         "core.heartbeat",
         "core.logging",
@@ -85,6 +87,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.permission-guard",
         "core.process-runtime",
         "core.project-containers",
+        "core.relay",
         "core.scheduler",
         "core.side-channel",
         "core.update",
@@ -119,6 +122,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.execution-isolation",
     ])
     expect(byId.get("core.bridge-adapter")?.dependsOn).toEqual([
       "core.network-registry",
@@ -141,6 +145,28 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.execution-isolation",
+    ])
+    expect(byId.get("core.execution-isolation")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.relay")?.dependsOn).toEqual([
+      "core.project-containers",
+      "core.side-channel",
+      "core.feishu-connector",
+      "core.data-repository",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.automation-ingress")?.dependsOn).toEqual([
+      "core.network-registry",
+      "core.project-containers",
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+      "core.execution-isolation",
+      "core.feishu-connector",
     ])
     expect(byId.get("core.heartbeat")?.dependsOn).toEqual([
       "core.project-containers",
@@ -149,6 +175,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.execution-isolation",
     ])
     expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])

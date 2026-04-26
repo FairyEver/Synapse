@@ -148,6 +148,27 @@ describe("AgentCommandRouter", () => {
       }, baseConversation()),
     ).resultText).toBe("local-build:--prod")
   })
+
+  it("routes builtin /compress to the runtime callback", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerConfig,
+      resetSession: async () => baseConversation(),
+      compressSession: async (_message, conversation) => ({
+        conversationId: conversation.id,
+        events: [{ type: "result", content: "Context compressed.", done: true }],
+        resultText: "Context compressed.",
+      }),
+    })
+
+    const result = expectRuntimeResult(await router.handle(baseMessage("/compress"), baseConversation()))
+
+    expect(result.resultText).toBe("Context compressed.")
+  })
 })
 
 function expectRuntimeResult(

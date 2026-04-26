@@ -2,20 +2,28 @@ import { describe, expect, it } from "vitest"
 import {
   allSchemas,
   auditSchema,
+  agentCompressStateSchema,
   agentCommandSettingsSchema,
   agentCommandsSchema,
   connectorsSchema,
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
+  opsDiagnosticsSchema,
   outboxSchema,
   projectsSchema,
   providersSchema,
+  relayBindingsSchema,
+  relayRunsSchema,
   repoPendingPushesSchema,
   repoRepositoriesSchema,
+  runAsConfigSchema,
+  runAsPreflightSchema,
   secretsSchema,
   scheduledHeartbeatSchema,
   scheduledJobsSchema,
+  webhookConfigSchema,
+  webhookRunsSchema,
   workspaceBindingsSchema,
 } from "../index"
 
@@ -27,18 +35,26 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "audit",
         "agent.command-settings",
         "agent.commands",
+        "agent.compress_state",
         "connectors",
         "conversations",
         "core.config",
         "core.identity",
+        "ops.diagnostics",
         "outbox",
         "projects",
         "providers",
+        "relay.bindings",
+        "relay.runs",
         "repo.pending-pushes",
         "repo.repositories",
+        "run_as.config",
+        "run_as.preflight",
         "secrets",
         "scheduled.heartbeat",
         "scheduled.jobs",
+        "webhook.config",
+        "webhook.runs",
         "workspace.bindings",
       ].sort(),
     )
@@ -69,11 +85,19 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(repoRepositoriesSchema.backend).toBe("json")
     expect(scheduledJobsSchema.backend).toBe("json")
     expect(scheduledHeartbeatSchema.backend).toBe("json")
+    expect(runAsConfigSchema.backend).toBe("json")
+    expect(runAsPreflightSchema.backend).toBe("jsonl")
+    expect(webhookConfigSchema.backend).toBe("encrypted-json")
+    expect(webhookRunsSchema.backend).toBe("sqlite")
+    expect(relayBindingsSchema.backend).toBe("json")
+    expect(relayRunsSchema.backend).toBe("sqlite")
+    expect(agentCompressStateSchema.backend).toBe("json")
+    expect(opsDiagnosticsSchema.backend).toBe("jsonl")
   })
 
-  it("encrypted flag is set only on `secrets`", () => {
+  it("encrypted flag is set only on secret-bearing namespaces", () => {
     for (const schema of allSchemas) {
-      const expected = schema.name === "secrets"
+      const expected = schema.name === "secrets" || schema.name === "webhook.config"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }
   })

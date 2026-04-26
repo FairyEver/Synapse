@@ -35,6 +35,7 @@ export interface ClaudeCodeArgsOptions {
 
 export class ClaudeCodeAdapter implements AgentAdapter {
   readonly agentType = "claude-code"
+  readonly compressionCommand = "/compact"
 
   private readonly runner: ClaudeProcessRunner
   private readonly options: ClaudeCodeOptions
@@ -64,6 +65,10 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       cwd: context.workDir,
       env: mergeEnv(this.options.env, context.sessionEnv),
       envAllowlist: mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
+      isolation: mergeProcessIsolation(
+        context.processIsolation,
+        mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
+      ),
       output: { stdout: "json-lines", stderr: "buffer" },
       metadata: {
         adapter: this.agentType,
@@ -77,6 +82,25 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     liveSessionRef.current = new ClaudeCodeLiveSession(session, this.agentType, bufferedLines)
     return liveSessionRef.current
   }
+}
+
+function mergeProcessIsolation(
+  isolation: AgentExecutionContext["processIsolation"],
+  envAllowlist: readonly string[] | undefined,
+): AgentExecutionContext["processIsolation"] {
+  if (!isolation) return undefined
+  return {
+    ...isolation,
+    envAllowlist: mergeStringLists(isolation.envAllowlist, envAllowlist),
+  }
+}
+
+function mergeStringLists(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): readonly string[] | undefined {
+  const values = new Set([...(left ?? []), ...(right ?? [])])
+  return values.size > 0 ? [...values] : undefined
 }
 
 function mergeEnv(

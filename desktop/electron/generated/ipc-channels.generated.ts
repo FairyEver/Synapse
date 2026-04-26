@@ -123,6 +123,22 @@ export const IPC_CHANNELS = {
     "feishuResumeHeartbeat": "synapse:connectors:feishu:heartbeats:resume",
     "feishuRunHeartbeat": "synapse:connectors:feishu:heartbeats:run",
   },
+  "ops": {
+    "diagnostics": "synapse:ops:diagnostics",
+    "openLogDirectory": "synapse:ops:open-log-directory",
+    "runAsGet": "synapse:ops:run-as:get",
+    "runAsUpdate": "synapse:ops:run-as:update",
+    "runAsPreflight": "synapse:ops:run-as:preflight",
+    "runAsAuditProbe": "synapse:ops:run-as:audit-probe",
+    "webhookStatus": "synapse:ops:webhook:status",
+    "webhookUpdate": "synapse:ops:webhook:update",
+    "webhookRuns": "synapse:ops:webhook:runs",
+    "relayBindings": "synapse:ops:relay:bindings",
+    "relayRuns": "synapse:ops:relay:runs",
+    "relayUnbind": "synapse:ops:relay:unbind",
+    "compressGet": "synapse:ops:compress:get",
+    "compressUpdate": "synapse:ops:compress:update",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

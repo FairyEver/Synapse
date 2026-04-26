@@ -1,3 +1,7 @@
+import { EventEmitter } from "node:events"
+import { PassThrough } from "node:stream"
+import type { ChildProcessWithoutNullStreams } from "node:child_process"
+
 import { describe, expect, it, vi } from "vitest"
 
 import { InMemoryAuditSink, createPermissionGuard } from "../../security"
@@ -107,6 +111,67 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       allowed: "proj-1",
       blocked: null,
     })
+  })
+
+  it("wraps run_as_user launches with sudo and filters isolation env", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const spawnImpl = vi.fn(() => {
+      const stdout = new PassThrough()
+      const stderr = new PassThrough()
+      const child = new EventEmitter() as ChildProcessWithoutNullStreams
+      Object.assign(child, {
+        stdout,
+        stderr,
+        stdin: new PassThrough(),
+        kill: vi.fn(),
+      })
+      queueMicrotask(() => {
+        stdout.end()
+        stderr.end()
+        child.emit("close", 0, null)
+      })
+      return child
+    })
+    const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink, spawnImpl })
+
+    await runner.run({
+      actor: { kind: "user" },
+      action: "agent.spawn",
+      command: "codex",
+      args: ["exec", "-"],
+      env: {
+        CC_PROJECT: "project-1",
+        LANG: "en_US.UTF-8",
+        SECRET_VALUE: "hidden",
+      },
+      envAllowlist: ["CC_PROJECT", "LANG", "SECRET_VALUE"],
+      isolation: {
+        kind: "run_as_user",
+        user: "synapse-worker",
+        envAllowlist: ["CC_PROJECT", "LANG"],
+      },
+    })
+
+    expect(spawnImpl).toHaveBeenCalledWith(
+      "sudo",
+      [
+        "-n",
+        "-iu",
+        "synapse-worker",
+        "--preserve-env=CC_PROJECT,LANG",
+        "--",
+        "codex",
+        "exec",
+        "-",
+      ],
+      expect.objectContaining({
+        env: {
+          CC_PROJECT: "project-1",
+          LANG: "en_US.UTF-8",
+        },
+      }),
+    )
   })
 
   it("writes stdin and streams complete stdout lines", async () => {

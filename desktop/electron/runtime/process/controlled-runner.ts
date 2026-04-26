@@ -25,6 +25,14 @@ const DEFAULT_ENV_ALLOWLIST = [
   "ComSpec",
 ]
 
+const DEFAULT_RUN_AS_ENV_ALLOWLIST = [
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LC_MESSAGES",
+  "TERM",
+]
+
 const DEFAULT_MAX_BUFFER_BYTES = 1024 * 1024
 
 export type ControlledProcessAction = Extract<
@@ -57,7 +65,14 @@ export interface ControlledProcessRunRequest {
   readonly output?: ControlledProcessOutputOptions
   readonly onStdoutLine?: ControlledProcessLineHandler
   readonly onStderrLine?: ControlledProcessLineHandler
+  readonly isolation?: ControlledProcessIsolationOptions
   readonly metadata?: Record<string, unknown>
+}
+
+export interface ControlledProcessIsolationOptions {
+  readonly kind: "run_as_user"
+  readonly user: string
+  readonly envAllowlist?: readonly string[]
 }
 
 export interface ControlledProcessResult {
@@ -124,7 +139,7 @@ export class ControlledProcessRunner {
     const args = request.args ?? []
     const output = request.output ?? {}
     const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
-    const env = buildAllowedEnv(request.env, request.envAllowlist)
+    const launch = buildLaunch(request)
 
     const permission = await this.permissionGuard.check({
       action: request.action,
@@ -132,8 +147,10 @@ export class ControlledProcessRunner {
       resource: request.command,
       context: {
         args,
+        launchCommand: launch.command,
+        launchArgs: launch.args,
         cwd: request.cwd,
-        envKeys: Object.keys(env).sort(),
+        envKeys: Object.keys(launch.env).sort(),
         output: {
           stdout: output.stdout ?? "buffer",
           stderr: output.stderr ?? "buffer",
@@ -145,6 +162,7 @@ export class ControlledProcessRunner {
         },
         timeoutMs: request.timeoutMs,
         longRunning: true,
+        isolation: launch.isolationMetadata,
         ...request.metadata,
       },
     })
@@ -166,9 +184,9 @@ export class ControlledProcessRunner {
 
     let child: ChildProcessWithoutNullStreams
     try {
-      child = this.spawnImpl(request.command, args, {
+      child = this.spawnImpl(launch.command, launch.args, {
         cwd: request.cwd,
-        env,
+        env: launch.env,
         windowsHide: true,
         shell: false,
       })
@@ -193,7 +211,7 @@ export class ControlledProcessRunner {
     const args = request.args ?? []
     const output = request.output ?? {}
     const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
-    const env = buildAllowedEnv(request.env, request.envAllowlist)
+    const launch = buildLaunch(request)
 
     const permission = await this.permissionGuard.check({
       action: request.action,
@@ -201,8 +219,10 @@ export class ControlledProcessRunner {
       resource: request.command,
       context: {
         args,
+        launchCommand: launch.command,
+        launchArgs: launch.args,
         cwd: request.cwd,
-        envKeys: Object.keys(env).sort(),
+        envKeys: Object.keys(launch.env).sort(),
         output: {
           stdout: output.stdout ?? "buffer",
           stderr: output.stderr ?? "buffer",
@@ -213,6 +233,7 @@ export class ControlledProcessRunner {
           stderrLine: request.onStderrLine !== undefined,
         },
         timeoutMs: request.timeoutMs,
+        isolation: launch.isolationMetadata,
         ...request.metadata,
       },
     })
@@ -234,9 +255,9 @@ export class ControlledProcessRunner {
 
     let child: ChildProcessWithoutNullStreams
     try {
-      child = this.spawnImpl(request.command, args, {
+      child = this.spawnImpl(launch.command, launch.args, {
         cwd: request.cwd,
-        env,
+        env: launch.env,
         windowsHide: true,
         shell: false,
       })
@@ -344,12 +365,15 @@ export class ControlledProcessRunner {
       outcome,
       metadata: {
         args,
+        launchCommand: launch.command,
+        launchArgs: launch.args,
         cwd: request.cwd,
         durationMs,
         exitCode: result.exitCode,
         signal: result.signal,
         timedOut,
         error: errorMessage(finalError) ?? errorMessage(spawnError),
+        isolation: launch.isolationMetadata,
       },
     })
 
@@ -375,6 +399,7 @@ export class ControlledProcessRunner {
         cwd: request.cwd,
         durationMs: Date.now() - startedAt,
         error,
+        isolation: request.isolation,
       },
     })
   }
@@ -570,6 +595,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
         timedOut: this.timedOut,
         error,
         longRunning: true,
+        isolation: this.request.isolation,
       },
     })
 
@@ -660,6 +686,70 @@ function buildAllowedEnv(
   }
 
   return nextEnv
+}
+
+interface ControlledProcessLaunch {
+  readonly command: string
+  readonly args: readonly string[]
+  readonly env: NodeJS.ProcessEnv
+  readonly isolationMetadata?: Record<string, unknown>
+}
+
+function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLaunch {
+  const args = request.args ?? []
+  const env = buildAllowedEnv(request.env, request.envAllowlist)
+  const isolation = request.isolation
+  if (!isolation) {
+    return { command: request.command, args, env }
+  }
+  if (isolation.kind !== "run_as_user") {
+    const exhaustive: never = isolation.kind
+    throw new Error(`Unsupported process isolation: ${exhaustive}`)
+  }
+  if (process.platform === "win32") {
+    throw new Error("run_as_user is not supported on Windows")
+  }
+  const user = isolation.user.trim()
+  if (!user) {
+    throw new Error("run_as_user requires a target user")
+  }
+  const envAllowlist = uniqueStrings(isolation.envAllowlist ?? DEFAULT_RUN_AS_ENV_ALLOWLIST)
+  const isolatedEnv = filterEnv(env, envAllowlist)
+  const preserveArg = envAllowlist.length > 0
+    ? [`--preserve-env=${envAllowlist.join(",")}`]
+    : []
+  return {
+    command: "sudo",
+    args: [
+      "-n",
+      "-iu",
+      user,
+      ...preserveArg,
+      "--",
+      request.command,
+      ...args,
+    ],
+    env: isolatedEnv,
+    isolationMetadata: {
+      kind: "run_as_user",
+      user,
+      envKeys: Object.keys(isolatedEnv).sort(),
+    },
+  }
+}
+
+function filterEnv(env: NodeJS.ProcessEnv, allowlist: readonly string[]): NodeJS.ProcessEnv {
+  const nextEnv: NodeJS.ProcessEnv = {}
+  for (const key of allowlist) {
+    if (!key) continue
+    const value = env[key]
+    if (value !== undefined) nextEnv[key] = value
+  }
+  return nextEnv
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
 }
 
 function validateJsonLineOutput(

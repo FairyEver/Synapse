@@ -82,6 +82,10 @@ export class CodexExecAdapter implements AgentAdapter {
       stdin: message.content,
       env: mergeEnv(this.options.env, context.sessionEnv),
       envAllowlist: mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
+      isolation: mergeProcessIsolation(
+        context.processIsolation,
+        mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
+      ),
       timeoutMs: this.options.timeoutMs,
       output: { stdout: "json-lines", stderr: "buffer" },
       onStdoutLine: (line) => parser.pushLine(line),
@@ -107,6 +111,25 @@ export class CodexExecAdapter implements AgentAdapter {
 
     return parser.finalize()
   }
+}
+
+function mergeProcessIsolation(
+  isolation: AgentExecutionContext["processIsolation"],
+  envAllowlist: readonly string[] | undefined,
+): AgentExecutionContext["processIsolation"] {
+  if (!isolation) return undefined
+  return {
+    ...isolation,
+    envAllowlist: mergeStringLists(isolation.envAllowlist, envAllowlist),
+  }
+}
+
+function mergeStringLists(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): readonly string[] | undefined {
+  const values = new Set([...(left ?? []), ...(right ?? [])])
+  return values.size > 0 ? [...values] : undefined
 }
 
 function mergeEnv(

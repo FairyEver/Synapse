@@ -125,6 +125,22 @@ const IPC_CHANNELS = {
     "feishuResumeHeartbeat": "synapse:connectors:feishu:heartbeats:resume",
     "feishuRunHeartbeat": "synapse:connectors:feishu:heartbeats:run",
   },
+  "ops": {
+    "diagnostics": "synapse:ops:diagnostics",
+    "openLogDirectory": "synapse:ops:open-log-directory",
+    "runAsGet": "synapse:ops:run-as:get",
+    "runAsUpdate": "synapse:ops:run-as:update",
+    "runAsPreflight": "synapse:ops:run-as:preflight",
+    "runAsAuditProbe": "synapse:ops:run-as:audit-probe",
+    "webhookStatus": "synapse:ops:webhook:status",
+    "webhookUpdate": "synapse:ops:webhook:update",
+    "webhookRuns": "synapse:ops:webhook:runs",
+    "relayBindings": "synapse:ops:relay:bindings",
+    "relayRuns": "synapse:ops:relay:runs",
+    "relayUnbind": "synapse:ops:relay:unbind",
+    "compressGet": "synapse:ops:compress:get",
+    "compressUpdate": "synapse:ops:compress:update",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -400,6 +416,22 @@ const synapseBridge: SynapseBridge = {
       runHeartbeat: (payload) =>
         invoke(IPC_CHANNELS.connectors.feishuRunHeartbeat)(payload),
     },
+  },
+  ops: {
+    diagnostics: (payload) => invoke(IPC_CHANNELS.ops.diagnostics)(payload),
+    openLogDirectory: invoke(IPC_CHANNELS.ops.openLogDirectory),
+    runAsGet: (projectId) => invoke(IPC_CHANNELS.ops.runAsGet)({ projectId }),
+    runAsUpdate: (payload) => invoke(IPC_CHANNELS.ops.runAsUpdate)(payload),
+    runAsPreflight: (projectId) => invoke(IPC_CHANNELS.ops.runAsPreflight)({ projectId }),
+    runAsAuditProbe: (projectId) => invoke(IPC_CHANNELS.ops.runAsAuditProbe)({ projectId }),
+    webhookStatus: invoke(IPC_CHANNELS.ops.webhookStatus),
+    webhookUpdate: (payload) => invoke(IPC_CHANNELS.ops.webhookUpdate)(payload),
+    webhookRuns: (payload) => invoke(IPC_CHANNELS.ops.webhookRuns)(payload),
+    relayBindings: (payload) => invoke(IPC_CHANNELS.ops.relayBindings)(payload),
+    relayRuns: (payload) => invoke(IPC_CHANNELS.ops.relayRuns)(payload),
+    relayUnbind: (id) => invoke(IPC_CHANNELS.ops.relayUnbind)({ id }),
+    compressGet: (projectId) => invoke(IPC_CHANNELS.ops.compressGet)({ projectId }),
+    compressUpdate: (payload) => invoke(IPC_CHANNELS.ops.compressUpdate)(payload),
   },
 }
 

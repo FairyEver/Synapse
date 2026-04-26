@@ -18,6 +18,7 @@ import {
   type AgentMessage,
 } from "../../agent-runtime"
 import type { ReplyTarget } from "../../reply-target"
+import type { AgentRelayService } from "../../relay"
 import type { HeartbeatService, SchedulerService } from "../../scheduler"
 import type { SideChannelService } from "../../side-channel"
 import { ConnectorRepository } from "../connector-repository"
@@ -153,6 +154,7 @@ export class FeishuConnectorService {
   private replyService: FeishuReplyService | undefined
   private schedulerService: Pick<SchedulerService, "handleFeishuCommand"> | undefined
   private heartbeatService: Pick<HeartbeatService, "handleFeishuCommand"> | undefined
+  private relayService: Pick<AgentRelayService, "bind" | "listBindings" | "send" | "unbind"> | undefined
   private unregisterDispatcher: (() => void) | undefined
 
   constructor(deps: FeishuConnectorServiceDeps) {
@@ -185,6 +187,10 @@ export class FeishuConnectorService {
 
   registerHeartbeatService(service: Pick<HeartbeatService, "handleFeishuCommand">): void {
     this.heartbeatService = service
+  }
+
+  registerRelayService(service: Pick<AgentRelayService, "bind" | "listBindings" | "send" | "unbind">): void {
+    this.relayService = service
   }
 
   assertReplyTargetAvailable(target: ReplyTarget): void {
@@ -752,6 +758,13 @@ export class FeishuConnectorService {
       isAdmin,
       reply,
     }
+    if (this.relayService && await this.handleRelayCommand(connector, message, isAdmin, reply)) {
+      this.recordAudit("allowed", connector.projectId, connector.id, "relay_command", undefined, {
+        sessionKey: message.sessionKey,
+        userId: message.userId,
+      })
+      return true
+    }
     if (this.schedulerService && await this.schedulerService.handleFeishuCommand(context)) {
       this.recordAudit("allowed", connector.projectId, connector.id, "cron_command", undefined, {
         sessionKey: message.sessionKey,
@@ -768,6 +781,94 @@ export class FeishuConnectorService {
     }
     await reply("自动化服务未启动。")
     return true
+  }
+
+  private async handleRelayCommand(
+    connector: ConnectorRecord,
+    message: AgentMessage,
+    isAdmin: boolean,
+    reply: (content: string) => Promise<void> | void | undefined,
+  ): Promise<boolean> {
+    const parsed = parseRelayCommand(message.content)
+    if (!parsed) return false
+    if (!this.relayService) {
+      await reply("Relay 不可用。")
+      return true
+    }
+    const [subCommand, ...args] = parsed.args
+    switch ((subCommand ?? "list").toLowerCase()) {
+      case "list": {
+        const bindings = await this.relayService.listBindings(connector.projectId)
+        await reply(bindings.length > 0
+          ? bindings.map((binding) => `${binding.id} -> ${binding.targetProjectId}`).join("\n")
+          : "Relay 绑定为空。")
+        return true
+      }
+      case "bind": {
+        if (!isAdmin) {
+          await reply("当前飞书用户无权修改 Relay 绑定。")
+          return true
+        }
+        const targetProjectId = args[0]
+        if (!targetProjectId) {
+          await reply("用法：/relay bind <project-id>")
+          return true
+        }
+        const binding = await this.relayService.bind({
+          sourceProjectId: connector.projectId,
+          targetProjectId,
+          sourceSessionKey: message.sessionKey,
+          sourceChannelKey: message.channelKey,
+          workspaceKey: message.workspaceKey,
+          workspacePath: message.workspacePath,
+          createdBy: message.userId,
+        })
+        await reply(`已绑定：${binding.targetProjectId}`)
+        return true
+      }
+      case "unbind": {
+        if (!isAdmin) {
+          await reply("当前飞书用户无权修改 Relay 绑定。")
+          return true
+        }
+        const bindingId = args[0]
+        if (!bindingId) {
+          await reply("用法：/relay unbind <binding-id>")
+          return true
+        }
+        const removed = await this.relayService.unbind(bindingId)
+        await reply(removed ? "已解绑。" : "未找到绑定。")
+        return true
+      }
+      case "send": {
+        const targetProjectId = args[0]
+        const relayMessage = args.slice(1).join(" ").trim()
+        if (!targetProjectId || !relayMessage) {
+          await reply("用法：/relay send <project-id> <message>")
+          return true
+        }
+        const result = await this.relayService.send({
+          sourceProjectId: connector.projectId,
+          sourceSessionKey: message.sessionKey,
+          targetProjectId,
+          message: relayMessage,
+          workspaceKey: message.workspaceKey,
+          workspacePath: message.workspacePath,
+          visible: true,
+        })
+        if (!result.timedOut && result.resultText) {
+          await reply(result.resultText)
+        } else if (result.timedOut) {
+          await reply(result.partialText || "Relay 仍在运行。")
+        } else if (result.error) {
+          await reply(result.error)
+        }
+        return true
+      }
+      default:
+        await reply("用法：/relay list|bind|unbind|send")
+        return true
+    }
   }
 
   private async handleWorkspaceInitFlow(
@@ -1268,8 +1369,16 @@ function parseWorkspaceCommand(content: string): { readonly args: readonly strin
   return { args: args ? args.split(/\s+/) : [] }
 }
 
+function parseRelayCommand(content: string): { readonly args: readonly string[] } | null {
+  const trimmed = content.trim()
+  const match = /^\/relay(?:\s+(.+))?$/i.exec(trimmed)
+  if (!match) return null
+  const args = (match[1] ?? "").trim()
+  return { args: args ? args.split(/\s+/) : [] }
+}
+
 function isAutomationCommand(content: string): boolean {
-  return /^(\/cron|\/heartbeat)(?:\s|$)/i.test(content.trim())
+  return /^(\/cron|\/heartbeat|\/relay)(?:\s|$)/i.test(content.trim())
 }
 
 function isCronAddExec(content: string): boolean {

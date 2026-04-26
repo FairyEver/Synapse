@@ -1,4 +1,9 @@
-import type { AgentCommandEntryV1, ConversationEntryV1, DataNamespace } from "../../runtime/data-repo"
+import type {
+  AgentCommandEntryV1,
+  AgentCompressStateEntryV1,
+  ConversationEntryV1,
+  DataNamespace,
+} from "../../runtime/data-repo"
 import type {
   ControlledProcessResult,
   ControlledProcessRunRequest,
@@ -13,6 +18,7 @@ import type {
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService } from "../reply-target"
 import type { ReplyTarget } from "../reply-target"
+import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
   prepareCodexRuntime,
   type ProviderConfigService,
@@ -43,6 +49,7 @@ import type {
   AgentPendingPermission,
   AgentPermissionRequestEvent,
   AgentPermissionResponseRequest,
+  AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
@@ -68,12 +75,14 @@ export interface AgentRuntimeServiceDeps {
   readonly outbox?: ReplyOutboxService
   readonly governance?: AgentGovernanceService
   readonly providerConfig?: ProviderConfigService
+  readonly compressState?: DataNamespace<AgentCompressStateEntryV1>
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
   readonly commandRunner?: AgentCommandProcessRunner
+  readonly executionIsolation?: ProcessIsolationResolver
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void
@@ -147,6 +156,8 @@ export class AgentRuntimeService {
         listCommands: (message) => this.listPublishedCommands(message.platform),
         runCustomCommand: (command, args, message) =>
           this.runCustomCommand(command, args, message),
+        compressSession: (message, conversation) =>
+          this.compressSession(message, conversation),
       })
       : undefined
   }
@@ -246,6 +257,45 @@ export class AgentRuntimeService {
     })
   }
 
+  async sendSideSessionWithTimeout(
+    message: AgentMessage,
+    name: string,
+    timeoutMs: number,
+  ): Promise<AgentRuntimeRelayResult> {
+    if (message.projectId !== this.deps.projectId) {
+      throw new Error(
+        `AgentRuntime project mismatch: expected "${this.deps.projectId}", got "${message.projectId}"`,
+      )
+    }
+
+    const conversation = await this.repository.createSideSession({
+      sessionKey: message.sessionKey,
+      platform: message.platform,
+      channelKey: message.channelKey,
+      workspaceKey: message.workspaceKey,
+      workspacePath: message.workspacePath,
+      name,
+      userMeta: {
+        userId: message.userId,
+        userName: message.userName,
+        chatName: message.chatName,
+        platform: message.platform,
+        channelKey: message.channelKey,
+        workspaceKey: message.workspaceKey,
+        workspacePath: message.workspacePath,
+      },
+      resumePolicy: "fresh",
+    })
+    const state = this.stateFor(message, conversation.id)
+    if (state.busy) {
+      return {
+        ...this.finishWithError(message, conversation.id, "Relay session is busy"),
+        timedOut: false,
+      }
+    }
+    return this.processSideSessionWithTimeout(state, message, conversation, timeoutMs)
+  }
+
   listPendingPermissions(): readonly AgentPendingPermission[] {
     return [...this.pendingPermissions.values()].map((pending) => ({
       requestId: pending.requestId,
@@ -294,6 +344,28 @@ export class AgentRuntimeService {
       allowedPlatforms: ["local-renderer"],
     }))
     return [...BUILTIN_COMMANDS, ...custom, ...skills, ...native]
+  }
+
+  async getCompressionState(agentType = this.agentType()): Promise<AgentCompressStateEntryV1> {
+    return this.getOrCreateCompressionState(agentType)
+  }
+
+  async updateCompressionState(input: {
+    readonly agentType?: string
+    readonly enabled?: boolean
+    readonly maxTokens?: number
+    readonly minGapMins?: number
+  }): Promise<AgentCompressStateEntryV1> {
+    const existing = await this.getOrCreateCompressionState(input.agentType ?? this.agentType())
+    const next: AgentCompressStateEntryV1 = {
+      ...existing,
+      enabled: input.enabled ?? existing.enabled,
+      maxTokens: input.maxTokens ?? existing.maxTokens,
+      minGapMins: input.minGapMins ?? existing.minGapMins,
+      updatedAt: this.isoNow(),
+    }
+    await this.deps.compressState?.upsert(next)
+    return next
   }
 
   async respondPermission(request: AgentPermissionResponseRequest): Promise<void> {
@@ -521,6 +593,269 @@ export class AgentRuntimeService {
     }
   }
 
+  private async processSideSessionWithTimeout(
+    state: RuntimeSessionState,
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    timeoutMs: number,
+  ): Promise<AgentRuntimeRelayResult> {
+    state.busy = true
+    state.activeTurns += 1
+    state.lastActivity = Date.now()
+    let savedConversation = conversation
+    try {
+      savedConversation = await this.repository.appendHistory(conversation.id, "user", message.content)
+      const workDir = this.workDirFor(message)
+      if (!workDir) {
+        state.activeTurns = Math.max(0, state.activeTurns - 1)
+        state.busy = false
+        state.lastActivity = Date.now()
+        return {
+          ...this.finishWithError(message, conversation.id, "Project workspace path is required"),
+          timedOut: false,
+        }
+      }
+      const adapter = await this.resolveAdapter()
+      if (adapter.startSession) {
+        return this.processLiveSideSessionWithTimeout(
+          state,
+          message,
+          savedConversation,
+          adapter,
+          workDir,
+          timeoutMs,
+        )
+      }
+      return this.processExecSideSessionWithTimeout(
+        state,
+        message,
+        savedConversation,
+        adapter,
+        workDir,
+        timeoutMs,
+      )
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error)
+      state.activeTurns = Math.max(0, state.activeTurns - 1)
+      state.busy = false
+      state.lastActivity = Date.now()
+      return {
+        ...this.finishWithError(message, savedConversation.id, messageText),
+        timedOut: false,
+      }
+    }
+  }
+
+  private async processExecSideSessionWithTimeout(
+    state: RuntimeSessionState,
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
+    workDir: string,
+    timeoutMs: number,
+  ): Promise<AgentRuntimeRelayResult> {
+    const events: AgentEvent[] = []
+    let partialText = ""
+    const executionPromise = adapter.execute(message, {
+      projectId: this.deps.projectId,
+      workDir,
+      sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
+      processIsolation: await this.resolveProcessIsolation(message),
+      actor: { kind: "agent", id: "relay" },
+      onEvent: (event) => {
+        events.push(event)
+        partialText = appendRelayText(partialText, event)
+        this.emitEvent(message, conversation.id, event)
+      },
+    })
+    const execution = await promiseWithTimeout(executionPromise, timeoutMs)
+    if (!execution) {
+      void executionPromise
+        .then((finalExecution) => this.finishExecSideSession(
+          state,
+          conversation,
+          adapter,
+          finalExecution.resultText,
+          finalExecution.threadId ?? finalExecution.agentSessionId,
+        ))
+        .catch((error) => {
+          this.deps.logger?.warn("Relay exec drain failed.", {
+            error: error instanceof Error ? error.message : String(error),
+            projectId: this.deps.projectId,
+            sessionKey: message.sessionKey,
+          })
+          state.activeTurns = Math.max(0, state.activeTurns - 1)
+          state.busy = false
+          state.lastActivity = Date.now()
+        })
+      return {
+        conversationId: conversation.id,
+        events,
+        resultText: partialText,
+        partialText,
+        timedOut: true,
+      }
+    }
+    const saved = await this.finishExecSideSession(
+      state,
+      conversation,
+      adapter,
+      execution.resultText,
+      execution.threadId ?? execution.agentSessionId,
+    )
+    return {
+      conversationId: saved.id,
+      events: execution.events,
+      resultText: execution.resultText,
+      agentSessionId: saved.agentSessionId,
+      threadId: saved.agentSessionId,
+      error: execution.error,
+      timedOut: false,
+    }
+  }
+
+  private async finishExecSideSession(
+    state: RuntimeSessionState,
+    conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
+    resultText: string,
+    agentSessionId?: string,
+  ): Promise<ConversationEntryV1> {
+    try {
+      return await this.saveExecutionResult(conversation, {
+        resultText,
+        agentSessionId,
+        agentType: adapter.agentType,
+      })
+    } finally {
+      state.activeTurns = Math.max(0, state.activeTurns - 1)
+      state.busy = false
+      state.lastActivity = Date.now()
+    }
+  }
+
+  private async processLiveSideSessionWithTimeout(
+    state: RuntimeSessionState,
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
+    workDir: string,
+    timeoutMs: number,
+  ): Promise<AgentRuntimeRelayResult> {
+    const liveSession = await this.getLiveSession(state, conversation, adapter, message, workDir)
+    const events: AgentEvent[] = []
+    let resultText = ""
+    let partialText = ""
+    let error: string | undefined
+    const deadline = Date.now() + timeoutMs
+
+    await liveSession.send(message)
+
+    while (liveSession.alive()) {
+      const remaining = Math.max(1, deadline - Date.now())
+      const event = await nextLiveEventWithTimeout(liveSession, remaining)
+      if (!event) {
+        void this.drainLiveSideSession(state, message, conversation, adapter, liveSession)
+        return {
+          conversationId: conversation.id,
+          events,
+          resultText: partialText,
+          partialText,
+          agentSessionId: liveSession.currentSessionId(),
+          threadId: liveSession.currentSessionId(),
+          timedOut: true,
+        }
+      }
+      events.push(event)
+      partialText = appendRelayText(partialText, event)
+      this.emitEvent(message, conversation.id, event)
+      await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
+
+      if (event.type === "permissionRequest") {
+        await liveSession.respondPermission(event.requestId, {
+          behavior: "deny",
+          message: "Relay cannot approve tool permissions.",
+        })
+        error = "Relay requested permission."
+        break
+      }
+      if (event.type === "result") {
+        resultText = event.content
+        break
+      }
+      if (event.type === "error") {
+        error = event.message
+        break
+      }
+    }
+
+    const currentSessionId = liveSession.currentSessionId()
+    const saved = await this.saveExecutionResult(conversation, {
+      resultText,
+      agentSessionId: currentSessionId,
+      agentType: adapter.agentType,
+    })
+    state.activeTurns = Math.max(0, state.activeTurns - 1)
+    state.busy = false
+    state.lastActivity = Date.now()
+    return {
+      conversationId: saved.id,
+      events,
+      resultText,
+      agentSessionId: saved.agentSessionId,
+      threadId: saved.agentSessionId,
+      error,
+      timedOut: false,
+    }
+  }
+
+  private async drainLiveSideSession(
+    state: RuntimeSessionState,
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
+    liveSession: AgentLiveSession,
+  ): Promise<void> {
+    let resultText = ""
+    try {
+      while (liveSession.alive()) {
+        const event = await liveSession.nextEvent()
+        if (!event) break
+        this.emitEvent(message, conversation.id, event)
+        await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
+        if (event.type === "permissionRequest") {
+          await liveSession.respondPermission(event.requestId, {
+            behavior: "deny",
+            message: "Relay cannot approve tool permissions.",
+          })
+          break
+        }
+        if (event.type === "result") {
+          resultText = event.content
+          break
+        }
+        if (event.type === "error") {
+          break
+        }
+      }
+      await this.saveExecutionResult(conversation, {
+        resultText,
+        agentSessionId: liveSession.currentSessionId(),
+        agentType: adapter.agentType,
+      })
+    } catch (error) {
+      this.deps.logger?.warn("Relay live drain failed.", {
+        error: error instanceof Error ? error.message : String(error),
+        projectId: this.deps.projectId,
+        sessionKey: message.sessionKey,
+      })
+    } finally {
+      state.activeTurns = Math.max(0, state.activeTurns - 1)
+      state.busy = false
+      state.lastActivity = Date.now()
+    }
+  }
+
   private async processExecTurn(
     message: AgentMessage,
     conversation: ConversationEntryV1,
@@ -535,6 +870,7 @@ export class AgentRuntimeService {
       threadId,
       agentSessionId: threadId,
       sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
+      processIsolation: await this.resolveProcessIsolation(message),
       actor: { kind: "user" },
       onEvent: (event) => {
         streamedEvents.add(event)
@@ -607,6 +943,7 @@ export class AgentRuntimeService {
       agentSessionId: currentSessionId,
       agentType: adapter.agentType,
     })
+    await this.maybeAutoCompress(state, message, saved, adapter, liveSession)
 
     return {
       conversationId: saved.id,
@@ -644,6 +981,7 @@ export class AgentRuntimeService {
       threadId: agentSessionId,
       agentSessionId,
       sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
+      processIsolation: await this.resolveProcessIsolation(message),
       actor: { kind: "user" },
     })
     if (!liveSession) {
@@ -899,6 +1237,7 @@ export class AgentRuntimeService {
       command: shellCommand(),
       args: shellArgs(`${command.exec} ${args.join(" ")}`.trim()),
       cwd: workDir,
+      isolation: await this.resolveProcessIsolation(message),
       timeoutMs: 60_000,
       output: { stdout: "buffer", stderr: "buffer" },
       metadata: {
@@ -911,8 +1250,213 @@ export class AgentRuntimeService {
     return formatCommandResult(command.name, result)
   }
 
+  private async compressSession(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+  ): Promise<AgentRuntimeTurnResult> {
+    const state = this.stateFor(message)
+    if (state.busy) {
+      return runtimeCommandResult(conversation.id, "Session is busy.", true, conversation.agentSessionId)
+    }
+    const workDir = this.workDirFor(message)
+    if (!workDir) {
+      return runtimeCommandResult(conversation.id, "Project workspace path is required", true, conversation.agentSessionId)
+    }
+    state.busy = true
+    try {
+      const adapter = await this.resolveAdapter()
+      if (!adapter.compressionCommand || !adapter.startSession) {
+        await this.markCompressionState(adapter.agentType, "unsupported", "Compression is unsupported.")
+        return runtimeCommandResult(
+          conversation.id,
+          `Compression is unsupported for ${adapter.agentType}.`,
+          true,
+          conversation.agentSessionId,
+        )
+      }
+      const liveSession = await this.getLiveSession(state, conversation, adapter, message, workDir)
+      const result = await this.runCompression({
+        state,
+        message,
+        conversation,
+        adapter,
+        liveSession,
+        reason: "manual",
+      })
+      if (result.error) {
+        return runtimeCommandResult(conversation.id, result.error, true, liveSession.currentSessionId())
+      }
+      return runtimeCommandResult(
+        conversation.id,
+        result.resultText || "Context compressed.",
+        false,
+        liveSession.currentSessionId(),
+      )
+    } finally {
+      state.busy = false
+      state.lastActivity = Date.now()
+    }
+  }
+
+  private async maybeAutoCompress(
+    state: RuntimeSessionState,
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
+    liveSession: AgentLiveSession,
+  ): Promise<void> {
+    if (!this.deps.compressState || !adapter.compressionCommand) return
+    const config = await this.getOrCreateCompressionState(adapter.agentType)
+    if (!config.enabled) return
+    if (estimateTokens(conversation) < config.maxTokens) return
+    if (!minGapElapsed(config.lastCompressedAt, config.minGapMins)) return
+    try {
+      const result = await this.runCompression({
+        state,
+        message,
+        conversation,
+        adapter,
+        liveSession,
+        reason: "auto",
+      })
+      if (result.error) {
+        await this.markCompressionState(adapter.agentType, "failed", result.error)
+      }
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error)
+      await this.markCompressionState(adapter.agentType, "failed", messageText)
+      this.deps.logger?.warn("Auto-compress failed.", {
+        error: messageText,
+        projectId: this.deps.projectId,
+        sessionKey: message.sessionKey,
+      })
+    }
+  }
+
+  private async runCompression(input: {
+    readonly state: RuntimeSessionState
+    readonly message: AgentMessage
+    readonly conversation: ConversationEntryV1
+    readonly adapter: AgentAdapter
+    readonly liveSession: AgentLiveSession
+    readonly reason: "manual" | "auto"
+  }): Promise<{ readonly resultText: string; readonly error?: string }> {
+    const command = input.adapter.compressionCommand
+    if (!command) {
+      await this.markCompressionState(input.adapter.agentType, "unsupported", "Compression is unsupported.")
+      return { resultText: "", error: "Compression is unsupported." }
+    }
+    const events: AgentEvent[] = []
+    let resultText = ""
+    let error: string | undefined
+    await input.liveSession.send({
+      ...input.message,
+      content: command,
+      replyCtx: { ...(replyCtxRecord(input.message.replyCtx) ?? {}), muted: true },
+    })
+    while (input.liveSession.alive()) {
+      const event = await nextLiveEventWithTimeout(input.liveSession, 5 * 60_000)
+      if (!event) {
+        error = "Compression timed out"
+        break
+      }
+      events.push(event)
+      await this.saveEventSessionId(
+        input.conversation.id,
+        event,
+        input.liveSession,
+        input.adapter.agentType,
+      )
+      if (event.type === "permissionRequest") {
+        await input.liveSession.respondPermission(event.requestId, {
+          behavior: "deny",
+          message: "Compression cannot request tool permissions.",
+        })
+        error = "Compression requested permission."
+        break
+      }
+      if (event.type === "result") {
+        resultText = event.content
+        break
+      }
+      if (event.type === "error") {
+        error = event.message
+        break
+      }
+    }
+    await this.markCompressionState(
+      input.adapter.agentType,
+      error ? "failed" : "success",
+      error,
+    )
+    this.deps.auditSink?.record({
+      action: "agent.spawn",
+      actor: { kind: "agent", id: "compress" },
+      resource: command,
+      outcome: error ? "failed" : "allowed",
+      metadata: {
+        projectId: this.deps.projectId,
+        sessionKey: input.message.sessionKey,
+        conversationId: input.conversation.id,
+        reason: input.reason,
+        eventCount: events.length,
+        error,
+      },
+    })
+    return { resultText, error }
+  }
+
+  private async getOrCreateCompressionState(
+    agentType: string,
+  ): Promise<AgentCompressStateEntryV1> {
+    if (!this.deps.compressState) throw new Error("Compression state is unavailable")
+    const id = compressionStateId(this.deps.projectId, agentType)
+    const existing = await this.deps.compressState.get(id)
+    if (existing) return existing
+    const now = this.isoNow()
+    const entry: AgentCompressStateEntryV1 = {
+      id,
+      schemaVersion: 1,
+      projectId: this.deps.projectId,
+      agentType,
+      enabled: false,
+      maxTokens: 60_000,
+      minGapMins: 30,
+      lastStatus: "idle",
+      createdAt: now,
+      updatedAt: now,
+    }
+    await this.deps.compressState.upsert(entry)
+    return entry
+  }
+
+  private async markCompressionState(
+    agentType: string,
+    status: AgentCompressStateEntryV1["lastStatus"],
+    error?: string,
+  ): Promise<void> {
+    if (!this.deps.compressState) return
+    const existing = await this.getOrCreateCompressionState(agentType)
+    const now = this.isoNow()
+    await this.deps.compressState.upsert({
+      ...existing,
+      lastCompressedAt: status === "success" ? now : existing.lastCompressedAt,
+      lastStatus: status,
+      lastError: error,
+      updatedAt: now,
+    })
+  }
+
   private workDirFor(message: AgentMessage): string | undefined {
     return message.workspacePath ?? this.deps.workDir
+  }
+
+  private async resolveProcessIsolation(message: AgentMessage) {
+    const sessionEnv = this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey)
+    return this.deps.executionIsolation?.resolveProcessIsolation(
+      this.deps.projectId,
+      Object.keys(sessionEnv ?? {}),
+    )
   }
 
   private queueLimit(): number {
@@ -1034,6 +1578,83 @@ function isPromptCommandRoute(
   result: AgentCommandRouterResult,
 ): result is Extract<AgentCommandRouterResult, { kind: "prompt" }> {
   return "kind" in result && result.kind === "prompt"
+}
+
+function runtimeCommandResult(
+  conversationId: string,
+  content: string,
+  isError = false,
+  agentSessionId?: string,
+): AgentRuntimeTurnResult {
+  const event: AgentEvent = isError
+    ? { type: "error", message: content }
+    : { type: "result", content, done: true, agentSessionId, threadId: agentSessionId }
+  return {
+    conversationId,
+    events: [event],
+    resultText: isError ? "" : content,
+    agentSessionId,
+    threadId: agentSessionId,
+    error: isError ? content : undefined,
+  }
+}
+
+function compressionStateId(projectId: string, agentType: string): string {
+  return `compress:${projectId}:${agentType}`
+}
+
+function estimateTokens(conversation: ConversationEntryV1): number {
+  const chars = conversation.history.reduce((total, entry) => total + entry.content.length, 0)
+  return Math.ceil(chars / 4)
+}
+
+function minGapElapsed(lastCompressedAt: string | undefined, minGapMins: number): boolean {
+  if (!lastCompressedAt) return true
+  const last = Date.parse(lastCompressedAt)
+  if (!Number.isFinite(last)) return true
+  return Date.now() - last >= minGapMins * 60_000
+}
+
+async function nextLiveEventWithTimeout(
+  liveSession: AgentLiveSession,
+  timeoutMs: number,
+): Promise<AgentEvent | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      liveSession.nextEvent(),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+async function promiseWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+function appendRelayText(current: string, event: AgentEvent): string {
+  if (event.type === "text" || event.type === "result") {
+    return `${current}${event.content}`
+  }
+  if (event.type === "error" && !current) return event.message
+  return current
 }
 
 function shellCommand(): string {

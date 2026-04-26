@@ -88,6 +88,8 @@ function sqliteIndexesFor(namespace: string): readonly string[] {
     case "conversations":
     case "outbox":
     case "repo.pending-pushes":
+    case "webhook.runs":
+    case "relay.runs":
       return ["json_extract(value, '$.projectId')"]
     default:
       return []

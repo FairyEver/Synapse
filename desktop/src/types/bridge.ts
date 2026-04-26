@@ -100,6 +100,46 @@ import type {
 } from "./repository"
 import type { SynapseAppUpdateState } from "./update"
 
+export type SynapseOpsDiagnostics = {
+  appVersion: string
+  singleInstanceLocked: boolean
+  logPath: string
+  sideChannel?: {
+    enabled: boolean
+    bindAddress?: string
+    port?: number
+    sendPath: string
+    cronAddPath: string
+    relaySendPath: string
+  }
+  webhook?: {
+    enabled: boolean
+    bindAddress: string
+    path: string
+    preferredPort?: number
+    assignedPort?: number
+    maxBodyBytes: number
+    rateLimitPerMinute: number
+    serviceRestartRequired?: boolean
+    lastError?: string
+  }
+  relay?: {
+    bindingCount: number
+    recentRunCount: number
+  }
+  agent?: SynapseAgentStatus
+  feishu?: {
+    projectId: string
+    configured: boolean
+    running: boolean
+  }
+}
+
+export type SynapseRunAsConfig = Record<string, unknown>
+export type SynapseRunAsCheckResult = Record<string, unknown>
+export type SynapseWebhookStatus = NonNullable<SynapseOpsDiagnostics["webhook"]>
+export type SynapseOpsRecord = Record<string, unknown>
+
 export type SynapseBridge = {
   platform: string
   versions: {
@@ -325,5 +365,41 @@ export type SynapseBridge = {
         payload: { projectId: string; id: string },
       ) => Promise<SynapseFeishuHeartbeat | null>
     }
+  }
+  ops: {
+    diagnostics: (payload?: { projectId?: string }) => Promise<SynapseOpsDiagnostics>
+    openLogDirectory: () => Promise<{ ok: true }>
+    runAsGet: (projectId: string) => Promise<SynapseRunAsConfig>
+    runAsUpdate: (payload: {
+      projectId: string
+      enabled?: boolean
+      user?: string
+      envAllowlist?: string[]
+      requirePreflight?: boolean
+    }) => Promise<SynapseRunAsConfig>
+    runAsPreflight: (projectId: string) => Promise<SynapseRunAsCheckResult>
+    runAsAuditProbe: (projectId: string) => Promise<SynapseRunAsCheckResult>
+    webhookStatus: () => Promise<SynapseWebhookStatus>
+    webhookUpdate: (payload: {
+      enabled?: boolean
+      bindAddress?: string
+      preferredPort?: number
+      path?: string
+      maxBodyBytes?: number
+      rateLimitPerMinute?: number
+      resetToken?: boolean
+    }) => Promise<SynapseOpsRecord>
+    webhookRuns: (payload?: { projectId?: string }) => Promise<SynapseOpsRecord[]>
+    relayBindings: (payload?: { projectId?: string }) => Promise<SynapseOpsRecord[]>
+    relayRuns: (payload?: { projectId?: string }) => Promise<SynapseOpsRecord[]>
+    relayUnbind: (id: string) => Promise<{ ok: boolean }>
+    compressGet: (projectId: string) => Promise<SynapseOpsRecord>
+    compressUpdate: (payload: {
+      projectId: string
+      agentType?: string
+      enabled?: boolean
+      maxTokens?: number
+      minGapMins?: number
+    }) => Promise<SynapseOpsRecord>
   }
 }

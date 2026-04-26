@@ -1,5 +1,6 @@
 import type {
   AgentCommandEntryV1,
+  AgentCompressStateEntryV1,
   ConversationEntryV1,
   DataRepository,
   OutboxEntryV1,
@@ -9,12 +10,15 @@ import {
   createControlledProcessRunner,
 } from "../../runtime/process"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
   createProviderConfigServiceFromDataRepository,
   type ProviderRuntimeView,
 } from "../provider-config"
 import { ReplyOutboxService } from "../reply-target"
 import { CodexExecAdapter } from "./adapters/codex-exec"
+import { ClaudeCodeAdapter } from "./adapters/claude-code"
+import type { AgentAdapter } from "./types"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
 import { SkillRegistry } from "./skill-registry"
@@ -100,6 +104,7 @@ export {
   type AgentPermissionRequestEvent,
   type AgentPermissionResponseRequest,
   type AgentRuntimeTurnResult,
+  type AgentRuntimeRelayResult,
   type AgentUserQuestion,
   type AgentUserQuestionOption,
 } from "./types"
@@ -126,6 +131,10 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         ctx.globalRegistry,
         "core.side-channel",
       )
+      const executionIsolation = optionalService<ProcessIsolationResolver>(
+        ctx.globalRegistry,
+        "core.execution-isolation",
+      )
       const customCommands = new CustomCommandRegistry({
         projectId: ctx.projectId,
         commands: ctx.dataRepo.namespace<AgentCommandEntryV1>("agent.commands"),
@@ -138,6 +147,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
+        compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         adapter: new CodexExecAdapter(runner),
         agentType: "codex",
         adapterFactory: (view) => adapterFromRuntimeView(view, runner),
@@ -148,6 +158,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         outbox,
         providerConfig,
         replyTargets,
+        executionIsolation,
         customCommands,
         skills,
         commandRunner: runner,
@@ -167,7 +178,16 @@ function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T 
 function adapterFromRuntimeView(
   view: ProviderRuntimeView,
   runner: ReturnType<typeof createControlledProcessRunner>,
-): CodexExecAdapter {
+): AgentAdapter {
+  if (view.agentType === "claude-code") {
+    return new ClaudeCodeAdapter(runner, {
+      model: view.model,
+      effort: view.provider?.effort,
+      mode: view.mode,
+      env: view.env,
+      envAllowlist: view.envAllowlist,
+    })
+  }
   return new CodexExecAdapter(runner, {
     model: view.model,
     provider: view.provider?.id,

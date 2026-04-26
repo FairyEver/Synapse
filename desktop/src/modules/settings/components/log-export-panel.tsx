@@ -1,4 +1,4 @@
-import { ClipboardCopy, Download, LoaderCircle, Trash2 } from "lucide-react"
+import { ClipboardCopy, Download, FolderOpen, LoaderCircle, RefreshCw, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -27,6 +27,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseLogFileInfo } from "@/types/log"
 import { Badge } from "@/components/ui/badge"
+import type { SynapseOpsDiagnostics } from "@/types/bridge"
 
 const LOG_ACTION_TIMEOUT_MS = 15000
 
@@ -66,11 +67,14 @@ function LogExportPanel() {
     selected: Set<string>
   } | null>(null)
   const [totalLogSize, setTotalLogSize] = useState<number | null>(null)
+  const [diagnostics, setDiagnostics] = useState<SynapseOpsDiagnostics | null>(null)
+  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false)
 
   useEffect(() => {
     requireSynapseBridge().log.listFiles().then((files) => {
       setTotalLogSize(files.reduce((sum, f) => sum + f.sizeBytes, 0))
     }).catch(() => undefined)
+    void loadDiagnostics()
   }, [])
 
   const isExporting = activeAction === "export"
@@ -179,6 +183,28 @@ function LogExportPanel() {
     }
   }, [promise])
 
+  const loadDiagnostics = useCallback(async () => {
+    setIsDiagnosticsLoading(true)
+    try {
+      setDiagnostics(await requireSynapseBridge().ops.diagnostics())
+    } catch (error) {
+      logger.error("Failed to load diagnostics.", error)
+    } finally {
+      setIsDiagnosticsLoading(false)
+    }
+  }, [])
+
+  const handleOpenLogDirectory = useCallback(async () => {
+    await promise(
+      () => requireSynapseBridge().ops.openLogDirectory(),
+      {
+        loading: "正在打开日志目录...",
+        success: () => "已打开日志目录",
+        error: (error) => error instanceof Error ? error.message : "打开失败",
+      },
+    )
+  }, [promise])
+
   const handleCopySelectedFiles = useCallback(async () => {
     if (!logFilePickerState) return
 
@@ -264,6 +290,46 @@ function LogExportPanel() {
             )}
             {isClearing ? "删除中..." : "删除全部日志"}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>诊断</CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isDiagnosticsLoading}
+              onClick={() => void loadDiagnostics()}
+            >
+              <RefreshCw className={isDiagnosticsLoading ? "animate-spin" : ""} data-icon="inline-start" />
+              刷新
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="grid gap-2 text-sm md:grid-cols-2">
+            <DiagnosticRow label="版本" value={diagnostics?.appVersion ?? "-"} />
+            <DiagnosticRow label="单实例" value={diagnostics?.singleInstanceLocked ? "已启用" : "-"} />
+            <DiagnosticRow label="Side-channel" value={diagnostics?.sideChannel?.enabled ? "运行中" : "未运行"} />
+            <DiagnosticRow label="Webhook" value={diagnostics?.webhook?.enabled ? "运行中" : "未运行"} />
+            <DiagnosticRow label="Relay" value={String(diagnostics?.relay?.recentRunCount ?? 0)} />
+            <DiagnosticRow label="Feishu" value={diagnostics?.feishu?.running ? "运行中" : "未运行"} />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="secondary" className="max-w-full truncate">
+              {diagnostics?.logPath ?? "logs"}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleOpenLogDirectory()}
+            >
+              <FolderOpen data-icon="inline-start" />
+              打开日志目录
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -360,6 +426,15 @@ function LogExportPanel() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function DiagnosticRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
   )
 }
 

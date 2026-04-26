@@ -633,6 +633,322 @@ export const scheduledHeartbeatSchema: NamespaceSchema<HeartbeatEntryV1> = {
     && typeof (v as HeartbeatEntryV1).runCount === "number",
 }
 
+export type RunAsCheckStatusV1 = "pass" | "fail" | "unsupported"
+
+export interface RunAsConfigEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  enabled: boolean
+  user?: string
+  envAllowlist: string[]
+  requirePreflight: boolean
+  lastPreflightAt?: string
+  lastPreflightStatus?: RunAsCheckStatusV1
+  lastAuditProbeAt?: string
+  lastAuditProbeStatus?: RunAsCheckStatusV1
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export const runAsConfigSchema: NamespaceSchema<RunAsConfigEntryV1> = {
+  name: "run_as.config",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is RunAsConfigEntryV1 =>
+    isAnyRecord<RunAsConfigEntryV1>(v)
+    && (v as RunAsConfigEntryV1).schemaVersion === 1
+    && typeof (v as RunAsConfigEntryV1).id === "string"
+    && typeof (v as RunAsConfigEntryV1).projectId === "string"
+    && typeof (v as RunAsConfigEntryV1).enabled === "boolean"
+    && isOptionalString((v as RunAsConfigEntryV1).user)
+    && isStringArray((v as RunAsConfigEntryV1).envAllowlist)
+    && typeof (v as RunAsConfigEntryV1).requirePreflight === "boolean"
+    && isOptionalString((v as RunAsConfigEntryV1).lastPreflightAt)
+    && ((v as RunAsConfigEntryV1).lastPreflightStatus === undefined
+      || isRunAsCheckStatus((v as RunAsConfigEntryV1).lastPreflightStatus))
+    && isOptionalString((v as RunAsConfigEntryV1).lastAuditProbeAt)
+    && ((v as RunAsConfigEntryV1).lastAuditProbeStatus === undefined
+      || isRunAsCheckStatus((v as RunAsConfigEntryV1).lastAuditProbeStatus))
+    && isOptionalString((v as RunAsConfigEntryV1).lastError)
+    && typeof (v as RunAsConfigEntryV1).createdAt === "string"
+    && typeof (v as RunAsConfigEntryV1).updatedAt === "string",
+}
+
+export interface RunAsPreflightEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  user: string
+  status: RunAsCheckStatusV1
+  workspacePath?: string
+  checks?: Record<string, unknown>
+  warnings?: string[]
+  error?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export const runAsPreflightSchema: NamespaceSchema<RunAsPreflightEntryV1> = {
+  name: "run_as.preflight",
+  backend: "jsonl",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is RunAsPreflightEntryV1 =>
+    isAnyRecord<RunAsPreflightEntryV1>(v)
+    && (v as RunAsPreflightEntryV1).schemaVersion === 1
+    && typeof (v as RunAsPreflightEntryV1).id === "string"
+    && typeof (v as RunAsPreflightEntryV1).projectId === "string"
+    && typeof (v as RunAsPreflightEntryV1).user === "string"
+    && isRunAsCheckStatus((v as RunAsPreflightEntryV1).status)
+    && isOptionalString((v as RunAsPreflightEntryV1).workspacePath)
+    && isOptionalRecord((v as RunAsPreflightEntryV1).checks)
+    && ((v as RunAsPreflightEntryV1).warnings === undefined || isStringArray((v as RunAsPreflightEntryV1).warnings))
+    && isOptionalString((v as RunAsPreflightEntryV1).error)
+    && typeof (v as RunAsPreflightEntryV1).createdAt === "string"
+    && typeof (v as RunAsPreflightEntryV1).updatedAt === "string",
+}
+
+export interface WebhookConfigEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  enabled: boolean
+  bindAddress: string
+  preferredPort?: number
+  assignedPort?: number
+  path: string
+  token?: string
+  maxBodyBytes: number
+  rateLimitPerMinute: number
+  serviceRestartRequired?: boolean
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export const webhookConfigSchema: NamespaceSchema<WebhookConfigEntryV1> = {
+  name: "webhook.config",
+  backend: "encrypted-json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  encrypted: true,
+  validate: (v): v is WebhookConfigEntryV1 =>
+    isAnyRecord<WebhookConfigEntryV1>(v)
+    && (v as WebhookConfigEntryV1).schemaVersion === 1
+    && typeof (v as WebhookConfigEntryV1).id === "string"
+    && typeof (v as WebhookConfigEntryV1).enabled === "boolean"
+    && typeof (v as WebhookConfigEntryV1).bindAddress === "string"
+    && isOptionalNumber((v as WebhookConfigEntryV1).preferredPort)
+    && isOptionalNumber((v as WebhookConfigEntryV1).assignedPort)
+    && typeof (v as WebhookConfigEntryV1).path === "string"
+    && isOptionalString((v as WebhookConfigEntryV1).token)
+    && typeof (v as WebhookConfigEntryV1).maxBodyBytes === "number"
+    && typeof (v as WebhookConfigEntryV1).rateLimitPerMinute === "number"
+    && isOptionalBoolean((v as WebhookConfigEntryV1).serviceRestartRequired)
+    && isOptionalString((v as WebhookConfigEntryV1).lastError)
+    && typeof (v as WebhookConfigEntryV1).createdAt === "string"
+    && typeof (v as WebhookConfigEntryV1).updatedAt === "string",
+}
+
+export type WebhookRunStatusV1 = "queued" | "running" | "success" | "failed" | "timeout"
+
+export interface WebhookRunEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  requestId: string
+  projectId: string
+  kind: "prompt" | "exec"
+  status: WebhookRunStatusV1
+  source: string
+  sessionKey?: string
+  workspacePath?: string
+  startedAt: string
+  finishedAt?: string
+  resultText?: string
+  lastError?: string
+  metadata?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export const webhookRunsSchema: NamespaceSchema<WebhookRunEntryV1> = {
+  name: "webhook.runs",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is WebhookRunEntryV1 =>
+    isAnyRecord<WebhookRunEntryV1>(v)
+    && (v as WebhookRunEntryV1).schemaVersion === 1
+    && typeof (v as WebhookRunEntryV1).id === "string"
+    && typeof (v as WebhookRunEntryV1).requestId === "string"
+    && typeof (v as WebhookRunEntryV1).projectId === "string"
+    && ((v as WebhookRunEntryV1).kind === "prompt" || (v as WebhookRunEntryV1).kind === "exec")
+    && isWebhookRunStatus((v as WebhookRunEntryV1).status)
+    && typeof (v as WebhookRunEntryV1).source === "string"
+    && isOptionalString((v as WebhookRunEntryV1).sessionKey)
+    && isOptionalString((v as WebhookRunEntryV1).workspacePath)
+    && typeof (v as WebhookRunEntryV1).startedAt === "string"
+    && isOptionalString((v as WebhookRunEntryV1).finishedAt)
+    && isOptionalString((v as WebhookRunEntryV1).resultText)
+    && isOptionalString((v as WebhookRunEntryV1).lastError)
+    && isOptionalRecord((v as WebhookRunEntryV1).metadata)
+    && typeof (v as WebhookRunEntryV1).createdAt === "string"
+    && typeof (v as WebhookRunEntryV1).updatedAt === "string",
+}
+
+export interface RelayBindingEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  sourceProjectId: string
+  targetProjectId: string
+  sourceSessionKey?: string
+  sourceChannelKey?: string
+  workspaceKey?: string
+  workspacePath?: string
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  createdBy?: string
+}
+
+export const relayBindingsSchema: NamespaceSchema<RelayBindingEntryV1> = {
+  name: "relay.bindings",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is RelayBindingEntryV1 =>
+    isAnyRecord<RelayBindingEntryV1>(v)
+    && (v as RelayBindingEntryV1).schemaVersion === 1
+    && typeof (v as RelayBindingEntryV1).id === "string"
+    && typeof (v as RelayBindingEntryV1).sourceProjectId === "string"
+    && typeof (v as RelayBindingEntryV1).targetProjectId === "string"
+    && isOptionalString((v as RelayBindingEntryV1).sourceSessionKey)
+    && isOptionalString((v as RelayBindingEntryV1).sourceChannelKey)
+    && isOptionalString((v as RelayBindingEntryV1).workspaceKey)
+    && isOptionalString((v as RelayBindingEntryV1).workspacePath)
+    && typeof (v as RelayBindingEntryV1).enabled === "boolean"
+    && typeof (v as RelayBindingEntryV1).createdAt === "string"
+    && typeof (v as RelayBindingEntryV1).updatedAt === "string"
+    && isOptionalString((v as RelayBindingEntryV1).createdBy),
+}
+
+export type RelayRunStatusV1 = "running" | "success" | "failed" | "timeout"
+
+export interface RelayRunEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  requestId: string
+  sourceProjectId: string
+  targetProjectId: string
+  sourceSessionKey: string
+  targetSessionKey: string
+  status: RelayRunStatusV1
+  visible: boolean
+  startedAt: string
+  finishedAt?: string
+  partialText?: string
+  resultText?: string
+  lastError?: string
+  metadata?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export const relayRunsSchema: NamespaceSchema<RelayRunEntryV1> = {
+  name: "relay.runs",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is RelayRunEntryV1 =>
+    isAnyRecord<RelayRunEntryV1>(v)
+    && (v as RelayRunEntryV1).schemaVersion === 1
+    && typeof (v as RelayRunEntryV1).id === "string"
+    && typeof (v as RelayRunEntryV1).requestId === "string"
+    && typeof (v as RelayRunEntryV1).sourceProjectId === "string"
+    && typeof (v as RelayRunEntryV1).targetProjectId === "string"
+    && typeof (v as RelayRunEntryV1).sourceSessionKey === "string"
+    && typeof (v as RelayRunEntryV1).targetSessionKey === "string"
+    && isRelayRunStatus((v as RelayRunEntryV1).status)
+    && typeof (v as RelayRunEntryV1).visible === "boolean"
+    && typeof (v as RelayRunEntryV1).startedAt === "string"
+    && isOptionalString((v as RelayRunEntryV1).finishedAt)
+    && isOptionalString((v as RelayRunEntryV1).partialText)
+    && isOptionalString((v as RelayRunEntryV1).resultText)
+    && isOptionalString((v as RelayRunEntryV1).lastError)
+    && isOptionalRecord((v as RelayRunEntryV1).metadata)
+    && typeof (v as RelayRunEntryV1).createdAt === "string"
+    && typeof (v as RelayRunEntryV1).updatedAt === "string",
+}
+
+export type AgentCompressStatusV1 = "idle" | "success" | "failed" | "unsupported"
+
+export interface AgentCompressStateEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  agentType: string
+  enabled: boolean
+  maxTokens: number
+  minGapMins: number
+  lastCompressedAt?: string
+  lastStatus?: AgentCompressStatusV1
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export const agentCompressStateSchema: NamespaceSchema<AgentCompressStateEntryV1> = {
+  name: "agent.compress_state",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AgentCompressStateEntryV1 =>
+    isAnyRecord<AgentCompressStateEntryV1>(v)
+    && (v as AgentCompressStateEntryV1).schemaVersion === 1
+    && typeof (v as AgentCompressStateEntryV1).id === "string"
+    && typeof (v as AgentCompressStateEntryV1).projectId === "string"
+    && typeof (v as AgentCompressStateEntryV1).agentType === "string"
+    && typeof (v as AgentCompressStateEntryV1).enabled === "boolean"
+    && typeof (v as AgentCompressStateEntryV1).maxTokens === "number"
+    && typeof (v as AgentCompressStateEntryV1).minGapMins === "number"
+    && isOptionalString((v as AgentCompressStateEntryV1).lastCompressedAt)
+    && ((v as AgentCompressStateEntryV1).lastStatus === undefined
+      || isAgentCompressStatus((v as AgentCompressStateEntryV1).lastStatus))
+    && isOptionalString((v as AgentCompressStateEntryV1).lastError)
+    && typeof (v as AgentCompressStateEntryV1).createdAt === "string"
+    && typeof (v as AgentCompressStateEntryV1).updatedAt === "string",
+}
+
+export interface OpsDiagnosticsEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId?: string
+  kind: string
+  status: "ok" | "degraded" | "error"
+  details?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export const opsDiagnosticsSchema: NamespaceSchema<OpsDiagnosticsEntryV1> = {
+  name: "ops.diagnostics",
+  backend: "jsonl",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is OpsDiagnosticsEntryV1 =>
+    isAnyRecord<OpsDiagnosticsEntryV1>(v)
+    && (v as OpsDiagnosticsEntryV1).schemaVersion === 1
+    && typeof (v as OpsDiagnosticsEntryV1).id === "string"
+    && isOptionalString((v as OpsDiagnosticsEntryV1).projectId)
+    && typeof (v as OpsDiagnosticsEntryV1).kind === "string"
+    && ["ok", "degraded", "error"].includes((v as OpsDiagnosticsEntryV1).status)
+    && isOptionalRecord((v as OpsDiagnosticsEntryV1).details)
+    && typeof (v as OpsDiagnosticsEntryV1).createdAt === "string"
+    && typeof (v as OpsDiagnosticsEntryV1).updatedAt === "string",
+}
+
 function isProviderModelArray(value: unknown): value is ProviderModelEntryV1[] {
   return Array.isArray(value)
     && value.every((item) =>
@@ -726,6 +1042,22 @@ function isConversationHistoryEntry(value: unknown): value is ConversationHistor
 
 function isConversationResumePolicy(value: unknown): value is ConversationResumePolicyV1 {
   return ["resume", "fresh", "continue"].includes(String(value))
+}
+
+function isRunAsCheckStatus(value: unknown): value is RunAsCheckStatusV1 {
+  return ["pass", "fail", "unsupported"].includes(String(value))
+}
+
+function isWebhookRunStatus(value: unknown): value is WebhookRunStatusV1 {
+  return ["queued", "running", "success", "failed", "timeout"].includes(String(value))
+}
+
+function isRelayRunStatus(value: unknown): value is RelayRunStatusV1 {
+  return ["running", "success", "failed", "timeout"].includes(String(value))
+}
+
+function isAgentCompressStatus(value: unknown): value is AgentCompressStatusV1 {
+  return ["idle", "success", "failed", "unsupported"].includes(String(value))
 }
 
 function isAuditActor(value: unknown): value is AuditActorV1 {

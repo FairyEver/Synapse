@@ -1,0 +1,638 @@
+import { randomUUID, timingSafeEqual } from "node:crypto"
+
+import type {
+  DataNamespace,
+  WebhookConfigEntryV1,
+  WebhookRunEntryV1,
+} from "../../runtime/data-repo"
+import {
+  createLocalNetworkHostLifecycle,
+  type LocalHttpRequest,
+  type LocalHttpResponse,
+  type NetworkServiceRegistry,
+  type ResolvedNetworkBinding,
+} from "../../runtime/network"
+import type { ProjectContainerRegistry } from "../../runtime/project-container"
+import type { ControlledProcessRunner } from "../../runtime/process"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import type { StructuredLogger } from "../../runtime/service-registry"
+import {
+  AgentRuntimeService,
+  AGENT_RUNTIME_SERVICE_ID,
+  type AgentMessage,
+} from "../agent-runtime"
+import { reconstructFeishuReplyContext } from "../connectors"
+import type { FeishuConnectorService } from "../connectors"
+import type { ProcessIsolationResolver } from "../execution-isolation"
+import type { ReplyTarget } from "../reply-target"
+import type { WebhookConfigUpdate, WebhookConfigUpdateResult, WebhookStatus } from "./types"
+
+const CONFIG_ID = "webhook:default"
+const DEFAULT_PATH = "/hook"
+const DEFAULT_BIND_ADDRESS = "127.0.0.1"
+const DEFAULT_MAX_BODY_BYTES = 256 * 1024
+const DEFAULT_RATE_LIMIT_PER_MINUTE = 60
+const DEFAULT_WAIT_MS = 30_000
+const NETWORK_SERVICE_ID = "automation.webhook"
+const MAX_REPLY_CHARS = 3000
+
+export interface AutomationIngressProjectSummary {
+  readonly projectId: string
+  readonly name?: string
+  readonly workspacePath?: string
+}
+
+export interface AutomationIngressServiceDeps {
+  readonly projectContainers: ProjectContainerRegistry
+  readonly networkRegistry: NetworkServiceRegistry
+  readonly configs: DataNamespace<WebhookConfigEntryV1>
+  readonly runs: DataNamespace<WebhookRunEntryV1>
+  readonly processRunner: ControlledProcessRunner
+  readonly listProjects: () => Promise<readonly AutomationIngressProjectSummary[]>
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
+  readonly executionIsolation?: ProcessIsolationResolver
+  readonly feishuConnector?: Pick<FeishuConnectorService, "sendAutomationMessage">
+  readonly logger?: StructuredLogger
+  readonly now?: () => Date
+}
+
+export class AutomationIngressService {
+  private readonly deps: AutomationIngressServiceDeps
+  private readonly rateLimiter = new Map<string, number[]>()
+  private binding: ResolvedNetworkBinding | undefined
+
+  constructor(deps: AutomationIngressServiceDeps) {
+    this.deps = deps
+  }
+
+  async start(): Promise<void> {
+    const config = await this.getOrCreateConfig()
+    if (!config.enabled) return
+    await this.checkListenPermission(config)
+    this.binding = await this.deps.networkRegistry.register({
+      id: NETWORK_SERVICE_ID,
+      role: "http",
+      preferredPort: config.preferredPort,
+      bindAddress: config.bindAddress,
+      auth: { kind: "bearer", tokenSecretRef: "webhook.config.token" },
+      handler: { handle: () => ({ ok: true }) },
+      audit: (event) => {
+        this.deps.auditSink?.record({
+          action: "network.listen",
+          actor: { kind: "system", id: "automation-ingress" },
+          resource: event.serviceId,
+          outcome: event.action === "failed" ? "failed" : "allowed",
+          metadata: {
+            action: event.action,
+            role: event.role,
+            bindAddress: event.binding?.bindAddress,
+            port: event.binding?.port,
+            error: event.error,
+          },
+        })
+      },
+      onPortAssigned: (port) => {
+        void this.updateAssignedPort(port)
+      },
+      start: (binding) => createLocalNetworkHostLifecycle(binding, {
+        maxBodyBytes: config.maxBodyBytes,
+        handleHttp: (request) => this.handleHttp(request),
+      }),
+    })
+  }
+
+  async stop(): Promise<void> {
+    await this.deps.networkRegistry.unregister(NETWORK_SERVICE_ID)
+    this.binding = undefined
+  }
+
+  async getStatus(): Promise<WebhookStatus> {
+    return statusFromConfig(await this.getOrCreateConfig(), this.binding)
+  }
+
+  async updateConfig(input: WebhookConfigUpdate): Promise<WebhookConfigUpdateResult> {
+    const existing = await this.getOrCreateConfig()
+    const token = input.resetToken ? randomUUID() : existing.token
+    const next: WebhookConfigEntryV1 = {
+      ...existing,
+      enabled: input.enabled ?? existing.enabled,
+      bindAddress: input.bindAddress?.trim() || existing.bindAddress,
+      preferredPort: input.preferredPort ?? existing.preferredPort,
+      path: normalizePath(input.path ?? existing.path),
+      token,
+      maxBodyBytes: input.maxBodyBytes ?? existing.maxBodyBytes,
+      rateLimitPerMinute: input.rateLimitPerMinute ?? existing.rateLimitPerMinute,
+      serviceRestartRequired: true,
+      updatedAt: this.isoNow(),
+    }
+    await this.deps.configs.upsert(next)
+    return {
+      status: statusFromConfig(next, this.binding),
+      token: input.resetToken ? token : undefined,
+    }
+  }
+
+  async listRuns(projectId?: string): Promise<readonly WebhookRunEntryV1[]> {
+    const runs = await this.deps.runs.list()
+    return projectId ? runs.filter((run) => run.projectId === projectId) : runs
+  }
+
+  private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
+    const config = await this.getOrCreateConfig()
+    const url = new URL(request.url, "http://127.0.0.1")
+    if (url.pathname !== config.path) {
+      return jsonResponse(404, false, undefined, "not_found", "not found")
+    }
+    if (request.method !== "POST") {
+      return jsonResponse(405, false, undefined, "method_not_allowed", "POST only")
+    }
+    if (!this.authenticated(request, url, config.token)) {
+      this.recordAudit("denied", `webhook:${config.path}`, { reason: "unauthorized" })
+      return jsonResponse(401, false, undefined, "unauthorized", "unauthorized")
+    }
+    if (!this.consumeRateLimit(request, config.rateLimitPerMinute)) {
+      return jsonResponse(429, false, undefined, "rate_limited", "rate limited")
+    }
+    try {
+      const body = parseJsonBody(request.body)
+      const mode = stringValue(body.replyMode) === "wait" ? "wait" : "async"
+      const promise = this.executeWebhook(body, request, config.path)
+      if (mode === "wait") {
+        const result = await promiseWithTimeout(promise, DEFAULT_WAIT_MS)
+        if (!result) return jsonResponse(202, true, { status: "running" })
+        return jsonResponse(200, true, result)
+      }
+      void promise.catch((error) => {
+        this.deps.logger?.warn("Webhook background run failed.", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+      return jsonResponse(202, true, { status: "queued" })
+    } catch (error) {
+      if (error instanceof WebhookError) {
+        return jsonResponse(error.status, false, undefined, error.code, error.message)
+      }
+      return jsonResponse(500, false, undefined, "internal_error", errorMessage(error))
+    }
+  }
+
+  private async executeWebhook(
+    body: Record<string, unknown>,
+    request: LocalHttpRequest,
+    path: string,
+  ): Promise<Record<string, unknown>> {
+    const project = await this.resolveProject(stringValue(body.projectId) ?? stringValue(body.project))
+    const prompt = stringValue(body.prompt)
+    const exec = stringValue(body.exec)
+    if (Boolean(prompt) === Boolean(exec)) {
+      throw new WebhookError("invalid_payload", "prompt and exec are mutually exclusive", 400)
+    }
+    const sessionKey = stringValue(body.sessionKey) ?? stringValue(body.session_key)
+    const run = await this.createRun({
+      projectId: project.projectId,
+      kind: prompt ? "prompt" : "exec",
+      source: remoteSource(request),
+      sessionKey,
+      workspacePath: stringValue(body.workspacePath) ?? stringValue(body.workDir),
+      metadata: recordValue(body.metadata),
+    })
+    try {
+      const result = prompt
+        ? await this.executePrompt(run, project, body, prompt)
+        : await this.executeShell(run, project, body, exec ?? "")
+      await this.finishRun(run, "success", { resultText: stringValue(result.resultText) })
+      this.recordAudit("allowed", `webhook:${path}`, {
+        runId: run.id,
+        projectId: project.projectId,
+        kind: run.kind,
+      })
+      return { runId: run.id, ...result }
+    } catch (error) {
+      const message = errorMessage(error)
+      await this.finishRun(run, "failed", { lastError: message })
+      this.recordAudit("failed", `webhook:${path}`, {
+        runId: run.id,
+        projectId: project.projectId,
+        kind: run.kind,
+        error: message,
+      })
+      throw error
+    }
+  }
+
+  private async executePrompt(
+    run: WebhookRunEntryV1,
+    project: AutomationIngressProjectSummary,
+    body: Record<string, unknown>,
+    prompt: string,
+  ): Promise<Record<string, unknown>> {
+    const sessionKey = run.sessionKey ?? stringValue(body.sessionKey) ?? stringValue(body.session_key)
+    if (!sessionKey) throw new WebhookError("session_required", "sessionKey is required", 400)
+    const container = await this.deps.projectContainers.open(project.projectId, {
+      name: project.name,
+      workspacePath: project.workspacePath,
+    })
+    const agent = container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+    const content = appendPayloadContext(prompt, body.payload)
+    const message: AgentMessage = {
+      projectId: project.projectId,
+      sessionKey,
+      platform: "webhook",
+      userId: "webhook",
+      userName: "webhook",
+      content,
+      workspaceKey: stringValue(body.workspaceKey),
+      workspacePath: stringValue(body.workspacePath),
+      replyCtx: replyContextFromWebhook(project.projectId, body, sessionKey),
+      createdAt: this.isoNow(),
+    }
+    const result = await agent.send(message)
+    await this.maybeReply(body, message.replyCtx, result.resultText || result.error)
+    return {
+      status: result.error ? "failed" : "success",
+      resultText: result.resultText,
+      error: result.error,
+    }
+  }
+
+  private async executeShell(
+    run: WebhookRunEntryV1,
+    project: AutomationIngressProjectSummary,
+    body: Record<string, unknown>,
+    exec: string,
+  ): Promise<Record<string, unknown>> {
+    const workDir = stringValue(body.workDir) ?? stringValue(body.workspacePath) ?? project.workspacePath
+    if (!workDir) throw new WebhookError("workspace_required", "workDir is required", 400)
+    const timeoutMs = timeoutMinsToMs(numberValue(body.timeoutMins) ?? numberValue(body.timeout_mins))
+    const env: Record<string, string> = {}
+    const result = await this.deps.processRunner.run({
+      actor: { kind: "agent", id: "webhook" },
+      action: "shell.exec",
+      command: shellCommand(),
+      args: shellArgs(exec),
+      cwd: workDir,
+      env,
+      envAllowlist: Object.keys(env),
+      isolation: await this.deps.executionIsolation?.resolveProcessIsolation(project.projectId),
+      timeoutMs,
+      output: {
+        stdout: "buffer",
+        stderr: "buffer",
+        maxBufferBytes: 1024 * 1024,
+      },
+      metadata: {
+        source: "webhook",
+        projectId: project.projectId,
+        runId: run.id,
+        sessionKey: run.sessionKey,
+      },
+    })
+    const output = formatShellOutput(result.stdout, result.stderr)
+    const statusText = result.timedOut
+      ? "timeout"
+      : result.exitCode === 0 && !result.error
+        ? "success"
+        : "failed"
+    const replyText = output || result.error || statusText
+    await this.maybeReply(body, replyContextFromWebhook(project.projectId, body, run.sessionKey), replyText)
+    if (statusText !== "success") {
+      throw new WebhookError(statusText, result.error ?? replyText, result.timedOut ? 504 : 500)
+    }
+    return {
+      status: statusText,
+      resultText: truncate(replyText),
+      exitCode: result.exitCode,
+    }
+  }
+
+  private async maybeReply(
+    body: Record<string, unknown>,
+    replyCtx: unknown,
+    content: string | undefined,
+  ): Promise<void> {
+    if (body.mute === true || body.silent === true || !content?.trim() || !this.deps.feishuConnector) return
+    const ctx = recordValue(replyCtx)
+    if (!ctx || ctx.kind !== "feishu") return
+    const target: ReplyTarget = {
+      projectId: stringValue(ctx.projectId) ?? "",
+      sessionKey: stringValue(ctx.sessionKey) ?? "",
+      transport: { kind: "feishu", connectorId: stringValue(ctx.connectorId) },
+      replyCtx: ctx,
+    }
+    await this.deps.feishuConnector.sendAutomationMessage(target, truncate(content))
+  }
+
+  private authenticated(
+    request: LocalHttpRequest,
+    url: URL,
+    token: string | undefined,
+  ): boolean {
+    if (!token) return false
+    const auth = firstHeader(request.headers.authorization)
+    if (auth?.startsWith("Bearer ") && timingSafeEqualText(auth.slice(7), token)) return true
+    const header = firstHeader(request.headers["x-webhook-token"])
+      ?? firstHeader(request.headers["x-synapse-webhook-token"])
+    const candidate = header ?? url.searchParams.get("token")
+    return candidate !== null && candidate !== undefined && timingSafeEqualText(candidate, token)
+  }
+
+  private consumeRateLimit(request: LocalHttpRequest, limit: number): boolean {
+    const key = firstHeader(request.headers["x-forwarded-for"]) ?? "local"
+    const now = Date.now()
+    const cutoff = now - 60_000
+    const values = (this.rateLimiter.get(key) ?? []).filter((value) => value >= cutoff)
+    if (values.length >= limit) {
+      this.rateLimiter.set(key, values)
+      return false
+    }
+    values.push(now)
+    this.rateLimiter.set(key, values)
+    return true
+  }
+
+  private async resolveProject(projectId: string | undefined): Promise<AutomationIngressProjectSummary> {
+    const projects = await this.deps.listProjects()
+    if (projectId) {
+      const project = projects.find((item) => item.projectId === projectId)
+      if (!project) throw new WebhookError("project_not_found", "project was not found", 404)
+      return project
+    }
+    if (projects.length === 1 && projects[0]) return projects[0]
+    throw new WebhookError("project_required", "project is required", 400)
+  }
+
+  private async getOrCreateConfig(): Promise<WebhookConfigEntryV1> {
+    const existing = await this.deps.configs.get(CONFIG_ID)
+    if (existing) return existing
+    const now = this.isoNow()
+    const config: WebhookConfigEntryV1 = {
+      id: CONFIG_ID,
+      schemaVersion: 1,
+      enabled: false,
+      bindAddress: DEFAULT_BIND_ADDRESS,
+      path: DEFAULT_PATH,
+      token: randomUUID(),
+      maxBodyBytes: DEFAULT_MAX_BODY_BYTES,
+      rateLimitPerMinute: DEFAULT_RATE_LIMIT_PER_MINUTE,
+      createdAt: now,
+      updatedAt: now,
+    }
+    await this.deps.configs.upsert(config)
+    return config
+  }
+
+  private async updateAssignedPort(port: number): Promise<void> {
+    const config = await this.getOrCreateConfig()
+    await this.deps.configs.upsert({
+      ...config,
+      assignedPort: port,
+      serviceRestartRequired: false,
+      updatedAt: this.isoNow(),
+    })
+  }
+
+  private async createRun(input: {
+    readonly projectId: string
+    readonly kind: "prompt" | "exec"
+    readonly source: string
+    readonly sessionKey?: string
+    readonly workspacePath?: string
+    readonly metadata?: Record<string, unknown>
+  }): Promise<WebhookRunEntryV1> {
+    const now = this.isoNow()
+    const run: WebhookRunEntryV1 = {
+      id: `webhook-run:${randomUUID()}`,
+      schemaVersion: 1,
+      requestId: randomUUID(),
+      projectId: input.projectId,
+      kind: input.kind,
+      status: "running",
+      source: input.source,
+      sessionKey: input.sessionKey,
+      workspacePath: input.workspacePath,
+      startedAt: now,
+      metadata: input.metadata,
+      createdAt: now,
+      updatedAt: now,
+    }
+    await this.deps.runs.upsert(run)
+    return run
+  }
+
+  private async finishRun(
+    run: WebhookRunEntryV1,
+    status: WebhookRunEntryV1["status"],
+    patch: {
+      readonly resultText?: string
+      readonly lastError?: string
+    },
+  ): Promise<void> {
+    await this.deps.runs.upsert({
+      ...run,
+      status,
+      resultText: patch.resultText ? truncate(patch.resultText) : undefined,
+      lastError: patch.lastError,
+      finishedAt: this.isoNow(),
+      updatedAt: this.isoNow(),
+    })
+  }
+
+  private async checkListenPermission(config: WebhookConfigEntryV1): Promise<void> {
+    const permission = await this.deps.permissionGuard?.check({
+      action: "network.listen",
+      actor: { kind: "user" },
+      resource: `${config.bindAddress}:${String(config.preferredPort ?? 0)}${config.path}`,
+      context: { serviceId: NETWORK_SERVICE_ID },
+    })
+    if (permission && !permission.allowed) throw new Error(permission.reason)
+  }
+
+  private recordAudit(
+    outcome: "allowed" | "denied" | "failed",
+    resource: string,
+    metadata: Record<string, unknown>,
+  ): void {
+    this.deps.auditSink?.record({
+      action: "network.connect",
+      actor: { kind: "agent", id: "webhook" },
+      resource,
+      outcome,
+      metadata,
+    })
+  }
+
+  private isoNow(): string {
+    return (this.deps.now?.() ?? new Date()).toISOString()
+  }
+}
+
+function statusFromConfig(
+  config: WebhookConfigEntryV1,
+  binding: ResolvedNetworkBinding | undefined,
+): WebhookStatus {
+  return {
+    enabled: config.enabled && Boolean(binding),
+    bindAddress: config.bindAddress,
+    path: config.path,
+    preferredPort: config.preferredPort,
+    assignedPort: binding?.port ?? config.assignedPort,
+    maxBodyBytes: config.maxBodyBytes,
+    rateLimitPerMinute: config.rateLimitPerMinute,
+    serviceRestartRequired: config.serviceRestartRequired,
+    lastError: config.lastError,
+  }
+}
+
+function replyContextFromWebhook(
+  projectId: string,
+  body: Record<string, unknown>,
+  sessionKey: string | undefined,
+): Record<string, unknown> | undefined {
+  const explicit = recordValue(body.replyCtx)
+  if (explicit) {
+    return body.mute === true ? { ...explicit, muted: true } : explicit
+  }
+  if (!sessionKey) return undefined
+  const connectorId = stringValue(body.connectorId)
+  const reconstructed = connectorId
+    ? reconstructFeishuReplyContext({
+      projectId,
+      connectorId,
+      sessionKey,
+      messageId: stringValue(body.messageId),
+    })
+    : null
+  if (!reconstructed) return body.mute === true ? { muted: true } : undefined
+  return body.mute === true ? { ...reconstructed, muted: true } : reconstructed
+}
+
+function appendPayloadContext(prompt: string, payload: unknown): string {
+  if (payload === undefined) return prompt
+  return `${prompt.trimEnd()}\n\nContext:\n${stringFromUnknown(payload)}`
+}
+
+function parseJsonBody(body: Buffer): Record<string, unknown> {
+  try {
+    const value = JSON.parse(body.toString("utf8")) as unknown
+    const record = recordValue(value)
+    if (!record) throw new Error("JSON body must be an object")
+    return record
+  } catch (error) {
+    throw new WebhookError("invalid_json", errorMessage(error), 400)
+  }
+}
+
+function jsonResponse(
+  status: number,
+  ok: boolean,
+  data?: unknown,
+  code?: string,
+  message?: string,
+): LocalHttpResponse {
+  return {
+    status,
+    body: ok ? { ok, data } : { ok, error: { code, message } },
+  }
+}
+
+async function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+function shellCommand(): string {
+  return process.platform === "win32" ? "powershell.exe" : "/bin/sh"
+}
+
+function shellArgs(command: string): readonly string[] {
+  return process.platform === "win32"
+    ? ["-NoProfile", "-Command", command]
+    : ["-lc", command]
+}
+
+function timeoutMinsToMs(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  return value * 60_000
+}
+
+function formatShellOutput(stdout: string | undefined, stderr: string | undefined): string {
+  return [stdout?.trim(), stderr?.trim()].filter(Boolean).join("\n")
+}
+
+function truncate(value: string): string {
+  if (value.length <= MAX_REPLY_CHARS) return value
+  return `${value.slice(0, MAX_REPLY_CHARS)}\n...`
+}
+
+function normalizePath(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return DEFAULT_PATH
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function stringFromUnknown(value: unknown): string {
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function remoteSource(request: LocalHttpRequest): string {
+  return firstHeader(request.headers["x-forwarded-for"]) ?? "local"
+}
+
+function firstHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function timingSafeEqualText(a: string, b: string): boolean {
+  const aBytes = Buffer.from(a)
+  const bBytes = Buffer.from(b)
+  if (aBytes.length !== bBytes.length) return false
+  try {
+    return timingSafeEqual(aBytes, bBytes)
+  } catch {
+    return false
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+class WebhookError extends Error {
+  readonly code: string
+  readonly status: number
+
+  constructor(code: string, message: string, status: number) {
+    super(message)
+    this.code = code
+    this.status = status
+  }
+}

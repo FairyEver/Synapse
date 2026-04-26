@@ -625,6 +625,10 @@ class LogService {
     })
   }
 
+  getLogDirectory(): string {
+    return this.logDirPath
+  }
+
   async dispose(): Promise<void> {
     this.isDisposed = true
 
