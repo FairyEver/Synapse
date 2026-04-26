@@ -5,6 +5,18 @@ import {
   matchHookEvent,
   validateHookConfig,
 } from "../../electron/services/automation-hooks-service"
+import { AutomationRuntimeStoreService } from "../../electron/services/automation-runtime-store-service"
+import type { SynapseProjectConfig } from "../../src/types/config"
+
+function project(overrides: Partial<SynapseProjectConfig> = {}): SynapseProjectConfig {
+  return {
+    id: "project-1",
+    name: "synapse",
+    path: "/tmp/synapse",
+    agentType: "codex",
+    ...overrides,
+  }
+}
 
 describe("automation hooks service", () => {
   it("validates configs and keeps only valid hooks", () => {
@@ -153,5 +165,67 @@ describe("automation hooks service", () => {
       error: "timeout",
       timeoutMs: 5_000,
     }])
+  })
+
+  it("persists UI hooks and tests command hooks as permission-gated plans", async () => {
+    const now = () => new Date("2026-04-26T05:00:00.000Z")
+    const service = new AutomationRuntimeStoreService({ namespace: null, now })
+    const projects = [project()]
+
+    const hook = await service.createHook(projects, {
+      project: "synapse",
+      event: "message.received",
+      type: "command",
+      command: "echo ok",
+    })
+    expect(hook).toMatchObject({
+      project: "synapse",
+      event: "message.received",
+      type: "command",
+      async: true,
+      timeout: null,
+    })
+
+    await expect(service.testHook({ id: hook.id })).resolves.toMatchObject({
+      results: [{
+        status: "permission_required",
+        command: "echo ok",
+        timeoutMs: 10_000,
+      }],
+    })
+    await expect(service.listHooks()).resolves.toMatchObject({
+      hooks: [{
+        id: hook.id,
+        lastRun: "2026-04-26T05:00:00.000Z",
+        lastResult: "permission_required",
+      }],
+    })
+
+    const updated = await service.updateHook({
+      id: hook.id,
+      patch: {
+        event: "error",
+        type: "http",
+        url: "https://example.test/hook",
+        timeout: 3,
+        async: false,
+      },
+    })
+    expect(updated).toMatchObject({
+      event: "error",
+      type: "http",
+      url: "https://example.test/hook",
+      timeout: 3,
+      async: false,
+    })
+
+    await expect(service.createHook(projects, {
+      project: "synapse",
+      event: "error",
+      type: "http",
+      url: "ftp://bad",
+    })).rejects.toThrow("url must start")
+    await expect(service.deleteHook({ id: "missing" })).rejects.toThrow("hook not found")
+    await expect(service.deleteHook({ id: hook.id })).resolves.toEqual({ status: "ok" })
   })
 })

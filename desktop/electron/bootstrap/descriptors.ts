@@ -36,6 +36,7 @@ import { createTray, destroyTray } from "../services/tray-service"
 import { createDefaultConnectorRegistryService } from "../services/connector-registry-service"
 import { AgentSessionsStoreService } from "../services/agent-sessions-store-service"
 import { AutomationCronStoreService } from "../services/automation-cron-store-service"
+import { AutomationRuntimeStoreService } from "../services/automation-runtime-store-service"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -224,6 +225,12 @@ export const automationCronDescriptor: ServiceDescriptor<AutomationCronStoreServ
   id: "automation.cron",
   criticality: "degraded",
   create: () => new AutomationCronStoreService(),
+}
+
+export const automationRuntimeDescriptor: ServiceDescriptor<AutomationRuntimeStoreService> = {
+  id: "automation.runtime",
+  criticality: "degraded",
+  create: () => new AutomationRuntimeStoreService(),
 }
 
 /**

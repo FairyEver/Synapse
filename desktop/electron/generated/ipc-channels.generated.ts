@@ -107,6 +107,17 @@ export const IPC_CHANNELS = {
     "updateCron": "synapse:automation:update-cron",
     "toggleCron": "synapse:automation:toggle-cron",
     "deleteCron": "synapse:automation:delete-cron",
+    "listHeartbeat": "synapse:automation:list-heartbeat",
+    "upsertHeartbeat": "synapse:automation:upsert-heartbeat",
+    "pauseHeartbeat": "synapse:automation:pause-heartbeat",
+    "resumeHeartbeat": "synapse:automation:resume-heartbeat",
+    "setHeartbeatInterval": "synapse:automation:set-heartbeat-interval",
+    "triggerHeartbeat": "synapse:automation:trigger-heartbeat",
+    "listHooks": "synapse:automation:list-hooks",
+    "createHook": "synapse:automation:create-hook",
+    "updateHook": "synapse:automation:update-hook",
+    "deleteHook": "synapse:automation:delete-hook",
+    "testHook": "synapse:automation:test-hook",
   },
 } as const
 

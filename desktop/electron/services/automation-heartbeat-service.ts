@@ -32,6 +32,15 @@ export type HeartbeatRunResult =
   | { status: "failed"; error: string; prompt: string }
   | { status: "timed_out"; error: string; prompt: string }
 
+export type HeartbeatStateSnapshot = {
+  paused?: boolean
+  runCount?: number
+  errorCount?: number
+  skippedBusy?: number
+  lastRun?: Date | null
+  lastError?: string
+}
+
 export type HeartbeatExecutor = (input: {
   project: string
   sessionKey: string
@@ -162,6 +171,28 @@ export class AutomationHeartbeatService {
       lastError: "",
     })
     return true
+  }
+
+  restore(project: string, config: HeartbeatConfig, state: HeartbeatStateSnapshot = {}, workDir = ""): boolean {
+    if (!this.register(project, config, workDir)) {
+      return false
+    }
+
+    const entry = this.entries.get(project)
+    if (!entry) {
+      return false
+    }
+    entry.paused = state.paused ?? false
+    entry.runCount = state.runCount ?? 0
+    entry.errorCount = state.errorCount ?? 0
+    entry.skippedBusy = state.skippedBusy ?? 0
+    entry.lastRun = state.lastRun ? new Date(state.lastRun.getTime()) : null
+    entry.lastError = state.lastError ?? ""
+    return true
+  }
+
+  unregister(project: string): boolean {
+    return this.entries.delete(project)
   }
 
   status(project: string): HeartbeatStatus | null {

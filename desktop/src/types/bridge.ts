@@ -27,6 +27,20 @@ import type {
   SynapseCronMutationResult,
   SynapseCronTogglePayload,
   SynapseCronUpdatePayload,
+  SynapseHeartbeatDraft,
+  SynapseHeartbeatIntervalPayload,
+  SynapseHeartbeatListResult,
+  SynapseHeartbeatMutationPayload,
+  SynapseHeartbeatRunResult,
+  SynapseHeartbeatStatus,
+  SynapseHook,
+  SynapseHookDeletePayload,
+  SynapseHookDraft,
+  SynapseHookListPayload,
+  SynapseHookListResult,
+  SynapseHookTestPayload,
+  SynapseHookTestResult,
+  SynapseHookUpdatePayload,
 } from "./automation"
 import type { SynapseCliDetectResult } from "./cli"
 import type {
@@ -262,6 +276,17 @@ export type SynapseBridge = {
     updateCron: (payload: SynapseCronUpdatePayload) => Promise<SynapseCronMutationResult>
     toggleCron: (payload: SynapseCronTogglePayload) => Promise<SynapseCronJob>
     deleteCron: (payload: SynapseCronDeletePayload) => Promise<{ status: "ok" }>
+    listHeartbeat: () => Promise<SynapseHeartbeatListResult>
+    upsertHeartbeat: (payload: SynapseHeartbeatDraft) => Promise<SynapseHeartbeatStatus>
+    pauseHeartbeat: (payload: SynapseHeartbeatMutationPayload) => Promise<SynapseHeartbeatStatus>
+    resumeHeartbeat: (payload: SynapseHeartbeatMutationPayload) => Promise<SynapseHeartbeatStatus>
+    setHeartbeatInterval: (payload: SynapseHeartbeatIntervalPayload) => Promise<SynapseHeartbeatStatus>
+    triggerHeartbeat: (payload: SynapseHeartbeatMutationPayload) => Promise<SynapseHeartbeatRunResult>
+    listHooks: (payload?: SynapseHookListPayload) => Promise<SynapseHookListResult>
+    createHook: (payload: SynapseHookDraft) => Promise<SynapseHook>
+    updateHook: (payload: SynapseHookUpdatePayload) => Promise<SynapseHook>
+    deleteHook: (payload: SynapseHookDeletePayload) => Promise<{ status: "ok" }>
+    testHook: (payload: SynapseHookTestPayload) => Promise<SynapseHookTestResult>
   }
   dataStore: {
     listTables: () => Promise<DataStoreTableInfo[]>

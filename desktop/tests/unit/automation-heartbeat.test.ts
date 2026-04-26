@@ -7,6 +7,8 @@ import {
   DEFAULT_HEARTBEAT_PROMPT,
   readHeartbeatPrompt,
 } from "../../electron/services/automation-heartbeat-service"
+import { AutomationRuntimeStoreService } from "../../electron/services/automation-runtime-store-service"
+import type { SynapseProjectConfig } from "../../src/types/config"
 
 const tempRoots: string[] = []
 
@@ -14,6 +16,16 @@ function tempDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-heartbeat-"))
   tempRoots.push(dir)
   return dir
+}
+
+function project(overrides: Partial<SynapseProjectConfig> = {}): SynapseProjectConfig {
+  return {
+    id: "project-1",
+    name: "synapse",
+    path: "/tmp/synapse",
+    agentType: "codex",
+    ...overrides,
+  }
 }
 
 afterEach(() => {
@@ -133,5 +145,62 @@ describe("automation heartbeat service", () => {
     timedOut.register("slow", { enabled: true, sessionKey: "tg:2", timeoutMins: 0.00001 })
     await expect(timedOut.triggerNow("slow")).resolves.toMatchObject({ status: "timed_out" })
     expect(timedOut.status("slow")).toMatchObject({ runCount: 1, errorCount: 1 })
+  })
+
+  it("persists UI heartbeat mutations and seeds imported project config", async () => {
+    const prompts: string[] = []
+    const now = () => new Date("2026-04-26T04:00:00.000Z")
+    const heartbeat = new AutomationHeartbeatService({
+      now,
+      executor: async ({ prompt }) => {
+        prompts.push(prompt)
+      },
+    })
+    const service = new AutomationRuntimeStoreService({ namespace: null, now, heartbeat })
+    const projects = [project({
+      heartbeat: {
+        enabled: true,
+        intervalMins: 12,
+        sessionKey: "telegram:C1:U1",
+      },
+    })]
+
+    await expect(service.listHeartbeat(projects)).resolves.toMatchObject({
+      heartbeats: [{
+        project: "synapse",
+        enabled: true,
+        intervalMins: 12,
+        sessionKey: "telegram:C1:U1",
+        runCount: 0,
+      }],
+    })
+
+    await expect(service.pauseHeartbeat({ project: "synapse" })).resolves.toMatchObject({ paused: true })
+    await expect(service.resumeHeartbeat({ project: "synapse" })).resolves.toMatchObject({ paused: false })
+    await expect(service.setHeartbeatInterval({ project: "synapse", intervalMins: 5 })).resolves.toMatchObject({ intervalMins: 5 })
+    await expect(service.upsertHeartbeat(projects, {
+      project: "synapse",
+      prompt: "check status",
+      silent: false,
+      timeoutMins: 1,
+    })).resolves.toMatchObject({
+      prompt: "check status",
+      silent: false,
+      timeoutMins: 1,
+    })
+
+    await expect(service.triggerHeartbeat({ project: "synapse" })).resolves.toMatchObject({
+      status: "completed",
+      prompt: "check status",
+      silent: false,
+    })
+    expect(prompts).toEqual(["check status"])
+    await expect(service.listHeartbeat([])).resolves.toMatchObject({
+      heartbeats: [{
+        project: "synapse",
+        runCount: 1,
+        lastRun: "2026-04-26T04:00:00.000Z",
+      }],
+    })
   })
 })
