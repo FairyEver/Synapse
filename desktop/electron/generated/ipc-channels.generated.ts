@@ -40,6 +40,7 @@ export const IPC_CHANNELS = {
     "getCcConnectSettings": "synapse:config:get-cc-connect-settings",
     "updateCcConnectSettings": "synapse:config:update-cc-connect-settings",
     "getCcConnectRawConfig": "synapse:config:get-cc-connect-raw-config",
+    "getCcConnectDiagnostics": "synapse:config:get-cc-connect-diagnostics",
     "reloadCcConnectConfig": "synapse:config:reload-cc-connect-config",
     "restartCcConnect": "synapse:config:restart-cc-connect",
   },

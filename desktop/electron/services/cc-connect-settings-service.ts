@@ -1,5 +1,10 @@
+import { constants } from "node:fs"
+import { access } from "node:fs/promises"
+import { homedir } from "node:os"
+import path from "node:path"
 import { DEFAULT_CC_CONNECT_SETTINGS } from "../../src/constants/defaults"
 import type {
+  SynapseCcConnectDiagnostics,
   SynapseCcConnectRawConfigResult,
   SynapseCcConnectRestartPayload,
   SynapseCcConnectRestartResult,
@@ -16,13 +21,72 @@ type ConfigAccess = {
 
 type CcConnectSettingsServiceOptions = {
   config?: ConfigAccess
+  homeDir?: string
   now?: () => Date
+  pathStatus?: (targetPath: string) => Promise<CcConnectPathStatus>
+  platform?: string
+  version?: string
 }
+
+type CcConnectPathStatus = "available" | "missing" | "blocked"
 
 const SECRET_KEY_PATTERN = /(?:api[_-]?key|token|secret|password)/i
 const LANGUAGE_OPTIONS = new Set(["en", "zh", "zh-TW", "ja", "es"])
 const ATTACHMENT_OPTIONS = new Set(["", "on", "off"])
 const LOG_LEVEL_OPTIONS = new Set(["debug", "info", "warn", "error"])
+const BRIDGE_DEFAULT_PORT = 9810
+const BRIDGE_DEFAULT_PATH = "/bridge/ws"
+const WEBHOOK_DEFAULT_PORT = 9111
+const WEBHOOK_DEFAULT_PATH = "/hook"
+const MANAGEMENT_DEFAULT_PORT = 9820
+const LOCAL_API_SOCKET = "run/api.sock"
+const DAEMON_LOG_MAX_SIZE_MB = 10
+const BRIDGE_CAPABILITIES = [
+  "text",
+  "card",
+  "buttons",
+  "typing",
+  "update_message",
+  "preview",
+  "reconstruct_reply",
+]
+const WEBHOOK_FIELDS = [
+  "event",
+  "project",
+  "session_key",
+  "prompt",
+  "exec",
+  "work_dir",
+  "silent",
+  "payload",
+]
+const GUARDED_DAEMON_ACTIONS = ["install", "uninstall", "start", "stop", "restart", "logs -f"]
+const GUARDED_UPDATE_ACTIONS = ["check update", "self update", "install source switch"]
+
+function isMissingPathError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "ENOENT" || error.code === "ENOTDIR")
+  )
+}
+
+async function defaultPathStatus(targetPath: string): Promise<CcConnectPathStatus> {
+  try {
+    await access(targetPath, constants.F_OK)
+    return "available"
+  } catch (error) {
+    return isMissingPathError(error) ? "missing" : "blocked"
+  }
+}
+
+function countChecks(checks: SynapseCcConnectDiagnostics["doctor"]["checks"]) {
+  return checks.reduce<SynapseCcConnectDiagnostics["doctor"]["summary"]>((summary, check) => {
+    summary[check.status] += 1
+    return summary
+  }, { pass: 0, warn: 0, fail: 0 })
+}
 
 function quoteToml(value: string): string {
   return JSON.stringify(value)
@@ -133,11 +197,19 @@ export function ccConnectSettingsToToml(config: SynapseConfig): string {
 
 export class CcConnectSettingsService {
   private readonly config: ConfigAccess | null
+  private readonly homeDir: string
   private readonly now: () => Date
+  private readonly pathStatus: (targetPath: string) => Promise<CcConnectPathStatus>
+  private readonly platform: string
+  private readonly version: string
 
   constructor(options: CcConnectSettingsServiceOptions = {}) {
     this.config = options.config ?? null
+    this.homeDir = options.homeDir ?? homedir()
     this.now = options.now ?? (() => new Date())
+    this.pathStatus = options.pathStatus ?? defaultPathStatus
+    this.platform = options.platform ?? process.platform
+    this.version = options.version ?? "3S"
   }
 
   private async configAccess(): Promise<ConfigAccess> {
@@ -171,6 +243,102 @@ export class CcConnectSettingsService {
       content: ccConnectSettingsToToml(config),
       redacted: true,
       source: "Synapse DataRepository",
+    }
+  }
+
+  async diagnostics(): Promise<SynapseCcConnectDiagnostics> {
+    const access = await this.configAccess()
+    const config = await access.load()
+    const dataDir = path.join(this.homeDir, ".cc-connect")
+    const socketPath = path.join(dataDir, LOCAL_API_SOCKET)
+    const logFile = path.join(dataDir, "logs", "cc-connect.log")
+    const [dataDirStatus, socketStatus] = await Promise.all([
+      this.pathStatus(dataDir),
+      this.pathStatus(socketPath),
+    ])
+    const hasProjects = config.global.projects.length > 0
+    const hasProviders = config.global.providers.length > 0
+    const checks: SynapseCcConnectDiagnostics["doctor"]["checks"] = [
+      {
+        name: "Data directory",
+        status: dataDirStatus === "available" ? "pass" : "warn",
+        detail: dataDir,
+      },
+      {
+        name: "Local API socket",
+        status: socketStatus === "available" ? "pass" : "warn",
+        detail: socketPath,
+      },
+      {
+        name: "Projects",
+        status: hasProjects ? "pass" : "warn",
+        detail: hasProjects ? `${config.global.projects.length} configured` : "no project configured",
+      },
+      {
+        name: "Providers",
+        status: hasProviders ? "pass" : "warn",
+        detail: hasProviders ? `${config.global.providers.length} configured` : "no provider configured",
+      },
+    ]
+
+    return {
+      bridge: {
+        enabled: false,
+        endpoint: `ws://127.0.0.1:${BRIDGE_DEFAULT_PORT}${BRIDGE_DEFAULT_PATH}`,
+        tokenSet: false,
+        capabilities: BRIDGE_CAPABILITIES,
+        adapters: [],
+      },
+      webhook: {
+        enabled: false,
+        endpoint: `http://127.0.0.1:${WEBHOOK_DEFAULT_PORT}${WEBHOOK_DEFAULT_PATH}`,
+        tokenSet: false,
+        authMethods: ["Bearer", "X-Webhook-Token", "query token"],
+        requestFields: WEBHOOK_FIELDS,
+        validation: ["POST only", "session_key required", "prompt xor exec", "project required when ambiguous"],
+      },
+      localApi: {
+        socketPath,
+        status: socketStatus,
+        permission: "0600",
+        endpoints: [
+          { label: "Send", value: "/send" },
+          { label: "Sessions", value: "/sessions" },
+          { label: "Cron", value: "/cron/*" },
+          { label: "Relay", value: "/relay/*" },
+        ],
+      },
+      managementApi: {
+        enabled: false,
+        endpoint: `http://127.0.0.1:${MANAGEMENT_DEFAULT_PORT}/api/v1`,
+        tokenSet: false,
+        endpoints: [
+          { label: "Status", value: "/status" },
+          { label: "Reload", value: "/reload" },
+          { label: "Restart", value: "/restart" },
+          { label: "Bridge adapters", value: "/bridge/adapters" },
+        ],
+      },
+      daemon: {
+        platform: this.platform,
+        installed: dataDirStatus === "available",
+        status: dataDirStatus === "available" ? "unknown" : "stopped",
+        pid: null,
+        workDir: dataDir,
+        logFile,
+        logMaxSizeMb: DAEMON_LOG_MAX_SIZE_MB,
+        guardedActions: GUARDED_DAEMON_ACTIONS,
+      },
+      doctor: {
+        checks,
+        summary: countChecks(checks),
+      },
+      update: {
+        currentVersion: this.version,
+        installSource: "npm release asset",
+        sources: ["GitHub", "Gitee"],
+        guardedActions: GUARDED_UPDATE_ACTIONS,
+      },
     }
   }
 

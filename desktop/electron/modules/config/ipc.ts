@@ -106,6 +106,72 @@ const ccConnectRestartResultSchema = z.discriminatedUnion("status", [
   }),
 ])
 
+const ccConnectDiagnosticStatusSchema = z.enum(["pass", "warn", "fail"])
+
+const ccConnectDiagnosticEndpointSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+})
+
+const ccConnectDiagnosticsSchema = z.object({
+  bridge: z.object({
+    enabled: z.boolean(),
+    endpoint: z.string(),
+    tokenSet: z.boolean(),
+    capabilities: z.array(z.string()),
+    adapters: z.array(z.object({
+      platform: z.string(),
+      project: z.string(),
+      capabilities: z.array(z.string()),
+      connectedAt: z.string().nullable(),
+    })),
+  }),
+  webhook: z.object({
+    enabled: z.boolean(),
+    endpoint: z.string(),
+    tokenSet: z.boolean(),
+    authMethods: z.array(z.string()),
+    requestFields: z.array(z.string()),
+    validation: z.array(z.string()),
+  }),
+  localApi: z.object({
+    socketPath: z.string(),
+    status: z.enum(["available", "missing", "blocked"]),
+    permission: z.string(),
+    endpoints: z.array(ccConnectDiagnosticEndpointSchema),
+  }),
+  managementApi: z.object({
+    enabled: z.boolean(),
+    endpoint: z.string(),
+    tokenSet: z.boolean(),
+    endpoints: z.array(ccConnectDiagnosticEndpointSchema),
+  }),
+  daemon: z.object({
+    platform: z.string(),
+    installed: z.boolean(),
+    status: z.enum(["running", "stopped", "unknown"]),
+    pid: z.number().nullable(),
+    workDir: z.string(),
+    logFile: z.string(),
+    logMaxSizeMb: z.number(),
+    guardedActions: z.array(z.string()),
+  }),
+  doctor: z.object({
+    checks: z.array(z.object({
+      name: z.string(),
+      status: ccConnectDiagnosticStatusSchema,
+      detail: z.string(),
+    })),
+    summary: z.record(ccConnectDiagnosticStatusSchema, z.number()),
+  }),
+  update: z.object({
+    currentVersion: z.string(),
+    installSource: z.string(),
+    sources: z.array(z.string()),
+    guardedActions: z.array(z.string()),
+  }),
+})
+
 const legacyCcConfigImportPreviewSchema = z.object({
   valid: z.boolean(),
   errors: z.array(z.string()),
@@ -274,6 +340,13 @@ export const configIpcModule: IpcModule = {
       request: z.void(),
       response: ccConnectRawConfigSchema,
       handler: () => ccConnectSettingsService.rawConfig(),
+    },
+    getCcConnectDiagnostics: {
+      kind: "invoke",
+      channel: "synapse:config:get-cc-connect-diagnostics",
+      request: z.void(),
+      response: ccConnectDiagnosticsSchema,
+      handler: () => ccConnectSettingsService.diagnostics(),
     },
     reloadCcConnectConfig: {
       kind: "invoke",

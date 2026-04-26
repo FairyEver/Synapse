@@ -111,4 +111,42 @@ describe("cc connect settings service", () => {
     expect(toml).not.toContain("secret-real-value")
     expect(redactTomlSecrets('token = "abc"\napi_key = "sk-test"\nname = "safe"\n')).toBe('token = "***REDACTED***"\napi_key = "***REDACTED***"\nname = "safe"\n')
   })
+
+  it("reports Bridge, Webhook, API, daemon, doctor, and update diagnostics", async () => {
+    const store = memoryConfig()
+    const service = new CcConnectSettingsService({
+      config: store,
+      homeDir: "/tmp/synapse-user",
+      pathStatus: async (targetPath) => targetPath.endsWith("api.sock") ? "available" : "missing",
+      platform: "darwin",
+      version: "test-version",
+    })
+
+    const diagnostics = await service.diagnostics()
+    expect(diagnostics.bridge).toMatchObject({
+      enabled: false,
+      endpoint: "ws://127.0.0.1:9810/bridge/ws",
+      tokenSet: false,
+    })
+    expect(diagnostics.webhook).toMatchObject({
+      endpoint: "http://127.0.0.1:9111/hook",
+      authMethods: ["Bearer", "X-Webhook-Token", "query token"],
+    })
+    expect(diagnostics.localApi).toMatchObject({
+      socketPath: "/tmp/synapse-user/.cc-connect/run/api.sock",
+      status: "available",
+      permission: "0600",
+    })
+    expect(diagnostics.managementApi.endpoint).toBe("http://127.0.0.1:9820/api/v1")
+    expect(diagnostics.daemon).toMatchObject({
+      platform: "darwin",
+      status: "stopped",
+      logMaxSizeMb: 10,
+    })
+    expect(diagnostics.doctor.summary.warn).toBeGreaterThan(0)
+    expect(diagnostics.update).toMatchObject({
+      currentVersion: "test-version",
+      sources: ["GitHub", "Gitee"],
+    })
+  })
 })

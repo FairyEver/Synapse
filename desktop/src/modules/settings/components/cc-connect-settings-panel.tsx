@@ -10,16 +10,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type {
   SynapseCcConnectAttachmentSend,
+  SynapseCcConnectDiagnosticStatus,
+  SynapseCcConnectDiagnostics,
   SynapseCcConnectLogLevel,
   SynapseCcConnectSettings,
   SynapseLocale,
@@ -69,8 +80,146 @@ function numberFromInput(value: string): number {
   return Number.parseInt(value.trim(), 10)
 }
 
+function statusLabel(status: SynapseCcConnectDiagnosticStatus): string {
+  if (status === "pass") {
+    return "通过"
+  }
+  if (status === "fail") {
+    return "失败"
+  }
+  return "注意"
+}
+
+function StatusBadge({ label, status }: { label?: string; status: SynapseCcConnectDiagnosticStatus }) {
+  return (
+    <Badge variant={status === "fail" ? "destructive" : status === "pass" ? "secondary" : "outline"}>
+      {label ?? statusLabel(status)}
+    </Badge>
+  )
+}
+
+function EnabledBadge({ enabled }: { enabled: boolean }) {
+  return <Badge variant={enabled ? "secondary" : "outline"}>{enabled ? "已启用" : "未启用"}</Badge>
+}
+
+function TokenBadge({ tokenSet }: { tokenSet: boolean }) {
+  return <Badge variant={tokenSet ? "secondary" : "outline"}>{tokenSet ? "Token 已配置" : "Token 未配置"}</Badge>
+}
+
+function joinValues(values: string[]): string {
+  return values.length > 0 ? values.join(", ") : "-"
+}
+
+function DiagnosticsPanel({ diagnostics }: { diagnostics: SynapseCcConnectDiagnostics }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <SettingsGroup>
+        <SettingsFieldRow label="Bridge" controlClassName="w-full md:max-w-3xl">
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <EnabledBadge enabled={diagnostics.bridge.enabled} />
+              <TokenBadge tokenSet={diagnostics.bridge.tokenSet} />
+            </div>
+            <code className="break-all rounded-md bg-muted px-2 py-1 text-xs">{diagnostics.bridge.endpoint}</code>
+            <p className="text-muted-foreground">{joinValues(diagnostics.bridge.capabilities)}</p>
+          </div>
+        </SettingsFieldRow>
+        <SettingsFieldRow label="Webhook" controlClassName="w-full md:max-w-3xl">
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <EnabledBadge enabled={diagnostics.webhook.enabled} />
+              <TokenBadge tokenSet={diagnostics.webhook.tokenSet} />
+            </div>
+            <code className="break-all rounded-md bg-muted px-2 py-1 text-xs">{diagnostics.webhook.endpoint}</code>
+            <p className="text-muted-foreground">{joinValues(diagnostics.webhook.authMethods)}</p>
+            <p className="text-muted-foreground">{joinValues(diagnostics.webhook.validation)}</p>
+          </div>
+        </SettingsFieldRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsFieldRow label="Local API" controlClassName="w-full md:max-w-3xl">
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge
+                status={diagnostics.localApi.status === "available" ? "pass" : "warn"}
+                label={diagnostics.localApi.status}
+              />
+              <Badge variant="outline">{diagnostics.localApi.permission}</Badge>
+            </div>
+            <code className="break-all rounded-md bg-muted px-2 py-1 text-xs">{diagnostics.localApi.socketPath}</code>
+            <p className="text-muted-foreground">
+              {diagnostics.localApi.endpoints.map((endpoint) => endpoint.value).join(", ")}
+            </p>
+          </div>
+        </SettingsFieldRow>
+        <SettingsFieldRow label="Management API" controlClassName="w-full md:max-w-3xl">
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <EnabledBadge enabled={diagnostics.managementApi.enabled} />
+              <TokenBadge tokenSet={diagnostics.managementApi.tokenSet} />
+            </div>
+            <code className="break-all rounded-md bg-muted px-2 py-1 text-xs">{diagnostics.managementApi.endpoint}</code>
+            <p className="text-muted-foreground">
+              {diagnostics.managementApi.endpoints.map((endpoint) => endpoint.value).join(", ")}
+            </p>
+          </div>
+        </SettingsFieldRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsFieldRow label="Daemon" controlClassName="w-full md:max-w-3xl">
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">{diagnostics.daemon.platform}</Badge>
+              <Badge variant={diagnostics.daemon.installed ? "secondary" : "outline"}>
+                {diagnostics.daemon.installed ? "已安装" : "未安装"}
+              </Badge>
+              <Badge variant="outline">{diagnostics.daemon.status}</Badge>
+            </div>
+            <code className="break-all rounded-md bg-muted px-2 py-1 text-xs">{diagnostics.daemon.logFile}</code>
+            <p className="text-muted-foreground">{joinValues(diagnostics.daemon.guardedActions)}</p>
+          </div>
+        </SettingsFieldRow>
+        <SettingsFieldRow label="Update" controlClassName="w-full md:max-w-3xl">
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">{diagnostics.update.currentVersion}</Badge>
+              <Badge variant="outline">{diagnostics.update.installSource}</Badge>
+            </div>
+            <p className="text-muted-foreground">{joinValues(diagnostics.update.sources)}</p>
+            <p className="text-muted-foreground">{joinValues(diagnostics.update.guardedActions)}</p>
+          </div>
+        </SettingsFieldRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Doctor</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Detail</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {diagnostics.doctor.checks.map((check) => (
+              <TableRow key={check.name}>
+                <TableCell>{check.name}</TableCell>
+                <TableCell><StatusBadge status={check.status} /></TableCell>
+                <TableCell className="whitespace-normal break-all text-muted-foreground">{check.detail}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </SettingsGroup>
+    </div>
+  )
+}
+
 function CcConnectSettingsPanel() {
   const [form, setForm] = useState<CcConnectFormState | null>(null)
+  const [diagnostics, setDiagnostics] = useState<SynapseCcConnectDiagnostics | null>(null)
   const [rawToml, setRawToml] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -82,12 +231,14 @@ function CcConnectSettingsPanel() {
     setError(null)
     try {
       const config = requireBridgeDomain("config")
-      const [settings, raw] = await Promise.all([
+      const [settings, raw, nextDiagnostics] = await Promise.all([
         config.getCcConnectSettings(),
         config.getCcConnectRawConfig(),
+        config.getCcConnectDiagnostics(),
       ])
       setForm(formFromSettings(settings))
       setRawToml(raw.content)
+      setDiagnostics(nextDiagnostics)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "读取 CC Connect 设置失败。")
     } finally {
@@ -157,7 +308,7 @@ function CcConnectSettingsPanel() {
     }
   }, [refresh])
 
-  if (loading || !form) {
+  if (loading || !form || !diagnostics) {
     return (
       <SettingsGroup>
         <div className="flex min-h-32 items-center justify-center">
@@ -248,6 +399,8 @@ function CcConnectSettingsPanel() {
           <Textarea value={rawToml} readOnly rows={16} className="font-mono text-xs" />
         </SettingsFieldRow>
       </SettingsGroup>
+
+      <DiagnosticsPanel diagnostics={diagnostics} />
 
       <AlertDialog open={restartOpen} onOpenChange={setRestartOpen}>
         <AlertDialogContent>

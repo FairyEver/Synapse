@@ -174,6 +174,74 @@ export type SynapseCcConnectRestartResult =
     platform: string
   }
 
+export type SynapseCcConnectDiagnosticStatus = "pass" | "warn" | "fail"
+
+export type SynapseCcConnectDiagnosticCheck = {
+  name: string
+  status: SynapseCcConnectDiagnosticStatus
+  detail: string
+}
+
+export type SynapseCcConnectDiagnosticEndpoint = {
+  label: string
+  value: string
+}
+
+export type SynapseCcConnectDiagnostics = {
+  bridge: {
+    enabled: boolean
+    endpoint: string
+    tokenSet: boolean
+    capabilities: string[]
+    adapters: Array<{
+      platform: string
+      project: string
+      capabilities: string[]
+      connectedAt: string | null
+    }>
+  }
+  webhook: {
+    enabled: boolean
+    endpoint: string
+    tokenSet: boolean
+    authMethods: string[]
+    requestFields: string[]
+    validation: string[]
+  }
+  localApi: {
+    socketPath: string
+    status: "available" | "missing" | "blocked"
+    permission: string
+    endpoints: SynapseCcConnectDiagnosticEndpoint[]
+  }
+  managementApi: {
+    enabled: boolean
+    endpoint: string
+    tokenSet: boolean
+    endpoints: SynapseCcConnectDiagnosticEndpoint[]
+  }
+  daemon: {
+    platform: string
+    installed: boolean
+    status: "running" | "stopped" | "unknown"
+    pid: number | null
+    workDir: string
+    logFile: string
+    logMaxSizeMb: number
+    guardedActions: string[]
+  }
+  doctor: {
+    checks: SynapseCcConnectDiagnosticCheck[]
+    summary: Record<SynapseCcConnectDiagnosticStatus, number>
+  }
+  update: {
+    currentVersion: string
+    installSource: string
+    sources: string[]
+    guardedActions: string[]
+  }
+}
+
 export type SynapseConfig = {
   activeRepoUuid: string | null
   repositories: SynapseRepositoryConfig[]
