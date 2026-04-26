@@ -60,6 +60,7 @@ export {
   type AuditEntryV1,
   type ConnectorEntryV1,
   type ConversationEntryV1,
+  type ConversationResumePolicyV1,
   type CoreConfigV1,
   type CoreIdentityV2,
   type OutboxEntryV1,

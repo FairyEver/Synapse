@@ -14,6 +14,15 @@ import {
 import { InMemoryAuditSink, createPermissionGuard } from "../../../runtime/security"
 import { CodexExecAdapter, type CodexProcessRunner } from "../adapters/codex-exec"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
+import type {
+  AgentAdapter,
+  AgentEvent,
+  AgentExecutionContext,
+  AgentExecutionResult,
+  AgentLiveSession,
+  AgentMessage,
+  AgentPermissionDecision,
+} from "../types"
 
 describe("AgentRuntimeService", () => {
   it("sends a prompt through Codex exec JSONL and persists the thread id", async () => {
@@ -68,7 +77,7 @@ describe("AgentRuntimeService", () => {
       "-",
     ])
 
-    const saved = await conversations.get(conversationId("local", "local:user-1"))
+    const saved = await conversations.get(conversationId("local", "local:user-1", "active"))
     expect(saved).toEqual(
       expect.objectContaining({
         projectId: "project-1",
@@ -181,6 +190,140 @@ describe("AgentRuntimeService", () => {
       }),
     ])
   })
+
+  it("serializes same-session turns and drains queued messages in order", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const adapter = new BlockingAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      now: fixedNow,
+    })
+
+    const first = service.send(baseMessage("one"))
+    await waitFor(() => adapter.started.length === 1)
+    const second = service.send(baseMessage("two"))
+
+    expect(adapter.started).toEqual(["one"])
+    adapter.resolveNext("first done", "thread-1")
+    expect((await first).resultText).toBe("first done")
+
+    await waitFor(() => adapter.started.length === 2)
+    expect(adapter.started).toEqual(["one", "two"])
+    adapter.resolveNext("second done", "thread-1")
+    expect((await second).resultText).toBe("second done")
+
+    const saved = await conversations.get(conversationId("local", "s1", "active"))
+    expect(saved?.history.map((entry) => entry.content)).toEqual([
+      "one",
+      "first done",
+      "two",
+      "second done",
+    ])
+  })
+
+  it("enforces the pending queue limit", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const adapter = new BlockingAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      pendingQueueLimit: 1,
+      now: fixedNow,
+    })
+
+    const first = service.send(baseMessage("one"))
+    await waitFor(() => adapter.started.length === 1)
+    const second = service.send(baseMessage("two"))
+    const third = await service.send(baseMessage("three"))
+
+    expect(third.events).toEqual([
+      expect.objectContaining({ type: "error", message: "Session queue is full" }),
+    ])
+
+    adapter.resolveNext("first done", "thread-1")
+    await first
+    await waitFor(() => adapter.started.length === 2)
+    adapter.resolveNext("second done", "thread-1")
+    await second
+  })
+
+  it("stores pending permissions, rejects non-user allow, and writes allow decisions with audit", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const auditSink = new InMemoryAuditSink()
+    const liveSession = new FakeLiveSession()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter: new FakeLiveAdapter(liveSession),
+      permissionGuard: createPermissionGuard(),
+      auditSink,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await expect(service.respondPermission({
+      requestId: "perm-1",
+      behavior: "allow",
+      actor: { kind: "agent", id: "agent-1" },
+    })).rejects.toThrow("Only a user actor can allow")
+
+    await service.respondPermission({
+      requestId: "perm-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })
+
+    expect((await turn).resultText).toBe("permission allow")
+    expect(liveSession.permissionResponses).toEqual([
+      { requestId: "perm-1", decision: { behavior: "allow", updatedInput: { command: "pwd" } } },
+    ])
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({ action: "shell.exec", outcome: "denied" }),
+      expect.objectContaining({ action: "shell.exec", outcome: "allowed" }),
+    ])
+  })
+
+  it("writes deny decisions and resolves the pending permission", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const auditSink = new InMemoryAuditSink()
+    const liveSession = new FakeLiveSession()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter: new FakeLiveAdapter(liveSession),
+      permissionGuard: createPermissionGuard(),
+      auditSink,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("deny permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await service.respondPermission({
+      requestId: "perm-1",
+      behavior: "deny",
+      message: "No",
+      actor: { kind: "agent", id: "agent-1" },
+    })
+
+    expect((await turn).resultText).toBe("permission deny")
+    expect(service.listPendingPermissions()).toEqual([])
+    expect(liveSession.permissionResponses).toEqual([
+      { requestId: "perm-1", decision: { behavior: "deny", updatedInput: { command: "pwd" }, message: "No" } },
+    ])
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({ action: "shell.exec", outcome: "denied" }),
+    ])
+  })
 })
 
 class FakeRunner implements CodexProcessRunner {
@@ -204,6 +347,121 @@ class FakeRunner implements CodexProcessRunner {
       timedOut: false,
       durationMs: 1,
     }
+  }
+}
+
+class BlockingAdapter implements AgentAdapter {
+  readonly agentType = "blocking"
+  readonly started: string[] = []
+  private readonly pending: Array<(result: AgentExecutionResult) => void> = []
+
+  execute(message: AgentMessage): Promise<AgentExecutionResult> {
+    this.started.push(message.content)
+    return new Promise((resolve) => {
+      this.pending.push(resolve)
+    })
+  }
+
+  resolveNext(resultText: string, agentSessionId: string): void {
+    const resolve = this.pending.shift()
+    if (!resolve) throw new Error("No pending execution")
+    resolve({
+      events: [
+        { type: "text", content: resultText, agentSessionId, threadId: agentSessionId },
+        { type: "result", content: resultText, done: true, agentSessionId, threadId: agentSessionId },
+      ],
+      resultText,
+      agentSessionId,
+      threadId: agentSessionId,
+    })
+  }
+}
+
+class FakeLiveAdapter implements AgentAdapter {
+  readonly agentType = "claude-code"
+  private readonly liveSession: FakeLiveSession
+
+  constructor(liveSession: FakeLiveSession) {
+    this.liveSession = liveSession
+  }
+
+  async execute(): Promise<AgentExecutionResult> {
+    throw new Error("not used")
+  }
+
+  async startSession(_context: AgentExecutionContext): Promise<AgentLiveSession> {
+    return this.liveSession
+  }
+}
+
+class FakeLiveSession implements AgentLiveSession {
+  readonly agentType = "claude-code"
+  readonly permissionResponses: Array<{
+    readonly requestId: string
+    readonly decision: AgentPermissionDecision
+  }> = []
+  private readonly queue = new AsyncQueue<AgentEvent>()
+
+  async send(): Promise<void> {
+    this.queue.push({
+      type: "permissionRequest",
+      requestId: "perm-1",
+      toolName: "Bash",
+      toolInput: "pwd",
+      toolInputRaw: { command: "pwd" },
+      agentSessionId: "claude-1",
+      threadId: "claude-1",
+    })
+  }
+
+  async respondPermission(
+    requestId: string,
+    decision: AgentPermissionDecision,
+  ): Promise<void> {
+    this.permissionResponses.push({ requestId, decision })
+    this.queue.push({
+      type: "result",
+      content: `permission ${decision.behavior}`,
+      done: true,
+      agentSessionId: "claude-1",
+      threadId: "claude-1",
+    })
+  }
+
+  nextEvent(): Promise<AgentEvent | null> {
+    return this.queue.next()
+  }
+
+  currentSessionId(): string | undefined {
+    return "claude-1"
+  }
+
+  alive(): boolean {
+    return true
+  }
+
+  async close(): Promise<void> {}
+}
+
+class AsyncQueue<T> {
+  private readonly values: T[] = []
+  private readonly waiters: Array<(value: T | null) => void> = []
+
+  push(value: T): void {
+    const waiter = this.waiters.shift()
+    if (waiter) {
+      waiter(value)
+      return
+    }
+    this.values.push(value)
+  }
+
+  next(): Promise<T | null> {
+    const value = this.values.shift()
+    if (value) return Promise.resolve(value)
+    return new Promise((resolve) => {
+      this.waiters.push(resolve)
+    })
   }
 }
 
@@ -278,4 +536,22 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
+}
+
+function baseMessage(content: string): AgentMessage {
+  return {
+    projectId: "project-1",
+    sessionKey: "s1",
+    platform: "local",
+    userId: "user-1",
+    content,
+  }
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let i = 0; i < 50; i += 1) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error("Timed out waiting for condition")
 }

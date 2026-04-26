@@ -34,6 +34,7 @@ export {
   type AuditEntryV1,
   type ConnectorEntryV1,
   type ConversationEntryV1,
+  type ConversationResumePolicyV1,
   type OutboxEntryV1,
   type ProjectEntryV1,
   type ProviderEntryV1,

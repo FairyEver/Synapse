@@ -194,6 +194,8 @@ export interface ConversationUserMetaV1 extends Record<string, unknown> {
   platform?: string
 }
 
+export type ConversationResumePolicyV1 = "resume" | "fresh" | "continue"
+
 export interface ConversationEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
@@ -203,6 +205,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   agentType?: string
   agentSessionId?: string
   pastAgentSessionIds?: string[]
+  resumePolicy?: ConversationResumePolicyV1
   history: ConversationHistoryEntryV1[]
   userMeta?: ConversationUserMetaV1
   active: boolean
@@ -227,6 +230,7 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).active === "boolean"
     && isOptionalString((v as ConversationEntryV1).agentSessionId)
     && ((v as ConversationEntryV1).pastAgentSessionIds === undefined || isStringArray((v as ConversationEntryV1).pastAgentSessionIds))
+    && ((v as ConversationEntryV1).resumePolicy === undefined || isConversationResumePolicy((v as ConversationEntryV1).resumePolicy))
     && isOptionalRecord((v as ConversationEntryV1).userMeta)
     && typeof (v as ConversationEntryV1).createdAt === "string"
     && typeof (v as ConversationEntryV1).updatedAt === "string",
@@ -379,6 +383,10 @@ function isConversationHistoryEntry(value: unknown): value is ConversationHistor
     && typeof value.content === "string"
     && typeof value.timestamp === "string"
     && isOptionalRecord(value.metadata)
+}
+
+function isConversationResumePolicy(value: unknown): value is ConversationResumePolicyV1 {
+  return ["resume", "fresh", "continue"].includes(String(value))
 }
 
 function isAuditActor(value: unknown): value is AuditActorV1 {

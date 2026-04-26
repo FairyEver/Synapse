@@ -26,6 +26,8 @@ export type ActorIdentity =
   | { kind: "user" }
   | { kind: "extension"; id: string }
   | { kind: "agent"; id: string }
+  | { kind: "connector"; id: string }
+  | { kind: "system"; id?: string }
 
 export interface PermissionRequest {
   readonly action: PermissionAction

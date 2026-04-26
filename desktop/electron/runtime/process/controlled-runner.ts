@@ -70,6 +70,14 @@ export interface ControlledProcessResult {
   readonly error?: string
 }
 
+export interface ControlledProcessSession {
+  writeStdin(input: string | Uint8Array): Promise<void>
+  endStdin(input?: string | Uint8Array): Promise<void>
+  wait(): Promise<ControlledProcessResult>
+  close(signal?: NodeJS.Signals): Promise<ControlledProcessResult>
+  alive(): boolean
+}
+
 export interface ControlledProcessRunnerDeps {
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
@@ -109,6 +117,75 @@ export class ControlledProcessRunner {
     this.auditSink = deps.auditSink
     this.spawnImpl = deps.spawnImpl ?? ((command, args, options) =>
       spawn(command, [...args], options) as ChildProcessWithoutNullStreams)
+  }
+
+  async start(request: ControlledProcessRunRequest): Promise<ControlledProcessSession> {
+    const startedAt = Date.now()
+    const args = request.args ?? []
+    const output = request.output ?? {}
+    const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
+    const env = buildAllowedEnv(request.env, request.envAllowlist)
+
+    const permission = await this.permissionGuard.check({
+      action: request.action,
+      actor: request.actor,
+      resource: request.command,
+      context: {
+        args,
+        cwd: request.cwd,
+        envKeys: Object.keys(env).sort(),
+        output: {
+          stdout: output.stdout ?? "buffer",
+          stderr: output.stderr ?? "buffer",
+        },
+        stdinBytes: stdinBytes(request.stdin),
+        stream: {
+          stdoutLine: request.onStdoutLine !== undefined,
+          stderrLine: request.onStderrLine !== undefined,
+        },
+        timeoutMs: request.timeoutMs,
+        longRunning: true,
+        ...request.metadata,
+      },
+    })
+
+    if (!permission.allowed) {
+      this.auditSink.record({
+        action: request.action,
+        actor: request.actor,
+        resource: request.command,
+        outcome: "denied",
+        metadata: {
+          reason: permission.reason,
+          policyId: permission.policyId,
+          cwd: request.cwd,
+        },
+      })
+      throw new ControlledProcessPermissionError(permission)
+    }
+
+    let child: ChildProcessWithoutNullStreams
+    try {
+      child = this.spawnImpl(request.command, args, {
+        cwd: request.cwd,
+        env,
+        windowsHide: true,
+        shell: false,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.recordFailed(request, startedAt, message)
+      throw error
+    }
+
+    return new ControlledProcessSessionImpl({
+      auditSink: this.auditSink,
+      child,
+      request,
+      startedAt,
+      output,
+      maxBufferBytes,
+    })
   }
 
   async run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult> {
@@ -300,6 +377,203 @@ export class ControlledProcessRunner {
         error,
       },
     })
+  }
+}
+
+interface ControlledProcessSessionImplDeps {
+  readonly auditSink: AuditSink
+  readonly child: ChildProcessWithoutNullStreams
+  readonly request: ControlledProcessRunRequest
+  readonly startedAt: number
+  readonly output: ControlledProcessOutputOptions
+  readonly maxBufferBytes: number
+}
+
+class ControlledProcessSessionImpl implements ControlledProcessSession {
+  private readonly auditSink: AuditSink
+  private readonly child: ChildProcessWithoutNullStreams
+  private readonly request: ControlledProcessRunRequest
+  private readonly startedAt: number
+  private readonly output: ControlledProcessOutputOptions
+  private readonly stdoutCollector: OutputCollector
+  private readonly stderrCollector: OutputCollector
+  private readonly stdoutLines: LineEmitter
+  private readonly stderrLines: LineEmitter
+  private readonly waitPromise: Promise<ControlledProcessResult>
+  private outputError: Error | null = null
+  private spawnError: Error | null = null
+  private timedOut = false
+  private isAlive = true
+
+  constructor(deps: ControlledProcessSessionImplDeps) {
+    this.auditSink = deps.auditSink
+    this.child = deps.child
+    this.request = deps.request
+    this.startedAt = deps.startedAt
+    this.output = deps.output
+    this.stdoutCollector = new OutputCollector(
+      deps.output.stdout ?? "buffer",
+      deps.maxBufferBytes,
+    )
+    this.stderrCollector = new OutputCollector(
+      deps.output.stderr ?? "buffer",
+      deps.maxBufferBytes,
+    )
+    this.stdoutLines = new LineEmitter(deps.request.onStdoutLine, (error) => {
+      this.outputError = error
+      this.child.kill("SIGTERM")
+    })
+    this.stderrLines = new LineEmitter(deps.request.onStderrLine, (error) => {
+      this.outputError = error
+      this.child.kill("SIGTERM")
+    })
+
+    this.child.stdout.on("data", (chunk: Buffer) => {
+      this.pushOutput(this.stdoutCollector, this.stdoutLines, chunk)
+    })
+    this.child.stderr.on("data", (chunk: Buffer) => {
+      this.pushOutput(this.stderrCollector, this.stderrLines, chunk)
+    })
+
+    if (deps.request.stdin !== undefined) {
+      void this.endStdin(deps.request.stdin)
+    }
+
+    const timeout = deps.request.timeoutMs === undefined
+      ? null
+      : setTimeout(() => {
+        this.timedOut = true
+        this.child.kill("SIGTERM")
+      }, deps.request.timeoutMs)
+
+    const onAbort = () => {
+      this.child.kill("SIGTERM")
+    }
+    deps.request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+
+    this.waitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      this.child.once("error", (error) => {
+        this.spawnError = error
+      })
+      this.child.once("close", (code, signal) => {
+        resolve({ code, signal })
+      })
+    }).then((closed) => {
+      this.isAlive = false
+      if (timeout) clearTimeout(timeout)
+      deps.request.abortSignal?.removeEventListener("abort", onAbort)
+      return this.finish(closed)
+    })
+  }
+
+  writeStdin(input: string | Uint8Array): Promise<void> {
+    if (!this.isAlive) {
+      return Promise.reject(new Error("Process session is not running"))
+    }
+    return new Promise((resolve, reject) => {
+      this.child.stdin.write(input, (error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+  }
+
+  async endStdin(input?: string | Uint8Array): Promise<void> {
+    if (input !== undefined) {
+      await this.writeStdin(input)
+    }
+    await new Promise<void>((resolve) => {
+      this.child.stdin.end(() => {
+        resolve()
+      })
+    })
+  }
+
+  wait(): Promise<ControlledProcessResult> {
+    return this.waitPromise
+  }
+
+  async close(signal: NodeJS.Signals = "SIGTERM"): Promise<ControlledProcessResult> {
+    if (this.isAlive) {
+      this.child.kill(signal)
+    }
+    return this.wait()
+  }
+
+  alive(): boolean {
+    return this.isAlive
+  }
+
+  private pushOutput(
+    collector: OutputCollector,
+    lineEmitter: LineEmitter,
+    chunk: Buffer,
+  ): void {
+    try {
+      collector.push(chunk)
+      lineEmitter.push(chunk)
+    } catch (error) {
+      this.outputError = error as Error
+      this.child.kill("SIGTERM")
+    }
+  }
+
+  private finish(closed: {
+    readonly code: number | null
+    readonly signal: NodeJS.Signals | null
+  }): ControlledProcessResult {
+    try {
+      this.stdoutLines.flush()
+      this.stderrLines.flush()
+    } catch (error) {
+      this.outputError = error as Error
+    }
+
+    const stdout = this.stdoutCollector.text()
+    const stderr = this.stderrCollector.text()
+    const durationMs = Date.now() - this.startedAt
+    const jsonLinesError = validateJsonLineOutput(this.output, {
+      exitCode: closed.code,
+      signal: closed.signal,
+      stdout,
+      stderr,
+      timedOut: this.timedOut,
+      durationMs,
+      error: errorMessage(this.outputError) ?? errorMessage(this.spawnError),
+    })
+    const finalError = jsonLinesError ?? this.outputError
+    const error = errorMessage(finalError) ?? errorMessage(this.spawnError)
+    const result: ControlledProcessResult = {
+      exitCode: closed.code,
+      signal: closed.signal,
+      stdout,
+      stderr,
+      timedOut: this.timedOut,
+      durationMs,
+      error,
+    }
+    const outcome = result.exitCode === 0 && !this.timedOut && !this.spawnError && !finalError
+      ? "allowed"
+      : "failed"
+
+    this.auditSink.record({
+      action: this.request.action,
+      actor: this.request.actor,
+      resource: this.request.command,
+      outcome,
+      metadata: {
+        args: this.request.args ?? [],
+        cwd: this.request.cwd,
+        durationMs,
+        exitCode: result.exitCode,
+        signal: result.signal,
+        timedOut: this.timedOut,
+        error,
+        longRunning: true,
+      },
+    })
+
+    return result
   }
 }
 

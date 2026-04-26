@@ -14,6 +14,24 @@ export {
   type AgentRuntimeServiceDeps,
 } from "./agent-runtime-service"
 export {
+  AgentGovernanceService,
+  MessageDedupe,
+  OutgoingTokenBucketLimiter,
+  RolePolicyManager,
+  SlidingWindowRateLimiter,
+  type AgentGovernanceConfig,
+  type AgentGovernanceDecision,
+  type RateLimitConfig,
+  type RolePolicyInput,
+  type TokenBucketConfig,
+} from "./governance"
+export {
+  AgentSessionRepository,
+  type AgentSessionRepositoryOptions,
+  type CreateAgentSessionInput,
+  type SaveAgentSessionInput,
+} from "./session-repository"
+export {
   CodexExecAdapter,
   CodexJsonLineParser,
   buildCodexExecArgs,
@@ -24,14 +42,28 @@ export {
   type CodexProcessRunner,
 } from "./adapters/codex-exec"
 export {
+  ClaudeCodeAdapter,
+  buildClaudeCodeArgs,
+  type ClaudeCodeArgsOptions,
+  type ClaudeCodeOptions,
+  type ClaudeProcessRunner,
+} from "./adapters/claude-code"
+export {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentAdapter,
   type AgentAttachment,
   type AgentEvent,
   type AgentExecutionContext,
   type AgentExecutionResult,
+  type AgentLiveSession,
   type AgentMessage,
+  type AgentPendingPermission,
+  type AgentPermissionDecision,
+  type AgentPermissionRequestEvent,
+  type AgentPermissionResponseRequest,
   type AgentRuntimeTurnResult,
+  type AgentUserQuestion,
+  type AgentUserQuestionOption,
 } from "./types"
 
 export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRuntimeService> {
@@ -48,6 +80,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         adapter: new CodexExecAdapter(runner),
         eventBus: ctx.eventBus,
         logger: ctx.logger,
+        permissionGuard,
+        auditSink,
       })
     },
   }

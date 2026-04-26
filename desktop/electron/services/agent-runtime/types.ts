@@ -13,8 +13,13 @@ export interface AgentMessage {
   readonly projectId: string
   readonly sessionKey: string
   readonly platform: string
+  readonly messageId?: string
   readonly userId?: string
   readonly userName?: string
+  readonly chatName?: string
+  readonly chatType?: "direct" | "group"
+  readonly mentions?: readonly string[]
+  readonly createdAt?: string
   readonly content: string
   readonly attachments?: readonly AgentAttachment[]
   readonly replyCtx?: unknown
@@ -27,6 +32,7 @@ interface AgentEventBase {
     | "thinking"
     | "toolUse"
     | "toolResult"
+    | "permissionRequest"
     | "result"
     | "error"
   readonly agentSessionId?: string
@@ -59,6 +65,27 @@ export interface AgentToolResultEvent extends AgentEventBase {
   readonly success?: boolean
 }
 
+export interface AgentUserQuestionOption {
+  readonly label: string
+  readonly description?: string
+}
+
+export interface AgentUserQuestion {
+  readonly question: string
+  readonly header?: string
+  readonly options?: readonly AgentUserQuestionOption[]
+  readonly multiSelect?: boolean
+}
+
+export interface AgentPermissionRequestEvent extends AgentEventBase {
+  readonly type: "permissionRequest"
+  readonly requestId: string
+  readonly toolName: string
+  readonly toolInput?: string
+  readonly toolInputRaw?: Record<string, unknown>
+  readonly questions?: readonly AgentUserQuestion[]
+}
+
 export interface AgentResultEvent extends AgentEventBase {
   readonly type: "result"
   readonly content: string
@@ -75,6 +102,7 @@ export type AgentEvent =
   | AgentThinkingEvent
   | AgentToolUseEvent
   | AgentToolResultEvent
+  | AgentPermissionRequestEvent
   | AgentResultEvent
   | AgentErrorEvent
 
@@ -82,6 +110,7 @@ export interface AgentExecutionContext {
   readonly projectId: string
   readonly workDir: string
   readonly threadId?: string
+  readonly agentSessionId?: string
   readonly actor: ActorIdentity
 }
 
@@ -99,6 +128,46 @@ export interface AgentAdapter {
     message: AgentMessage,
     context: AgentExecutionContext,
   ): Promise<AgentExecutionResult>
+  startSession?(
+    context: AgentExecutionContext,
+  ): Promise<AgentLiveSession>
+}
+
+export type AgentPermissionBehavior = "allow" | "deny"
+
+export interface AgentPermissionDecision {
+  readonly behavior: AgentPermissionBehavior
+  readonly updatedInput?: Record<string, unknown>
+  readonly message?: string
+}
+
+export interface AgentPermissionResponseRequest extends AgentPermissionDecision {
+  readonly requestId: string
+  readonly actor: ActorIdentity
+}
+
+export interface AgentPendingPermission {
+  readonly requestId: string
+  readonly projectId: string
+  readonly sessionKey: string
+  readonly conversationId: string
+  readonly toolName: string
+  readonly toolInput?: string
+  readonly toolInputRaw?: Record<string, unknown>
+  readonly createdAt: string
+}
+
+export interface AgentLiveSession {
+  readonly agentType: string
+  send(message: AgentMessage): Promise<void>
+  respondPermission(
+    requestId: string,
+    decision: AgentPermissionDecision,
+  ): Promise<void>
+  nextEvent(): Promise<AgentEvent | null>
+  currentSessionId(): string | undefined
+  alive(): boolean
+  close(): Promise<void>
 }
 
 export interface AgentRuntimeTurnResult {

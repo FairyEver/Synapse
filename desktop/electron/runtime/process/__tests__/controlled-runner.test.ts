@@ -142,4 +142,47 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       { line: "second line" },
     ])
   })
+
+  it("starts a controlled long-running session with stdin writes and audit", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink })
+    const seen: string[] = []
+
+    const session = await runner.start({
+      actor: { kind: "user" },
+      action: "agent.spawn",
+      command: process.execPath,
+      args: [
+        "-e",
+        [
+          "const readline = require('node:readline');",
+          "const rl = readline.createInterface({ input: process.stdin });",
+          "rl.on('line', line => {",
+          "  process.stdout.write(JSON.stringify({ line }) + '\\n');",
+          "  if (line === 'stop') process.exit(0);",
+          "});",
+        ].join(" "),
+      ],
+      output: { stdout: "json-lines" },
+      onStdoutLine: (line) => seen.push(line),
+    })
+
+    await session.writeStdin("hello\n")
+    await session.writeStdin("stop\n")
+    const result = await session.wait()
+
+    expect(result.exitCode).toBe(0)
+    expect(seen.map((line) => JSON.parse(line))).toEqual([
+      { line: "hello" },
+      { line: "stop" },
+    ])
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "agent.spawn",
+        outcome: "allowed",
+        metadata: expect.objectContaining({ longRunning: true }),
+      }),
+    ])
+  })
 })

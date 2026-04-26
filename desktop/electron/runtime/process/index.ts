@@ -24,4 +24,5 @@ export type {
   ControlledProcessResult,
   ControlledProcessRunnerDeps,
   ControlledProcessRunRequest,
+  ControlledProcessSession,
 } from "./controlled-runner"
