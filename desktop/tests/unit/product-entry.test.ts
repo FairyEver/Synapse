@@ -27,16 +27,17 @@ describe("CC Connect product entries", () => {
 
     expect(html).toContain("data-module=\"agent-sessions\"")
     expect(html).toContain("暂无会话")
-    expect(html).toContain("新建会话")
+    expect(html).not.toContain("新建会话")
+    expect(html).not.toContain("运行中")
   })
 
   it("renders the connectors module empty state", () => {
     const html = renderToStaticMarkup(React.createElement(ConnectorsModule))
 
     expect(html).toContain("data-module=\"connectors\"")
-    expect(html).toContain("暂无连接")
-    expect(html).toContain("Webhook")
-    expect(html).toContain("Bridge")
+    expect(html).toContain("暂无项目")
+    expect(html).not.toContain("添加连接")
+    expect(html).not.toContain("QR 绑定")
   })
 
   it("renders the automation module empty state", () => {
@@ -46,5 +47,7 @@ describe("CC Connect product entries", () => {
     expect(html).toContain("定时任务")
     expect(html).toContain("Heartbeat")
     expect(html).toContain("Hooks")
+    expect(html).not.toContain("新建任务")
+    expect(html).not.toContain("启用 Heartbeat")
   })
 })
