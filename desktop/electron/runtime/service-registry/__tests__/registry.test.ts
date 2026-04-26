@@ -138,6 +138,7 @@ describe("ServiceRegistryImpl T1.4 stubs (still throw)", () => {
         metrics: {} as never,
         tracer: {} as never,
         permissionGuard: {} as never,
+        auditSink: {} as never,
         processRuntime: {} as never,
       }),
     })

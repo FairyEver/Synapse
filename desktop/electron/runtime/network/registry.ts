@@ -36,6 +36,26 @@ export interface NetworkRequestHandler {
   readonly handle: (request: unknown) => Promise<unknown> | unknown
 }
 
+export interface NetworkServiceLifecycle {
+  stop(): Promise<void> | void
+}
+
+export type NetworkServiceAuditAction =
+  | "registered"
+  | "started"
+  | "unregistered"
+  | "stopped"
+  | "failed"
+
+export interface NetworkServiceAuditEvent {
+  readonly action: NetworkServiceAuditAction
+  readonly serviceId: string
+  readonly role: NetworkRole
+  readonly binding?: ResolvedNetworkBinding
+  readonly timestamp: string
+  readonly error?: string
+}
+
 export interface NetworkServiceDescriptor {
   readonly id: string
   readonly role: NetworkRole
@@ -45,6 +65,11 @@ export interface NetworkServiceDescriptor {
   readonly tls?: TlsConfig
   readonly auth?: AuthStrategy
   readonly handler: NetworkRequestHandler
+  readonly start?: (binding: ResolvedNetworkBinding) =>
+    | NetworkServiceLifecycle
+    | void
+    | Promise<NetworkServiceLifecycle | void>
+  readonly audit?: (event: NetworkServiceAuditEvent) => void | Promise<void>
   readonly onPortAssigned?: (port: number) => void
 }
 
@@ -79,6 +104,7 @@ export interface NetworkServiceRegistryOptions {
 interface InternalEntry {
   readonly descriptor: NetworkServiceDescriptor
   readonly binding: ResolvedNetworkBinding
+  lifecycle?: NetworkServiceLifecycle
 }
 
 export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
@@ -110,10 +136,29 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
       bindAddress,
     }
 
-    this.entries.set(descriptor.id, { descriptor, binding })
+    const entry: InternalEntry = { descriptor, binding }
+    this.entries.set(descriptor.id, entry)
     this.allocatedPorts.add(port)
     descriptor.onPortAssigned?.(port)
-    return binding
+
+    try {
+      await this.emitAudit(entry, "registered")
+      const lifecycle = await descriptor.start?.(binding)
+      if (lifecycle) {
+        entry.lifecycle = lifecycle
+        await this.emitAudit(entry, "started")
+      }
+      return binding
+    } catch (error) {
+      this.entries.delete(descriptor.id)
+      this.allocatedPorts.delete(port)
+      await this.emitAudit(
+        entry,
+        "failed",
+        error instanceof Error ? error.message : String(error),
+      )
+      throw error
+    }
   }
 
   async unregister(id: string): Promise<void> {
@@ -121,6 +166,20 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
     if (!entry) return
     this.entries.delete(id)
     this.allocatedPorts.delete(entry.binding.port)
+    await this.emitAudit(entry, "unregistered")
+    if (entry.lifecycle) {
+      try {
+        await entry.lifecycle.stop()
+        await this.emitAudit(entry, "stopped")
+      } catch (error) {
+        await this.emitAudit(
+          entry,
+          "failed",
+          error instanceof Error ? error.message : String(error),
+        )
+        throw error
+      }
+    }
   }
 
   list(): readonly ResolvedNetworkBinding[] {
@@ -154,6 +213,21 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
       preferred,
       taken,
       probe: (p) => this.probePort(p, bindAddress),
+    })
+  }
+
+  private async emitAudit(
+    entry: InternalEntry,
+    action: NetworkServiceAuditAction,
+    error?: string,
+  ): Promise<void> {
+    await entry.descriptor.audit?.({
+      action,
+      serviceId: entry.descriptor.id,
+      role: entry.descriptor.role,
+      binding: entry.binding,
+      timestamp: new Date().toISOString(),
+      error,
     })
   }
 }

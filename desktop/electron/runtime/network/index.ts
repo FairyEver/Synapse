@@ -4,6 +4,9 @@ export {
 } from "./registry"
 export type {
   AuthStrategy,
+  NetworkServiceAuditAction,
+  NetworkServiceAuditEvent,
+  NetworkServiceLifecycle,
   NetworkRequestHandler,
   NetworkRole,
   NetworkServiceDescriptor,

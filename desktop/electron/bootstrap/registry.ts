@@ -12,12 +12,23 @@ import {
   ServiceRegistryImpl,
 } from "../runtime/service-registry"
 import { createMainLogger } from "../services/log-store"
+import type { DataRepository } from "../runtime/data-repo"
+import type { EventBus } from "../runtime/event-bus"
+import { createMetricsRegistry, createTracer } from "../runtime/observability"
+import type { ProcessRuntime } from "../runtime/process"
+import type { AuditSink, PermissionGuard } from "../runtime/security"
 import {
   coreAppIconDescriptor,
+  coreAuditSinkDescriptor,
   coreConfigDescriptor,
+  coreDataRepositoryDescriptor,
   coreDataStoreDescriptor,
   coreEventBusDescriptor,
   coreLoggingDescriptor,
+  coreNetworkRegistryDescriptor,
+  corePermissionGuardDescriptor,
+  coreProcessRuntimeDescriptor,
+  coreProjectContainerRegistryDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
   createUiTrayDescriptor,
@@ -41,9 +52,15 @@ export function buildServiceRegistry(
   // Order doesn't matter for register(); topo at startAll resolves it.
   registry.register(coreLoggingDescriptor)
   registry.register(coreConfigDescriptor)
+  registry.register(coreDataRepositoryDescriptor)
+  registry.register(corePermissionGuardDescriptor)
+  registry.register(coreAuditSinkDescriptor)
+  registry.register(coreProcessRuntimeDescriptor)
+  registry.register(coreNetworkRegistryDescriptor)
   registry.register(coreAppIconDescriptor)
   registry.register(coreWindowManagerDescriptor)
   registry.register(coreEventBusDescriptor)
+  registry.register(coreProjectContainerRegistryDescriptor)
   registry.register(coreDataStoreDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)
@@ -58,12 +75,26 @@ function buildContext(registry: ServiceRegistry): ServiceContext {
   const logger = createMainLogger("registry")
   return {
     logger,
-    dataRepo: { __placeholder: undefined },
-    eventBus: { __placeholder: undefined },
+    dataRepo: serviceProxy<DataRepository>(registry, "core.data-repository"),
+    eventBus: serviceProxy<EventBus>(registry, "core.event-bus"),
     registry,
-    metrics: { __placeholder: undefined },
-    tracer: { __placeholder: undefined },
-    permissionGuard: { __placeholder: undefined },
-    processRuntime: { __placeholder: undefined },
+    metrics: createMetricsRegistry(),
+    tracer: createTracer(),
+    permissionGuard: serviceProxy<PermissionGuard>(registry, "core.permission-guard"),
+    auditSink: serviceProxy<AuditSink>(registry, "core.audit-sink"),
+    processRuntime: serviceProxy<ProcessRuntime>(registry, "core.process-runtime"),
   }
+}
+
+function serviceProxy<T extends object>(
+  registry: ServiceRegistry,
+  serviceId: string,
+): T {
+  return new Proxy({}, {
+    get(_target, prop) {
+      const service = registry.get<T>(serviceId) as Record<PropertyKey, unknown>
+      const value = service[prop]
+      return typeof value === "function" ? value.bind(service) : value
+    },
+  }) as T
 }

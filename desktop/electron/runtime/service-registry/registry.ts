@@ -12,6 +12,14 @@ import {
 } from "./errors"
 import { descriptorAsNode, reverseTopoSort, topoSort } from "./topo"
 import { makeUnrefTimeout } from "../lib"
+import { createDataRepository } from "../data-repo/repository"
+import { createEventBus } from "../event-bus/bus"
+import { createMetricsRegistry, createTracer } from "../observability"
+import { createMainProcessRuntime } from "../process/runtime"
+import {
+  InMemoryAuditSink,
+  createPermissionGuard,
+} from "../security/permission-guard"
 import type {
   DegradedServiceFailure,
   ServiceContext,
@@ -294,13 +302,14 @@ export function createServiceRegistry(
     options?.contextProvider ??
     ((registry: ServiceRegistry): ServiceContext => ({
       logger: createNullLogger(),
-      dataRepo: { __placeholder: undefined },
-      eventBus: { __placeholder: undefined },
+      dataRepo: createDataRepository(),
+      eventBus: createEventBus({ defaultBackpressure: "drop-newest" }),
       registry,
-      metrics: { __placeholder: undefined },
-      tracer: { __placeholder: undefined },
-      permissionGuard: { __placeholder: undefined },
-      processRuntime: { __placeholder: undefined },
+      metrics: createMetricsRegistry(),
+      tracer: createTracer(),
+      permissionGuard: createPermissionGuard(),
+      auditSink: new InMemoryAuditSink(),
+      processRuntime: createMainProcessRuntime(),
     }))
   return new ServiceRegistryImpl({
     contextProvider,

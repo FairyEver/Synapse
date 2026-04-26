@@ -87,14 +87,10 @@ export interface ScopedEventBus {
 }
 
 /**
- * Wraps a DataRepository so namespace handles are project-scoped at the
- * persistence layer. The implementation prefixes namespace data with
- * `projects/<projectId>/`. For SQLite namespaces the wrapper sets the
- * projectId column on every read/write.
- *
- * Phase 0.5 lands the interface + a thin in-memory implementation that
- * returns the underlying handle directly. Real per-project on-disk layout
- * comes in M1 when actual project-scoped data shows up.
+ * Wraps a DataRepository so selected namespace handles are project-scoped at
+ * the persistence layer. Phase 0.7 uses field-level isolation: project-scoped
+ * namespaces automatically write and filter `projectId`, while global
+ * namespaces pass through to the underlying repository.
  */
 export interface ProjectScopedDataRepo {
   readonly projectId: string

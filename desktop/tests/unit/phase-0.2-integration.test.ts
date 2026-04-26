@@ -158,8 +158,8 @@ describe("Phase 0.2 integration (T2.14)", () => {
         id: "evt-1",
         schemaVersion: 1,
         action: "fs.write",
-        actor: "user",
-        resource: "/tmp/x",
+        actor: { kind: "user" },
+        resource: { type: "file", id: "/tmp/x", projectId: "proj-1" },
         outcome: "allowed",
         timestamp: "2026-04-25T00:00:00Z",
       })
@@ -167,7 +167,13 @@ describe("Phase 0.2 integration (T2.14)", () => {
         id: "conv-1",
         schemaVersion: 1,
         projectId: "proj-1",
-        startedAt: "2026-04-25T00:00:00Z",
+        sessionKey: "local:user",
+        history: [
+          { role: "user", content: "hello", timestamp: "2026-04-25T00:00:00Z" },
+        ],
+        active: true,
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
       })
       await secretsNs.upsert({
         id: "sec-1",
@@ -284,8 +290,8 @@ describe("Phase 0.2 integration (T2.14)", () => {
         id: "evt-existing",
         schemaVersion: 1,
         action: "x",
-        actor: "user",
-        resource: "/r",
+        actor: { kind: "user" },
+        resource: { type: "file", id: "/r" },
         outcome: "allowed",
         timestamp: "2026-04-25T00:00:00Z",
       })
@@ -305,8 +311,8 @@ describe("Phase 0.2 integration (T2.14)", () => {
                     id: "evt-imported",
                     schemaVersion: 1,
                     action: "y",
-                    actor: "user",
-                    resource: "/r",
+                    actor: { kind: "user" },
+                    resource: { type: "file", id: "/r" },
                     outcome: "denied",
                     timestamp: "2026-04-25T00:00:01Z",
                   },

@@ -111,6 +111,65 @@ describe("NetworkServiceRegistry (T3.15)", () => {
     await expect(reg.register(desc({ id: "a", preferredPort: 50001 }))).resolves.toBeDefined()
   })
 
+  it("starts lifecycle on register and stops lifecycle on unregister", async () => {
+    const stop = vi.fn()
+    const start = vi.fn(() => ({ stop }))
+    const reg = createNetworkServiceRegistry({ probePort: async () => true })
+
+    const binding = await reg.register(desc({ id: "api", preferredPort: 50001, start }))
+    expect(start).toHaveBeenCalledWith(binding)
+
+    await reg.unregister("api")
+    expect(stop).toHaveBeenCalledOnce()
+  })
+
+  it("releases allocation when lifecycle start fails", async () => {
+    const reg = createNetworkServiceRegistry({ probePort: async () => true })
+
+    await expect(
+      reg.register(desc({
+        id: "api",
+        preferredPort: 50001,
+        start: () => {
+          throw new Error("start failed")
+        },
+      })),
+    ).rejects.toThrow(/start failed/)
+
+    await expect(reg.register(desc({ id: "api", preferredPort: 50001 }))).resolves.toEqual({
+      id: "api",
+      port: 50001,
+      bindAddress: "127.0.0.1",
+    })
+  })
+
+  it("emits descriptor audit events for register/start/unregister/stop", async () => {
+    const audit = vi.fn()
+    const reg = createNetworkServiceRegistry({ probePort: async () => true })
+
+    await reg.register(desc({
+      id: "bridge",
+      preferredPort: 50001,
+      audit,
+      start: () => ({ stop: vi.fn() }),
+    }))
+    await reg.unregister("bridge")
+
+    expect(audit.mock.calls.map(([event]) => event.action)).toEqual([
+      "registered",
+      "started",
+      "unregistered",
+      "stopped",
+    ])
+    expect(audit.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        serviceId: "bridge",
+        role: "http",
+        binding: { id: "bridge", port: 50001, bindAddress: "127.0.0.1" },
+      }),
+    )
+  })
+
   it("explicit bindAddress is preserved (e.g. 0.0.0.0 for explicit external)", async () => {
     const reg = createNetworkServiceRegistry({ probePort: async () => true })
     const binding = await reg.register(

@@ -23,6 +23,8 @@
  * T1.7 adds repo.* + ui.tray.
  */
 
+import { app, safeStorage } from "electron"
+
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { configStore } from "../services/config-store"
 import { logStore } from "../services/log-store"
@@ -38,6 +40,16 @@ import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
 import { createEventBus } from "../runtime/event-bus/bus"
 import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
+import type { DataRepository } from "../runtime/data-repo"
+import { createFileBackedDataRepository } from "../runtime/data-repo"
+import type { PermissionGuard, AuditSink } from "../runtime/security"
+import { InMemoryAuditSink, createPermissionGuard } from "../runtime/security"
+import type { ProcessRuntime } from "../runtime/process"
+import { createMainProcessRuntime } from "../runtime/process"
+import type { NetworkServiceRegistry } from "../runtime/network"
+import { createNetworkServiceRegistry } from "../runtime/network"
+import type { ProjectContainerRegistry } from "../runtime/project-container"
+import { createProjectContainerRegistry } from "../runtime/project-container"
 
 /**
  * core.logging — wraps the existing `logStore` singleton.
@@ -262,6 +274,63 @@ export const coreEventBusDescriptor: ServiceDescriptor<EventBus> = {
     const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
     return createEventBus({
       broadcaster: new WindowBroadcaster(windowManager),
+    })
+  },
+}
+
+export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
+  id: "core.data-repository",
+  criticality: "fatal",
+  create() {
+    return createFileBackedDataRepository({
+      rootDir: `${app.getPath("userData")}/data-v1`,
+      safeStorage,
+    })
+  },
+}
+
+export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> = {
+  id: "core.permission-guard",
+  criticality: "fatal",
+  create() {
+    return createPermissionGuard()
+  },
+}
+
+export const coreAuditSinkDescriptor: ServiceDescriptor<AuditSink> = {
+  id: "core.audit-sink",
+  criticality: "fatal",
+  create() {
+    return new InMemoryAuditSink()
+  },
+}
+
+export const coreProcessRuntimeDescriptor: ServiceDescriptor<ProcessRuntime> = {
+  id: "core.process-runtime",
+  criticality: "fatal",
+  create() {
+    return createMainProcessRuntime()
+  },
+}
+
+export const coreNetworkRegistryDescriptor: ServiceDescriptor<NetworkServiceRegistry> = {
+  id: "core.network-registry",
+  criticality: "fatal",
+  create() {
+    return createNetworkServiceRegistry()
+  },
+}
+
+export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectContainerRegistry> = {
+  id: "core.project-containers",
+  criticality: "fatal",
+  dependsOn: ["core.event-bus", "core.data-repository"],
+  create(ctx) {
+    return createProjectContainerRegistry({
+      globalRegistry: ctx.registry,
+      globalEventBus: ctx.registry.get<EventBus>("core.event-bus"),
+      globalDataRepo: ctx.registry.get<DataRepository>("core.data-repository"),
+      buildLogger: (projectId) => ctx.logger.child(`project.${projectId}`),
     })
   },
 }

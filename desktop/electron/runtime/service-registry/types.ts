@@ -2,12 +2,16 @@
  * Phase 0.1 — ServiceRegistry public types.
  * SPEC §4.
  *
- * Cross-phase placeholder interfaces (DataRepository, EventBus, MetricsRegistry,
- * Tracer, PermissionGuard, ProcessRuntime, HealthStatus) are kept here as minimal
- * forward-declarations until their owning phase lands. Each later Phase upgrades
- * the placeholder to its real interface and updates downstream consumers via
- * re-export. Do not flesh these placeholders out here.
+ * Phase 0.7 — ServiceContext now carries real runtime infrastructure
+ * interfaces instead of placeholders so project-scoped CC Connect services can
+ * depend on typed DataRepository/EventBus/PermissionGuard/ProcessRuntime.
  */
+
+import type { DataRepository } from "../data-repo/types"
+import type { EventBus } from "../event-bus/types"
+import type { MetricsRegistry, Tracer } from "../observability"
+import type { ProcessRuntime } from "../process/runtime"
+import type { AuditSink, PermissionGuard } from "../security/permission-guard"
 
 /** Phase 0.6 — unified StructuredLogger interface (also re-exported by runtime/logging). */
 export interface StructuredLogger {
@@ -18,36 +22,6 @@ export interface StructuredLogger {
   error(message: string, meta?: Record<string, unknown> | unknown): void
   fatal(message: string, meta?: Record<string, unknown> | unknown): void
   child(prefix: string, bindings?: Record<string, unknown>): StructuredLogger
-}
-
-/** Phase 0.2 — replaced by runtime/data-repo/types.ts. */
-export interface DataRepository {
-  readonly __placeholder?: never
-}
-
-/** Phase 0.4 — replaced by runtime/event-bus/types.ts. */
-export interface EventBus {
-  readonly __placeholder?: never
-}
-
-/** Phase 0.6 — replaced by runtime/observability/metrics.ts. */
-export interface MetricsRegistry {
-  readonly __placeholder?: never
-}
-
-/** Phase 0.6 — replaced by runtime/observability/tracer.ts. */
-export interface Tracer {
-  readonly __placeholder?: never
-}
-
-/** Phase 0.6 — replaced by runtime/security/permission-guard.ts. */
-export interface PermissionGuard {
-  readonly __placeholder?: never
-}
-
-/** Phase 0.5 — replaced by runtime/process/types.ts. */
-export interface ProcessRuntime {
-  readonly __placeholder?: never
 }
 
 /** Phase 0.6 — replaced by runtime/observability/health.ts. */
@@ -76,6 +50,7 @@ export interface ServiceContext {
   readonly metrics: MetricsRegistry
   readonly tracer: Tracer
   readonly permissionGuard: PermissionGuard
+  readonly auditSink: AuditSink
   readonly processRuntime: ProcessRuntime
 }
 

@@ -172,6 +172,7 @@ function makeFakeContext() {
     metrics: {} as never,
     tracer: {} as never,
     permissionGuard: {} as never,
+    auditSink: {} as never,
     processRuntime: {} as never,
   }
 }

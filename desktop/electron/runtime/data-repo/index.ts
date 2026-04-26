@@ -40,6 +40,8 @@ export {
 export { InMemoryLayeredConfig } from "./layered-config"
 
 export { DataRepositoryImpl, createDataRepository } from "./repository"
+export { createFileBackedDataRepository } from "./factory"
+export type { FileBackedDataRepositoryOptions } from "./factory"
 
 export {
   allSchemas,

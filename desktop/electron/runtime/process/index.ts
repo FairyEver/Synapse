@@ -2,6 +2,12 @@ export {
   MainProcessRuntime,
   createMainProcessRuntime,
 } from "./runtime"
+export {
+  ControlledProcessOutputError,
+  ControlledProcessPermissionError,
+  ControlledProcessRunner,
+  createControlledProcessRunner,
+} from "./controlled-runner"
 export type {
   ProcessDescriptor,
   ProcessHandle,
@@ -10,3 +16,11 @@ export type {
   ProcessStatus,
   RestartPolicy,
 } from "./runtime"
+export type {
+  ControlledProcessAction,
+  ControlledProcessOutputMode,
+  ControlledProcessOutputOptions,
+  ControlledProcessResult,
+  ControlledProcessRunnerDeps,
+  ControlledProcessRunRequest,
+} from "./controlled-runner"

@@ -71,7 +71,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     }
   })
 
-  it("validate accepts a minimal valid record for each placeholder", () => {
+  it("validate accepts a minimal valid record for each namespace", () => {
     expect(
       coreConfigSchema.validate({
         schemaVersion: 1,
@@ -97,6 +97,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       providersSchema.validate({
         id: "anthropic",
         schemaVersion: 1,
+        scope: "global",
         kind: "anthropic",
       }),
     ).toBe(true)
@@ -111,7 +112,11 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       connectorsSchema.validate({
         id: "c1",
         schemaVersion: 1,
+        projectId: "proj-1",
         platform: "feishu",
+        status: "connected",
+        allowlist: { mode: "users", userIds: ["u1"], adminIds: ["u1"] },
+        sessionKeyPolicy: { mode: "per-user" },
       }),
     ).toBe(true)
     expect(
@@ -119,7 +124,13 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         id: "conv-1",
         schemaVersion: 1,
         projectId: "proj-1",
-        startedAt: "2026-04-25T00:00:00Z",
+        sessionKey: "feishu:u1",
+        history: [
+          { role: "user", content: "hi", timestamp: "2026-04-25T00:00:00Z" },
+        ],
+        active: true,
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
       }),
     ).toBe(true)
     expect(
@@ -127,8 +138,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         id: "evt-1",
         schemaVersion: 1,
         action: "fs.write",
-        actor: "user",
-        resource: "/tmp/x",
+        actor: { kind: "user" },
+        resource: { type: "file", id: "/tmp/x", projectId: "proj-1" },
         outcome: "allowed",
         timestamp: "2026-04-25T00:00:00Z",
       }),
@@ -137,9 +148,13 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       outboxSchema.validate({
         id: "job-1",
         schemaVersion: 1,
-        destination: "feishu:bot-x",
-        payload: {},
+        projectId: "proj-1",
+        destination: { platform: "feishu", sessionKey: "feishu:u1" },
+        payload: { kind: "text", content: "done" },
         attempts: 0,
+        status: "pending",
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
       }),
     ).toBe(true)
     expect(
@@ -163,5 +178,52 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         lastError: null,
       }),
     ).toBe(true)
+  })
+
+  it("business schemas reject missing project/session/status/outcome fields", () => {
+    expect(
+      connectorsSchema.validate({
+        id: "c1",
+        schemaVersion: 1,
+        platform: "feishu",
+        status: "connected",
+        allowlist: { mode: "all" },
+        sessionKeyPolicy: { mode: "per-user" },
+      }),
+    ).toBe(false)
+    expect(
+      conversationsSchema.validate({
+        id: "conv-1",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        history: [],
+        active: true,
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
+      }),
+    ).toBe(false)
+    expect(
+      auditSchema.validate({
+        id: "evt-1",
+        schemaVersion: 1,
+        action: "agent.spawn",
+        actor: { kind: "agent", id: "a1" },
+        resource: { type: "process" },
+        outcome: "unknown",
+        timestamp: "2026-04-25T00:00:00Z",
+      }),
+    ).toBe(false)
+    expect(
+      outboxSchema.validate({
+        id: "job-1",
+        schemaVersion: 1,
+        destination: { platform: "feishu" },
+        payload: { kind: "text" },
+        attempts: 0,
+        status: "pending",
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
+      }),
+    ).toBe(false)
   })
 })
