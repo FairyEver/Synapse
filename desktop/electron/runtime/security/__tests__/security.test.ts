@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
+import type { AuditEntryV1, DataNamespace } from "../../data-repo"
 import {
+  DataRepositoryAuditSink,
   InMemoryAuditSink,
   createPermissionGuard,
   userInitiatedAllowPolicy,
@@ -115,3 +117,122 @@ describe("InMemoryAuditSink (T6.7)", () => {
     expect(sink.list()).toEqual([])
   })
 })
+
+describe("DataRepositoryAuditSink", () => {
+  it("persists audit entries into the audit namespace", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-1",
+      now: () => new Date("2026-04-26T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "agent.spawn",
+      actor: { kind: "user" },
+      resource: "codex",
+      outcome: "allowed",
+      metadata: { projectId: "proj-1", conversationId: "conv-1" },
+    })
+    await sink.flushForTests()
+
+    expect(namespace.items).toEqual([
+      {
+        id: "audit-1",
+        schemaVersion: 1,
+        action: "agent.spawn",
+        actor: { kind: "user" },
+        resource: { type: "agent", id: "codex", projectId: "proj-1" },
+        outcome: "allowed",
+        timestamp: "2026-04-26T00:00:00.000Z",
+        projectId: "proj-1",
+        sessionId: "conv-1",
+        metadata: { projectId: "proj-1", conversationId: "conv-1" },
+      },
+    ])
+  })
+
+  it("redacts sensitive metadata before persistence", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-2",
+    })
+
+    sink.record({
+      action: "secret.read",
+      actor: { kind: "user" },
+      resource: "provider-secret",
+      outcome: "allowed",
+      metadata: {
+        Authorization: "Bearer token",
+        nested: { apiKey: "sk-test", safe: "value" },
+        prompt: "full user prompt",
+      },
+    })
+    await sink.flushForTests()
+
+    expect(namespace.items[0]?.metadata).toEqual({
+      Authorization: "[redacted]",
+      nested: { apiKey: "[redacted]", safe: "value" },
+      prompt: "[redacted]",
+    })
+  })
+
+  it("logs persistence failures without throwing from record", async () => {
+    const namespace = new FakeAuditNamespace(new Error("disk full"))
+    const warnings: unknown[] = []
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      logger: { warn: (_message, meta) => warnings.push(meta) },
+      idFactory: () => "audit-3",
+    })
+
+    expect(() => sink.record({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/tmp/a",
+      outcome: "failed",
+    })).not.toThrow()
+    await sink.flushForTests()
+
+    expect(warnings).toEqual([{ action: "fs.write", error: "disk full" }])
+  })
+})
+
+class FakeAuditNamespace implements DataNamespace<AuditEntryV1> {
+  readonly name = "audit"
+  readonly schemaVersion = 1
+  readonly backend = "jsonl"
+  readonly items: AuditEntryV1[] = []
+  private readonly error?: Error
+
+  constructor(error?: Error) {
+    this.error = error
+  }
+
+  async getSingleton(): Promise<AuditEntryV1 | null> {
+    return null
+  }
+
+  async setSingleton(_value: AuditEntryV1): Promise<void> {}
+
+  async list(): Promise<AuditEntryV1[]> {
+    return this.items.slice()
+  }
+
+  async get(id: string): Promise<AuditEntryV1 | null> {
+    return this.items.find((item) => item.id === id) ?? null
+  }
+
+  async upsert(item: AuditEntryV1): Promise<void> {
+    if (this.error) throw this.error
+    this.items.push(item)
+  }
+
+  async remove(_id: string): Promise<void> {}
+
+  onChange(): () => void {
+    return () => {}
+  }
+}

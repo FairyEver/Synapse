@@ -5,6 +5,7 @@ import type {
   DataChangeEvent,
   DataChangeListener,
   DataNamespace,
+  OutboxEntryV1,
   ProviderEntryV1,
   SecretEntryV1,
 } from "../../../runtime/data-repo"
@@ -17,6 +18,7 @@ import { InMemoryAuditSink, createPermissionGuard } from "../../../runtime/secur
 import { CodexExecAdapter, type CodexProcessRunner } from "../adapters/codex-exec"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
 import { ProviderConfigService } from "../../provider-config"
+import { ReplyOutboxService } from "../../reply-target"
 import type {
   AgentAdapter,
   AgentEvent,
@@ -30,6 +32,12 @@ import type {
 describe("AgentRuntimeService", () => {
   it("sends a prompt through Codex exec JSONL and persists the thread id", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const outboxService = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox,
+      now: fixedNow,
+    })
     const lines = [
       { type: "thread.started", thread_id: "thread-1" },
       { type: "turn.started" },
@@ -48,6 +56,7 @@ describe("AgentRuntimeService", () => {
       workDir: "/repo",
       conversations,
       adapter: new CodexExecAdapter(runner),
+      outbox: outboxService,
       now: fixedNow,
     })
 
@@ -99,6 +108,20 @@ describe("AgentRuntimeService", () => {
       expect.objectContaining({ role: "user", content: "hello\nworld" }),
       expect.objectContaining({ role: "assistant", content: "done" }),
     ])
+    await outboxService.flushForTests()
+    expect(await outbox.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        projectId: "project-1",
+        destination: expect.objectContaining({
+          platform: "local",
+          sessionKey: "local:user-1",
+        }),
+        payload: expect.objectContaining({
+          content: "done",
+        }),
+        status: "sent",
+      }),
+    ]))
   })
 
   it("uses saved thread id for resume turns", async () => {

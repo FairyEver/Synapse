@@ -78,6 +78,13 @@ export class AgentSessionRepository {
     return matching ?? null
   }
 
+  async listSessions(): Promise<ConversationEntryV1[]> {
+    const sessions = await this.conversations.list({
+      projectId: this.projectId,
+    } as Partial<ConversationEntryV1>)
+    return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
   async createSession(input: CreateAgentSessionInput): Promise<ConversationEntryV1> {
     await this.deactivateActive(input.sessionKey, input.platform)
     const now = this.isoNow()

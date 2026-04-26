@@ -158,6 +158,19 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       }),
     ).toBe(true)
     expect(
+      outboxSchema.validate({
+        id: "job-2",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        destination: { platform: "local-renderer", sessionKey: "local:u1" },
+        payload: { kind: "event", content: "done" },
+        attempts: 1,
+        status: "sent",
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
+      }),
+    ).toBe(true)
+    expect(
       repoRepositoriesSchema.validate({
         id: "1",
         uuid: "abc",

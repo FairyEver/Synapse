@@ -85,6 +85,16 @@ export const IPC_CHANNELS = {
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
   },
+  "agent": {
+    "status": "synapse:agent:status",
+    "listSessions": "synapse:agent:list-sessions",
+    "getTimeline": "synapse:agent:get-timeline",
+    "send": "synapse:agent:send",
+    "listPendingPermissions": "synapse:agent:list-pending-permissions",
+    "respondPermission": "synapse:agent:respond-permission",
+    "getProviders": "synapse:agent:get-providers",
+    "event": "synapse:events:agent",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

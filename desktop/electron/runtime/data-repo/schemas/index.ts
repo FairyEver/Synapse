@@ -36,6 +36,7 @@ export {
   type ConversationEntryV1,
   type ConversationResumePolicyV1,
   type OutboxEntryV1,
+  type OutboxPayloadV1,
   type ProjectEntryV1,
   type ProviderCodexOptionsV1,
   type ProviderEntryV1,

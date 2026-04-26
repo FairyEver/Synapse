@@ -10,6 +10,9 @@ export interface AgentCommandRouterDeps {
   readonly projectId: string
   readonly agentType: string
   readonly providerConfig: ProviderConfigService
+  readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
+  readonly agentNativeSlashAllowlist?: readonly string[]
+  readonly unknownSlashBehavior?: "reject" | "passthrough"
   resetSession(sessionKey: string, platform?: string): Promise<ConversationEntryV1 | null>
 }
 
@@ -17,6 +20,18 @@ interface ParsedCommand {
   readonly name: string
   readonly args: readonly string[]
 }
+
+export interface RegisteredPromptCommand {
+  readonly name: string
+  buildPrompt(args: readonly string[], message: AgentMessage): Promise<string> | string
+}
+
+export interface AgentPromptCommandRoute {
+  readonly kind: "prompt"
+  readonly content: string
+}
+
+export type AgentCommandRouterResult = AgentRuntimeTurnResult | AgentPromptCommandRoute
 
 interface ModeOption {
   readonly key: string
@@ -33,7 +48,7 @@ export class AgentCommandRouter {
   async handle(
     message: AgentMessage,
     conversation: ConversationEntryV1,
-  ): Promise<AgentRuntimeTurnResult | null> {
+  ): Promise<AgentCommandRouterResult | null> {
     const parsed = parseCommand(message.content)
     if (!parsed) return null
 
@@ -47,8 +62,35 @@ export class AgentCommandRouter {
       case "/status":
         return this.handleStatus(conversation)
       default:
-        return commandResult(conversation.id, `Unsupported command: ${parsed.name}`, true)
+        return this.handleNonBuiltin(message, conversation, parsed)
     }
+  }
+
+  private async handleNonBuiltin(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    parsed: ParsedCommand,
+  ): Promise<AgentCommandRouterResult | null> {
+    const name = commandName(parsed.name)
+    const promptCommand = this.deps.registeredPromptCommands?.find((command) =>
+      command.name.toLowerCase() === name)
+    if (promptCommand) {
+      return {
+        kind: "prompt",
+        content: await Promise.resolve(promptCommand.buildPrompt(parsed.args, message)),
+      }
+    }
+
+    const allowlist = this.deps.agentNativeSlashAllowlist ?? []
+    if (allowlist.some((allowed) => allowed.toLowerCase() === name)) {
+      return null
+    }
+
+    if (this.deps.unknownSlashBehavior === "passthrough") {
+      return null
+    }
+
+    return commandResult(conversation.id, `Unsupported command: ${parsed.name}`, true)
   }
 
   private async handleModel(
@@ -148,6 +190,10 @@ export function parseCommand(content: string): ParsedCommand | null {
     name: rawName.toLowerCase(),
     args,
   }
+}
+
+function commandName(name: string): string {
+  return name.startsWith("/") ? name.slice(1).toLowerCase() : name.toLowerCase()
 }
 
 export function parseModelSwitchArgs(args: readonly string[]): string | null {
@@ -272,4 +318,3 @@ function normalizeAgentType(agentType: string): string {
   if (normalized === "claudecode") return "claude-code"
   return normalized
 }
-

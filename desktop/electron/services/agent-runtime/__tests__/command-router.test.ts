@@ -40,17 +40,19 @@ describe("AgentCommandRouter", () => {
     })
     const conversation = baseConversation()
 
-    const list = await router.handle(baseMessage("/model"), conversation)
-    expect(list?.resultText).toContain("gpt-5.4")
-    expect(list?.resultText).toContain("gpt-5.3-codex (codex)")
+    const list = expectRuntimeResult(await router.handle(baseMessage("/model"), conversation))
+    expect(list.resultText).toContain("gpt-5.4")
+    expect(list.resultText).toContain("gpt-5.3-codex (codex)")
 
-    const byAlias = await router.handle(baseMessage("/model switch codex"), conversation)
-    expect(byAlias?.resultText).toBe("Model changed: gpt-5.3-codex")
+    const byAlias = expectRuntimeResult(
+      await router.handle(baseMessage("/model switch codex"), conversation),
+    )
+    expect(byAlias.resultText).toBe("Model changed: gpt-5.3-codex")
     expect((await providerConfig.getProjectProviderState("project-1", "codex")).activeModel)
       .toBe("gpt-5.3-codex")
 
-    const byIndex = await router.handle(baseMessage("/model 1"), conversation)
-    expect(byIndex?.resultText).toBe("Model changed: gpt-5.4")
+    const byIndex = expectRuntimeResult(await router.handle(baseMessage("/model 1"), conversation))
+    expect(byIndex.resultText).toBe("Model changed: gpt-5.4")
     expect(resets).toEqual(["s1", "s1"])
   })
 
@@ -69,26 +71,60 @@ describe("AgentCommandRouter", () => {
       },
     })
 
-    const list = await router.handle(baseMessage("/mode"), baseConversation())
-    expect(list?.resultText).toContain("acceptEdits")
+    const list = expectRuntimeResult(await router.handle(baseMessage("/mode"), baseConversation()))
+    expect(list.resultText).toContain("acceptEdits")
 
-    const switched = await router.handle(baseMessage("/mode acceptEdits"), baseConversation())
-    expect(switched?.resultText).toBe("Mode changed: acceptEdits")
+    const switched = expectRuntimeResult(
+      await router.handle(baseMessage("/mode acceptEdits"), baseConversation()),
+    )
+    expect(switched.resultText).toBe("Mode changed: acceptEdits")
     expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeMode)
       .toBe("acceptEdits")
 
-    const next = await router.handle(baseMessage("/new"), baseConversation())
-    expect(next?.resultText).toBe("New session will start on the next message.")
+    const next = expectRuntimeResult(await router.handle(baseMessage("/new"), baseConversation()))
+    expect(next.resultText).toBe("New session will start on the next message.")
 
-    const status = await router.handle(baseMessage("/status"), baseConversation())
-    expect(status?.resultText).toContain("Agent: claude-code")
-    expect(status?.resultText).toContain("Agent session: thread-1")
+    const status = expectRuntimeResult(await router.handle(baseMessage("/status"), baseConversation()))
+    expect(status.resultText).toContain("Agent: claude-code")
+    expect(status.resultText).toContain("Agent session: thread-1")
 
-    const unknown = await router.handle(baseMessage("/unknown"), baseConversation())
-    expect(unknown?.error).toBe("Unsupported command: /unknown")
+    const unknown = expectRuntimeResult(await router.handle(baseMessage("/unknown"), baseConversation()))
+    expect(unknown.error).toBe("Unsupported command: /unknown")
     expect(resets).toEqual(["s1", "s1"])
   })
+
+  it("routes registered prompt commands and explicit agent-native slash passthrough", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "codex",
+      providerConfig,
+      registeredPromptCommands: [{
+        name: "explain",
+        buildPrompt: (args) => `Explain: ${args.join(" ")}`,
+      }],
+      agentNativeSlashAllowlist: ["plan-status"],
+      resetSession: async () => baseConversation(),
+    })
+
+    const prompt = await router.handle(baseMessage("/explain foo bar"), baseConversation())
+    expect(prompt).toEqual({ kind: "prompt", content: "Explain: foo bar" })
+
+    const passthrough = await router.handle(baseMessage("/plan-status"), baseConversation())
+    expect(passthrough).toBeNull()
+  })
 })
+
+function expectRuntimeResult(
+  result: Awaited<ReturnType<AgentCommandRouter["handle"]>>,
+) {
+  if (!result || "kind" in result) {
+    throw new Error("Expected runtime command result")
+  }
+  return result
+}
 
 function baseMessage(content: string): AgentMessage {
   return {
@@ -187,4 +223,3 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
 }
-

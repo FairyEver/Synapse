@@ -87,6 +87,16 @@ const IPC_CHANNELS = {
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
   },
+  "agent": {
+    "status": "synapse:agent:status",
+    "listSessions": "synapse:agent:list-sessions",
+    "getTimeline": "synapse:agent:get-timeline",
+    "send": "synapse:agent:send",
+    "listPendingPermissions": "synapse:agent:list-pending-permissions",
+    "respondPermission": "synapse:agent:respond-permission",
+    "getProviders": "synapse:agent:get-providers",
+    "event": "synapse:events:agent",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -102,6 +112,9 @@ const EVENT_CHANNELS = {
   },
   dataStore: {
     changed: "synapse:data-store:changed",
+  },
+  agent: {
+    event: "synapse:events:agent",
   },
 }
 
@@ -294,6 +307,17 @@ const synapseBridge: SynapseBridge = {
       invoke(DATA_STORE_CHANNELS.openMCPSettings)(target),
     registerMCP: (target) => invoke(DATA_STORE_CHANNELS.registerMCP)(target),
     onChanged: subscribe(EVENT_CHANNELS.dataStore.changed) as unknown as SynapseBridge["dataStore"]["onChanged"],
+  },
+  agent: {
+    status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
+    listSessions: (projectId) => invoke(IPC_CHANNELS.agent.listSessions)({ projectId }),
+    getTimeline: (args) => invoke(IPC_CHANNELS.agent.getTimeline)(args),
+    send: (args) => invoke(IPC_CHANNELS.agent.send)(args),
+    listPendingPermissions: (projectId) =>
+      invoke(IPC_CHANNELS.agent.listPendingPermissions)({ projectId }),
+    respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),
+    getProviders: (projectId) => invoke(IPC_CHANNELS.agent.getProviders)({ projectId }),
+    onEvent: subscribe(EVENT_CHANNELS.agent.event) as unknown as SynapseBridge["agent"]["onEvent"],
   },
 }
 

@@ -38,10 +38,11 @@ import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
 import { DataStoreModule } from "@/modules/data-store"
 import { EditorScanModule } from "@/modules/editor-scan"
+import { AgentModule } from "@/modules/agent"
 import type { SynapseContentType } from "@/types/content"
 import type { SynapsePendingPushEntry } from "@/types/repository"
 
-type AppTabId = SynapseContentType | "data-store" | "editor-scan" | "settings"
+type AppTabId = SynapseContentType | "agent" | "data-store" | "editor-scan" | "settings"
 type DialogKind = "create" | "detail" | "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -135,6 +136,7 @@ function MainApp() {
         id: definition.id,
         label: definition.tabLabel,
       })),
+      { id: "agent" as const, label: "Agent" },
       { id: "data-store" as const, label: "数据库" },
       { id: "editor-scan" as const, label: "IDE" },
       { id: "settings" as const, label: "设置" },
@@ -407,6 +409,7 @@ function MainApp() {
               />
             )
           })}
+          {activeTab === "agent" ? <AgentModule /> : null}
           {activeTab === "data-store" ? <DataStoreModule /> : null}
           {activeTab === "editor-scan" ? <EditorScanModule /> : null}
           {activeTab === "settings" ? <SettingsModule /> : null}

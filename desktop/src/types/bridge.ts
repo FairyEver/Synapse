@@ -15,6 +15,15 @@ import type {
   DataStoreWhereClause,
 } from "./data-store"
 import type {
+  SynapseAgentDomainEvent,
+  SynapseAgentPendingPermission,
+  SynapseAgentProviderState,
+  SynapseAgentSendResult,
+  SynapseAgentSessionSummary,
+  SynapseAgentStatus,
+  SynapseAgentTimelineResult,
+} from "./agent"
+import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "./backup"
@@ -224,5 +233,21 @@ export type SynapseBridge = {
     openMCPSettings: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
     registerMCP: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
     onChanged: (listener: (event: DataStoreChangeEvent) => void) => () => void
+  }
+  agent: {
+    status: (projectId: string) => Promise<SynapseAgentStatus>
+    listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
+    getTimeline: (
+      args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
+    ) => Promise<SynapseAgentTimelineResult>
+    send: (
+      args: { projectId: string; sessionKey?: string; content: string },
+    ) => Promise<SynapseAgentSendResult>
+    listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
+    respondPermission: (
+      args: { projectId: string; requestId: string; behavior: "allow" | "deny"; message?: string },
+    ) => Promise<{ ok: true }>
+    getProviders: (projectId: string) => Promise<SynapseAgentProviderState>
+    onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void
   }
 }

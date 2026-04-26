@@ -1,0 +1,85 @@
+import type {
+  SynapseAgentEvent,
+  SynapseAgentSessionSummary,
+  SynapseAgentTimelineEntry,
+} from "@/types/agent"
+
+const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
+
+function agentEventToTimelineEntry(
+  event: SynapseAgentEvent,
+  timestamp: string,
+  index: number,
+): SynapseAgentTimelineEntry {
+  return {
+    id: `event:${timestamp}:${event.type}:${index}`,
+    role: roleForEvent(event),
+    content: contentForEvent(event),
+    timestamp,
+  }
+}
+
+function contentForEvent(event: SynapseAgentEvent): string {
+  switch (event.type) {
+    case "text":
+    case "thinking":
+    case "result":
+      return event.content
+    case "toolUse":
+      return event.toolName
+    case "toolResult":
+      return event.content ?? event.toolName
+    case "permissionRequest":
+      return event.toolInput ? `${event.toolName}\n${event.toolInput}` : event.toolName
+    case "error":
+      return event.message
+    default: {
+      const exhaustive: never = event
+      return exhaustive
+    }
+  }
+}
+
+function roleForEvent(event: SynapseAgentEvent): SynapseAgentTimelineEntry["role"] {
+  switch (event.type) {
+    case "text":
+    case "result":
+      return "assistant"
+    case "toolUse":
+    case "toolResult":
+      return "tool"
+    case "thinking":
+    case "permissionRequest":
+    case "error":
+      return "system"
+    default: {
+      const exhaustive: never = event
+      return exhaustive
+    }
+  }
+}
+
+function sessionLabel(session: SynapseAgentSessionSummary): string {
+  return session.name || session.sessionKey || DEFAULT_LOCAL_SESSION_KEY
+}
+
+function defaultSessionKey(sessions: readonly SynapseAgentSessionSummary[]): string {
+  return sessions.find((session) => session.active)?.sessionKey
+    ?? sessions[0]?.sessionKey
+    ?? DEFAULT_LOCAL_SESSION_KEY
+}
+
+function formatEntryTime(timestamp: string): string {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+export {
+  DEFAULT_LOCAL_SESSION_KEY,
+  agentEventToTimelineEntry,
+  defaultSessionKey,
+  formatEntryTime,
+  sessionLabel,
+}

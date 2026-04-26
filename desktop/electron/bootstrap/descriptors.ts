@@ -45,7 +45,7 @@ import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
 import type { DataRepository } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { PermissionGuard, AuditSink } from "../runtime/security"
-import { InMemoryAuditSink, createPermissionGuard } from "../runtime/security"
+import { DataRepositoryAuditSink, createPermissionGuard } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
 import { createMainProcessRuntime } from "../runtime/process"
 import type { NetworkServiceRegistry } from "../runtime/network"
@@ -302,8 +302,12 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
 export const coreAuditSinkDescriptor: ServiceDescriptor<AuditSink> = {
   id: "core.audit-sink",
   criticality: "fatal",
-  create() {
-    return new InMemoryAuditSink()
+  dependsOn: ["core.data-repository"],
+  create(ctx) {
+    return new DataRepositoryAuditSink({
+      audit: ctx.registry.get<DataRepository>("core.data-repository").namespace("audit"),
+      logger: ctx.logger,
+    })
   },
 }
 

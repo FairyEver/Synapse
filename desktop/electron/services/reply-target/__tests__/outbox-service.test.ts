@@ -1,0 +1,155 @@
+import { describe, expect, it } from "vitest"
+
+import type {
+  DataChangeEvent,
+  DataChangeListener,
+  DataNamespace,
+  OutboxEntryV1,
+} from "../../../runtime/data-repo"
+import { ReplyOutboxService } from "../outbox-service"
+
+describe("ReplyOutboxService", () => {
+  it("records sent local renderer events", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox,
+      idFactory: () => "outbox-1",
+      now: () => new Date("2026-04-26T00:00:00.000Z"),
+    })
+
+    service.recordAgentEvent({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conv-1",
+      transport: { kind: "local-renderer" },
+    }, {
+      type: "result",
+      content: "done",
+      done: true,
+      agentSessionId: "thread-1",
+      threadId: "thread-1",
+    })
+    await service.flushForTests()
+
+    expect(await outbox.list()).toEqual([
+      expect.objectContaining({
+        id: "outbox-1",
+        projectId: "project-1",
+        destination: expect.objectContaining({
+          platform: "local-renderer",
+          sessionKey: "local:renderer",
+        }),
+        payload: {
+          kind: "text",
+          content: "done",
+          metadata: {
+            eventType: "result",
+            agentSessionId: "thread-1",
+            threadId: "thread-1",
+          },
+        },
+        attempts: 1,
+        status: "sent",
+      }),
+    ])
+  })
+
+  it("records failed events with lastError", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox,
+      idFactory: () => "outbox-2",
+    })
+
+    service.recordAgentEvent({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      transport: { kind: "local-renderer" },
+    }, {
+      type: "error",
+      message: "boom",
+    })
+    await service.flushForTests()
+
+    expect((await outbox.list())[0]).toEqual(expect.objectContaining({
+      id: "outbox-2",
+      status: "failed",
+      lastError: "boom",
+      payload: expect.objectContaining({
+        kind: "event",
+        content: "boom",
+      }),
+    }))
+  })
+})
+
+class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
+  readonly schemaVersion = 1
+  readonly backend = "sqlite" as const
+  readonly name: string
+  private readonly values = new Map<string, T>()
+  private readonly listeners: DataChangeListener<T>[] = []
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  async getSingleton(): Promise<T | null> {
+    return null
+  }
+
+  async setSingleton(): Promise<void> {}
+
+  async list(filter?: Partial<T>): Promise<T[]> {
+    const values = [...this.values.values()]
+    if (!filter) return values
+    return values.filter((value) =>
+      Object.entries(filter).every(([key, expected]) =>
+        (value as Record<string, unknown>)[key] === expected,
+      ),
+    )
+  }
+
+  async get(id: string): Promise<T | null> {
+    return this.values.get(id) ?? null
+  }
+
+  async upsert(item: T): Promise<void> {
+    const previous = this.values.get(item.id)
+    this.values.set(item.id, item)
+    this.emit({
+      namespace: this.name,
+      kind: "upsert",
+      id: item.id,
+      value: item,
+      previous,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  async remove(id: string): Promise<void> {
+    const previous = this.values.get(id)
+    this.values.delete(id)
+    this.emit({
+      namespace: this.name,
+      kind: "remove",
+      id,
+      previous,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  onChange(listener: DataChangeListener<T>): () => void {
+    this.listeners.push(listener)
+    return () => {
+      const index = this.listeners.indexOf(listener)
+      if (index >= 0) this.listeners.splice(index, 1)
+    }
+  }
+
+  private emit(event: DataChangeEvent<T>): void {
+    for (const listener of this.listeners) listener(event)
+  }
+}

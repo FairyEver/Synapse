@@ -64,6 +64,7 @@ export {
   type CoreConfigV1,
   type CoreIdentityV2,
   type OutboxEntryV1,
+  type OutboxPayloadV1,
   type ProjectEntryV1,
   type ProviderCodexOptionsV1,
   type ProviderEntryV1,

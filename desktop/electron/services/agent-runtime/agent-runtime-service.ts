@@ -7,12 +7,17 @@ import type {
   PermissionGuard,
 } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import type { ReplyOutboxService } from "../reply-target"
 import {
   prepareCodexRuntime,
   type ProviderConfigService,
   type ProviderRuntimeView,
 } from "../provider-config"
 import { AgentCommandRouter } from "./command-router"
+import type {
+  AgentCommandRouterResult,
+  RegisteredPromptCommand,
+} from "./command-router"
 import type { AgentGovernanceDecision, AgentGovernanceService } from "./governance"
 import {
   AgentSessionRepository,
@@ -43,8 +48,12 @@ export interface AgentRuntimeServiceDeps {
   readonly pendingQueueLimit?: number
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
+  readonly outbox?: ReplyOutboxService
   readonly governance?: AgentGovernanceService
   readonly providerConfig?: ProviderConfigService
+  readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
+  readonly agentNativeSlashAllowlist?: readonly string[]
+  readonly unknownSlashBehavior?: "reject" | "passthrough"
 }
 
 export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter
@@ -61,6 +70,15 @@ interface RuntimeSessionState {
   busy: boolean
   liveSession?: AgentLiveSession
   pending?: PendingPermissionState
+}
+
+export interface AgentRuntimeStatus {
+  readonly projectId: string
+  readonly agentType: string
+  readonly liveSessions: number
+  readonly busySessions: number
+  readonly queuedTurns: number
+  readonly pendingPermissions: number
 }
 
 interface PendingPermissionState extends AgentPendingPermission {
@@ -89,6 +107,9 @@ export class AgentRuntimeService {
         projectId: deps.projectId,
         agentType: this.agentType(),
         providerConfig: deps.providerConfig,
+        registeredPromptCommands: deps.registeredPromptCommands,
+        agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
+        unknownSlashBehavior: deps.unknownSlashBehavior,
         resetSession: (sessionKey, platform) => this.resetSession(sessionKey, platform),
       })
       : undefined
@@ -108,7 +129,12 @@ export class AgentRuntimeService {
     }
 
     const commandResult = await this.commandRouter?.handle(message, conversation)
-    if (commandResult) {
+    if (commandResult && isPromptCommandRoute(commandResult)) {
+      message = {
+        ...message,
+        content: commandResult.content,
+      }
+    } else if (commandResult) {
       for (const event of commandResult.events) {
         this.emitEvent(message, commandResult.conversationId, event)
       }
@@ -143,6 +169,26 @@ export class AgentRuntimeService {
       toolInputRaw: pending.toolInputRaw,
       createdAt: pending.createdAt,
     }))
+  }
+
+  getStatus(): AgentRuntimeStatus {
+    const states = [...this.states.values()]
+    return {
+      projectId: this.deps.projectId,
+      agentType: this.agentType(),
+      liveSessions: states.filter((state) => state.liveSession?.alive()).length,
+      busySessions: states.filter((state) => state.busy).length,
+      queuedTurns: states.reduce((count, state) => count + state.queue.length, 0),
+      pendingPermissions: this.pendingPermissions.size,
+    }
+  }
+
+  async listSessions(): Promise<readonly ConversationEntryV1[]> {
+    return this.repository.listSessions()
+  }
+
+  async getSession(conversationIdValue: string): Promise<ConversationEntryV1 | null> {
+    return this.repository.get(conversationIdValue)
   }
 
   async respondPermission(request: AgentPermissionResponseRequest): Promise<void> {
@@ -502,6 +548,15 @@ export class AgentRuntimeService {
       scope: { sessionId: conversationIdValue },
       timestamp: this.isoNow(),
     })
+    this.deps.outbox?.recordAgentEvent({
+      projectId: this.deps.projectId,
+      sessionKey: message.sessionKey,
+      conversationId: conversationIdValue,
+      threadId: event.threadId ?? event.agentSessionId,
+      messageId: message.messageId,
+      transport: { kind: message.platform || "local-renderer" },
+      replyCtx: replyCtxRecord(message.replyCtx),
+    }, event)
   }
 
   private recordPermissionAudit(
@@ -607,6 +662,18 @@ function permissionActionForTool(toolName: string): PermissionAction {
     default:
       return "agent.spawn"
   }
+}
+
+function replyCtxRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function isPromptCommandRoute(
+  result: AgentCommandRouterResult,
+): result is Extract<AgentCommandRouterResult, { kind: "prompt" }> {
+  return "kind" in result && result.kind === "prompt"
 }
 
 export type { AgentGovernanceDecision }

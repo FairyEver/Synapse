@@ -308,6 +308,7 @@ export const auditSchema: NamespaceSchema<AuditEntryV1> = {
 export type OutboxStatusV1 =
   | "pending"
   | "sending"
+  | "sent"
   | "delivered"
   | "failed"
   | "dead-letter"
@@ -462,7 +463,7 @@ function isAuditResource(value: unknown): value is AuditResourceV1 {
 }
 
 function isOutboxStatus(value: unknown): value is OutboxStatusV1 {
-  return ["pending", "sending", "delivered", "failed", "dead-letter"].includes(
+  return ["pending", "sending", "sent", "delivered", "failed", "dead-letter"].includes(
     String(value),
   )
 }

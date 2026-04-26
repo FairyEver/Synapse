@@ -1,4 +1,4 @@
-import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
+import type { ConversationEntryV1, DataRepository, OutboxEntryV1 } from "../../runtime/data-repo"
 import type { ProjectScopedService } from "../../runtime/project-container"
 import {
   createControlledProcessRunner,
@@ -8,6 +8,7 @@ import {
   createProviderConfigServiceFromDataRepository,
   type ProviderRuntimeView,
 } from "../provider-config"
+import { ReplyOutboxService } from "../reply-target"
 import { CodexExecAdapter } from "./adapters/codex-exec"
 import { AgentRuntimeService } from "./agent-runtime-service"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
@@ -16,6 +17,7 @@ export {
   AgentRuntimeService,
   conversationId,
   type AgentAdapterFactory,
+  type AgentRuntimeStatus,
   type AgentRuntimeServiceDeps,
 } from "./agent-runtime-service"
 export {
@@ -24,7 +26,10 @@ export {
   parseCommand,
   parseModelSwitchArgs,
   resolveModelTarget,
+  type AgentCommandRouterResult,
   type AgentCommandRouterDeps,
+  type AgentPromptCommandRoute,
+  type RegisteredPromptCommand,
 } from "./command-router"
 export {
   AgentGovernanceService,
@@ -87,6 +92,11 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       const auditSink = ctx.globalRegistry.get<AuditSink>("core.audit-sink")
       const dataRepository = ctx.globalRegistry.get<DataRepository>("core.data-repository")
       const runner = createControlledProcessRunner({ permissionGuard, auditSink })
+      const outbox = new ReplyOutboxService({
+        projectId: ctx.projectId,
+        outbox: ctx.dataRepo.namespace<OutboxEntryV1>("outbox"),
+        logger: ctx.logger,
+      })
       const providerConfig = createProviderConfigServiceFromDataRepository({
         dataRepository,
         permissionGuard,
@@ -103,6 +113,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         logger: ctx.logger,
         permissionGuard,
         auditSink,
+        outbox,
         providerConfig,
       })
     },

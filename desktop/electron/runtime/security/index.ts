@@ -1,4 +1,8 @@
 export {
+  DataRepositoryAuditSink,
+  type DataRepositoryAuditSinkDeps,
+} from "./audit-sink"
+export {
   InMemoryAuditSink,
   PermissionGuardImpl,
   createPermissionGuard,
