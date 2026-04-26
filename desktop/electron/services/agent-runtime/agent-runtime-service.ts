@@ -323,6 +323,11 @@ export class AgentRuntimeService {
     }
   }
 
+  async getActiveAgentType(): Promise<string> {
+    if (!this.deps.providerConfig) return this.agentType()
+    return this.deps.providerConfig.getActiveAgentType(this.deps.projectId, this.agentType())
+  }
+
   async listSessions(): Promise<readonly ConversationEntryV1[]> {
     return this.repository.listSessions()
   }
@@ -475,12 +480,17 @@ export class AgentRuntimeService {
       readonly sessionKey: string
       readonly platform?: string
       readonly name?: string
+      readonly workspaceKey?: string
+      readonly workspacePath?: string
     },
   ): Promise<ConversationEntryV1> {
+    await this.closeIdleStateForSession(input.sessionKey, input.workspaceKey)
     return this.repository.createSession({
       sessionKey: input.sessionKey,
       platform: input.platform,
       name: input.name,
+      workspaceKey: input.workspaceKey,
+      workspacePath: input.workspacePath,
       resumePolicy: "resume",
     })
   }
@@ -489,8 +499,18 @@ export class AgentRuntimeService {
     sessionKey: string,
     conversationIdValue: string,
     platform?: string,
+    workspaceKey?: string,
   ): Promise<ConversationEntryV1> {
-    return this.repository.setActiveSession(sessionKey, conversationIdValue, platform)
+    const target = await this.repository.get(conversationIdValue)
+    if (!target || target.sessionKey !== sessionKey) {
+      throw new Error(`Conversation "${conversationIdValue}" is not available for this session key`)
+    }
+    const effectiveWorkspaceKey = workspaceKey ?? target.workspaceKey
+    const active = await this.repository.getActive(sessionKey, platform, effectiveWorkspaceKey)
+    if (active?.id !== target.id) {
+      await this.closeIdleStateForSession(sessionKey, effectiveWorkspaceKey)
+    }
+    return this.repository.setActiveSession(sessionKey, conversationIdValue, platform, effectiveWorkspaceKey)
   }
 
   async reapIdleWorkspaceRuntimes(
@@ -516,24 +536,13 @@ export class AgentRuntimeService {
     const conversation = await this.repository.get(conversationIdValue)
     if (!conversation) return false
     if (conversation.active) {
-      const state = this.states.get(runtimeKey(
+      const key = runtimeKey(
         conversation.sessionKey,
         this.deps.projectId,
         conversation.workspaceKey,
-      ))
-      if (state?.pending) {
-        this.pendingPermissions.delete(state.pending.requestId)
-        state.pending = undefined
-      }
-      if (state?.liveSession) {
-        await state.liveSession.close()
-        state.liveSession = undefined
-      }
-      this.states.delete(runtimeKey(
-        conversation.sessionKey,
-        this.deps.projectId,
-        conversation.workspaceKey,
-      ))
+      )
+      await this.closeIdleStateForSession(conversation.sessionKey, conversation.workspaceKey)
+      this.states.delete(key)
     }
     await this.repository.deleteSession(conversationIdValue)
     return true
@@ -1149,6 +1158,25 @@ export class AgentRuntimeService {
     return state
   }
 
+  private async closeIdleStateForSession(
+    sessionKey: string,
+    workspaceKey?: string,
+  ): Promise<void> {
+    const state = this.states.get(runtimeKey(sessionKey, this.deps.projectId, workspaceKey))
+    if (!state) return
+    if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
+      throw new Error("Session is busy.")
+    }
+    if (state.pending) {
+      this.pendingPermissions.delete(state.pending.requestId)
+      state.pending = undefined
+    }
+    if (state.liveSession) {
+      await state.liveSession.close()
+      state.liveSession = undefined
+    }
+  }
+
   private resetMessageSession(message: AgentMessage): Promise<ConversationEntryV1 | null> {
     return this.resetSession(message.sessionKey, message.platform, message.workspaceKey)
   }
@@ -1467,9 +1495,10 @@ export class AgentRuntimeService {
     if (!this.deps.providerConfig || !this.deps.adapterFactory) {
       return this.deps.adapter
     }
+    const agentType = await this.getActiveAgentType()
     const view = await this.deps.providerConfig.resolveRuntimeConfig(
       this.deps.projectId,
-      this.agentType(),
+      agentType,
       { actor: { kind: "user" } },
     )
     if (view.agentType === "codex") {

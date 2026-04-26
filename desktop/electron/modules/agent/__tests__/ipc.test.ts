@@ -109,6 +109,71 @@ describe("agentIpcModule", () => {
       }],
     })
   })
+
+  it("creates and switches local renderer sessions", async () => {
+    const created = {
+      id: "conv-2",
+      sessionKey: "local:renderer",
+      name: "新会话",
+      platform: "local-renderer",
+      active: true,
+      history: [],
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    }
+    const createSession = vi.fn().mockResolvedValue(created)
+    const switchSession = vi.fn().mockResolvedValue({
+      ...created,
+      id: "conv-1",
+      name: "旧会话",
+    })
+    const deleteSession = vi.fn().mockResolvedValue(true)
+    const harness = createHarness({
+      agent: {
+        createSession,
+        switchSession,
+        deleteSession,
+      },
+    })
+
+    expect(await harness.invoke("synapse:agent:create-session", {
+      projectId: "project-1",
+      name: "新会话",
+    })).toEqual(expect.objectContaining({
+      id: "conv-2",
+      sessionKey: "local:renderer",
+      name: "新会话",
+      active: true,
+      historyCount: 0,
+    }))
+    expect(createSession).toHaveBeenCalledWith({
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      name: "新会话",
+    })
+
+    expect(await harness.invoke("synapse:agent:switch-session", {
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })).toEqual(expect.objectContaining({
+      id: "conv-1",
+      sessionKey: "local:renderer",
+      name: "旧会话",
+      active: true,
+      historyCount: 0,
+    }))
+    expect(switchSession).toHaveBeenCalledWith(
+      "local:renderer",
+      "conv-1",
+      "local-renderer",
+    )
+
+    expect(await harness.invoke("synapse:agent:delete-session", {
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })).toEqual({ ok: true })
+    expect(deleteSession).toHaveBeenCalledWith("conv-1")
+  })
 })
 
 function createHarness(overrides: {
@@ -126,6 +191,9 @@ function createHarness(overrides: {
     }),
     listSessions: vi.fn().mockResolvedValue([]),
     getSession: vi.fn().mockResolvedValue(null),
+    createSession: vi.fn(),
+    switchSession: vi.fn(),
+    deleteSession: vi.fn(),
     send: vi.fn(),
     listPendingPermissions: vi.fn().mockReturnValue([]),
     respondPermission: vi.fn().mockResolvedValue(undefined),

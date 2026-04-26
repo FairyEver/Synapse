@@ -1,3 +1,8 @@
+import path from "node:path"
+import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from "node:fs"
+import type { Dirent } from "node:fs"
+import { homedir } from "node:os"
+
 import type {
   ControlledProcessResult,
   ControlledProcessRunRequest,
@@ -8,6 +13,7 @@ import type {
   AgentExecutionContext,
   AgentExecutionResult,
   AgentMessage,
+  AgentResultMetadata,
 } from "../types"
 
 const CODEX_TOOL_NAMES: Record<string, string> = {
@@ -62,7 +68,14 @@ export class CodexExecAdapter implements AgentAdapter {
     message: AgentMessage,
     context: AgentExecutionContext,
   ): Promise<AgentExecutionResult> {
-    const parser = new CodexJsonLineParser(context.threadId, context.onEvent)
+    const env = mergeEnv(this.options.env, context.sessionEnv)
+    const envAllowlist = mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv)
+    const parser = new CodexJsonLineParser(context.threadId, context.onEvent, {
+      model: this.options.model,
+      effort: this.options.effort,
+      workDir: context.workDir,
+      codexHome: stringValue(env?.CODEX_HOME),
+    })
     const args = buildCodexExecArgs({
       workDir: context.workDir,
       threadId: context.threadId,
@@ -80,11 +93,11 @@ export class CodexExecAdapter implements AgentAdapter {
       args,
       cwd: context.workDir,
       stdin: message.content,
-      env: mergeEnv(this.options.env, context.sessionEnv),
-      envAllowlist: mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
+      env,
+      envAllowlist,
       isolation: mergeProcessIsolation(
         context.processIsolation,
-        mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
+        envAllowlist,
       ),
       timeoutMs: this.options.timeoutMs,
       output: { stdout: "json-lines", stderr: "buffer" },
@@ -196,18 +209,31 @@ export interface CodexParseResult extends AgentExecutionResult {
   readonly lineCount: number
 }
 
+interface CodexParserOptions {
+  readonly model?: string
+  readonly effort?: string
+  readonly workDir?: string
+  readonly codexHome?: string
+}
+
 export class CodexJsonLineParser {
   private readonly events: AgentEvent[] = []
   private readonly textParts: string[] = []
   private readonly pendingMessages: string[] = []
   private readonly onEvent: ((event: AgentEvent) => void) | undefined
+  private readonly options: CodexParserOptions
   private currentThreadId: string | undefined
   private currentError: string | undefined
   private lines = 0
 
-  constructor(initialThreadId?: string, onEvent?: (event: AgentEvent) => void) {
+  constructor(
+    initialThreadId?: string,
+    onEvent?: (event: AgentEvent) => void,
+    options: CodexParserOptions = {},
+  ) {
     this.currentThreadId = initialThreadId
     this.onEvent = onEvent
+    this.options = options
   }
 
   get lineCount(): number {
@@ -275,6 +301,7 @@ export class CodexJsonLineParser {
           type: "result",
           content: this.textParts.join(""),
           done: true,
+          metadata: this.resultMetadata(),
         })
         break
       case "turn.failed":
@@ -286,6 +313,22 @@ export class CodexJsonLineParser {
       default:
         break
     }
+  }
+
+  private resultMetadata(): AgentResultMetadata | undefined {
+    const contextRemainingPercent = resolveContextRemainingPercent(
+      this.options.codexHome,
+      this.currentThreadId,
+    )
+    const metadata: AgentResultMetadata = {
+      model: this.options.model,
+      effort: this.options.effort,
+      contextRemainingPercent,
+      workDir: this.options.workDir,
+    }
+    return Object.values(metadata).some((value) => value !== undefined && value !== "")
+      ? metadata
+      : undefined
   }
 
   private handleItemStarted(item: Record<string, unknown> | null): void {
@@ -486,6 +529,168 @@ function truncate(value: string, maxRunes: number): string {
   const runes = [...value]
   if (runes.length <= maxRunes) return value
   return `${runes.slice(0, maxRunes).join("")}...`
+}
+
+const CODEX_CONTEXT_BASELINE_TOKENS = 12000
+const CODEX_ROLLOUT_TAIL_BYTES = 1024 * 1024
+const CODEX_SESSION_SCAN_LIMIT = 5000
+
+interface CodexContextUsage {
+  readonly contextWindow: number
+  readonly usedTokens: number
+  readonly baselineTokens: number
+}
+
+function resolveContextRemainingPercent(
+  codexHome: string | undefined,
+  threadId: string | undefined,
+): number | undefined {
+  const sessionFile = findCodexSessionFile(resolveCodexHome(codexHome), threadId)
+  if (!sessionFile) return undefined
+  const usage = readLatestContextUsage(sessionFile)
+  if (!usage) return undefined
+  return contextRemainingPercent(usage)
+}
+
+function resolveCodexHome(codexHome: string | undefined): string {
+  const trimmed = codexHome?.trim()
+  return trimmed ? trimmed : path.join(homedir(), ".codex")
+}
+
+function findCodexSessionFile(
+  codexHome: string,
+  threadId: string | undefined,
+): string | undefined {
+  if (!threadId) return undefined
+  const roots = [
+    path.join(codexHome, "sessions"),
+    path.join(codexHome, "archived_sessions"),
+  ]
+  let scanned = 0
+  let match: { filePath: string; mtimeMs: number } | undefined
+
+  for (const root of roots) {
+    if (!existsSync(root)) continue
+    const stack = [root]
+    while (stack.length > 0 && scanned < CODEX_SESSION_SCAN_LIMIT) {
+      const current = stack.pop()
+      if (!current) continue
+      let entries: Dirent[]
+      try {
+        entries = readdirSync(current, { withFileTypes: true })
+      } catch (_error) {
+        continue
+      }
+      for (const entry of entries) {
+        const entryPath = path.join(current, entry.name)
+        if (entry.isDirectory()) {
+          stack.push(entryPath)
+          continue
+        }
+        scanned += 1
+        if (!entry.isFile() || !entry.name.endsWith(".jsonl") || !entry.name.includes(threadId)) {
+          continue
+        }
+        const mtimeMs = statMtimeMs(entryPath)
+        if (!match || mtimeMs > match.mtimeMs) {
+          match = { filePath: entryPath, mtimeMs }
+        }
+      }
+    }
+  }
+  return match?.filePath
+}
+
+function statMtimeMs(filePath: string): number {
+  try {
+    return statSync(filePath).mtimeMs
+  } catch (_error) {
+    return 0
+  }
+}
+
+function readLatestContextUsage(filePath: string): CodexContextUsage | undefined {
+  const tail = readFileTail(filePath, CODEX_ROLLOUT_TAIL_BYTES)
+  if (!tail) return undefined
+  const lines = tail.split(/\r?\n/).reverse()
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    let raw: unknown
+    try {
+      raw = JSON.parse(trimmed)
+    } catch (_error) {
+      continue
+    }
+    const usage = contextUsageFromRecord(asRecord(raw))
+    if (usage) return usage
+  }
+  return undefined
+}
+
+function readFileTail(filePath: string, maxBytes: number): string | undefined {
+  let file: ReturnType<typeof openSync> | undefined
+  try {
+    const size = statSync(filePath).size
+    const start = Math.max(0, size - maxBytes)
+    const length = size - start
+    const buffer = Buffer.alloc(length)
+    file = openSync(filePath, "r")
+    readSync(file, buffer, 0, length, start)
+    return buffer.toString("utf8")
+  } catch (_error) {
+    return undefined
+  } finally {
+    if (file !== undefined) closeSync(file)
+  }
+}
+
+function contextUsageFromRecord(raw: Record<string, unknown> | null): CodexContextUsage | undefined {
+  if (!raw) return undefined
+  const payload = asRecord(raw.payload)
+  const eventType = stringValue(payload?.type) ?? stringValue(raw.type)
+  if (eventType !== "token_count") return undefined
+  const info = asRecord(payload?.info) ?? asRecord(raw.info)
+  if (!info) return undefined
+  const totalUsage = asRecord(info.total_token_usage) ?? asRecord(info.totalTokenUsage)
+  const lastUsage = asRecord(info.last_token_usage) ?? asRecord(info.lastTokenUsage)
+  const contextWindow = numberValue(info.model_context_window)
+    ?? numberValue(info.context_window)
+    ?? numberValue(info.modelContextWindow)
+    ?? numberValue(info.contextWindow)
+  if (!contextWindow || contextWindow <= 0) return undefined
+
+  const usedTokens = numberValue(info.used_tokens)
+    ?? numberValue(info.usedTokens)
+    ?? numberValue(totalUsage?.total_tokens)
+    ?? numberValue(totalUsage?.totalTokens)
+    ?? sumTokenUsage(totalUsage)
+    ?? sumTokenUsage(lastUsage)
+  if (!usedTokens || usedTokens <= 0) return undefined
+  return {
+    contextWindow,
+    usedTokens,
+    baselineTokens: numberValue(info.baseline_tokens)
+      ?? numberValue(info.baselineTokens)
+      ?? CODEX_CONTEXT_BASELINE_TOKENS,
+  }
+}
+
+function sumTokenUsage(usage: Record<string, unknown> | null): number | undefined {
+  if (!usage) return undefined
+  const input = numberValue(usage.input_tokens) ?? numberValue(usage.inputTokens) ?? 0
+  const output = numberValue(usage.output_tokens) ?? numberValue(usage.outputTokens) ?? 0
+  const total = input + output
+  return total > 0 ? total : undefined
+}
+
+function contextRemainingPercent(usage: CodexContextUsage): number | undefined {
+  const baseline = Math.max(0, usage.baselineTokens)
+  if (usage.contextWindow <= baseline) return 0
+  const effectiveWindow = usage.contextWindow - baseline
+  const effectiveUsed = Math.max(0, usage.usedTokens - baseline)
+  const remaining = Math.max(0, effectiveWindow - effectiveUsed)
+  return Math.max(0, Math.min(100, Math.round((remaining / effectiveWindow) * 100)))
 }
 
 function trimmedOrDefault(value: string | undefined, fallback: string): string {

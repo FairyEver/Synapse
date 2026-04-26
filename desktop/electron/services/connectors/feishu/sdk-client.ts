@@ -95,16 +95,16 @@ class FeishuSdkRuntimeClient implements FeishuRuntimeClient {
       ?? stringValue(recordValue(response.data)?.open_id)
   }
 
-  replyText(ctx: FeishuReplyContext, content: string): Promise<void> {
-    return this.sendMessage(ctx, "text", JSON.stringify({ text: content }), "reply")
+  async replyText(ctx: FeishuReplyContext, content: string): Promise<void> {
+    await this.sendMessage(ctx, "text", JSON.stringify({ text: content }), "reply")
   }
 
-  createText(ctx: FeishuReplyContext, content: string): Promise<void> {
-    return this.sendMessage(ctx, "text", JSON.stringify({ text: content }), "create")
+  async createText(ctx: FeishuReplyContext, content: string): Promise<void> {
+    await this.sendMessage(ctx, "text", JSON.stringify({ text: content }), "create")
   }
 
-  sendCard(ctx: FeishuReplyContext, card: Record<string, unknown>): Promise<void> {
-    return this.sendMessage(ctx, "interactive", JSON.stringify(card), ctx.messageId ? "reply" : "create")
+  async sendCard(ctx: FeishuReplyContext, card: Record<string, unknown>): Promise<void> {
+    await this.sendMessage(ctx, "interactive", JSON.stringify(card), ctx.messageId ? "reply" : "create")
   }
 
   async sendImage(ctx: FeishuReplyContext, image: Buffer): Promise<void> {
@@ -132,14 +132,28 @@ class FeishuSdkRuntimeClient implements FeishuRuntimeClient {
     await this.sendMessage(ctx, "file", JSON.stringify({ file_key: fileKey }), ctx.messageId ? "reply" : "create")
   }
 
+  async addReaction(messageId: string, emojiType: string): Promise<string | undefined> {
+    const response = await this.client.im.v1.messageReaction.create({
+      path: { message_id: messageId },
+      data: { reaction_type: { emoji_type: emojiType } },
+    })
+    return stringValue(response.data?.reaction_id)
+  }
+
+  async removeReaction(messageId: string, reactionId: string): Promise<void> {
+    await this.client.im.v1.messageReaction.delete({
+      path: { message_id: messageId, reaction_id: reactionId },
+    })
+  }
+
   private async sendMessage(
     ctx: FeishuReplyContext,
     msgType: FeishuMsgType,
     content: string,
     mode: "reply" | "create",
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     if (mode === "reply" && ctx.messageId) {
-      await this.client.im.message.reply({
+      const response = await this.client.im.message.reply({
         path: { message_id: ctx.messageId },
         data: {
           msg_type: msgType,
@@ -147,11 +161,11 @@ class FeishuSdkRuntimeClient implements FeishuRuntimeClient {
           reply_in_thread: ctx.replyInThread,
         },
       })
-      return
+      return stringValue(response.data?.message_id)
     }
 
     const receiveByUser = ctx.chatType === "direct" && ctx.userId
-    await this.client.im.message.create({
+    const response = await this.client.im.message.create({
       params: {
         receive_id_type: receiveByUser ? "open_id" : "chat_id",
       },
@@ -161,6 +175,7 @@ class FeishuSdkRuntimeClient implements FeishuRuntimeClient {
         content,
       },
     })
+    return stringValue(response.data?.message_id)
   }
 }
 

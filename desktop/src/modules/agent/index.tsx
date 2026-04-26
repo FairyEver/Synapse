@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useState } from "react"
 import { Command as CommandIcon, Send } from "lucide-react"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
@@ -31,12 +31,29 @@ function AgentModule() {
   const [draft, setDraft] = useState("")
   const [paletteOpen, setPaletteOpen] = useState(false)
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault()
+  const submitDraft = () => {
     const content = draft.trim()
-    if (!content || chat.sending) return
+    if (!content || !projectId) return
     setDraft("")
     void chat.sendMessage(content)
+  }
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    submitDraft()
+  }
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey) return
+    event.preventDefault()
+    submitDraft()
+  }
+
+  const handleCommandSelect = (name: string) => {
+    if (!projectId) return
+    setDraft("")
+    setPaletteOpen(false)
+    void chat.sendMessage(`/${name}`)
   }
 
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
@@ -47,10 +64,12 @@ function AgentModule() {
   const sidebar = (
     <AgentSessionSidebar
       sessions={chat.sessions}
-      selectedSessionKey={chat.selectedSessionKey}
-      loading={chat.loading}
+      selectedConversationId={chat.selectedConversationId}
+      loading={chat.loading || chat.sending}
       onRefresh={() => void chat.refresh()}
-      onSelect={chat.setSelectedSessionKey}
+      onCreate={() => void chat.createSession()}
+      onSelect={(conversationId) => void chat.selectSession(conversationId)}
+      onDelete={(conversationId) => void chat.deleteSession(conversationId)}
     />
   )
 
@@ -59,10 +78,7 @@ function AgentModule() {
       <div className="flex h-full min-h-0 flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold">Agent</h2>
-            <p className="truncate text-sm text-muted-foreground">
-              {activeRepository?.name ?? "未选择项目"}
-            </p>
+            <h2 className="truncate text-sm font-medium">{activeRepository?.name ?? "未选择项目"}</h2>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {activeProvider ? (
@@ -73,6 +89,9 @@ function AgentModule() {
             ) : null}
             {chat.status?.pendingPermissions ? (
               <Badge variant="outline">权限 {chat.status.pendingPermissions}</Badge>
+            ) : null}
+            {chat.activityLabel ? (
+              <Badge variant="outline">{chat.activityLabel}</Badge>
             ) : null}
             <Popover open={paletteOpen} onOpenChange={setPaletteOpen}>
               <PopoverTrigger asChild>
@@ -91,10 +110,7 @@ function AgentModule() {
                         <CommandItem
                           key={`${command.source}:${command.name}`}
                           value={`/${command.name}`}
-                          onSelect={() => {
-                            setDraft(`/${command.name} `)
-                            setPaletteOpen(false)
-                          }}
+                          onSelect={() => handleCommandSelect(command.name)}
                         >
                           <span className="truncate">/{command.name}</span>
                           <CommandShortcut>{command.kind}</CommandShortcut>
@@ -141,11 +157,13 @@ function AgentModule() {
           <Textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleInputKeyDown}
             placeholder="输入消息"
-            disabled={!projectId || chat.sending}
-            className="min-h-20"
+            disabled={!projectId}
+            rows={1}
+            className="h-8 min-h-8 resize-none overflow-hidden py-1.5 focus-visible:border-input focus-visible:ring-0"
           />
-          <Button type="submit" disabled={!draft.trim() || !projectId || chat.sending}>
+          <Button type="submit" disabled={!draft.trim() || !projectId}>
             <Send data-icon="inline-start" />
             发送
           </Button>

@@ -63,6 +63,51 @@ describe("FeishuReplyService", () => {
       ["replyText", "hello world"],
     ])
   })
+
+  it("uses CC connect style tool cards without a final reply footer", async () => {
+    const client = new FakeFeishuClient()
+    const service = new FeishuReplyService({
+      clientForConnector: () => client,
+    })
+    const target = feishuTarget()
+
+    await service.dispatchAgentEvent(target, {
+      type: "toolUse",
+      toolName: "Bash",
+      toolInput: "/bin/zsh -lc \"echo hello\"",
+    })
+    await service.dispatchAgentEvent(target, {
+      type: "toolResult",
+      toolName: "Bash",
+      content: "hello",
+      status: "completed",
+      exitCode: 0,
+      success: true,
+    })
+    await service.dispatchAgentEvent(target, {
+      type: "result",
+      content: "你好。有什么要处理的？",
+      done: true,
+      metadata: {
+        model: "gpt-5.5",
+        effort: "xhigh",
+        contextRemainingPercent: 95,
+      },
+    })
+
+    expect(client.calls).toEqual([
+      ["sendCard", expect.objectContaining({
+        schema: "2.0",
+        body: expect.objectContaining({
+          elements: [expect.objectContaining({
+            tag: "markdown",
+            content: expect.stringContaining("🔧 **工具 #1: Bash**\n---\n```bash\n/bin/zsh -lc \"echo hello\"\n```"),
+          })],
+        }),
+      })],
+      ["replyText", "你好。有什么要处理的？"],
+    ])
+  })
 })
 
 function feishuTarget(): ReplyTarget {

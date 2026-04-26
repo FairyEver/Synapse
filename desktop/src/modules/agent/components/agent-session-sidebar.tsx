@@ -1,4 +1,15 @@
-import { Bot, RefreshCw } from "lucide-react"
+import { Bot, Plus, RefreshCw, Trash2 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   ModuleSidebar,
@@ -14,18 +25,22 @@ import {
 
 type AgentSessionSidebarProps = {
   sessions: SynapseAgentSessionSummary[]
-  selectedSessionKey: string
+  selectedConversationId?: string
   loading: boolean
   onRefresh: () => void
-  onSelect: (sessionKey: string) => void
+  onCreate: () => void
+  onSelect: (conversationId: string) => void
+  onDelete: (conversationId: string) => void
 }
 
 function AgentSessionSidebar({
   sessions,
-  selectedSessionKey,
+  selectedConversationId,
   loading,
   onRefresh,
+  onCreate,
   onSelect,
+  onDelete,
 }: AgentSessionSidebarProps) {
   const items = sessions.length > 0
     ? sessions
@@ -43,33 +58,78 @@ function AgentSessionSidebar({
     <ModuleSidebar variant="bare">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-sm font-semibold">会话</h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={loading}
-          onClick={onRefresh}
-          title="刷新"
-        >
-          <RefreshCw />
-          <span className="sr-only">刷新</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={loading}
+            onClick={onCreate}
+            title="新建会话"
+          >
+            <Plus />
+            <span className="sr-only">新建会话</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={loading}
+            onClick={onRefresh}
+            title="刷新"
+          >
+            <RefreshCw />
+            <span className="sr-only">刷新</span>
+          </Button>
+        </div>
       </div>
       <ModuleSidebarList>
-        {items.map((session) => (
-          <ModuleSidebarItem
-            key={session.id}
-            active={session.sessionKey === selectedSessionKey}
-            icon={Bot}
-            trailing={session.updatedAt ? (
-              <span className="text-xs text-muted-foreground">
-                {formatEntryTime(session.updatedAt)}
-              </span>
-            ) : null}
-            onClick={() => onSelect(session.sessionKey)}
-          >
-            {sessionLabel(session)}
-          </ModuleSidebarItem>
-        ))}
+        {items.map((session) => {
+          const canDelete = sessions.length > 0
+          return (
+            <div key={session.id} className="flex items-center gap-1">
+              <ModuleSidebarItem
+                active={session.id === selectedConversationId || (!selectedConversationId && session.active)}
+                icon={Bot}
+                className="min-w-0 flex-1"
+                trailing={session.updatedAt ? (
+                  <span className="text-xs text-muted-foreground">
+                    {formatEntryTime(session.updatedAt)}
+                  </span>
+                ) : null}
+                onClick={() => onSelect(session.id)}
+              >
+                {sessionLabel(session)}
+              </ModuleSidebarItem>
+              {canDelete ? (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={loading}
+                      title="删除会话"
+                    >
+                      <Trash2 />
+                      <span className="sr-only">删除会话</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>删除此会话？</AlertDialogTitle>
+                      <AlertDialogDescription>会话记录将被删除。</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => onDelete(session.id)}>
+                        删除
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : null}
+            </div>
+          )
+        })}
       </ModuleSidebarList>
     </ModuleSidebar>
   )

@@ -162,6 +162,8 @@ export interface FeishuRuntimeClient {
   sendCard(ctx: FeishuReplyContext, card: Record<string, unknown>): Promise<void>
   sendImage(ctx: FeishuReplyContext, image: Buffer): Promise<void>
   sendFile(ctx: FeishuReplyContext, fileName: string, file: Buffer): Promise<void>
+  addReaction?(messageId: string, emojiType: string): Promise<string | undefined>
+  removeReaction?(messageId: string, reactionId: string): Promise<void>
 }
 
 export interface FeishuClientFactory {

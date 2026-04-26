@@ -1,4 +1,9 @@
-import type { AgentEvent, AgentPermissionRequestEvent } from "../../agent-runtime"
+import type {
+  AgentEvent,
+  AgentPermissionRequestEvent,
+  AgentThinkingEvent,
+  AgentToolUseEvent,
+} from "../../agent-runtime"
 import type { ReplyTarget } from "../../reply-target"
 import type { ReplyOutboxService } from "../../reply-target"
 import type { SideChannelPreparedAttachment } from "../../side-channel"
@@ -7,12 +12,6 @@ import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { FeishuReplyContext, FeishuRuntimeClient } from "./feishu-types"
 import { reconstructFeishuReplyContext } from "./session"
-import {
-  appendCompactProgressEntry,
-  progressEntryFromEvent,
-  renderCompactProgress,
-  type CompactProgressEntry,
-} from "../../agent-runtime/preview-progress"
 
 export interface FeishuReplyServiceDeps {
   readonly clientForConnector: (connectorId: string) => FeishuRuntimeClient | undefined
@@ -24,11 +23,9 @@ export interface FeishuReplyServiceDeps {
 
 interface FeishuTurnState {
   text: string
-  progressEntries: readonly CompactProgressEntry[]
-  lastProgressAt?: number
+  toolCount: number
 }
 
-const PROGRESS_FALLBACK_INTERVAL_MS = 5000
 const FEISHU_TEXT_MAX_RUNES = 3900
 
 export class FeishuReplyService implements ReplyTransportDispatcher {
@@ -60,9 +57,12 @@ export class FeishuReplyService implements ReplyTransportDispatcher {
           await this.sendPermissionCard(target, event)
           break
         case "thinking":
+          await this.sendThinkingProgress(target, event)
+          break
         case "toolUse":
+          await this.sendToolUseProgress(target, turn, event)
+          break
         case "toolResult":
-          await this.sendProgressFallback(target, turn, event)
           break
         default: {
           const exhaustive: never = event
@@ -103,7 +103,9 @@ export class FeishuReplyService implements ReplyTransportDispatcher {
   private async sendText(target: ReplyTarget, content: string): Promise<void> {
     const { client, ctx } = await this.resolveClient(target)
     const safeContent = truncateRunes(content, FEISHU_TEXT_MAX_RUNES)
-    if (ctx.messageId) {
+    if (containsMarkdown(safeContent)) {
+      await client.sendCard(ctx, markdownCard(preprocessFeishuMarkdown(safeContent)))
+    } else if (ctx.messageId) {
       await client.replyText(ctx, safeContent)
     } else {
       await client.createText(ctx, safeContent)
@@ -111,24 +113,20 @@ export class FeishuReplyService implements ReplyTransportDispatcher {
     this.recordAudit("allowed", target, "reply")
   }
 
-  private async sendProgressFallback(
+  private async sendThinkingProgress(target: ReplyTarget, event: AgentThinkingEvent): Promise<void> {
+    if (!event.content.trim()) return
+    await this.sendText(target, `💭 ${event.content}`)
+  }
+
+  private async sendToolUseProgress(
     target: ReplyTarget,
     turn: FeishuTurnState,
-    event: AgentEvent,
+    event: AgentToolUseEvent,
   ): Promise<void> {
-    const entry = progressEntryFromEvent(event)
-    if (!entry) return
-    turn.progressEntries = appendCompactProgressEntry(turn.progressEntries, entry)
-    const now = Date.now()
-    if (
-      event.type !== "toolResult"
-      && turn.lastProgressAt !== undefined
-      && now - turn.lastProgressAt < PROGRESS_FALLBACK_INTERVAL_MS
-    ) {
-      return
-    }
-    turn.lastProgressAt = now
-    await this.sendText(target, renderCompactProgress(turn.progressEntries))
+    turn.toolCount += 1
+    const toolName = event.toolName || "Tool"
+    const formattedInput = formatToolInput(toolName, event.toolInput ?? stringFromUnknown(event.toolInputRaw))
+    await this.sendText(target, `🔧 **工具 #${String(turn.toolCount)}: ${toolName}**\n---\n${formattedInput}`)
   }
 
   private async sendPermissionCard(
@@ -216,7 +214,7 @@ export class FeishuReplyService implements ReplyTransportDispatcher {
     if (existing) return existing
     const created: FeishuTurnState = {
       text: "",
-      progressEntries: [],
+      toolCount: 0,
     }
     this.turns.set(key, created)
     return created
@@ -311,6 +309,97 @@ function permissionCard(
         ],
       },
     ],
+  }
+}
+
+function markdownCard(content: string): Record<string, unknown> {
+  return {
+    schema: "2.0",
+    config: { wide_screen_mode: true },
+    body: {
+      elements: [{
+        tag: "markdown",
+        content,
+      }],
+    },
+  }
+}
+
+const MARKDOWN_INDICATORS = [
+  "```",
+  "**",
+  "~~",
+  "`",
+  "\n- ",
+  "\n* ",
+  "\n1. ",
+  "\n# ",
+  "---",
+]
+
+function containsMarkdown(content: string): boolean {
+  return MARKDOWN_INDICATORS.some((indicator) => content.includes(indicator))
+}
+
+function preprocessFeishuMarkdown(markdown: string): string {
+  let content = ""
+  for (let index = 0; index < markdown.length; index += 1) {
+    if (
+      index > 0
+      && markdown[index] === "`"
+      && markdown[index + 1] === "`"
+      && markdown[index + 2] === "`"
+      && markdown[index - 1] !== "\n"
+    ) {
+      content += "\n"
+    }
+    content += markdown[index]
+  }
+  return content
+}
+
+function formatToolInput(toolName: string, input: string): string {
+  if (!input) return ""
+  if (input.includes("```")) return input
+  if (input.includes("\n") || [...input].length > 200) {
+    return `\`\`\`${toolCodeLang(toolName, input)}\n${input}\n\`\`\``
+  }
+  switch (toolName) {
+    case "shell":
+    case "run_shell_command":
+    case "Bash":
+      return `\`\`\`bash\n${input}\n\`\`\``
+    default:
+      return `\`${input}\``
+  }
+}
+
+function toolCodeLang(toolName: string, input: string): string {
+  switch (toolName) {
+    case "shell":
+    case "run_shell_command":
+    case "Bash":
+      return "bash"
+    case "write_file":
+    case "WriteFile":
+    case "replace":
+    case "ReplaceInFile":
+      if (input.includes("\n- ") || input.includes("\n+ ")) return "diff"
+      break
+    default:
+      break
+  }
+  if (input.includes("\n- ") && input.includes("\n+ ")) return "diff"
+  return ""
+}
+
+function stringFromUnknown(value: unknown): string {
+  if (typeof value === "string") return value
+  if (value === undefined || value === null) return ""
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
   }
 }
 

@@ -440,6 +440,7 @@ export class FeishuConnectorService {
     }
 
     await this.connectorRepository.updateDedupe(connectorId, normalized.dedupe)
+    const stopProcessingIndicator = await this.startProcessingIndicator(projectId, connectorId, normalized.message, running)
     try {
       const workspaceConfig = normalizeWorkspaceConfig(connector.workspaceConfig)
       if (workspaceConfig.enabled) {
@@ -510,6 +511,40 @@ export class FeishuConnectorService {
           error: replyError instanceof Error ? replyError.message : String(replyError),
           projectId,
           connectorId,
+        })
+      })
+    } finally {
+      await stopProcessingIndicator()
+    }
+  }
+
+  private async startProcessingIndicator(
+    projectId: string,
+    connectorId: string,
+    message: AgentMessage,
+    running: RunningFeishuConnector | undefined,
+  ): Promise<() => Promise<void>> {
+    const messageId = message.messageId
+    const client = running?.client
+    if (!messageId || !client?.addReaction) return async () => {}
+    const reactionId = await client.addReaction(messageId, "OnIt").catch((error) => {
+      this.deps.logger?.warn("Failed to add Feishu processing reaction.", {
+        error: error instanceof Error ? error.message : String(error),
+        projectId,
+        connectorId,
+        messageId: message.messageId,
+      })
+      return undefined
+    })
+    const removeReaction = client.removeReaction?.bind(client)
+    if (!reactionId || !removeReaction) return async () => {}
+    return async () => {
+      await removeReaction(messageId, reactionId).catch((error) => {
+        this.deps.logger?.warn("Failed to remove Feishu processing reaction.", {
+          error: error instanceof Error ? error.message : String(error),
+          projectId,
+          connectorId,
+          messageId,
         })
       })
     }

@@ -91,10 +91,18 @@ export interface AgentPermissionRequestEvent extends AgentEventBase {
   readonly questions?: readonly AgentUserQuestion[]
 }
 
+export interface AgentResultMetadata {
+  readonly model?: string
+  readonly effort?: string
+  readonly contextRemainingPercent?: number
+  readonly workDir?: string
+}
+
 export interface AgentResultEvent extends AgentEventBase {
   readonly type: "result"
   readonly content: string
   readonly done: true
+  readonly metadata?: AgentResultMetadata
 }
 
 export interface AgentErrorEvent extends AgentEventBase {

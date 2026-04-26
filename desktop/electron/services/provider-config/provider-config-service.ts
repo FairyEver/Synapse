@@ -152,6 +152,25 @@ export class ProviderConfigService {
     return this.getProjectProviderState(projectId, agentType)
   }
 
+  async getActiveAgentType(
+    projectId: string,
+    fallback: AgentRuntimeAgentType = "codex",
+  ): Promise<AgentRuntimeAgentType> {
+    const state = await this.getProjectStateEntry(projectId)
+    if (state?.agentType) return normalizeAgentType(state.agentType)
+
+    const activeProviderId = state?.activeProviderId
+    if (activeProviderId) {
+      const provider = await this.findProviderEntry(projectId, activeProviderId)
+      const agentTypes = providerAgentTypes(provider)
+      if (agentTypes.length === 1 && agentTypes[0]) {
+        return normalizeAgentType(agentTypes[0])
+      }
+    }
+
+    return normalizeAgentType(fallback)
+  }
+
   async resolveRuntimeConfig(
     projectId: string,
     agentType: AgentRuntimeAgentType,
@@ -395,10 +414,14 @@ function providerConfigId(entry: ProviderEntryV1): string {
 }
 
 function matchesAgentType(entry: ProviderEntryV1, agentType: AgentRuntimeAgentType): boolean {
-  const allowed = entry.agentTypes ?? (entry.agentType ? [entry.agentType] : undefined)
+  const allowed = providerAgentTypes(entry)
   if (!allowed || allowed.length === 0) return true
   const normalized = normalizeAgentType(agentType)
   return allowed.some((value) => normalizeAgentType(value) === normalized)
+}
+
+function providerAgentTypes(entry: ProviderEntryV1 | null | undefined): readonly string[] {
+  return entry?.agentTypes ?? (entry?.agentType ? [entry.agentType] : [])
 }
 
 function normalizeAgentType(agentType: string): string {

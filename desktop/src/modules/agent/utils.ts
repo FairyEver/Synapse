@@ -19,6 +19,19 @@ function agentEventToTimelineEntry(
   }
 }
 
+function localUserTimelineEntry(
+  content: string,
+  timestamp: string,
+  index: number,
+): SynapseAgentTimelineEntry {
+  return {
+    id: `local:${timestamp}:user:${index}`,
+    role: "user",
+    content,
+    timestamp,
+  }
+}
+
 function contentForEvent(event: SynapseAgentEvent): string {
   switch (event.type) {
     case "text":
@@ -69,6 +82,11 @@ function defaultSessionKey(sessions: readonly SynapseAgentSessionSummary[]): str
     ?? DEFAULT_LOCAL_SESSION_KEY
 }
 
+function defaultSessionId(sessions: readonly SynapseAgentSessionSummary[]): string | undefined {
+  return sessions.find((session) => session.active)?.id
+    ?? sessions[0]?.id
+}
+
 function formatEntryTime(timestamp: string): string {
   return new Date(timestamp).toLocaleTimeString([], {
     hour: "2-digit",
@@ -79,7 +97,9 @@ function formatEntryTime(timestamp: string): string {
 export {
   DEFAULT_LOCAL_SESSION_KEY,
   agentEventToTimelineEntry,
+  defaultSessionId,
   defaultSessionKey,
   formatEntryTime,
+  localUserTimelineEntry,
   sessionLabel,
 }

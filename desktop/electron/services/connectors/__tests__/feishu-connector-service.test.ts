@@ -30,6 +30,7 @@ describe("FeishuConnectorService", () => {
     const dataRepository = new MemoryDataRepository()
     const client = new FakeFeishuClient()
     const agent = new FakeAgentRuntime()
+    agent.activeAgentType = "claude-code"
     const service = new FeishuConnectorService({
       dataRepository,
       projectContainers: fakeProjectContainers(agent),
@@ -63,6 +64,11 @@ describe("FeishuConnectorService", () => {
     })
 
     expect(agent.messages).toHaveLength(1)
+    expect(client.replies).toEqual([])
+    expect(client.reactions).toEqual([
+      ["addReaction", "m1", "OnIt"],
+      ["removeReaction", "m1", "reaction-1"],
+    ])
     expect(agent.messages[0]).toEqual(expect.objectContaining({
       projectId: "project-1",
       platform: "feishu",
@@ -198,6 +204,7 @@ class FakeFeishuClient implements FeishuRuntimeClient {
   started = false
   stopped = false
   readonly replies: Array<{ readonly ctx: FeishuReplyContext; readonly content: string }> = []
+  readonly reactions: unknown[][] = []
 
   async start(handlers: FeishuRuntimeClientHandlers): Promise<void> {
     this.handlers = handlers
@@ -219,11 +226,23 @@ class FakeFeishuClient implements FeishuRuntimeClient {
   async sendCard(_ctx: FeishuReplyContext, _card: Record<string, unknown>): Promise<void> {}
   async sendImage(_ctx: FeishuReplyContext, _image: Buffer): Promise<void> {}
   async sendFile(_ctx: FeishuReplyContext, _fileName: string, _file: Buffer): Promise<void> {}
+  async addReaction(messageId: string, emojiType: string): Promise<string | undefined> {
+    this.reactions.push(["addReaction", messageId, emojiType])
+    return "reaction-1"
+  }
+  async removeReaction(messageId: string, reactionId: string): Promise<void> {
+    this.reactions.push(["removeReaction", messageId, reactionId])
+  }
 }
 
 class FakeAgentRuntime {
+  activeAgentType = "codex"
   readonly messages: AgentMessage[] = []
   readonly permissions: AgentPermissionResponseRequest[] = []
+
+  async getActiveAgentType(): Promise<string> {
+    return this.activeAgentType
+  }
 
   async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
     this.messages.push(message)

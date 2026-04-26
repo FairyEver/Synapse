@@ -298,6 +298,15 @@ export type SynapseBridge = {
     getTimeline: (
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
+    createSession: (
+      args: { projectId: string; sessionKey?: string; name?: string },
+    ) => Promise<SynapseAgentSessionSummary>
+    switchSession: (
+      args: { projectId: string; sessionKey?: string; conversationId: string },
+    ) => Promise<SynapseAgentSessionSummary>
+    deleteSession: (
+      args: { projectId: string; conversationId: string },
+    ) => Promise<{ ok: boolean }>
     send: (
       args: { projectId: string; sessionKey?: string; content: string },
     ) => Promise<SynapseAgentSendResult>

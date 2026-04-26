@@ -42,6 +42,12 @@ export type SynapseAgentEvent =
       type: "result"
       content: string
       done: true
+      metadata?: {
+        model?: string
+        effort?: string
+        contextRemainingPercent?: number
+        workDir?: string
+      }
       agentSessionId?: string
       threadId?: string
     }

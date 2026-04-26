@@ -31,6 +31,20 @@ const timelineRequestSchema = projectRequestSchema.extend({
   limit: z.number().int().positive().max(200).optional(),
 })
 
+const createSessionRequestSchema = projectRequestSchema.extend({
+  sessionKey: z.string().optional(),
+  name: z.string().optional(),
+})
+
+const switchSessionRequestSchema = projectRequestSchema.extend({
+  sessionKey: z.string().optional(),
+  conversationId: z.string().min(1),
+})
+
+const deleteSessionRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+})
+
 const sendRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   content: z.string().min(1),
@@ -141,6 +155,12 @@ const agentEventSchema = z.discriminatedUnion("type", [
     type: z.literal("result"),
     content: z.string(),
     done: z.literal(true),
+    metadata: z.object({
+      model: z.string().optional(),
+      effort: z.string().optional(),
+      contextRemainingPercent: z.number().optional(),
+      workDir: z.string().optional(),
+    }).optional(),
   }),
   z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
 ])
@@ -178,6 +198,10 @@ const respondPermissionResultSchema = z.object({
   ok: z.literal(true),
 })
 
+const deleteSessionResultSchema = z.object({
+  ok: z.boolean(),
+})
+
 const openReferenceResultSchema = z.object({
   ok: z.literal(true),
   path: z.string(),
@@ -186,6 +210,9 @@ const openReferenceResultSchema = z.object({
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SessionsRequest = z.infer<typeof sessionsRequestSchema>
 type TimelineRequest = z.infer<typeof timelineRequestSchema>
+type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
+type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
+type DeleteSessionRequest = z.infer<typeof deleteSessionRequestSchema>
 type SendRequest = z.infer<typeof sendRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
 type OpenReferenceRequest = z.infer<typeof openReferenceRequestSchema>
@@ -234,6 +261,48 @@ export const agentIpcModule: IpcModule = {
           conversationId: session?.id,
           entries: session ? historyEntries(session, request.limit ?? 100) : [],
         }
+      },
+    },
+    createSession: {
+      kind: "invoke",
+      channel: "synapse:agent:create-session",
+      request: createSessionRequestSchema,
+      response: sessionSummarySchema,
+      handler: async (ctx, request: CreateSessionRequest) => {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
+        const session = await agent.createSession({
+          sessionKey,
+          platform: LOCAL_RENDERER_PLATFORM,
+          name: request.name?.trim() || undefined,
+        })
+        return sessionSummary(session)
+      },
+    },
+    switchSession: {
+      kind: "invoke",
+      channel: "synapse:agent:switch-session",
+      request: switchSessionRequestSchema,
+      response: sessionSummarySchema,
+      handler: async (ctx, request: SwitchSessionRequest) => {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
+        const session = await agent.switchSession(
+          sessionKey,
+          request.conversationId,
+          LOCAL_RENDERER_PLATFORM,
+        )
+        return sessionSummary(session)
+      },
+    },
+    deleteSession: {
+      kind: "invoke",
+      channel: "synapse:agent:delete-session",
+      request: deleteSessionRequestSchema,
+      response: deleteSessionResultSchema,
+      handler: async (ctx, request: DeleteSessionRequest) => {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        return { ok: await agent.deleteSession(request.conversationId) }
       },
     },
     send: {

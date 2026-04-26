@@ -107,6 +107,9 @@ export {
   type AgentRuntimeRelayResult,
   type AgentUserQuestion,
   type AgentUserQuestionOption,
+  type AgentResultMetadata,
+  type AgentThinkingEvent,
+  type AgentToolUseEvent,
 } from "./types"
 
 export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRuntimeService> {

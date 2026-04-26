@@ -237,7 +237,11 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}
         {isReady && activeCategory === "connectors" ? (
-          <FeishuConnectorPanel projectId={activeRepository?.uuid ?? null} />
+          <FeishuConnectorPanel
+            projectId={activeRepository?.uuid ?? null}
+            repositoryName={activeRepository?.name}
+            repositoryPath={activeRepository?.localPath}
+          />
         ) : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
         {isReady && activeCategory === "data-store" ? <DataStoreSettingsPanel /> : null}

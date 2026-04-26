@@ -1,3 +1,7 @@
+import path from "node:path"
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -164,6 +168,48 @@ describe("Codex JSONL parser", () => {
     expect(result.events.at(-1)).toEqual(
       expect.objectContaining({ type: "result", content: "hello world" }),
     )
+  })
+
+  it("attaches Codex footer metadata and context remaining", async () => {
+    const codexHome = await mkdtemp(path.join(tmpdir(), "synapse-codex-home-"))
+    const sessionDir = path.join(codexHome, "sessions", "2026", "04", "26")
+    await mkdir(sessionDir, { recursive: true })
+    await writeFile(path.join(sessionDir, "rollout-thread-1.jsonl"), `${JSON.stringify({
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          model_context_window: 112000,
+          total_token_usage: { total_tokens: 62000 },
+        },
+      },
+    })}\n`)
+
+    const parser = new CodexJsonLineParser(undefined, undefined, {
+      model: "gpt-5.5",
+      effort: "xhigh",
+      workDir: "/repo",
+      codexHome,
+    })
+    parser.pushLine(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }))
+    parser.pushLine(JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "agent_message",
+        content: [{ type: "output_text", text: "hello" }],
+      },
+    }))
+    parser.pushLine(JSON.stringify({ type: "turn.completed" }))
+
+    expect(parser.finalize().events.at(-1)).toEqual(expect.objectContaining({
+      type: "result",
+      metadata: {
+        model: "gpt-5.5",
+        effort: "xhigh",
+        contextRemainingPercent: 50,
+        workDir: "/repo",
+      },
+    }))
   })
 
   it("maps reasoning items to thinking", () => {

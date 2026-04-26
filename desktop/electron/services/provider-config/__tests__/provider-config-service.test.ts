@@ -60,6 +60,27 @@ describe("ProviderConfigService", () => {
     const claudeState = await service.getProjectProviderState("project-1", "claude-code")
     expect(claudeState.providers.map((provider) => provider.id)).toEqual(["anthropic"])
     expect(claudeState.activeProvider).toBeUndefined()
+    expect(await service.getActiveAgentType("project-1")).toBe("codex")
+  })
+
+  it("resolves the active agent type from project state or a single-agent provider", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const service = new ProviderConfigService({ providers, secrets, now: fixedNow })
+
+    await service.upsertGlobalProvider({
+      id: "anthropic",
+      kind: "anthropic",
+      model: "claude-sonnet",
+      agentTypes: ["claude-code"],
+    })
+    await service.setProjectProviderRefs("project-1", ["anthropic"])
+    await service.setActiveProvider("project-1", "anthropic")
+
+    expect(await service.getActiveAgentType("project-1")).toBe("claude-code")
+
+    await service.setActiveMode("project-1", "acceptEdits", "claude-code")
+    expect(await service.getActiveAgentType("project-1")).toBe("claude-code")
   })
 
   it("updates active provider model first and project model when no provider is active", async () => {
@@ -250,4 +271,3 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
 }
-

@@ -58,8 +58,8 @@ function SidebarContentLayout({
         >
           <div
             className={cn(
-              "h-full min-h-0 min-w-0",
-              contentScrollable ? undefined : "overflow-hidden",
+              "min-w-0",
+              contentScrollable ? "min-h-full" : "h-full min-h-0 overflow-hidden",
             )}
           >
             {children}

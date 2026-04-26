@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FolderOpen, Pause, Play, QrCode, RefreshCw, RotateCcw, Save, Square, Trash2 } from "lucide-react"
+import {
+  FolderOpen,
+  Pause,
+  Play,
+  QrCode,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Square,
+  Trash2,
+  VolumeX,
+} from "lucide-react"
 import QRCode from "qrcode"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +19,7 @@ import {
   Card,
   CardAction,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -25,7 +37,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -50,13 +61,19 @@ import type {
 
 type FeishuConnectorPanelProps = {
   projectId: string | null
+  repositoryName?: string
+  repositoryPath?: string
 }
 
 type SetupState = SynapseFeishuSetupBeginResult & {
   poll?: SynapseFeishuSetupPollResult
 }
 
-function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
+function FeishuConnectorPanel({
+  projectId,
+  repositoryName,
+  repositoryPath,
+}: FeishuConnectorPanelProps) {
   const { promise } = useAppNotifications()
   const [status, setStatus] = useState<SynapseFeishuConnectorRuntimeStatus | null>(null)
   const [isLoadingStatus, setIsLoadingStatus] = useState(false)
@@ -282,8 +299,8 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
         idleTimeoutMs: workspaceConfig.idleTimeoutMs,
       }),
       {
-        loading: "正在保存多工作区...",
-        success: "多工作区已保存。",
+        loading: "正在保存目录规则...",
+        success: "目录规则已保存。",
       },
     )
     setWorkspaceConfig(saved)
@@ -391,8 +408,8 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
         prompt: heartbeatPrompt.trim() || undefined,
       }),
       {
-        loading: "正在保存 Heartbeat...",
-        success: "Heartbeat 已保存。",
+        loading: "正在保存保活提醒...",
+        success: "保活提醒已保存。",
       },
     )
     await refreshAutomation()
@@ -425,11 +442,16 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
     await refreshAutomation()
   }, [feishu, projectId, refreshAutomation])
 
+  const connector = status?.connector
+  const workspaceDirectoryEnabled = workspaceConfig.enabled
+  const workspaceBaseDirRequired = workspaceDirectoryEnabled && !workspaceConfig.baseDir?.trim()
+
   if (!projectId) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">飞书</CardTitle>
+          <CardTitle>飞书连接器</CardTitle>
+          <CardDescription>连接器设置跟随当前仓库。</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">请先选择仓库。</p>
@@ -448,81 +470,134 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          飞书
-          {statusBadge}
-        </CardTitle>
-        <CardAction>
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={isLoadingStatus}
-            onClick={() => void refreshStatus()}
-            aria-label="刷新"
-          >
-            <RefreshCw className={isLoadingStatus ? "size-4 animate-spin" : "size-4"} />
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            disabled={status?.running || !status?.configured}
-            onClick={() => void handleStart()}
-          >
-            <Play className="size-4" />
-            连接
-          </Button>
-          <Button
-            variant="outline"
-            disabled={!status?.running}
-            onClick={() => void handleStop()}
-          >
-            <Square className="size-4" />
-            断开
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {status?.connector?.appId ?? "未配置"}
-          </span>
-        </div>
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            飞书连接器
+            {statusBadge}
+          </CardTitle>
+          <CardDescription>
+            接入飞书消息，让当前仓库可以在飞书中启动会话、任务和提醒。
+          </CardDescription>
+          <CardAction>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={isLoadingStatus}
+              onClick={() => void refreshStatus()}
+              aria-label="刷新连接状态"
+            >
+              <RefreshCw className={isLoadingStatus ? "animate-spin" : undefined} />
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ConnectorDetail label="App ID" value={connector?.appId ?? "未配置"} />
+            <ConnectorDetail label="当前仓库" value={repositoryName ?? "未选择"} />
+            <ConnectorDetail label="默认运行目录" value={repositoryPath ?? "未选择"} wrap />
+            <ConnectorDetail label="运行状态" value={status?.running ? "已连接" : "未连接"} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={status?.running || !status?.configured}
+              onClick={() => void handleStart()}
+            >
+              <Play data-icon="inline-start" />
+              连接
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!status?.running}
+              onClick={() => void handleStop()}
+            >
+              <Square data-icon="inline-start" />
+              断开
+            </Button>
+          </div>
 
-        {status?.connector?.lastError ? (
-          <Alert variant="destructive">
-            <AlertTitle>连接失败</AlertTitle>
-            <AlertDescription>{status.connector.lastError}</AlertDescription>
-          </Alert>
-        ) : null}
+          {connector?.lastError ? (
+            <Alert variant="destructive">
+              <AlertTitle>连接失败</AlertTitle>
+              <AlertDescription>{connector.lastError}</AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
 
-        <Separator />
+      <Card>
+        <CardHeader>
+          <CardTitle>连接凭据</CardTitle>
+          <CardDescription>保存飞书应用凭据后，连接器才能收发消息。</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)]">
+          <div className="flex flex-col gap-6">
+            <FieldGroup>
+              <Field>
+                <FieldLabel>扫码授权</FieldLabel>
+                <FieldDescription>用开发者账号完成一次性授权。</FieldDescription>
+                <div>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleBeginSetup()}
+                  >
+                    <QrCode data-icon="inline-start" />
+                    创建二维码
+                  </Button>
+                </div>
+              </Field>
+              {setup?.poll?.status === "completed" ? (
+                <Button onClick={() => void handleSaveSetup()}>
+                  <Save data-icon="inline-start" />
+                  保存授权
+                </Button>
+              ) : null}
+              {setup?.poll?.message ? (
+                <p className="text-sm text-muted-foreground">{setup.poll.message}</p>
+              ) : null}
+            </FieldGroup>
 
-        <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)]">
-          <FieldGroup>
-            <Field>
-              <FieldLabel>扫码授权</FieldLabel>
-              <FieldDescription>使用飞书开发者账号授权个人应用。</FieldDescription>
+            <FieldGroup>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field>
+                  <FieldLabel htmlFor="feishu-app-id">App ID</FieldLabel>
+                  <Input
+                    id="feishu-app-id"
+                    value={manualAppId}
+                    onChange={(event) => setManualAppId(event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="feishu-app-secret">App Secret</FieldLabel>
+                  <Input
+                    id="feishu-app-secret"
+                    type="password"
+                    value={manualAppSecret}
+                    onChange={(event) => setManualAppSecret(event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="feishu-owner-open-id">Owner Open ID</FieldLabel>
+                  <Input
+                    id="feishu-owner-open-id"
+                    value={manualOwnerOpenId}
+                    onChange={(event) => setManualOwnerOpenId(event.target.value)}
+                  />
+                </Field>
+              </div>
               <div>
                 <Button
-                  variant="outline"
-                  onClick={() => void handleBeginSetup()}
+                  disabled={!manualAppId.trim() || !manualAppSecret.trim()}
+                  onClick={() => void handleSaveManual()}
                 >
-                  <QrCode className="size-4" />
-                  创建二维码
+                  <Save data-icon="inline-start" />
+                  保存凭据
                 </Button>
               </div>
-            </Field>
-            {setup?.poll?.status === "completed" ? (
-              <Button onClick={() => void handleSaveSetup()}>
-                <Save className="size-4" />
-                保存授权
-              </Button>
-            ) : null}
-            {setup?.poll?.message ? (
-              <p className="text-sm text-muted-foreground">{setup.poll.message}</p>
-            ) : null}
-          </FieldGroup>
+            </FieldGroup>
+          </div>
 
           <div className="flex min-h-56 items-center justify-center rounded-lg border border-border bg-background p-3">
             {qrDataUrl ? (
@@ -532,165 +607,170 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
                 alt="飞书授权二维码"
               />
             ) : (
-              <p className="text-sm text-muted-foreground">暂无二维码</p>
+              <p className="text-sm text-muted-foreground">先创建二维码</p>
             )}
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        <Separator />
-
-        <FieldGroup>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Field>
-              <FieldLabel htmlFor="feishu-app-id">App ID</FieldLabel>
-              <Input
-                id="feishu-app-id"
-                value={manualAppId}
-                onChange={(event) => setManualAppId(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="feishu-app-secret">App Secret</FieldLabel>
-              <Input
-                id="feishu-app-secret"
-                type="password"
-                value={manualAppSecret}
-                onChange={(event) => setManualAppSecret(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="feishu-owner-open-id">Open ID</FieldLabel>
-              <Input
-                id="feishu-owner-open-id"
-                value={manualOwnerOpenId}
-                onChange={(event) => setManualOwnerOpenId(event.target.value)}
-              />
-            </Field>
-          </div>
-          <div>
-            <Button
-              disabled={!manualAppId.trim() || !manualAppSecret.trim()}
-              onClick={() => void handleSaveManual()}
-            >
-              <Save className="size-4" />
-              保存
-            </Button>
-          </div>
-        </FieldGroup>
-
-        <Separator />
-
-        <FieldGroup>
-          <Field orientation="horizontal">
-            <div className="flex flex-col gap-1">
-              <FieldLabel htmlFor="feishu-workspace-enabled">多工作区</FieldLabel>
-              <FieldDescription>按飞书频道绑定本地目录。</FieldDescription>
+      <Card>
+        <CardHeader>
+          <CardTitle>频道目录</CardTitle>
+          <CardDescription>按飞书频道选择本地运行目录。</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          <section className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">目录规则</span>
+              <Badge variant={workspaceDirectoryEnabled ? "default" : "secondary"}>
+                {workspaceDirectoryEnabled ? "启用" : "未启用"}
+              </Badge>
             </div>
-            <Switch
-              id="feishu-workspace-enabled"
-              checked={workspaceConfig.enabled}
-              onCheckedChange={(enabled) =>
-                setWorkspaceConfig((current) => ({ ...current, enabled }))}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="feishu-workspace-base-dir">工作区目录</FieldLabel>
-            <div className="flex gap-2">
-              <Input
-                id="feishu-workspace-base-dir"
-                value={workspaceConfig.baseDir ?? ""}
-                onChange={(event) =>
-                  setWorkspaceConfig((current) => ({
-                    ...current,
-                    baseDir: event.target.value,
-                  }))}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => void handleChooseBaseDir()}
-                aria-label="选择目录"
-              >
-                <FolderOpen />
-              </Button>
+            <FieldGroup>
+              <Field orientation="horizontal">
+                <div className="flex flex-col gap-1">
+                  <FieldLabel htmlFor="feishu-workspace-enabled">启用频道目录</FieldLabel>
+                  <FieldDescription>开启后选择本地根目录。</FieldDescription>
+                </div>
+                <Switch
+                  id="feishu-workspace-enabled"
+                  checked={workspaceDirectoryEnabled}
+                  onCheckedChange={(enabled) =>
+                    setWorkspaceConfig((current) => ({ ...current, enabled }))}
+                />
+              </Field>
+              <Field data-disabled={!workspaceDirectoryEnabled || undefined}>
+                <FieldLabel htmlFor="feishu-workspace-base-dir">本地根目录</FieldLabel>
+                <FieldDescription>选择包含频道同名文件夹的父目录。</FieldDescription>
+                <div className="flex gap-2">
+                  <Input
+                    id="feishu-workspace-base-dir"
+                    value={workspaceConfig.baseDir ?? ""}
+                    disabled={!workspaceDirectoryEnabled}
+                    onChange={(event) =>
+                      setWorkspaceConfig((current) => ({
+                        ...current,
+                        baseDir: event.target.value,
+                      }))}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!workspaceDirectoryEnabled}
+                    onClick={() => void handleChooseBaseDir()}
+                    aria-label="选择目录"
+                  >
+                    <FolderOpen />
+                  </Button>
+                </div>
+              </Field>
+              <Field orientation="horizontal" data-disabled={!workspaceDirectoryEnabled || undefined}>
+                <div className="flex flex-col gap-1">
+                  <FieldLabel htmlFor="feishu-workspace-auto-bind">按频道名自动绑定</FieldLabel>
+                  <FieldDescription>频道名和文件夹名相同时自动绑定。</FieldDescription>
+                </div>
+                <Switch
+                  id="feishu-workspace-auto-bind"
+                  checked={workspaceConfig.autoBindByChannelName ?? true}
+                  disabled={!workspaceDirectoryEnabled}
+                  onCheckedChange={(autoBindByChannelName) =>
+                    setWorkspaceConfig((current) => ({ ...current, autoBindByChannelName }))}
+                />
+              </Field>
+              <div>
+                <Button
+                  disabled={workspaceBaseDirRequired}
+                  onClick={() => void handleSaveWorkspaceConfig()}
+                >
+                  <Save data-icon="inline-start" />
+                  保存目录规则
+                </Button>
+              </div>
+            </FieldGroup>
+          </section>
+
+          <section className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">绑定结果</span>
+              <Badge variant="secondary">
+                {workspaceBindings.project.length + workspaceBindings.shared.length}
+              </Badge>
             </div>
-          </Field>
-          <Field orientation="horizontal">
-            <FieldLabel htmlFor="feishu-workspace-auto-bind">按频道名绑定</FieldLabel>
-            <Switch
-              id="feishu-workspace-auto-bind"
-              checked={workspaceConfig.autoBindByChannelName ?? true}
-              onCheckedChange={(autoBindByChannelName) =>
-                setWorkspaceConfig((current) => ({ ...current, autoBindByChannelName }))}
-            />
-          </Field>
-          <div>
-            <Button
-              disabled={workspaceConfig.enabled && !workspaceConfig.baseDir?.trim()}
-              onClick={() => void handleSaveWorkspaceConfig()}
-            >
-              <Save />
-              保存多工作区
-            </Button>
-          </div>
-        </FieldGroup>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <WorkspaceBindingTable
+                title="当前仓库绑定"
+                bindings={workspaceBindings.project}
+                isLoading={isLoadingWorkspace}
+                onUnbind={handleUnbindWorkspace}
+              />
+              <WorkspaceBindingTable
+                title="共享绑定"
+                bindings={workspaceBindings.shared}
+                isLoading={isLoadingWorkspace}
+                onUnbind={handleUnbindWorkspace}
+              />
+            </div>
+          </section>
+        </CardContent>
+      </Card>
 
-        <WorkspaceBindingTable
-          title="项目绑定"
-          bindings={workspaceBindings.project}
-          isLoading={isLoadingWorkspace}
-          onUnbind={handleUnbindWorkspace}
-        />
-        <WorkspaceBindingTable
-          title="shared 绑定"
-          bindings={workspaceBindings.shared}
-          isLoading={isLoadingWorkspace}
-          onUnbind={handleUnbindWorkspace}
-        />
+      <AutomationSection
+        connectorId={status?.connector?.id}
+        jobs={scheduledJobs}
+        heartbeats={heartbeats}
+        isLoading={isLoadingAutomation}
+        jobKind={jobKind}
+        jobSessionKey={jobSessionKey}
+        jobCronExpr={jobCronExpr}
+        jobBody={jobBody}
+        jobDescription={jobDescription}
+        jobSessionMode={jobSessionMode}
+        jobSilent={jobSilent}
+        jobMute={jobMute}
+        heartbeatSessionKey={heartbeatSessionKey}
+        heartbeatIntervalMins={heartbeatIntervalMins}
+        heartbeatPrompt={heartbeatPrompt}
+        onJobKindChange={setJobKind}
+        onJobSessionKeyChange={setJobSessionKey}
+        onJobCronExprChange={setJobCronExpr}
+        onJobBodyChange={setJobBody}
+        onJobDescriptionChange={setJobDescription}
+        onJobSessionModeChange={setJobSessionMode}
+        onJobSilentChange={setJobSilent}
+        onJobMuteChange={setJobMute}
+        onCreateJob={handleCreateJob}
+        onToggleJobEnabled={handleToggleJobEnabled}
+        onToggleJobMuted={handleToggleJobMuted}
+        onDeleteJob={handleDeleteJob}
+        onRunJob={handleRunJob}
+        onHeartbeatSessionKeyChange={setHeartbeatSessionKey}
+        onHeartbeatIntervalMinsChange={setHeartbeatIntervalMins}
+        onHeartbeatPromptChange={setHeartbeatPrompt}
+        onSaveHeartbeat={handleSaveHeartbeat}
+        onPauseHeartbeat={handlePauseHeartbeat}
+        onResumeHeartbeat={handleResumeHeartbeat}
+        onRunHeartbeat={handleRunHeartbeat}
+        onRefresh={refreshAutomation}
+      />
+    </div>
+  )
+}
 
-        <Separator />
-
-        <AutomationSection
-          connectorId={status?.connector?.id}
-          jobs={scheduledJobs}
-          heartbeats={heartbeats}
-          isLoading={isLoadingAutomation}
-          jobKind={jobKind}
-          jobSessionKey={jobSessionKey}
-          jobCronExpr={jobCronExpr}
-          jobBody={jobBody}
-          jobDescription={jobDescription}
-          jobSessionMode={jobSessionMode}
-          jobSilent={jobSilent}
-          jobMute={jobMute}
-          heartbeatSessionKey={heartbeatSessionKey}
-          heartbeatIntervalMins={heartbeatIntervalMins}
-          heartbeatPrompt={heartbeatPrompt}
-          onJobKindChange={setJobKind}
-          onJobSessionKeyChange={setJobSessionKey}
-          onJobCronExprChange={setJobCronExpr}
-          onJobBodyChange={setJobBody}
-          onJobDescriptionChange={setJobDescription}
-          onJobSessionModeChange={setJobSessionMode}
-          onJobSilentChange={setJobSilent}
-          onJobMuteChange={setJobMute}
-          onCreateJob={handleCreateJob}
-          onToggleJobEnabled={handleToggleJobEnabled}
-          onToggleJobMuted={handleToggleJobMuted}
-          onDeleteJob={handleDeleteJob}
-          onRunJob={handleRunJob}
-          onHeartbeatSessionKeyChange={setHeartbeatSessionKey}
-          onHeartbeatIntervalMinsChange={setHeartbeatIntervalMins}
-          onHeartbeatPromptChange={setHeartbeatPrompt}
-          onSaveHeartbeat={handleSaveHeartbeat}
-          onPauseHeartbeat={handlePauseHeartbeat}
-          onResumeHeartbeat={handleResumeHeartbeat}
-          onRunHeartbeat={handleRunHeartbeat}
-          onRefresh={refreshAutomation}
-        />
-      </CardContent>
-    </Card>
+function ConnectorDetail({
+  label,
+  value,
+  wrap = false,
+}: {
+  label: string
+  value: string
+  wrap?: boolean
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className={wrap ? "break-all font-mono text-xs" : "truncate text-sm"}>{value}</span>
+    </div>
   )
 }
 
@@ -827,170 +907,181 @@ function AutomationSection({
   const canCreateJob = Boolean(connectorId && jobSessionKey.trim() && jobCronExpr.trim() && jobBody.trim())
   const canSaveHeartbeat = Boolean(connectorId && heartbeatSessionKey.trim() && Number(heartbeatIntervalMins) > 0)
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">定时任务</span>
-          <Badge variant="secondary">{jobs.length}</Badge>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={isLoading}
-          onClick={() => onRefresh()}
-          aria-label="刷新定时任务"
-        >
-          <RefreshCw className={isLoading ? "size-4 animate-spin" : "size-4"} />
-        </Button>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>自动任务</CardTitle>
+        <CardDescription>
+          按时间在飞书会话里执行 Prompt 或命令；保活提醒用于定期检查状态。
+        </CardDescription>
+        <CardAction>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={isLoading}
+            onClick={() => onRefresh()}
+            aria-label="刷新自动任务"
+          >
+            <RefreshCw className={isLoading ? "animate-spin" : undefined} />
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">定时执行</span>
+            <Badge variant="secondary">{jobs.length}</Badge>
+          </div>
 
-      <FieldGroup>
-        <div className="grid gap-4 md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)]">
-          <Field>
-            <FieldLabel>类型</FieldLabel>
-            <Select value={jobKind} onValueChange={(value) => onJobKindChange(value as "prompt" | "exec")}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="prompt">Prompt</SelectItem>
-                <SelectItem value="exec">命令</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="feishu-cron-session">Session Key</FieldLabel>
-            <Input
-              id="feishu-cron-session"
-              value={jobSessionKey}
-              onChange={(event) => onJobSessionKeyChange(event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="feishu-cron-expr">Cron</FieldLabel>
-            <Input
-              id="feishu-cron-expr"
-              value={jobCronExpr}
-              onChange={(event) => onJobCronExprChange(event.target.value)}
-            />
-          </Field>
-        </div>
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
-          <Field>
-            <FieldLabel htmlFor="feishu-cron-body">
-              {jobKind === "exec" ? "命令（管理员）" : "Prompt"}
-            </FieldLabel>
-            {jobKind === "exec" ? (
-              <FieldDescription>创建命令任务需要飞书管理员。</FieldDescription>
-            ) : null}
-            <Textarea
-              id="feishu-cron-body"
-              value={jobBody}
-              onChange={(event) => onJobBodyChange(event.target.value)}
-            />
-          </Field>
           <FieldGroup>
+            <div className="grid gap-4 md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)]">
+              <Field>
+                <FieldLabel>执行内容</FieldLabel>
+                <Select value={jobKind} onValueChange={(value) => onJobKindChange(value as "prompt" | "exec")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="prompt">Prompt</SelectItem>
+                    <SelectItem value="exec">命令</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="feishu-cron-session">会话标识</FieldLabel>
+                <Input
+                  id="feishu-cron-session"
+                  value={jobSessionKey}
+                  onChange={(event) => onJobSessionKeyChange(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="feishu-cron-expr">执行时间</FieldLabel>
+                <Input
+                  id="feishu-cron-expr"
+                  value={jobCronExpr}
+                  onChange={(event) => onJobCronExprChange(event.target.value)}
+                />
+              </Field>
+            </div>
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
+              <Field>
+                <FieldLabel htmlFor="feishu-cron-body">
+                  {jobKind === "exec" ? "命令" : "Prompt"}
+                </FieldLabel>
+                {jobKind === "exec" ? (
+                  <FieldDescription>命令会在本机执行，请只给可信管理员使用。</FieldDescription>
+                ) : null}
+                <Textarea
+                  id="feishu-cron-body"
+                  value={jobBody}
+                  onChange={(event) => onJobBodyChange(event.target.value)}
+                />
+              </Field>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="feishu-cron-desc">名称</FieldLabel>
+                  <Input
+                    id="feishu-cron-desc"
+                    value={jobDescription}
+                    onChange={(event) => onJobDescriptionChange(event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>会话方式</FieldLabel>
+                  <Select
+                    value={jobSessionMode}
+                    onValueChange={(value) => onJobSessionModeChange(value as "reuse" | "new_per_run")}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="reuse">复用会话</SelectItem>
+                      <SelectItem value="new_per_run">每次新建会话</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field orientation="horizontal">
+                  <FieldLabel htmlFor="feishu-cron-silent">隐藏开始提示</FieldLabel>
+                  <Switch id="feishu-cron-silent" checked={jobSilent} onCheckedChange={onJobSilentChange} />
+                </Field>
+                <Field orientation="horizontal">
+                  <FieldLabel htmlFor="feishu-cron-mute">不回传结果</FieldLabel>
+                  <Switch id="feishu-cron-mute" checked={jobMute} onCheckedChange={onJobMuteChange} />
+                </Field>
+              </FieldGroup>
+            </div>
+            <div>
+              <Button disabled={!canCreateJob} onClick={() => onCreateJob()}>
+                <Save data-icon="inline-start" />
+                创建任务
+              </Button>
+            </div>
+          </FieldGroup>
+
+          <ScheduledJobTable
+            jobs={jobs}
+            isLoading={isLoading}
+            onToggleEnabled={onToggleJobEnabled}
+            onToggleMuted={onToggleJobMuted}
+            onDelete={onDeleteJob}
+            onRun={onRunJob}
+          />
+        </section>
+
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">保活提醒</span>
+            <Badge variant="secondary">{heartbeats.length}</Badge>
+          </div>
+          <FieldGroup>
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_10rem]">
+              <Field>
+                <FieldLabel htmlFor="feishu-heartbeat-session">会话标识</FieldLabel>
+                <Input
+                  id="feishu-heartbeat-session"
+                  value={heartbeatSessionKey}
+                  onChange={(event) => onHeartbeatSessionKeyChange(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="feishu-heartbeat-interval">间隔分钟</FieldLabel>
+                <Input
+                  id="feishu-heartbeat-interval"
+                  type="number"
+                  min={1}
+                  value={heartbeatIntervalMins}
+                  onChange={(event) => onHeartbeatIntervalMinsChange(event.target.value)}
+                />
+              </Field>
+            </div>
             <Field>
-              <FieldLabel htmlFor="feishu-cron-desc">描述</FieldLabel>
-              <Input
-                id="feishu-cron-desc"
-                value={jobDescription}
-                onChange={(event) => onJobDescriptionChange(event.target.value)}
+              <FieldLabel htmlFor="feishu-heartbeat-prompt">检查内容</FieldLabel>
+              <FieldDescription>留空时使用默认检查内容。</FieldDescription>
+              <Textarea
+                id="feishu-heartbeat-prompt"
+                value={heartbeatPrompt}
+                onChange={(event) => onHeartbeatPromptChange(event.target.value)}
               />
             </Field>
-            <Field>
-              <FieldLabel>会话</FieldLabel>
-              <Select
-                value={jobSessionMode}
-                onValueChange={(value) => onJobSessionModeChange(value as "reuse" | "new_per_run")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="reuse">复用</SelectItem>
-                  <SelectItem value="new_per_run">每次新建</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field orientation="horizontal">
-              <FieldLabel htmlFor="feishu-cron-silent">Silent</FieldLabel>
-              <Switch id="feishu-cron-silent" checked={jobSilent} onCheckedChange={onJobSilentChange} />
-            </Field>
-            <Field orientation="horizontal">
-              <FieldLabel htmlFor="feishu-cron-mute">Mute</FieldLabel>
-              <Switch id="feishu-cron-mute" checked={jobMute} onCheckedChange={onJobMuteChange} />
-            </Field>
+            <div>
+              <Button disabled={!canSaveHeartbeat} onClick={() => onSaveHeartbeat()}>
+                <Save data-icon="inline-start" />
+                保存保活提醒
+              </Button>
+            </div>
           </FieldGroup>
-        </div>
-        <div>
-          <Button disabled={!canCreateJob} onClick={() => onCreateJob()}>
-            <Save />
-            创建定时任务
-          </Button>
-        </div>
-      </FieldGroup>
 
-      <ScheduledJobTable
-        jobs={jobs}
-        isLoading={isLoading}
-        onToggleEnabled={onToggleJobEnabled}
-        onToggleMuted={onToggleJobMuted}
-        onDelete={onDeleteJob}
-        onRun={onRunJob}
-      />
-
-      <Separator />
-
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Heartbeat</span>
-        <Badge variant="secondary">{heartbeats.length}</Badge>
-      </div>
-      <FieldGroup>
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_10rem]">
-          <Field>
-            <FieldLabel htmlFor="feishu-heartbeat-session">Session Key</FieldLabel>
-            <Input
-              id="feishu-heartbeat-session"
-              value={heartbeatSessionKey}
-              onChange={(event) => onHeartbeatSessionKeyChange(event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="feishu-heartbeat-interval">分钟</FieldLabel>
-            <Input
-              id="feishu-heartbeat-interval"
-              type="number"
-              min={1}
-              value={heartbeatIntervalMins}
-              onChange={(event) => onHeartbeatIntervalMinsChange(event.target.value)}
-            />
-          </Field>
-        </div>
-        <Field>
-          <FieldLabel htmlFor="feishu-heartbeat-prompt">Prompt</FieldLabel>
-          <Textarea
-            id="feishu-heartbeat-prompt"
-            value={heartbeatPrompt}
-            onChange={(event) => onHeartbeatPromptChange(event.target.value)}
+          <HeartbeatTable
+            heartbeats={heartbeats}
+            isLoading={isLoading}
+            onPause={onPauseHeartbeat}
+            onResume={onResumeHeartbeat}
+            onRun={onRunHeartbeat}
           />
-        </Field>
-        <div>
-          <Button disabled={!canSaveHeartbeat} onClick={() => onSaveHeartbeat()}>
-            <Save />
-            保存 Heartbeat
-          </Button>
-        </div>
-      </FieldGroup>
-
-      <HeartbeatTable
-        heartbeats={heartbeats}
-        isLoading={isLoading}
-        onPause={onPauseHeartbeat}
-        onResume={onResumeHeartbeat}
-        onRun={onRunHeartbeat}
-      />
-    </div>
+        </section>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1013,11 +1104,11 @@ function ScheduledJobTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>ID</TableHead>
+          <TableHead>任务</TableHead>
           <TableHead>类型</TableHead>
           <TableHead>状态</TableHead>
-          <TableHead>下次</TableHead>
-          <TableHead>上次</TableHead>
+          <TableHead>下次执行</TableHead>
+          <TableHead>上次执行</TableHead>
           <TableHead className="w-36 text-right">操作</TableHead>
         </TableRow>
       </TableHeader>
@@ -1037,22 +1128,22 @@ function ScheduledJobTable({
                 <Badge variant={job.enabled ? "default" : "secondary"}>
                   {job.enabled ? "启用" : "禁用"}
                 </Badge>
-                {job.mute ? <Badge variant="outline">Mute</Badge> : null}
-                {job.silent ? <Badge variant="outline">Silent</Badge> : null}
+                {job.mute ? <Badge variant="outline">不回传</Badge> : null}
+                {job.silent ? <Badge variant="outline">隐藏提示</Badge> : null}
               </div>
             </TableCell>
             <TableCell className="font-mono text-xs">{formatDate(job.nextRunAt)}</TableCell>
             <TableCell className="font-mono text-xs">{formatDate(job.lastRunAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end gap-1">
-                <Button variant="ghost" size="icon" onClick={() => onRun(job)} aria-label="运行">
+                <Button variant="ghost" size="icon" onClick={() => onRun(job)} aria-label="立即运行">
                   <Play />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => onToggleEnabled(job)} aria-label="启用状态">
+                <Button variant="ghost" size="icon" onClick={() => onToggleEnabled(job)} aria-label="启停任务">
                   {job.enabled ? <Pause /> : <Play />}
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => onToggleMuted(job)} aria-label="静默状态">
-                  <Square />
+                <Button variant="ghost" size="icon" onClick={() => onToggleMuted(job)} aria-label="切换结果回传">
+                  <VolumeX />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={() => onDelete(job)} aria-label="删除">
                   <Trash2 />
@@ -1083,10 +1174,10 @@ function HeartbeatTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Session</TableHead>
-          <TableHead className="text-right">分钟</TableHead>
+          <TableHead>会话</TableHead>
+          <TableHead className="text-right">间隔</TableHead>
           <TableHead>状态</TableHead>
-          <TableHead>下次</TableHead>
+          <TableHead>下次执行</TableHead>
           <TableHead className="w-28 text-right">操作</TableHead>
         </TableRow>
       </TableHeader>
@@ -1094,7 +1185,7 @@ function HeartbeatTable({
         {heartbeats.length === 0 ? (
           <TableRow>
             <TableCell colSpan={5} className="text-muted-foreground">
-              {isLoading ? "加载中..." : "暂无 Heartbeat"}
+              {isLoading ? "加载中..." : "暂无保活提醒"}
             </TableCell>
           </TableRow>
         ) : heartbeats.map((heartbeat) => (
@@ -1105,14 +1196,14 @@ function HeartbeatTable({
             <TableCell className="font-mono text-xs">{formatDate(heartbeat.nextRunAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end gap-1">
-                <Button variant="ghost" size="icon" onClick={() => onRun(heartbeat)} aria-label="运行 Heartbeat">
+                <Button variant="ghost" size="icon" onClick={() => onRun(heartbeat)} aria-label="立即运行保活提醒">
                   <RotateCcw />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => heartbeat.paused ? onResume(heartbeat) : onPause(heartbeat)}
-                  aria-label="暂停 Heartbeat"
+                  aria-label={heartbeat.paused ? "恢复保活提醒" : "暂停保活提醒"}
                 >
                   {heartbeat.paused ? <Play /> : <Pause />}
                 </Button>
