@@ -211,7 +211,7 @@ function LogExportPanel() {
 
   return (
     <>
-      <Card className="bg-background">
+      <Card>
         <CardHeader>
           <CardTitle>日志</CardTitle>
           <CardDescription>导出应用运行日志，用于排查问题。</CardDescription>

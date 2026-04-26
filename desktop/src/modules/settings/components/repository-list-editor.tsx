@@ -628,7 +628,7 @@ function RepositoryListEditor({
       </Dialog>
 
       {repositories.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {repositories.map((repository) => {
             const isActive = repository.uuid === activeRepoUuid
 

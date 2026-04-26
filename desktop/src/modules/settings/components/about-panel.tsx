@@ -242,7 +242,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-3">
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
         <img

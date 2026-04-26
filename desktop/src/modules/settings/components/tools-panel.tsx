@@ -12,7 +12,7 @@ function ToolsPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="bg-background">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">IDE</CardTitle>
         </CardHeader>
@@ -21,7 +21,7 @@ function ToolsPanel() {
         </CardContent>
       </Card>
 
-      <Card className="bg-background">
+      <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">命令行工具</CardTitle>

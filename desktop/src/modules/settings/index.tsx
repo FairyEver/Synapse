@@ -177,7 +177,7 @@ function SettingsModule() {
 
   return (
     <SidebarContentLayout
-      contentClassName="bg-muted/30"
+      contentClassName="bg-muted/30 p-4"
       sidebar={
         <SettingsCategorySidebar
           categories={visibleCategories}
@@ -188,7 +188,7 @@ function SettingsModule() {
         />
       }
     >
-      <div className="flex flex-col gap-6 pb-6">
+      <div className="flex flex-col gap-4">
         {activeCategory === "admin" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
             {activeRepository.name}
@@ -197,7 +197,7 @@ function SettingsModule() {
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         {!isReady ? (
-          <Card className="bg-background ring-0">
+          <Card>
             <CardHeader>
               <CardTitle>加载中</CardTitle>
               <CardDescription>正在读取设置。</CardDescription>

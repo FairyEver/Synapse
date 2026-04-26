@@ -363,7 +363,7 @@ function DataStoreSettingsPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="bg-background">
+      <Card>
         <CardHeader className="pb-0">
           <CardTitle>服务状态</CardTitle>
           <CardAction>
@@ -381,7 +381,7 @@ function DataStoreSettingsPanel() {
         </CardContent>
       </Card>
 
-      <Card className="bg-background">
+      <Card>
         <CardHeader className="pb-0">
           <CardTitle>CLI</CardTitle>
           <CardAction>
@@ -430,7 +430,7 @@ function DataStoreSettingsPanel() {
         </CardContent>
       </Card>
 
-      <Card className="bg-background">
+      <Card>
         <CardHeader className="pb-0">
           <CardTitle>MCP Server</CardTitle>
           <CardAction>
@@ -499,7 +499,7 @@ function DataStoreSettingsPanel() {
         </CardContent>
       </Card>
 
-      <Card className="bg-background">
+      <Card>
         <CardHeader className="pb-0">
           <CardTitle>数据管理</CardTitle>
         </CardHeader>

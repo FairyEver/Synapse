@@ -16,7 +16,12 @@ function SettingsGroup({ children, className, sectionClassName }: SettingsGroupP
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-xl bg-background", className)}>
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl bg-card text-card-foreground ring-1 ring-foreground/10",
+        className,
+      )}
+    >
       {sections.map((section, index) => (
         <Fragment key={index}>
           {index > 0 ? <Separator /> : null}

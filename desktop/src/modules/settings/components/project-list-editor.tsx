@@ -201,7 +201,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   return (
     <div className="flex flex-col gap-4">
       {projects.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {projects.map((project) => (
             <Card key={project.id}>
               <CardHeader className="pb-2">
