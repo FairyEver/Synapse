@@ -15,6 +15,7 @@ export {
   coreDataStoreDescriptor,
   coreLoggingDescriptor,
   coreUpdateDescriptor,
+  connectorsFeishuLarkRuntimeDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,

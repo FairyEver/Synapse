@@ -23,6 +23,7 @@ import {
   agentSessionsDescriptor,
   automationCronDescriptor,
   automationRuntimeDescriptor,
+  connectorsFeishuLarkRuntimeDescriptor,
   connectorsQrOnboardingDescriptor,
   connectorsRegistryDescriptor,
   connectorsSecretStoreDescriptor,
@@ -57,6 +58,7 @@ export function buildServiceRegistry(
   registry.register(automationRuntimeDescriptor)
   registry.register(connectorsRegistryDescriptor)
   registry.register(connectorsSecretStoreDescriptor)
+  registry.register(connectorsFeishuLarkRuntimeDescriptor)
   registry.register(connectorsQrOnboardingDescriptor)
   registry.register(repoWatchDescriptor)
   registry.register(repoMaintenanceDescriptor)

@@ -49,6 +49,7 @@ function createSaveHarness() {
     },
   }
   const secrets: Array<{ id: string; value: string }> = []
+  const runtimeReloads: Array<{ projectId: string; connectionId: string }> = []
   const secretStore = {
     writeConnectorSecrets: async (items: Array<{ id: string; value: string }>) => {
       secrets.push(...items.map((item) => ({ id: item.id, value: item.value })))
@@ -60,6 +61,7 @@ function createSaveHarness() {
       return config
     },
     secrets,
+    runtimeReloads,
     options: {
       config: {
         load: async () => structuredClone(config),
@@ -76,6 +78,11 @@ function createSaveHarness() {
       },
       registry: new ConnectorRegistryService(),
       secretStore,
+      runtime: {
+        startOrReloadProjectConnection: async (projectId: string, connectionId: string) => {
+          runtimeReloads.push({ projectId, connectionId })
+        },
+      },
       now: () => new Date("2026-04-26T00:00:00.000Z"),
     },
   }
@@ -302,6 +309,10 @@ describe("connector QR onboarding service", () => {
       type: "feishu",
       status: "configured",
     })
+    expect(harness.runtimeReloads).toEqual([{
+      projectId: "project-1",
+      connectionId: "connector:feishu:synapse-feishu",
+    }])
   })
 
   it("saves Lark app_secret into secret refs after registration completion", async () => {

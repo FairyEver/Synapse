@@ -36,6 +36,7 @@ import { createTray, destroyTray } from "../services/tray-service"
 import { createDefaultConnectorRegistryService } from "../services/connector-registry-service"
 import { ConnectorQrOnboardingService } from "../services/connector-qr-onboarding-service"
 import { ConnectorSecretStoreService } from "../services/connector-secret-store-service"
+import { FeishuLarkRuntimeService } from "../services/feishu-lark-runtime-service"
 import { AgentSessionsStoreService } from "../services/agent-sessions-store-service"
 import { AutomationCronStoreService } from "../services/automation-cron-store-service"
 import { AutomationRuntimeStoreService } from "../services/automation-runtime-store-service"
@@ -227,15 +228,41 @@ export const connectorsSecretStoreDescriptor: ServiceDescriptor<ConnectorSecretS
   }),
 }
 
+export const connectorsFeishuLarkRuntimeDescriptor: ServiceDescriptor<FeishuLarkRuntimeService> = {
+  id: "connectors.feishu-lark-runtime",
+  criticality: "degraded",
+  dependsOn: ["core.config", "connectors.secrets", "agent.sessions"],
+  create(ctx) {
+    return new FeishuLarkRuntimeService({
+      config: configStore,
+      secretStore: ctx.registry.get("connectors.secrets"),
+      agentSessions: ctx.registry.get("agent.sessions"),
+      permissionGuard: createPermissionGuard(),
+      auditSink: new InMemoryAuditSink(),
+      logger: ctx.logger.child("connectors.feishu-lark-runtime"),
+    })
+  },
+  start(instance) {
+    return instance.startAllFromConfig()
+  },
+  stop(instance) {
+    return instance.stopAll()
+  },
+  reload(instance) {
+    return instance.startAllFromConfig()
+  },
+}
+
 export const connectorsQrOnboardingDescriptor: ServiceDescriptor<ConnectorQrOnboardingService> = {
   id: "connectors.qr-onboarding",
   criticality: "degraded",
-  dependsOn: ["core.config", "connectors.registry", "connectors.secrets"],
+  dependsOn: ["core.config", "connectors.registry", "connectors.secrets", "connectors.feishu-lark-runtime"],
   create(ctx) {
     return new ConnectorQrOnboardingService({
       config: configStore,
       registry: ctx.registry.get("connectors.registry"),
       secretStore: ctx.registry.get("connectors.secrets"),
+      runtime: ctx.registry.get("connectors.feishu-lark-runtime"),
       permissionGuard: createPermissionGuard(),
       auditSink: new InMemoryAuditSink(),
     })

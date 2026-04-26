@@ -90,6 +90,9 @@ type ConnectorQrOnboardingServiceOptions = {
   config?: ConfigAccess
   registry?: ConnectorRegistryService
   secretStore?: ConnectorSecretStoreService
+  runtime?: {
+    startOrReloadProjectConnection: (projectId: string, connectionId: string) => Promise<void>
+  }
   permissionGuard?: PermissionGuard
   auditSink?: AuditSink
   now?: () => Date
@@ -314,6 +317,7 @@ export class ConnectorQrOnboardingService {
   private readonly config: ConfigAccess | null
   private readonly registry: ConnectorRegistryService | null
   private readonly secretStore: ConnectorSecretStoreService | null
+  private readonly runtime: ConnectorQrOnboardingServiceOptions["runtime"] | null
   private readonly permissionGuard: PermissionGuard | null
   private readonly auditSink: AuditSink | null
   private readonly now: () => Date
@@ -324,6 +328,7 @@ export class ConnectorQrOnboardingService {
     this.config = options.config ?? null
     this.registry = options.registry ?? null
     this.secretStore = options.secretStore ?? null
+    this.runtime = options.runtime ?? null
     this.permissionGuard = options.permissionGuard ?? null
     this.auditSink = options.auditSink ?? null
     this.now = options.now ?? (() => new Date())
@@ -680,6 +685,7 @@ export class ConnectorQrOnboardingService {
     })
 
     await config.update({ global: { projects } })
+    await this.runtime?.startOrReloadProjectConnection(project.id, connection.id)
     return { connection }
   }
 

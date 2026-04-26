@@ -104,4 +104,49 @@ export class ConnectorSecretStoreService {
       }
     }
   }
+
+  async readConnectorSecretValue(id: string): Promise<string | null> {
+    const permission = await this.permissionGuard.check({
+      action: "secret.read",
+      actor: { kind: "user" },
+      resource: id,
+      context: {
+        source: "connectors",
+      },
+    })
+
+    if (!permission.allowed) {
+      this.auditSink.record({
+        action: "secret.read",
+        actor: { kind: "user" },
+        resource: id,
+        outcome: "denied",
+        metadata: { reason: permission.reason },
+      })
+      throw new Error("密钥读取未授权。")
+    }
+
+    try {
+      const entry = await this.namespace.get(id)
+      this.auditSink.record({
+        action: "secret.read",
+        actor: { kind: "user" },
+        resource: id,
+        outcome: "allowed",
+        metadata: { source: "connectors" },
+      })
+      return entry?.value ?? null
+    } catch (error) {
+      this.auditSink.record({
+        action: "secret.read",
+        actor: { kind: "user" },
+        resource: id,
+        outcome: "failed",
+        metadata: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+      throw error
+    }
+  }
 }

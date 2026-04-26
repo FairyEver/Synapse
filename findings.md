@@ -7,15 +7,17 @@
 - 主进程必须遵守 Phase 0 hard constraints：IPC、webContents、网络端口、业务数据写入、敏感操作等都要走既有 runtime 基础设施。
 - 用户要求严格对照 CC Connect 源码迁移，不允许凭计划或想象实现。
 
-## 初始状态
-
-- 当前任务需要先读 CC Connect Feishu/Lark 源码和 Synapse connectors/session/bridge/bootstrap 相关源码。
-- 真实扫码验收可能需要用户手机和飞书/Lark 后台权限；如遇不可绕过的账号或开放平台权限阻塞，需写 handoff 并 Bark 通知。
-
 ## 源码对照发现
 
 - CC Connect 在 `platform/feishu/feishu.go` 同时注册 `feishu` 与 `lark`，两者共享实现但默认 domain 不同。
 - CC Connect Feishu/Lark runtime 的主路径是 `Start(handler)` -> SDK event dispatcher -> WebSocket 长连接 -> `onMessage`/`onCardAction`/`onBotMenu` -> `core.Engine.handleMessage` -> `Reply/Send`。
 - CC Connect registration 共用 Feishu accounts API，poll 识别 `tenant_brand=lark` 后切到 `https://accounts.larksuite.com`。
-- Synapse 当前 Stage 13 只有 QR begin/poll/save 和 secretRef 保存，没有任何 Feishu/Lark runtime service，也没有保存后启动/重载连接。
+- Synapse Stage 13 只有 QR begin/poll/save 和 secretRef 保存，没有 Feishu/Lark runtime service，也没有保存后启动/重载连接。
 - Synapse 已有 `AgentSessionConnectService` 可把 `SynapseInboundMessage` 接到 session/agent 链路，是 Stage 14 runtime 的首选接入点。
+
+## B02 实现发现
+
+- 官方 Node SDK `@larksuiteoapi/node-sdk` 提供 `WSClient`、`EventDispatcher`、`Client.im.v1.message.reply/create`，可覆盖当前 runtime 的最小真实长连接和回复链路。
+- Node SDK 高层 `LarkChannel` 不暴露 `application.bot.menu_v6`，因此 Synapse runtime 使用底层 `WSClient + EventDispatcher`，显式注册 message/card action/bot menu。
+- Synapse 当前 agent engine 仍是现有 session 事件链；Stage 14 runtime 已接入 `AgentSessionsStoreService.connectInbound()`，真实模型/CLI runtime 若未连接，会沿用现有错误事件。
+- Feishu/Lark 群聊 mention 过滤依赖 bot open_id；runtime 会通过 `/open-apis/bot/v3/info` 获取，失败时按 CC Connect 行为让群过滤降级。

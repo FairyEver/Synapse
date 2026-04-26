@@ -1182,7 +1182,7 @@ function ManualPlatformForm({
   )
 }
 
-type QrFlowPhase = "idle" | "generating" | "waiting" | "scanned" | "saving" | "connected" | "expired" | "denied" | "error"
+type QrFlowPhase = "idle" | "generating" | "waiting" | "scanned" | "saving" | "starting" | "connected" | "expired" | "denied" | "error"
 
 function QrPlatformOnboardingForm({
   platform,
@@ -1228,6 +1228,7 @@ function QrPlatformOnboardingForm({
           sessionId: nextSession.sessionId,
           projectId: project.id,
         })
+        setPhase("starting")
         await onRefreshConfig()
         setPhase("connected")
         return
@@ -1249,7 +1250,7 @@ function QrPlatformOnboardingForm({
   }
 
   const pollQr = async () => {
-    if (!session || pollingRef.current || phase === "saving" || phase === "connected") {
+    if (!session || pollingRef.current || phase === "saving" || phase === "starting" || phase === "connected") {
       return
     }
 
@@ -1337,7 +1338,7 @@ function QrPlatformOnboardingForm({
             <CheckCircle2 className="size-5 text-muted-foreground" />
           ) : phase === "error" || phase === "expired" || phase === "denied" ? (
             <AlertCircle className="size-5 text-muted-foreground" />
-          ) : phase === "waiting" || phase === "scanned" || phase === "saving" ? (
+          ) : phase === "waiting" || phase === "scanned" || phase === "saving" || phase === "starting" ? (
             <Clock className="size-5 text-muted-foreground" />
           ) : (
             <QrCode className="size-5 text-muted-foreground" />
@@ -1347,7 +1348,7 @@ function QrPlatformOnboardingForm({
             <p className="text-sm text-muted-foreground">{platform}</p>
           </div>
         </div>
-        {session?.qrContent && (phase === "waiting" || phase === "scanned" || phase === "saving") ? (
+        {session?.qrContent && (phase === "waiting" || phase === "scanned" || phase === "saving" || phase === "starting") ? (
           <div className="mt-4 flex justify-center">
             <QrCodePreview qrContent={session.qrContent} />
           </div>
@@ -1360,7 +1361,7 @@ function QrPlatformOnboardingForm({
           ) : null}
           {phase === "generating" ? (
             <Button type="button" disabled>
-              生成中...
+              生成二维码中
             </Button>
           ) : null}
           {phase === "expired" || phase === "error" || phase === "denied" ? (
@@ -1399,11 +1400,12 @@ function QrCodePreview({ qrContent }: { qrContent: string }) {
 function getQrStatusLabel(status: QrFlowPhase): string {
   const labels: Record<QrFlowPhase, string> = {
     idle: "未开始",
-    generating: "生成中",
+    generating: "生成二维码中",
     waiting: "等待扫码",
     scanned: "已扫码，等待确认",
-    saving: "保存中",
-    connected: "已连接",
+    saving: "保存配置中",
+    starting: "启动连接中",
+    connected: "已连接，可对话",
     expired: "已过期",
     denied: "已拒绝",
     error: "设置失败",

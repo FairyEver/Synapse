@@ -18,6 +18,7 @@ import type {
   SynapseSendAgentMessageResult,
   SynapseSwitchAgentSessionPayload,
 } from "../../src/types/agent-session"
+import type { SynapseInboundMessage } from "../../src/types/connector"
 import type { SynapseProjectConfig } from "../../src/types/config"
 import type { SynapseProviderEntry } from "../../src/types/provider"
 import { JsonNamespace } from "../runtime/data-repo/backends/json"
@@ -30,6 +31,10 @@ import {
   AgentEngineService,
   type AgentEngineTurnResult,
 } from "./agent-engine-service"
+import {
+  AgentSessionConnectService,
+  type AgentSessionConnectResult,
+} from "./agent-session-connect-service"
 import {
   AgentSessionsRepository,
   type SessionsSnapshot,
@@ -52,6 +57,11 @@ type SendMessageOptions = {
   events?: SynapseAgentEvent[]
   eventGapsMs?: number[]
   idleTimeoutMs?: number
+  engine?: AgentEngineService
+}
+
+type ConnectInboundOptions = {
+  events?: SynapseAgentEvent[]
   engine?: AgentEngineService
 }
 
@@ -665,6 +675,31 @@ export class AgentSessionsStoreService {
     const session = repository.getOrCreateActive(sessionKey)
     repository.appendHistory(session.id, { role, content })
     await this.save()
+  }
+
+  async connectInbound(
+    projects: readonly SynapseProjectConfig[],
+    projectId: string,
+    inbound: SynapseInboundMessage,
+    options: ConnectInboundOptions = {},
+  ): Promise<AgentSessionConnectResult> {
+    await this.initialize()
+
+    const project = this.requireProject(projects, projectId)
+    const repository = this.ensureRepository(project.id)
+    const eventLog = this.eventLogForSession(repository.getOrCreateActive(inbound.sessionKey).id)
+    const engine = options.engine ?? new AgentEngineService({ now: this.now, eventLog })
+    const result = new AgentSessionConnectService().connect({
+      inbound,
+      repository,
+      engine,
+      agentType: project.agentType,
+      now: this.now,
+      events: options.events ?? [{ type: "error", error: "agent runtime is not connected" }],
+    })
+
+    await this.save()
+    return result
   }
 
   private async initialize(): Promise<void> {

@@ -42,7 +42,7 @@
 
 ### 阶段 4：UI 状态与测试
 
-**状态：** pending
+**状态：** in_progress
 
 验证：二维码流程状态完整，补充 unit/runtime 测试，生成 `14.4-feishu-lark-test-report.md`。
 
