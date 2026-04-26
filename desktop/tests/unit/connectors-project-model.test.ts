@@ -1,13 +1,21 @@
 import { describe, expect, it } from "vitest"
 import {
+  addInlineProviderToProject,
+  bindGlobalProviderToProject,
   createCcConnectProjectDraft,
   createProjectPlatformConnectionFromConnector,
   createQrProjectPlatformDraft,
+  listLinkableGlobalProviders,
   parseDisabledCommands,
+  removeProviderFromProject,
+  resolveProjectProvidersForSession,
   sanitizeCcProjectName,
+  setActiveProviderForProject,
   summarizeCcConnectProjects,
+  unbindGlobalProviderFromProject,
   updateCcConnectProjectSettings,
 } from "../../src/modules/connectors/project-model"
+import { createProviderDraft } from "../../src/lib/provider-model"
 
 describe("connectors project model", () => {
   it("sanitizes project names like the old CC Connect project wizard", () => {
@@ -48,6 +56,7 @@ describe("connectors project model", () => {
         adminFrom: "u1",
         disabledCommands: ["restart"],
         providerRefs: ["openai"],
+        activeProvider: "openai",
         platformConnections: [
           {
             id: "conn-1",
@@ -74,6 +83,7 @@ describe("connectors project model", () => {
         adminFrom: "u1",
         disabledCommands: ["restart"],
         providerRefs: ["openai"],
+        activeProvider: "openai",
         heartbeatEnabled: false,
         platformCount: 1,
         platforms: [
@@ -123,6 +133,125 @@ describe("connectors project model", () => {
 
   it("parses disabled commands from a comma separated field", () => {
     expect(parseDisabledCommands(" restart, ,upgrade ")).toEqual(["restart", "upgrade"])
+  })
+
+  it("binds and unbinds global providers on project refs", () => {
+    const project = createCcConnectProjectDraft({
+      id: "project-1",
+      name: "synapse",
+      workDir: "/repo/synapse",
+      agentType: "codex",
+    })
+
+    const bound = bindGlobalProviderToProject(project, "OpenAI")
+    expect(bound.providerRefs).toEqual(["openai"])
+
+    const active = setActiveProviderForProject(bound, "openai")
+    expect(active.activeProvider).toBe("openai")
+
+    const unbound = unbindGlobalProviderFromProject(active, "openai")
+    expect(unbound.providerRefs).toEqual([])
+    expect(unbound.activeProvider).toBeNull()
+  })
+
+  it("filters linkable global providers by refs, inline names, and agent type", () => {
+    const project = {
+      id: "project-1",
+      name: "synapse",
+      path: "/repo/synapse",
+      agentType: "codex",
+      providerRefs: ["global-a"],
+      providers: [
+        createProviderDraft({
+          name: "inline-b",
+          scope: "project",
+          projectId: "project-1",
+        }).provider,
+      ],
+    }
+    const globals = [
+      createProviderDraft({ name: "global-a", agentTypes: ["codex"] }).provider,
+      createProviderDraft({ name: "inline-b", agentTypes: ["codex"] }).provider,
+      createProviderDraft({ name: "claude-only", agentTypes: ["claudecode"] }).provider,
+      createProviderDraft({ name: "codex-ok", agentTypes: ["codex"] }).provider,
+    ]
+
+    expect(listLinkableGlobalProviders(project, globals).map((provider) => provider.name)).toEqual(["codex-ok"])
+  })
+
+  it("adds custom project providers with secret refs only", () => {
+    const project = createCcConnectProjectDraft({
+      id: "project-1",
+      name: "synapse",
+      workDir: "/repo/synapse",
+      agentType: "codex",
+    })
+    const draft = createProviderDraft({
+      name: "Project Relay",
+      scope: "project",
+      projectId: project.id,
+      apiKey: "sk-project",
+      baseUrl: "https://relay.example.com",
+      model: "gpt-5.3-codex",
+    })
+    const nextProject = addInlineProviderToProject(project, draft.provider)
+
+    expect(nextProject.providers?.[0]).toMatchObject({
+      name: "project-relay",
+      scope: "project",
+      projectId: "project-1",
+      secretRef: "provider:project-project-1:project-relay:api-key",
+    })
+    expect(JSON.stringify(nextProject.providers)).not.toContain("sk-project")
+    expect(() => addInlineProviderToProject(nextProject, draft.provider)).toThrow("already exists")
+  })
+
+  it("resolves session providers with inline override before global refs", () => {
+    const global = createProviderDraft({
+      name: "shared",
+      baseUrl: "https://global.example.com",
+      agentTypes: ["codex"],
+    }).provider
+    const inline = createProviderDraft({
+      name: "shared",
+      scope: "project",
+      projectId: "project-1",
+      baseUrl: "https://inline.example.com",
+      agentTypes: ["codex"],
+    }).provider
+    const project = {
+      id: "project-1",
+      name: "synapse",
+      path: "/repo/synapse",
+      agentType: "codex",
+      providerRefs: ["shared"],
+      providers: [inline],
+    }
+
+    const resolved = resolveProjectProvidersForSession(project, [global])
+
+    expect(resolved).toHaveLength(1)
+    expect(resolved[0]?.baseUrl).toBe("https://inline.example.com")
+  })
+
+  it("removes custom providers and clears active provider", () => {
+    const provider = createProviderDraft({
+      name: "relay",
+      scope: "project",
+      projectId: "project-1",
+    }).provider
+    const project = {
+      id: "project-1",
+      name: "synapse",
+      path: "/repo/synapse",
+      providers: [provider],
+      activeProvider: "relay",
+    }
+
+    const nextProject = removeProviderFromProject(project, "relay")
+
+    expect(nextProject.providers).toEqual([])
+    expect(nextProject.activeProvider).toBeNull()
   })
 
   it("stores manual token platforms through secret refs only", () => {

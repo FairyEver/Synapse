@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Clock, FolderKanban, Plug, Plus, QrCode, RefreshCw, Server, Trash2 } from "lucide-react"
+import { AlertCircle, CheckCircle2, Clock, FolderKanban, Link2, Plug, Plus, QrCode, RefreshCw, Server, Trash2, Zap } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +25,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -44,14 +45,26 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { SynapseProjectConfig, SynapseProjectPlatformConnection } from "@/types/config"
+import type { SynapseProviderEntry } from "@/types/provider"
+import {
+  createProviderDraft,
+  normalizeProviderName,
+} from "@/lib/provider-model"
 import {
   CC_CONNECT_AGENT_OPTIONS,
   DEFAULT_AGENT_TYPE,
+  addInlineProviderToProject,
+  bindGlobalProviderToProject,
   createCcConnectProjectDraft,
   createProjectPlatformConnectionFromConnector,
   createQrProjectPlatformDraft,
+  listLinkableGlobalProviders,
+  removeProviderFromProject,
+  resolveProjectProvidersForSession,
   sanitizeCcProjectName,
+  setActiveProviderForProject,
   summarizeCcConnectProjects,
+  unbindGlobalProviderFromProject,
   updateCcConnectProjectSettings,
   type ConnectorProjectSummary,
 } from "./project-model"
@@ -64,6 +77,7 @@ type ProjectDraft = {
 
 type ConnectorsProjectViewProps = {
   projects: SynapseProjectConfig[]
+  globalProviders: SynapseProviderEntry[]
   isReady: boolean
   error: string | null
   onCreateProject: (draft: ProjectDraft) => Promise<void>
@@ -120,6 +134,7 @@ function ConnectorsModule() {
   return (
     <ConnectorsProjectView
       projects={config.global.projects}
+      globalProviders={config.global.providers}
       isReady={isReady}
       error={error}
       onCreateProject={handleCreateProject}
@@ -132,6 +147,7 @@ function ConnectorsModule() {
 
 function ConnectorsProjectView({
   projects,
+  globalProviders,
   isReady,
   error,
   onCreateProject,
@@ -227,6 +243,7 @@ function ConnectorsProjectView({
           <ProjectDetailPanel
             project={selectedProject}
             sourceProject={projects.find((project) => project.id === selectedProject?.id) ?? null}
+            globalProviders={globalProviders}
             onUpdateProject={onUpdateProject}
             onDeleteProject={onDeleteProject}
             onDeleted={() => setSelectedProjectId(null)}
@@ -284,12 +301,14 @@ function ProjectCard({
 function ProjectDetailPanel({
   project,
   sourceProject,
+  globalProviders,
   onUpdateProject,
   onDeleteProject,
   onDeleted,
 }: {
   project: ConnectorProjectSummary | null
   sourceProject: SynapseProjectConfig | null
+  globalProviders: SynapseProviderEntry[]
   onUpdateProject: (projectId: string, project: SynapseProjectConfig) => Promise<void>
   onDeleteProject: (projectId: string) => Promise<void>
   onDeleted: () => void
@@ -349,6 +368,54 @@ function ProjectDetailPanel({
       platformConnections: [...(sourceProject.platformConnections ?? []), connection],
     })
   }
+
+  const handleBindGlobalProvider = async (providerName: string) => {
+    if (!sourceProject) {
+      return
+    }
+
+    await onUpdateProject(project.id, bindGlobalProviderToProject(sourceProject, providerName))
+  }
+
+  const handleUnbindGlobalProvider = async (providerName: string) => {
+    if (!sourceProject) {
+      return
+    }
+
+    await onUpdateProject(project.id, unbindGlobalProviderFromProject(sourceProject, providerName))
+  }
+
+  const handleAddInlineProvider = async (provider: SynapseProviderEntry) => {
+    if (!sourceProject) {
+      return
+    }
+
+    await onUpdateProject(project.id, addInlineProviderToProject(sourceProject, provider))
+  }
+
+  const handleRemoveProvider = async (providerName: string) => {
+    if (!sourceProject) {
+      return
+    }
+
+    await onUpdateProject(project.id, removeProviderFromProject(sourceProject, providerName))
+  }
+
+  const handleSetActiveProvider = async (providerName: string | null) => {
+    if (!sourceProject) {
+      return
+    }
+
+    await onUpdateProject(project.id, setActiveProviderForProject(sourceProject, providerName))
+  }
+
+  const resolvedProviders = sourceProject
+    ? resolveProjectProvidersForSession(sourceProject, globalProviders)
+    : []
+  const linkableProviders = sourceProject
+    ? listLinkableGlobalProviders(sourceProject, globalProviders)
+    : []
+  const inlineProviderNames = new Set((sourceProject?.providers ?? []).map((provider) => normalizeProviderName(provider.name)))
 
   return (
     <Card className="min-h-96">
@@ -426,23 +493,100 @@ function ProjectDetailPanel({
           </TabsContent>
 
           <TabsContent value="providers" className="mt-4">
-            {project.providerRefs.length === 0 ? (
-              <Empty className="min-h-48">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Server />
-                  </EmptyMedia>
-                  <EmptyTitle>未绑定服务商</EmptyTitle>
-                </EmptyHeader>
-                <EmptyContent />
-              </Empty>
-            ) : (
+            <div className="flex flex-col gap-4">
               <div className="flex flex-wrap gap-2">
-                {project.providerRefs.map((provider) => (
-                  <Badge key={provider} variant="outline">{provider}</Badge>
-                ))}
+                {sourceProject ? (
+                  <ProviderBindDialog
+                    providers={linkableProviders}
+                    onBind={handleBindGlobalProvider}
+                  />
+                ) : null}
+                {sourceProject ? (
+                  <ProjectProviderDialog
+                    project={sourceProject}
+                    onAddProvider={handleAddInlineProvider}
+                  />
+                ) : null}
               </div>
-            )}
+              {resolvedProviders.length === 0 ? (
+                <Empty className="min-h-48">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <Server />
+                    </EmptyMedia>
+                    <EmptyTitle>未绑定服务商</EmptyTitle>
+                  </EmptyHeader>
+                  <EmptyContent />
+                </Empty>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {resolvedProviders.map((provider) => {
+                    const isInline = inlineProviderNames.has(normalizeProviderName(provider.name))
+                    const isActive = normalizeProviderName(sourceProject?.activeProvider ?? "") === normalizeProviderName(provider.name)
+
+                    return (
+                      <div key={provider.id} className="rounded-lg border border-border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium">{provider.name}</p>
+                              {isActive ? <Badge variant="secondary">当前</Badge> : null}
+                              <Badge variant="outline">{isInline ? "项目" : "全局"}</Badge>
+                            </div>
+                            <p className="truncate text-sm text-muted-foreground">
+                              {provider.model ?? "未设置模型"}
+                            </p>
+                            {provider.baseUrl ? (
+                              <p className="truncate text-xs text-muted-foreground">{provider.baseUrl}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {!isActive ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleSetActiveProvider(provider.name)}
+                            >
+                              <Zap />
+                              激活
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleSetActiveProvider(null)}
+                            >
+                              清除激活
+                            </Button>
+                          )}
+                          {!isActive && isInline ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void handleRemoveProvider(provider.name)}
+                            >
+                              <Trash2 />
+                              删除
+                            </Button>
+                          ) : null}
+                          {!isActive && !isInline ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void handleUnbindGlobalProvider(provider.name)}
+                            >
+                              <Link2 />
+                              解绑
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="heartbeat" className="mt-4">
@@ -571,6 +715,238 @@ function ProjectDetailPanel({
         </Tabs>
       </CardContent>
     </Card>
+  )
+}
+
+function ProviderBindDialog({
+  providers,
+  onBind,
+}: {
+  providers: SynapseProviderEntry[]
+  onBind: (providerName: string) => Promise<void>
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState(providers[0]?.name ?? "")
+  const [isSaving, setIsSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!providers.some((provider) => provider.name === selectedProvider)) {
+      setSelectedProvider(providers[0]?.name ?? "")
+    }
+  }, [providers, selectedProvider])
+
+  const handleBind = async () => {
+    if (!selectedProvider) {
+      setFormError("没有可绑定的全局服务商。")
+      return
+    }
+
+    setIsSaving(true)
+    setFormError(null)
+
+    try {
+      await onBind(selectedProvider)
+      setIsOpen(false)
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "绑定失败。")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" disabled={providers.length === 0}>
+          <Link2 />
+          绑定全局
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>绑定全局服务商</DialogTitle>
+        </DialogHeader>
+        <FieldGroup className="gap-4">
+          <Field>
+            <Label htmlFor="bind-global-provider">服务商</Label>
+            <NativeSelect
+              id="bind-global-provider"
+              className="w-full"
+              value={selectedProvider}
+              disabled={isSaving}
+              onChange={(event) => {
+                setSelectedProvider(event.target.value)
+                setFormError(null)
+              }}
+            >
+              {providers.map((provider) => (
+                <NativeSelectOption key={provider.id} value={provider.name}>
+                  {provider.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          <FieldError>{formError}</FieldError>
+        </FieldGroup>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isSaving}>
+            取消
+          </Button>
+          <Button onClick={() => void handleBind()} disabled={isSaving || !selectedProvider}>
+            {isSaving ? "绑定中..." : "绑定"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ProjectProviderDialog({
+  project,
+  onAddProvider,
+}: {
+  project: SynapseProjectConfig
+  onAddProvider: (provider: SynapseProviderEntry) => Promise<void>
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [draft, setDraft] = useState({
+    name: "",
+    apiKey: "",
+    baseUrl: "",
+    model: "",
+  })
+  const [formError, setFormError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const resetDraft = () => {
+    setDraft({
+      name: "",
+      apiKey: "",
+      baseUrl: "",
+      model: "",
+    })
+    setFormError(null)
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    if (isSaving) {
+      return
+    }
+    setIsOpen(open)
+    if (!open) {
+      resetDraft()
+    }
+  }
+
+  const updateDraft = (patch: Partial<typeof draft>) => {
+    setDraft((current) => ({
+      ...current,
+      ...patch,
+    }))
+    setFormError(null)
+  }
+
+  const handleAdd = async () => {
+    if (!draft.name.trim()) {
+      setFormError("名称不能为空。")
+      return
+    }
+
+    const providerDraft = createProviderDraft({
+      name: draft.name,
+      scope: "project",
+      projectId: project.id,
+      apiKey: draft.apiKey,
+      baseUrl: draft.baseUrl,
+      model: draft.model,
+      agentTypes: [project.agentType ?? DEFAULT_AGENT_TYPE],
+    })
+
+    setIsSaving(true)
+    setFormError(null)
+
+    try {
+      await onAddProvider(providerDraft.provider)
+      setIsOpen(false)
+      resetDraft()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "添加失败。")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Plus />
+          添加项目服务商
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>添加项目服务商</DialogTitle>
+          <DialogDescription>API Key 只保存为密钥引用。</DialogDescription>
+        </DialogHeader>
+        <FieldGroup className="gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field>
+              <Label htmlFor="project-provider-name">名称</Label>
+              <Input
+                id="project-provider-name"
+                value={draft.name}
+                disabled={isSaving}
+                onChange={(event) => updateDraft({ name: event.target.value })}
+                placeholder="relay"
+              />
+            </Field>
+            <Field>
+              <Label htmlFor="project-provider-api-key">API Key</Label>
+              <Input
+                id="project-provider-api-key"
+                type="password"
+                value={draft.apiKey}
+                disabled={isSaving}
+                onChange={(event) => updateDraft({ apiKey: event.target.value })}
+                placeholder="sk-..."
+              />
+            </Field>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field>
+              <Label htmlFor="project-provider-base-url">Base URL</Label>
+              <Input
+                id="project-provider-base-url"
+                value={draft.baseUrl}
+                disabled={isSaving}
+                onChange={(event) => updateDraft({ baseUrl: event.target.value })}
+                placeholder="https://api.example.com"
+              />
+            </Field>
+            <Field>
+              <Label htmlFor="project-provider-model">模型</Label>
+              <Input
+                id="project-provider-model"
+                value={draft.model}
+                disabled={isSaving}
+                onChange={(event) => updateDraft({ model: event.target.value })}
+              />
+            </Field>
+          </div>
+          <FieldError>{formError}</FieldError>
+        </FieldGroup>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isSaving}>
+            取消
+          </Button>
+          <Button onClick={() => void handleAdd()} disabled={isSaving}>
+            {isSaving ? "添加中..." : "添加"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

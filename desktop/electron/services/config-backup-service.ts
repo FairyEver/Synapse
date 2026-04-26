@@ -84,6 +84,13 @@ function validateProject(
     return null
   }
 
+  const providerRefs = readStringList(rawValue.providerRefs)
+  const providers = Array.isArray(rawValue.providers)
+    ? rawValue.providers
+        .map((provider, providerIndex) => validateProvider(provider, providerIndex, errors))
+        .filter((provider): provider is SynapseConfigBackup["config"]["global"]["providers"][number] => provider !== null)
+    : undefined
+
   return {
     id: id.trim(),
     name: name.trim(),
@@ -93,6 +100,9 @@ function validateProject(
     ...(isNonEmptyString(rawValue.workDirOverride) ? { workDirOverride: rawValue.workDirOverride.trim() } : undefined),
     ...(isNonEmptyString(rawValue.baseDir) ? { baseDir: rawValue.baseDir.trim() } : undefined),
     ...(rawValue.source === "cc-connect" ? { source: "cc-connect" as const } : undefined),
+    ...(providerRefs ? { providerRefs } : undefined),
+    ...(providers?.length ? { providers } : undefined),
+    ...(isNonEmptyString(rawValue.activeProvider) ? { activeProvider: rawValue.activeProvider.trim() } : undefined),
     ...(isRecord(rawValue.workspaceDirOverrides)
       ? {
           workspaceDirOverrides: Object.fromEntries(
@@ -118,6 +128,21 @@ function readStringRecord(value: unknown): Record<string, string> | undefined {
     .map(([key, item]) => [key, item.trim()] as const)
 
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function readStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const items = Array.from(new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ))
+
+  return items.length > 0 ? items : undefined
 }
 
 function readProviderModels(value: unknown): SynapseProviderModel[] | undefined {

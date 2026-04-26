@@ -1,5 +1,10 @@
 import type { SynapseConnectorEntry } from "@/types/connector"
 import type { SynapseProjectConfig, SynapseProjectPlatformConnection } from "@/types/config"
+import type { SynapseProviderEntry } from "@/types/provider"
+import {
+  normalizeProviderName,
+  resolveProjectProviders,
+} from "@/lib/provider-model"
 
 type AgentOption = {
   value: string
@@ -23,6 +28,7 @@ type ConnectorProjectSummary = {
   adminFrom: string
   disabledCommands: string[]
   providerRefs: string[]
+  activeProvider: string | null
   heartbeatEnabled: boolean
   platformCount: number
   platforms: {
@@ -118,6 +124,126 @@ function updateCcConnectProjectSettings(
   }
 }
 
+function getProjectAgentType(project: SynapseProjectConfig): string {
+  return project.agentType?.trim() || DEFAULT_AGENT_TYPE
+}
+
+function supportsProjectAgent(provider: SynapseProviderEntry, project: SynapseProjectConfig): boolean {
+  const agentType = getProjectAgentType(project)
+  return !provider.agentTypes?.length || provider.agentTypes.includes(agentType)
+}
+
+function listLinkableGlobalProviders(
+  project: SynapseProjectConfig,
+  globalProviders: readonly SynapseProviderEntry[],
+): SynapseProviderEntry[] {
+  const providerRefs = new Set((project.providerRefs ?? []).map(normalizeProviderName))
+  const inlineNames = new Set((project.providers ?? []).map((provider) => normalizeProviderName(provider.name)))
+
+  return globalProviders.filter((provider) => {
+    const name = normalizeProviderName(provider.name)
+    return !providerRefs.has(name) && !inlineNames.has(name) && supportsProjectAgent(provider, project)
+  })
+}
+
+function bindGlobalProviderToProject(
+  project: SynapseProjectConfig,
+  providerName: string,
+): SynapseProjectConfig {
+  const normalizedName = normalizeProviderName(providerName)
+  const providerRefs = project.providerRefs ?? []
+
+  if (!normalizedName || providerRefs.map(normalizeProviderName).includes(normalizedName)) {
+    return project
+  }
+
+  return {
+    ...project,
+    providerRefs: [...providerRefs, normalizedName],
+  }
+}
+
+function unbindGlobalProviderFromProject(
+  project: SynapseProjectConfig,
+  providerName: string,
+): SynapseProjectConfig {
+  const normalizedName = normalizeProviderName(providerName)
+  const providerRefs = (project.providerRefs ?? []).filter(
+    (ref) => normalizeProviderName(ref) !== normalizedName,
+  )
+  const activeProvider = normalizeProviderName(project.activeProvider ?? "") === normalizedName
+    ? null
+    : project.activeProvider ?? null
+
+  return {
+    ...project,
+    providerRefs,
+    activeProvider,
+  }
+}
+
+function addInlineProviderToProject(
+  project: SynapseProjectConfig,
+  provider: SynapseProviderEntry,
+): SynapseProjectConfig {
+  const normalizedName = normalizeProviderName(provider.name)
+  const providers = project.providers ?? []
+
+  if (providers.some((item) => normalizeProviderName(item.name) === normalizedName)) {
+    throw new Error(`provider ${normalizedName} already exists in project`)
+  }
+
+  return {
+    ...project,
+    providers: [...providers, provider],
+  }
+}
+
+function removeProviderFromProject(
+  project: SynapseProjectConfig,
+  providerName: string,
+): SynapseProjectConfig {
+  const normalizedName = normalizeProviderName(providerName)
+  const providers = (project.providers ?? []).filter(
+    (provider) => normalizeProviderName(provider.name) !== normalizedName,
+  )
+  const providerRefs = (project.providerRefs ?? []).filter(
+    (ref) => normalizeProviderName(ref) !== normalizedName,
+  )
+  const activeProvider = normalizeProviderName(project.activeProvider ?? "") === normalizedName
+    ? null
+    : project.activeProvider ?? null
+
+  return {
+    ...project,
+    providers,
+    providerRefs,
+    activeProvider,
+  }
+}
+
+function setActiveProviderForProject(
+  project: SynapseProjectConfig,
+  providerName: string | null,
+): SynapseProjectConfig {
+  return {
+    ...project,
+    activeProvider: providerName ? normalizeProviderName(providerName) : null,
+  }
+}
+
+function resolveProjectProvidersForSession(
+  project: SynapseProjectConfig,
+  globalProviders: readonly SynapseProviderEntry[],
+): SynapseProviderEntry[] {
+  return resolveProjectProviders(
+    globalProviders,
+    project.providers ?? [],
+    project.providerRefs ?? [],
+    getProjectAgentType(project),
+  )
+}
+
 function createProjectPlatformConnectionFromConnector(
   connector: SynapseConnectorEntry,
   now: string,
@@ -177,6 +303,7 @@ function summarizeCcConnectProjects(
     adminFrom: project.adminFrom ?? "",
     disabledCommands: project.disabledCommands ?? [],
     providerRefs: project.providerRefs ?? [],
+    activeProvider: project.activeProvider ?? null,
     heartbeatEnabled: project.heartbeat?.enabled ?? false,
     platformCount: project.platformConnections?.length ?? 0,
     platforms: (project.platformConnections ?? []).map((platform) => ({
@@ -194,13 +321,20 @@ function summarizeCcConnectProjects(
 export {
   CC_CONNECT_AGENT_OPTIONS,
   DEFAULT_AGENT_TYPE,
+  addInlineProviderToProject,
+  bindGlobalProviderToProject,
   createCcConnectProjectDraft,
   createProjectPlatformConnectionFromConnector,
   createQrProjectPlatformDraft,
   getProjectWorkDir,
+  listLinkableGlobalProviders,
   parseDisabledCommands,
+  removeProviderFromProject,
+  resolveProjectProvidersForSession,
   sanitizeCcProjectName,
+  setActiveProviderForProject,
   summarizeCcConnectProjects,
+  unbindGlobalProviderFromProject,
   updateCcConnectProjectSettings,
 }
 export type { ConnectorProjectSummary }

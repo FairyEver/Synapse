@@ -66,6 +66,8 @@ export type SynapseProjectConfig = {
   replyFooter?: boolean
   injectSender?: boolean
   providerRefs?: string[]
+  providers?: SynapseProviderEntry[]
+  activeProvider?: string | null
   heartbeat?: SynapseProjectHeartbeatConfig
   mode?: SynapseProjectMode
   workDir?: string

@@ -63,6 +63,21 @@ function asTrimmedString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback
 }
 
+function normalizeStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const items = Array.from(new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ))
+
+  return items.length > 0 ? items : undefined
+}
+
 function normalizeDirectoryName(value: unknown, fallback: string): string {
   const nextValue = asTrimmedString(value, fallback)
 
@@ -142,6 +157,24 @@ function hasProjectConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "workspaceDirOverrides") && !isRecord(value.workspaceDirOverrides)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "providerRefs") && !Array.isArray(value.providerRefs)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "providers") && (
+    !Array.isArray(value.providers) || value.providers.some(hasProviderConfigFormatError)
+  )) {
+    return true
+  }
+
+  if (
+    hasOwnKey(value, "activeProvider")
+    && value.activeProvider !== null
+    && typeof value.activeProvider !== "string"
+  ) {
     return true
   }
 
@@ -300,6 +333,9 @@ function normalizeProjectConfig(value: unknown): SynapseProjectConfig | null {
     return null
   }
 
+  const providerRefs = normalizeStringList(value.providerRefs)
+  const providers = Array.isArray(value.providers) ? normalizeProviders(value.providers) : undefined
+
   return {
     id,
     name,
@@ -309,6 +345,9 @@ function normalizeProjectConfig(value: unknown): SynapseProjectConfig | null {
     ...(isNonEmptyString(value.workDirOverride) ? { workDirOverride: value.workDirOverride.trim() } : undefined),
     ...(isNonEmptyString(value.baseDir) ? { baseDir: value.baseDir.trim() } : undefined),
     ...(value.source === "cc-connect" ? { source: "cc-connect" as const } : undefined),
+    ...(providerRefs ? { providerRefs } : undefined),
+    ...(providers?.length ? { providers } : undefined),
+    ...(isNonEmptyString(value.activeProvider) ? { activeProvider: value.activeProvider.trim() } : undefined),
     ...(isRecord(value.workspaceDirOverrides)
       ? { workspaceDirOverrides: normalizeStringRecord(value.workspaceDirOverrides) }
       : undefined),
