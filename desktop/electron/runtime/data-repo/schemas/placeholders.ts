@@ -29,6 +29,7 @@ export interface SecretEntryV1 extends Record<string, unknown> {
   schemaVersion: 1
   /** Cipher-resolved value lives in EncryptedJsonBackend storage; this struct is wrapper metadata. */
   kind: "api-key" | "oauth-token" | "webhook-secret" | "generic"
+  value?: string
   description?: string
 }
 
@@ -53,6 +54,23 @@ export interface ProviderModelEntryV1 extends Record<string, unknown> {
   alias?: string
 }
 
+export interface ProviderCodexOptionsV1 extends Record<string, unknown> {
+  envKey?: string
+  wireApi?: string
+  httpHeaders?: Record<string, string>
+  codexHome?: string
+}
+
+export interface ProviderOptionsV1 extends Record<string, unknown> {
+  env?: Record<string, string>
+  thinking?: string
+  effort?: string
+  endpoints?: Record<string, string>
+  agentModels?: Record<string, string>
+  agentModelLists?: Record<string, ProviderModelEntryV1[]>
+  codex?: ProviderCodexOptionsV1
+}
+
 export interface ProviderEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
@@ -66,9 +84,13 @@ export interface ProviderEntryV1 extends Record<string, unknown> {
   models?: ProviderModelEntryV1[]
   activeProviderId?: string
   activeModel?: string
+  activeMode?: string
   providerRefs?: string[]
   agentType?: string
-  options?: Record<string, unknown>
+  agentTypes?: string[]
+  env?: Record<string, string>
+  thinking?: string
+  options?: ProviderOptionsV1
   createdAt?: string
   updatedAt?: string
 }
@@ -87,9 +109,13 @@ export const providersSchema: NamespaceSchema<ProviderEntryV1> = {
     && isOptionalString((v as ProviderEntryV1).projectId)
     && isOptionalString((v as ProviderEntryV1).baseUrl)
     && isOptionalString((v as ProviderEntryV1).secretRef)
+    && isOptionalString((v as ProviderEntryV1).activeMode)
     && ((v as ProviderEntryV1).models === undefined || isProviderModelArray((v as ProviderEntryV1).models))
     && ((v as ProviderEntryV1).providerRefs === undefined || isStringArray((v as ProviderEntryV1).providerRefs))
-    && isOptionalRecord((v as ProviderEntryV1).options),
+    && ((v as ProviderEntryV1).agentTypes === undefined || isStringArray((v as ProviderEntryV1).agentTypes))
+    && ((v as ProviderEntryV1).env === undefined || isStringRecord((v as ProviderEntryV1).env))
+    && isOptionalString((v as ProviderEntryV1).thinking)
+    && ((v as ProviderEntryV1).options === undefined || isProviderOptions((v as ProviderEntryV1).options)),
 }
 
 export interface ProjectEntryV1 extends Record<string, unknown> {
@@ -99,6 +125,7 @@ export interface ProjectEntryV1 extends Record<string, unknown> {
   workspacePath?: string
   activeProviderId?: string
   activeModel?: string
+  activeMode?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -341,6 +368,37 @@ function isProviderModelArray(value: unknown): value is ProviderModelEntryV1[] {
       && isOptionalString(item.display)
       && isOptionalString(item.alias),
     )
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isAnyRecord<Record<string, unknown>>(value)
+    && Object.values(value).every((item) => typeof item === "string")
+}
+
+function isProviderModelListRecord(
+  value: unknown,
+): value is Record<string, ProviderModelEntryV1[]> {
+  return isAnyRecord<Record<string, unknown>>(value)
+    && Object.values(value).every(isProviderModelArray)
+}
+
+function isProviderCodexOptions(value: unknown): value is ProviderCodexOptionsV1 {
+  return isAnyRecord<ProviderCodexOptionsV1>(value)
+    && isOptionalString(value.envKey)
+    && isOptionalString(value.wireApi)
+    && isOptionalString(value.codexHome)
+    && (value.httpHeaders === undefined || isStringRecord(value.httpHeaders))
+}
+
+function isProviderOptions(value: unknown): value is ProviderOptionsV1 {
+  return isAnyRecord<ProviderOptionsV1>(value)
+    && (value.env === undefined || isStringRecord(value.env))
+    && isOptionalString(value.thinking)
+    && isOptionalString(value.effort)
+    && (value.endpoints === undefined || isStringRecord(value.endpoints))
+    && (value.agentModels === undefined || isStringRecord(value.agentModels))
+    && (value.agentModelLists === undefined || isProviderModelListRecord(value.agentModelLists))
+    && (value.codex === undefined || isProviderCodexOptions(value.codex))
 }
 
 function isConnectorStatus(value: unknown): value is ConnectorStatusV1 {

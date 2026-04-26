@@ -36,6 +36,7 @@ import { repositoryMaintenanceService } from "../services/repository-maintenance
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService } from "../services/agent-runtime"
+import { createProviderConfigProjectService } from "../services/provider-config"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -338,6 +339,7 @@ export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectCo
       globalDataRepo: ctx.registry.get<DataRepository>("core.data-repository"),
       buildLogger: (projectId) => ctx.logger.child(`project.${projectId}`),
     })
+    registry.registerService(createProviderConfigProjectService())
     registry.registerService(createAgentRuntimeProjectService())
     return registry
   },

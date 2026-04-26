@@ -37,7 +37,10 @@ export {
   type ConversationResumePolicyV1,
   type OutboxEntryV1,
   type ProjectEntryV1,
+  type ProviderCodexOptionsV1,
   type ProviderEntryV1,
+  type ProviderModelEntryV1,
+  type ProviderOptionsV1,
   type SecretEntryV1,
 } from "./placeholders"
 

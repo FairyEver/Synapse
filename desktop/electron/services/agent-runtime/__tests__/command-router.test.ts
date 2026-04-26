@@ -1,0 +1,190 @@
+import { describe, expect, it } from "vitest"
+
+import type {
+  ConversationEntryV1,
+  DataChangeEvent,
+  DataChangeListener,
+  DataNamespace,
+  ProviderEntryV1,
+  SecretEntryV1,
+} from "../../../runtime/data-repo"
+import { ProviderConfigService } from "../../provider-config"
+import { AgentCommandRouter } from "../command-router"
+import type { AgentMessage } from "../types"
+
+describe("AgentCommandRouter", () => {
+  it("lists and switches models by alias and index, then resets the session", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    await providerConfig.upsertGlobalProvider({
+      id: "openai",
+      model: "gpt-5.4",
+      models: [
+        { id: "gpt-5.4", alias: "main" },
+        { id: "gpt-5.3-codex", alias: "codex" },
+      ],
+      agentTypes: ["codex"],
+    })
+    await providerConfig.setProjectProviderRefs("project-1", ["openai"])
+    await providerConfig.setActiveProvider("project-1", "openai")
+    const resets: string[] = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "codex",
+      providerConfig,
+      resetSession: async (sessionKey) => {
+        resets.push(sessionKey)
+        return { ...conversation, agentSessionId: undefined }
+      },
+    })
+    const conversation = baseConversation()
+
+    const list = await router.handle(baseMessage("/model"), conversation)
+    expect(list?.resultText).toContain("gpt-5.4")
+    expect(list?.resultText).toContain("gpt-5.3-codex (codex)")
+
+    const byAlias = await router.handle(baseMessage("/model switch codex"), conversation)
+    expect(byAlias?.resultText).toBe("Model changed: gpt-5.3-codex")
+    expect((await providerConfig.getProjectProviderState("project-1", "codex")).activeModel)
+      .toBe("gpt-5.3-codex")
+
+    const byIndex = await router.handle(baseMessage("/model 1"), conversation)
+    expect(byIndex?.resultText).toBe("Model changed: gpt-5.4")
+    expect(resets).toEqual(["s1", "s1"])
+  })
+
+  it("lists and switches modes, handles /new and /status, and rejects unknown commands", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const resets: string[] = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerConfig,
+      resetSession: async (sessionKey) => {
+        resets.push(sessionKey)
+        return { ...baseConversation(), agentSessionId: undefined }
+      },
+    })
+
+    const list = await router.handle(baseMessage("/mode"), baseConversation())
+    expect(list?.resultText).toContain("acceptEdits")
+
+    const switched = await router.handle(baseMessage("/mode acceptEdits"), baseConversation())
+    expect(switched?.resultText).toBe("Mode changed: acceptEdits")
+    expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeMode)
+      .toBe("acceptEdits")
+
+    const next = await router.handle(baseMessage("/new"), baseConversation())
+    expect(next?.resultText).toBe("New session will start on the next message.")
+
+    const status = await router.handle(baseMessage("/status"), baseConversation())
+    expect(status?.resultText).toContain("Agent: claude-code")
+    expect(status?.resultText).toContain("Agent session: thread-1")
+
+    const unknown = await router.handle(baseMessage("/unknown"), baseConversation())
+    expect(unknown?.error).toBe("Unsupported command: /unknown")
+    expect(resets).toEqual(["s1", "s1"])
+  })
+})
+
+function baseMessage(content: string): AgentMessage {
+  return {
+    projectId: "project-1",
+    sessionKey: "s1",
+    platform: "local",
+    content,
+  }
+}
+
+function baseConversation(): ConversationEntryV1 {
+  return {
+    id: "conversation-1",
+    schemaVersion: 1,
+    projectId: "project-1",
+    sessionKey: "s1",
+    platform: "local",
+    agentType: "codex",
+    agentSessionId: "thread-1",
+    history: [],
+    active: true,
+    createdAt: "2026-04-26T00:00:00.000Z",
+    updatedAt: "2026-04-26T00:00:00.000Z",
+  }
+}
+
+class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
+  readonly schemaVersion = 1
+  readonly backend = "json" as const
+  readonly name: string
+  private readonly values = new Map<string, T>()
+  private readonly listeners: DataChangeListener<T>[] = []
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  async getSingleton(): Promise<T | null> {
+    return null
+  }
+
+  async setSingleton(): Promise<void> {}
+
+  async list(filter?: Partial<T>): Promise<T[]> {
+    const values = [...this.values.values()]
+    if (!filter) return values
+    return values.filter((value) =>
+      Object.entries(filter).every(([key, expected]) =>
+        (value as Record<string, unknown>)[key] === expected,
+      ),
+    )
+  }
+
+  async get(id: string): Promise<T | null> {
+    return this.values.get(id) ?? null
+  }
+
+  async upsert(item: T): Promise<void> {
+    const previous = this.values.get(item.id)
+    this.values.set(item.id, item)
+    this.emit({
+      namespace: this.name,
+      kind: "upsert",
+      id: item.id,
+      value: item,
+      previous,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  async remove(id: string): Promise<void> {
+    const previous = this.values.get(id)
+    this.values.delete(id)
+    this.emit({
+      namespace: this.name,
+      kind: "remove",
+      id,
+      previous,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  onChange(listener: DataChangeListener<T>): () => void {
+    this.listeners.push(listener)
+    return () => {
+      const index = this.listeners.indexOf(listener)
+      if (index >= 0) this.listeners.splice(index, 1)
+    }
+  }
+
+  private emit(event: DataChangeEvent<T>): void {
+    for (const listener of this.listeners) listener(event)
+  }
+}
+
+function fixedNow(): Date {
+  return new Date("2026-04-26T00:00:00.000Z")
+}
+

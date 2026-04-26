@@ -7,6 +7,12 @@ import type {
   PermissionGuard,
 } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import {
+  prepareCodexRuntime,
+  type ProviderConfigService,
+  type ProviderRuntimeView,
+} from "../provider-config"
+import { AgentCommandRouter } from "./command-router"
 import type { AgentGovernanceDecision, AgentGovernanceService } from "./governance"
 import {
   AgentSessionRepository,
@@ -28,6 +34,8 @@ export interface AgentRuntimeServiceDeps {
   readonly workDir?: string
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly adapter: AgentAdapter
+  readonly adapterFactory?: AgentAdapterFactory
+  readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
@@ -36,7 +44,10 @@ export interface AgentRuntimeServiceDeps {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly governance?: AgentGovernanceService
+  readonly providerConfig?: ProviderConfigService
 }
+
+export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter
 
 interface QueuedTurn {
   readonly message: AgentMessage
@@ -62,6 +73,7 @@ const DEFAULT_PENDING_QUEUE_LIMIT = 5
 export class AgentRuntimeService {
   private readonly deps: AgentRuntimeServiceDeps
   private readonly repository: AgentSessionRepository
+  private readonly commandRouter: AgentCommandRouter | undefined
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
 
@@ -72,6 +84,14 @@ export class AgentRuntimeService {
       conversations: deps.conversations,
       now: deps.now,
     })
+    this.commandRouter = deps.providerConfig
+      ? new AgentCommandRouter({
+        projectId: deps.projectId,
+        agentType: this.agentType(),
+        providerConfig: deps.providerConfig,
+        resetSession: (sessionKey, platform) => this.resetSession(sessionKey, platform),
+      })
+      : undefined
   }
 
   async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
@@ -85,6 +105,14 @@ export class AgentRuntimeService {
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
       return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
+    }
+
+    const commandResult = await this.commandRouter?.handle(message, conversation)
+    if (commandResult) {
+      for (const event of commandResult.events) {
+        this.emitEvent(message, commandResult.conversationId, event)
+      }
+      return commandResult
     }
 
     const state = this.stateFor(message)
@@ -193,7 +221,23 @@ export class AgentRuntimeService {
   ): Promise<ConversationEntryV1 | null> {
     const conversation = await this.repository.getActive(sessionKey, platform)
     if (!conversation) return null
-    return this.repository.clearCurrentAgentSessionId(conversation.id, this.deps.adapter.agentType)
+    return this.repository.clearCurrentAgentSessionId(conversation.id, this.agentType())
+  }
+
+  async resetSession(
+    sessionKey: string,
+    platform = "local",
+  ): Promise<ConversationEntryV1 | null> {
+    const state = this.states.get(runtimeKey(sessionKey, this.deps.projectId))
+    if (state?.pending) {
+      this.pendingPermissions.delete(state.pending.requestId)
+      state.pending = undefined
+    }
+    if (state?.liveSession) {
+      await state.liveSession.close()
+      state.liveSession = undefined
+    }
+    return this.clearCurrentAgentSessionId(sessionKey, platform)
   }
 
   private async processQueue(state: RuntimeSessionState): Promise<void> {
@@ -235,18 +279,20 @@ export class AgentRuntimeService {
       return this.finishWithError(message, conversation.id, "Project workspace path is required")
     }
 
-    if (this.deps.adapter.startSession) {
-      return this.processLiveTurn(state, message, conversation)
+    const adapter = await this.resolveAdapter()
+    if (adapter.startSession) {
+      return this.processLiveTurn(state, message, conversation, adapter)
     }
-    return this.processExecTurn(message, conversation)
+    return this.processExecTurn(message, conversation, adapter)
   }
 
   private async processExecTurn(
     message: AgentMessage,
     conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
   ): Promise<AgentRuntimeTurnResult> {
-    const threadId = reusableAgentSessionId(conversation, this.deps.adapter.agentType)
-    const execution = await this.deps.adapter.execute(message, {
+    const threadId = reusableAgentSessionId(conversation, adapter.agentType)
+    const execution = await adapter.execute(message, {
       projectId: this.deps.projectId,
       workDir: this.deps.workDir as string,
       threadId,
@@ -261,6 +307,7 @@ export class AgentRuntimeService {
     const saved = await this.saveExecutionResult(conversation, {
       resultText: execution.resultText,
       agentSessionId: execution.threadId ?? execution.agentSessionId,
+      agentType: adapter.agentType,
     })
 
     return {
@@ -277,8 +324,9 @@ export class AgentRuntimeService {
     state: RuntimeSessionState,
     message: AgentMessage,
     conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
   ): Promise<AgentRuntimeTurnResult> {
-    const liveSession = await this.getLiveSession(state, conversation)
+    const liveSession = await this.getLiveSession(state, conversation, adapter)
     const events: AgentEvent[] = []
     let resultText = ""
     let error: string | undefined
@@ -293,7 +341,7 @@ export class AgentRuntimeService {
       }
       events.push(event)
       this.emitEvent(message, conversation.id, event)
-      await this.saveEventSessionId(conversation.id, event, liveSession)
+      await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
 
       if (event.type === "permissionRequest") {
         await this.awaitPendingPermission(state, message, conversation.id, event, liveSession)
@@ -313,6 +361,7 @@ export class AgentRuntimeService {
     const saved = await this.saveExecutionResult(conversation, {
       resultText,
       agentSessionId: currentSessionId,
+      agentType: adapter.agentType,
     })
 
     return {
@@ -328,11 +377,12 @@ export class AgentRuntimeService {
   private async getLiveSession(
     state: RuntimeSessionState,
     conversation: ConversationEntryV1,
+    adapter: AgentAdapter,
   ): Promise<AgentLiveSession> {
     if (
       state.liveSession
       && state.liveSession.alive()
-      && state.liveSession.agentType === this.deps.adapter.agentType
+      && state.liveSession.agentType === adapter.agentType
     ) {
       return state.liveSession
     }
@@ -341,8 +391,8 @@ export class AgentRuntimeService {
       await state.liveSession.close()
     }
 
-    const agentSessionId = reusableAgentSessionId(conversation, this.deps.adapter.agentType)
-    const liveSession = await this.deps.adapter.startSession?.({
+    const agentSessionId = reusableAgentSessionId(conversation, adapter.agentType)
+    const liveSession = await adapter.startSession?.({
       projectId: this.deps.projectId,
       workDir: this.deps.workDir as string,
       threadId: agentSessionId,
@@ -385,12 +435,13 @@ export class AgentRuntimeService {
     conversationIdValue: string,
     event: AgentEvent,
     liveSession: AgentLiveSession,
+    agentType: string,
   ): Promise<void> {
     const agentSessionId = event.agentSessionId ?? event.threadId ?? liveSession.currentSessionId()
     if (!agentSessionId) return
     await this.repository.saveAgentSession({
       conversationId: conversationIdValue,
-      agentType: this.deps.adapter.agentType,
+      agentType,
       agentSessionId,
       resumePolicy: "resume",
     })
@@ -401,13 +452,14 @@ export class AgentRuntimeService {
     execution: {
       readonly resultText: string
       readonly agentSessionId?: string
+      readonly agentType: string
     },
   ): Promise<ConversationEntryV1> {
     let saved = conversation
     if (execution.agentSessionId) {
       saved = await this.repository.saveAgentSession({
         conversationId: conversation.id,
-        agentType: this.deps.adapter.agentType,
+        agentType: execution.agentType,
         agentSessionId: execution.agentSessionId,
         resumePolicy: "resume",
       })
@@ -491,6 +543,29 @@ export class AgentRuntimeService {
 
   private queueLimit(): number {
     return this.deps.pendingQueueLimit ?? DEFAULT_PENDING_QUEUE_LIMIT
+  }
+
+  private async resolveAdapter(): Promise<AgentAdapter> {
+    if (!this.deps.providerConfig || !this.deps.adapterFactory) {
+      return this.deps.adapter
+    }
+    const view = await this.deps.providerConfig.resolveRuntimeConfig(
+      this.deps.projectId,
+      this.agentType(),
+      { actor: { kind: "user" } },
+    )
+    if (view.agentType === "codex") {
+      await prepareCodexRuntime(view, {
+        permissionGuard: this.deps.permissionGuard,
+        auditSink: this.deps.auditSink,
+        actor: { kind: "user" },
+      })
+    }
+    return this.deps.adapterFactory(view)
+  }
+
+  private agentType(): string {
+    return this.deps.agentType ?? this.deps.adapter.agentType
   }
 
   private isoNow(): string {

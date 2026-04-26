@@ -5,6 +5,8 @@ import type {
   DataChangeEvent,
   DataChangeListener,
   DataNamespace,
+  ProviderEntryV1,
+  SecretEntryV1,
 } from "../../../runtime/data-repo"
 import {
   createControlledProcessRunner,
@@ -14,6 +16,7 @@ import {
 import { InMemoryAuditSink, createPermissionGuard } from "../../../runtime/security"
 import { CodexExecAdapter, type CodexProcessRunner } from "../adapters/codex-exec"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
+import { ProviderConfigService } from "../../provider-config"
 import type {
   AgentAdapter,
   AgentEvent,
@@ -144,6 +147,99 @@ describe("AgentRuntimeService", () => {
       "--json",
       "-",
     ])
+  })
+
+  it("handles /model before the adapter and clears the current agent session id", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    await providerConfig.upsertGlobalProvider({
+      id: "openai",
+      model: "gpt-5.4",
+      models: [
+        { id: "gpt-5.4" },
+        { id: "gpt-5.3-codex", alias: "fast" },
+      ],
+      agentTypes: ["codex"],
+    })
+    await providerConfig.setProjectProviderRefs("project-1", ["openai"])
+    await providerConfig.setActiveProvider("project-1", "openai")
+    await conversations.upsert({
+      id: conversationId("local", "s1", "active"),
+      schemaVersion: 1,
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local",
+      agentType: "codex",
+      agentSessionId: "thread-1",
+      history: [],
+      active: true,
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    })
+    const adapter = new BlockingAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      agentType: "codex",
+      providerConfig,
+      now: fixedNow,
+    })
+
+    const result = await service.send(baseMessage("/model switch fast"))
+
+    expect(result.resultText).toBe("Model changed: gpt-5.3-codex")
+    expect(adapter.started).toEqual([])
+    expect((await conversations.get(conversationId("local", "s1", "active")))).toEqual(
+      expect.objectContaining({
+        agentSessionId: undefined,
+        pastAgentSessionIds: ["thread-1"],
+      }),
+    )
+    expect((await providerConfig.getProjectProviderState("project-1", "codex")).activeModel)
+      .toBe("gpt-5.3-codex")
+  })
+
+  it("handles /new and unknown slash commands without sending them to the adapter", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    await conversations.upsert({
+      id: conversationId("local", "s1", "active"),
+      schemaVersion: 1,
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local",
+      agentType: "codex",
+      agentSessionId: "thread-1",
+      history: [],
+      active: true,
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    })
+    const adapter = new BlockingAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      agentType: "codex",
+      providerConfig,
+      now: fixedNow,
+    })
+
+    const next = await service.send(baseMessage("/new"))
+    const unknown = await service.send(baseMessage("/not-real"))
+
+    expect(next.resultText).toBe("New session will start on the next message.")
+    expect(unknown.error).toBe("Unsupported command: /not-real")
+    expect(adapter.started).toEqual([])
+    expect((await conversations.get(conversationId("local", "s1", "active")))?.agentSessionId)
+      .toBeUndefined()
   })
 
   it("does not spawn when permission is denied and records audit", async () => {
