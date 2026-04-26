@@ -31,6 +31,7 @@ export {
   projectsSchema,
   providersSchema,
   secretsSchema,
+  workspaceBindingsSchema,
   type AuditEntryV1,
   type ConnectorAllowlistV1,
   type ConnectorDedupeStateV1,
@@ -38,6 +39,7 @@ export {
   type ConnectorReconnectStateV1,
   type ConnectorSessionKeyPolicyV1,
   type ConnectorStatusV1,
+  type ConnectorWorkspaceConfigV1,
   type ConversationEntryV1,
   type ConversationResumePolicyV1,
   type OutboxEntryV1,
@@ -48,6 +50,7 @@ export {
   type ProviderModelEntryV1,
   type ProviderOptionsV1,
   type SecretEntryV1,
+  type WorkspaceBindingEntryV1,
 } from "./placeholders"
 
 import { coreConfigSchema } from "./core-config"
@@ -62,6 +65,7 @@ import {
   projectsSchema,
   providersSchema,
   secretsSchema,
+  workspaceBindingsSchema,
 } from "./placeholders"
 import type { NamespaceSchema } from "../types"
 
@@ -74,6 +78,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   secretsSchema,
   providersSchema,
   projectsSchema,
+  workspaceBindingsSchema,
   connectorsSchema,
   conversationsSchema,
   auditSchema,

@@ -100,6 +100,42 @@ describe("AgentSessionRepository", () => {
     expect((await repository.get(second.id))?.active).toBe(true)
     expect((await repository.getActive("s1", "local"))?.id).toBe(second.id)
   })
+
+  it("keeps active conversations isolated by workspace key", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+
+    const repoA = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "feishu:oc_group:ou_user",
+      platform: "feishu",
+      channelKey: "feishu:oc_group",
+      workspaceKey: "workspace:a",
+      workspacePath: "/repo-a",
+      content: "hello a",
+    })
+    const repoB = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "feishu:oc_group:ou_user",
+      platform: "feishu",
+      channelKey: "feishu:oc_group",
+      workspaceKey: "workspace:b",
+      workspacePath: "/repo-b",
+      content: "hello b",
+    })
+
+    expect(repoA.id).not.toBe(repoB.id)
+    expect((await repository.getActive("feishu:oc_group:ou_user", "feishu", "workspace:a"))?.id)
+      .toBe(repoA.id)
+    expect((await repository.getActive("feishu:oc_group:ou_user", "feishu", "workspace:b"))?.id)
+      .toBe(repoB.id)
+    expect(repoA.active).toBe(true)
+    expect(repoB.active).toBe(true)
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

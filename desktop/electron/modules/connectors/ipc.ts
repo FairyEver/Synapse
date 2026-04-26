@@ -41,6 +41,13 @@ const dedupeSchema = z.object({
   ignoreBefore: z.string().optional(),
 })
 
+const workspaceConfigSchema = z.object({
+  enabled: z.boolean(),
+  baseDir: z.string().optional(),
+  autoBindByChannelName: z.boolean().optional(),
+  idleTimeoutMs: z.number().optional(),
+})
+
 const feishuConnectorSummarySchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -52,6 +59,7 @@ const feishuConnectorSummarySchema = z.object({
   sessionKeyPolicy: sessionKeyPolicySchema,
   reconnect: reconnectSchema.optional(),
   dedupe: dedupeSchema.optional(),
+  workspaceConfig: workspaceConfigSchema.optional(),
   lastConnectedAt: z.string().optional(),
   lastError: z.string().optional(),
   createdAt: z.string().optional(),
@@ -63,6 +71,47 @@ const feishuStatusSchema = z.object({
   configured: z.boolean(),
   running: z.boolean(),
   connector: feishuConnectorSummarySchema.optional(),
+})
+
+const workspaceConfigUpdateRequestSchema = projectRequestSchema.extend({
+  enabled: z.boolean(),
+  baseDir: z.string().optional(),
+  autoBindByChannelName: z.boolean().optional(),
+  idleTimeoutMs: z.number().optional(),
+})
+
+const workspaceBindingScopeSchema = z.enum(["project", "shared"])
+
+const workspaceBindingSchema = z.object({
+  id: z.string(),
+  schemaVersion: z.literal(1),
+  projectId: z.string().optional(),
+  scope: workspaceBindingScopeSchema,
+  platform: z.literal("feishu"),
+  channelKey: z.string(),
+  channelName: z.string().optional(),
+  workspacePath: z.string(),
+  baseDir: z.string().optional(),
+  boundBy: z.string().optional(),
+  boundAt: z.string(),
+  updatedAt: z.string(),
+})
+
+const workspaceBindingsSummarySchema = z.object({
+  project: z.array(workspaceBindingSchema),
+  shared: z.array(workspaceBindingSchema),
+})
+
+const routeWorkspaceBindingRequestSchema = projectRequestSchema.extend({
+  scope: workspaceBindingScopeSchema,
+  channelKey: z.string().min(1),
+  workspacePath: z.string().min(1),
+  channelName: z.string().optional(),
+})
+
+const unbindWorkspaceBindingRequestSchema = projectRequestSchema.extend({
+  scope: workspaceBindingScopeSchema,
+  channelKey: z.string().min(1),
 })
 
 const beginSetupResultSchema = z.object({
@@ -92,6 +141,9 @@ const pollSetupResultSchema = z.object({
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SetupPollRequest = z.infer<typeof setupPollRequestSchema>
 type ManualCredentialsRequest = z.infer<typeof manualCredentialsRequestSchema>
+type WorkspaceConfigUpdateRequest = z.infer<typeof workspaceConfigUpdateRequestSchema>
+type RouteWorkspaceBindingRequest = z.infer<typeof routeWorkspaceBindingRequestSchema>
+type UnbindWorkspaceBindingRequest = z.infer<typeof unbindWorkspaceBindingRequestSchema>
 
 export const connectorsIpcModule: IpcModule = {
   id: "connectors",
@@ -159,6 +211,46 @@ export const connectorsIpcModule: IpcModule = {
       response: z.array(feishuConnectorSummarySchema),
       handler: (ctx, request: ProjectRequest) =>
         resolveFeishuConnector(ctx.resolve).list(request.projectId),
+    },
+    feishuGetWorkspaceConfig: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:workspace-config:get",
+      request: projectRequestSchema,
+      response: workspaceConfigSchema,
+      handler: (ctx, request: ProjectRequest) =>
+        resolveFeishuConnector(ctx.resolve).getWorkspaceConfig(request.projectId),
+    },
+    feishuUpdateWorkspaceConfig: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:workspace-config:update",
+      request: workspaceConfigUpdateRequestSchema,
+      response: workspaceConfigSchema,
+      handler: (ctx, request: WorkspaceConfigUpdateRequest) =>
+        resolveFeishuConnector(ctx.resolve).updateWorkspaceConfig(request),
+    },
+    feishuListWorkspaceBindings: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:workspace-bindings:list",
+      request: projectRequestSchema,
+      response: workspaceBindingsSummarySchema,
+      handler: (ctx, request: ProjectRequest) =>
+        resolveFeishuConnector(ctx.resolve).listWorkspaceBindings(request.projectId),
+    },
+    feishuRouteWorkspaceBinding: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:workspace-bindings:route",
+      request: routeWorkspaceBindingRequestSchema,
+      response: workspaceBindingSchema,
+      handler: (ctx, request: RouteWorkspaceBindingRequest) =>
+        resolveFeishuConnector(ctx.resolve).routeWorkspaceBinding(request),
+    },
+    feishuUnbindWorkspaceBinding: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:workspace-bindings:unbind",
+      request: unbindWorkspaceBindingRequestSchema,
+      response: z.object({ ok: z.literal(true) }),
+      handler: (ctx, request: UnbindWorkspaceBindingRequest) =>
+        resolveFeishuConnector(ctx.resolve).unbindWorkspaceBinding(request),
     },
   },
   events: {},

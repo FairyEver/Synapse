@@ -71,9 +71,13 @@ interface QueuedTurn {
 }
 
 interface RuntimeSessionState {
-  readonly key: string
+  key: string
+  workspaceKey?: string
+  workspacePath?: string
   readonly queue: QueuedTurn[]
   busy: boolean
+  activeTurns: number
+  lastActivity: number
   liveSession?: AgentLiveSession
   pending?: PendingPermissionState
 }
@@ -116,7 +120,7 @@ export class AgentRuntimeService {
         registeredPromptCommands: deps.registeredPromptCommands,
         agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
         unknownSlashBehavior: deps.unknownSlashBehavior,
-        resetSession: (sessionKey, platform) => this.resetSession(sessionKey, platform),
+        resetSession: (message) => this.resetMessageSession(message),
       })
       : undefined
   }
@@ -170,6 +174,8 @@ export class AgentRuntimeService {
       requestId: pending.requestId,
       projectId: pending.projectId,
       sessionKey: pending.sessionKey,
+      workspaceKey: pending.workspaceKey,
+      workspacePath: pending.workspacePath,
       conversationId: pending.conversationId,
       toolName: pending.toolName,
       toolInput: pending.toolInput,
@@ -261,7 +267,11 @@ export class AgentRuntimeService {
     }
 
     this.pendingPermissions.delete(request.requestId)
-    const state = this.states.get(runtimeKey(pending.sessionKey, pending.projectId))
+    const state = this.states.get(runtimeKey(
+      pending.sessionKey,
+      pending.projectId,
+      pending.workspaceKey,
+    ))
     if (state?.pending?.requestId === request.requestId) {
       state.pending = undefined
     }
@@ -271,8 +281,9 @@ export class AgentRuntimeService {
   async clearCurrentAgentSessionId(
     sessionKey: string,
     platform = "local",
+    workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.repository.getActive(sessionKey, platform)
+    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
     if (!conversation) return null
     return this.repository.clearCurrentAgentSessionId(conversation.id, this.agentType())
   }
@@ -280,8 +291,9 @@ export class AgentRuntimeService {
   async resetSession(
     sessionKey: string,
     platform = "local",
+    workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const state = this.states.get(runtimeKey(sessionKey, this.deps.projectId))
+    const state = this.states.get(runtimeKey(sessionKey, this.deps.projectId, workspaceKey))
     if (state?.pending) {
       this.pendingPermissions.delete(state.pending.requestId)
       state.pending = undefined
@@ -290,7 +302,7 @@ export class AgentRuntimeService {
       await state.liveSession.close()
       state.liveSession = undefined
     }
-    return this.clearCurrentAgentSessionId(sessionKey, platform)
+    return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
   }
 
   async createSession(
@@ -316,11 +328,34 @@ export class AgentRuntimeService {
     return this.repository.setActiveSession(sessionKey, conversationIdValue, platform)
   }
 
+  async reapIdleWorkspaceRuntimes(
+    idleTimeoutMs: number,
+    nowMs = Date.now(),
+  ): Promise<readonly string[]> {
+    const cutoff = nowMs - idleTimeoutMs
+    const reaped: string[] = []
+    for (const [key, state] of this.states) {
+      if (!state.workspaceKey || !state.workspacePath) continue
+      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
+      if (state.lastActivity >= cutoff) continue
+      if (state.liveSession?.alive()) {
+        await state.liveSession.close()
+      }
+      reaped.push(state.workspacePath)
+      this.states.delete(key)
+    }
+    return reaped
+  }
+
   async deleteSession(conversationIdValue: string): Promise<boolean> {
     const conversation = await this.repository.get(conversationIdValue)
     if (!conversation) return false
     if (conversation.active) {
-      const state = this.states.get(runtimeKey(conversation.sessionKey, this.deps.projectId))
+      const state = this.states.get(runtimeKey(
+        conversation.sessionKey,
+        this.deps.projectId,
+        conversation.workspaceKey,
+      ))
       if (state?.pending) {
         this.pendingPermissions.delete(state.pending.requestId)
         state.pending = undefined
@@ -329,7 +364,11 @@ export class AgentRuntimeService {
         await state.liveSession.close()
         state.liveSession = undefined
       }
-      this.states.delete(runtimeKey(conversation.sessionKey, this.deps.projectId))
+      this.states.delete(runtimeKey(
+        conversation.sessionKey,
+        this.deps.projectId,
+        conversation.workspaceKey,
+      ))
     }
     await this.repository.deleteSession(conversationIdValue)
     return true
@@ -364,32 +403,41 @@ export class AgentRuntimeService {
     message: AgentMessage,
     conversationIdValue: string,
   ): Promise<AgentRuntimeTurnResult> {
-    let conversation = await this.repository.get(conversationIdValue)
-    if (!conversation) {
-      conversation = await this.repository.getOrCreateActive(message)
-    }
-    conversation = await this.repository.appendHistory(conversation.id, "user", message.content)
+    state.activeTurns += 1
+    state.lastActivity = Date.now()
+    try {
+      let conversation = await this.repository.get(conversationIdValue)
+      if (!conversation) {
+        conversation = await this.repository.getOrCreateActive(message)
+      }
+      conversation = await this.repository.appendHistory(conversation.id, "user", message.content)
 
-    if (!this.deps.workDir) {
-      return this.finishWithError(message, conversation.id, "Project workspace path is required")
-    }
+      const workDir = this.workDirFor(message)
+      if (!workDir) {
+        return this.finishWithError(message, conversation.id, "Project workspace path is required")
+      }
 
-    const adapter = await this.resolveAdapter()
-    if (adapter.startSession) {
-      return this.processLiveTurn(state, message, conversation, adapter)
+      const adapter = await this.resolveAdapter()
+      if (adapter.startSession) {
+        return this.processLiveTurn(state, message, conversation, adapter, workDir)
+      }
+      return this.processExecTurn(message, conversation, adapter, workDir)
+    } finally {
+      state.activeTurns = Math.max(0, state.activeTurns - 1)
+      state.lastActivity = Date.now()
     }
-    return this.processExecTurn(message, conversation, adapter)
   }
 
   private async processExecTurn(
     message: AgentMessage,
     conversation: ConversationEntryV1,
     adapter: AgentAdapter,
+    workDir: string,
   ): Promise<AgentRuntimeTurnResult> {
     const threadId = reusableAgentSessionId(conversation, adapter.agentType)
     const execution = await adapter.execute(message, {
       projectId: this.deps.projectId,
-      workDir: this.deps.workDir as string,
+      workDir,
       threadId,
       agentSessionId: threadId,
       sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
@@ -421,8 +469,9 @@ export class AgentRuntimeService {
     message: AgentMessage,
     conversation: ConversationEntryV1,
     adapter: AgentAdapter,
+    workDir: string,
   ): Promise<AgentRuntimeTurnResult> {
-    const liveSession = await this.getLiveSession(state, conversation, adapter, message)
+    const liveSession = await this.getLiveSession(state, conversation, adapter, message, workDir)
     const events: AgentEvent[] = []
     let resultText = ""
     let error: string | undefined
@@ -475,6 +524,7 @@ export class AgentRuntimeService {
     conversation: ConversationEntryV1,
     adapter: AgentAdapter,
     message: AgentMessage,
+    workDir: string,
   ): Promise<AgentLiveSession> {
     if (
       state.liveSession
@@ -491,7 +541,7 @@ export class AgentRuntimeService {
     const agentSessionId = reusableAgentSessionId(conversation, adapter.agentType)
     const liveSession = await adapter.startSession?.({
       projectId: this.deps.projectId,
-      workDir: this.deps.workDir as string,
+      workDir,
       threadId: agentSessionId,
       agentSessionId,
       sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
@@ -516,6 +566,8 @@ export class AgentRuntimeService {
         requestId: event.requestId,
         projectId: this.deps.projectId,
         sessionKey: message.sessionKey,
+        workspaceKey: message.workspaceKey,
+        workspacePath: message.workspacePath,
         conversationId: conversationIdValue,
         toolName: event.toolName,
         toolInput: event.toolInput,
@@ -620,9 +672,11 @@ export class AgentRuntimeService {
       outcome,
       metadata: {
         ...metadata,
-        projectId: pending.projectId,
-        sessionKey: pending.sessionKey,
-        conversationId: pending.conversationId,
+          projectId: pending.projectId,
+          sessionKey: pending.sessionKey,
+          workspaceKey: pending.workspaceKey,
+          workspacePath: pending.workspacePath,
+          conversationId: pending.conversationId,
         requestId: pending.requestId,
         toolName: pending.toolName,
       },
@@ -630,16 +684,33 @@ export class AgentRuntimeService {
   }
 
   private stateFor(message: AgentMessage): RuntimeSessionState {
-    const key = runtimeKey(message.sessionKey, message.projectId)
+    const key = runtimeKey(message.sessionKey, message.projectId, message.workspaceKey)
     const existing = this.states.get(key)
-    if (existing) return existing
+    if (existing) {
+      existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
+      existing.workspacePath = message.workspacePath ?? existing.workspacePath
+      existing.lastActivity = Date.now()
+      return existing
+    }
     const state: RuntimeSessionState = {
       key,
+      workspaceKey: message.workspaceKey,
+      workspacePath: message.workspacePath,
       queue: [],
       busy: false,
+      activeTurns: 0,
+      lastActivity: Date.now(),
     }
     this.states.set(key, state)
     return state
+  }
+
+  private resetMessageSession(message: AgentMessage): Promise<ConversationEntryV1 | null> {
+    return this.resetSession(message.sessionKey, message.platform, message.workspaceKey)
+  }
+
+  private workDirFor(message: AgentMessage): string | undefined {
+    return message.workspacePath ?? this.deps.workDir
   }
 
   private queueLimit(): number {
@@ -685,8 +756,8 @@ function reusableAgentSessionId(
   return conversation.agentSessionId
 }
 
-function runtimeKey(sessionKey: string, projectId: string): string {
-  return `${projectId}:${sessionKey}`
+function runtimeKey(sessionKey: string, projectId: string, workspaceKey?: string): string {
+  return `${projectId}:${workspaceKey ?? "default"}:${sessionKey}`
 }
 
 function permissionActionForTool(toolName: string): PermissionAction {

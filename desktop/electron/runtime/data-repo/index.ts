@@ -57,6 +57,7 @@ export {
   repoPendingPushesSchema,
   repoRepositoriesSchema,
   secretsSchema,
+  workspaceBindingsSchema,
   type AuditEntryV1,
   type ConnectorAllowlistV1,
   type ConnectorDedupeStateV1,
@@ -64,6 +65,7 @@ export {
   type ConnectorReconnectStateV1,
   type ConnectorSessionKeyPolicyV1,
   type ConnectorStatusV1,
+  type ConnectorWorkspaceConfigV1,
   type ConversationEntryV1,
   type ConversationResumePolicyV1,
   type CoreConfigV1,
@@ -78,6 +80,7 @@ export {
   type RepoPendingPushV1,
   type RepoRepositoryV1,
   type SecretEntryV1,
+  type WorkspaceBindingEntryV1,
 } from "./schemas"
 export {
   copyToTimestampedBackup,

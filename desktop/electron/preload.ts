@@ -106,6 +106,11 @@ const IPC_CHANNELS = {
     "feishuStart": "synapse:connectors:feishu:start",
     "feishuStop": "synapse:connectors:feishu:stop",
     "feishuList": "synapse:connectors:feishu:list",
+    "feishuGetWorkspaceConfig": "synapse:connectors:feishu:workspace-config:get",
+    "feishuUpdateWorkspaceConfig": "synapse:connectors:feishu:workspace-config:update",
+    "feishuListWorkspaceBindings": "synapse:connectors:feishu:workspace-bindings:list",
+    "feishuRouteWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:route",
+    "feishuUnbindWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:unbind",
   },
 } as const satisfies IpcChannelMap
 
@@ -347,6 +352,16 @@ const synapseBridge: SynapseBridge = {
         invoke(IPC_CHANNELS.connectors.feishuStop)({ projectId }),
       list: (projectId) =>
         invoke(IPC_CHANNELS.connectors.feishuList)({ projectId }),
+      getWorkspaceConfig: (projectId) =>
+        invoke(IPC_CHANNELS.connectors.feishuGetWorkspaceConfig)({ projectId }),
+      updateWorkspaceConfig: (payload) =>
+        invoke(IPC_CHANNELS.connectors.feishuUpdateWorkspaceConfig)(payload),
+      listWorkspaceBindings: (projectId) =>
+        invoke(IPC_CHANNELS.connectors.feishuListWorkspaceBindings)({ projectId }),
+      routeWorkspaceBinding: (payload) =>
+        invoke(IPC_CHANNELS.connectors.feishuRouteWorkspaceBinding)(payload),
+      unbindWorkspaceBinding: (payload) =>
+        invoke(IPC_CHANNELS.connectors.feishuUnbindWorkspaceBinding)(payload),
     },
   },
 }

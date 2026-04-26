@@ -6,7 +6,7 @@ import type {
   FeishuNormalizedInbound,
   FeishuReplyContext,
 } from "./feishu-types"
-import { makeFeishuSessionKey } from "./session"
+import { makeFeishuChannelKey, makeFeishuSessionKey } from "./session"
 
 const MAX_DEDUPE_MESSAGE_IDS = 200
 
@@ -25,6 +25,9 @@ export function normalizeFeishuMessage(
   const userId = event.sender.sender_id?.open_id
   const chatId = event.message.chat_id
   const chatType = normalizeChatType(event.message.chat_type)
+  const rootId = event.message.root_id ?? event.message.thread_id
+  const channelKey = makeFeishuChannelKey({ chatId, rootId })
+  const channelName = stringValue(event.message.chat_name)
   const dedupe = input.connector.dedupe ?? {
     ttlMs: 60_000,
     lastMessageIds: [],
@@ -55,7 +58,7 @@ export function normalizeFeishuMessage(
     chatId,
     userId,
     chatType,
-    rootId: event.message.root_id ?? event.message.thread_id,
+    rootId,
     messageId,
   })
   const replyCtx: FeishuReplyContext = {
@@ -75,10 +78,13 @@ export function normalizeFeishuMessage(
   const agentMessage: AgentMessage = {
     projectId: input.projectId,
     sessionKey,
+    channelKey,
     platform: "feishu",
     messageId,
     userId,
+    chatName: channelName,
     chatType,
+    channelName,
     mentions: mentionOpenIds(event.message.mentions),
     createdAt: createTimeToIso(event.message.create_time),
     content: parsed.content,

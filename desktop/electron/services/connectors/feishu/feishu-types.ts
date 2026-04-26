@@ -87,6 +87,7 @@ export interface FeishuMessageEvent {
     readonly create_time?: string
     readonly update_time?: string
     readonly chat_id: string
+    readonly chat_name?: string
     readonly thread_id?: string
     readonly chat_type: string
     readonly message_type: string

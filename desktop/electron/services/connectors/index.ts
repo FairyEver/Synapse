@@ -18,6 +18,7 @@ export {
   type ConnectorSessionKeyPolicy,
   type ConnectorStatus,
   type ConnectorUpdateInput,
+  type ConnectorWorkspaceConfig,
   type FeishuConnectorSummary,
 } from "./types"
 export {
@@ -26,6 +27,11 @@ export {
   type FeishuConnectorRuntimeStatus,
   type FeishuConnectorServiceDeps,
   type FeishuProjectSummary,
+  type FeishuWorkspaceBindingsSummary,
+  type FeishuWorkspaceConfig,
+  type FeishuWorkspaceConfigUpdate,
+  type FeishuWorkspaceRouteInput,
+  type FeishuWorkspaceUnbindInput,
 } from "./feishu/connector-service"
 export {
   FeishuSetupService,
@@ -42,8 +48,10 @@ export {
 } from "./feishu/reply-service"
 export {
   makeFeishuSessionKey,
+  makeFeishuChannelKey,
   reconstructFeishuReplyContext,
   sessionKeyFromFeishuCardAction,
+  type FeishuChannelInput,
   type FeishuSessionInput,
 } from "./feishu/session"
 export {

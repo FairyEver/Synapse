@@ -9,6 +9,11 @@ export interface FeishuSessionInput {
   readonly messageId?: string
 }
 
+export interface FeishuChannelInput {
+  readonly chatId: string
+  readonly rootId?: string
+}
+
 export function makeFeishuSessionKey(
   policy: ConnectorSessionKeyPolicy | undefined,
   input: FeishuSessionInput,
@@ -24,6 +29,13 @@ export function makeFeishuSessionKey(
     default:
       return `feishu:${input.chatId}:${input.userId}`
   }
+}
+
+export function makeFeishuChannelKey(input: FeishuChannelInput): string {
+  if (input.rootId) {
+    return `feishu:${input.chatId}:root:${input.rootId}`
+  }
+  return `feishu:${input.chatId}`
 }
 
 export function sessionKeyFromFeishuCardAction(input: {

@@ -32,6 +32,7 @@ describe("normalizeFeishuMessage", () => {
       projectId: "project-1",
       platform: "feishu",
       sessionKey: "feishu:oc_group:ou_user",
+      channelKey: "feishu:oc_group",
       content: "hello",
       chatType: "group",
       replyCtx: expect.objectContaining({
@@ -42,6 +43,25 @@ describe("normalizeFeishuMessage", () => {
       }),
     }))
     expect(result.dedupe.lastMessageIds).toEqual(["m1"])
+  })
+
+  it("uses thread/root channelKey without leaking user id", () => {
+    const result = normalizeFeishuMessage({
+      projectId: "project-1",
+      connector: connector({ sessionKeyPolicy: { mode: "per-user" } }),
+      botOpenId: "ou_bot",
+      event: message({
+        message_id: "m-thread",
+        chat_type: "group",
+        root_id: "om_root",
+        mentions: [{ key: "@bot", id: { open_id: "ou_bot" } }],
+      }),
+    })
+
+    expect(result.kind).toBe("message")
+    if (result.kind !== "message") return
+    expect(result.message.sessionKey).toBe("feishu:oc_group:ou_user")
+    expect(result.message.channelKey).toBe("feishu:oc_group:root:om_root")
   })
 
   it("ignores duplicate, stale, unmentioned, and disallowed messages", () => {

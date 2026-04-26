@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Play, QrCode, RefreshCw, Save, Square } from "lucide-react"
+import { FolderOpen, Play, QrCode, RefreshCw, Save, Square, Trash2 } from "lucide-react"
 import QRCode from "qrcode"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -19,11 +19,23 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { useAppNotifications } from "@/app-shell/notifications"
 import type {
   SynapseFeishuConnectorRuntimeStatus,
   SynapseFeishuSetupBeginResult,
   SynapseFeishuSetupPollResult,
+  SynapseFeishuWorkspaceBinding,
+  SynapseFeishuWorkspaceBindingsSummary,
+  SynapseFeishuWorkspaceConfig,
 } from "@/types/connectors"
 
 type FeishuConnectorPanelProps = {
@@ -43,6 +55,13 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
   const [manualAppId, setManualAppId] = useState("")
   const [manualAppSecret, setManualAppSecret] = useState("")
   const [manualOwnerOpenId, setManualOwnerOpenId] = useState("")
+  const [workspaceConfig, setWorkspaceConfig] = useState<SynapseFeishuWorkspaceConfig>({
+    enabled: false,
+    autoBindByChannelName: true,
+  })
+  const [workspaceBindings, setWorkspaceBindings] =
+    useState<SynapseFeishuWorkspaceBindingsSummary>({ project: [], shared: [] })
+  const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false)
 
   const feishu = window.synapse?.connectors.feishu
 
@@ -59,6 +78,25 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
   useEffect(() => {
     void refreshStatus()
   }, [refreshStatus])
+
+  const refreshWorkspace = useCallback(async () => {
+    if (!projectId || !feishu) return
+    setIsLoadingWorkspace(true)
+    try {
+      const [config, bindings] = await Promise.all([
+        feishu.getWorkspaceConfig(projectId),
+        feishu.listWorkspaceBindings(projectId),
+      ])
+      setWorkspaceConfig(config)
+      setWorkspaceBindings(bindings)
+    } finally {
+      setIsLoadingWorkspace(false)
+    }
+  }, [feishu, projectId])
+
+  useEffect(() => {
+    void refreshWorkspace()
+  }, [refreshWorkspace])
 
   useEffect(() => {
     if (!setup?.qrUrl) {
@@ -182,6 +220,50 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
     )
     setStatus(result)
   }, [feishu, projectId, promise])
+
+  const handleChooseBaseDir = useCallback(async () => {
+    const selectedPath = await window.synapse?.repository.chooseDirectory()
+    if (selectedPath) {
+      setWorkspaceConfig((current) => ({ ...current, baseDir: selectedPath }))
+    }
+  }, [])
+
+  const handleSaveWorkspaceConfig = useCallback(async () => {
+    if (!projectId || !feishu) return
+    const saved = await promise(
+      () => feishu.updateWorkspaceConfig({
+        projectId,
+        enabled: workspaceConfig.enabled,
+        baseDir: workspaceConfig.baseDir,
+        autoBindByChannelName: workspaceConfig.autoBindByChannelName,
+        idleTimeoutMs: workspaceConfig.idleTimeoutMs,
+      }),
+      {
+        loading: "正在保存多工作区...",
+        success: "多工作区已保存。",
+      },
+    )
+    setWorkspaceConfig(saved)
+    await refreshWorkspace()
+  }, [feishu, projectId, promise, refreshWorkspace, workspaceConfig])
+
+  const handleUnbindWorkspace = useCallback(async (
+    binding: SynapseFeishuWorkspaceBinding,
+  ) => {
+    if (!projectId || !feishu) return
+    await promise(
+      () => feishu.unbindWorkspaceBinding({
+        projectId,
+        scope: binding.scope,
+        channelKey: binding.channelKey,
+      }),
+      {
+        loading: "正在解绑...",
+        success: "已解绑。",
+      },
+    )
+    await refreshWorkspace()
+  }, [feishu, projectId, promise, refreshWorkspace])
 
   if (!projectId) {
     return (
@@ -335,8 +417,134 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
             </Button>
           </div>
         </FieldGroup>
+
+        <Separator />
+
+        <FieldGroup>
+          <Field orientation="horizontal">
+            <div className="flex flex-col gap-1">
+              <FieldLabel htmlFor="feishu-workspace-enabled">多工作区</FieldLabel>
+              <FieldDescription>按飞书频道绑定本地目录。</FieldDescription>
+            </div>
+            <Switch
+              id="feishu-workspace-enabled"
+              checked={workspaceConfig.enabled}
+              onCheckedChange={(enabled) =>
+                setWorkspaceConfig((current) => ({ ...current, enabled }))}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="feishu-workspace-base-dir">工作区目录</FieldLabel>
+            <div className="flex gap-2">
+              <Input
+                id="feishu-workspace-base-dir"
+                value={workspaceConfig.baseDir ?? ""}
+                onChange={(event) =>
+                  setWorkspaceConfig((current) => ({
+                    ...current,
+                    baseDir: event.target.value,
+                  }))}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => void handleChooseBaseDir()}
+                aria-label="选择目录"
+              >
+                <FolderOpen />
+              </Button>
+            </div>
+          </Field>
+          <Field orientation="horizontal">
+            <FieldLabel htmlFor="feishu-workspace-auto-bind">按频道名绑定</FieldLabel>
+            <Switch
+              id="feishu-workspace-auto-bind"
+              checked={workspaceConfig.autoBindByChannelName ?? true}
+              onCheckedChange={(autoBindByChannelName) =>
+                setWorkspaceConfig((current) => ({ ...current, autoBindByChannelName }))}
+            />
+          </Field>
+          <div>
+            <Button
+              disabled={workspaceConfig.enabled && !workspaceConfig.baseDir?.trim()}
+              onClick={() => void handleSaveWorkspaceConfig()}
+            >
+              <Save />
+              保存多工作区
+            </Button>
+          </div>
+        </FieldGroup>
+
+        <WorkspaceBindingTable
+          title="项目绑定"
+          bindings={workspaceBindings.project}
+          isLoading={isLoadingWorkspace}
+          onUnbind={handleUnbindWorkspace}
+        />
+        <WorkspaceBindingTable
+          title="shared 绑定"
+          bindings={workspaceBindings.shared}
+          isLoading={isLoadingWorkspace}
+          onUnbind={handleUnbindWorkspace}
+        />
       </CardContent>
     </Card>
+  )
+}
+
+function WorkspaceBindingTable({
+  title,
+  bindings,
+  isLoading,
+  onUnbind,
+}: {
+  title: string
+  bindings: readonly SynapseFeishuWorkspaceBinding[]
+  isLoading: boolean
+  onUnbind: (binding: SynapseFeishuWorkspaceBinding) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">{title}</span>
+        <Badge variant="secondary">{bindings.length}</Badge>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>频道</TableHead>
+            <TableHead>目录</TableHead>
+            <TableHead className="w-12" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {bindings.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={3} className="text-muted-foreground">
+                {isLoading ? "加载中..." : "暂无绑定"}
+              </TableCell>
+            </TableRow>
+          ) : bindings.map((binding) => (
+            <TableRow key={binding.id}>
+              <TableCell>{binding.channelName ?? binding.channelKey}</TableCell>
+              <TableCell className="font-mono text-xs">{binding.workspacePath}</TableCell>
+              <TableCell>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onUnbind(binding)}
+                  aria-label="解绑"
+                >
+                  <Trash2 />
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 

@@ -33,8 +33,8 @@ describe("AgentCommandRouter", () => {
       projectId: "project-1",
       agentType: "codex",
       providerConfig,
-      resetSession: async (sessionKey) => {
-        resets.push(sessionKey)
+      resetSession: async (message) => {
+        resets.push(message.sessionKey)
         return { ...conversation, agentSessionId: undefined }
       },
     })
@@ -65,8 +65,8 @@ describe("AgentCommandRouter", () => {
       projectId: "project-1",
       agentType: "claude-code",
       providerConfig,
-      resetSession: async (sessionKey) => {
-        resets.push(sessionKey)
+      resetSession: async (message) => {
+        resets.push(message.sessionKey)
         return { ...baseConversation(), agentSessionId: undefined }
       },
     })

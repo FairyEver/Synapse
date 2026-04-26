@@ -12,12 +12,16 @@ export interface AgentAttachment {
 export interface AgentMessage {
   readonly projectId: string
   readonly sessionKey: string
+  readonly channelKey?: string
   readonly platform: string
   readonly messageId?: string
   readonly userId?: string
   readonly userName?: string
   readonly chatName?: string
   readonly chatType?: "direct" | "group"
+  readonly channelName?: string
+  readonly workspaceKey?: string
+  readonly workspacePath?: string
   readonly mentions?: readonly string[]
   readonly createdAt?: string
   readonly content: string
@@ -151,6 +155,8 @@ export interface AgentPendingPermission {
   readonly requestId: string
   readonly projectId: string
   readonly sessionKey: string
+  readonly workspaceKey?: string
+  readonly workspacePath?: string
   readonly conversationId: string
   readonly toolName: string
   readonly toolInput?: string

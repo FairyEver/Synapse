@@ -21,6 +21,12 @@ const isStringArray = (value: unknown): value is string[] =>
 const isOptionalString = (value: unknown): boolean =>
   value === undefined || typeof value === "string"
 
+const isOptionalBoolean = (value: unknown): boolean =>
+  value === undefined || typeof value === "boolean"
+
+const isOptionalNumber = (value: unknown): boolean =>
+  value === undefined || typeof value === "number"
+
 const isOptionalRecord = (value: unknown): value is Record<string, unknown> | undefined =>
   value === undefined || isAnyRecord<Record<string, unknown>>(value)
 
@@ -174,6 +180,13 @@ export interface ConnectorDedupeStateV1 extends Record<string, unknown> {
   ignoreBefore?: string
 }
 
+export interface ConnectorWorkspaceConfigV1 extends Record<string, unknown> {
+  enabled: boolean
+  baseDir?: string
+  autoBindByChannelName?: boolean
+  idleTimeoutMs?: number
+}
+
 export interface ConnectorEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
@@ -185,6 +198,7 @@ export interface ConnectorEntryV1 extends Record<string, unknown> {
   sessionKeyPolicy: ConnectorSessionKeyPolicyV1
   reconnect?: ConnectorReconnectStateV1
   dedupe?: ConnectorDedupeStateV1
+  workspaceConfig?: ConnectorWorkspaceConfigV1
   createdAt?: string
   updatedAt?: string
 }
@@ -204,7 +218,44 @@ export const connectorsSchema: NamespaceSchema<ConnectorEntryV1> = {
     && isConnectorAllowlist((v as ConnectorEntryV1).allowlist)
     && isConnectorSessionKeyPolicy((v as ConnectorEntryV1).sessionKeyPolicy)
     && ((v as ConnectorEntryV1).reconnect === undefined || isReconnectState((v as ConnectorEntryV1).reconnect))
-    && ((v as ConnectorEntryV1).dedupe === undefined || isDedupeState((v as ConnectorEntryV1).dedupe)),
+    && ((v as ConnectorEntryV1).dedupe === undefined || isDedupeState((v as ConnectorEntryV1).dedupe))
+    && ((v as ConnectorEntryV1).workspaceConfig === undefined || isConnectorWorkspaceConfig((v as ConnectorEntryV1).workspaceConfig)),
+}
+
+export interface WorkspaceBindingEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId?: string
+  scope: "project" | "shared"
+  platform: "feishu"
+  channelKey: string
+  channelName?: string
+  workspacePath: string
+  baseDir?: string
+  boundBy?: string
+  boundAt: string
+  updatedAt: string
+}
+
+export const workspaceBindingsSchema: NamespaceSchema<WorkspaceBindingEntryV1> = {
+  name: "workspace.bindings",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is WorkspaceBindingEntryV1 =>
+    isAnyRecord<WorkspaceBindingEntryV1>(v)
+    && (v as WorkspaceBindingEntryV1).schemaVersion === 1
+    && typeof (v as WorkspaceBindingEntryV1).id === "string"
+    && ((v as WorkspaceBindingEntryV1).scope === "project" || (v as WorkspaceBindingEntryV1).scope === "shared")
+    && (v as WorkspaceBindingEntryV1).platform === "feishu"
+    && isOptionalString((v as WorkspaceBindingEntryV1).projectId)
+    && typeof (v as WorkspaceBindingEntryV1).channelKey === "string"
+    && typeof (v as WorkspaceBindingEntryV1).workspacePath === "string"
+    && isOptionalString((v as WorkspaceBindingEntryV1).channelName)
+    && isOptionalString((v as WorkspaceBindingEntryV1).baseDir)
+    && isOptionalString((v as WorkspaceBindingEntryV1).boundBy)
+    && typeof (v as WorkspaceBindingEntryV1).boundAt === "string"
+    && typeof (v as WorkspaceBindingEntryV1).updatedAt === "string",
 }
 
 export interface ConversationHistoryEntryV1 extends Record<string, unknown> {
@@ -219,6 +270,9 @@ export interface ConversationUserMetaV1 extends Record<string, unknown> {
   userName?: string
   chatName?: string
   platform?: string
+  channelKey?: string
+  workspaceKey?: string
+  workspacePath?: string
 }
 
 export type ConversationResumePolicyV1 = "resume" | "fresh" | "continue"
@@ -229,6 +283,9 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   projectId: string
   sessionKey: string
   platform?: string
+  channelKey?: string
+  workspaceKey?: string
+  workspacePath?: string
   agentType?: string
   agentSessionId?: string
   pastAgentSessionIds?: string[]
@@ -252,6 +309,9 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).id === "string"
     && typeof (v as ConversationEntryV1).projectId === "string"
     && typeof (v as ConversationEntryV1).sessionKey === "string"
+    && isOptionalString((v as ConversationEntryV1).channelKey)
+    && isOptionalString((v as ConversationEntryV1).workspaceKey)
+    && isOptionalString((v as ConversationEntryV1).workspacePath)
     && Array.isArray((v as ConversationEntryV1).history)
     && (v as ConversationEntryV1).history.every(isConversationHistoryEntry)
     && typeof (v as ConversationEntryV1).active === "boolean"
@@ -434,6 +494,14 @@ function isDedupeState(value: unknown): value is ConnectorDedupeStateV1 {
     && typeof value.ttlMs === "number"
     && (value.lastMessageIds === undefined || isStringArray(value.lastMessageIds))
     && isOptionalString(value.ignoreBefore)
+}
+
+function isConnectorWorkspaceConfig(value: unknown): value is ConnectorWorkspaceConfigV1 {
+  return isAnyRecord<ConnectorWorkspaceConfigV1>(value)
+    && typeof value.enabled === "boolean"
+    && isOptionalString(value.baseDir)
+    && isOptionalBoolean(value.autoBindByChannelName)
+    && isOptionalNumber(value.idleTimeoutMs)
 }
 
 function isConversationHistoryEntry(value: unknown): value is ConversationHistoryEntryV1 {

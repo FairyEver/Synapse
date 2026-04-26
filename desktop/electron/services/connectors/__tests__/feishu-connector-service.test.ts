@@ -1,3 +1,7 @@
+import path from "node:path"
+import { mkdir, mkdtemp, realpath } from "node:fs/promises"
+import { tmpdir } from "node:os"
+
 import { describe, expect, it } from "vitest"
 
 import type {
@@ -64,6 +68,7 @@ describe("FeishuConnectorService", () => {
       platform: "feishu",
       content: "run tests",
       sessionKey: "feishu:oc_group:ou_admin",
+      channelKey: "feishu:oc_group",
     }))
     const connector = await dataRepository.namespace<ConnectorEntryV1>("connectors").get("feishu:project-1")
     expect(connector?.dedupe?.lastMessageIds).toEqual(["m1"])
@@ -88,12 +93,111 @@ describe("FeishuConnectorService", () => {
     await service.stopProject("project-1")
     expect(client.stopped).toBe(true)
   })
+
+  it("binds Feishu channels to workspaces before sending agent turns", async () => {
+    const baseDir = await mkdtemp(path.join(tmpdir(), "synapse-feishu-workspaces-"))
+    const workspaceDir = path.join(baseDir, "repo-a")
+    await mkdir(workspaceDir)
+    const normalizedWorkspaceDir = await realpath(workspaceDir)
+    const dataRepository = new MemoryDataRepository()
+    const client = new FakeFeishuClient()
+    const agent = new FakeAgentRuntime()
+    const service = new FeishuConnectorService({
+      dataRepository,
+      projectContainers: fakeProjectContainers(agent),
+      sideChannel: new FakeSideChannel() as unknown as SideChannelService,
+      listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
+      clientFactory: { create: () => client },
+    })
+    service.start()
+    await service.saveManualCredentials({
+      projectId: "project-1",
+      appId: "cli_a",
+      appSecret: "secret_a",
+      ownerOpenId: "ou_admin",
+    })
+    await service.updateWorkspaceConfig({
+      projectId: "project-1",
+      enabled: true,
+      baseDir,
+      autoBindByChannelName: false,
+    })
+    await service.startProject("project-1")
+
+    await client.handlers?.onMessage({
+      sender: { sender_id: { open_id: "ou_admin" } },
+      message: {
+        message_id: "m1",
+        create_time: String(Date.now() + 1000),
+        chat_id: "oc_group",
+        chat_type: "group",
+        chat_name: "Repo A",
+        message_type: "text",
+        content: JSON.stringify({ text: "@bot status" }),
+        mentions: [{ key: "@bot", id: { open_id: "ou_bot" } }],
+      },
+    })
+
+    expect(agent.messages).toHaveLength(0)
+    expect(client.replies.at(-1)?.content).toBe("当前频道未绑定工作区。发送目录名、本地路径或 Git URL。")
+
+    await client.handlers?.onMessage({
+      sender: { sender_id: { open_id: "ou_admin" } },
+      message: {
+        message_id: "m2",
+        create_time: String(Date.now() + 2000),
+        chat_id: "oc_group",
+        chat_type: "group",
+        chat_name: "Repo A",
+        message_type: "text",
+        content: JSON.stringify({ text: "@bot /workspace bind repo-a" }),
+        mentions: [{ key: "@bot", id: { open_id: "ou_bot" } }],
+      },
+    })
+
+    expect(client.replies.at(-1)?.content).toBe(`已绑定：${normalizedWorkspaceDir}`)
+
+    await client.handlers?.onMessage({
+      sender: { sender_id: { open_id: "ou_admin" } },
+      message: {
+        message_id: "m3",
+        create_time: String(Date.now() + 3000),
+        chat_id: "oc_group",
+        chat_type: "group",
+        chat_name: "Repo A",
+        message_type: "text",
+        content: JSON.stringify({ text: "@bot run tests" }),
+        mentions: [{ key: "@bot", id: { open_id: "ou_bot" } }],
+      },
+    })
+
+    expect(agent.messages).toEqual([
+      expect.objectContaining({
+        content: "run tests",
+        channelKey: "feishu:oc_group",
+        channelName: "Repo A",
+        workspacePath: normalizedWorkspaceDir,
+        workspaceKey: expect.stringMatching(/^workspace:/),
+      }),
+    ])
+    expect(await service.listWorkspaceBindings("project-1")).toEqual(expect.objectContaining({
+      project: [
+        expect.objectContaining({
+          channelKey: "feishu:oc_group",
+          workspacePath: normalizedWorkspaceDir,
+        }),
+      ],
+    }))
+
+    await service.stopProject("project-1")
+  })
 })
 
 class FakeFeishuClient implements FeishuRuntimeClient {
   handlers: FeishuRuntimeClientHandlers | undefined
   started = false
   stopped = false
+  readonly replies: Array<{ readonly ctx: FeishuReplyContext; readonly content: string }> = []
 
   async start(handlers: FeishuRuntimeClientHandlers): Promise<void> {
     this.handlers = handlers
@@ -108,7 +212,9 @@ class FakeFeishuClient implements FeishuRuntimeClient {
     return "ou_bot"
   }
 
-  async replyText(_ctx: FeishuReplyContext, _content: string): Promise<void> {}
+  async replyText(ctx: FeishuReplyContext, content: string): Promise<void> {
+    this.replies.push({ ctx, content })
+  }
   async createText(_ctx: FeishuReplyContext, _content: string): Promise<void> {}
   async sendCard(_ctx: FeishuReplyContext, _card: Record<string, unknown>): Promise<void> {}
   async sendImage(_ctx: FeishuReplyContext, _image: Buffer): Promise<void> {}

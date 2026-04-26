@@ -32,10 +32,60 @@ export type SynapseFeishuConnectorSummary = {
     lastMessageIds?: string[]
     ignoreBefore?: string
   }
+  workspaceConfig?: SynapseFeishuWorkspaceConfig
   lastConnectedAt?: string
   lastError?: string
   createdAt?: string
   updatedAt?: string
+}
+
+export type SynapseFeishuWorkspaceConfig = {
+  enabled: boolean
+  baseDir?: string
+  autoBindByChannelName?: boolean
+  idleTimeoutMs?: number
+}
+
+export type SynapseFeishuWorkspaceBinding = {
+  id: string
+  schemaVersion: 1
+  projectId?: string
+  scope: "project" | "shared"
+  platform: "feishu"
+  channelKey: string
+  channelName?: string
+  workspacePath: string
+  baseDir?: string
+  boundBy?: string
+  boundAt: string
+  updatedAt: string
+}
+
+export type SynapseFeishuWorkspaceBindingsSummary = {
+  project: SynapseFeishuWorkspaceBinding[]
+  shared: SynapseFeishuWorkspaceBinding[]
+}
+
+export type SynapseFeishuWorkspaceConfigPayload = {
+  projectId: string
+  enabled: boolean
+  baseDir?: string
+  autoBindByChannelName?: boolean
+  idleTimeoutMs?: number
+}
+
+export type SynapseFeishuWorkspaceRoutePayload = {
+  projectId: string
+  scope: "project" | "shared"
+  channelKey: string
+  workspacePath: string
+  channelName?: string
+}
+
+export type SynapseFeishuWorkspaceUnbindPayload = {
+  projectId: string
+  scope: "project" | "shared"
+  channelKey: string
 }
 
 export type SynapseFeishuConnectorRuntimeStatus = {

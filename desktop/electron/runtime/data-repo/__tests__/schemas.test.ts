@@ -12,10 +12,11 @@ import {
   repoPendingPushesSchema,
   repoRepositoriesSchema,
   secretsSchema,
+  workspaceBindingsSchema,
 } from "../index"
 
 describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
-  it("allSchemas exposes all 11 SPEC §5 namespaces", () => {
+  it("allSchemas exposes all 12 SPEC §5 namespaces", () => {
     const names = allSchemas.map((s) => s.name).sort()
     expect(names).toEqual(
       [
@@ -30,6 +31,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "repo.pending-pushes",
         "repo.repositories",
         "secrets",
+        "workspace.bindings",
       ].sort(),
     )
   })
@@ -50,6 +52,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(secretsSchema.backend).toBe("encrypted-json")
     expect(providersSchema.backend).toBe("json")
     expect(projectsSchema.backend).toBe("json")
+    expect(workspaceBindingsSchema.backend).toBe("json")
     expect(connectorsSchema.backend).toBe("json")
     expect(conversationsSchema.backend).toBe("sqlite")
     expect(auditSchema.backend).toBe("jsonl")
@@ -117,6 +120,20 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         status: "connected",
         allowlist: { mode: "users", userIds: ["u1"], adminIds: ["u1"] },
         sessionKeyPolicy: { mode: "per-user" },
+        workspaceConfig: { enabled: true, baseDir: "/tmp/workspaces" },
+      }),
+    ).toBe(true)
+    expect(
+      workspaceBindingsSchema.validate({
+        id: "wb-1",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        scope: "project",
+        platform: "feishu",
+        channelKey: "feishu:oc_group",
+        workspacePath: "/tmp/workspaces/backend",
+        boundAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
       }),
     ).toBe(true)
     expect(
@@ -125,6 +142,9 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         schemaVersion: 1,
         projectId: "proj-1",
         sessionKey: "feishu:u1",
+        channelKey: "feishu:u1",
+        workspaceKey: "workspace:abc",
+        workspacePath: "/tmp/workspaces/backend",
         history: [
           { role: "user", content: "hi", timestamp: "2026-04-25T00:00:00Z" },
         ],

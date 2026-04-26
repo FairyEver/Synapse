@@ -16,6 +16,9 @@ export interface CreateAgentSessionInput {
   readonly id?: string
   readonly sessionKey: string
   readonly platform?: string
+  readonly channelKey?: string
+  readonly workspaceKey?: string
+  readonly workspacePath?: string
   readonly name?: string
   readonly userMeta?: ConversationEntryV1["userMeta"]
   readonly resumePolicy?: ConversationResumePolicyV1
@@ -42,11 +45,18 @@ export class AgentSessionRepository {
   }
 
   async getOrCreateActive(message: AgentMessage): Promise<ConversationEntryV1> {
-    const existing = await this.getActive(message.sessionKey, message.platform)
+    const existing = await this.getActive(
+      message.sessionKey,
+      message.platform,
+      message.workspaceKey,
+    )
     if (existing) {
       const updated = {
         ...existing,
         platform: message.platform,
+        channelKey: message.channelKey ?? existing.channelKey,
+        workspaceKey: message.workspaceKey ?? existing.workspaceKey,
+        workspacePath: message.workspacePath ?? existing.workspacePath,
         userMeta: mergeUserMeta(existing.userMeta, message),
         updatedAt: this.isoNow(),
       }
@@ -55,11 +65,14 @@ export class AgentSessionRepository {
     }
 
     return this.createSession({
-      id: conversationId(message.platform, message.sessionKey, "active"),
+      id: conversationId(message.platform, message.sessionKey, "active", message.workspaceKey),
       sessionKey: message.sessionKey,
       platform: message.platform,
       name: message.sessionKey,
       userMeta: mergeUserMeta(undefined, message),
+      channelKey: message.channelKey,
+      workspaceKey: message.workspaceKey,
+      workspacePath: message.workspacePath,
       resumePolicy: "resume",
     })
   }
@@ -67,10 +80,12 @@ export class AgentSessionRepository {
   async getActive(
     sessionKey: string,
     platform?: string,
+    workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
     const candidates = await this.conversations.list({
       projectId: this.projectId,
       sessionKey,
+      workspaceKey,
       active: true,
     } as Partial<ConversationEntryV1>)
     const matching = candidates.find((item) => platform === undefined || item.platform === platform)
@@ -86,14 +101,18 @@ export class AgentSessionRepository {
   }
 
   async createSession(input: CreateAgentSessionInput): Promise<ConversationEntryV1> {
-    await this.deactivateActive(input.sessionKey, input.platform)
+    await this.deactivateActive(input.sessionKey, input.platform, undefined, input.workspaceKey)
     const now = this.isoNow()
     const conversation: ConversationEntryV1 = {
-      id: input.id ?? conversationId(input.platform ?? "local", input.sessionKey, this.idFactory()),
+      id: input.id
+        ?? conversationId(input.platform ?? "local", input.sessionKey, this.idFactory(), input.workspaceKey),
       schemaVersion: 1,
       projectId: this.projectId,
       sessionKey: input.sessionKey,
       platform: input.platform,
+      channelKey: input.channelKey,
+      workspaceKey: input.workspaceKey,
+      workspacePath: input.workspacePath,
       history: [],
       userMeta: input.userMeta,
       active: true,
@@ -110,12 +129,18 @@ export class AgentSessionRepository {
     sessionKey: string,
     conversationIdValue: string,
     platform?: string,
+    workspaceKey?: string,
   ): Promise<ConversationEntryV1> {
     const target = await this.conversations.get(conversationIdValue)
     if (!target || target.projectId !== this.projectId || target.sessionKey !== sessionKey) {
       throw new Error(`Conversation "${conversationIdValue}" is not available for this session key`)
     }
-    await this.deactivateActive(sessionKey, platform ?? target.platform, conversationIdValue)
+    await this.deactivateActive(
+      sessionKey,
+      platform ?? target.platform,
+      conversationIdValue,
+      workspaceKey ?? target.workspaceKey,
+    )
     const updated = { ...target, active: true, updatedAt: this.isoNow() }
     await this.conversations.upsert(updated)
     return updated
@@ -209,10 +234,12 @@ export class AgentSessionRepository {
     sessionKey: string,
     platform?: string,
     exceptId?: string,
+    workspaceKey?: string,
   ): Promise<void> {
     const active = await this.conversations.list({
       projectId: this.projectId,
       sessionKey,
+      workspaceKey,
       active: true,
     } as Partial<ConversationEntryV1>)
     for (const conversation of active) {
@@ -235,8 +262,9 @@ export function conversationId(
   platform: string,
   sessionKey: string,
   nonce = "default",
+  workspaceKey?: string,
 ): string {
-  const key = Buffer.from(`${platform}:${sessionKey}:${nonce}`).toString("base64url")
+  const key = Buffer.from(`${platform}:${workspaceKey ?? ""}:${sessionKey}:${nonce}`).toString("base64url")
   return `agent-runtime:${key}`
 }
 
@@ -271,6 +299,9 @@ function mergeUserMeta(
     userName: message.userName ?? current?.userName,
     chatName: message.chatName ?? current?.chatName,
     platform: message.platform,
+    channelKey: message.channelKey ?? current?.channelKey,
+    workspaceKey: message.workspaceKey ?? current?.workspaceKey,
+    workspacePath: message.workspacePath ?? current?.workspacePath,
   }
 }
 

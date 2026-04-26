@@ -401,6 +401,72 @@ describe("AgentRuntimeService", () => {
     ])
   })
 
+  it("isolates runtime queues and work dirs by workspace key", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const adapter = new BlockingAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      now: fixedNow,
+    })
+
+    const first = service.send({
+      ...baseMessage("one"),
+      workspaceKey: "workspace:a",
+      workspacePath: "/repo-a",
+    })
+    await waitFor(() => adapter.started.length === 1)
+    const second = service.send({
+      ...baseMessage("two"),
+      workspaceKey: "workspace:b",
+      workspacePath: "/repo-b",
+    })
+    await waitFor(() => adapter.started.length === 2)
+
+    expect(adapter.started).toEqual(["one", "two"])
+    expect(adapter.workDirs).toEqual(["/repo-a", "/repo-b"])
+
+    adapter.resolveNext("first done", "thread-a")
+    adapter.resolveNext("second done", "thread-b")
+    expect((await first).resultText).toBe("first done")
+    expect((await second).resultText).toBe("second done")
+
+    const savedA = await conversations.get(conversationId("local", "s1", "active", "workspace:a"))
+    const savedB = await conversations.get(conversationId("local", "s1", "active", "workspace:b"))
+    expect(savedA?.agentSessionId).toBe("thread-a")
+    expect(savedB?.agentSessionId).toBe("thread-b")
+    expect(savedA?.history.map((entry) => entry.content)).toEqual(["one", "first done"])
+    expect(savedB?.history.map((entry) => entry.content)).toEqual(["two", "second done"])
+  })
+
+  it("does not reap active workspace turns and reaps idle workspace state", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const adapter = new BlockingAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      now: fixedNow,
+    })
+
+    const turn = service.send({
+      ...baseMessage("one"),
+      workspaceKey: "workspace:a",
+      workspacePath: "/repo-a",
+    })
+    await waitFor(() => adapter.started.length === 1)
+
+    expect(await service.reapIdleWorkspaceRuntimes(0, Date.now() + 1_000)).toEqual([])
+
+    adapter.resolveNext("done", "thread-a")
+    await turn
+
+    expect(await service.reapIdleWorkspaceRuntimes(0, Date.now() + 1_000)).toEqual(["/repo-a"])
+  })
+
   it("enforces the pending queue limit", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const adapter = new BlockingAdapter()
@@ -530,10 +596,12 @@ class FakeRunner implements CodexProcessRunner {
 class BlockingAdapter implements AgentAdapter {
   readonly agentType = "blocking"
   readonly started: string[] = []
+  readonly workDirs: string[] = []
   private readonly pending: Array<(result: AgentExecutionResult) => void> = []
 
-  execute(message: AgentMessage): Promise<AgentExecutionResult> {
+  execute(message: AgentMessage, context: AgentExecutionContext): Promise<AgentExecutionResult> {
     this.started.push(message.content)
+    this.workDirs.push(context.workDir)
     return new Promise((resolve) => {
       this.pending.push(resolve)
     })

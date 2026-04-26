@@ -13,7 +13,7 @@ export interface AgentCommandRouterDeps {
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
-  resetSession(sessionKey: string, platform?: string): Promise<ConversationEntryV1 | null>
+  resetSession(message: AgentMessage): Promise<ConversationEntryV1 | null>
 }
 
 interface ParsedCommand {
@@ -113,7 +113,7 @@ export class AgentCommandRouter {
 
     const target = resolveModelTarget(targetInput, state.activeProvider?.models ?? [])
     await this.deps.providerConfig.setActiveModel(this.deps.projectId, target, this.deps.agentType)
-    const reset = await this.deps.resetSession(message.sessionKey, message.platform)
+    const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
       `Model changed: ${target}`,
@@ -142,7 +142,7 @@ export class AgentCommandRouter {
     }
 
     await this.deps.providerConfig.setActiveMode(this.deps.projectId, target, this.deps.agentType)
-    const reset = await this.deps.resetSession(message.sessionKey, message.platform)
+    const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
       `Mode changed: ${target}`,
@@ -155,7 +155,7 @@ export class AgentCommandRouter {
     message: AgentMessage,
     conversation: ConversationEntryV1,
   ): Promise<AgentRuntimeTurnResult> {
-    const reset = await this.deps.resetSession(message.sessionKey, message.platform)
+    const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
       "New session will start on the next message.",

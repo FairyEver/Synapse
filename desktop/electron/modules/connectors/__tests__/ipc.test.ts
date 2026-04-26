@@ -27,6 +27,15 @@ describe("connectorsIpcModule", () => {
       startProject: vi.fn(),
       stopProject: vi.fn(),
       list: vi.fn(),
+      getWorkspaceConfig: vi.fn().mockResolvedValue({
+        enabled: true,
+        baseDir: "/repo/workspaces",
+        autoBindByChannelName: true,
+      }),
+      updateWorkspaceConfig: vi.fn(),
+      listWorkspaceBindings: vi.fn(),
+      routeWorkspaceBinding: vi.fn(),
+      unbindWorkspaceBinding: vi.fn(),
     }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
@@ -44,6 +53,16 @@ describe("connectorsIpcModule", () => {
       projectId: "project-1",
       configured: true,
       running: false,
+    }))
+
+    const workspaceConfig = await harness.invoke("synapse:connectors:feishu:workspace-config:get", {
+      projectId: "project-1",
+    })
+
+    expect(service.getWorkspaceConfig).toHaveBeenCalledWith("project-1")
+    expect(workspaceConfig).toEqual(expect.objectContaining({
+      enabled: true,
+      baseDir: "/repo/workspaces",
     }))
   })
 })

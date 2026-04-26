@@ -35,6 +35,12 @@ import type {
   SynapseFeishuManualCredentialsPayload,
   SynapseFeishuSetupBeginResult,
   SynapseFeishuSetupPollResult,
+  SynapseFeishuWorkspaceBinding,
+  SynapseFeishuWorkspaceBindingsSummary,
+  SynapseFeishuWorkspaceConfig,
+  SynapseFeishuWorkspaceConfigPayload,
+  SynapseFeishuWorkspaceRoutePayload,
+  SynapseFeishuWorkspaceUnbindPayload,
 } from "./connectors"
 import type {
   SynapseContentDownloadResult,
@@ -269,6 +275,19 @@ export type SynapseBridge = {
       start: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
       stop: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
       list: (projectId: string) => Promise<SynapseFeishuConnectorSummary[]>
+      getWorkspaceConfig: (projectId: string) => Promise<SynapseFeishuWorkspaceConfig>
+      updateWorkspaceConfig: (
+        payload: SynapseFeishuWorkspaceConfigPayload,
+      ) => Promise<SynapseFeishuWorkspaceConfig>
+      listWorkspaceBindings: (
+        projectId: string,
+      ) => Promise<SynapseFeishuWorkspaceBindingsSummary>
+      routeWorkspaceBinding: (
+        payload: SynapseFeishuWorkspaceRoutePayload,
+      ) => Promise<SynapseFeishuWorkspaceBinding>
+      unbindWorkspaceBinding: (
+        payload: SynapseFeishuWorkspaceUnbindPayload,
+      ) => Promise<{ ok: true }>
     }
   }
 }

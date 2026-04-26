@@ -104,6 +104,11 @@ export const IPC_CHANNELS = {
     "feishuStart": "synapse:connectors:feishu:start",
     "feishuStop": "synapse:connectors:feishu:stop",
     "feishuList": "synapse:connectors:feishu:list",
+    "feishuGetWorkspaceConfig": "synapse:connectors:feishu:workspace-config:get",
+    "feishuUpdateWorkspaceConfig": "synapse:connectors:feishu:workspace-config:update",
+    "feishuListWorkspaceBindings": "synapse:connectors:feishu:workspace-bindings:list",
+    "feishuRouteWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:route",
+    "feishuUnbindWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:unbind",
   },
 } as const
 
