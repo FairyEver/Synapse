@@ -158,6 +158,16 @@ export type SynapseFeishuScheduledJob = {
   runCount: number
 }
 
+export type SynapseFeishuAutomationProjectFields = {
+  projectName?: string
+  connectorStatus?: SynapseConnectorStatus
+  connectorConfigured: boolean
+  connectorRunning: boolean
+}
+
+export type SynapseFeishuScheduledJobWithProject =
+  SynapseFeishuScheduledJob & SynapseFeishuAutomationProjectFields
+
 export type SynapseFeishuScheduledJobPayload = {
   projectId: string
   connectorId: string
@@ -205,6 +215,9 @@ export type SynapseFeishuHeartbeat = {
   nextRunAt?: string
   runCount: number
 }
+
+export type SynapseFeishuHeartbeatWithProject =
+  SynapseFeishuHeartbeat & SynapseFeishuAutomationProjectFields
 
 export type SynapseFeishuHeartbeatPayload = {
   projectId: string

@@ -3,6 +3,7 @@ import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { FeishuConnectorService } from "../../services/connectors"
 import type { HeartbeatService, SchedulerService } from "../../services/scheduler"
+import type { SynapseConfig } from "../../../src/types/config"
 
 const projectRequestSchema = z.object({
   projectId: z.string().min(1),
@@ -173,6 +174,15 @@ const scheduledJobSchema = z.object({
   runCount: z.number(),
 })
 
+const automationProjectFieldsSchema = z.object({
+  projectName: z.string().optional(),
+  connectorStatus: z.enum(["disabled", "connecting", "connected", "degraded", "error"]).optional(),
+  connectorConfigured: z.boolean(),
+  connectorRunning: z.boolean(),
+})
+
+const scheduledJobWithProjectSchema = scheduledJobSchema.extend(automationProjectFieldsSchema.shape)
+
 const scheduledJobCreateRequestSchema = projectRequestSchema.extend({
   connectorId: z.string().min(1),
   sessionKey: z.string().min(1),
@@ -232,6 +242,8 @@ const heartbeatSchema = z.object({
   nextRunAt: z.string().optional(),
   runCount: z.number(),
 })
+
+const heartbeatWithProjectSchema = heartbeatSchema.extend(automationProjectFieldsSchema.shape)
 
 const heartbeatUpsertRequestSchema = projectRequestSchema.extend({
   connectorId: z.string().min(1),
@@ -380,6 +392,19 @@ export const connectorsIpcModule: IpcModule = {
       handler: (ctx, request: ProjectRequest) =>
         resolveScheduler(ctx.resolve).listByProject(request.projectId),
     },
+    feishuListAllScheduledJobs: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:scheduled-jobs:list-all",
+      request: z.void(),
+      response: z.array(scheduledJobWithProjectSchema),
+      handler: async (ctx) => {
+        const scheduler = resolveScheduler(ctx.resolve)
+        const feishu = resolveFeishuConnector(ctx.resolve)
+        const config = await resolveConfig(ctx.resolve).load()
+        const jobs = await scheduler.listAll()
+        return attachProjectAutomationFields(config, feishu, jobs)
+      },
+    },
     feishuCreateScheduledJob: {
       kind: "invoke",
       channel: "synapse:connectors:feishu:scheduled-jobs:create",
@@ -433,6 +458,18 @@ export const connectorsIpcModule: IpcModule = {
       handler: (ctx, request: ProjectRequest) =>
         resolveHeartbeat(ctx.resolve).listByProject(request.projectId),
     },
+    feishuListAllHeartbeats: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:heartbeats:list-all",
+      request: z.void(),
+      response: z.array(heartbeatWithProjectSchema),
+      handler: async (ctx) => {
+        const heartbeats = await resolveHeartbeat(ctx.resolve).listAll()
+        const feishu = resolveFeishuConnector(ctx.resolve)
+        const config = await resolveConfig(ctx.resolve).load()
+        return attachProjectAutomationFields(config, feishu, heartbeats)
+      },
+    },
     feishuUpsertHeartbeat: {
       kind: "invoke",
       channel: "synapse:connectors:feishu:heartbeats:upsert",
@@ -451,6 +488,16 @@ export const connectorsIpcModule: IpcModule = {
       response: heartbeatSchema,
       handler: (ctx, request: HeartbeatIdRequest) =>
         resolveHeartbeat(ctx.resolve).pause(request.id),
+    },
+    feishuDeleteHeartbeat: {
+      kind: "invoke",
+      channel: "synapse:connectors:feishu:heartbeats:delete",
+      request: heartbeatIdRequestSchema,
+      response: z.object({ ok: z.literal(true) }),
+      handler: async (ctx, request: HeartbeatIdRequest) => {
+        await resolveHeartbeat(ctx.resolve).delete(request.id)
+        return { ok: true }
+      },
     },
     feishuResumeHeartbeat: {
       kind: "invoke",
@@ -482,4 +529,40 @@ function resolveScheduler(resolve: <T>(serviceId: string) => T): SchedulerServic
 
 function resolveHeartbeat(resolve: <T>(serviceId: string) => T): HeartbeatService {
   return resolve<HeartbeatService>("core.heartbeat")
+}
+
+function resolveConfig(resolve: <T>(serviceId: string) => T): { load(): Promise<SynapseConfig> } {
+  return resolve<{ load(): Promise<SynapseConfig> }>("core.config")
+}
+
+async function attachProjectAutomationFields<T extends { readonly id: string; readonly projectId: string }>(
+  config: SynapseConfig,
+  feishu: FeishuConnectorService,
+  entries: readonly T[],
+): Promise<Array<T & z.infer<typeof automationProjectFieldsSchema>>> {
+  const visibleEntries = entries.filter((entry) => !entry.id.startsWith("migration-backup:"))
+  const projectsById = new Map(config.global.projects.map((project) => [project.id, project.name]))
+  const statusByProject = new Map(
+    await Promise.all(
+      [...new Set(visibleEntries.map((entry) => entry.projectId))].map(async (projectId) => {
+        try {
+          return [projectId, await feishu.getStatus(projectId)] as const
+        } catch {
+          return [projectId, null] as const
+        }
+      }),
+    ),
+  )
+
+  return visibleEntries
+    .map((entry) => {
+      const status = statusByProject.get(entry.projectId)
+      return {
+        ...entry,
+        projectName: projectsById.get(entry.projectId),
+        connectorStatus: status?.connector?.status,
+        connectorConfigured: status?.configured ?? false,
+        connectorRunning: status?.running ?? false,
+      }
+    })
 }

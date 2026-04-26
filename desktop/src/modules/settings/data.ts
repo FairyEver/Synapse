@@ -1,11 +1,11 @@
 import {
   Blocks,
   Braces,
+  Clock,
   Database,
   FolderGit2,
   FolderKanban,
   Info,
-  Plug,
   ScrollText,
   Settings2,
   Shield,
@@ -36,16 +36,16 @@ const settingsCategories: SettingsCategory[] = [
     description: "项目路径。",
   },
   {
+    id: "scheduled-tasks",
+    icon: Clock,
+    label: "定时任务",
+    description: "定时执行与保活。",
+  },
+  {
     id: "tools",
     icon: Blocks,
     label: "工具",
     description: "编辑器与命令行工具。",
-  },
-  {
-    id: "connectors",
-    icon: Plug,
-    label: "连接器",
-    description: "飞书远程控制。",
   },
   {
     id: "variables",

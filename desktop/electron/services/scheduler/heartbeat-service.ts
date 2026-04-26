@@ -56,6 +56,11 @@ export class HeartbeatService {
     return entry
   }
 
+  async delete(id: string): Promise<boolean> {
+    this.cancel(id)
+    return this.deps.repository.delete(id)
+  }
+
   async pause(id: string): Promise<HeartbeatRecord> {
     return this.update(id, { paused: true })
   }
@@ -77,6 +82,10 @@ export class HeartbeatService {
 
   listByProject(projectId: string): Promise<HeartbeatRecord[]> {
     return this.deps.repository.listByProject(projectId)
+  }
+
+  listAll(): Promise<HeartbeatRecord[]> {
+    return this.deps.repository.listAll()
   }
 
   findBySession(projectId: string, sessionKey: string): Promise<HeartbeatRecord | null> {

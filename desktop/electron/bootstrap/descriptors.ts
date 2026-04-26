@@ -65,6 +65,7 @@ import type { NetworkServiceRegistry } from "../runtime/network"
 import { createNetworkServiceRegistry } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
 import { createProjectContainerRegistry } from "../runtime/project-container"
+import { migrateRepositoryScopedConnectorData } from "./project-scope-migration"
 
 /**
  * core.logging — wraps the existing `logStore` singleton.
@@ -386,10 +387,10 @@ export const coreExecutionIsolationDescriptor: ServiceDescriptor<ExecutionIsolat
 
 async function listConfiguredProjects() {
   const config = await configStore.load()
-  return config.repositories.map((repository) => ({
-    projectId: repository.uuid,
-    name: repository.name,
-    workspacePath: repository.localPath,
+  return config.global.projects.map((project) => ({
+    projectId: project.id,
+    name: project.name,
+    workspacePath: project.path,
   }))
 }
 
@@ -554,11 +555,14 @@ export const coreFeishuConnectorDescriptor: ServiceDescriptor<FeishuConnectorSer
     "core.permission-guard",
     "core.audit-sink",
   ],
-  create(ctx) {
+  async create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const config = await configStore.load()
+    await migrateRepositoryScopedConnectorData(dataRepository, config, ctx.logger.child("project-scope-migration"))
     return new FeishuConnectorService({
       projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
       sideChannel: ctx.registry.get<SideChannelService>("core.side-channel"),
-      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      dataRepository,
       listProjects: listConfiguredProjects,
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),

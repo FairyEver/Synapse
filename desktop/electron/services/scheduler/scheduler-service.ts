@@ -98,6 +98,10 @@ export class SchedulerService {
     return this.deps.repository.listByProject(projectId)
   }
 
+  listAll(): Promise<ScheduledJobRecord[]> {
+    return this.deps.repository.listAll()
+  }
+
   listBySession(projectId: string, sessionKey: string): Promise<ScheduledJobRecord[]> {
     return this.deps.repository.listBySession(projectId, sessionKey)
   }

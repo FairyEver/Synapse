@@ -185,7 +185,7 @@ export const opsIpcModule: IpcModule = {
       response: z.record(z.string(), z.unknown()),
       handler: async (ctx, request: ProjectRequest) => {
         const project = await projectById(request.projectId)
-        return resolveRunAs(ctx.resolve).preflight(request.projectId, project?.localPath)
+        return resolveRunAs(ctx.resolve).preflight(request.projectId, project?.path)
       },
     },
     runAsAuditProbe: {
@@ -195,7 +195,7 @@ export const opsIpcModule: IpcModule = {
       response: z.record(z.string(), z.unknown()),
       handler: async (ctx, request: ProjectRequest) => {
         const project = await projectById(request.projectId)
-        return resolveRunAs(ctx.resolve).auditProbe(request.projectId, project?.localPath)
+        return resolveRunAs(ctx.resolve).auditProbe(request.projectId, project?.path)
       },
     },
     webhookStatus: {
@@ -272,12 +272,12 @@ export const opsIpcModule: IpcModule = {
 
 async function firstProjectId(): Promise<string | undefined> {
   const config = await configStore.load()
-  return config.repositories[0]?.uuid
+  return config.global.projects[0]?.id
 }
 
 async function projectById(projectId: string) {
   const config = await configStore.load()
-  return config.repositories.find((item) => item.uuid === projectId)
+  return config.global.projects.find((item) => item.id === projectId)
 }
 
 async function resolveProjectAgent(
@@ -287,9 +287,9 @@ async function resolveProjectAgent(
   const containers = resolve<ProjectContainerRegistry>("core.project-containers")
   const project = await projectById(projectId)
   if (!project) throw new Error("Project was not found")
-  const container = await containers.open(project.uuid, {
+  const container = await containers.open(project.id, {
     name: project.name,
-    workspacePath: project.localPath,
+    workspacePath: project.path,
   })
   return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
 }
@@ -300,11 +300,11 @@ async function agentStatus(
 ) {
   const containers = resolve<ProjectContainerRegistry>("core.project-containers")
   const config = await configStore.load()
-  const project = config.repositories.find((item) => item.uuid === projectId)
+  const project = config.global.projects.find((item) => item.id === projectId)
   if (!project) return undefined
-  const container = await containers.open(project.uuid, {
+  const container = await containers.open(project.id, {
     name: project.name,
-    workspacePath: project.localPath,
+    workspacePath: project.path,
   })
   return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID).getStatus()
 }
@@ -339,7 +339,7 @@ function optional<T>(
 ): T | undefined {
   try {
     return resolve<T>(serviceId)
-  } catch (_error) {
+  } catch {
     return undefined
   }
 }

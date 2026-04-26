@@ -84,6 +84,13 @@ export class HeartbeatRepository {
     return this.heartbeats.get(id)
   }
 
+  async delete(id: string): Promise<boolean> {
+    const existing = await this.heartbeats.get(id)
+    if (!existing) return false
+    await this.heartbeats.remove(id)
+    return true
+  }
+
   listByProject(projectId: string): Promise<HeartbeatEntryV1[]> {
     return this.heartbeats.list({ projectId } as Partial<HeartbeatEntryV1>)
   }

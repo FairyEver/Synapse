@@ -35,9 +35,11 @@ import type {
   SynapseFeishuConnectorSummary,
   SynapseFeishuHeartbeat,
   SynapseFeishuHeartbeatPayload,
+  SynapseFeishuHeartbeatWithProject,
   SynapseFeishuManualCredentialsPayload,
   SynapseFeishuScheduledJob,
   SynapseFeishuScheduledJobPayload,
+  SynapseFeishuScheduledJobWithProject,
   SynapseFeishuSetupBeginResult,
   SynapseFeishuSetupPollResult,
   SynapseFeishuWorkspaceBinding,
@@ -345,6 +347,7 @@ export type SynapseBridge = {
         payload: SynapseFeishuWorkspaceUnbindPayload,
       ) => Promise<{ ok: true }>
       listScheduledJobs: (projectId: string) => Promise<SynapseFeishuScheduledJob[]>
+      listAllScheduledJobs: () => Promise<SynapseFeishuScheduledJobWithProject[]>
       createScheduledJob: (
         payload: SynapseFeishuScheduledJobPayload,
       ) => Promise<SynapseFeishuScheduledJob>
@@ -361,12 +364,16 @@ export type SynapseBridge = {
         payload: { projectId: string; id: string },
       ) => Promise<SynapseFeishuScheduledJob | null>
       listHeartbeats: (projectId: string) => Promise<SynapseFeishuHeartbeat[]>
+      listAllHeartbeats: () => Promise<SynapseFeishuHeartbeatWithProject[]>
       upsertHeartbeat: (
         payload: SynapseFeishuHeartbeatPayload,
       ) => Promise<SynapseFeishuHeartbeat>
       pauseHeartbeat: (
         payload: { projectId: string; id: string },
       ) => Promise<SynapseFeishuHeartbeat>
+      deleteHeartbeat: (
+        payload: { projectId: string; id: string },
+      ) => Promise<{ ok: true }>
       resumeHeartbeat: (
         payload: { projectId: string; id: string },
       ) => Promise<SynapseFeishuHeartbeat>
