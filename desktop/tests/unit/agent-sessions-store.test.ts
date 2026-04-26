@@ -87,4 +87,88 @@ describe("agent sessions store service", () => {
       sessionId: second.id,
     })).resolves.toMatchObject({ id: second.id, active: true })
   })
+
+  it("sends messages through the main-side engine success, error, and timeout paths", async () => {
+    const service = new AgentSessionsStoreService({ namespace: null, now: clock() })
+    const projects = [project()]
+    const created = await service.createSession(projects, {
+      projectId: "project-1",
+      sessionKey: "bridge:web-admin:alpha",
+    })
+
+    const completed = await service.sendMessage(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      sessionKey: created.sessionKey,
+      message: "hello",
+    }, {
+      events: [
+        { type: "text", content: "hi ", sessionId: "agent-1" },
+        { type: "result", content: "hi there", done: true },
+      ],
+    })
+
+    expect(completed).toMatchObject({
+      status: "completed",
+      response: "hi there",
+      error: null,
+      session: {
+        agentSessionId: "agent-1",
+        historyCount: 2,
+      },
+    })
+    expect(completed.session.history.map((entry) => [entry.role, entry.content])).toEqual([
+      ["user", "hello"],
+      ["assistant", "hi there"],
+    ])
+
+    const failed = await service.sendMessage(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      sessionKey: created.sessionKey,
+      message: "fail",
+    }, {
+      events: [{ type: "error", error: "agent failed" }],
+    })
+
+    expect(failed).toMatchObject({
+      status: "error",
+      error: "agent failed",
+    })
+    expect(failed.session.history.at(-1)).toMatchObject({
+      role: "user",
+      content: "fail",
+    })
+
+    const timedOut = await service.sendMessage(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      sessionKey: created.sessionKey,
+      message: "slow",
+    }, {
+      idleTimeoutMs: 100,
+      eventGapsMs: [150],
+      events: [{ type: "text", content: "late" }],
+    })
+
+    expect(timedOut).toMatchObject({
+      status: "timed_out",
+      error: "agent session timed out (no response)",
+    })
+  })
+
+  it("rejects empty input before starting an engine turn", async () => {
+    const service = new AgentSessionsStoreService({ namespace: null, now: clock() })
+    const projects = [project()]
+    const created = await service.createSession(projects, {
+      projectId: "project-1",
+      sessionKey: "bridge:web-admin:alpha",
+    })
+
+    await expect(service.sendMessage(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      message: "   ",
+    })).rejects.toThrow("message is required")
+  })
 })

@@ -54,6 +54,20 @@ export type SynapseSwitchAgentSessionPayload = {
   sessionId: string
 }
 
+export type SynapseSendAgentMessagePayload = {
+  projectId: string
+  sessionId: string
+  sessionKey?: string
+  message: string
+}
+
+export type SynapseSendAgentMessageResult = {
+  status: "idle" | "running" | "waiting_permission" | "completed" | "error" | "stopped" | "timed_out"
+  response: string
+  error: string | null
+  session: SynapseAgentSessionDetail
+}
+
 export type SynapseCardHeader = {
   title: string
   color?: string

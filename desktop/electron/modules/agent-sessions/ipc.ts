@@ -57,9 +57,24 @@ const switchSessionRequestSchema = z.object({
   sessionId: z.string(),
 })
 
+const sendMessageRequestSchema = z.object({
+  projectId: z.string(),
+  sessionId: z.string(),
+  sessionKey: z.string().optional(),
+  message: z.string(),
+})
+
+const sendMessageResponseSchema = z.object({
+  status: z.enum(["idle", "running", "waiting_permission", "completed", "error", "stopped", "timed_out"]),
+  response: z.string(),
+  error: z.string().nullable(),
+  session: sessionDetailSchema,
+})
+
 type GetSessionRequest = z.infer<typeof getSessionRequestSchema>
 type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
 type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
+type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>
 
 async function projects(ctx: IpcHandlerContext) {
   const config = await ctx.resolve<typeof configStore>("core.config").load()
@@ -100,6 +115,13 @@ export const agentSessionsIpcModule: IpcModule = {
       request: switchSessionRequestSchema,
       response: sessionDetailSchema,
       handler: async (ctx, input: SwitchSessionRequest) => sessionsService(ctx).switchSession(await projects(ctx), input),
+    },
+    send: {
+      kind: "invoke",
+      channel: "synapse:agent-sessions:send",
+      request: sendMessageRequestSchema,
+      response: sendMessageResponseSchema,
+      handler: async (ctx, input: SendMessageRequest) => sessionsService(ctx).sendMessage(await projects(ctx), input),
     },
   },
   events: {},

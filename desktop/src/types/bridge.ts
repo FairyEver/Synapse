@@ -86,6 +86,8 @@ import type {
   SynapseAgentSessionListResult,
   SynapseCreateAgentSessionPayload,
   SynapseGetAgentSessionPayload,
+  SynapseSendAgentMessagePayload,
+  SynapseSendAgentMessageResult,
   SynapseSwitchAgentSessionPayload,
 } from "./agent-session"
 
@@ -233,6 +235,7 @@ export type SynapseBridge = {
     getDetail: (payload: SynapseGetAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
     create: (payload: SynapseCreateAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
     switchSession: (payload: SynapseSwitchAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
+    send: (payload: SynapseSendAgentMessagePayload) => Promise<SynapseSendAgentMessageResult>
   }
   dataStore: {
     listTables: () => Promise<DataStoreTableInfo[]>

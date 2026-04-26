@@ -98,6 +98,7 @@ const IPC_CHANNELS = {
     "getDetail": "synapse:agent-sessions:get-detail",
     "create": "synapse:agent-sessions:create",
     "switchSession": "synapse:agent-sessions:switch",
+    "send": "synapse:agent-sessions:send",
   },
 } as const satisfies IpcChannelMap
 
@@ -280,6 +281,7 @@ const synapseBridge: SynapseBridge = {
     getDetail: (payload) => invoke(IPC_CHANNELS["agent-sessions"].getDetail)(payload),
     create: (payload) => invoke(IPC_CHANNELS["agent-sessions"].create)(payload),
     switchSession: (payload) => invoke(IPC_CHANNELS["agent-sessions"].switchSession)(payload),
+    send: (payload) => invoke(IPC_CHANNELS["agent-sessions"].send)(payload),
   },
   dataStore: {
     listTables: invoke(DATA_STORE_CHANNELS.listTables),

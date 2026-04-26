@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { Bot, MessageSquare, Plus, RefreshCw, User } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react"
+import { Bot, Loader2, MessageSquare, Plus, RefreshCw, Send, User } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { formatDateTime } from "@/lib/date-time"
 import { cn } from "@/lib/utils"
@@ -135,6 +136,10 @@ function AgentSessionsModule() {
   const [detail, setDetail] = useState<SynapseAgentSessionDetail | null>(null)
   const [loading, setLoading] = useState(!isReady)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [input, setInput] = useState("")
+  const [sending, setSending] = useState(false)
+  const [pendingMessage, setPendingMessage] = useState<SynapseSessionHistoryEntry | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const projects = config.global.projects
@@ -207,6 +212,59 @@ function AgentSessionsModule() {
       setDetailLoading(false)
     }
   }, [projects, selectedProject])
+
+  const handleSend = useCallback(async () => {
+    if (!detail || sending) {
+      return
+    }
+
+    const content = input.trim()
+    if (!content) {
+      return
+    }
+
+    const optimisticMessage: SynapseSessionHistoryEntry = {
+      role: "user",
+      content,
+      timestamp: new Date().toISOString(),
+    }
+
+    setInput("")
+    setSending(true)
+    setSendError(null)
+    setPendingMessage(optimisticMessage)
+
+    try {
+      const result = await requireBridgeDomain("agentSessions").send({
+        projectId: detail.projectId,
+        sessionId: detail.id,
+        sessionKey: detail.sessionKey,
+        message: content,
+      })
+      const list = await requireBridgeDomain("agentSessions").list()
+      setSessions(list.sessions)
+      setSelectedId(result.session.id)
+      setDetail(result.session)
+      if (result.status === "error" || result.status === "timed_out") {
+        setInput(content)
+        setSendError(result.error ?? "发送失败。")
+      }
+    } catch (sendFailure) {
+      logger.error("Failed to send agent session message.", sendFailure)
+      setInput(content)
+      setSendError(sendFailure instanceof Error ? sendFailure.message : "发送失败。")
+    } finally {
+      setPendingMessage(null)
+      setSending(false)
+    }
+  }, [detail, input, sending])
+
+  const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault()
+      void handleSend()
+    }
+  }, [handleSend])
 
   useEffect(() => {
     if (!isReady) {
@@ -292,38 +350,74 @@ function AgentSessionsModule() {
               ) : null}
             </div>
           </CardHeader>
-          <CardContent className="min-h-0">
-            {detailLoading ? (
-              <LoadingState />
-            ) : !detail ? (
-              <Empty className="min-h-64">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <MessageSquare />
-                  </EmptyMedia>
-                  <EmptyTitle>选择会话</EmptyTitle>
-                  <EmptyDescription>从左侧打开消息历史。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : detail.history.length === 0 ? (
-              <Empty className="min-h-64">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <MessageSquare />
-                  </EmptyMedia>
-                  <EmptyTitle>暂无消息</EmptyTitle>
-                  <EmptyDescription>当前会话还没有消息。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <ScrollArea className="h-[calc(100vh-18rem)] pr-4">
-                <div className="flex flex-col gap-4">
-                  {detail.history.map((entry, index) => (
-                    <HistoryMessage key={`${entry.timestamp}:${index}`} entry={entry} />
-                  ))}
+          <CardContent className="flex min-h-0 flex-col gap-3">
+            <div className="min-h-0 flex-1">
+              {detailLoading ? (
+                <LoadingState />
+              ) : !detail ? (
+                <Empty className="min-h-64">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <MessageSquare />
+                    </EmptyMedia>
+                    <EmptyTitle>选择会话</EmptyTitle>
+                    <EmptyDescription>从左侧打开消息历史。</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : detail.history.length === 0 && !pendingMessage ? (
+                <Empty className="min-h-64">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <MessageSquare />
+                    </EmptyMedia>
+                    <EmptyTitle>暂无消息</EmptyTitle>
+                    <EmptyDescription>当前会话还没有消息。</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <ScrollArea className="h-[calc(100vh-22rem)] pr-4">
+                  <div className="flex flex-col gap-4">
+                    {detail.history.map((entry, index) => (
+                      <HistoryMessage key={`${entry.timestamp}:${index}`} entry={entry} />
+                    ))}
+                    {pendingMessage ? <HistoryMessage entry={pendingMessage} /> : null}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+            {detail ? (
+              <form
+                className="flex items-end gap-2 border-t pt-3"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleSend()
+                }}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  {sendError ? (
+                    <p className="text-sm text-destructive">{sendError}</p>
+                  ) : null}
+                  <Textarea
+                    value={input}
+                    onChange={(event) => {
+                      setInput(event.currentTarget.value)
+                      setSendError(null)
+                    }}
+                    onKeyDown={handleInputKeyDown}
+                    placeholder="输入消息"
+                    disabled={sending}
+                    rows={3}
+                  />
                 </div>
-              </ScrollArea>
-            )}
+                <Button type="submit" size="icon-lg" disabled={sending || !input.trim()}>
+                  {sending ? (
+                    <Loader2 data-icon="inline-start" className="size-4 animate-spin" />
+                  ) : (
+                    <Send data-icon="inline-start" className="size-4" />
+                  )}
+                </Button>
+              </form>
+            ) : null}
           </CardContent>
         </Card>
       </div>

@@ -6,14 +6,21 @@ import type {
   SynapseAgentSessionSummary,
   SynapseCreateAgentSessionPayload,
   SynapseGetAgentSessionPayload,
+  SynapseSendAgentMessagePayload,
+  SynapseSendAgentMessageResult,
   SynapseSwitchAgentSessionPayload,
 } from "../../src/types/agent-session"
 import type { SynapseProjectConfig } from "../../src/types/config"
 import { JsonNamespace } from "../runtime/data-repo/backends/json"
 import {
+  AgentEngineService,
+  type AgentEngineTurnResult,
+} from "./agent-engine-service"
+import {
   AgentSessionsRepository,
   type SessionsSnapshot,
 } from "./sessions-repository-service"
+import type { SynapseAgentEvent } from "./session-event-service"
 
 type AgentSessionsStoreSnapshot = {
   schemaVersion: 1
@@ -25,6 +32,13 @@ type AgentSessionsStoreNamespace = Pick<JsonNamespace<AgentSessionsStoreSnapshot
 type AgentSessionsStoreServiceOptions = {
   namespace?: AgentSessionsStoreNamespace | null
   now?: () => Date
+}
+
+type SendMessageOptions = {
+  events?: SynapseAgentEvent[]
+  eventGapsMs?: number[]
+  idleTimeoutMs?: number
+  engine?: AgentEngineService
 }
 
 const AGENT_SESSIONS_NAMESPACE = "agent.sessions"
@@ -178,6 +192,58 @@ export class AgentSessionsStoreService {
     })
   }
 
+  async sendMessage(
+    projects: readonly SynapseProjectConfig[],
+    input: SynapseSendAgentMessagePayload,
+    options: SendMessageOptions = {},
+  ): Promise<SynapseSendAgentMessageResult> {
+    await this.initialize()
+
+    const project = this.requireProject(projects, input.projectId)
+    const message = input.message.trim()
+    if (!message) {
+      throw new Error("message is required")
+    }
+
+    const repository = this.ensureRepository(project.id)
+    const session = repository.findById(input.sessionId)
+    if (!session) {
+      throw new Error("session not found")
+    }
+
+    const sessionKey = input.sessionKey?.trim()
+      || this.sessionKeyForSessionId(repository.snapshot(), session.id)
+      || defaultSessionKey(normalizeProjectName(project))
+
+    const engine = options.engine ?? new AgentEngineService({ now: this.now })
+    const result = engine.processTurn({
+      sessionId: session.id,
+      sessionKey,
+      prompt: message,
+      events: options.events ?? [{ type: "error", error: "agent runtime is not connected" }],
+      eventGapsMs: options.eventGapsMs,
+      idleTimeoutMs: options.idleTimeoutMs,
+      repository,
+      now: this.now,
+    })
+
+    this.applyEngineSessionId(repository, session.id, result)
+    await this.save()
+
+    const detail = await this.getDetail(projects, {
+      projectId: project.id,
+      sessionId: session.id,
+      historyLimit: DEFAULT_HISTORY_LIMIT,
+    })
+
+    return {
+      status: result.status,
+      response: result.response,
+      error: result.error,
+      session: detail,
+    }
+  }
+
   async appendHistoryForTest(projectId: string, sessionKey: string, role: string, content: string): Promise<void> {
     await this.initialize()
     const repository = this.ensureRepository(projectId)
@@ -284,4 +350,23 @@ export class AgentSessionsStoreService {
       ...(meta?.chatName ? { chatName: meta.chatName } : undefined),
     }
   }
+
+  private sessionKeyForSessionId(snapshot: SessionsSnapshot, sessionId: string): string {
+    return Object.entries(snapshot.userSessions)
+      .find(([, sessionIds]) => sessionIds.includes(sessionId))?.[0] ?? ""
+  }
+
+  private applyEngineSessionId(
+    repository: AgentSessionsRepository,
+    sessionId: string,
+    result: AgentEngineTurnResult,
+  ): void {
+    if (result.agentSessionId) {
+      repository.setAgentSessionId(sessionId, result.agentSessionId)
+    }
+  }
+}
+
+function defaultSessionKey(projectName: string): string {
+  return `bridge:web-admin:${projectName}`
 }

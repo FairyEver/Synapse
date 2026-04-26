@@ -43,6 +43,7 @@ describe("CC Connect product entries", () => {
     expect(html).toContain("data-module=\"agent-sessions\"")
     expect(html).toContain("暂无会话")
     expect(html).toContain("新会话")
+    expect(html).not.toContain("输入消息")
     expect(html).not.toContain("运行中")
   })
 
