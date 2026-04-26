@@ -718,11 +718,18 @@ export class ConnectorQrOnboardingService {
       body,
       timeoutMs: 15_000,
     })
-    this.recordNetworkAudit(url, response.status >= 200 && response.status < 300 ? "allowed" : "failed")
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`${context}: http ${response.status}`)
+
+    try {
+      const parsed = parseJsonObject(response.body, context)
+      this.recordNetworkAudit(url, "allowed")
+      return parsed
+    } catch (error) {
+      this.recordNetworkAudit(url, "failed")
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`${context}: http ${response.status}`)
+      }
+      throw error
     }
-    return parseJsonObject(response.body, context)
   }
 
   private async getJson(

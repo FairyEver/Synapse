@@ -213,6 +213,21 @@ describe("connector QR onboarding service", () => {
     })
   })
 
+  it("keeps waiting when Feishu poll returns OAuth 400 authorization_pending", async () => {
+    const { client } = createMockHttpClient([
+      { body: { supported_auth_methods: ["client_secret"] } },
+      { body: { device_code: "device-1", verification_uri_complete: "https://qr.example.test", interval: 2, expire_in: 90 } },
+      { status: 400, body: { error: "authorization_pending" } },
+    ])
+    const service = new ConnectorQrOnboardingService({ httpClient: client })
+    const session = await service.beginQr("feishu")
+
+    await expect(service.pollQr(session.sessionId)).resolves.toMatchObject({
+      status: "waiting",
+      error: null,
+    })
+  })
+
   it("returns a failed QR session when polling transport fails", async () => {
     const { client } = createMockHttpClient([
       { body: { supported_auth_methods: ["client_secret"] } },
