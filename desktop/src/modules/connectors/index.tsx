@@ -1,8 +1,9 @@
-import { FolderKanban, Plug, Plus, Server, Trash2 } from "lucide-react"
+import { AlertCircle, CheckCircle2, Clock, FolderKanban, Plug, Plus, QrCode, RefreshCw, Server, Trash2 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,11 +43,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseProjectConfig, SynapseProjectPlatformConnection } from "@/types/config"
 import {
   CC_CONNECT_AGENT_OPTIONS,
   DEFAULT_AGENT_TYPE,
   createCcConnectProjectDraft,
+  createProjectPlatformConnectionFromConnector,
+  createQrProjectPlatformDraft,
   sanitizeCcProjectName,
   summarizeCcConnectProjects,
   updateCcConnectProjectSettings,
@@ -336,6 +339,17 @@ function ProjectDetailPanel({
     onDeleted()
   }
 
+  const handleAddPlatformConnection = async (connection: SynapseProjectPlatformConnection) => {
+    if (!sourceProject) {
+      return
+    }
+
+    await onUpdateProject(project.id, {
+      ...sourceProject,
+      platformConnections: [...(sourceProject.platformConnections ?? []), connection],
+    })
+  }
+
   return (
     <Card className="min-h-96">
       <CardHeader>
@@ -362,9 +376,25 @@ function ProjectDetailPanel({
               <DetailItem label="工作目录" value={project.workDir} />
               <DetailItem label="会话" value="待接入" />
             </div>
+            {sourceProject ? (
+              <div className="mt-4">
+                <PlatformConnectionDialog
+                  project={sourceProject}
+                  onAddPlatformConnection={handleAddPlatformConnection}
+                />
+              </div>
+            ) : null}
           </TabsContent>
 
           <TabsContent value="platforms" className="mt-4">
+            {sourceProject ? (
+              <div className="mb-4">
+                <PlatformConnectionDialog
+                  project={sourceProject}
+                  onAddPlatformConnection={handleAddPlatformConnection}
+                />
+              </div>
+            ) : null}
             {project.platforms.length === 0 ? (
               <Empty className="min-h-48">
                 <EmptyHeader>
@@ -379,17 +409,17 @@ function ProjectDetailPanel({
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 {project.platforms.map((platform) => (
-                  <Card key={platform.id} size="sm">
-                    <CardHeader>
-                      <CardTitle>{platform.name}</CardTitle>
-                      <CardDescription>{platform.type}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
+                  <div key={platform.id} className="rounded-lg border border-border p-3">
+                    <div className="space-y-1">
+                      <p className="font-medium">{platform.name}</p>
+                      <p className="text-sm text-muted-foreground">{platform.type}</p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <Badge variant="outline">{platform.status}</Badge>
                       <Badge variant="outline">{platform.enabled ? "启用" : "停用"}</Badge>
                       {platform.allowFrom ? <Badge variant="outline">{platform.allowFrom}</Badge> : null}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -542,6 +572,320 @@ function ProjectDetailPanel({
       </CardContent>
     </Card>
   )
+}
+
+type PlatformWizardKind = "telegram" | "feishu" | "lark" | "weixin"
+type QrPlatformKind = Exclude<PlatformWizardKind, "telegram">
+
+const PLATFORM_WIZARD_OPTIONS: Array<{
+  value: PlatformWizardKind
+  label: string
+  method: "manual" | "qr"
+}> = [
+  { value: "telegram", label: "Telegram", method: "manual" },
+  { value: "feishu", label: "Feishu", method: "qr" },
+  { value: "lark", label: "Lark", method: "qr" },
+  { value: "weixin", label: "Weixin", method: "qr" },
+]
+
+function PlatformConnectionDialog({
+  project,
+  onAddPlatformConnection,
+}: {
+  project: SynapseProjectConfig
+  onAddPlatformConnection: (connection: SynapseProjectPlatformConnection) => Promise<void>
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [platform, setPlatform] = useState<PlatformWizardKind>("telegram")
+
+  const selected = PLATFORM_WIZARD_OPTIONS.find((option) => option.value === platform)
+    ?? PLATFORM_WIZARD_OPTIONS[0]
+  const qrPlatform: QrPlatformKind = selected.value === "telegram" ? "feishu" : selected.value
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Plus />
+          添加平台
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>添加平台</DialogTitle>
+        </DialogHeader>
+        <FieldGroup className="gap-4">
+          <Field>
+            <Label htmlFor="platform-kind">平台</Label>
+            <NativeSelect
+              id="platform-kind"
+              className="w-full"
+              value={platform}
+              onChange={(event) => setPlatform(event.target.value as PlatformWizardKind)}
+            >
+              {PLATFORM_WIZARD_OPTIONS.map((option) => (
+                <NativeSelectOption key={option.value} value={option.value}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          {selected.method === "manual" ? (
+            <TelegramManualPlatformForm
+              project={project}
+              onAddPlatformConnection={onAddPlatformConnection}
+              onClose={() => setIsOpen(false)}
+            />
+          ) : (
+            <QrPlatformDraftForm
+              key={qrPlatform}
+              platform={qrPlatform}
+              onAddPlatformConnection={onAddPlatformConnection}
+              onClose={() => setIsOpen(false)}
+            />
+          )}
+        </FieldGroup>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function TelegramManualPlatformForm({
+  project,
+  onAddPlatformConnection,
+  onClose,
+}: {
+  project: SynapseProjectConfig
+  onAddPlatformConnection: (connection: SynapseProjectPlatformConnection) => Promise<void>
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState({
+    token: "",
+    allowFrom: "*",
+    groupReplyAll: false,
+    shareSessionInChannel: false,
+  })
+  const [formError, setFormError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!draft.token.trim()) {
+      setFormError("Token 不能为空。")
+      return
+    }
+
+    if (!window.synapse?.connectors) {
+      setFormError("连接服务不可用。")
+      return
+    }
+
+    setIsSubmitting(true)
+    setFormError(null)
+
+    try {
+      const connectorDraft = await window.synapse.connectors.createDraft({
+        type: "telegram",
+        name: `${project.name}-telegram`,
+        enabled: true,
+        options: {
+          token: draft.token.trim(),
+          allow_from: draft.allowFrom.trim() || "*",
+          group_reply_all: draft.groupReplyAll,
+          share_session_in_channel: draft.shareSessionInChannel,
+        },
+      })
+
+      if (connectorDraft.issues.length > 0) {
+        setFormError(connectorDraft.issues[0]?.message ?? "保存失败。")
+        return
+      }
+
+      await onAddPlatformConnection(
+        createProjectPlatformConnectionFromConnector(
+          connectorDraft.connector,
+          new Date().toISOString(),
+        ),
+      )
+      setDraft({
+        token: "",
+        allowFrom: "*",
+        groupReplyAll: false,
+        shareSessionInChannel: false,
+      })
+      onClose()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "保存失败。")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <>
+      <Field>
+        <Label htmlFor="telegram-token">Token</Label>
+        <Input
+          id="telegram-token"
+          type="password"
+          value={draft.token}
+          onChange={(event) => {
+            setDraft((current) => ({ ...current, token: event.target.value }))
+          }}
+          disabled={isSubmitting}
+        />
+      </Field>
+      <Field>
+        <Label htmlFor="telegram-allow-from">允许用户</Label>
+        <Input
+          id="telegram-allow-from"
+          value={draft.allowFrom}
+          onChange={(event) => {
+            setDraft((current) => ({ ...current, allowFrom: event.target.value }))
+          }}
+          disabled={isSubmitting}
+        />
+      </Field>
+      <div className="grid gap-3">
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={draft.groupReplyAll}
+            onCheckedChange={(checked) => {
+              setDraft((current) => ({ ...current, groupReplyAll: checked === true }))
+            }}
+            disabled={isSubmitting}
+          />
+          群聊全部回复
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={draft.shareSessionInChannel}
+            onCheckedChange={(checked) => {
+              setDraft((current) => ({ ...current, shareSessionInChannel: checked === true }))
+            }}
+            disabled={isSubmitting}
+          />
+          频道共享会话
+        </label>
+      </div>
+      <FieldError>{formError}</FieldError>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+          取消
+        </Button>
+        <Button onClick={() => void handleSubmit()} disabled={isSubmitting}>
+          {isSubmitting ? "保存中..." : "保存"}
+        </Button>
+      </DialogFooter>
+    </>
+  )
+}
+
+type QrDraftStatus = "idle" | "waiting" | "expired" | "error" | "success"
+
+function QrPlatformDraftForm({
+  platform,
+  onAddPlatformConnection,
+  onClose,
+}: {
+  platform: "feishu" | "lark" | "weixin"
+  onAddPlatformConnection: (connection: SynapseProjectPlatformConnection) => Promise<void>
+  onClose: () => void
+}) {
+  const [status, setStatus] = useState<QrDraftStatus>("idle")
+  const [formError, setFormError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSaveDraft = async () => {
+    setIsSubmitting(true)
+    setFormError(null)
+
+    try {
+      await onAddPlatformConnection(createQrProjectPlatformDraft({
+        id: `connector:${platform}:qr-${crypto.randomUUID()}`,
+        type: platform,
+        now: new Date().toISOString(),
+      }))
+      setStatus("success")
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "保存失败。")
+      setStatus("error")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center gap-3">
+          {status === "success" ? (
+            <CheckCircle2 className="size-5 text-muted-foreground" />
+          ) : status === "error" || status === "expired" ? (
+            <AlertCircle className="size-5 text-muted-foreground" />
+          ) : status === "waiting" ? (
+            <Clock className="size-5 text-muted-foreground" />
+          ) : (
+            <QrCode className="size-5 text-muted-foreground" />
+          )}
+          <div>
+            <p className="font-medium">{getQrStatusLabel(status)}</p>
+            <p className="text-sm text-muted-foreground">{platform}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {status === "idle" ? (
+            <Button type="button" onClick={() => setStatus("waiting")} disabled={isSubmitting}>
+              开始设置
+            </Button>
+          ) : null}
+          {status === "waiting" ? (
+            <>
+              <Button type="button" onClick={() => void handleSaveDraft()} disabled={isSubmitting}>
+                {isSubmitting ? "保存中..." : "保存草稿"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setStatus("expired")} disabled={isSubmitting}>
+                标记过期
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setStatus("error")} disabled={isSubmitting}>
+                标记错误
+              </Button>
+            </>
+          ) : null}
+          {status === "expired" || status === "error" ? (
+            <Button type="button" variant="outline" onClick={() => setStatus("waiting")} disabled={isSubmitting}>
+              <RefreshCw />
+              重试
+            </Button>
+          ) : null}
+          {status === "success" ? (
+            <Button type="button" onClick={onClose}>
+              完成
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <FieldError>{formError}</FieldError>
+      {status !== "success" ? (
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+            取消
+          </Button>
+        </DialogFooter>
+      ) : null}
+    </>
+  )
+}
+
+function getQrStatusLabel(status: QrDraftStatus): string {
+  const labels: Record<QrDraftStatus, string> = {
+    idle: "未开始",
+    waiting: "等待扫码",
+    expired: "二维码已过期",
+    error: "设置失败",
+    success: "草稿已保存",
+  }
+
+  return labels[status]
 }
 
 function createSettingsDraft(project: ConnectorProjectSummary | null) {

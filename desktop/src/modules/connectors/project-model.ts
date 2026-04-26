@@ -1,4 +1,5 @@
-import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseConnectorEntry } from "@/types/connector"
+import type { SynapseProjectConfig, SynapseProjectPlatformConnection } from "@/types/config"
 
 type AgentOption = {
   value: string
@@ -42,6 +43,12 @@ type UpdateCcConnectProjectSettingsInput = {
   language: string
   adminFrom: string
   disabledCommands: string
+}
+
+type CreateQrPlatformDraftInput = {
+  id: string
+  type: "feishu" | "lark" | "weixin"
+  now: string
 }
 
 const CC_CONNECT_AGENT_OPTIONS: AgentOption[] = [
@@ -111,6 +118,52 @@ function updateCcConnectProjectSettings(
   }
 }
 
+function createProjectPlatformConnectionFromConnector(
+  connector: SynapseConnectorEntry,
+  now: string,
+): SynapseProjectPlatformConnection {
+  return {
+    id: connector.id,
+    type: connector.type,
+    name: connector.name,
+    status: connector.status,
+    enabled: connector.enabled,
+    options: { ...connector.options },
+    secretRefs: { ...connector.secretRefs },
+    allowFrom: connector.allowFrom,
+    shareSessionInChannel: connector.options.share_session_in_channel === true,
+    groupReplyAll: connector.options.group_reply_all === true,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function createQrProjectPlatformDraft({
+  id,
+  type,
+  now,
+}: CreateQrPlatformDraftInput): SynapseProjectPlatformConnection {
+  const labels: Record<CreateQrPlatformDraftInput["type"], string> = {
+    feishu: "Feishu",
+    lark: "Lark",
+    weixin: "Weixin",
+  }
+
+  return {
+    id,
+    type,
+    name: labels[type],
+    status: "draft",
+    enabled: false,
+    options: {
+      setup_mode: "qr",
+    },
+    secretRefs: {},
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 function summarizeCcConnectProjects(
   projects: readonly SynapseProjectConfig[],
 ): ConnectorProjectSummary[] {
@@ -142,6 +195,8 @@ export {
   CC_CONNECT_AGENT_OPTIONS,
   DEFAULT_AGENT_TYPE,
   createCcConnectProjectDraft,
+  createProjectPlatformConnectionFromConnector,
+  createQrProjectPlatformDraft,
   getProjectWorkDir,
   parseDisabledCommands,
   sanitizeCcProjectName,
