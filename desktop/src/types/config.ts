@@ -111,12 +111,68 @@ export type SynapseGlobalConfig = {
   locale: SynapseLocale
   projects: SynapseProjectConfig[]
   providers: SynapseProviderEntry[]
+  ccConnect: SynapseCcConnectSettings
   defaultProjectId: string | null
   workspaceBindings: SynapseWorkspaceBinding[]
   favorites: SynapseFavorites
   recentlyViewed: SynapseRecentlyViewed
   contentSortOrder: SynapseContentSortOrder
 }
+
+export type SynapseCcConnectAttachmentSend = "" | "on" | "off"
+
+export type SynapseCcConnectLogLevel = "debug" | "info" | "warn" | "error"
+
+export type SynapseCcConnectSettings = {
+  language: SynapseLocale
+  attachmentSend: SynapseCcConnectAttachmentSend
+  logLevel: SynapseCcConnectLogLevel
+  idleTimeoutMins: number
+  thinkingMessages: boolean
+  thinkingMaxLen: number
+  toolMessages: boolean
+  toolMaxLen: number
+  streamPreviewEnabled: boolean
+  streamPreviewIntervalMs: number
+  rateLimitMaxMessages: number
+  rateLimitWindowSecs: number
+  lastReloadAt: string | null
+  lastRestartRequestedAt: string | null
+}
+
+export type SynapseCcConnectSettingsUpdate = Partial<Omit<SynapseCcConnectSettings, "lastReloadAt" | "lastRestartRequestedAt">>
+
+export type SynapseCcConnectRawConfigResult = {
+  format: "toml"
+  content: string
+  redacted: boolean
+  source: string
+}
+
+export type SynapseCcConnectReloadResult = {
+  message: string
+  projectsUpdated: string[]
+  reloadedAt: string
+}
+
+export type SynapseCcConnectRestartPayload = {
+  confirmed?: boolean
+  sessionKey?: string
+  platform?: string
+}
+
+export type SynapseCcConnectRestartResult =
+  | {
+    status: "confirmation_required"
+    message: string
+  }
+  | {
+    status: "recorded"
+    message: string
+    requestedAt: string
+    sessionKey: string
+    platform: string
+  }
 
 export type SynapseConfig = {
   activeRepoUuid: string | null

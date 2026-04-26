@@ -1,5 +1,6 @@
 import {
   DEFAULT_CONFIG,
+  DEFAULT_CC_CONNECT_SETTINGS,
   DEFAULT_CONTENT_SORT_ORDER,
   DEFAULT_FAVORITES,
   DEFAULT_GLOBAL_CONFIG,
@@ -17,6 +18,9 @@ import { normalizeSynapseLocale } from "./locale"
 import type { SynapseContentType } from "../types/content"
 import type { SynapseProviderEntry } from "../types/provider"
 import type {
+  SynapseCcConnectAttachmentSend,
+  SynapseCcConnectLogLevel,
+  SynapseCcConnectSettings,
   SynapseConfig,
   SynapseConfigPatch,
   SynapseContentSortOrder,
@@ -53,6 +57,14 @@ function isSynapseThemeMode(value: unknown): value is SynapseThemeMode {
 
 function isSynapseLocale(value: unknown): value is SynapseLocale {
   return typeof value === "string" && SYNAPSE_LOCALE_OPTIONS.includes(value as SynapseLocale)
+}
+
+function isCcConnectAttachmentSend(value: unknown): value is SynapseCcConnectAttachmentSend {
+  return value === "" || value === "on" || value === "off"
+}
+
+function isCcConnectLogLevel(value: unknown): value is SynapseCcConnectLogLevel {
+  return value === "debug" || value === "info" || value === "warn" || value === "error"
 }
 
 function isSynapseContentSortOrder(value: unknown): value is SynapseContentSortOrder {
@@ -638,6 +650,47 @@ function normalizeRecentlyViewed(value: unknown): SynapseRecentlyViewed {
   }
 }
 
+function numberAtLeast(value: unknown, fallback: number, min: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= min
+    ? Math.floor(value)
+    : fallback
+}
+
+function normalizeCcConnectSettings(value: unknown): SynapseCcConnectSettings {
+  if (!isRecord(value)) {
+    return structuredClone(DEFAULT_CC_CONNECT_SETTINGS)
+  }
+
+  return {
+    language: isSynapseLocale(value.language) && value.language !== "auto"
+      ? value.language
+      : DEFAULT_CC_CONNECT_SETTINGS.language,
+    attachmentSend: isCcConnectAttachmentSend(value.attachmentSend)
+      ? value.attachmentSend
+      : DEFAULT_CC_CONNECT_SETTINGS.attachmentSend,
+    logLevel: isCcConnectLogLevel(value.logLevel)
+      ? value.logLevel
+      : DEFAULT_CC_CONNECT_SETTINGS.logLevel,
+    idleTimeoutMins: numberAtLeast(value.idleTimeoutMins, DEFAULT_CC_CONNECT_SETTINGS.idleTimeoutMins, 0),
+    thinkingMessages: typeof value.thinkingMessages === "boolean"
+      ? value.thinkingMessages
+      : DEFAULT_CC_CONNECT_SETTINGS.thinkingMessages,
+    thinkingMaxLen: numberAtLeast(value.thinkingMaxLen, DEFAULT_CC_CONNECT_SETTINGS.thinkingMaxLen, 0),
+    toolMessages: typeof value.toolMessages === "boolean"
+      ? value.toolMessages
+      : DEFAULT_CC_CONNECT_SETTINGS.toolMessages,
+    toolMaxLen: numberAtLeast(value.toolMaxLen, DEFAULT_CC_CONNECT_SETTINGS.toolMaxLen, 0),
+    streamPreviewEnabled: typeof value.streamPreviewEnabled === "boolean"
+      ? value.streamPreviewEnabled
+      : DEFAULT_CC_CONNECT_SETTINGS.streamPreviewEnabled,
+    streamPreviewIntervalMs: numberAtLeast(value.streamPreviewIntervalMs, DEFAULT_CC_CONNECT_SETTINGS.streamPreviewIntervalMs, 100),
+    rateLimitMaxMessages: numberAtLeast(value.rateLimitMaxMessages, DEFAULT_CC_CONNECT_SETTINGS.rateLimitMaxMessages, 0),
+    rateLimitWindowSecs: numberAtLeast(value.rateLimitWindowSecs, DEFAULT_CC_CONNECT_SETTINGS.rateLimitWindowSecs, 1),
+    lastReloadAt: typeof value.lastReloadAt === "string" ? value.lastReloadAt : null,
+    lastRestartRequestedAt: typeof value.lastRestartRequestedAt === "string" ? value.lastRestartRequestedAt : null,
+  }
+}
+
 function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   if (!isRecord(value)) {
     return structuredClone(DEFAULT_GLOBAL_CONFIG)
@@ -659,6 +712,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
       : normalizeSynapseLocale(value.language, DEFAULT_LOCALE),
     projects,
     providers,
+    ccConnect: normalizeCcConnectSettings(value.ccConnect),
     defaultProjectId,
     workspaceBindings,
     favorites: normalizeFavorites(value.favorites),
@@ -729,6 +783,7 @@ export function applySynapseConfigPatch(
         ...patch.global,
         projects: patch.global.projects ?? config.global.projects,
         providers: patch.global.providers ?? config.global.providers,
+        ccConnect: patch.global.ccConnect ?? config.global.ccConnect,
         workspaceBindings: patch.global.workspaceBindings ?? config.global.workspaceBindings,
       }
     : config.global

@@ -45,6 +45,12 @@ import type {
 import type { SynapseCliDetectResult } from "./cli"
 import type {
   SynapseConfig,
+  SynapseCcConnectRawConfigResult,
+  SynapseCcConnectReloadResult,
+  SynapseCcConnectRestartPayload,
+  SynapseCcConnectRestartResult,
+  SynapseCcConnectSettings,
+  SynapseCcConnectSettingsUpdate,
   SynapseConfigPatch,
   SynapseLegacyCcConfigImportPreview,
 } from "./config"
@@ -180,6 +186,11 @@ export type SynapseBridge = {
     previewLegacyCcConfigImport: (
       payload: { toml: string },
     ) => Promise<SynapseLegacyCcConfigImportPreview>
+    getCcConnectSettings: () => Promise<SynapseCcConnectSettings>
+    updateCcConnectSettings: (payload: SynapseCcConnectSettingsUpdate) => Promise<SynapseCcConnectSettings>
+    getCcConnectRawConfig: () => Promise<SynapseCcConnectRawConfigResult>
+    reloadCcConnectConfig: () => Promise<SynapseCcConnectReloadResult>
+    restartCcConnect: (payload?: SynapseCcConnectRestartPayload) => Promise<SynapseCcConnectRestartResult>
     resetApp: () => Promise<void>
     update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
   }

@@ -10,8 +10,9 @@ import { app } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
 import type { IpcModule } from "../../runtime/ipc/types"
-import type { SynapseConfigPatch } from "../../../src/types/config"
+import type { SynapseCcConnectSettingsUpdate, SynapseConfigPatch } from "../../../src/types/config"
 import { configBackupService } from "../../services/config-backup-service"
+import { ccConnectSettingsService } from "../../services/cc-connect-settings-service"
 import { previewLegacyCcConfigImport } from "../../services/legacy-cc-config-import"
 import { configStore } from "../../services/config-store"
 import { createMainLogger, logStore } from "../../services/log-store"
@@ -46,6 +47,64 @@ const importResultSchema = z.object({
   success: z.boolean(),
   message: z.optional(z.string()),
 })
+
+const ccConnectLanguageSchema = z.enum(["en", "zh", "zh-TW", "ja", "es"])
+const ccConnectAttachmentSendSchema = z.enum(["", "on", "off"])
+const ccConnectLogLevelSchema = z.enum(["debug", "info", "warn", "error"])
+
+const ccConnectSettingsSchema = z.object({
+  language: ccConnectLanguageSchema,
+  attachmentSend: ccConnectAttachmentSendSchema,
+  logLevel: ccConnectLogLevelSchema,
+  idleTimeoutMins: z.number(),
+  thinkingMessages: z.boolean(),
+  thinkingMaxLen: z.number(),
+  toolMessages: z.boolean(),
+  toolMaxLen: z.number(),
+  streamPreviewEnabled: z.boolean(),
+  streamPreviewIntervalMs: z.number(),
+  rateLimitMaxMessages: z.number(),
+  rateLimitWindowSecs: z.number(),
+  lastReloadAt: z.string().nullable(),
+  lastRestartRequestedAt: z.string().nullable(),
+})
+
+const ccConnectSettingsUpdateSchema = ccConnectSettingsSchema
+  .omit({ lastReloadAt: true, lastRestartRequestedAt: true })
+  .partial()
+
+const ccConnectRawConfigSchema = z.object({
+  format: z.literal("toml"),
+  content: z.string(),
+  redacted: z.boolean(),
+  source: z.string(),
+})
+
+const ccConnectReloadResultSchema = z.object({
+  message: z.string(),
+  projectsUpdated: z.array(z.string()),
+  reloadedAt: z.string(),
+})
+
+const ccConnectRestartRequestSchema = z.object({
+  confirmed: z.boolean().optional(),
+  sessionKey: z.string().optional(),
+  platform: z.string().optional(),
+}).optional()
+
+const ccConnectRestartResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("confirmation_required"),
+    message: z.string(),
+  }),
+  z.object({
+    status: z.literal("recorded"),
+    message: z.string(),
+    requestedAt: z.string(),
+    sessionKey: z.string(),
+    platform: z.string(),
+  }),
+])
 
 const legacyCcConfigImportPreviewSchema = z.object({
   valid: z.boolean(),
@@ -194,6 +253,41 @@ export const configIpcModule: IpcModule = {
         app.relaunch()
         app.exit(0)
       },
+    },
+    getCcConnectSettings: {
+      kind: "invoke",
+      channel: "synapse:config:get-cc-connect-settings",
+      request: z.void(),
+      response: ccConnectSettingsSchema,
+      handler: () => ccConnectSettingsService.getSettings(),
+    },
+    updateCcConnectSettings: {
+      kind: "invoke",
+      channel: "synapse:config:update-cc-connect-settings",
+      request: ccConnectSettingsUpdateSchema,
+      response: ccConnectSettingsSchema,
+      handler: (_ctx, payload: SynapseCcConnectSettingsUpdate) => ccConnectSettingsService.updateSettings(payload),
+    },
+    getCcConnectRawConfig: {
+      kind: "invoke",
+      channel: "synapse:config:get-cc-connect-raw-config",
+      request: z.void(),
+      response: ccConnectRawConfigSchema,
+      handler: () => ccConnectSettingsService.rawConfig(),
+    },
+    reloadCcConnectConfig: {
+      kind: "invoke",
+      channel: "synapse:config:reload-cc-connect-config",
+      request: z.void(),
+      response: ccConnectReloadResultSchema,
+      handler: () => ccConnectSettingsService.reload(),
+    },
+    restartCcConnect: {
+      kind: "invoke",
+      channel: "synapse:config:restart-cc-connect",
+      request: ccConnectRestartRequestSchema,
+      response: ccConnectRestartResultSchema,
+      handler: (_ctx, payload) => ccConnectSettingsService.restart(payload ?? {}),
     },
   },
   events: {},

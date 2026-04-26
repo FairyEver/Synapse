@@ -6,6 +6,7 @@ import {
   FolderKanban,
   Info,
   Plug,
+  RadioTower,
   ScrollText,
   Settings2,
   Shield,
@@ -41,6 +42,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Plug,
     label: "服务商",
     description: "全局 Provider。",
+  },
+  {
+    id: "cc-connect",
+    icon: RadioTower,
+    label: "CC Connect",
+    description: "运行设置。",
   },
   {
     id: "tools",

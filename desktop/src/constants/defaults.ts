@@ -1,4 +1,5 @@
 import type {
+  SynapseCcConnectSettings,
   SynapseConfig,
   SynapseContentSortOrder,
   SynapseFavorites,
@@ -43,11 +44,29 @@ export const DEFAULT_RECENTLY_VIEWED = {
 
 export const DEFAULT_CONTENT_SORT_ORDER: SynapseContentSortOrder = "modified-desc"
 
+export const DEFAULT_CC_CONNECT_SETTINGS: SynapseCcConnectSettings = {
+  language: "en",
+  attachmentSend: "",
+  logLevel: "info",
+  idleTimeoutMins: 120,
+  thinkingMessages: true,
+  thinkingMaxLen: 300,
+  toolMessages: true,
+  toolMaxLen: 500,
+  streamPreviewEnabled: true,
+  streamPreviewIntervalMs: 1500,
+  rateLimitMaxMessages: 20,
+  rateLimitWindowSecs: 60,
+  lastReloadAt: null,
+  lastRestartRequestedAt: null,
+}
+
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
   locale: DEFAULT_LOCALE,
   projects: [],
   providers: [],
+  ccConnect: DEFAULT_CC_CONNECT_SETTINGS,
   defaultProjectId: null,
   workspaceBindings: [],
   favorites: DEFAULT_FAVORITES,

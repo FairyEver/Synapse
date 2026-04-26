@@ -2,6 +2,7 @@ import { app, dialog } from "electron"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
+import { DEFAULT_CC_CONNECT_SETTINGS } from "../../src/constants/defaults"
 import type {
   SynapseConfigBackup,
   SynapseConfigBackupExportResult,
@@ -492,6 +493,7 @@ function validateConfig(
       locale: locale as SynapseConfigBackup["config"]["global"]["locale"],
       projects: normalizedProjects,
       providers: normalizedProviders,
+      ccConnect: DEFAULT_CC_CONNECT_SETTINGS,
       defaultProjectId: isNonEmptyString(global.defaultProjectId) && projectIdSet.has(global.defaultProjectId.trim())
         ? global.defaultProjectId.trim()
         : null,

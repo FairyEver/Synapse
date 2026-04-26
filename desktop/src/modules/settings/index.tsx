@@ -28,6 +28,7 @@ import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
 import { DataStoreSettingsPanel } from "@/modules/settings/components/data-store-settings-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
+import { CcConnectSettingsPanel } from "@/modules/settings/components/cc-connect-settings-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 
@@ -264,6 +265,7 @@ function SettingsModule() {
             onSave={handleSaveProviders}
           />
         ) : null}
+        {isReady && activeCategory === "cc-connect" ? <CcConnectSettingsPanel /> : null}
         {isReady && activeCategory === "data-store" ? <DataStoreSettingsPanel /> : null}
         {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 

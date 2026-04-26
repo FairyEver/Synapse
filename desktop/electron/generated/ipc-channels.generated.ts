@@ -37,6 +37,11 @@ export const IPC_CHANNELS = {
     "importBackup": "synapse:config:import-backup",
     "previewLegacyCcConfigImport": "synapse:config:preview-legacy-cc-config-import",
     "resetApp": "synapse:config:reset-app",
+    "getCcConnectSettings": "synapse:config:get-cc-connect-settings",
+    "updateCcConnectSettings": "synapse:config:update-cc-connect-settings",
+    "getCcConnectRawConfig": "synapse:config:get-cc-connect-raw-config",
+    "reloadCcConnectConfig": "synapse:config:reload-cc-connect-config",
+    "restartCcConnect": "synapse:config:restart-cc-connect",
   },
   "identity": {
     "getLocalState": "synapse:identity:get-local-state",
