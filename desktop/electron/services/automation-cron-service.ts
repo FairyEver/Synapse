@@ -472,6 +472,15 @@ export class AutomationCronStore {
     this.jobs.set(id, updated)
     return cloneJob(updated)
   }
+
+  replace(id: string, input: AutomationCronJobInput): AutomationCronJob | null {
+    if (!this.jobs.has(id) || input.id !== id) {
+      return null
+    }
+    const job = normalizeJob(input)
+    this.jobs.set(id, job)
+    return cloneJob(job)
+  }
 }
 
 function stringValue(value: unknown, field: string): string {
@@ -539,6 +548,17 @@ export class AutomationCronScheduler {
     const updated = this.store.update(id, field, value)
     if (!updated) {
       throw new Error(`failed to update field ${JSON.stringify(field)}`)
+    }
+    return updated
+  }
+
+  replaceJob(id: string, input: AutomationCronJobInput): AutomationCronJob {
+    const updated = this.store.replace(id, {
+      ...input,
+      sessionMode: normalizeCronSessionMode(input.sessionMode),
+    })
+    if (!updated) {
+      throw new Error(`job ${JSON.stringify(id)} not found`)
     }
     return updated
   }

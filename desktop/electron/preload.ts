@@ -103,6 +103,13 @@ const IPC_CHANNELS = {
     "send": "synapse:agent-sessions:send",
     "respondPermission": "synapse:agent-sessions:respond-permission",
   },
+  "automation": {
+    "listCron": "synapse:automation:list-cron",
+    "createCron": "synapse:automation:create-cron",
+    "updateCron": "synapse:automation:update-cron",
+    "toggleCron": "synapse:automation:toggle-cron",
+    "deleteCron": "synapse:automation:delete-cron",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -288,6 +295,13 @@ const synapseBridge: SynapseBridge = {
     executeCommand: (payload) => invoke(IPC_CHANNELS["agent-sessions"].executeCommand)(payload),
     send: (payload) => invoke(IPC_CHANNELS["agent-sessions"].send)(payload),
     respondPermission: (payload) => invoke(IPC_CHANNELS["agent-sessions"].respondPermission)(payload),
+  },
+  automation: {
+    listCron: (payload) => invoke(IPC_CHANNELS.automation.listCron)(payload),
+    createCron: (payload) => invoke(IPC_CHANNELS.automation.createCron)(payload),
+    updateCron: (payload) => invoke(IPC_CHANNELS.automation.updateCron)(payload),
+    toggleCron: (payload) => invoke(IPC_CHANNELS.automation.toggleCron)(payload),
+    deleteCron: (payload) => invoke(IPC_CHANNELS.automation.deleteCron)(payload),
   },
   dataStore: {
     listTables: invoke(DATA_STORE_CHANNELS.listTables),

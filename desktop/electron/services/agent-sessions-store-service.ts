@@ -522,7 +522,7 @@ export class AgentSessionsStoreService {
         return commandResult({
           command: definition.command,
           title: definition.title,
-          content: "Cron UI 将在本轮 V2-B10 接入。",
+          content: "进入自动化 > 定时任务。",
           format: "text",
         })
       case "heartbeat":

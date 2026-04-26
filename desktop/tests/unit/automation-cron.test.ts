@@ -8,6 +8,8 @@ import {
   nextCronRunAfter,
   normalizeCronSessionMode,
 } from "../../electron/services/automation-cron-service"
+import { AutomationCronStoreService } from "../../electron/services/automation-cron-store-service"
+import type { SynapseProjectConfig } from "../../src/types/config"
 
 function job(overrides: Partial<Parameters<AutomationCronScheduler["addJob"]>[0]> = {}): Parameters<AutomationCronScheduler["addJob"]>[0] {
   return {
@@ -24,6 +26,15 @@ function job(overrides: Partial<Parameters<AutomationCronScheduler["addJob"]>[0]
     mode: "",
     createdAt: new Date("2026-04-25T00:00:00.000Z"),
     ...overrides,
+  }
+}
+
+function project(): SynapseProjectConfig {
+  return {
+    id: "project-1",
+    name: "synapse",
+    path: "/tmp/synapse",
+    agentType: "codex",
   }
 }
 
@@ -115,5 +126,74 @@ describe("automation cron service", () => {
       newSessionPerRun: true,
       requiresPermission: true,
     })
+  })
+
+  it("persists UI cron mutations and gates exec jobs", async () => {
+    const now = () => new Date("2026-04-25T05:59:00.000Z")
+    const service = new AutomationCronStoreService({ namespace: null, now })
+    const projects = [project()]
+
+    const promptJob = await service.create(projects, {
+      project: "synapse",
+      sessionKey: "",
+      cronExpr: "0 6 * * *",
+      prompt: "daily summary",
+      exec: "",
+      description: "Daily",
+      enabled: true,
+    })
+    expect(promptJob).toMatchObject({
+      status: "ok",
+      job: {
+        project: "synapse",
+        sessionKey: "bridge:web-admin:synapse",
+        scheduleText: "每天 06:00",
+        requiresPermission: false,
+      },
+    })
+    expect(promptJob.job?.nextRunAt).toBeTruthy()
+
+    const gated = await service.create(projects, {
+      project: "synapse",
+      sessionKey: "bridge:web-admin:synapse",
+      cronExpr: "*/30 * * * *",
+      prompt: "",
+      exec: "df -h",
+      enabled: true,
+    })
+    expect(gated).toEqual({ status: "permission_required", job: null, error: null })
+
+    const execJob = await service.create(projects, {
+      project: "synapse",
+      sessionKey: "bridge:web-admin:synapse",
+      cronExpr: "*/30 * * * *",
+      prompt: "",
+      exec: "df -h",
+      enabled: true,
+      permissionDecision: "allow",
+    })
+    expect(execJob.job).toMatchObject({
+      exec: "df -h",
+      requiresPermission: true,
+      scheduleText: "每30分钟",
+    })
+
+    const toggled = await service.toggle({ id: promptJob.job?.id ?? "", enabled: false })
+    expect(toggled).toMatchObject({ enabled: false, nextRunAt: null })
+
+    const updated = await service.update({
+      id: promptJob.job?.id ?? "",
+      patch: { cronExpr: "0 9 * * 1-5", prompt: "weekday", exec: "" },
+    })
+    expect(updated.job).toMatchObject({
+      cronExpr: "0 9 * * 1-5",
+      prompt: "weekday",
+      scheduleText: "每周一 09:00",
+    })
+
+    const list = await service.list()
+    expect(list.jobs).toHaveLength(2)
+    await expect(service.delete({ id: "missing" })).rejects.toThrow("cron job not found")
+    await expect(service.delete({ id: execJob.job?.id ?? "" })).resolves.toEqual({ status: "ok" })
   })
 })

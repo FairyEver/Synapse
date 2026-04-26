@@ -18,6 +18,16 @@ import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "./backup"
+import type {
+  SynapseCronDeletePayload,
+  SynapseCronJob,
+  SynapseCronJobDraft,
+  SynapseCronListPayload,
+  SynapseCronListResult,
+  SynapseCronMutationResult,
+  SynapseCronTogglePayload,
+  SynapseCronUpdatePayload,
+} from "./automation"
 import type { SynapseCliDetectResult } from "./cli"
 import type {
   SynapseConfig,
@@ -245,6 +255,13 @@ export type SynapseBridge = {
     executeCommand: (payload: SynapseExecuteCommandPayload) => Promise<SynapseCommandExecutionResult>
     send: (payload: SynapseSendAgentMessagePayload) => Promise<SynapseSendAgentMessageResult>
     respondPermission: (payload: SynapseRespondPermissionPayload) => Promise<SynapseRespondPermissionResult>
+  }
+  automation: {
+    listCron: (payload?: SynapseCronListPayload) => Promise<SynapseCronListResult>
+    createCron: (payload: SynapseCronJobDraft) => Promise<SynapseCronMutationResult>
+    updateCron: (payload: SynapseCronUpdatePayload) => Promise<SynapseCronMutationResult>
+    toggleCron: (payload: SynapseCronTogglePayload) => Promise<SynapseCronJob>
+    deleteCron: (payload: SynapseCronDeletePayload) => Promise<{ status: "ok" }>
   }
   dataStore: {
     listTables: () => Promise<DataStoreTableInfo[]>

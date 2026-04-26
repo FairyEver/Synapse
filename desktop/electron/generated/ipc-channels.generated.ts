@@ -101,6 +101,13 @@ export const IPC_CHANNELS = {
     "send": "synapse:agent-sessions:send",
     "respondPermission": "synapse:agent-sessions:respond-permission",
   },
+  "automation": {
+    "listCron": "synapse:automation:list-cron",
+    "createCron": "synapse:automation:create-cron",
+    "updateCron": "synapse:automation:update-cron",
+    "toggleCron": "synapse:automation:toggle-cron",
+    "deleteCron": "synapse:automation:delete-cron",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

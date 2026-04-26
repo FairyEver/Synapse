@@ -35,6 +35,7 @@ import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createDefaultConnectorRegistryService } from "../services/connector-registry-service"
 import { AgentSessionsStoreService } from "../services/agent-sessions-store-service"
+import { AutomationCronStoreService } from "../services/automation-cron-store-service"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -217,6 +218,12 @@ export const agentSessionsDescriptor: ServiceDescriptor<AgentSessionsStoreServic
   id: "agent.sessions",
   criticality: "degraded",
   create: () => new AgentSessionsStoreService(),
+}
+
+export const automationCronDescriptor: ServiceDescriptor<AutomationCronStoreService> = {
+  id: "automation.cron",
+  criticality: "degraded",
+  create: () => new AutomationCronStoreService(),
 }
 
 /**
