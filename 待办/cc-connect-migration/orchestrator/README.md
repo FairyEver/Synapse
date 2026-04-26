@@ -45,6 +45,15 @@ stage 01 必须以该目录为正式来源证据，并扫描完整项目资产�
 
 这些文件用于解决上下文压缩、中断、换会话、验收次数丢失的问题。
 
+跨对话交接使用：
+
+```text
+待办/cc-connect-migration/orchestrator/HANDOFF_PROTOCOL.md
+待办/cc-connect-migration/artifacts/0.0-latest-handoff.md
+```
+
+如果用户通过远程控制软件操作、不方便复制长文本，所有对话结束前都应更新 `0.0-latest-handoff.md`，让下一个对话直接读取这张纸条。
+
 ## 自动化边界
 
 编排器能自动推进的内容：
@@ -67,3 +76,5 @@ needs-user-confirmation
 00A 裁决结果需要用户取舍
 执行迁移代码前的最终确认
 ```
+
+暂停、阻塞、等待用户确认或无人值守完成待用户检查时，编排器必须先更新 state/log/resume/summary，再按 `待办/cc-connect-migration/整体标准.md` 的“用户通知规则”发送 Bark 手机通知，并把通知结果写入 log。

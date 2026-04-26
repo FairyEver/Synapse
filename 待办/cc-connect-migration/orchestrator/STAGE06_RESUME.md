@@ -11,6 +11,12 @@
 核心迁移方式：
 计划文件决定本批做什么、放哪里、如何验收；CC Connect 原源码和测试决定具体行为、字段默认值、边界条件、错误处理和状态机；3S 当前代码决定如何落到 Electron/TypeScript 架构里。恢复后继续写任何新代码前，必须先确认当前批次已经读取对应 CC Connect 原源码和测试文件；如果没有，先补读源码和测试，再继续实现或修正。
 
+用户通知方式：
+如果恢复后发现需要用户处理、blocked、needs-user-confirmation、未知脏改、真实账号/secret/扫码/系统服务授权，或无人值守结束后需要用户检查，必须先更新 state/log/resume/overnight summary，再按 `待办/cc-connect-migration/整体标准.md` 的“用户通知规则”发送 Bark 手机通知。
+
+跨对话交接方式：
+恢复、暂停、阻塞、完成或需要另一个 Codex 对话继续时，必须按 `待办/cc-connect-migration/orchestrator/HANDOFF_PROTOCOL.md` 更新 `待办/cc-connect-migration/artifacts/0.0-latest-handoff.md`。不要要求用户复制长篇状态。
+
 CC Connect 原项目资产路径固定为：
 
 ```text
@@ -23,17 +29,19 @@ CC Connect 原项目资产路径固定为：
 先读取：
 
 1. `AGENTS.md`
-2. `待办/cc-connect-migration/orchestrator/STAGE06_CODE_RUNNER_RULES.md`
-3. `待办/cc-connect-migration/artifacts/6.0-code-runner-state.md`
-4. `待办/cc-connect-migration/artifacts/6.0-code-runner-log.md`
-5. `待办/cc-connect-migration/artifacts/6.0-code-runner-resume-prompt.md`
-6. `待办/cc-connect-migration/artifacts/6.0-dev-batch-plan.md`
-7. `待办/cc-connect-migration/artifacts/6.0-overnight-summary.md`
-8. `待办/cc-connect-migration/artifacts/1.2-feature-manifest.md`
-9. `待办/cc-connect-migration/artifacts/4.1-verification-ledger.md`
-10. `待办/cc-connect-migration/artifacts/5.1-development-plan.md`
-11. `待办/cc-connect-migration/artifacts/5.3-decision-log.md`
-12. `待办/cc-connect-migration/artifacts/5.4-release-and-rollback-plan.md`
+2. `待办/cc-connect-migration/整体标准.md`
+3. `待办/cc-connect-migration/orchestrator/STAGE06_CODE_RUNNER_RULES.md`
+4. `待办/cc-connect-migration/artifacts/6.0-code-runner-state.md`
+5. `待办/cc-connect-migration/artifacts/6.0-code-runner-log.md`
+6. `待办/cc-connect-migration/artifacts/6.0-code-runner-resume-prompt.md`
+7. `待办/cc-connect-migration/artifacts/6.0-dev-batch-plan.md`
+8. `待办/cc-connect-migration/artifacts/6.0-overnight-summary.md`
+9. `待办/cc-connect-migration/artifacts/0.0-latest-handoff.md`
+10. `待办/cc-connect-migration/artifacts/1.2-feature-manifest.md`
+11. `待办/cc-connect-migration/artifacts/4.1-verification-ledger.md`
+12. `待办/cc-connect-migration/artifacts/5.1-development-plan.md`
+13. `待办/cc-connect-migration/artifacts/5.3-decision-log.md`
+14. `待办/cc-connect-migration/artifacts/5.4-release-and-rollback-plan.md`
 
 恢复检查：
 
@@ -69,6 +77,8 @@ CC Connect 原项目资产路径固定为：
 例外：S06-B03 / CC-005 使用已预授权的 `smol-toml` 不属于需要暂停的新增依赖。
 
 暂停前必须更新 `6.0-overnight-summary.md`，写清楚“需要用户决定什么、选项、推荐选择、影响、明早第一步”。
+暂停前还必须发送 Bark 手机通知，并把发送结果写入 `6.0-code-runner-log.md` 和 state 的“最近通知”。
+暂停前还必须更新 `0.0-latest-handoff.md`，把下一步提示词写成短文本，方便用户直接复制给另一个对话。
 
 开始恢复：
 

@@ -41,6 +41,7 @@ mcp__chrome-devtools__list_console_messages
 如果 `list_pages` 中存在已经登录成功的 `localhost:9820` 页面，必须使用这个页面继续实测。原因：这个页面复用了用户 Chrome 中的 cookie、localStorage 和 Admin API token，可以真实看到后台功能。Codex 内置浏览器或新 profile 通常没有这些登录态，会被重定向到登录/令牌页。
 
 如果 Chrome DevTools MCP 不可用，或 `list_pages` 找不到任何 `localhost:9820` 页面，必须暂停并记录阻塞原因，不要退回到普通浏览器猜测，不要用源码替代实测。
+暂停前必须按 `待办/cc-connect-migration/整体标准.md` 的“用户通知规则”发送 Bark 手机通知，提醒用户打开已登录的 Chrome Admin 页面或处理 MCP/登录态问题。
 
 每次进入新页面、打开弹窗/抽屉/面板、切换 Tab、展开命令面板、滚动到新的内容区域后，都必须重新执行 `take_snapshot` 记录页面结构。每个一级页面和关键弹窗/抽屉还必须执行 `take_screenshot` 保存截图证据。
 
@@ -67,6 +68,7 @@ mcp__chrome-devtools__list_console_messages
 3. 不要把“隔离浏览器缺少 token”记录为 CC Connect Admin 功能阻塞，也不要据此判定后台不可用；只能记录为“实测工具登录态不可用”。
 
 若无法通过 Chrome DevTools MCP 操作已登录页面，必须停止并在输出文件中记录阻塞原因，不允许凭空补全。
+停止前必须发送 Bark 手机通知，正文写清需要用户处理的是 Chrome DevTools MCP、已登录页面或授权问题，不要包含 token。
 
 安全边界：
 
@@ -266,6 +268,10 @@ CC Connect Admin 页面/功能
 10. `8.screenshots/` 已保存每个一级页面和关键弹窗/抽屉/面板的截图。
 
 如果不能满足完成定义，请不要写完成；只写具体阻塞项和还缺哪些页面/交互没有覆盖。
+
+如果最终结论不是完成，或虽然完成但下一步需要用户重跑 02/03/04/05/06，必须按 `待办/cc-connect-migration/整体标准.md` 的“用户通知规则”发送 Bark 手机通知，并把通知结果写入 `8.1-cc-connect-admin-walkthrough.md` 的运行健康记录。
+
+最终无论完成或阻塞，都必须按 `待办/cc-connect-migration/orchestrator/HANDOFF_PROTOCOL.md` 更新 `待办/cc-connect-migration/artifacts/0.0-latest-handoff.md`，让其他 Codex 对话能直接读取实测结论、生成文件和下一步建议。
 
 最终回复只输出：
 

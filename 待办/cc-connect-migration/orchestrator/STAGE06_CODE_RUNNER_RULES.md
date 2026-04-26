@@ -25,6 +25,8 @@
 10. 不扩大当前批次范围。发现遗漏时先记录 candidate/open question，不顺手实现。
 11. 写代码前必须读取对应 CC Connect 原源码和测试文件。计划文件只决定做什么，原源码和测试决定怎么做。
 12. 迁移实现应尽可能用 TypeScript 还原 CC Connect 已跑通的函数逻辑、字段默认值、边界条件、错误处理和状态机，不允许只根据计划文件凭空重建相似功能。
+13. 如果进入 blocked、needs-user-confirmation、必须暂停、无人值守完成待用户检查，必须先更新 state/log/resume/overnight summary，再按 `待办/cc-connect-migration/整体标准.md` 的“用户通知规则”发送 Bark 手机通知。
+14. 每次批次完成、暂停、阻塞、无人值守结束或需要交给另一个 Codex 对话继续前，必须按 `待办/cc-connect-migration/orchestrator/HANDOFF_PROTOCOL.md` 更新 `待办/cc-connect-migration/artifacts/0.0-latest-handoff.md`。
 
 ## 3. 状态文件
 
@@ -70,6 +72,7 @@ stage 06 执行器必须维护以下文件：
 最近结论：
 阻塞问题：
 需要用户确认：
+最近通知：
 已完成批次：
 剩余批次：
 已更新 CC ID：
@@ -217,7 +220,9 @@ smol-toml
 18. 生成 `6.x-execution-report-*`，报告必须包含“原源码对照”和“本批 commit message”。
 19. 更新 state/log/resume prompt。
 20. 更新 `6.0-overnight-summary.md`，让用户第二天第一眼能看到完成了什么、阻塞了什么、下一步要决定什么。
-21. 运行 `git status --short`，确认只有当前批次相关文件发生变化；如出现未知无关变更，必须暂停。
+21. 如果本批次触发暂停、阻塞、需要用户确认或无人值守完成待用户检查，发送 Bark 手机通知，并把通知结果写入 state/log/overnight summary 的“最近通知”。
+22. 更新 `0.0-latest-handoff.md`，给用户和其他 Codex 对话留下当前批次纸条。
+23. 运行 `git status --short`，确认只有当前批次相关文件发生变化；如出现未知无关变更，必须暂停。
 22. 使用 `git add` 暂存当前批次的代码、测试、lockfile、artifacts 和状态文件。
 23. 提交当前批次 commit。
 24. 进入下一个 planned 批次。
@@ -348,6 +353,8 @@ git status --short
 6.x-blocker.md
 ```
 
+上述文件落盘后，必须发送 Bark 手机通知。通知标题使用 `Synapse CC Connect 需要处理：<批次>`，正文写清失败原因、`6.x-blocker.md` 路径、推荐选择和可直接回复的下一步提示词。发送结果追加到 `6.0-code-runner-log.md`，并写入 state 的“最近通知”。
+
 ## 9. 必须暂停的情况
 
 遇到以下情况必须暂停，不得无人值守继续：
@@ -364,6 +371,8 @@ git status --short
 10. 上下文不足以判断安全边界。
 11. 本批次找不到对应 CC Connect 原源码或测试证据。
 12. commit 前后存在无法归属于当前批次的未提交改动。
+
+触发任何必须暂停条件时，必须执行同一通知流程：先更新 state/log/resume/overnight summary/blocker，再发送 Bark 手机通知，最后在 log 中记录通知成功或失败。
 
 ## 10. 允许无人值守继续的情况
 
@@ -424,6 +433,7 @@ Overnight Summary：
 状态更新：
 下一批次：
 是否需要用户确认：
+最近通知：
 ```
 
 不要输出长篇解释。详细内容写入 artifacts。

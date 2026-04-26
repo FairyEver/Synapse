@@ -23,6 +23,8 @@
 8. 如果裁决结论是 needs-user-confirmation，暂停并向用户提出具体选择。
 9. 如果任何阶段出现 needs-user-confirmation，暂停，不要自行拍板。
 10. 如果上下文接近压缩、任务中断或需要用户稍后继续，确保待办/cc-connect-migration/artifacts/0.0-resume-prompt.md 足以恢复。
+11. 如果流程暂停、阻塞或需要用户后续处理，必须先更新 state/log/resume 文件，再按 待办/cc-connect-migration/整体标准.md 的“用户通知规则”发送 Bark 手机通知。
+12. 每次阶段完成、暂停、阻塞或需要交给另一个 Codex 对话继续前，必须按 待办/cc-connect-migration/orchestrator/HANDOFF_PROTOCOL.md 更新 待办/cc-connect-migration/artifacts/0.0-latest-handoff.md。
 
 启动前检查：
 
@@ -116,6 +118,7 @@ stage 07：
 最近结论：
 阻塞问题：
 需要用户确认：
+最近通知：
 已完成阶段：
 已生成产物：
 下一步动作：
@@ -144,6 +147,14 @@ stage 07：
 4. 下一步动作。
 5. 已完成产物。
 6. 若存在阻塞，列出阻塞问题。
+
+用户通知规则：
+
+如果遇到 needs-user-confirmation、blocked、必须暂停、等待用户授权或无人值守完成后需要用户检查，先写入 state/log/resume，再使用 待办/cc-connect-migration/整体标准.md 中的 Bark endpoint 发送手机通知。通知标题使用 `Synapse CC Connect 需要处理：<阶段>`，正文写清“为什么停下、先看哪个文件、建议回复什么”。发送结果写入 log。
+
+跨对话交接规则：
+
+如果需要用户把结果交给另一个 Codex 对话，或当前对话即将停止，必须更新 待办/cc-connect-migration/artifacts/0.0-latest-handoff.md。不要要求用户复制长篇状态；让下一对话读取 待办/cc-connect-migration/orchestrator/HANDOFF_PROTOCOL.md 和这张最新纸条。
 
 开始执行：
 

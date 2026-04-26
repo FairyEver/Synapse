@@ -11,6 +11,12 @@
 核心迁移方式：
 计划文件决定本批做什么、放哪里、如何验收；CC Connect 原源码和测试决定具体行为、字段默认值、边界条件、错误处理和状态机；3S 当前代码决定如何落到 Electron/TypeScript 架构里。写任何新代码前，必须先读取本批对应的 CC Connect 原源码和测试文件，不允许只根据计划文件重建相似功能。
 
+用户通知方式：
+如果执行器遇到 blocked、needs-user-confirmation、必须暂停、等待用户授权/决定，或无人值守执行完成后需要用户检查，必须先更新 state/log/resume/overnight summary，再按 `待办/cc-connect-migration/整体标准.md` 的“用户通知规则”发送 Bark 手机通知。通知正文写清暂停原因、推荐先看哪个文件、下一步可直接回复什么。
+
+跨对话交接方式：
+如果需要用户把当前结果转给另一个 Codex 对话，或者执行器暂停/阻塞/完成，必须按 `待办/cc-connect-migration/orchestrator/HANDOFF_PROTOCOL.md` 更新 `待办/cc-connect-migration/artifacts/0.0-latest-handoff.md`。不要要求用户复制长篇状态。
+
 CC Connect 原项目资产路径固定为：
 
 ```text
@@ -23,21 +29,22 @@ CC Connect 原项目资产路径固定为：
 先读取：
 
 1. `AGENTS.md`
-2. `待办/cc-connect-migration/orchestrator/STAGE06_CODE_RUNNER_RULES.md`
-3. `待办/cc-connect-migration/artifacts/0.0-orchestrator-state.md`
-4. `待办/cc-connect-migration/artifacts/0.0-orchestrator-log.md`
-5. `待办/cc-connect-migration/artifacts/1.2-feature-manifest.md`
-6. `待办/cc-connect-migration/artifacts/2.2-product-design.md`
-7. `待办/cc-connect-migration/artifacts/3.1-migration-map.md`
-8. `待办/cc-connect-migration/artifacts/3.2-data-compatibility-plan.md`
-9. `待办/cc-connect-migration/artifacts/3.3-permission-and-security-map.md`
-10. `待办/cc-connect-migration/artifacts/4.1-verification-ledger.md`
-11. `待办/cc-connect-migration/artifacts/4.2-golden-test-cases.md`
-12. `待办/cc-connect-migration/artifacts/4.3-manual-acceptance-script.md`
-13. `待办/cc-connect-migration/artifacts/5.1-development-plan.md`
-14. `待办/cc-connect-migration/artifacts/5.2-development-plan-review.md`
-15. `待办/cc-connect-migration/artifacts/5.3-decision-log.md`
-16. `待办/cc-connect-migration/artifacts/5.4-release-and-rollback-plan.md`
+2. `待办/cc-connect-migration/整体标准.md`
+3. `待办/cc-connect-migration/orchestrator/STAGE06_CODE_RUNNER_RULES.md`
+4. `待办/cc-connect-migration/artifacts/0.0-orchestrator-state.md`
+5. `待办/cc-connect-migration/artifacts/0.0-orchestrator-log.md`
+6. `待办/cc-connect-migration/artifacts/1.2-feature-manifest.md`
+7. `待办/cc-connect-migration/artifacts/2.2-product-design.md`
+8. `待办/cc-connect-migration/artifacts/3.1-migration-map.md`
+9. `待办/cc-connect-migration/artifacts/3.2-data-compatibility-plan.md`
+10. `待办/cc-connect-migration/artifacts/3.3-permission-and-security-map.md`
+11. `待办/cc-connect-migration/artifacts/4.1-verification-ledger.md`
+12. `待办/cc-connect-migration/artifacts/4.2-golden-test-cases.md`
+13. `待办/cc-connect-migration/artifacts/4.3-manual-acceptance-script.md`
+14. `待办/cc-connect-migration/artifacts/5.1-development-plan.md`
+15. `待办/cc-connect-migration/artifacts/5.2-development-plan-review.md`
+16. `待办/cc-connect-migration/artifacts/5.3-decision-log.md`
+17. `待办/cc-connect-migration/artifacts/5.4-release-and-rollback-plan.md`
 
 启动前检查：
 
@@ -64,6 +71,7 @@ CC Connect 原项目资产路径固定为：
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-log.md`
    - `待办/cc-connect-migration/artifacts/6.0-code-runner-resume-prompt.md`
    - `待办/cc-connect-migration/artifacts/6.0-overnight-summary.md`
+   - `待办/cc-connect-migration/artifacts/0.0-latest-handoff.md`
 4. 启动后立即创建或更新 `6.0-overnight-summary.md`。
 5. 从 `6.0-dev-batch-plan.md` 中选择第一个 planned 批次执行。
 6. 每个批次执行前，从 `1.2-feature-manifest.md` 和 `4.2-golden-test-cases.md` 提取本批 CC ID 对应的 CC Connect 源码/测试路径，并用 `rg` 在 `/Users/liyang/Desktop/code-guide/cc-connect-main` 中补充相关源码。
@@ -109,12 +117,15 @@ pnpm desktop:check:ipc-codegen
 暂停条件：
 
 严格遵守 `STAGE06_CODE_RUNNER_RULES.md` 的“必须暂停的情况”。暂停前必须更新 state/log/resume prompt，并说明用户应该下一步输入什么。
+暂停时还必须按“用户通知方式”发送 Bark 手机通知，并把通知结果写入 log/state/overnight summary。
 
 夜间无人值守要求：
 
 1. 如果遇到必须用户决定的问题，停止前必须更新 `6.0-overnight-summary.md`，写清楚“需要用户决定什么、选项、推荐选择、影响、明早第一步”。
 2. 如果全部完成，必须在 `6.0-overnight-summary.md` 写清楚完成批次、commit 范围、最终审计结论和是否还需要人工检查。
 3. 用户明早只看 `6.0-overnight-summary.md` 就应该知道当前状态和下一步该回复什么。
+4. 如果无人值守结束后需要用户处理或检查，必须发送 Bark 手机通知。
+5. 如果无人值守结束、阻塞或需要转交给另一个对话，必须更新 `0.0-latest-handoff.md`。
 
 开始执行：
 
