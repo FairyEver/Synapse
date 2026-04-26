@@ -47,6 +47,7 @@ export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
   locale: DEFAULT_LOCALE,
   projects: [],
+  providers: [],
   defaultProjectId: null,
   workspaceBindings: [],
   favorites: DEFAULT_FAVORITES,

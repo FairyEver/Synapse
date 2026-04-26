@@ -19,6 +19,7 @@ import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
 import { ToolsPanel } from "@/modules/settings/components/tools-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { LogExportPanel } from "@/modules/settings/components/log-export-panel"
+import { ProviderSettingsPanel } from "@/modules/settings/components/provider-settings-panel"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
 import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
 import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
@@ -175,6 +176,26 @@ function SettingsModule() {
     [applyPatch],
   )
 
+  const handleSaveProviders = useCallback(
+    async (
+      providers: typeof config.global.providers,
+      projects: typeof config.global.projects,
+    ) => {
+      logger.info("Saving provider list from settings.", {
+        providerCount: providers.length,
+        projectCount: projects.length,
+      })
+
+      return applyPatch({
+        global: {
+          providers,
+          projects,
+        },
+      })
+    },
+    [applyPatch],
+  )
+
   return (
     <SidebarContentLayout
       contentClassName="bg-muted/30"
@@ -236,6 +257,13 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
+        {isReady && activeCategory === "providers" ? (
+          <ProviderSettingsPanel
+            providers={config.global.providers}
+            projects={config.global.projects}
+            onSave={handleSaveProviders}
+          />
+        ) : null}
         {isReady && activeCategory === "data-store" ? <DataStoreSettingsPanel /> : null}
         {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 

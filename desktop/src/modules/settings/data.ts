@@ -5,6 +5,7 @@ import {
   FolderGit2,
   FolderKanban,
   Info,
+  Plug,
   ScrollText,
   Settings2,
   Shield,
@@ -34,6 +35,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: FolderKanban,
     label: "项目",
     description: "项目路径。",
+  },
+  {
+    id: "providers",
+    icon: Plug,
+    label: "服务商",
+    description: "全局 Provider。",
   },
   {
     id: "tools",

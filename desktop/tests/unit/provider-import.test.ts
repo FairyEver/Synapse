@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest"
 import {
   convertCCSwitchProvider,
   createProviderDraft,
+  removeProviderRefsFromProjects,
   resolveProjectProviders,
 } from "../../electron/services/provider-model-service"
+import { DEFAULT_CONFIG } from "../../src/constants/defaults"
+import { sanitizeSynapseConfig } from "../../src/lib/config"
 
 describe("provider model import", () => {
   it("stores API keys as secret drafts and keeps provider JSON secret-free", () => {
@@ -28,6 +31,61 @@ describe("provider model import", () => {
       value: "sk-secret",
     })
     expect(JSON.stringify(draft.provider)).not.toContain("sk-secret")
+  })
+
+  it("keeps global providers through config sanitization", () => {
+    const draft = createProviderDraft({
+      name: "MiniMax",
+      apiKey: "sk-secret",
+      baseUrl: "https://api.example.com/v1",
+      model: "claude-test",
+      agentTypes: ["claudecode", "codex"],
+      endpoints: { codex: "https://api.example.com/codex" },
+      agentModels: { codex: "openai/gpt-5.3-codex" },
+      codex: { wireApi: "responses" },
+    })
+
+    const sanitized = sanitizeSynapseConfig({
+      ...DEFAULT_CONFIG,
+      global: {
+        ...DEFAULT_CONFIG.global,
+        providers: [draft.provider],
+      },
+    })
+
+    expect(sanitized.global.providers).toHaveLength(1)
+    expect(sanitized.global.providers[0]).toMatchObject({
+      name: "minimax",
+      scope: "global",
+      secretRef: "provider:global:minimax:api-key",
+      endpoints: { codex: "https://api.example.com/codex" },
+      agentModels: { codex: "openai/gpt-5.3-codex" },
+      codex: { wireApi: "responses" },
+    })
+    expect(JSON.stringify(sanitized.global.providers)).not.toContain("sk-secret")
+  })
+
+  it("removes deleted global provider refs from projects", () => {
+    const nextProjects = removeProviderRefsFromProjects(
+      [
+        {
+          id: "project-1",
+          name: "Project 1",
+          path: "/tmp/project-1",
+          providerRefs: ["MiniMax", "other"],
+        },
+        {
+          id: "project-2",
+          name: "Project 2",
+          path: "/tmp/project-2",
+          providerRefs: ["minimax"],
+        },
+      ],
+      "minimax",
+    )
+
+    expect(nextProjects[0]?.providerRefs).toEqual(["other"])
+    expect(nextProjects[1]?.providerRefs).toBeUndefined()
   })
 
   it("resolves global provider refs with agent filtering and inline override precedence", () => {

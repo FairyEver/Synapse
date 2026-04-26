@@ -10,6 +10,7 @@ import type {
 import { SYNAPSE_LOCALE_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
 import type { SynapseFavorites, SynapseWorkspaceBinding } from "../../src/types/config"
 import type { SynapseContentType } from "../../src/types/content"
+import type { SynapseProviderEntry, SynapseProviderModel } from "../../src/types/provider"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
 import { normalizeUserId, userIdentityService } from "./user-identity-service"
@@ -104,6 +105,123 @@ function validateProject(
           ),
         }
       : undefined),
+  }
+}
+
+function readStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0)
+    .map(([key, item]) => [key, item.trim()] as const)
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function readProviderModels(value: unknown): SynapseProviderModel[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const models = value
+    .filter(isRecord)
+    .map((item) => ({
+      model: typeof item.model === "string" ? item.model.trim() : "",
+      ...(typeof item.alias === "string" && item.alias.trim()
+        ? { alias: item.alias.trim() }
+        : undefined),
+    }))
+    .filter((item) => item.model.length > 0)
+
+  return models.length > 0 ? models : undefined
+}
+
+function readProviderModelLists(value: unknown): SynapseProviderEntry["agentModelLists"] | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const entries = Object.entries(value)
+    .map(([key, item]) => [key, readProviderModels(item)] as const)
+    .filter((entry): entry is [string, SynapseProviderModel[]] => Boolean(entry[1]))
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function validateProvider(
+  rawValue: unknown,
+  index: number,
+  errors: string[],
+): SynapseConfigBackup["config"]["global"]["providers"][number] | null {
+  const itemPath = `config.global.providers[${index}]`
+
+  if (!isRecord(rawValue)) {
+    errors.push(`${itemPath} 不是对象。`)
+    return null
+  }
+
+  const id = readRequiredField(rawValue, "id", itemPath, errors)
+  const name = readRequiredField(rawValue, "name", itemPath, errors)
+  const schemaVersion = readRequiredField(rawValue, "schemaVersion", itemPath, errors)
+  const kind = readRequiredField(rawValue, "kind", itemPath, errors)
+  const scope = readRequiredField(rawValue, "scope", itemPath, errors)
+
+  if (!isNonEmptyString(id)) {
+    errors.push(`${itemPath}.id 必须是非空字符串。`)
+  }
+
+  if (!isNonEmptyString(name)) {
+    errors.push(`${itemPath}.name 必须是非空字符串。`)
+  }
+
+  if (schemaVersion !== 1) {
+    errors.push(`${itemPath}.schemaVersion 必须是 1。`)
+  }
+
+  if (kind !== "llm") {
+    errors.push(`${itemPath}.kind 必须是 llm。`)
+  }
+
+  if (scope !== "global" && scope !== "project") {
+    errors.push(`${itemPath}.scope 必须是 global 或 project。`)
+  }
+
+  if (!isNonEmptyString(id) || !isNonEmptyString(name) || schemaVersion !== 1 || kind !== "llm" || (scope !== "global" && scope !== "project")) {
+    return null
+  }
+
+  const agentTypes = Array.isArray(rawValue.agentTypes)
+    ? Array.from(new Set(rawValue.agentTypes.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)))
+    : undefined
+  const models = readProviderModels(rawValue.models)
+  const endpoints = readStringRecord(rawValue.endpoints)
+  const agentModels = readStringRecord(rawValue.agentModels)
+  const agentModelLists = readProviderModelLists(rawValue.agentModelLists)
+  const httpHeaders = isRecord(rawValue.codex) ? readStringRecord(rawValue.codex.httpHeaders) : undefined
+  const wireApi = isRecord(rawValue.codex) && isNonEmptyString(rawValue.codex.wireApi)
+    ? rawValue.codex.wireApi.trim()
+    : undefined
+
+  return {
+    id: id.trim(),
+    schemaVersion: 1,
+    kind: "llm",
+    name: name.trim(),
+    scope,
+    ...(isNonEmptyString(rawValue.projectId) ? { projectId: rawValue.projectId.trim() } : undefined),
+    ...(isNonEmptyString(rawValue.secretRef) ? { secretRef: rawValue.secretRef.trim() } : undefined),
+    ...(isNonEmptyString(rawValue.baseUrl) ? { baseUrl: rawValue.baseUrl.trim() } : undefined),
+    ...(isNonEmptyString(rawValue.model) ? { model: rawValue.model.trim() } : undefined),
+    ...(isNonEmptyString(rawValue.thinking) ? { thinking: rawValue.thinking.trim() } : undefined),
+    ...(readStringRecord(rawValue.env) ? { env: readStringRecord(rawValue.env) } : undefined),
+    ...(agentTypes?.length ? { agentTypes } : undefined),
+    ...(models ? { models } : undefined),
+    ...(endpoints ? { endpoints } : undefined),
+    ...(agentModels ? { agentModels } : undefined),
+    ...(agentModelLists ? { agentModelLists } : undefined),
+    ...(wireApi || httpHeaders ? { codex: { ...(wireApi ? { wireApi } : undefined), ...(httpHeaders ? { httpHeaders } : undefined) } } : undefined),
   }
 }
 
@@ -253,6 +371,7 @@ function validateConfig(
   const themeMode = readRequiredField(global, "themeMode", "config.global", errors)
   const locale = "locale" in global ? global.locale : "auto"
   const projects = readRequiredField(global, "projects", "config.global", errors)
+  const providers = "providers" in global ? global.providers : []
   const workspaceBindings = Array.isArray(global.workspaceBindings)
     ? global.workspaceBindings.map(validateWorkspaceBinding).filter((value): value is SynapseWorkspaceBinding => value !== null)
     : []
@@ -272,6 +391,7 @@ function validateConfig(
   }
 
   const normalizedProjects: SynapseConfigBackup["config"]["global"]["projects"] = []
+  const normalizedProviders: SynapseConfigBackup["config"]["global"]["providers"] = []
 
   if (!Array.isArray(projects)) {
     errors.push("config.global.projects 必须是数组。")
@@ -281,6 +401,18 @@ function validateConfig(
 
       if (normalizedProject) {
         normalizedProjects.push(normalizedProject)
+      }
+    })
+  }
+
+  if (!Array.isArray(providers)) {
+    errors.push("config.global.providers 必须是数组。")
+  } else {
+    providers.forEach((item, index) => {
+      const normalizedProvider = validateProvider(item, index, errors)
+
+      if (normalizedProvider) {
+        normalizedProviders.push(normalizedProvider)
       }
     })
   }
@@ -334,6 +466,7 @@ function validateConfig(
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
       locale: locale as SynapseConfigBackup["config"]["global"]["locale"],
       projects: normalizedProjects,
+      providers: normalizedProviders,
       defaultProjectId: isNonEmptyString(global.defaultProjectId) && projectIdSet.has(global.defaultProjectId.trim())
         ? global.defaultProjectId.trim()
         : null,

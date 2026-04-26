@@ -1,4 +1,5 @@
 import type { SynapseContentType } from "./content"
+import type { SynapseProviderEntry } from "./provider"
 
 export const SYNAPSE_CONTENT_SORT_OPTIONS = [
   "modified-desc",
@@ -107,6 +108,7 @@ export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
   locale: SynapseLocale
   projects: SynapseProjectConfig[]
+  providers: SynapseProviderEntry[]
   defaultProjectId: string | null
   workspaceBindings: SynapseWorkspaceBinding[]
   favorites: SynapseFavorites

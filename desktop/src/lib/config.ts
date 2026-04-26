@@ -15,6 +15,7 @@ import {
 import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_LOCALE_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
 import { normalizeSynapseLocale } from "./locale"
 import type { SynapseContentType } from "../types/content"
+import type { SynapseProviderEntry } from "../types/provider"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
@@ -147,6 +148,30 @@ function hasProjectConfigFormatError(value: unknown): boolean {
   return false
 }
 
+function hasProviderConfigFormatError(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "id") && typeof value.id !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "name") && typeof value.name !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "scope") && typeof value.scope !== "string") {
+    return true
+  }
+
+  if (hasOwnKey(value, "secretRef") && typeof value.secretRef !== "string") {
+    return true
+  }
+
+  return false
+}
+
 function hasRepositoryConfigFormatError(value: unknown): boolean {
   if (!isRecord(value)) {
     return true
@@ -217,7 +242,8 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (!hasOwnKey(value, "projects")) {
-    return hasOwnKey(value, "workspaceBindings") && !Array.isArray(value.workspaceBindings)
+    return (hasOwnKey(value, "workspaceBindings") && !Array.isArray(value.workspaceBindings))
+      || (hasOwnKey(value, "providers") && !Array.isArray(value.providers))
   }
 
   if (!Array.isArray(value.projects)) {
@@ -226,6 +252,9 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
 
   return value.projects.some(hasProjectConfigFormatError)
     || (hasOwnKey(value, "workspaceBindings") && !Array.isArray(value.workspaceBindings))
+    || (hasOwnKey(value, "providers") && (
+      !Array.isArray(value.providers) || value.providers.some(hasProviderConfigFormatError)
+    ))
 }
 
 export function hasRecoverableSynapseConfigFormatError(value: unknown): boolean {
@@ -391,6 +420,105 @@ function normalizeProjects(value: unknown): SynapseProjectConfig[] {
   )
 }
 
+function stringRecord(value: Record<string, unknown>): Record<string, string> | undefined {
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0)
+    .map(([key, item]) => [key, item.trim()] as const)
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function uniqueStrings(value: unknown[]): string[] | undefined {
+  const values = Array.from(new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ))
+
+  return values.length > 0 ? values : undefined
+}
+
+function providerModels(value: unknown[]): SynapseProviderEntry["models"] | undefined {
+  const models = value
+    .filter(isRecord)
+    .map((item) => ({
+      model: asTrimmedString(item.model),
+      ...(isNonEmptyString(item.alias) ? { alias: item.alias.trim() } : undefined),
+    }))
+    .filter((item) => item.model.length > 0)
+
+  return models.length > 0 ? models : undefined
+}
+
+function providerModelLists(value: Record<string, unknown>): SynapseProviderEntry["agentModelLists"] | undefined {
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, unknown[]] => Array.isArray(entry[1]))
+    .map(([key, item]) => [key, providerModels(item)] as const)
+    .filter((entry): entry is [string, NonNullable<SynapseProviderEntry["models"]>] => Boolean(entry[1]))
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function providerCodexConfig(value: Record<string, unknown>): SynapseProviderEntry["codex"] | undefined {
+  const httpHeaders = isRecord(value.httpHeaders) ? stringRecord(value.httpHeaders) : undefined
+  const wireApi = isNonEmptyString(value.wireApi) ? value.wireApi.trim() : undefined
+
+  if (!wireApi && !httpHeaders) {
+    return undefined
+  }
+
+  return {
+    ...(wireApi ? { wireApi } : undefined),
+    ...(httpHeaders ? { httpHeaders } : undefined),
+  }
+}
+
+function normalizeProviderConfig(value: unknown): SynapseProviderEntry | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const id = asTrimmedString(value.id)
+  const name = asTrimmedString(value.name)
+  const scope = value.scope === "project" ? "project" : value.scope === "global" ? "global" : null
+
+  if (!id || !name || value.schemaVersion !== 1 || value.kind !== "llm" || !scope) {
+    return null
+  }
+
+  return {
+    id,
+    schemaVersion: 1,
+    kind: "llm",
+    name,
+    scope,
+    ...(isNonEmptyString(value.projectId) ? { projectId: value.projectId.trim() } : undefined),
+    ...(isNonEmptyString(value.secretRef) ? { secretRef: value.secretRef.trim() } : undefined),
+    ...(isNonEmptyString(value.baseUrl) ? { baseUrl: value.baseUrl.trim() } : undefined),
+    ...(isNonEmptyString(value.model) ? { model: value.model.trim() } : undefined),
+    ...(isNonEmptyString(value.thinking) ? { thinking: value.thinking.trim() } : undefined),
+    ...(isRecord(value.env) && stringRecord(value.env) ? { env: stringRecord(value.env) } : undefined),
+    ...(Array.isArray(value.agentTypes) && uniqueStrings(value.agentTypes) ? { agentTypes: uniqueStrings(value.agentTypes) } : undefined),
+    ...(Array.isArray(value.models) && providerModels(value.models) ? { models: providerModels(value.models) } : undefined),
+    ...(isRecord(value.endpoints) && stringRecord(value.endpoints) ? { endpoints: stringRecord(value.endpoints) } : undefined),
+    ...(isRecord(value.agentModels) && stringRecord(value.agentModels) ? { agentModels: stringRecord(value.agentModels) } : undefined),
+    ...(isRecord(value.agentModelLists) && providerModelLists(value.agentModelLists) ? { agentModelLists: providerModelLists(value.agentModelLists) } : undefined),
+    ...(isRecord(value.codex) && providerCodexConfig(value.codex) ? { codex: providerCodexConfig(value.codex) } : undefined),
+  }
+}
+
+function normalizeProviders(value: unknown): SynapseProviderEntry[] {
+  if (!Array.isArray(value)) {
+    return structuredClone(DEFAULT_GLOBAL_CONFIG.providers)
+  }
+
+  return dedupeByKey(
+    value.map(normalizeProviderConfig).filter(isDefined),
+    (provider) => provider.id,
+  )
+}
+
 function normalizeWorkspaceBinding(value: unknown): SynapseWorkspaceBinding | null {
   if (!isRecord(value)) {
     return null
@@ -477,6 +605,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   }
 
   const projects = normalizeProjects(value.projects)
+  const providers = normalizeProviders(value.providers)
   const workspaceBindings = normalizeWorkspaceBindings(value.workspaceBindings)
   const requestedDefaultProjectId = value.defaultProjectId
   const defaultProjectId = isNonEmptyString(requestedDefaultProjectId)
@@ -490,6 +619,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
       ? value.locale
       : normalizeSynapseLocale(value.language, DEFAULT_LOCALE),
     projects,
+    providers,
     defaultProjectId,
     workspaceBindings,
     favorites: normalizeFavorites(value.favorites),
@@ -559,6 +689,7 @@ export function applySynapseConfigPatch(
         ...config.global,
         ...patch.global,
         projects: patch.global.projects ?? config.global.projects,
+        providers: patch.global.providers ?? config.global.providers,
         workspaceBindings: patch.global.workspaceBindings ?? config.global.workspaceBindings,
       }
     : config.global
