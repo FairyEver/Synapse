@@ -284,6 +284,13 @@ describe("agent sessions store service", () => {
     })
     expect(history.content).toContain("user: hello")
 
+    const skills = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      command: "/skills",
+    })
+    expect(skills.content).toBe("进入技能 > 项目扫描。")
+
     const disabled = await service.executeCommand(projects, {
       projectId: "project-1",
       sessionId: created.id,

@@ -535,7 +535,7 @@ export class AgentSessionsStoreService {
         return commandResult({
           command: definition.command,
           title: definition.title,
-          content: "Skills UI 将在后续批次接入。",
+          content: "进入技能 > 项目扫描。",
           format: "text",
         })
       default:
