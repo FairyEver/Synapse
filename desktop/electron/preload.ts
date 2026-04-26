@@ -93,6 +93,12 @@ const IPC_CHANNELS = {
     "createDraft": "synapse:connectors:create-draft",
     "normalizeInbound": "synapse:connectors:normalize-inbound",
   },
+  "agent-sessions": {
+    "list": "synapse:agent-sessions:list",
+    "getDetail": "synapse:agent-sessions:get-detail",
+    "create": "synapse:agent-sessions:create",
+    "switchSession": "synapse:agent-sessions:switch",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -268,6 +274,12 @@ const synapseBridge: SynapseBridge = {
     listDescriptors: invoke(IPC_CHANNELS.connectors.listDescriptors),
     createDraft: (payload) => invoke(IPC_CHANNELS.connectors.createDraft)(payload),
     normalizeInbound: (payload) => invoke(IPC_CHANNELS.connectors.normalizeInbound)(payload),
+  },
+  agentSessions: {
+    list: invoke(IPC_CHANNELS["agent-sessions"].list),
+    getDetail: (payload) => invoke(IPC_CHANNELS["agent-sessions"].getDetail)(payload),
+    create: (payload) => invoke(IPC_CHANNELS["agent-sessions"].create)(payload),
+    switchSession: (payload) => invoke(IPC_CHANNELS["agent-sessions"].switchSession)(payload),
   },
   dataStore: {
     listTables: invoke(DATA_STORE_CHANNELS.listTables),

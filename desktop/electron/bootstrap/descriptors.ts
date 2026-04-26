@@ -34,6 +34,7 @@ import { repositoryMaintenanceService } from "../services/repository-maintenance
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createDefaultConnectorRegistryService } from "../services/connector-registry-service"
+import { AgentSessionsStoreService } from "../services/agent-sessions-store-service"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -210,6 +211,12 @@ export const connectorsRegistryDescriptor: ServiceDescriptor<ReturnType<typeof c
   id: "connectors.registry",
   criticality: "degraded",
   create: () => createDefaultConnectorRegistryService(),
+}
+
+export const agentSessionsDescriptor: ServiceDescriptor<AgentSessionsStoreService> = {
+  id: "agent.sessions",
+  criticality: "degraded",
+  create: () => new AgentSessionsStoreService(),
 }
 
 /**

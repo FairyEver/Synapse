@@ -91,6 +91,12 @@ export const IPC_CHANNELS = {
     "createDraft": "synapse:connectors:create-draft",
     "normalizeInbound": "synapse:connectors:normalize-inbound",
   },
+  "agent-sessions": {
+    "list": "synapse:agent-sessions:list",
+    "getDetail": "synapse:agent-sessions:get-detail",
+    "create": "synapse:agent-sessions:create",
+    "switchSession": "synapse:agent-sessions:switch",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

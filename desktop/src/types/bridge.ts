@@ -81,6 +81,13 @@ import type {
   SynapseRepositoryValidationResult,
 } from "./repository"
 import type { SynapseAppUpdateState } from "./update"
+import type {
+  SynapseAgentSessionDetail,
+  SynapseAgentSessionListResult,
+  SynapseCreateAgentSessionPayload,
+  SynapseGetAgentSessionPayload,
+  SynapseSwitchAgentSessionPayload,
+} from "./agent-session"
 
 export type SynapseBridge = {
   platform: string
@@ -220,6 +227,12 @@ export type SynapseBridge = {
       shareSessionInChannel?: boolean
       threadIsolation?: boolean
     }) => Promise<SynapseInboundNormalizationResult>
+  }
+  agentSessions: {
+    list: () => Promise<SynapseAgentSessionListResult>
+    getDetail: (payload: SynapseGetAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
+    create: (payload: SynapseCreateAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
+    switchSession: (payload: SynapseSwitchAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
   }
   dataStore: {
     listTables: () => Promise<DataStoreTableInfo[]>

@@ -1,5 +1,59 @@
 import type { SynapseInboundAttachment, SynapseInboundMessage } from "./connector"
 
+export type SynapseSessionHistoryEntry = {
+  role: string
+  content: string
+  timestamp: string
+}
+
+export type SynapseAgentSessionLastMessage = SynapseSessionHistoryEntry
+
+export type SynapseAgentSessionSummary = {
+  id: string
+  projectId: string
+  projectName: string
+  sessionKey: string
+  name: string
+  platform: string
+  agentType: string
+  active: boolean
+  live: boolean
+  createdAt: string
+  updatedAt: string
+  historyCount: number
+  lastMessage: SynapseAgentSessionLastMessage | null
+  userName?: string
+  chatName?: string
+}
+
+export type SynapseAgentSessionDetail = SynapseAgentSessionSummary & {
+  agentSessionId: string
+  history: SynapseSessionHistoryEntry[]
+}
+
+export type SynapseAgentSessionListResult = {
+  sessions: SynapseAgentSessionSummary[]
+  activeKeys: Record<string, string>
+}
+
+export type SynapseCreateAgentSessionPayload = {
+  projectId: string
+  sessionKey: string
+  name?: string
+}
+
+export type SynapseGetAgentSessionPayload = {
+  projectId: string
+  sessionId: string
+  historyLimit?: number
+}
+
+export type SynapseSwitchAgentSessionPayload = {
+  projectId: string
+  sessionKey: string
+  sessionId: string
+}
+
 export type SynapseCardHeader = {
   title: string
   color?: string

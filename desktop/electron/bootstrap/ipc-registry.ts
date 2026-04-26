@@ -19,6 +19,7 @@ import { configIpcModule } from "../modules/config/ipc"
 import { repositoryIpcModule } from "../modules/repository/ipc"
 import { contentIpcModule } from "../modules/content/ipc"
 import { connectorsIpcModule } from "../modules/connectors/ipc"
+import { agentSessionsIpcModule } from "../modules/agent-sessions/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -41,6 +42,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(repositoryIpcModule, ctx)
   registry.register(contentIpcModule, ctx)
   registry.register(connectorsIpcModule, ctx)
+  registry.register(agentSessionsIpcModule, ctx)
 
   return registry
 }
@@ -61,4 +63,5 @@ export const registeredIpcModules: readonly IpcModule[] = [
   repositoryIpcModule,
   contentIpcModule,
   connectorsIpcModule,
+  agentSessionsIpcModule,
 ]

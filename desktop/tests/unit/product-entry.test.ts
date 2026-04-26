@@ -1,10 +1,25 @@
 import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { getAppShellTabs } from "../../src/app-shell/tabs"
 import { AgentSessionsModule } from "../../src/modules/agent-sessions"
 import { AutomationModule } from "../../src/modules/automation"
 import { ConnectorsProjectView } from "../../src/modules/connectors"
+
+vi.mock("../../src/app-shell/config", async () => {
+  const { createDefaultConfig } = await import("../../src/lib/config")
+
+  return {
+    useAppConfig: () => ({
+      config: createDefaultConfig(),
+      error: null,
+      isReady: true,
+      refreshConfig: async () => createDefaultConfig(),
+      updateConfig: async () => createDefaultConfig(),
+      resetKey: 0,
+    }),
+  }
+})
 
 describe("CC Connect product entries", () => {
   it("exposes sessions, connectors, and automation in the app shell tabs", () => {
@@ -27,7 +42,7 @@ describe("CC Connect product entries", () => {
 
     expect(html).toContain("data-module=\"agent-sessions\"")
     expect(html).toContain("暂无会话")
-    expect(html).not.toContain("新建会话")
+    expect(html).toContain("新会话")
     expect(html).not.toContain("运行中")
   })
 

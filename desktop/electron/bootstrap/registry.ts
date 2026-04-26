@@ -20,6 +20,7 @@ import {
   coreLoggingDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
+  agentSessionsDescriptor,
   connectorsRegistryDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
@@ -47,6 +48,7 @@ export function buildServiceRegistry(
   registry.register(coreEventBusDescriptor)
   registry.register(coreDataStoreDescriptor)
   registry.register(coreUpdateDescriptor)
+  registry.register(agentSessionsDescriptor)
   registry.register(connectorsRegistryDescriptor)
   registry.register(repoWatchDescriptor)
   registry.register(repoMaintenanceDescriptor)

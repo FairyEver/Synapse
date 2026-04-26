@@ -61,7 +61,7 @@ vi.mock("electron", () => ({
 }))
 
 describe("buildServiceRegistry (T1.8)", () => {
-  it("registers all 12 SPEC §4 services with correct dependsOn graph", async () => {
+  it("registers all 13 SPEC §4 services with correct dependsOn graph", async () => {
     const { buildServiceRegistry } = await import("../registry")
     const registry = buildServiceRegistry({
       trayShowOrCreate: () => {},
@@ -72,6 +72,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(ids).toEqual(
       [
         "connectors.registry",
+        "agent.sessions",
         "core.app-icon",
         "core.config",
         "core.data-store",
@@ -95,6 +96,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
     expect(byId.get("connectors.registry")?.dependsOn).toEqual([])
+    expect(byId.get("agent.sessions")?.dependsOn).toEqual([])
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config"])
     expect(byId.get("repo.maintenance")?.dependsOn).toEqual(["repo.watch"])
     expect(byId.get("repo.pending-pushes")?.dependsOn).toEqual(["core.data-store"])
