@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 import { getAppShellTabs } from "../../src/app-shell/tabs"
 import { AgentSessionsModule } from "../../src/modules/agent-sessions"
 import { AutomationModule } from "../../src/modules/automation"
-import { ConnectorsModule } from "../../src/modules/connectors"
+import { ConnectorsProjectView } from "../../src/modules/connectors"
 
 describe("CC Connect product entries", () => {
   it("exposes sessions, connectors, and automation in the app shell tabs", () => {
@@ -32,12 +32,17 @@ describe("CC Connect product entries", () => {
   })
 
   it("renders the connectors module empty state", () => {
-    const html = renderToStaticMarkup(React.createElement(ConnectorsModule))
+    const html = renderToStaticMarkup(React.createElement(ConnectorsProjectView, {
+      error: null,
+      isReady: true,
+      onCreateProject: async () => undefined,
+      projects: [],
+    }))
 
     expect(html).toContain("data-module=\"connectors\"")
     expect(html).toContain("暂无项目")
+    expect(html).toContain("新建项目")
     expect(html).not.toContain("添加连接")
-    expect(html).not.toContain("QR 绑定")
   })
 
   it("renders the automation module empty state", () => {

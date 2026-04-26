@@ -19,6 +19,21 @@ export type SynapseLocale = (typeof SYNAPSE_LOCALE_OPTIONS)[number]
 
 export type SynapseProjectMode = "single" | "multi-workspace"
 
+export type SynapseProjectPlatformConnection = {
+  id: string
+  type: string
+  name: string
+  status: "draft" | "configured" | "disabled" | "invalid"
+  enabled: boolean
+  options?: Record<string, string | boolean | number>
+  secretRefs?: Record<string, string>
+  allowFrom?: string
+  shareSessionInChannel?: boolean
+  groupReplyAll?: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export type SynapseWorkspaceBinding = {
   id: string
   projectId: string | null
@@ -32,11 +47,13 @@ export type SynapseProjectConfig = {
   id: string
   name: string
   path: string
+  agentType?: string
   mode?: SynapseProjectMode
   workDir?: string
   workDirOverride?: string
   baseDir?: string
   source?: "synapse" | "cc-connect"
+  platformConnections?: SynapseProjectPlatformConnection[]
   workspaceDirOverrides?: Record<string, string>
 }
 
