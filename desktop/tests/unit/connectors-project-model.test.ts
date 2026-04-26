@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { applySynapseConfigPatch, createDefaultConfig } from "../../src/lib/config"
 import {
   addInlineProviderToProject,
   bindGlobalProviderToProject,
@@ -311,5 +312,80 @@ describe("connectors project model", () => {
       },
       secretRefs: {},
     })
+  })
+
+  it("keeps saved platform connections through config persistence", () => {
+    const project = createCcConnectProjectDraft({
+      id: "project-1",
+      name: "synapse",
+      workDir: "/repo/synapse",
+      agentType: "codex",
+    })
+    const manualConnection = createProjectPlatformConnectionFromConnector(
+      {
+        id: "connector:telegram:synapse",
+        schemaVersion: 1,
+        type: "telegram",
+        name: "synapse-telegram",
+        enabled: true,
+        status: "configured",
+        options: {
+          allow_from: "u1",
+          group_reply_all: true,
+          share_session_in_channel: true,
+        },
+        secretRefs: {
+          token: "connector:telegram:synapse:token",
+        },
+        capabilities: ["text.in"],
+        allowFrom: "u1",
+      },
+      "2026-04-26T00:00:00.000Z",
+    )
+    const qrConnection = createQrProjectPlatformDraft({
+      id: "connector:feishu:qr-1",
+      type: "feishu",
+      now: "2026-04-26T00:01:00.000Z",
+    })
+
+    const config = applySynapseConfigPatch(createDefaultConfig(), {
+      global: {
+        projects: [{
+          ...project,
+          permissionMode: "acceptEdits",
+          language: "zh",
+          adminFrom: "u1",
+          disabledCommands: ["restart"],
+          platformConnections: [manualConnection, qrConnection],
+        }],
+      },
+    })
+
+    expect(config.global.projects[0]).toMatchObject({
+      agentType: "codex",
+      permissionMode: "acceptEdits",
+      language: "zh",
+      adminFrom: "u1",
+      disabledCommands: ["restart"],
+      platformConnections: [
+        {
+          id: "connector:telegram:synapse",
+          type: "telegram",
+          status: "configured",
+          enabled: true,
+          secretRefs: {
+            token: "connector:telegram:synapse:token",
+          },
+        },
+        {
+          id: "connector:feishu:qr-1",
+          type: "feishu",
+          status: "draft",
+          enabled: false,
+        },
+      ],
+    })
+    expect(JSON.stringify(config.global.projects[0]?.platformConnections)).not.toContain("plain-token")
+    expect(summarizeCcConnectProjects(config.global.projects)[0]?.platformCount).toBe(2)
   })
 })

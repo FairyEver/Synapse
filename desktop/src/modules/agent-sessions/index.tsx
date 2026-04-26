@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -445,17 +446,15 @@ function commandStatusLabel(status: SynapseCommandExecutionResult["status"]): st
   }
 }
 
-function CommandPalette({
-  open,
+function AgentCommandPaletteContent({
   commands,
+  error,
   loading,
-  onOpenChange,
   onSelect,
 }: {
-  open: boolean
   commands: SynapseCommandCatalogItem[]
+  error: string | null
   loading: boolean
-  onOpenChange: (open: boolean) => void
   onSelect: (command: SynapseCommandCatalogItem) => void
 }) {
   const grouped = useMemo(
@@ -467,16 +466,10 @@ function CommandPalette({
   )
 
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="命令"
-      description="搜索命令"
-      data-track="agent-session-command-palette"
-    >
+    <Command>
       <CommandInput placeholder="搜索命令" />
       <CommandList>
-        <CommandEmpty>{loading ? "加载中" : "没有命令"}</CommandEmpty>
+        <CommandEmpty>{error ?? (loading ? "加载中" : "没有命令")}</CommandEmpty>
         {grouped.map((entry) => (
           <CommandGroup key={entry.group} heading={commandGroupLabels[entry.group]}>
             {entry.commands.map((command) => (
@@ -501,6 +494,39 @@ function CommandPalette({
           </CommandGroup>
         ))}
       </CommandList>
+    </Command>
+  )
+}
+
+function CommandPalette({
+  open,
+  commands,
+  error,
+  loading,
+  onOpenChange,
+  onSelect,
+}: {
+  open: boolean
+  commands: SynapseCommandCatalogItem[]
+  error: string | null
+  loading: boolean
+  onOpenChange: (open: boolean) => void
+  onSelect: (command: SynapseCommandCatalogItem) => void
+}) {
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="命令"
+      description="搜索命令"
+      data-track="agent-session-command-palette"
+    >
+      <AgentCommandPaletteContent
+        commands={commands}
+        error={error}
+        loading={loading}
+        onSelect={onSelect}
+      />
     </CommandDialog>
   )
 }
@@ -574,6 +600,7 @@ function AgentSessionsModule() {
   const [permissionBusy, setPermissionBusy] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [commands, setCommands] = useState<SynapseCommandCatalogItem[]>([])
+  const [commandError, setCommandError] = useState<string | null>(null)
   const [commandLoading, setCommandLoading] = useState(false)
   const [commandResult, setCommandResult] = useState<SynapseCommandExecutionResult | null>(null)
   const [commandBusy, setCommandBusy] = useState(false)
@@ -657,10 +684,12 @@ function AgentSessionsModule() {
     const project = detail ? projects.find((item) => item.id === detail.projectId) : selectedProject
     if (!project) {
       setCommands([])
+      setCommandError("没有可用项目。")
       return
     }
 
     setCommandLoading(true)
+    setCommandError(null)
     try {
       const result = await requireBridgeDomain("agentSessions").listCommands({
         projectId: project.id,
@@ -668,7 +697,10 @@ function AgentSessionsModule() {
       setCommands(result.commands)
     } catch (loadError) {
       logger.error("Failed to load agent commands.", loadError)
-      setSendError(loadError instanceof Error ? loadError.message : "读取命令失败。")
+      const message = loadError instanceof Error ? loadError.message : "读取命令失败。"
+      setCommands([])
+      setCommandError(message)
+      setSendError(message)
     } finally {
       setCommandLoading(false)
     }
@@ -1006,6 +1038,7 @@ function AgentSessionsModule() {
       <CommandPalette
         open={commandOpen}
         commands={commands}
+        error={commandError}
         loading={commandLoading}
         onOpenChange={setCommandOpen}
         onSelect={handleCommandSelect}
@@ -1032,4 +1065,4 @@ export {
   richCardHasInteractions,
   toRenderableMessage,
 } from "./message-interactions"
-export { AgentSessionsModule }
+export { AgentCommandPaletteContent, AgentSessionsModule }

@@ -27,7 +27,9 @@ import type {
   SynapseFavorites,
   SynapseGlobalConfig,
   SynapseLocale,
+  SynapseProjectHeartbeatConfig,
   SynapseProjectConfig,
+  SynapseProjectPlatformConnection,
   SynapseWorkspaceBinding,
   SynapseRecentlyViewed,
   SynapseRepositoryConfig,
@@ -88,6 +90,23 @@ function normalizeStringList(value: unknown): string[] | undefined {
   ))
 
   return items.length > 0 ? items : undefined
+}
+
+function normalizePrimitiveRecord(value: unknown): Record<string, string | boolean | number> | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, string | boolean | number] => {
+      const item = entry[1]
+      return typeof item === "string"
+        || typeof item === "boolean"
+        || (typeof item === "number" && Number.isFinite(item))
+    },
+  )
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
 function normalizeDirectoryName(value: unknown, fallback: string): string {
@@ -347,23 +366,103 @@ function normalizeProjectConfig(value: unknown): SynapseProjectConfig | null {
 
   const providerRefs = normalizeStringList(value.providerRefs)
   const providers = Array.isArray(value.providers) ? normalizeProviders(value.providers) : undefined
+  const disabledCommands = normalizeStringList(value.disabledCommands)
+  const platformConnections = normalizeProjectPlatformConnections(value.platformConnections)
+  const heartbeat = normalizeProjectHeartbeatConfig(value.heartbeat)
 
   return {
     id,
     name,
     path: projectPath,
     ...(value.mode === "multi-workspace" || value.mode === "single" ? { mode: value.mode } : undefined),
+    ...(isNonEmptyString(value.agentType) ? { agentType: value.agentType.trim() } : undefined),
+    ...(isNonEmptyString(value.permissionMode) ? { permissionMode: value.permissionMode.trim() } : undefined),
+    ...(isNonEmptyString(value.language) ? { language: value.language.trim() } : undefined),
+    ...(isNonEmptyString(value.adminFrom) ? { adminFrom: value.adminFrom.trim() } : undefined),
+    ...(typeof value.showContextIndicator === "boolean" ? { showContextIndicator: value.showContextIndicator } : undefined),
+    ...(typeof value.replyFooter === "boolean" ? { replyFooter: value.replyFooter } : undefined),
+    ...(typeof value.injectSender === "boolean" ? { injectSender: value.injectSender } : undefined),
     ...(isNonEmptyString(value.workDir) ? { workDir: value.workDir.trim() } : undefined),
     ...(isNonEmptyString(value.workDirOverride) ? { workDirOverride: value.workDirOverride.trim() } : undefined),
     ...(isNonEmptyString(value.baseDir) ? { baseDir: value.baseDir.trim() } : undefined),
     ...(value.source === "cc-connect" ? { source: "cc-connect" as const } : undefined),
+    ...(disabledCommands ? { disabledCommands } : undefined),
     ...(providerRefs ? { providerRefs } : undefined),
     ...(providers?.length ? { providers } : undefined),
     ...(isNonEmptyString(value.activeProvider) ? { activeProvider: value.activeProvider.trim() } : undefined),
+    ...(heartbeat ? { heartbeat } : undefined),
+    ...(platformConnections.length > 0 ? { platformConnections } : undefined),
     ...(isRecord(value.workspaceDirOverrides)
       ? { workspaceDirOverrides: normalizeStringRecord(value.workspaceDirOverrides) }
       : undefined),
   }
+}
+
+function normalizeProjectHeartbeatConfig(value: unknown): SynapseProjectHeartbeatConfig | undefined {
+  if (!isRecord(value) || typeof value.enabled !== "boolean") {
+    return undefined
+  }
+
+  return {
+    enabled: value.enabled,
+    ...(typeof value.paused === "boolean" ? { paused: value.paused } : undefined),
+    ...(typeof value.intervalMins === "number" && Number.isFinite(value.intervalMins)
+      ? { intervalMins: Math.floor(value.intervalMins) }
+      : undefined),
+    ...(isNonEmptyString(value.sessionKey) ? { sessionKey: value.sessionKey.trim() } : undefined),
+    ...(isNonEmptyString(value.lastRunAt) ? { lastRunAt: value.lastRunAt.trim() } : undefined),
+    ...(isNonEmptyString(value.lastError) ? { lastError: value.lastError.trim() } : undefined),
+  }
+}
+
+function isProjectPlatformStatus(value: unknown): value is SynapseProjectPlatformConnection["status"] {
+  return value === "draft" || value === "configured" || value === "disabled" || value === "invalid"
+}
+
+function normalizeProjectPlatformConnection(value: unknown): SynapseProjectPlatformConnection | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const id = asTrimmedString(value.id)
+  const type = asTrimmedString(value.type)
+  const name = asTrimmedString(value.name)
+  const createdAt = asTrimmedString(value.createdAt)
+  const updatedAt = asTrimmedString(value.updatedAt)
+  const options = normalizePrimitiveRecord(value.options)
+  const secretRefs = isRecord(value.secretRefs)
+    ? normalizeStringRecord(value.secretRefs)
+    : undefined
+
+  if (!id || !type || !name || !isProjectPlatformStatus(value.status) || typeof value.enabled !== "boolean" || !createdAt || !updatedAt) {
+    return null
+  }
+
+  return {
+    id,
+    type,
+    name,
+    status: value.status,
+    enabled: value.enabled,
+    ...(options ? { options } : undefined),
+    ...(secretRefs ? { secretRefs } : undefined),
+    ...(isNonEmptyString(value.allowFrom) ? { allowFrom: value.allowFrom.trim() } : undefined),
+    ...(typeof value.shareSessionInChannel === "boolean" ? { shareSessionInChannel: value.shareSessionInChannel } : undefined),
+    ...(typeof value.groupReplyAll === "boolean" ? { groupReplyAll: value.groupReplyAll } : undefined),
+    createdAt,
+    updatedAt,
+  }
+}
+
+function normalizeProjectPlatformConnections(value: unknown): SynapseProjectPlatformConnection[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return dedupeByKey(
+    value.map(normalizeProjectPlatformConnection).filter(isDefined),
+    (connection) => connection.id,
+  )
 }
 
 function normalizeStringRecord(value: Record<string, unknown>): Record<string, string> | undefined {
