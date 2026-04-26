@@ -43,14 +43,10 @@ export const secretsSchema: NamespaceSchema<SecretEntryV1> = {
 export interface ProviderEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
-  kind: "llm" | string
-  name?: string
+  kind: string
   /** Foreign key to a `secrets` namespace entry. */
   secretRef?: string
   display?: string
-  baseUrl?: string
-  model?: string
-  agentTypes?: string[]
 }
 
 export const providersSchema: NamespaceSchema<ProviderEntryV1> = {

@@ -10,7 +10,6 @@ import {
 } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import { setLocale } from "@/runtime/i18n"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
@@ -139,14 +138,6 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
       mediaQueryList.removeEventListener("change", syncThemeMode)
     }
   }, [config.global.themeMode])
-
-  useEffect(() => {
-    void setLocale(config.global.locale).catch((localeError: unknown) => {
-      logger.warn("Failed to apply locale.", {
-        error: localeError instanceof Error ? localeError.message : String(localeError),
-      })
-    })
-  }, [config.global.locale])
 
   const value = useMemo<AppConfigContextValue>(
     () => ({

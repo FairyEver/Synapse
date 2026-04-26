@@ -9,8 +9,6 @@ import type {
 } from "electron-updater"
 import type { SynapseAppUpdateState } from "../../src/types/update"
 import type { WindowManager } from "../runtime/window"
-import { createInstallSourceMetadata } from "./install-source-metadata"
-import { createLegacyUpdateCompatibility } from "./update-compatibility"
 
 // Update event channels for broadcasting state changes
 const UPDATE_CHANNELS = {
@@ -44,20 +42,9 @@ function createUnsupportedMessage(): string {
 
 function createBaseState(): SynapseAppUpdateState {
   const isSupported = isUpdateSupportedInCurrentEnvironment()
-  const currentVersion = app.getVersion()
 
   return {
-    currentVersion,
-    installSource: createInstallSourceMetadata({
-      appVersion: currentVersion,
-      execPath: process.execPath,
-      isPackaged: app.isPackaged,
-      platform: process.platform,
-    }),
-    legacyUpdateCompatibility: createLegacyUpdateCompatibility({
-      currentVersion,
-      latestVersion: null,
-    }),
+    currentVersion: app.getVersion(),
     releaseVersion: null,
     status: isSupported ? "idle" : "unsupported",
     message: isSupported ? "可以检查新版本。" : createUnsupportedMessage(),
@@ -406,23 +393,10 @@ class UpdateService {
   }
 
   private setState(patch: Partial<SynapseAppUpdateState>): void {
-    const currentVersion = app.getVersion()
-    const releaseVersion = patch.releaseVersion ?? this.state.releaseVersion
-
     this.state = {
       ...this.state,
       ...patch,
-      currentVersion,
-      installSource: createInstallSourceMetadata({
-        appVersion: currentVersion,
-        execPath: process.execPath,
-        isPackaged: app.isPackaged,
-        platform: process.platform,
-      }),
-      legacyUpdateCompatibility: createLegacyUpdateCompatibility({
-        currentVersion,
-        latestVersion: releaseVersion,
-      }),
+      currentVersion: app.getVersion(),
     }
 
     const nextState = cloneState(this.state)

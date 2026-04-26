@@ -33,14 +33,6 @@ import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
-import { createDefaultConnectorRegistryService } from "../services/connector-registry-service"
-import { ConnectorQrOnboardingService } from "../services/connector-qr-onboarding-service"
-import { ConnectorSecretStoreService } from "../services/connector-secret-store-service"
-import { FeishuLarkRuntimeService } from "../services/feishu-lark-runtime-service"
-import { AgentSessionsStoreService } from "../services/agent-sessions-store-service"
-import { AutomationCronStoreService } from "../services/automation-cron-store-service"
-import { AutomationRuntimeStoreService } from "../services/automation-runtime-store-service"
-import { InMemoryAuditSink, createPermissionGuard } from "../runtime/security"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -211,80 +203,6 @@ export const repoPendingPushesDescriptor: ServiceDescriptor<typeof pendingPushes
   criticality: "degraded",
   dependsOn: ["core.data-store"],
   create: () => pendingPushesService,
-}
-
-export const connectorsRegistryDescriptor: ServiceDescriptor<ReturnType<typeof createDefaultConnectorRegistryService>> = {
-  id: "connectors.registry",
-  criticality: "degraded",
-  create: () => createDefaultConnectorRegistryService(),
-}
-
-export const connectorsSecretStoreDescriptor: ServiceDescriptor<ConnectorSecretStoreService> = {
-  id: "connectors.secrets",
-  criticality: "degraded",
-  create: () => new ConnectorSecretStoreService({
-    permissionGuard: createPermissionGuard(),
-    auditSink: new InMemoryAuditSink(),
-  }),
-}
-
-export const connectorsFeishuLarkRuntimeDescriptor: ServiceDescriptor<FeishuLarkRuntimeService> = {
-  id: "connectors.feishu-lark-runtime",
-  criticality: "degraded",
-  dependsOn: ["core.config", "connectors.secrets", "agent.sessions"],
-  create(ctx) {
-    return new FeishuLarkRuntimeService({
-      config: configStore,
-      secretStore: ctx.registry.get("connectors.secrets"),
-      agentSessions: ctx.registry.get("agent.sessions"),
-      permissionGuard: createPermissionGuard(),
-      auditSink: new InMemoryAuditSink(),
-      logger: ctx.logger.child("connectors.feishu-lark-runtime"),
-    })
-  },
-  start(instance) {
-    return instance.startAllFromConfig()
-  },
-  stop(instance) {
-    return instance.stopAll()
-  },
-  reload(instance) {
-    return instance.startAllFromConfig()
-  },
-}
-
-export const connectorsQrOnboardingDescriptor: ServiceDescriptor<ConnectorQrOnboardingService> = {
-  id: "connectors.qr-onboarding",
-  criticality: "degraded",
-  dependsOn: ["core.config", "connectors.registry", "connectors.secrets", "connectors.feishu-lark-runtime"],
-  create(ctx) {
-    return new ConnectorQrOnboardingService({
-      config: configStore,
-      registry: ctx.registry.get("connectors.registry"),
-      secretStore: ctx.registry.get("connectors.secrets"),
-      runtime: ctx.registry.get("connectors.feishu-lark-runtime"),
-      permissionGuard: createPermissionGuard(),
-      auditSink: new InMemoryAuditSink(),
-    })
-  },
-}
-
-export const agentSessionsDescriptor: ServiceDescriptor<AgentSessionsStoreService> = {
-  id: "agent.sessions",
-  criticality: "degraded",
-  create: () => new AgentSessionsStoreService(),
-}
-
-export const automationCronDescriptor: ServiceDescriptor<AutomationCronStoreService> = {
-  id: "automation.cron",
-  criticality: "degraded",
-  create: () => new AutomationCronStoreService(),
-}
-
-export const automationRuntimeDescriptor: ServiceDescriptor<AutomationRuntimeStoreService> = {
-  id: "automation.runtime",
-  criticality: "degraded",
-  create: () => new AutomationRuntimeStoreService(),
 }
 
 /**

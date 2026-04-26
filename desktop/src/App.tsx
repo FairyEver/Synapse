@@ -5,7 +5,6 @@ import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
-import { getAppShellTabs, type AppTabId } from "@/app-shell/tabs"
 import { useAppShellToolbarState } from "@/app-shell/use-app-shell-toolbar-state"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -36,15 +35,13 @@ import { ContentDetailWindowPage } from "@/modules/content/components/content-de
 import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { PromptsModule } from "@/modules/prompts"
-import { AgentSessionsModule } from "@/modules/agent-sessions"
-import { AutomationModule } from "@/modules/automation"
-import { ConnectorsModule } from "@/modules/connectors"
 import { SettingsModule } from "@/modules/settings"
 import { DataStoreModule } from "@/modules/data-store"
 import { EditorScanModule } from "@/modules/editor-scan"
 import type { SynapseContentType } from "@/types/content"
 import type { SynapsePendingPushEntry } from "@/types/repository"
 
+type AppTabId = SynapseContentType | "data-store" | "editor-scan" | "settings"
 type DialogKind = "create" | "detail" | "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -133,7 +130,15 @@ function MainApp() {
   )
 
   const tabs = useMemo(
-    () => getAppShellTabs(),
+    () => [
+      ...CONTENT_TYPE_DEFINITIONS.map((definition) => ({
+        id: definition.id,
+        label: definition.tabLabel,
+      })),
+      { id: "data-store" as const, label: "数据库" },
+      { id: "editor-scan" as const, label: "IDE" },
+      { id: "settings" as const, label: "设置" },
+    ],
     [],
   )
 
@@ -402,9 +407,6 @@ function MainApp() {
               />
             )
           })}
-          {activeTab === "agent-sessions" ? <AgentSessionsModule /> : null}
-          {activeTab === "connectors" ? <ConnectorsModule /> : null}
-          {activeTab === "automation" ? <AutomationModule /> : null}
           {activeTab === "data-store" ? <DataStoreModule /> : null}
           {activeTab === "editor-scan" ? <EditorScanModule /> : null}
           {activeTab === "settings" ? <SettingsModule /> : null}

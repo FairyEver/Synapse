@@ -19,31 +19,15 @@ import { ScanItemDetailDialog, type ScanItemForDetail } from "./components/scan-
 type ContentTab = "skill" | "rule"
 type ScopeTab = "global" | "project"
 
-type EditorScanModuleProps = {
-  initialContentTab?: ContentTab
-  initialScopeTab?: ScopeTab
-  lockedContentTab?: ContentTab
-  lockedScopeTab?: ScopeTab
-  title?: string
-}
-
-function EditorScanModule({
-  initialContentTab = "skill",
-  initialScopeTab = "global",
-  lockedContentTab,
-  lockedScopeTab,
-  title,
-}: EditorScanModuleProps = {}) {
+function EditorScanModule() {
   const { data, loading, error, refresh } = useEditorScan()
   const { success: showSuccess, error: showError } = useAppNotifications()
   const [selectedEditorId, setSelectedEditorId] =
     useState<SynapseEditorId>(EDITOR_ORDER[0] ?? "")
-  const [contentTabState, setContentTabState] = useState<ContentTab>(lockedContentTab ?? initialContentTab)
-  const [scopeTabState, setScopeTabState] = useState<ScopeTab>(lockedScopeTab ?? initialScopeTab)
+  const [contentTab, setContentTab] = useState<ContentTab>("skill")
+  const [scopeTab, setScopeTab] = useState<ScopeTab>("global")
   const [detailItem, setDetailItem] = useState<ScanItemForDetail | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const contentTab = lockedContentTab ?? contentTabState
-  const scopeTab = lockedScopeTab ?? scopeTabState
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -163,30 +147,26 @@ function EditorScanModule({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold">
-              {title ?? globalResult?.editorLabel ?? "IDE"}
+              {globalResult?.editorLabel ?? "IDE"}
             </h2>
-            {!lockedContentTab ? (
-              <Tabs
-                value={contentTab}
-                onValueChange={(v) => setContentTabState(v as ContentTab)}
-              >
-                <TabsList>
-                  <TabsTrigger value="skill">Skill</TabsTrigger>
-                  <TabsTrigger value="rule">Rule</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            ) : null}
-            {!lockedScopeTab ? (
-              <Tabs
-                value={scopeTab}
-                onValueChange={(v) => setScopeTabState(v as ScopeTab)}
-              >
-                <TabsList>
-                  <TabsTrigger value="global">全局</TabsTrigger>
-                  <TabsTrigger value="project">项目</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            ) : null}
+            <Tabs
+              value={contentTab}
+              onValueChange={(v) => setContentTab(v as ContentTab)}
+            >
+              <TabsList>
+                <TabsTrigger value="skill">Skill</TabsTrigger>
+                <TabsTrigger value="rule">Rule</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Tabs
+              value={scopeTab}
+              onValueChange={(v) => setScopeTab(v as ScopeTab)}
+            >
+              <TabsList>
+                <TabsTrigger value="global">全局</TabsTrigger>
+                <TabsTrigger value="project">项目</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
           <Button
             variant="ghost"

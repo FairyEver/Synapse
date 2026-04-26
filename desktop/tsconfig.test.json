@@ -20,7 +20,6 @@
     "electron/**/__tests__/**/*.ts",
     "electron/**/*.test.ts",
     "electron/**/*.spec.ts",
-    "src/types/**/*.d.ts",
     "src/**/__tests__/**/*.ts",
     "src/**/__tests__/**/*.tsx",
     "src/**/*.test.{ts,tsx}",

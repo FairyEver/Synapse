@@ -20,13 +20,6 @@ import {
   coreLoggingDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
-  agentSessionsDescriptor,
-  automationCronDescriptor,
-  automationRuntimeDescriptor,
-  connectorsFeishuLarkRuntimeDescriptor,
-  connectorsQrOnboardingDescriptor,
-  connectorsRegistryDescriptor,
-  connectorsSecretStoreDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
@@ -53,13 +46,6 @@ export function buildServiceRegistry(
   registry.register(coreEventBusDescriptor)
   registry.register(coreDataStoreDescriptor)
   registry.register(coreUpdateDescriptor)
-  registry.register(agentSessionsDescriptor)
-  registry.register(automationCronDescriptor)
-  registry.register(automationRuntimeDescriptor)
-  registry.register(connectorsRegistryDescriptor)
-  registry.register(connectorsSecretStoreDescriptor)
-  registry.register(connectorsFeishuLarkRuntimeDescriptor)
-  registry.register(connectorsQrOnboardingDescriptor)
   registry.register(repoWatchDescriptor)
   registry.register(repoMaintenanceDescriptor)
   registry.register(repoPendingPushesDescriptor)

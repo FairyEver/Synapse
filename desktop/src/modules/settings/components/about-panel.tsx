@@ -13,23 +13,6 @@ const ADMIN_CLICK_RESET_DELAY = 2000
 
 const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   currentVersion: "0.0.0",
-  installSource: {
-    source: "unknown",
-    packageName: null,
-    packageVersion: null,
-    binaryPath: null,
-    wrapperScriptPath: null,
-    expectedBinaryName: null,
-    versionStatus: "unknown",
-    message: "安装来源未知。",
-  },
-  legacyUpdateCompatibility: {
-    status: "unknown",
-    currentVersion: "0.0.0",
-    latestVersion: null,
-    commandHint: null,
-    message: "尚未获取最新版本。",
-  },
   releaseVersion: null,
   status: "idle",
   message: "正在读取更新信息...",
@@ -117,17 +100,6 @@ function getDownloadDetails(updateState: SynapseAppUpdateState): string | null {
   }
 
   return parts.length > 0 ? parts.join(" · ") : null
-}
-
-function formatInstallSource(updateState: SynapseAppUpdateState): string {
-  const { installSource } = updateState
-  const version = installSource.packageVersion ? ` ${installSource.packageVersion}` : ""
-
-  if (installSource.source === "npm-wrapper") {
-    return `${installSource.packageName ?? "cc-connect"}${version}`
-  }
-
-  return installSource.message
 }
 
 type AboutPanelProps = {
@@ -292,7 +264,6 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">当前版本</p>
             <p className="text-sm text-muted-foreground">v{updateState.currentVersion}</p>
-            <p className="text-xs text-muted-foreground">安装来源：{formatInstallSource(updateState)}</p>
           </div>
         </div>
 

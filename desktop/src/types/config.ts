@@ -1,5 +1,4 @@
 import type { SynapseContentType } from "./content"
-import type { SynapseProviderEntry } from "./provider"
 
 export const SYNAPSE_CONTENT_SORT_OPTIONS = [
   "modified-desc",
@@ -14,68 +13,10 @@ export const SYNAPSE_THEME_MODE_OPTIONS = ["light", "dark", "system"] as const
 
 export type SynapseThemeMode = (typeof SYNAPSE_THEME_MODE_OPTIONS)[number]
 
-export const SYNAPSE_LOCALE_OPTIONS = ["auto", "en", "zh", "zh-TW", "ja", "es"] as const
-
-export type SynapseLocale = (typeof SYNAPSE_LOCALE_OPTIONS)[number]
-
-export type SynapseProjectMode = "single" | "multi-workspace"
-
-export type SynapseProjectPlatformConnection = {
-  id: string
-  type: string
-  name: string
-  status: "draft" | "configured" | "disabled" | "invalid"
-  enabled: boolean
-  options?: Record<string, string | boolean | number>
-  secretRefs?: Record<string, string>
-  allowFrom?: string
-  shareSessionInChannel?: boolean
-  groupReplyAll?: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export type SynapseProjectHeartbeatConfig = {
-  enabled: boolean
-  paused?: boolean
-  intervalMins?: number
-  sessionKey?: string
-  lastRunAt?: string
-  lastError?: string
-}
-
-export type SynapseWorkspaceBinding = {
-  id: string
-  projectId: string | null
-  channelKey: string
-  channelName: string
-  workspacePath: string
-  boundAt: string
-}
-
 export type SynapseProjectConfig = {
   id: string
   name: string
   path: string
-  agentType?: string
-  permissionMode?: string
-  language?: string
-  adminFrom?: string
-  disabledCommands?: string[]
-  showContextIndicator?: boolean
-  replyFooter?: boolean
-  injectSender?: boolean
-  providerRefs?: string[]
-  providers?: SynapseProviderEntry[]
-  activeProvider?: string | null
-  heartbeat?: SynapseProjectHeartbeatConfig
-  mode?: SynapseProjectMode
-  workDir?: string
-  workDirOverride?: string
-  baseDir?: string
-  source?: "synapse" | "cc-connect"
-  platformConnections?: SynapseProjectPlatformConnection[]
-  workspaceDirOverrides?: Record<string, string>
 }
 
 export type SynapseFavorites = {
@@ -108,138 +49,10 @@ export type SynapseRepositoryConfig = {
 
 export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
-  locale: SynapseLocale
   projects: SynapseProjectConfig[]
-  providers: SynapseProviderEntry[]
-  ccConnect: SynapseCcConnectSettings
-  defaultProjectId: string | null
-  workspaceBindings: SynapseWorkspaceBinding[]
   favorites: SynapseFavorites
   recentlyViewed: SynapseRecentlyViewed
   contentSortOrder: SynapseContentSortOrder
-}
-
-export type SynapseCcConnectAttachmentSend = "" | "on" | "off"
-
-export type SynapseCcConnectLogLevel = "debug" | "info" | "warn" | "error"
-
-export type SynapseCcConnectSettings = {
-  language: SynapseLocale
-  attachmentSend: SynapseCcConnectAttachmentSend
-  logLevel: SynapseCcConnectLogLevel
-  idleTimeoutMins: number
-  thinkingMessages: boolean
-  thinkingMaxLen: number
-  toolMessages: boolean
-  toolMaxLen: number
-  streamPreviewEnabled: boolean
-  streamPreviewIntervalMs: number
-  rateLimitMaxMessages: number
-  rateLimitWindowSecs: number
-  lastReloadAt: string | null
-  lastRestartRequestedAt: string | null
-}
-
-export type SynapseCcConnectSettingsUpdate = Partial<Omit<SynapseCcConnectSettings, "lastReloadAt" | "lastRestartRequestedAt">>
-
-export type SynapseCcConnectRawConfigResult = {
-  format: "toml"
-  content: string
-  redacted: boolean
-  source: string
-}
-
-export type SynapseCcConnectReloadResult = {
-  message: string
-  projectsUpdated: string[]
-  reloadedAt: string
-}
-
-export type SynapseCcConnectRestartPayload = {
-  confirmed?: boolean
-  sessionKey?: string
-  platform?: string
-}
-
-export type SynapseCcConnectRestartResult =
-  | {
-    status: "confirmation_required"
-    message: string
-  }
-  | {
-    status: "recorded"
-    message: string
-    requestedAt: string
-    sessionKey: string
-    platform: string
-  }
-
-export type SynapseCcConnectDiagnosticStatus = "pass" | "warn" | "fail"
-
-export type SynapseCcConnectDiagnosticCheck = {
-  name: string
-  status: SynapseCcConnectDiagnosticStatus
-  detail: string
-}
-
-export type SynapseCcConnectDiagnosticEndpoint = {
-  label: string
-  value: string
-}
-
-export type SynapseCcConnectDiagnostics = {
-  bridge: {
-    enabled: boolean
-    endpoint: string
-    tokenSet: boolean
-    capabilities: string[]
-    adapters: Array<{
-      platform: string
-      project: string
-      capabilities: string[]
-      connectedAt: string | null
-    }>
-  }
-  webhook: {
-    enabled: boolean
-    endpoint: string
-    tokenSet: boolean
-    authMethods: string[]
-    requestFields: string[]
-    validation: string[]
-  }
-  localApi: {
-    socketPath: string
-    status: "available" | "missing" | "blocked"
-    permission: string
-    endpoints: SynapseCcConnectDiagnosticEndpoint[]
-  }
-  managementApi: {
-    enabled: boolean
-    endpoint: string
-    tokenSet: boolean
-    endpoints: SynapseCcConnectDiagnosticEndpoint[]
-  }
-  daemon: {
-    platform: string
-    installed: boolean
-    status: "running" | "stopped" | "unknown"
-    pid: number | null
-    workDir: string
-    logFile: string
-    logMaxSizeMb: number
-    guardedActions: string[]
-  }
-  doctor: {
-    checks: SynapseCcConnectDiagnosticCheck[]
-    summary: Record<SynapseCcConnectDiagnosticStatus, number>
-  }
-  update: {
-    currentVersion: string
-    installSource: string
-    sources: string[]
-    guardedActions: string[]
-  }
 }
 
 export type SynapseConfig = {
@@ -254,43 +67,4 @@ export type SynapseConfigPatch = {
   global?: Partial<SynapseGlobalConfig> & {
     projects?: SynapseProjectConfig[]
   }
-}
-
-export type SynapseLegacyCcProviderPreview = {
-  name: string
-  source: "global" | "project"
-  projectName: string | null
-  baseUrl: string | null
-  model: string | null
-  agentTypes: string[]
-  hasApiKey: boolean
-}
-
-export type SynapseLegacyCcProjectPreview = {
-  name: string
-  mode: string | null
-  workDir: string | null
-  baseDir: string | null
-  agentType: string | null
-  providerRefs: string[]
-  activeProvider: string | null
-  platformTypes: string[]
-  runAsUser: string | null
-  runAsEnv: string[]
-  issues: string[]
-}
-
-export type SynapseLegacyCcConfigImportPreview = {
-  valid: boolean
-  errors: string[]
-  warnings: string[]
-  ignoredTopLevelKeys: string[]
-  global: {
-    dataDir: string
-    language: string | null
-    attachmentSend: "on" | "off"
-    logLevel: string
-  }
-  projects: SynapseLegacyCcProjectPreview[]
-  providers: SynapseLegacyCcProviderPreview[]
 }

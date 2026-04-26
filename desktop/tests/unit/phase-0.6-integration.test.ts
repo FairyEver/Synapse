@@ -118,14 +118,11 @@ describe("Phase 0.6 integration (T6.17)", () => {
     }
   })
 
-  it("i18n + theme placeholders behave as expected", async () => {
+  it("i18n + theme placeholders behave as expected", () => {
     const i18n = new InMemoryI18nProvider()
-    i18n.registerDictionary("en", { fallback: "Hello, {name}" })
-    i18n.registerDictionary("zh", { greeting: "你好，{name}" })
+    i18n.registerDictionary("zh-CN", { greeting: "你好，{name}" })
     setI18nProvider(i18n)
-    await i18n.setLocale("zh")
     expect(t("greeting", { name: "Ada" })).toBe("你好，Ada")
-    expect(t("fallback", { name: "Ada" })).toBe("Hello, Ada")
     expect(t("missing.key")).toBe("missing.key")
 
     const theme = new InMemoryThemeProvider()

@@ -1,49 +1,50 @@
-import {
-  getLocaleFallbackChain,
-  normalizeSynapseLocale,
-} from "@/lib/locale"
-import type { SynapseLocale } from "@/types/config"
+/**
+ * Phase 0.6 — i18n placeholder.
+ * SPEC §15.9.
+ *
+ * From the SPEC: "硬约束从 Phase 0.6 起：新增用户可见文案必须通过 t(key) 取值
+ * （即使目前只有中文字典）". Phase 0 ships an in-memory provider with a single
+ * built-in zh-CN dictionary; M5 swaps the dictionaries with real JSON imports
+ * + a locale switcher.
+ */
 
 export interface I18nProvider {
-  readonly locale: SynapseLocale
+  readonly locale: string
   t(key: string, params?: Record<string, unknown>): string
   setLocale(locale: string): Promise<void>
   registerDictionary(locale: string, entries: Record<string, string>): void
 }
 
 export class InMemoryI18nProvider implements I18nProvider {
-  private currentLocale: SynapseLocale = "auto"
-  private readonly dictionaries = new Map<SynapseLocale, Map<string, string>>()
+  private currentLocale = "zh-CN"
+  private readonly dictionaries = new Map<string, Map<string, string>>()
 
   constructor() {
-    this.dictionaries.set("en", new Map())
+    // Seed with empty dictionaries so consumers iterating the registry don't
+    // need to special-case the initial state.
+    this.dictionaries.set("zh-CN", new Map())
   }
 
-  get locale(): SynapseLocale {
+  get locale(): string {
     return this.currentLocale
   }
 
   async setLocale(locale: string): Promise<void> {
-    this.currentLocale = normalizeSynapseLocale(locale)
+    if (!this.dictionaries.has(locale)) {
+      throw new Error(`No dictionary registered for locale "${locale}"`)
+    }
+    this.currentLocale = locale
   }
 
   registerDictionary(locale: string, entries: Record<string, string>): void {
-    const normalizedLocale = normalizeSynapseLocale(locale)
-    const dict = this.dictionaries.get(normalizedLocale) ?? new Map<string, string>()
+    const dict = this.dictionaries.get(locale) ?? new Map<string, string>()
     for (const [k, v] of Object.entries(entries)) dict.set(k, v)
-    this.dictionaries.set(normalizedLocale, dict)
+    this.dictionaries.set(locale, dict)
   }
 
   t(key: string, params?: Record<string, unknown>): string {
-    let raw: string | undefined
-
-    for (const locale of getLocaleFallbackChain(this.currentLocale)) {
-      raw = this.dictionaries.get(locale)?.get(key)
-      if (raw) {
-        break
-      }
-    }
-
+    const dict = this.dictionaries.get(this.currentLocale)
+    const raw = dict?.get(key)
     if (!raw) return key
     if (!params) return raw
     return raw.replace(/\{(\w+)\}/g, (_, p) => {
@@ -61,8 +62,4 @@ export function setI18nProvider(provider: I18nProvider): void {
 
 export function t(key: string, params?: Record<string, unknown>): string {
   return defaultProvider.t(key, params)
-}
-
-export async function setLocale(locale: string): Promise<void> {
-  await defaultProvider.setLocale(locale)
 }

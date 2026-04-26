@@ -18,51 +18,8 @@ import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "./backup"
-import type {
-  SynapseCronDeletePayload,
-  SynapseCronJob,
-  SynapseCronJobDraft,
-  SynapseCronListPayload,
-  SynapseCronListResult,
-  SynapseCronMutationResult,
-  SynapseCronTogglePayload,
-  SynapseCronUpdatePayload,
-  SynapseHeartbeatDraft,
-  SynapseHeartbeatIntervalPayload,
-  SynapseHeartbeatListResult,
-  SynapseHeartbeatMutationPayload,
-  SynapseHeartbeatRunResult,
-  SynapseHeartbeatStatus,
-  SynapseHook,
-  SynapseHookDeletePayload,
-  SynapseHookDraft,
-  SynapseHookListPayload,
-  SynapseHookListResult,
-  SynapseHookTestPayload,
-  SynapseHookTestResult,
-  SynapseHookUpdatePayload,
-} from "./automation"
 import type { SynapseCliDetectResult } from "./cli"
-import type {
-  SynapseConfig,
-  SynapseCcConnectRawConfigResult,
-  SynapseCcConnectDiagnostics,
-  SynapseCcConnectReloadResult,
-  SynapseCcConnectRestartPayload,
-  SynapseCcConnectRestartResult,
-  SynapseCcConnectSettings,
-  SynapseCcConnectSettingsUpdate,
-  SynapseConfigPatch,
-  SynapseProjectPlatformConnection,
-  SynapseLegacyCcConfigImportPreview,
-} from "./config"
-import type {
-  SynapseConnectorDescriptor,
-  SynapseConnectorDraft,
-  SynapseConnectorQrPlatform,
-  SynapseConnectorQrSession,
-  SynapseInboundNormalizationResult,
-} from "./connector"
+import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseContentDownloadResult,
   SynapseContentDetail,
@@ -115,21 +72,6 @@ import type {
   SynapseRepositoryValidationResult,
 } from "./repository"
 import type { SynapseAppUpdateState } from "./update"
-import type {
-  SynapseAgentSessionDetail,
-  SynapseCommandExecutionResult,
-  SynapseExecuteCommandPayload,
-  SynapseAgentSessionListResult,
-  SynapseCreateAgentSessionPayload,
-  SynapseGetAgentSessionPayload,
-  SynapseListCommandsPayload,
-  SynapseListCommandsResult,
-  SynapseRespondPermissionPayload,
-  SynapseRespondPermissionResult,
-  SynapseSendAgentMessagePayload,
-  SynapseSendAgentMessageResult,
-  SynapseSwitchAgentSessionPayload,
-} from "./agent-session"
 
 export type SynapseBridge = {
   platform: string
@@ -187,15 +129,6 @@ export type SynapseBridge = {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>
     get: () => Promise<SynapseConfig>
     importBackup: () => Promise<SynapseConfigBackupImportResult | null>
-    previewLegacyCcConfigImport: (
-      payload: { toml: string },
-    ) => Promise<SynapseLegacyCcConfigImportPreview>
-    getCcConnectSettings: () => Promise<SynapseCcConnectSettings>
-    updateCcConnectSettings: (payload: SynapseCcConnectSettingsUpdate) => Promise<SynapseCcConnectSettings>
-    getCcConnectRawConfig: () => Promise<SynapseCcConnectRawConfigResult>
-    getCcConnectDiagnostics: () => Promise<SynapseCcConnectDiagnostics>
-    reloadCcConnectConfig: () => Promise<SynapseCcConnectReloadResult>
-    restartCcConnect: (payload?: SynapseCcConnectRestartPayload) => Promise<SynapseCcConnectRestartResult>
     resetApp: () => Promise<void>
     update: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
   }
@@ -257,72 +190,6 @@ export type SynapseBridge = {
     installUpdate: () => Promise<void>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
     onOpenUpdatePage: (listener: () => void) => () => void
-  }
-  connectors: {
-    listDescriptors: () => Promise<SynapseConnectorDescriptor[]>
-    createDraft: (payload: {
-      type: string
-      name?: string
-      enabled?: boolean
-      options?: Record<string, unknown>
-      secretRefs?: Record<string, string>
-    }) => Promise<SynapseConnectorDraft>
-    beginQr: (payload: {
-      platform: SynapseConnectorQrPlatform
-    }) => Promise<SynapseConnectorQrSession>
-    pollQr: (payload: {
-      sessionId: string
-    }) => Promise<SynapseConnectorQrSession>
-    cancelQr: (payload: {
-      sessionId: string
-    }) => Promise<SynapseConnectorQrSession>
-    saveQr: (payload: {
-      sessionId: string
-      projectId: string
-    }) => Promise<{ connection: SynapseProjectPlatformConnection }>
-    saveManualPlatform: (payload: {
-      projectId: string
-      type: string
-      name?: string
-      enabled?: boolean
-      options?: Record<string, unknown>
-    }) => Promise<{ connection: SynapseProjectPlatformConnection }>
-    normalizeInbound: (payload: {
-      raw: unknown
-      connectorId?: string
-      platform?: string
-      allowFrom?: string
-      shareSessionInChannel?: boolean
-      threadIsolation?: boolean
-    }) => Promise<SynapseInboundNormalizationResult>
-  }
-  agentSessions: {
-    list: () => Promise<SynapseAgentSessionListResult>
-    getDetail: (payload: SynapseGetAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
-    create: (payload: SynapseCreateAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
-    switchSession: (payload: SynapseSwitchAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
-    listCommands: (payload: SynapseListCommandsPayload) => Promise<SynapseListCommandsResult>
-    executeCommand: (payload: SynapseExecuteCommandPayload) => Promise<SynapseCommandExecutionResult>
-    send: (payload: SynapseSendAgentMessagePayload) => Promise<SynapseSendAgentMessageResult>
-    respondPermission: (payload: SynapseRespondPermissionPayload) => Promise<SynapseRespondPermissionResult>
-  }
-  automation: {
-    listCron: (payload?: SynapseCronListPayload) => Promise<SynapseCronListResult>
-    createCron: (payload: SynapseCronJobDraft) => Promise<SynapseCronMutationResult>
-    updateCron: (payload: SynapseCronUpdatePayload) => Promise<SynapseCronMutationResult>
-    toggleCron: (payload: SynapseCronTogglePayload) => Promise<SynapseCronJob>
-    deleteCron: (payload: SynapseCronDeletePayload) => Promise<{ status: "ok" }>
-    listHeartbeat: () => Promise<SynapseHeartbeatListResult>
-    upsertHeartbeat: (payload: SynapseHeartbeatDraft) => Promise<SynapseHeartbeatStatus>
-    pauseHeartbeat: (payload: SynapseHeartbeatMutationPayload) => Promise<SynapseHeartbeatStatus>
-    resumeHeartbeat: (payload: SynapseHeartbeatMutationPayload) => Promise<SynapseHeartbeatStatus>
-    setHeartbeatInterval: (payload: SynapseHeartbeatIntervalPayload) => Promise<SynapseHeartbeatStatus>
-    triggerHeartbeat: (payload: SynapseHeartbeatMutationPayload) => Promise<SynapseHeartbeatRunResult>
-    listHooks: (payload?: SynapseHookListPayload) => Promise<SynapseHookListResult>
-    createHook: (payload: SynapseHookDraft) => Promise<SynapseHook>
-    updateHook: (payload: SynapseHookUpdatePayload) => Promise<SynapseHook>
-    deleteHook: (payload: SynapseHookDeletePayload) => Promise<{ status: "ok" }>
-    testHook: (payload: SynapseHookTestPayload) => Promise<SynapseHookTestResult>
   }
   dataStore: {
     listTables: () => Promise<DataStoreTableInfo[]>

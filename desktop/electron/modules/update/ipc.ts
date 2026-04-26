@@ -23,23 +23,6 @@ const updateStateSchema = z.enum([
 
 const updateStateResponseSchema = z.object({
   currentVersion: z.string(),
-  installSource: z.object({
-    source: z.enum(["development", "packaged-app", "npm-wrapper", "unknown"]),
-    packageName: z.string().nullable(),
-    packageVersion: z.string().nullable(),
-    binaryPath: z.string().nullable(),
-    wrapperScriptPath: z.string().nullable(),
-    expectedBinaryName: z.string().nullable(),
-    versionStatus: z.enum(["matching", "newer-or-equal", "outdated", "missing", "unknown"]),
-    message: z.string(),
-  }),
-  legacyUpdateCompatibility: z.object({
-    status: z.enum(["skipped", "unknown", "current", "available"]),
-    currentVersion: z.string(),
-    latestVersion: z.string().nullable(),
-    commandHint: z.string().nullable(),
-    message: z.string(),
-  }),
   releaseVersion: z.string().nullable(),
   status: updateStateSchema,
   message: z.string(),
