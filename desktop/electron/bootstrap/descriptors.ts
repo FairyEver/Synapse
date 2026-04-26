@@ -34,9 +34,12 @@ import { repositoryMaintenanceService } from "../services/repository-maintenance
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createDefaultConnectorRegistryService } from "../services/connector-registry-service"
+import { ConnectorQrOnboardingService } from "../services/connector-qr-onboarding-service"
+import { ConnectorSecretStoreService } from "../services/connector-secret-store-service"
 import { AgentSessionsStoreService } from "../services/agent-sessions-store-service"
 import { AutomationCronStoreService } from "../services/automation-cron-store-service"
 import { AutomationRuntimeStoreService } from "../services/automation-runtime-store-service"
+import { InMemoryAuditSink, createPermissionGuard } from "../runtime/security"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -213,6 +216,30 @@ export const connectorsRegistryDescriptor: ServiceDescriptor<ReturnType<typeof c
   id: "connectors.registry",
   criticality: "degraded",
   create: () => createDefaultConnectorRegistryService(),
+}
+
+export const connectorsSecretStoreDescriptor: ServiceDescriptor<ConnectorSecretStoreService> = {
+  id: "connectors.secrets",
+  criticality: "degraded",
+  create: () => new ConnectorSecretStoreService({
+    permissionGuard: createPermissionGuard(),
+    auditSink: new InMemoryAuditSink(),
+  }),
+}
+
+export const connectorsQrOnboardingDescriptor: ServiceDescriptor<ConnectorQrOnboardingService> = {
+  id: "connectors.qr-onboarding",
+  criticality: "degraded",
+  dependsOn: ["core.config", "connectors.registry", "connectors.secrets"],
+  create(ctx) {
+    return new ConnectorQrOnboardingService({
+      config: configStore,
+      registry: ctx.registry.get("connectors.registry"),
+      secretStore: ctx.registry.get("connectors.secrets"),
+      permissionGuard: createPermissionGuard(),
+      auditSink: new InMemoryAuditSink(),
+    })
+  },
 }
 
 export const agentSessionsDescriptor: ServiceDescriptor<AgentSessionsStoreService> = {

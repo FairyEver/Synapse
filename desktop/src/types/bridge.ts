@@ -53,11 +53,14 @@ import type {
   SynapseCcConnectSettings,
   SynapseCcConnectSettingsUpdate,
   SynapseConfigPatch,
+  SynapseProjectPlatformConnection,
   SynapseLegacyCcConfigImportPreview,
 } from "./config"
 import type {
   SynapseConnectorDescriptor,
   SynapseConnectorDraft,
+  SynapseConnectorQrPlatform,
+  SynapseConnectorQrSession,
   SynapseInboundNormalizationResult,
 } from "./connector"
 import type {
@@ -264,6 +267,26 @@ export type SynapseBridge = {
       options?: Record<string, unknown>
       secretRefs?: Record<string, string>
     }) => Promise<SynapseConnectorDraft>
+    beginQr: (payload: {
+      platform: SynapseConnectorQrPlatform
+    }) => Promise<SynapseConnectorQrSession>
+    pollQr: (payload: {
+      sessionId: string
+    }) => Promise<SynapseConnectorQrSession>
+    cancelQr: (payload: {
+      sessionId: string
+    }) => Promise<SynapseConnectorQrSession>
+    saveQr: (payload: {
+      sessionId: string
+      projectId: string
+    }) => Promise<{ connection: SynapseProjectPlatformConnection }>
+    saveManualPlatform: (payload: {
+      projectId: string
+      type: string
+      name?: string
+      enabled?: boolean
+      options?: Record<string, unknown>
+    }) => Promise<{ connection: SynapseProjectPlatformConnection }>
     normalizeInbound: (payload: {
       raw: unknown
       connectorId?: string

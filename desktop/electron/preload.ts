@@ -97,6 +97,11 @@ const IPC_CHANNELS = {
   "connectors": {
     "listDescriptors": "synapse:connectors:list-descriptors",
     "createDraft": "synapse:connectors:create-draft",
+    "beginQr": "synapse:connectors:begin-qr",
+    "pollQr": "synapse:connectors:poll-qr",
+    "cancelQr": "synapse:connectors:cancel-qr",
+    "saveQr": "synapse:connectors:save-qr",
+    "saveManualPlatform": "synapse:connectors:save-manual-platform",
     "normalizeInbound": "synapse:connectors:normalize-inbound",
   },
   "agent-sessions": {
@@ -307,6 +312,11 @@ const synapseBridge: SynapseBridge = {
   connectors: {
     listDescriptors: invoke(IPC_CHANNELS.connectors.listDescriptors),
     createDraft: (payload) => invoke(IPC_CHANNELS.connectors.createDraft)(payload),
+    beginQr: (payload) => invoke(IPC_CHANNELS.connectors.beginQr)(payload),
+    pollQr: (payload) => invoke(IPC_CHANNELS.connectors.pollQr)(payload),
+    cancelQr: (payload) => invoke(IPC_CHANNELS.connectors.cancelQr)(payload),
+    saveQr: (payload) => invoke(IPC_CHANNELS.connectors.saveQr)(payload),
+    saveManualPlatform: (payload) => invoke(IPC_CHANNELS.connectors.saveManualPlatform)(payload),
     normalizeInbound: (payload) => invoke(IPC_CHANNELS.connectors.normalizeInbound)(payload),
   },
   agentSessions: {

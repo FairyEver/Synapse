@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { ConnectorRegistryService, ConnectorDraftInput } from "../../services/connector-registry-service"
+import type { ConnectorQrOnboardingService } from "../../services/connector-qr-onboarding-service"
 import { normalizeInboundMessage } from "../../services/inbound-message-normalizer"
 
 const connectorOptionDefinitionSchema = z.object({
@@ -54,6 +55,65 @@ const draftInputSchema = z.object({
   options: z.record(z.string(), z.unknown()).optional(),
   secretRefs: z.record(z.string(), z.string()).optional(),
 })
+
+const qrPlatformSchema = z.enum(["feishu", "lark", "weixin"])
+
+const qrSessionSchema = z.object({
+  sessionId: z.string(),
+  platform: qrPlatformSchema,
+  status: z.enum(["waiting", "scanned", "success", "expired", "denied", "cancelled", "failed"]),
+  qrContent: z.string().nullable(),
+  intervalSeconds: z.number(),
+  expiresAt: z.string().nullable(),
+  refreshCount: z.number(),
+  result: z.record(z.string(), z.string()).nullable(),
+  error: z.string().nullable(),
+})
+
+const platformConnectionSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  name: z.string(),
+  status: z.enum(["draft", "configured", "disabled", "invalid"]),
+  enabled: z.boolean(),
+  options: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional(),
+  secretRefs: z.record(z.string(), z.string()).optional(),
+  allowFrom: z.string().optional(),
+  shareSessionInChannel: z.boolean().optional(),
+  groupReplyAll: z.boolean().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+const qrBeginRequestSchema = z.object({
+  platform: qrPlatformSchema,
+})
+
+const qrSessionRequestSchema = z.object({
+  sessionId: z.string(),
+})
+
+const qrSaveRequestSchema = z.object({
+  sessionId: z.string(),
+  projectId: z.string(),
+})
+
+const manualPlatformSaveRequestSchema = z.object({
+  projectId: z.string(),
+  type: z.string(),
+  name: z.string().optional(),
+  enabled: z.boolean().optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
+})
+
+const platformSaveResponseSchema = z.object({
+  connection: platformConnectionSchema,
+})
+
+type QrBeginRequest = z.infer<typeof qrBeginRequestSchema>
+type QrSessionRequest = z.infer<typeof qrSessionRequestSchema>
+type QrSaveRequest = z.infer<typeof qrSaveRequestSchema>
+type ManualPlatformSaveRequest = z.infer<typeof manualPlatformSaveRequestSchema>
 
 const inboundNormalizeRequestSchema = z.object({
   raw: z.unknown(),
@@ -122,6 +182,10 @@ function connectorsService(ctx: IpcHandlerContext): ConnectorRegistryService {
   return ctx.resolve<ConnectorRegistryService>("connectors.registry")
 }
 
+function qrOnboardingService(ctx: IpcHandlerContext): ConnectorQrOnboardingService {
+  return ctx.resolve<ConnectorQrOnboardingService>("connectors.qr-onboarding")
+}
+
 export const connectorsIpcModule: IpcModule = {
   id: "connectors",
   methods: {
@@ -138,6 +202,41 @@ export const connectorsIpcModule: IpcModule = {
       request: draftInputSchema,
       response: connectorDraftSchema,
       handler: (ctx, input: ConnectorDraftInput) => connectorsService(ctx).createConnectorDraft(input),
+    },
+    beginQr: {
+      kind: "invoke",
+      channel: "synapse:connectors:begin-qr",
+      request: qrBeginRequestSchema,
+      response: qrSessionSchema,
+      handler: (ctx, input: QrBeginRequest) => qrOnboardingService(ctx).beginQr(input.platform),
+    },
+    pollQr: {
+      kind: "invoke",
+      channel: "synapse:connectors:poll-qr",
+      request: qrSessionRequestSchema,
+      response: qrSessionSchema,
+      handler: (ctx, input: QrSessionRequest) => qrOnboardingService(ctx).pollQr(input.sessionId),
+    },
+    cancelQr: {
+      kind: "invoke",
+      channel: "synapse:connectors:cancel-qr",
+      request: qrSessionRequestSchema,
+      response: qrSessionSchema,
+      handler: (ctx, input: QrSessionRequest) => qrOnboardingService(ctx).cancelQr(input.sessionId),
+    },
+    saveQr: {
+      kind: "invoke",
+      channel: "synapse:connectors:save-qr",
+      request: qrSaveRequestSchema,
+      response: platformSaveResponseSchema,
+      handler: (ctx, input: QrSaveRequest) => qrOnboardingService(ctx).saveCompletedQr(input),
+    },
+    saveManualPlatform: {
+      kind: "invoke",
+      channel: "synapse:connectors:save-manual-platform",
+      request: manualPlatformSaveRequestSchema,
+      response: platformSaveResponseSchema,
+      handler: (ctx, input: ManualPlatformSaveRequest) => qrOnboardingService(ctx).saveManualPlatform(input),
     },
     normalizeInbound: {
       kind: "invoke",

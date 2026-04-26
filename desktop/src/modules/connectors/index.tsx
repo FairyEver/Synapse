@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Clock, FolderKanban, Link2, Plug, Plus, QrCode, RefreshCw, Server, Trash2, Zap } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { QRCodeSVG } from "qrcode.react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -44,7 +45,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SynapseProjectConfig, SynapseProjectPlatformConnection } from "@/types/config"
+import type { SynapseProjectConfig } from "@/types/config"
+import type {
+  SynapseConnectorDescriptor,
+  SynapseConnectorOptionDefinition,
+  SynapseConnectorQrPlatform,
+  SynapseConnectorQrSession,
+} from "@/types/connector"
 import type { SynapseProviderEntry } from "@/types/provider"
 import {
   createProviderDraft,
@@ -56,8 +63,6 @@ import {
   addInlineProviderToProject,
   bindGlobalProviderToProject,
   createCcConnectProjectDraft,
-  createProjectPlatformConnectionFromConnector,
-  createQrProjectPlatformDraft,
   listLinkableGlobalProviders,
   removeProviderFromProject,
   resolveProjectProvidersForSession,
@@ -83,11 +88,12 @@ type ConnectorsProjectViewProps = {
   onCreateProject: (draft: ProjectDraft) => Promise<void>
   onUpdateProject: (projectId: string, project: SynapseProjectConfig) => Promise<void>
   onDeleteProject: (projectId: string) => Promise<void>
+  onRefreshConfig: () => Promise<void>
   onChooseDirectory?: () => Promise<string | null>
 }
 
 function ConnectorsModule() {
-  const { config, error, isReady, updateConfig } = useAppConfig()
+  const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
 
   const handleCreateProject = async (draft: ProjectDraft) => {
     const nextProject = createCcConnectProjectDraft({
@@ -140,6 +146,9 @@ function ConnectorsModule() {
       onCreateProject={handleCreateProject}
       onUpdateProject={handleUpdateProject}
       onDeleteProject={handleDeleteProject}
+      onRefreshConfig={async () => {
+        await refreshConfig()
+      }}
       onChooseDirectory={handleChooseDirectory}
     />
   )
@@ -153,6 +162,7 @@ function ConnectorsProjectView({
   onCreateProject,
   onUpdateProject,
   onDeleteProject,
+  onRefreshConfig,
   onChooseDirectory,
 }: ConnectorsProjectViewProps) {
   const projectSummaries = useMemo(() => summarizeCcConnectProjects(projects), [projects])
@@ -246,6 +256,7 @@ function ConnectorsProjectView({
             globalProviders={globalProviders}
             onUpdateProject={onUpdateProject}
             onDeleteProject={onDeleteProject}
+            onRefreshConfig={onRefreshConfig}
             onDeleted={() => setSelectedProjectId(null)}
           />
         </div>
@@ -304,6 +315,7 @@ function ProjectDetailPanel({
   globalProviders,
   onUpdateProject,
   onDeleteProject,
+  onRefreshConfig,
   onDeleted,
 }: {
   project: ConnectorProjectSummary | null
@@ -311,6 +323,7 @@ function ProjectDetailPanel({
   globalProviders: SynapseProviderEntry[]
   onUpdateProject: (projectId: string, project: SynapseProjectConfig) => Promise<void>
   onDeleteProject: (projectId: string) => Promise<void>
+  onRefreshConfig: () => Promise<void>
   onDeleted: () => void
 }) {
   const [settingsDraft, setSettingsDraft] = useState(() => createSettingsDraft(project))
@@ -356,17 +369,6 @@ function ProjectDetailPanel({
   const handleDeleteProject = async () => {
     await onDeleteProject(project.id)
     onDeleted()
-  }
-
-  const handleAddPlatformConnection = async (connection: SynapseProjectPlatformConnection) => {
-    if (!sourceProject) {
-      return
-    }
-
-    await onUpdateProject(project.id, {
-      ...sourceProject,
-      platformConnections: [...(sourceProject.platformConnections ?? []), connection],
-    })
   }
 
   const handleBindGlobalProvider = async (providerName: string) => {
@@ -447,7 +449,7 @@ function ProjectDetailPanel({
               <div className="mt-4">
                 <PlatformConnectionDialog
                   project={sourceProject}
-                  onAddPlatformConnection={handleAddPlatformConnection}
+                  onRefreshConfig={onRefreshConfig}
                 />
               </div>
             ) : null}
@@ -458,7 +460,7 @@ function ProjectDetailPanel({
               <div className="mb-4">
                 <PlatformConnectionDialog
                   project={sourceProject}
-                  onAddPlatformConnection={handleAddPlatformConnection}
+                  onRefreshConfig={onRefreshConfig}
                 />
               </div>
             ) : null}
@@ -950,33 +952,126 @@ function ProjectProviderDialog({
   )
 }
 
-type PlatformWizardKind = "telegram" | "feishu" | "lark" | "weixin"
-type QrPlatformKind = Exclude<PlatformWizardKind, "telegram">
+const QR_PLATFORM_TYPES = new Set(["feishu", "lark", "weixin"])
+const MANUAL_PLATFORM_ORDER = ["telegram", "discord", "slack", "dingtalk", "wecom", "qq", "qqbot", "line", "weibo"]
+const PLATFORM_LABELS: Record<string, string> = {
+  dingtalk: "DingTalk",
+  discord: "Discord",
+  feishu: "Feishu",
+  lark: "Lark",
+  line: "LINE",
+  qq: "QQ",
+  qqbot: "QQ Bot",
+  slack: "Slack",
+  telegram: "Telegram",
+  wecom: "WeCom",
+  weibo: "Weibo",
+  weixin: "Weixin",
+}
 
-const PLATFORM_WIZARD_OPTIONS: Array<{
-  value: PlatformWizardKind
-  label: string
-  method: "manual" | "qr"
-}> = [
-  { value: "telegram", label: "Telegram", method: "manual" },
-  { value: "feishu", label: "Feishu", method: "qr" },
-  { value: "lark", label: "Lark", method: "qr" },
-  { value: "weixin", label: "Weixin", method: "qr" },
-]
+const OPTION_LABELS: Record<string, string> = {
+  access_token: "Access Token",
+  account_id: "账号 ID",
+  agent_id: "Agent ID",
+  allow_from: "允许用户",
+  app_id: "App ID",
+  app_secret: "App Secret",
+  app_token: "App Token",
+  bot_token: "Bot Token",
+  callback_aes_key: "Callback AES Key",
+  callback_path: "Callback Path",
+  callback_token: "Callback Token",
+  channel_secret: "Channel Secret",
+  channel_token: "Channel Token",
+  client_id: "Client ID",
+  client_secret: "Client Secret",
+  corp_id: "Corp ID",
+  corp_secret: "Corp Secret",
+  guild_id: "Guild ID",
+  group_reply_all: "群聊全部回复",
+  port: "端口",
+  sandbox: "沙盒模式",
+  share_session_in_channel: "频道共享会话",
+  thread_isolation: "线程隔离",
+  token: "Token",
+  ws_url: "WebSocket URL",
+}
+
+const OPTION_PLACEHOLDERS: Record<string, string> = {
+  allow_from: "*",
+  app_token: "xapp-...",
+  bot_token: "xoxb-...",
+  callback_path: "/callback",
+  port: "8080",
+  token: "token",
+  ws_url: "ws://127.0.0.1:3001",
+}
 
 function PlatformConnectionDialog({
   project,
-  onAddPlatformConnection,
+  onRefreshConfig,
 }: {
   project: SynapseProjectConfig
-  onAddPlatformConnection: (connection: SynapseProjectPlatformConnection) => Promise<void>
+  onRefreshConfig: () => Promise<void>
 }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [platform, setPlatform] = useState<PlatformWizardKind>("telegram")
+  const [descriptors, setDescriptors] = useState<SynapseConnectorDescriptor[]>([])
+  const [descriptorError, setDescriptorError] = useState<string | null>(null)
+  const [platform, setPlatform] = useState("telegram")
 
-  const selected = PLATFORM_WIZARD_OPTIONS.find((option) => option.value === platform)
-    ?? PLATFORM_WIZARD_OPTIONS[0]
-  const qrPlatform: QrPlatformKind = selected.value === "telegram" ? "feishu" : selected.value
+  useEffect(() => {
+    if (!isOpen || descriptors.length > 0) {
+      return
+    }
+
+    if (!window.synapse?.connectors) {
+      setDescriptorError("连接服务不可用。")
+      return
+    }
+
+    let cancelled = false
+    window.synapse.connectors.listDescriptors()
+      .then((items) => {
+        if (cancelled) {
+          return
+        }
+        setDescriptors(items)
+        setDescriptorError(null)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return
+        }
+        setDescriptorError(error instanceof Error ? error.message : "读取平台失败。")
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [descriptors.length, isOpen])
+
+  const descriptorMap = useMemo(
+    () => new Map(descriptors.map((descriptor) => [descriptor.type, descriptor])),
+    [descriptors],
+  )
+  const platformOptions = useMemo(() => {
+    const manualOptions = MANUAL_PLATFORM_ORDER
+      .map((type) => ({
+        value: type,
+        label: descriptorMap.get(type)?.label ?? PLATFORM_LABELS[type] ?? type,
+        method: "manual" as const,
+      }))
+
+    return [
+      ...manualOptions,
+      { value: "feishu", label: descriptorMap.get("feishu")?.label ?? PLATFORM_LABELS.feishu, method: "qr" as const },
+      { value: "lark", label: descriptorMap.get("lark")?.label ?? PLATFORM_LABELS.lark, method: "qr" as const },
+      { value: "weixin", label: descriptorMap.get("weixin")?.label ?? PLATFORM_LABELS.weixin, method: "qr" as const },
+    ]
+  }, [descriptorMap])
+
+  const selected = platformOptions.find((option) => option.value === platform) ?? platformOptions[0]
+  const selectedDescriptor = descriptorMap.get(selected.value)
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -997,26 +1092,32 @@ function PlatformConnectionDialog({
               id="platform-kind"
               className="w-full"
               value={platform}
-              onChange={(event) => setPlatform(event.target.value as PlatformWizardKind)}
+              onChange={(event) => setPlatform(event.target.value)}
             >
-              {PLATFORM_WIZARD_OPTIONS.map((option) => (
+              {platformOptions.map((option) => (
                 <NativeSelectOption key={option.value} value={option.value}>
                   {option.label}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
           </Field>
+          <FieldError>{descriptorError}</FieldError>
           {selected.method === "manual" ? (
-            <TelegramManualPlatformForm
-              project={project}
-              onAddPlatformConnection={onAddPlatformConnection}
-              onClose={() => setIsOpen(false)}
-            />
+            selectedDescriptor ? (
+              <ManualPlatformForm
+                key={selectedDescriptor.type}
+                descriptor={selectedDescriptor}
+                project={project}
+                onRefreshConfig={onRefreshConfig}
+                onClose={() => setIsOpen(false)}
+              />
+            ) : null
           ) : (
-            <QrPlatformDraftForm
-              key={qrPlatform}
-              platform={qrPlatform}
-              onAddPlatformConnection={onAddPlatformConnection}
+            <QrPlatformOnboardingForm
+              key={selected.value}
+              platform={selected.value as SynapseConnectorQrPlatform}
+              project={project}
+              onRefreshConfig={onRefreshConfig}
               onClose={() => setIsOpen(false)}
             />
           )}
@@ -1026,27 +1127,32 @@ function PlatformConnectionDialog({
   )
 }
 
-function TelegramManualPlatformForm({
+function ManualPlatformForm({
+  descriptor,
   project,
-  onAddPlatformConnection,
+  onRefreshConfig,
   onClose,
 }: {
+  descriptor: SynapseConnectorDescriptor
   project: SynapseProjectConfig
-  onAddPlatformConnection: (connection: SynapseProjectPlatformConnection) => Promise<void>
+  onRefreshConfig: () => Promise<void>
   onClose: () => void
 }) {
-  const [draft, setDraft] = useState({
-    token: "",
-    allowFrom: "*",
-    groupReplyAll: false,
-    shareSessionInChannel: false,
-  })
+  const [draft, setDraft] = useState<Record<string, string | boolean | number>>(() =>
+    createManualPlatformDraft(descriptor),
+  )
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  useEffect(() => {
+    setDraft(createManualPlatformDraft(descriptor))
+    setFormError(null)
+  }, [descriptor])
+
   const handleSubmit = async () => {
-    if (!draft.token.trim()) {
-      setFormError("Token 不能为空。")
+    const missing = descriptor.options.find((option) => option.required && !hasManualOptionValue(draft[option.name]))
+    if (missing) {
+      setFormError(`${getOptionLabel(missing)}不能为空。`)
       return
     }
 
@@ -1059,35 +1165,15 @@ function TelegramManualPlatformForm({
     setFormError(null)
 
     try {
-      const connectorDraft = await window.synapse.connectors.createDraft({
-        type: "telegram",
-        name: `${project.name}-telegram`,
+      await window.synapse.connectors.saveManualPlatform({
+        projectId: project.id,
+        type: descriptor.type,
+        name: `${project.name}-${descriptor.type}`,
         enabled: true,
-        options: {
-          token: draft.token.trim(),
-          allow_from: draft.allowFrom.trim() || "*",
-          group_reply_all: draft.groupReplyAll,
-          share_session_in_channel: draft.shareSessionInChannel,
-        },
+        options: cleanManualPlatformDraft(draft),
       })
-
-      if (connectorDraft.issues.length > 0) {
-        setFormError(connectorDraft.issues[0]?.message ?? "保存失败。")
-        return
-      }
-
-      await onAddPlatformConnection(
-        createProjectPlatformConnectionFromConnector(
-          connectorDraft.connector,
-          new Date().toISOString(),
-        ),
-      )
-      setDraft({
-        token: "",
-        allowFrom: "*",
-        groupReplyAll: false,
-        shareSessionInChannel: false,
-      })
+      await onRefreshConfig()
+      setDraft(createManualPlatformDraft(descriptor))
       onClose()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "保存失败。")
@@ -1098,51 +1184,18 @@ function TelegramManualPlatformForm({
 
   return (
     <>
-      <Field>
-        <Label htmlFor="telegram-token">Token</Label>
-        <Input
-          id="telegram-token"
-          type="password"
-          value={draft.token}
-          onChange={(event) => {
-            setDraft((current) => ({ ...current, token: event.target.value }))
-          }}
+      {descriptor.options.map((option) => (
+        <ConnectorOptionField
+          key={option.name}
+          option={option}
+          value={draft[option.name]}
           disabled={isSubmitting}
-        />
-      </Field>
-      <Field>
-        <Label htmlFor="telegram-allow-from">允许用户</Label>
-        <Input
-          id="telegram-allow-from"
-          value={draft.allowFrom}
-          onChange={(event) => {
-            setDraft((current) => ({ ...current, allowFrom: event.target.value }))
+          onChange={(value) => {
+            setDraft((current) => ({ ...current, [option.name]: value }))
+            setFormError(null)
           }}
-          disabled={isSubmitting}
         />
-      </Field>
-      <div className="grid gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={draft.groupReplyAll}
-            onCheckedChange={(checked) => {
-              setDraft((current) => ({ ...current, groupReplyAll: checked === true }))
-            }}
-            disabled={isSubmitting}
-          />
-          群聊全部回复
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={draft.shareSessionInChannel}
-            onCheckedChange={(checked) => {
-              setDraft((current) => ({ ...current, shareSessionInChannel: checked === true }))
-            }}
-            disabled={isSubmitting}
-          />
-          频道共享会话
-        </label>
-      </div>
+      ))}
       <FieldError>{formError}</FieldError>
       <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
@@ -1156,84 +1209,194 @@ function TelegramManualPlatformForm({
   )
 }
 
-type QrDraftStatus = "idle" | "waiting" | "expired" | "error" | "success"
+type QrFlowPhase = "idle" | "generating" | "waiting" | "scanned" | "saving" | "connected" | "expired" | "denied" | "error"
 
-function QrPlatformDraftForm({
+function QrPlatformOnboardingForm({
   platform,
-  onAddPlatformConnection,
+  project,
+  onRefreshConfig,
   onClose,
 }: {
-  platform: "feishu" | "lark" | "weixin"
-  onAddPlatformConnection: (connection: SynapseProjectPlatformConnection) => Promise<void>
+  platform: SynapseConnectorQrPlatform
+  project: SynapseProjectConfig
+  onRefreshConfig: () => Promise<void>
   onClose: () => void
 }) {
-  const [status, setStatus] = useState<QrDraftStatus>("idle")
+  const [phase, setPhase] = useState<QrFlowPhase>("idle")
+  const [session, setSession] = useState<SynapseConnectorQrSession | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const pollTimerRef = useRef<number | null>(null)
+  const pollingRef = useRef(false)
 
-  const handleSaveDraft = async () => {
+  const clearPollTimer = () => {
+    if (pollTimerRef.current !== null) {
+      window.clearTimeout(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }
+
+  const applySessionStatus = async (nextSession: SynapseConnectorQrSession) => {
+    setSession(nextSession)
+
+    switch (nextSession.status) {
+      case "waiting":
+        setPhase("waiting")
+        return
+      case "scanned":
+        setPhase("scanned")
+        return
+      case "success":
+        setPhase("saving")
+        if (!window.synapse?.connectors) {
+          throw new Error("连接服务不可用。")
+        }
+        await window.synapse.connectors.saveQr({
+          sessionId: nextSession.sessionId,
+          projectId: project.id,
+        })
+        await onRefreshConfig()
+        setPhase("connected")
+        return
+      case "expired":
+        setPhase("expired")
+        setFormError(nextSession.error)
+        return
+      case "denied":
+        setPhase("denied")
+        setFormError(nextSession.error)
+        return
+      case "failed":
+        setPhase("error")
+        setFormError(nextSession.error ?? "设置失败。")
+        return
+      case "cancelled":
+        return
+    }
+  }
+
+  const pollQr = async () => {
+    if (!session || pollingRef.current || phase === "saving" || phase === "connected") {
+      return
+    }
+
+    if (!window.synapse?.connectors) {
+      setFormError("连接服务不可用。")
+      setPhase("error")
+      return
+    }
+
+    pollingRef.current = true
+    try {
+      const nextSession = await window.synapse.connectors.pollQr({ sessionId: session.sessionId })
+      await applySessionStatus(nextSession)
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "轮询失败。")
+      setPhase("error")
+    } finally {
+      pollingRef.current = false
+    }
+  }
+
+  useEffect(() => {
+    if ((phase !== "waiting" && phase !== "scanned") || !session) {
+      return
+    }
+
+    clearPollTimer()
+    const intervalMs = Math.max(session.intervalSeconds, 1) * 1000
+    pollTimerRef.current = window.setTimeout(() => {
+      void pollQr()
+    }, intervalMs)
+
+    return clearPollTimer
+  }, [phase, session?.intervalSeconds, session?.sessionId])
+
+  useEffect(() => clearPollTimer, [])
+
+  const handleStart = async () => {
+    if (!QR_PLATFORM_TYPES.has(platform)) {
+      setFormError("平台不支持扫码。")
+      setPhase("error")
+      return
+    }
+
     setIsSubmitting(true)
     setFormError(null)
+    setPhase("generating")
 
     try {
-      await onAddPlatformConnection(createQrProjectPlatformDraft({
-        id: `connector:${platform}:qr-${crypto.randomUUID()}`,
-        type: platform,
-        now: new Date().toISOString(),
-      }))
-      setStatus("success")
+      if (!window.synapse?.connectors) {
+        throw new Error("连接服务不可用。")
+      }
+      const nextSession = await window.synapse.connectors.beginQr({ platform })
+      await applySessionStatus(nextSession)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "保存失败。")
-      setStatus("error")
+      setPhase("error")
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleCancel = () => {
+    clearPollTimer()
+    if (session) {
+      void window.synapse?.connectors.cancelQr({ sessionId: session.sessionId }).catch((error: unknown) => {
+        setFormError(error instanceof Error ? error.message : "取消失败。")
+      })
+    }
+    onClose()
+  }
+
+  const handleRetry = () => {
+    clearPollTimer()
+    setSession(null)
+    setFormError(null)
+    setPhase("idle")
   }
 
   return (
     <>
       <div className="rounded-lg border border-border p-4">
         <div className="flex items-center gap-3">
-          {status === "success" ? (
+          {phase === "connected" ? (
             <CheckCircle2 className="size-5 text-muted-foreground" />
-          ) : status === "error" || status === "expired" ? (
+          ) : phase === "error" || phase === "expired" || phase === "denied" ? (
             <AlertCircle className="size-5 text-muted-foreground" />
-          ) : status === "waiting" ? (
+          ) : phase === "waiting" || phase === "scanned" || phase === "saving" ? (
             <Clock className="size-5 text-muted-foreground" />
           ) : (
             <QrCode className="size-5 text-muted-foreground" />
           )}
           <div>
-            <p className="font-medium">{getQrStatusLabel(status)}</p>
+            <p className="font-medium">{getQrStatusLabel(phase)}</p>
             <p className="text-sm text-muted-foreground">{platform}</p>
           </div>
         </div>
+        {session?.qrContent && (phase === "waiting" || phase === "scanned" || phase === "saving") ? (
+          <div className="mt-4 flex justify-center">
+            <QrCodePreview qrContent={session.qrContent} />
+          </div>
+        ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
-          {status === "idle" ? (
-            <Button type="button" onClick={() => setStatus("waiting")} disabled={isSubmitting}>
+          {phase === "idle" ? (
+            <Button type="button" onClick={() => void handleStart()} disabled={isSubmitting}>
               开始设置
             </Button>
           ) : null}
-          {status === "waiting" ? (
-            <>
-              <Button type="button" onClick={() => void handleSaveDraft()} disabled={isSubmitting}>
-                {isSubmitting ? "保存中..." : "保存草稿"}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setStatus("expired")} disabled={isSubmitting}>
-                标记过期
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setStatus("error")} disabled={isSubmitting}>
-                标记错误
-              </Button>
-            </>
+          {phase === "generating" ? (
+            <Button type="button" disabled>
+              生成中...
+            </Button>
           ) : null}
-          {status === "expired" || status === "error" ? (
-            <Button type="button" variant="outline" onClick={() => setStatus("waiting")} disabled={isSubmitting}>
+          {phase === "expired" || phase === "error" || phase === "denied" ? (
+            <Button type="button" variant="outline" onClick={handleRetry} disabled={isSubmitting}>
               <RefreshCw />
               重试
             </Button>
           ) : null}
-          {status === "success" ? (
+          {phase === "connected" ? (
             <Button type="button" onClick={onClose}>
               完成
             </Button>
@@ -1241,9 +1404,9 @@ function QrPlatformDraftForm({
         </div>
       </div>
       <FieldError>{formError}</FieldError>
-      {status !== "success" ? (
+      {phase !== "connected" ? (
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+          <Button variant="outline" onClick={handleCancel} disabled={isSubmitting}>
             取消
           </Button>
         </DialogFooter>
@@ -1252,16 +1415,106 @@ function QrPlatformDraftForm({
   )
 }
 
-function getQrStatusLabel(status: QrDraftStatus): string {
-  const labels: Record<QrDraftStatus, string> = {
+function QrCodePreview({ qrContent }: { qrContent: string }) {
+  return (
+    <div className="rounded-md border border-border bg-background p-3">
+      <QRCodeSVG value={qrContent} size={192} level="M" title="连接二维码" />
+    </div>
+  )
+}
+
+function getQrStatusLabel(status: QrFlowPhase): string {
+  const labels: Record<QrFlowPhase, string> = {
     idle: "未开始",
+    generating: "生成中",
     waiting: "等待扫码",
-    expired: "二维码已过期",
+    scanned: "已扫码，等待确认",
+    saving: "保存中",
+    connected: "已连接",
+    expired: "已过期",
+    denied: "已拒绝",
     error: "设置失败",
-    success: "草稿已保存",
   }
 
   return labels[status]
+}
+
+function createManualPlatformDraft(descriptor: SynapseConnectorDescriptor): Record<string, string | boolean | number> {
+  return descriptor.options.reduce<Record<string, string | boolean | number>>((draft, option) => {
+    if (option.defaultValue !== undefined) {
+      draft[option.name] = option.defaultValue
+    } else if (option.kind === "boolean") {
+      draft[option.name] = false
+    } else {
+      draft[option.name] = ""
+    }
+    return draft
+  }, {})
+}
+
+function hasManualOptionValue(value: string | boolean | number | undefined): boolean {
+  if (typeof value === "string") {
+    return value.trim().length > 0
+  }
+  return value !== undefined && value !== null
+}
+
+function cleanManualPlatformDraft(values: Record<string, string | boolean | number>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(values)
+      .map(([key, value]) => [key, typeof value === "string" ? value.trim() : value] as const)
+      .filter(([, value]) => value !== ""),
+  )
+}
+
+function getOptionLabel(option: SynapseConnectorOptionDefinition): string {
+  return OPTION_LABELS[option.name] ?? option.name
+}
+
+function ConnectorOptionField({
+  option,
+  value,
+  disabled,
+  onChange,
+}: {
+  option: SynapseConnectorOptionDefinition
+  value: string | boolean | number | undefined
+  disabled: boolean
+  onChange: (value: string | boolean | number) => void
+}) {
+  const fieldId = `platform-option-${option.name}`
+  const label = getOptionLabel(option)
+
+  if (option.kind === "boolean") {
+    return (
+      <Field orientation="horizontal">
+        <Checkbox
+          id={fieldId}
+          checked={value === true}
+          onCheckedChange={(checked) => onChange(checked === true)}
+          disabled={disabled}
+        />
+        <Label htmlFor={fieldId}>{label}</Label>
+      </Field>
+    )
+  }
+
+  return (
+    <Field>
+      <Label htmlFor={fieldId}>{label}</Label>
+      <Input
+        id={fieldId}
+        type={option.kind === "secret" ? "password" : option.kind === "number" ? "number" : "text"}
+        value={value === undefined ? "" : String(value)}
+        onChange={(event) => {
+          onChange(option.kind === "number" ? Number(event.target.value) : event.target.value)
+        }}
+        placeholder={OPTION_PLACEHOLDERS[option.name]}
+        disabled={disabled}
+        aria-required={option.required}
+      />
+    </Field>
+  )
 }
 
 function createSettingsDraft(project: ConnectorProjectSummary | null) {
@@ -1462,4 +1715,4 @@ function ProjectCreateDialog({
   )
 }
 
-export { ConnectorsModule, ConnectorsProjectView }
+export { ConnectorsModule, ConnectorsProjectView, QrCodePreview }

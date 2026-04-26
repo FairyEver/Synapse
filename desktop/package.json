@@ -53,6 +53,7 @@
     "lucide-react": "1.8.0",
     "markdown-it": "^14.1.1",
     "markdown-it-container": "^4.0.0",
+    "qrcode.react": "^4.2.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.5",
     "react-avatar-editor": "^15.1.0",

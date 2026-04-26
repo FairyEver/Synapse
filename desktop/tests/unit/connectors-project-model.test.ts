@@ -5,7 +5,6 @@ import {
   bindGlobalProviderToProject,
   createCcConnectProjectDraft,
   createProjectPlatformConnectionFromConnector,
-  createQrProjectPlatformDraft,
   listLinkableGlobalProviders,
   parseDisabledCommands,
   removeProviderFromProject,
@@ -294,23 +293,40 @@ describe("connectors project model", () => {
     expect(JSON.stringify(connection)).not.toContain("plain-token")
   })
 
-  it("creates disabled QR platform drafts without credentials", () => {
-    const connection = createQrProjectPlatformDraft({
-      id: "connector:weixin:qr-1",
-      type: "weixin",
-      now: "2026-04-26T00:00:00.000Z",
-    })
+  it("stores QR platform completion through configured secret refs", () => {
+    const connection = createProjectPlatformConnectionFromConnector(
+      {
+        id: "connector:weixin:synapse",
+        schemaVersion: 1,
+        type: "weixin",
+        name: "synapse-weixin",
+        enabled: true,
+        status: "configured",
+        options: {
+          base_url: "https://ilink.example.test",
+          account_id: "bot-id",
+        },
+        secretRefs: {
+          token: "connector:weixin:synapse:token",
+        },
+        capabilities: ["text.in"],
+      },
+      "2026-04-26T00:00:00.000Z",
+    )
 
     expect(connection).toMatchObject({
-      id: "connector:weixin:qr-1",
+      id: "connector:weixin:synapse",
       type: "weixin",
-      name: "Weixin",
-      status: "draft",
-      enabled: false,
+      name: "synapse-weixin",
+      status: "configured",
+      enabled: true,
       options: {
-        setup_mode: "qr",
+        base_url: "https://ilink.example.test",
+        account_id: "bot-id",
       },
-      secretRefs: {},
+      secretRefs: {
+        token: "connector:weixin:synapse:token",
+      },
     })
   })
 
@@ -342,11 +358,24 @@ describe("connectors project model", () => {
       },
       "2026-04-26T00:00:00.000Z",
     )
-    const qrConnection = createQrProjectPlatformDraft({
-      id: "connector:feishu:qr-1",
-      type: "feishu",
-      now: "2026-04-26T00:01:00.000Z",
-    })
+    const qrConnection = createProjectPlatformConnectionFromConnector(
+      {
+        id: "connector:feishu:synapse",
+        schemaVersion: 1,
+        type: "feishu",
+        name: "synapse-feishu",
+        enabled: true,
+        status: "configured",
+        options: {
+          app_id: "cli_123",
+        },
+        secretRefs: {
+          app_secret: "connector:feishu:synapse:app-secret",
+        },
+        capabilities: ["text.in"],
+      },
+      "2026-04-26T00:01:00.000Z",
+    )
 
     const config = applySynapseConfigPatch(createDefaultConfig(), {
       global: {
@@ -378,10 +407,10 @@ describe("connectors project model", () => {
           },
         },
         {
-          id: "connector:feishu:qr-1",
+          id: "connector:feishu:synapse",
           type: "feishu",
-          status: "draft",
-          enabled: false,
+          status: "configured",
+          enabled: true,
         },
       ],
     })

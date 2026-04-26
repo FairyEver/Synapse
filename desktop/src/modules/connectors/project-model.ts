@@ -51,12 +51,6 @@ type UpdateCcConnectProjectSettingsInput = {
   disabledCommands: string
 }
 
-type CreateQrPlatformDraftInput = {
-  id: string
-  type: "feishu" | "lark" | "weixin"
-  now: string
-}
-
 const CC_CONNECT_AGENT_OPTIONS: AgentOption[] = [
   { value: "claudecode", label: "Claude Code" },
   { value: "codex", label: "Codex" },
@@ -264,32 +258,6 @@ function createProjectPlatformConnectionFromConnector(
   }
 }
 
-function createQrProjectPlatformDraft({
-  id,
-  type,
-  now,
-}: CreateQrPlatformDraftInput): SynapseProjectPlatformConnection {
-  const labels: Record<CreateQrPlatformDraftInput["type"], string> = {
-    feishu: "Feishu",
-    lark: "Lark",
-    weixin: "Weixin",
-  }
-
-  return {
-    id,
-    type,
-    name: labels[type],
-    status: "draft",
-    enabled: false,
-    options: {
-      setup_mode: "qr",
-    },
-    secretRefs: {},
-    createdAt: now,
-    updatedAt: now,
-  }
-}
-
 function summarizeCcConnectProjects(
   projects: readonly SynapseProjectConfig[],
 ): ConnectorProjectSummary[] {
@@ -325,7 +293,6 @@ export {
   bindGlobalProviderToProject,
   createCcConnectProjectDraft,
   createProjectPlatformConnectionFromConnector,
-  createQrProjectPlatformDraft,
   getProjectWorkDir,
   listLinkableGlobalProviders,
   parseDisabledCommands,

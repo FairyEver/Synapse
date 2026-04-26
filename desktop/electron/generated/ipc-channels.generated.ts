@@ -95,6 +95,11 @@ export const IPC_CHANNELS = {
   "connectors": {
     "listDescriptors": "synapse:connectors:list-descriptors",
     "createDraft": "synapse:connectors:create-draft",
+    "beginQr": "synapse:connectors:begin-qr",
+    "pollQr": "synapse:connectors:poll-qr",
+    "cancelQr": "synapse:connectors:cancel-qr",
+    "saveQr": "synapse:connectors:save-qr",
+    "saveManualPlatform": "synapse:connectors:save-manual-platform",
     "normalizeInbound": "synapse:connectors:normalize-inbound",
   },
   "agent-sessions": {

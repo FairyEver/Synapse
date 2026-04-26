@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import { getAppShellTabs } from "../../src/app-shell/tabs"
 import { AgentSessionsModule } from "../../src/modules/agent-sessions"
 import { AutomationModule } from "../../src/modules/automation"
-import { ConnectorsProjectView } from "../../src/modules/connectors"
+import { ConnectorsProjectView, QrCodePreview } from "../../src/modules/connectors"
 
 vi.mock("../../src/app-shell/config", async () => {
   const { createDefaultConfig } = await import("../../src/lib/config")
@@ -53,6 +53,7 @@ describe("CC Connect product entries", () => {
       isReady: true,
       onCreateProject: async () => undefined,
       onDeleteProject: async () => undefined,
+      onRefreshConfig: async () => undefined,
       onUpdateProject: async () => undefined,
       globalProviders: [],
       projects: [],
@@ -62,6 +63,15 @@ describe("CC Connect product entries", () => {
     expect(html).toContain("暂无项目")
     expect(html).toContain("新建项目")
     expect(html).not.toContain("添加连接")
+  })
+
+  it("renders QR code content for external platform onboarding", () => {
+    const html = renderToStaticMarkup(React.createElement(QrCodePreview, {
+      qrContent: "https://qr.example.test/connect",
+    }))
+
+    expect(html).toContain("<svg")
+    expect(html).toContain("连接二维码")
   })
 
   it("renders the automation module empty state", () => {

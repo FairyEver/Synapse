@@ -50,6 +50,29 @@ export type SynapseConnectorDraft = {
   warnings: string[]
 }
 
+export type SynapseConnectorQrPlatform = "feishu" | "lark" | "weixin"
+
+export type SynapseConnectorQrStatus =
+  | "waiting"
+  | "scanned"
+  | "success"
+  | "expired"
+  | "denied"
+  | "cancelled"
+  | "failed"
+
+export type SynapseConnectorQrSession = {
+  sessionId: string
+  platform: SynapseConnectorQrPlatform
+  status: SynapseConnectorQrStatus
+  qrContent: string | null
+  intervalSeconds: number
+  expiresAt: string | null
+  refreshCount: number
+  result: Record<string, string> | null
+  error: string | null
+}
+
 export type SynapseInboundAttachmentKind = "image" | "file" | "audio"
 
 export type SynapseInboundAttachment = {

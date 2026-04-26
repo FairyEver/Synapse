@@ -1,5 +1,29 @@
+import http from "node:http"
+import https from "node:https"
+import { URL, URLSearchParams } from "node:url"
+import type { SynapseConfig, SynapseProjectPlatformConnection } from "../../src/types/config"
+import type { SynapseConnectorEntry } from "../../src/types/connector"
+import type { PermissionGuard, AuditSink } from "../runtime/security"
+import type { ConnectorRegistryService } from "./connector-registry-service"
+import type { ConnectorSecretStoreService } from "./connector-secret-store-service"
+
 export type ConnectorQrPlatform = "feishu" | "lark" | "weixin"
 export type ConnectorQrStatus = "waiting" | "scanned" | "success" | "expired" | "denied" | "cancelled" | "failed"
+
+export type ConnectorQrHttpRequest = {
+  method: "GET" | "POST"
+  url: string
+  headers?: Record<string, string>
+  body?: string
+  timeoutMs?: number
+}
+
+export type ConnectorQrHttpResponse = {
+  status: number
+  body: string
+}
+
+export type ConnectorQrHttpClient = (request: ConnectorQrHttpRequest) => Promise<ConnectorQrHttpResponse>
 
 export type FeishuRegistrationInit = {
   supportedAuthMethods?: string[]
@@ -45,12 +69,61 @@ export type ConnectorQrSession = {
   mode: "new" | "bind"
   qrContent: string | null
   deviceCode: string | null
+  baseUrl: string | null
   intervalSeconds: number
   expiresAt: string | null
   refreshCount: number
   result: Record<string, string> | null
   error: string | null
 }
+
+export type ConnectorQrPublicSession = {
+  sessionId: string
+  platform: ConnectorQrPlatform
+  status: ConnectorQrStatus
+  qrContent: string | null
+  intervalSeconds: number
+  expiresAt: string | null
+  refreshCount: number
+  result: Record<string, string> | null
+  error: string | null
+}
+
+export type ConnectorQrSaveResult = {
+  connection: SynapseProjectPlatformConnection
+}
+
+type ConfigAccess = {
+  load: () => Promise<SynapseConfig>
+  update: (patch: { global: { projects: SynapseConfig["global"]["projects"] } }) => Promise<SynapseConfig>
+}
+
+type ConnectorQrOnboardingServiceOptions = {
+  httpClient?: ConnectorQrHttpClient
+  config?: ConfigAccess
+  registry?: ConnectorRegistryService
+  secretStore?: ConnectorSecretStoreService
+  permissionGuard?: PermissionGuard
+  auditSink?: AuditSink
+  now?: () => Date
+}
+
+type SaveManualPlatformInput = {
+  projectId: string
+  type: string
+  name?: string
+  enabled?: boolean
+  options?: Record<string, unknown>
+}
+
+type SaveCompletedQrInput = {
+  sessionId: string
+  projectId: string
+}
+
+const FEISHU_ACCOUNTS_BASE_URL = "https://accounts.feishu.cn"
+const LARK_ACCOUNTS_BASE_URL = "https://accounts.larksuite.com"
+const WEIXIN_DEFAULT_API_URL = "https://ilinkai.weixin.qq.com"
 
 let sequence = 0
 
@@ -66,6 +139,162 @@ function sessionId(platform: ConnectorQrPlatform): string {
 
 function errorText(code: string, description: string | undefined): string {
   return description ? `${code}: ${description}` : code
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : {}
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? trimString(value) : undefined
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : undefined
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function parseJsonObject(body: string, context: string): Record<string, unknown> {
+  const parsed = JSON.parse(body) as unknown
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${context}: expected JSON object`)
+  }
+  return parsed as Record<string, unknown>
+}
+
+function mapFeishuInit(raw: Record<string, unknown>): FeishuRegistrationInit {
+  return {
+    supportedAuthMethods: readStringArray(raw.supported_auth_methods),
+    error: readString(raw.error),
+    errorDescription: readString(raw.error_description),
+  }
+}
+
+function mapFeishuBegin(raw: Record<string, unknown>): FeishuRegistrationBegin {
+  return {
+    deviceCode: readString(raw.device_code),
+    verificationUriComplete: readString(raw.verification_uri_complete),
+    interval: readNumber(raw.interval),
+    expireIn: readNumber(raw.expire_in),
+    error: readString(raw.error),
+    errorDescription: readString(raw.error_description),
+  }
+}
+
+function mapFeishuPoll(raw: Record<string, unknown>): FeishuRegistrationPoll {
+  const userInfo = readRecord(raw.user_info)
+  return {
+    clientId: readString(raw.client_id),
+    clientSecret: readString(raw.client_secret),
+    ownerOpenId: readString(userInfo.open_id),
+    tenantBrand: readString(userInfo.tenant_brand),
+    error: readString(raw.error),
+    errorDescription: readString(raw.error_description),
+  }
+}
+
+function mapWeixinBegin(raw: Record<string, unknown>): WeixinQrPayload {
+  return {
+    qrCode: readString(raw.qrcode),
+    qrCodeImageContent: readString(raw.qrcode_img_content),
+  }
+}
+
+function mapWeixinPoll(raw: Record<string, unknown>): WeixinQrPoll {
+  return {
+    status: readString(raw.status),
+    botToken: readString(raw.bot_token),
+    ilinkBotId: readString(raw.ilink_bot_id),
+    baseUrl: readString(raw.baseurl),
+    ilinkUserId: readString(raw.ilink_user_id),
+  }
+}
+
+function toPublicSession(session: ConnectorQrSession): ConnectorQrPublicSession {
+  let result: Record<string, string> | null = null
+  if (session.result) {
+    if (session.platform === "weixin") {
+      result = {
+        ...(session.result.ilinkBotId ? { ilinkBotId: session.result.ilinkBotId } : {}),
+        ...(session.result.baseUrl ? { baseUrl: session.result.baseUrl } : {}),
+        ...(session.result.ilinkUserId ? { ilinkUserId: session.result.ilinkUserId } : {}),
+      }
+    } else {
+      result = {
+        ...(session.result.appId ? { appId: session.result.appId } : {}),
+        ...(session.result.ownerOpenId ? { ownerOpenId: session.result.ownerOpenId } : {}),
+      }
+    }
+  }
+
+  return {
+    sessionId: session.id,
+    platform: session.platform,
+    status: session.status,
+    qrContent: session.qrContent,
+    intervalSeconds: session.intervalSeconds,
+    expiresAt: session.expiresAt,
+    refreshCount: session.refreshCount,
+    result,
+    error: session.error,
+  }
+}
+
+function createProjectPlatformConnectionFromConnector(
+  connector: SynapseConnectorEntry,
+  now: string,
+): SynapseProjectPlatformConnection {
+  return {
+    id: connector.id,
+    type: connector.type,
+    name: connector.name,
+    status: connector.status,
+    enabled: connector.enabled,
+    options: { ...connector.options },
+    secretRefs: { ...connector.secretRefs },
+    allowFrom: connector.allowFrom,
+    shareSessionInChannel: connector.options.share_session_in_channel === true,
+    groupReplyAll: connector.options.group_reply_all === true,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+export function createNodeConnectorQrHttpClient(): ConnectorQrHttpClient {
+  return (request) => new Promise((resolve, reject) => {
+    const url = new URL(request.url)
+    const transport = url.protocol === "https:" ? https : http
+    const clientRequest = transport.request(url, {
+      method: request.method,
+      headers: request.headers,
+      timeout: request.timeoutMs ?? 15_000,
+    }, (response) => {
+      const chunks: Buffer[] = []
+      response.on("data", (chunk: Buffer) => {
+        chunks.push(chunk)
+      })
+      response.on("end", () => {
+        resolve({
+          status: response.statusCode ?? 0,
+          body: Buffer.concat(chunks).toString("utf8"),
+        })
+      })
+    })
+
+    clientRequest.on("error", reject)
+    clientRequest.on("timeout", () => {
+      clientRequest.destroy(new Error("request timed out"))
+    })
+    if (request.body) {
+      clientRequest.write(request.body)
+    }
+    clientRequest.end()
+  })
 }
 
 export function resolveFeishuSetupInputs(
@@ -133,10 +362,29 @@ export function resolveWeixinSetupMode(
 }
 
 export class ConnectorQrOnboardingService {
+  private readonly httpClient: ConnectorQrHttpClient
+  private readonly config: ConfigAccess | null
+  private readonly registry: ConnectorRegistryService | null
+  private readonly secretStore: ConnectorSecretStoreService | null
+  private readonly permissionGuard: PermissionGuard | null
+  private readonly auditSink: AuditSink | null
+  private readonly now: () => Date
+  private readonly sessions = new Map<string, ConnectorQrSession>()
+
+  constructor(options: ConnectorQrOnboardingServiceOptions = {}) {
+    this.httpClient = options.httpClient ?? createNodeConnectorQrHttpClient()
+    this.config = options.config ?? null
+    this.registry = options.registry ?? null
+    this.secretStore = options.secretStore ?? null
+    this.permissionGuard = options.permissionGuard ?? null
+    this.auditSink = options.auditSink ?? null
+    this.now = options.now ?? (() => new Date())
+  }
+
   beginFeishuRegistration(
     init: FeishuRegistrationInit,
     begin: FeishuRegistrationBegin,
-    options: { timeoutSeconds?: number; now?: Date } = {},
+    options: { timeoutSeconds?: number; now?: Date; platform?: "feishu" | "lark"; baseUrl?: string } = {},
   ): ConnectorQrSession {
     const supported = init.supportedAuthMethods ?? []
     if (init.error) {
@@ -160,12 +408,13 @@ export class ConnectorQrOnboardingService {
     const now = options.now ?? new Date()
 
     return {
-      id: sessionId("feishu"),
-      platform: "feishu",
+      id: sessionId(options.platform ?? "feishu"),
+      platform: options.platform ?? "feishu",
       status: "waiting",
       mode: "new",
       qrContent,
       deviceCode,
+      baseUrl: options.baseUrl ?? FEISHU_ACCOUNTS_BASE_URL,
       intervalSeconds: begin.interval && begin.interval > 0 ? begin.interval : 5,
       expiresAt: new Date(now.getTime() + expireIn * 1000).toISOString(),
       refreshCount: 0,
@@ -226,6 +475,7 @@ export class ConnectorQrOnboardingService {
       mode: "new",
       qrContent,
       deviceCode,
+      baseUrl: WEIXIN_DEFAULT_API_URL,
       intervalSeconds: 1,
       expiresAt: null,
       refreshCount: 1,
@@ -277,6 +527,330 @@ export class ConnectorQrOnboardingService {
     return { ...session, status: "cancelled" }
   }
 
+  async beginQr(platform: ConnectorQrPlatform): Promise<ConnectorQrPublicSession> {
+    const session = platform === "weixin"
+      ? await this.beginWeixinQrFromRemote()
+      : await this.beginFeishuQrFromRemote(platform)
+
+    this.sessions.set(session.id, session)
+    return toPublicSession(session)
+  }
+
+  async pollQr(sessionId: string): Promise<ConnectorQrPublicSession> {
+    const session = this.requireSession(sessionId)
+    if (session.status !== "waiting" && session.status !== "scanned") {
+      return toPublicSession(session)
+    }
+
+    let next: ConnectorQrSession
+    try {
+      next = session.platform === "weixin"
+        ? await this.pollWeixinQrFromRemote(session)
+        : await this.pollFeishuQrFromRemote(session)
+    } catch (error) {
+      next = {
+        ...session,
+        status: "failed",
+        refreshCount: session.refreshCount + 1,
+        error: error instanceof Error ? error.message : "poll failed",
+      }
+    }
+
+    this.sessions.set(next.id, next)
+    return toPublicSession(next)
+  }
+
+  cancelQr(sessionId: string): ConnectorQrPublicSession {
+    const session = this.requireSession(sessionId)
+    const next = this.cancel(session)
+    this.sessions.set(next.id, next)
+    return toPublicSession(next)
+  }
+
+  async saveCompletedQr(input: SaveCompletedQrInput): Promise<ConnectorQrSaveResult> {
+    const session = this.requireSession(input.sessionId)
+    if (session.status !== "success" || !session.result) {
+      throw new Error("扫码尚未完成。")
+    }
+
+    if (session.platform === "weixin") {
+      return this.saveConnectorToProject({
+        projectId: input.projectId,
+        type: "weixin",
+        nameSuffix: "weixin",
+        options: {
+          token: session.result.botToken,
+          base_url: session.result.baseUrl ?? WEIXIN_DEFAULT_API_URL,
+          account_id: session.result.ilinkBotId,
+          ilink_user_id: session.result.ilinkUserId,
+        },
+      })
+    }
+
+    return this.saveConnectorToProject({
+      projectId: input.projectId,
+      type: session.platform,
+      nameSuffix: session.platform,
+      options: {
+        app_id: session.result.appId,
+        app_secret: session.result.appSecret,
+        owner_open_id: session.result.ownerOpenId,
+      },
+    })
+  }
+
+  async saveManualPlatform(input: SaveManualPlatformInput): Promise<ConnectorQrSaveResult> {
+    return this.saveConnectorToProject({
+      projectId: input.projectId,
+      type: input.type,
+      nameSuffix: input.type,
+      name: input.name,
+      enabled: input.enabled,
+      options: input.options ?? {},
+    })
+  }
+
+  private async beginFeishuQrFromRemote(platform: "feishu" | "lark"): Promise<ConnectorQrSession> {
+    const initRaw = await this.feishuRegistrationCall(FEISHU_ACCOUNTS_BASE_URL, "init")
+    const init = mapFeishuInit(initRaw)
+    if (init.error) {
+      return this.failed(platform, errorText(init.error, init.errorDescription))
+    }
+    if ((init.supportedAuthMethods ?? []).length > 0 && !init.supportedAuthMethods?.includes("client_secret")) {
+      return this.failed(platform, "current environment does not support client_secret auth")
+    }
+
+    const beginRaw = await this.feishuRegistrationCall(FEISHU_ACCOUNTS_BASE_URL, "begin", {
+      archetype: "PersonalAgent",
+      auth_method: "client_secret",
+      request_user_info: "open_id",
+    })
+
+    return this.beginFeishuRegistration(
+      init,
+      mapFeishuBegin(beginRaw),
+      {
+        platform,
+        baseUrl: FEISHU_ACCOUNTS_BASE_URL,
+        now: this.now(),
+      },
+    )
+  }
+
+  private async pollFeishuQrFromRemote(session: ConnectorQrSession): Promise<ConnectorQrSession> {
+    let current = session
+    let baseUrl = current.baseUrl ?? FEISHU_ACCOUNTS_BASE_URL
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const raw = await this.feishuRegistrationCall(baseUrl, "poll", {
+        device_code: current.deviceCode ?? "",
+      })
+      const poll = mapFeishuPoll(raw)
+      const tenantBrand = trimString(poll.tenantBrand)?.toLowerCase()
+
+      if (tenantBrand === "lark" && baseUrl !== LARK_ACCOUNTS_BASE_URL) {
+        baseUrl = LARK_ACCOUNTS_BASE_URL
+        current = { ...current, platform: "lark", baseUrl }
+        continue
+      }
+
+      return {
+        ...this.pollFeishuRegistration({ ...current, baseUrl }, poll),
+        baseUrl,
+      }
+    }
+
+    return { ...current, baseUrl }
+  }
+
+  private async beginWeixinQrFromRemote(apiBase = WEIXIN_DEFAULT_API_URL): Promise<ConnectorQrSession> {
+    const trimmedBase = apiBase.replace(/\/+$/, "")
+    const url = new URL(`${trimmedBase}/ilink/bot/get_bot_qrcode`)
+    url.searchParams.set("bot_type", "3")
+    const raw = await this.getJson(url.toString(), "weixin get_bot_qrcode", {
+      timeoutMs: 15_000,
+    })
+
+    return {
+      ...this.beginWeixinQr(mapWeixinBegin(raw)),
+      baseUrl: trimmedBase,
+    }
+  }
+
+  private async pollWeixinQrFromRemote(session: ConnectorQrSession): Promise<ConnectorQrSession> {
+    const apiBase = session.baseUrl ?? WEIXIN_DEFAULT_API_URL
+    const url = new URL(`${apiBase.replace(/\/+$/, "")}/ilink/bot/get_qrcode_status`)
+    url.searchParams.set("qrcode", session.deviceCode ?? "")
+    const raw = await this.getJson(url.toString(), "weixin get_qrcode_status", {
+      headers: { "iLink-App-ClientVersion": "1" },
+      timeoutMs: 40_000,
+    })
+    return {
+      ...this.pollWeixinQr(session, mapWeixinPoll(raw)),
+      baseUrl: apiBase,
+    }
+  }
+
+  private async feishuRegistrationCall(
+    baseUrl: string,
+    action: string,
+    params: Record<string, string> = {},
+  ): Promise<Record<string, unknown>> {
+    const form = new URLSearchParams()
+    form.set("action", action)
+    for (const [key, value] of Object.entries(params)) {
+      form.set(key, value)
+    }
+
+    return this.postFormJson(
+      `${baseUrl}/oauth/v1/app/registration`,
+      form.toString(),
+      `feishu ${action}`,
+    )
+  }
+
+  private async postFormJson(url: string, body: string, context: string): Promise<Record<string, unknown>> {
+    await this.checkNetworkPermission(url)
+    const response = await this.httpClient({
+      method: "POST",
+      url,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      timeoutMs: 15_000,
+    })
+    this.recordNetworkAudit(url, response.status >= 200 && response.status < 300 ? "allowed" : "failed")
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`${context}: http ${response.status}`)
+    }
+    return parseJsonObject(response.body, context)
+  }
+
+  private async getJson(
+    url: string,
+    context: string,
+    options: { headers?: Record<string, string>; timeoutMs?: number } = {},
+  ): Promise<Record<string, unknown>> {
+    await this.checkNetworkPermission(url)
+    const response = await this.httpClient({
+      method: "GET",
+      url,
+      headers: options.headers,
+      timeoutMs: options.timeoutMs,
+    })
+    this.recordNetworkAudit(url, response.status >= 200 && response.status < 300 ? "allowed" : "failed")
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`${context}: http ${response.status}`)
+    }
+    return parseJsonObject(response.body, context)
+  }
+
+  private async checkNetworkPermission(url: string): Promise<void> {
+    if (!this.permissionGuard) {
+      return
+    }
+
+    const resource = new URL(url).origin
+    const result = await this.permissionGuard.check({
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource,
+      context: { source: "connectors.qr" },
+    })
+
+    if (!result.allowed) {
+      this.auditSink?.record({
+        action: "network.connect",
+        actor: { kind: "user" },
+        resource,
+        outcome: "denied",
+        metadata: { reason: result.reason },
+      })
+      throw new Error("外部平台网络请求未授权。")
+    }
+  }
+
+  private recordNetworkAudit(url: string, outcome: "allowed" | "failed"): void {
+    this.auditSink?.record({
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: new URL(url).origin,
+      outcome,
+      metadata: { source: "connectors.qr" },
+    })
+  }
+
+  private requireSession(sessionId: string): ConnectorQrSession {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error("扫码会话不存在或已过期。")
+    }
+    return session
+  }
+
+  private requirePersistenceDeps(): {
+    config: ConfigAccess
+    registry: ConnectorRegistryService
+    secretStore: ConnectorSecretStoreService
+  } {
+    if (!this.config || !this.registry || !this.secretStore) {
+      throw new Error("连接保存服务不可用。")
+    }
+
+    return {
+      config: this.config,
+      registry: this.registry,
+      secretStore: this.secretStore,
+    }
+  }
+
+  private async saveConnectorToProject(input: {
+    projectId: string
+    type: string
+    nameSuffix: string
+    name?: string
+    enabled?: boolean
+    options: Record<string, unknown>
+  }): Promise<ConnectorQrSaveResult> {
+    const { config, registry, secretStore } = this.requirePersistenceDeps()
+    const currentConfig = await config.load()
+    const project = currentConfig.global.projects.find((item) => item.id === input.projectId)
+    if (!project) {
+      throw new Error("项目不存在。")
+    }
+
+    const connectorDraft = registry.createConnectorDraft({
+      type: input.type,
+      name: input.name ?? `${project.name}-${input.nameSuffix}`,
+      enabled: input.enabled ?? true,
+      options: input.options,
+    })
+
+    if (connectorDraft.issues.length > 0) {
+      throw new Error(connectorDraft.issues[0]?.message ?? "平台配置不完整。")
+    }
+
+    await secretStore.writeConnectorSecrets(connectorDraft.secrets)
+    const now = this.now().toISOString()
+    const connection = createProjectPlatformConnectionFromConnector(connectorDraft.connector, now)
+    const projects = currentConfig.global.projects.map((item) => {
+      if (item.id !== project.id) {
+        return item
+      }
+
+      const existingConnections = item.platformConnections ?? []
+      return {
+        ...item,
+        platformConnections: [
+          ...existingConnections.filter((current) => current.id !== connection.id),
+          connection,
+        ],
+      }
+    })
+
+    await config.update({ global: { projects } })
+    return { connection }
+  }
+
   private failed(platform: ConnectorQrPlatform, error: string): ConnectorQrSession {
     return {
       id: sessionId(platform),
@@ -285,6 +859,7 @@ export class ConnectorQrOnboardingService {
       mode: "new",
       qrContent: null,
       deviceCode: null,
+      baseUrl: platform === "weixin" ? WEIXIN_DEFAULT_API_URL : FEISHU_ACCOUNTS_BASE_URL,
       intervalSeconds: 0,
       expiresAt: null,
       refreshCount: 0,
