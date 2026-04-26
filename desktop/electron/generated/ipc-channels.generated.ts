@@ -109,6 +109,17 @@ export const IPC_CHANNELS = {
     "feishuListWorkspaceBindings": "synapse:connectors:feishu:workspace-bindings:list",
     "feishuRouteWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:route",
     "feishuUnbindWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:unbind",
+    "feishuListScheduledJobs": "synapse:connectors:feishu:scheduled-jobs:list",
+    "feishuCreateScheduledJob": "synapse:connectors:feishu:scheduled-jobs:create",
+    "feishuDeleteScheduledJob": "synapse:connectors:feishu:scheduled-jobs:delete",
+    "feishuSetScheduledJobEnabled": "synapse:connectors:feishu:scheduled-jobs:set-enabled",
+    "feishuSetScheduledJobMuted": "synapse:connectors:feishu:scheduled-jobs:set-muted",
+    "feishuRunScheduledJob": "synapse:connectors:feishu:scheduled-jobs:run",
+    "feishuListHeartbeats": "synapse:connectors:feishu:heartbeats:list",
+    "feishuUpsertHeartbeat": "synapse:connectors:feishu:heartbeats:upsert",
+    "feishuPauseHeartbeat": "synapse:connectors:feishu:heartbeats:pause",
+    "feishuResumeHeartbeat": "synapse:connectors:feishu:heartbeats:resume",
+    "feishuRunHeartbeat": "synapse:connectors:feishu:heartbeats:run",
   },
 } as const
 
