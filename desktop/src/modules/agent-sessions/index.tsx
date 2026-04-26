@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react"
-import { Bot, Loader2, MessageSquare, Plus, RefreshCw, Send, User } from "lucide-react"
+import { Bot, Brain, Check, Copy, Loader2, MessageSquare, Plus, RefreshCw, Send, Terminal, User, Wrench, X } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Badge } from "@/components/ui/badge"
@@ -24,10 +24,15 @@ import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { formatDateTime } from "@/lib/date-time"
 import { cn } from "@/lib/utils"
 import type {
+  SynapseAgentSessionEventRecord,
   SynapseAgentSessionDetail,
   SynapseAgentSessionSummary,
+  SynapseMessageInteraction,
+  SynapsePendingPermission,
+  SynapseSessionMessage,
   SynapseSessionHistoryEntry,
 } from "@/types/agent-session"
+import { MessageRenderer } from "./components/message-renderer"
 
 const logger = createRendererLogger("agent.sessions")
 
@@ -47,6 +52,87 @@ function defaultSessionKey(projectName: string): string {
   return `bridge:web-admin:${projectName}`
 }
 
+function payloadString(record: SynapseAgentSessionEventRecord, key: string): string {
+  const value = record.payload[key]
+  return typeof value === "string" ? value : ""
+}
+
+function payloadNumber(record: SynapseAgentSessionEventRecord, key: string): number | null {
+  const value = record.payload[key]
+  return typeof value === "number" ? value : null
+}
+
+function payloadBoolean(record: SynapseAgentSessionEventRecord, key: string): boolean | null {
+  const value = record.payload[key]
+  return typeof value === "boolean" ? value : null
+}
+
+function toolCodeLanguage(toolName: string, content: string): string {
+  if (["shell", "run_shell_command", "Bash"].includes(toolName)) {
+    return "bash"
+  }
+  if (content.includes("\n- ") && content.includes("\n+ ")) {
+    return "diff"
+  }
+  return "text"
+}
+
+function CodeBlock({ code, language }: { code: string; language?: string }) {
+  const copy = useCallback(() => {
+    void navigator.clipboard?.writeText(code)
+  }, [code])
+
+  return (
+    <div className="overflow-hidden rounded-md border bg-muted">
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+        <span className="text-xs text-muted-foreground">{language || "text"}</span>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={copy} aria-label="复制">
+          <Copy className="size-3.5" />
+        </Button>
+      </div>
+      <pre className="max-h-80 overflow-auto p-3 text-xs leading-relaxed">
+        <code>{code || "无输出"}</code>
+      </pre>
+    </div>
+  )
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const blocks: Array<{ type: "text" | "code"; content: string; language?: string }> = []
+  const fence = /```([A-Za-z0-9_-]*)\n([\s\S]*?)```/gu
+  let cursor = 0
+  let match = fence.exec(content)
+
+  while (match) {
+    if (match.index > cursor) {
+      blocks.push({ type: "text", content: content.slice(cursor, match.index) })
+    }
+    blocks.push({
+      type: "code",
+      language: match[1] || "text",
+      content: match[2] ?? "",
+    })
+    cursor = match.index + match[0].length
+    match = fence.exec(content)
+  }
+
+  if (cursor < content.length || blocks.length === 0) {
+    blocks.push({ type: "text", content: content.slice(cursor) || content })
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {blocks.map((block, index) => block.type === "code" ? (
+        <CodeBlock key={`${block.type}:${index}`} code={block.content} language={block.language} />
+      ) : (
+        <p key={`${block.type}:${index}`} className="whitespace-pre-wrap text-sm leading-relaxed">
+          {block.content}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 function HistoryMessage({ entry }: { entry: SynapseSessionHistoryEntry }) {
   const isUser = entry.role === "user"
 
@@ -61,7 +147,11 @@ function HistoryMessage({ entry }: { entry: SynapseSessionHistoryEntry }) {
         "max-w-[80%] rounded-md border px-3 py-2 text-sm",
         isUser ? "bg-primary text-primary-foreground" : "bg-background text-foreground",
       )}>
-        <p className="whitespace-pre-wrap leading-relaxed">{entry.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap leading-relaxed">{entry.content}</p>
+        ) : (
+          <MarkdownContent content={entry.content} />
+        )}
         <p className={cn(
           "mt-2 text-xs",
           isUser ? "text-primary-foreground/70" : "text-muted-foreground",
@@ -129,6 +219,191 @@ function LoadingState() {
   )
 }
 
+function eventTitle(record: SynapseAgentSessionEventRecord): string {
+  switch (record.type) {
+    case "thinking":
+      return "思考"
+    case "tool_use":
+      return payloadString(record, "toolName") || "工具调用"
+    case "tool_result":
+      return payloadString(record, "toolName") || "工具结果"
+    case "permission_request":
+      return "权限请求"
+    case "permission_response":
+      return "权限响应"
+    case "result":
+      return "完成"
+    case "error":
+      return "错误"
+    case "text":
+      return "回复"
+  }
+}
+
+function eventIcon(record: SynapseAgentSessionEventRecord) {
+  switch (record.type) {
+    case "thinking":
+      return <Brain className="size-4" />
+    case "tool_use":
+    case "tool_result":
+      return <Wrench className="size-4" />
+    case "permission_request":
+    case "permission_response":
+      return <Check className="size-4" />
+    case "error":
+      return <X className="size-4" />
+    case "result":
+    case "text":
+      return <Terminal className="size-4" />
+  }
+}
+
+function PermissionEventCard({
+  record,
+  pending,
+  onDecision,
+}: {
+  record: SynapseAgentSessionEventRecord
+  pending: boolean
+  onDecision: (record: SynapseAgentSessionEventRecord, decision: "allow" | "deny") => void
+}) {
+  const toolName = payloadString(record, "toolName") || "tool"
+  const toolInput = payloadString(record, "toolInput")
+  const message: SynapseSessionMessage = {
+    id: `${record.sessionId}:${record.seq}`,
+    sessionId: record.sessionId,
+    role: "assistant",
+    content: "",
+    createdAt: record.timestamp,
+    card: {
+      header: { title: "权限请求" },
+      elements: [
+        { type: "markdown", content: `**${toolName}**\n\n${toolInput || "无输入"}` },
+        {
+          type: "actions",
+          buttons: [
+            { text: "允许", type: "primary", value: "perm:allow" },
+            { text: "拒绝", type: "danger", value: "perm:deny" },
+          ],
+        },
+      ],
+    },
+  }
+
+  const handleInteraction = (interaction: SynapseMessageInteraction) => {
+    if (!pending || interaction.kind !== "button") {
+      return
+    }
+    if (interaction.value === "perm:allow") {
+      onDecision(record, "allow")
+    }
+    if (interaction.value === "perm:deny") {
+      onDecision(record, "deny")
+    }
+  }
+
+  return (
+    <div className={cn(!pending && "pointer-events-none opacity-70")}>
+      <MessageRenderer message={message} onInteraction={handleInteraction} />
+    </div>
+  )
+}
+
+function EventRecordItem({
+  record,
+  pendingPermission,
+  onPermissionDecision,
+}: {
+  record: SynapseAgentSessionEventRecord
+  pendingPermission: SynapsePendingPermission | null
+  onPermissionDecision: (record: SynapseAgentSessionEventRecord, decision: "allow" | "deny") => void
+}) {
+  const toolName = payloadString(record, "toolName")
+  const toolInput = payloadString(record, "toolInput")
+  const toolResult = payloadString(record, "toolResult")
+  const content = payloadString(record, "content")
+  const error = payloadString(record, "error")
+  const status = payloadString(record, "toolStatus")
+  const exitCode = payloadNumber(record, "toolExitCode")
+  const success = payloadBoolean(record, "toolSuccess")
+  const requestId = payloadString(record, "requestId")
+  const isPendingPermission = record.type === "permission_request"
+    && pendingPermission?.requestId === requestId
+
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+          <span className="text-muted-foreground">{eventIcon(record)}</span>
+          <span className="truncate">{eventTitle(record)}</span>
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground">#{record.seq}</span>
+      </div>
+      {record.type === "thinking" || record.type === "text" || record.type === "result" ? (
+        <MarkdownContent content={content} />
+      ) : null}
+      {record.type === "tool_use" ? (
+        <CodeBlock code={toolInput} language={toolCodeLanguage(toolName, toolInput)} />
+      ) : null}
+      {record.type === "tool_result" ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {status ? <Badge variant="outline">{status}</Badge> : null}
+            {exitCode !== null ? <Badge variant="secondary">exit {exitCode}</Badge> : null}
+            {success !== null ? <Badge variant={success ? "secondary" : "destructive"}>{success ? "ok" : "failed"}</Badge> : null}
+          </div>
+          <CodeBlock code={toolResult} language="text" />
+        </div>
+      ) : null}
+      {record.type === "permission_request" ? (
+        <PermissionEventCard record={record} pending={isPendingPermission} onDecision={onPermissionDecision} />
+      ) : null}
+      {record.type === "permission_response" ? (
+        <Badge variant={payloadString(record, "decision") === "allow" ? "secondary" : "destructive"}>
+          {payloadString(record, "decision") === "allow" ? "允许" : "拒绝"}
+        </Badge>
+      ) : null}
+      {record.type === "error" ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : null}
+      <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(record.timestamp)}</p>
+    </div>
+  )
+}
+
+function EventStream({
+  events,
+  pendingPermission,
+  onPermissionDecision,
+}: {
+  events: SynapseAgentSessionEventRecord[]
+  pendingPermission: SynapsePendingPermission | null
+  onPermissionDecision: (record: SynapseAgentSessionEventRecord, decision: "allow" | "deny") => void
+}) {
+  if (events.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-medium">事件</h2>
+        <Badge variant="outline">{events.length}</Badge>
+      </div>
+      <div className="flex flex-col gap-3">
+        {events.map((record) => (
+          <EventRecordItem
+            key={`${record.sessionId}:${record.seq}`}
+            record={record}
+            pendingPermission={pendingPermission}
+            onPermissionDecision={onPermissionDecision}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function AgentSessionsModule() {
   const { config, isReady } = useAppConfig()
   const [sessions, setSessions] = useState<SynapseAgentSessionSummary[]>([])
@@ -139,6 +414,9 @@ function AgentSessionsModule() {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [pendingMessage, setPendingMessage] = useState<SynapseSessionHistoryEntry | null>(null)
+  const [eventsBySession, setEventsBySession] = useState<Record<string, SynapseAgentSessionEventRecord[]>>({})
+  const [pendingPermissions, setPendingPermissions] = useState<Record<string, SynapsePendingPermission | null>>({})
+  const [permissionBusy, setPermissionBusy] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -147,6 +425,8 @@ function AgentSessionsModule() {
     () => projects.find((project) => project.id === detail?.projectId) ?? projects[0] ?? null,
     [detail?.projectId, projects],
   )
+  const currentEvents = detail ? eventsBySession[detail.id] ?? [] : []
+  const currentPendingPermission = detail ? pendingPermissions[detail.id] ?? null : null
 
   const loadDetail = useCallback(async (session: SynapseAgentSessionSummary) => {
     setSelectedId(session.id)
@@ -245,6 +525,14 @@ function AgentSessionsModule() {
       setSessions(list.sessions)
       setSelectedId(result.session.id)
       setDetail(result.session)
+      setEventsBySession((current) => ({
+        ...current,
+        [result.session.id]: result.events,
+      }))
+      setPendingPermissions((current) => ({
+        ...current,
+        [result.session.id]: result.pendingPermission,
+      }))
       if (result.status === "error" || result.status === "timed_out") {
         setInput(content)
         setSendError(result.error ?? "发送失败。")
@@ -258,6 +546,45 @@ function AgentSessionsModule() {
       setSending(false)
     }
   }, [detail, input, sending])
+
+  const handlePermissionDecision = useCallback(async (
+    record: SynapseAgentSessionEventRecord,
+    decision: "allow" | "deny",
+  ) => {
+    if (!detail || permissionBusy) {
+      return
+    }
+
+    const requestId = payloadString(record, "requestId")
+    if (!requestId) {
+      setSendError("权限请求缺少 request id。")
+      return
+    }
+
+    setPermissionBusy(true)
+    setSendError(null)
+    try {
+      const result = await requireBridgeDomain("agentSessions").respondPermission({
+        projectId: detail.projectId,
+        sessionId: detail.id,
+        requestId,
+        decision,
+      })
+      setEventsBySession((current) => ({
+        ...current,
+        [detail.id]: [...(current[detail.id] ?? []), result.event],
+      }))
+      setPendingPermissions((current) => ({
+        ...current,
+        [detail.id]: result.pendingPermission,
+      }))
+    } catch (respondError) {
+      logger.error("Failed to respond to agent permission request.", respondError)
+      setSendError(respondError instanceof Error ? respondError.message : "权限响应失败。")
+    } finally {
+      setPermissionBusy(false)
+    }
+  }, [detail, permissionBusy])
 
   const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -364,7 +691,7 @@ function AgentSessionsModule() {
                     <EmptyDescription>从左侧打开消息历史。</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
-              ) : detail.history.length === 0 && !pendingMessage ? (
+              ) : detail.history.length === 0 && !pendingMessage && currentEvents.length === 0 ? (
                 <Empty className="min-h-64">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
@@ -381,6 +708,11 @@ function AgentSessionsModule() {
                       <HistoryMessage key={`${entry.timestamp}:${index}`} entry={entry} />
                     ))}
                     {pendingMessage ? <HistoryMessage entry={pendingMessage} /> : null}
+                    <EventStream
+                      events={currentEvents}
+                      pendingPermission={currentPendingPermission}
+                      onPermissionDecision={handlePermissionDecision}
+                    />
                   </div>
                 </ScrollArea>
               )}
@@ -409,7 +741,7 @@ function AgentSessionsModule() {
                     rows={3}
                   />
                 </div>
-                <Button type="submit" size="icon-lg" disabled={sending || !input.trim()}>
+                <Button type="submit" size="icon-lg" disabled={sending || permissionBusy || !input.trim()}>
                   {sending ? (
                     <Loader2 data-icon="inline-start" className="size-4 animate-spin" />
                   ) : (

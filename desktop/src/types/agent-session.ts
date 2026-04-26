@@ -66,6 +66,53 @@ export type SynapseSendAgentMessageResult = {
   response: string
   error: string | null
   session: SynapseAgentSessionDetail
+  events: SynapseAgentSessionEventRecord[]
+  pendingPermission: SynapsePendingPermission | null
+}
+
+export type SynapseAgentSessionEventType =
+  | "text"
+  | "thinking"
+  | "tool_use"
+  | "tool_result"
+  | "permission_request"
+  | "permission_response"
+  | "result"
+  | "error"
+
+export type SynapseAgentSessionEventRecord = {
+  sessionId: string
+  seq: number
+  type: SynapseAgentSessionEventType
+  timestamp: string
+  payload: Record<string, unknown>
+}
+
+export type SynapsePendingPermission = {
+  requestId: string
+  toolName: string
+  toolInput: string
+  toolInputRaw: Record<string, unknown>
+  questions: Array<{
+    question: string
+    header: string
+    options: Array<{ label: string; description: string }>
+    multiSelect?: boolean
+  }>
+}
+
+export type SynapseRespondPermissionPayload = {
+  projectId: string
+  sessionId: string
+  requestId: string
+  decision: "allow" | "deny"
+  message?: string
+}
+
+export type SynapseRespondPermissionResult = {
+  status: "accepted" | "denied"
+  event: SynapseAgentSessionEventRecord
+  pendingPermission: null
 }
 
 export type SynapseCardHeader = {

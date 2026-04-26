@@ -4,6 +4,7 @@ export type SynapseSessionEventType =
   | "tool_use"
   | "tool_result"
   | "permission_request"
+  | "permission_response"
   | "result"
   | "error"
 
@@ -25,6 +26,8 @@ export type SynapseAgentEvent = {
     options: Array<{ label: string; description: string }>
     multiSelect?: boolean
   }>
+  permissionDecision?: "allow" | "deny"
+  permissionMessage?: string
   done?: boolean
   error?: string
   inputTokens?: number
@@ -48,6 +51,7 @@ function normalizeEventType(type: string): SynapseSessionEventType {
     case "tool_use":
     case "tool_result":
     case "permission_request":
+    case "permission_response":
     case "result":
     case "error":
       return type
@@ -83,6 +87,14 @@ export function mapAgentEventPayload(event: SynapseAgentEvent): Record<string, u
       toolInput: event.toolInput ?? "",
       toolInputRaw: event.toolInputRaw ?? {},
       questions: event.questions ?? [],
+    }
+  }
+
+  if (type === "permission_response") {
+    return {
+      requestId: event.requestId ?? "",
+      decision: event.permissionDecision ?? "deny",
+      ...(event.permissionMessage ? { message: event.permissionMessage } : undefined),
     }
   }
 

@@ -112,6 +112,11 @@ describe("agent sessions store service", () => {
       status: "completed",
       response: "hi there",
       error: null,
+      events: [
+        { seq: 1, type: "text", payload: { content: "hi ", agentSessionId: "agent-1" } },
+        { seq: 2, type: "result", payload: { content: "hi there", done: true } },
+      ],
+      pendingPermission: null,
       session: {
         agentSessionId: "agent-1",
         historyCount: 2,
@@ -155,6 +160,84 @@ describe("agent sessions store service", () => {
       status: "timed_out",
       error: "agent session timed out (no response)",
     })
+  })
+
+  it("returns ordered event records and accepts pending permission responses", async () => {
+    const service = new AgentSessionsStoreService({ namespace: null, now: clock() })
+    const projects = [project()]
+    const created = await service.createSession(projects, {
+      projectId: "project-1",
+      sessionKey: "bridge:web-admin:alpha",
+    })
+
+    const waiting = await service.sendMessage(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      sessionKey: created.sessionKey,
+      message: "edit file",
+    }, {
+      events: [
+        { type: "thinking", content: "checking files" },
+        { type: "tool_use", toolName: "Bash", toolInput: "ls" },
+        {
+          type: "tool_result",
+          toolName: "Bash",
+          toolResult: "README.md",
+          toolStatus: "completed",
+          toolExitCode: 0,
+          toolSuccess: true,
+        },
+        {
+          type: "permission_request",
+          requestId: "perm-1",
+          toolName: "Write",
+          toolInput: "update README.md",
+          toolInputRaw: { file_path: "README.md" },
+        },
+      ],
+    })
+
+    expect(waiting.status).toBe("waiting_permission")
+    expect(waiting.events.map((event) => [event.seq, event.type])).toEqual([
+      [1, "thinking"],
+      [2, "tool_use"],
+      [3, "tool_result"],
+      [4, "permission_request"],
+    ])
+    expect(waiting.pendingPermission).toEqual({
+      requestId: "perm-1",
+      toolName: "Write",
+      toolInput: "update README.md",
+      toolInputRaw: { file_path: "README.md" },
+      questions: [],
+    })
+
+    const response = await service.respondPermission(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      requestId: "perm-1",
+      decision: "allow",
+    })
+
+    expect(response).toMatchObject({
+      status: "accepted",
+      event: {
+        seq: 5,
+        type: "permission_response",
+        payload: {
+          requestId: "perm-1",
+          decision: "allow",
+        },
+      },
+      pendingPermission: null,
+    })
+
+    await expect(service.respondPermission(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      requestId: "perm-1",
+      decision: "deny",
+    })).rejects.toThrow("permission request not found")
   })
 
   it("rejects empty input before starting an engine turn", async () => {

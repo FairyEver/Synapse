@@ -99,6 +99,7 @@ const IPC_CHANNELS = {
     "create": "synapse:agent-sessions:create",
     "switchSession": "synapse:agent-sessions:switch",
     "send": "synapse:agent-sessions:send",
+    "respondPermission": "synapse:agent-sessions:respond-permission",
   },
 } as const satisfies IpcChannelMap
 
@@ -282,6 +283,7 @@ const synapseBridge: SynapseBridge = {
     create: (payload) => invoke(IPC_CHANNELS["agent-sessions"].create)(payload),
     switchSession: (payload) => invoke(IPC_CHANNELS["agent-sessions"].switchSession)(payload),
     send: (payload) => invoke(IPC_CHANNELS["agent-sessions"].send)(payload),
+    respondPermission: (payload) => invoke(IPC_CHANNELS["agent-sessions"].respondPermission)(payload),
   },
   dataStore: {
     listTables: invoke(DATA_STORE_CHANNELS.listTables),

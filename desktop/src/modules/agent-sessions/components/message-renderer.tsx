@@ -1,6 +1,5 @@
 import { Fragment } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import type {
@@ -145,20 +144,18 @@ function MessageRenderer({
   }
 
   return (
-    <Card size="sm" className="bg-background">
+    <div className="rounded-md border bg-background">
       {renderable.card.header?.title ? (
-        <CardHeader>
-          <CardTitle>{renderable.card.header.title}</CardTitle>
-        </CardHeader>
+        <div className="border-b px-3 py-2 text-sm font-medium">{renderable.card.header.title}</div>
       ) : null}
-      <CardContent className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 p-3">
         {renderable.card.elements.map((element, index) => (
           <Fragment key={`${element.type}:${index}`}>
             <RichElement element={element} row={index} onInteraction={onInteraction} />
           </Fragment>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 

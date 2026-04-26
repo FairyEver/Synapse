@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
     "create": "synapse:agent-sessions:create",
     "switchSession": "synapse:agent-sessions:switch",
     "send": "synapse:agent-sessions:send",
+    "respondPermission": "synapse:agent-sessions:respond-permission",
   },
 } as const
 

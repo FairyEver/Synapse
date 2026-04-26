@@ -65,6 +65,17 @@ describe("session event mapping", () => {
     })
 
     expect(mapAgentEventPayload({
+      type: "permission_response",
+      requestId: "req-1",
+      permissionDecision: "deny",
+      permissionMessage: "no",
+    })).toEqual({
+      requestId: "req-1",
+      decision: "deny",
+      message: "no",
+    })
+
+    expect(mapAgentEventPayload({
       type: "result",
       content: "done",
       sessionId: "thread-1",

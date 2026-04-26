@@ -64,17 +64,67 @@ const sendMessageRequestSchema = z.object({
   message: z.string(),
 })
 
+const eventRecordSchema = z.object({
+  sessionId: z.string(),
+  seq: z.number(),
+  type: z.enum([
+    "text",
+    "thinking",
+    "tool_use",
+    "tool_result",
+    "permission_request",
+    "permission_response",
+    "result",
+    "error",
+  ]),
+  timestamp: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+})
+
+const pendingPermissionSchema = z.object({
+  requestId: z.string(),
+  toolName: z.string(),
+  toolInput: z.string(),
+  toolInputRaw: z.record(z.string(), z.unknown()),
+  questions: z.array(z.object({
+    question: z.string(),
+    header: z.string(),
+    options: z.array(z.object({
+      label: z.string(),
+      description: z.string(),
+    })),
+    multiSelect: z.boolean().optional(),
+  })),
+})
+
 const sendMessageResponseSchema = z.object({
   status: z.enum(["idle", "running", "waiting_permission", "completed", "error", "stopped", "timed_out"]),
   response: z.string(),
   error: z.string().nullable(),
   session: sessionDetailSchema,
+  events: z.array(eventRecordSchema),
+  pendingPermission: pendingPermissionSchema.nullable(),
+})
+
+const respondPermissionRequestSchema = z.object({
+  projectId: z.string(),
+  sessionId: z.string(),
+  requestId: z.string(),
+  decision: z.enum(["allow", "deny"]),
+  message: z.string().optional(),
+})
+
+const respondPermissionResponseSchema = z.object({
+  status: z.enum(["accepted", "denied"]),
+  event: eventRecordSchema,
+  pendingPermission: z.null(),
 })
 
 type GetSessionRequest = z.infer<typeof getSessionRequestSchema>
 type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
 type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
 type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>
+type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
 
 async function projects(ctx: IpcHandlerContext) {
   const config = await ctx.resolve<typeof configStore>("core.config").load()
@@ -122,6 +172,13 @@ export const agentSessionsIpcModule: IpcModule = {
       request: sendMessageRequestSchema,
       response: sendMessageResponseSchema,
       handler: async (ctx, input: SendMessageRequest) => sessionsService(ctx).sendMessage(await projects(ctx), input),
+    },
+    respondPermission: {
+      kind: "invoke",
+      channel: "synapse:agent-sessions:respond-permission",
+      request: respondPermissionRequestSchema,
+      response: respondPermissionResponseSchema,
+      handler: async (ctx, input: RespondPermissionRequest) => sessionsService(ctx).respondPermission(await projects(ctx), input),
     },
   },
   events: {},

@@ -6,6 +6,9 @@ import type {
   SynapseAgentSessionSummary,
   SynapseCreateAgentSessionPayload,
   SynapseGetAgentSessionPayload,
+  SynapsePendingPermission,
+  SynapseRespondPermissionPayload,
+  SynapseRespondPermissionResult,
   SynapseSendAgentMessagePayload,
   SynapseSendAgentMessageResult,
   SynapseSwitchAgentSessionPayload,
@@ -20,7 +23,7 @@ import {
   AgentSessionsRepository,
   type SessionsSnapshot,
 } from "./sessions-repository-service"
-import type { SynapseAgentEvent } from "./session-event-service"
+import { SessionEventLog, type SynapseAgentEvent } from "./session-event-service"
 
 type AgentSessionsStoreSnapshot = {
   schemaVersion: 1
@@ -39,6 +42,11 @@ type SendMessageOptions = {
   eventGapsMs?: number[]
   idleTimeoutMs?: number
   engine?: AgentEngineService
+}
+
+type PendingPermissionRecord = {
+  projectId: string
+  sessionId: string
 }
 
 const AGENT_SESSIONS_NAMESPACE = "agent.sessions"
@@ -104,6 +112,8 @@ export class AgentSessionsStoreService {
   private readonly namespace: AgentSessionsStoreNamespace | null
   private readonly now: () => Date
   private readonly repositories = new Map<string, AgentSessionsRepository>()
+  private readonly eventLogs = new Map<string, SessionEventLog>()
+  private readonly pendingPermissions = new Map<string, PendingPermissionRecord>()
   private initialized = false
 
   constructor(options: AgentSessionsStoreServiceOptions = {}) {
@@ -215,7 +225,8 @@ export class AgentSessionsStoreService {
       || this.sessionKeyForSessionId(repository.snapshot(), session.id)
       || defaultSessionKey(normalizeProjectName(project))
 
-    const engine = options.engine ?? new AgentEngineService({ now: this.now })
+    const eventLog = this.eventLogForSession(session.id)
+    const engine = options.engine ?? new AgentEngineService({ now: this.now, eventLog })
     const result = engine.processTurn({
       sessionId: session.id,
       sessionKey,
@@ -228,6 +239,15 @@ export class AgentSessionsStoreService {
     })
 
     this.applyEngineSessionId(repository, session.id, result)
+    const pendingPermission = this.toPendingPermission(result.pendingPermission)
+    if (pendingPermission) {
+      this.pendingPermissions.set(
+        this.permissionKey(project.id, session.id, pendingPermission.requestId),
+        { projectId: project.id, sessionId: session.id },
+      )
+    } else {
+      this.clearPendingPermissions(project.id, session.id)
+    }
     await this.save()
 
     const detail = await this.getDetail(projects, {
@@ -241,6 +261,55 @@ export class AgentSessionsStoreService {
       response: result.response,
       error: result.error,
       session: detail,
+      events: result.records,
+      pendingPermission,
+    }
+  }
+
+  async respondPermission(
+    projects: readonly SynapseProjectConfig[],
+    input: SynapseRespondPermissionPayload,
+  ): Promise<SynapseRespondPermissionResult> {
+    await this.initialize()
+
+    const project = this.requireProject(projects, input.projectId)
+    const repository = this.ensureRepository(project.id)
+    const session = repository.findById(input.sessionId)
+    if (!session) {
+      throw new Error("session not found")
+    }
+
+    const requestId = input.requestId.trim()
+    if (!requestId) {
+      throw new Error("permission request is required")
+    }
+    if (input.decision !== "allow" && input.decision !== "deny") {
+      throw new Error("permission decision is required")
+    }
+
+    const key = this.permissionKey(project.id, session.id, requestId)
+    const pending = this.pendingPermissions.get(key)
+    if (!pending) {
+      throw new Error("permission request not found")
+    }
+
+    const permissionEvent: SynapseAgentEvent = {
+      type: "permission_response",
+      requestId,
+      permissionDecision: input.decision,
+    }
+    if (input.decision === "deny") {
+      permissionEvent.permissionMessage = input.message?.trim()
+        || "The user denied this tool use. Stop and wait for the user's instructions."
+    }
+
+    const event = this.eventLogForSession(session.id).append(session.id, permissionEvent)
+    this.pendingPermissions.delete(key)
+
+    return {
+      status: input.decision === "allow" ? "accepted" : "denied",
+      event,
+      pendingPermission: null,
     }
   }
 
@@ -363,6 +432,48 @@ export class AgentSessionsStoreService {
   ): void {
     if (result.agentSessionId) {
       repository.setAgentSessionId(sessionId, result.agentSessionId)
+    }
+  }
+
+  private eventLogForSession(sessionId: string): SessionEventLog {
+    const existing = this.eventLogs.get(sessionId)
+    if (existing) {
+      return existing
+    }
+
+    const eventLog = new SessionEventLog({ now: this.now })
+    this.eventLogs.set(sessionId, eventLog)
+    return eventLog
+  }
+
+  private toPendingPermission(event: SynapseAgentEvent | null): SynapsePendingPermission | null {
+    if (!event || event.type !== "permission_request") {
+      return null
+    }
+
+    const requestId = event.requestId?.trim()
+    if (!requestId) {
+      return null
+    }
+
+    return {
+      requestId,
+      toolName: event.toolName ?? "",
+      toolInput: event.toolInput ?? "",
+      toolInputRaw: event.toolInputRaw ?? {},
+      questions: event.questions ?? [],
+    }
+  }
+
+  private permissionKey(projectId: string, sessionId: string, requestId: string): string {
+    return `${projectId}:${sessionId}:${requestId}`
+  }
+
+  private clearPendingPermissions(projectId: string, sessionId: string): void {
+    for (const [key, pending] of this.pendingPermissions.entries()) {
+      if (pending.projectId === projectId && pending.sessionId === sessionId) {
+        this.pendingPermissions.delete(key)
+      }
     }
   }
 }
