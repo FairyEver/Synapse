@@ -18,6 +18,7 @@ export type {
 } from "./runtime"
 export type {
   ControlledProcessAction,
+  ControlledProcessLineHandler,
   ControlledProcessOutputMode,
   ControlledProcessOutputOptions,
   ControlledProcessResult,

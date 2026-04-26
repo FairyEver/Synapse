@@ -40,18 +40,23 @@ export interface ControlledProcessOutputOptions {
   readonly maxBufferBytes?: number
 }
 
+export type ControlledProcessLineHandler = (line: string) => void
+
 export interface ControlledProcessRunRequest {
   readonly actor: ActorIdentity
   readonly action: ControlledProcessAction
   readonly command: string
   readonly args?: readonly string[]
   readonly cwd?: string
+  readonly stdin?: string | Uint8Array
   readonly env?: Record<string, string | undefined>
   /** Extends the default allowlist; it never means "pass the whole env". */
   readonly envAllowlist?: readonly string[]
   readonly timeoutMs?: number
   readonly abortSignal?: AbortSignal
   readonly output?: ControlledProcessOutputOptions
+  readonly onStdoutLine?: ControlledProcessLineHandler
+  readonly onStderrLine?: ControlledProcessLineHandler
   readonly metadata?: Record<string, unknown>
 }
 
@@ -125,6 +130,11 @@ export class ControlledProcessRunner {
           stdout: output.stdout ?? "buffer",
           stderr: output.stderr ?? "buffer",
         },
+        stdinBytes: stdinBytes(request.stdin),
+        stream: {
+          stdoutLine: request.onStdoutLine !== undefined,
+          stderrLine: request.onStderrLine !== undefined,
+        },
         timeoutMs: request.timeoutMs,
         ...request.metadata,
       },
@@ -164,8 +174,16 @@ export class ControlledProcessRunner {
     let timedOut = false
     let outputError: Error | null = null
     let spawnError: Error | null = null
+    const stdoutLines = new LineEmitter(request.onStdoutLine, (error) => {
+      outputError = error
+      child.kill("SIGTERM")
+    })
+    const stderrLines = new LineEmitter(request.onStderrLine, (error) => {
+      outputError = error
+      child.kill("SIGTERM")
+    })
 
-    const killForOutputLimit = (error: Error) => {
+    const killForOutputFailure = (error: Error) => {
       outputError = error
       child.kill("SIGTERM")
     }
@@ -173,17 +191,23 @@ export class ControlledProcessRunner {
     child.stdout.on("data", (chunk: Buffer) => {
       try {
         stdoutCollector.push(chunk)
+        stdoutLines.push(chunk)
       } catch (error) {
-        killForOutputLimit(error as Error)
+        killForOutputFailure(error as Error)
       }
     })
     child.stderr.on("data", (chunk: Buffer) => {
       try {
         stderrCollector.push(chunk)
+        stderrLines.push(chunk)
       } catch (error) {
-        killForOutputLimit(error as Error)
+        killForOutputFailure(error as Error)
       }
     })
+
+    if (request.stdin !== undefined) {
+      child.stdin.end(request.stdin)
+    }
 
     const timeout = request.timeoutMs === undefined
       ? null
@@ -208,6 +232,12 @@ export class ControlledProcessRunner {
 
     if (timeout) clearTimeout(timeout)
     request.abortSignal?.removeEventListener("abort", onAbort)
+    try {
+      stdoutLines.flush()
+      stderrLines.flush()
+    } catch (error) {
+      outputError = error as Error
+    }
 
     const stdout = stdoutCollector.text()
     const stderr = stderrCollector.text()
@@ -301,6 +331,45 @@ class OutputCollector {
   }
 }
 
+class LineEmitter {
+  private readonly handler: ControlledProcessLineHandler | undefined
+  private readonly onError: (error: Error) => void
+  private pending = ""
+
+  constructor(
+    handler: ControlledProcessLineHandler | undefined,
+    onError: (error: Error) => void,
+  ) {
+    this.handler = handler
+    this.onError = onError
+  }
+
+  push(chunk: Buffer): void {
+    if (!this.handler) return
+    this.pending += chunk.toString("utf8")
+    const parts = this.pending.split(/\r?\n/)
+    this.pending = parts.pop() ?? ""
+    for (const line of parts) {
+      this.emit(line)
+    }
+  }
+
+  flush(): void {
+    if (!this.handler || this.pending === "") return
+    const line = this.pending.replace(/\r$/, "")
+    this.pending = ""
+    if (line !== "") this.emit(line)
+  }
+
+  private emit(line: string): void {
+    try {
+      this.handler?.(line)
+    } catch (error) {
+      this.onError(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+}
+
 function buildAllowedEnv(
   env: Record<string, string | undefined> | undefined,
   envAllowlist: readonly string[] | undefined,
@@ -352,6 +421,12 @@ function parseJsonLines(name: string, value: string): ControlledProcessOutputErr
 
 function errorMessage(error: Error | null): string | undefined {
   return error ? error.message : undefined
+}
+
+function stdinBytes(stdin: string | Uint8Array | undefined): number | undefined {
+  if (stdin === undefined) return undefined
+  if (typeof stdin === "string") return Buffer.byteLength(stdin)
+  return stdin.byteLength
 }
 
 export function createControlledProcessRunner(

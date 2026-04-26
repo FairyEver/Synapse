@@ -35,6 +35,7 @@ import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
+import { createAgentRuntimeProjectService } from "../services/agent-runtime"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -324,13 +325,20 @@ export const coreNetworkRegistryDescriptor: ServiceDescriptor<NetworkServiceRegi
 export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectContainerRegistry> = {
   id: "core.project-containers",
   criticality: "fatal",
-  dependsOn: ["core.event-bus", "core.data-repository"],
+  dependsOn: [
+    "core.event-bus",
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
   create(ctx) {
-    return createProjectContainerRegistry({
+    const registry = createProjectContainerRegistry({
       globalRegistry: ctx.registry,
       globalEventBus: ctx.registry.get<EventBus>("core.event-bus"),
       globalDataRepo: ctx.registry.get<DataRepository>("core.data-repository"),
       buildLogger: (projectId) => ctx.logger.child(`project.${projectId}`),
     })
+    registry.registerService(createAgentRuntimeProjectService())
+    return registry
   },
 }

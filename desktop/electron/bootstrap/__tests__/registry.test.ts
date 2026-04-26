@@ -105,6 +105,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.project-containers")?.dependsOn).toEqual([
       "core.event-bus",
       "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
     ])
     expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
@@ -128,6 +130,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.event-bus")).toBeLessThan(idx("core.project-containers"))
+    expect(idx("core.permission-guard")).toBeLessThan(idx("core.project-containers"))
+    expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.data-store")).toBeLessThan(idx("repo.pending-pushes"))
     expect(idx("core.app-icon")).toBeLessThan(idx("ui.tray"))

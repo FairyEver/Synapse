@@ -108,4 +108,38 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       blocked: null,
     })
   })
+
+  it("writes stdin and streams complete stdout lines", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink })
+    const seen: string[] = []
+
+    const result = await runner.run({
+      actor: { kind: "user" },
+      action: "agent.spawn",
+      command: process.execPath,
+      args: [
+        "-e",
+        [
+          "let input = '';",
+          "process.stdin.on('data', chunk => { input += chunk; });",
+          "process.stdin.on('end', () => {",
+          "  for (const line of input.split(/\\n/)) {",
+          "    process.stdout.write(JSON.stringify({ line }) + '\\n');",
+          "  }",
+          "});",
+        ].join(" "),
+      ],
+      stdin: "first line\nsecond line",
+      output: { stdout: "json-lines" },
+      onStdoutLine: (line) => seen.push(line),
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(seen.map((line) => JSON.parse(line))).toEqual([
+      { line: "first line" },
+      { line: "second line" },
+    ])
+  })
 })
