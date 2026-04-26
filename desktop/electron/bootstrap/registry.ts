@@ -26,11 +26,13 @@ import {
   coreDataStoreDescriptor,
   coreEventBusDescriptor,
   coreFeishuConnectorDescriptor,
+  coreHeartbeatDescriptor,
   coreLoggingDescriptor,
   coreNetworkRegistryDescriptor,
   corePermissionGuardDescriptor,
   coreProcessRuntimeDescriptor,
   coreProjectContainerRegistryDescriptor,
+  coreSchedulerDescriptor,
   coreSideChannelDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
@@ -66,6 +68,8 @@ export function buildServiceRegistry(
   registry.register(coreProjectContainerRegistryDescriptor)
   registry.register(coreSideChannelDescriptor)
   registry.register(coreFeishuConnectorDescriptor)
+  registry.register(coreSchedulerDescriptor)
+  registry.register(coreHeartbeatDescriptor)
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDataStoreDescriptor)
   registry.register(coreUpdateDescriptor)

@@ -16,7 +16,9 @@ import { ReplyOutboxService, type ReplyTarget } from "../reply-target"
 import { AttachmentPolicyError, prepareSideChannelAttachments } from "./attachment-policy"
 import type {
   ReplyTargetRuntime,
+  SideChannelCronAddHandler,
   ReplyTransportDispatcher,
+  SideChannelCronAddRequest,
   SideChannelSendRequest,
   SideChannelSendResult,
   SideChannelStatus,
@@ -40,24 +42,29 @@ export interface SideChannelServiceDeps {
   readonly preferredPort?: number
   readonly bindAddress?: string
   readonly sendPath?: string
+  readonly cronAddPath?: string
   readonly maxBodyBytes?: number
 }
 
 const DEFAULT_SEND_PATH = "/send"
+const DEFAULT_CRON_ADD_PATH = "/cron/add"
 const NETWORK_SERVICE_ID = "side-channel.send"
 
 export class SideChannelService implements ReplyTargetRuntime {
   private readonly deps: SideChannelServiceDeps
   private readonly token: string
   private readonly sendPath: string
+  private readonly cronAddPath: string
   private readonly targets = new Map<string, ReplyTarget>()
   private readonly dispatchers = new Map<string, ReplyTransportDispatcher>()
+  private cronAddHandler: SideChannelCronAddHandler | undefined
   private binding: ResolvedNetworkBinding | undefined
 
   constructor(deps: SideChannelServiceDeps) {
     this.deps = deps
     this.token = deps.token ?? randomUUID()
     this.sendPath = deps.sendPath ?? DEFAULT_SEND_PATH
+    this.cronAddPath = deps.cronAddPath ?? DEFAULT_CRON_ADD_PATH
   }
 
   async start(): Promise<void> {
@@ -110,18 +117,22 @@ export class SideChannelService implements ReplyTargetRuntime {
       bindAddress: this.binding?.bindAddress,
       port: this.binding?.port,
       sendPath: this.sendPath,
+      cronAddPath: this.cronAddPath,
     }
   }
 
   getAgentEnv(projectId: string, sessionKey: string): Record<string, string> | undefined {
     if (!this.binding) return undefined
-    const url = `http://${this.binding.bindAddress}:${String(this.binding.port)}${this.sendPath}`
+    const baseUrl = `http://${this.binding.bindAddress}:${String(this.binding.port)}`
+    const url = `${baseUrl}${this.sendPath}`
     return {
       CC_PROJECT: projectId,
       CC_SESSION_KEY: sessionKey,
       SYNAPSE_PROJECT: projectId,
       SYNAPSE_SESSION_KEY: sessionKey,
+      SYNAPSE_SIDE_CHANNEL_BASE_URL: baseUrl,
       SYNAPSE_SIDE_CHANNEL_URL: url,
+      SYNAPSE_CRON_ADD_URL: `${baseUrl}${this.cronAddPath}`,
       SYNAPSE_SIDE_CHANNEL_TOKEN: this.token,
     }
   }
@@ -135,6 +146,15 @@ export class SideChannelService implements ReplyTargetRuntime {
     return () => {
       if (this.dispatchers.get(kind) === dispatcher) {
         this.dispatchers.delete(kind)
+      }
+    }
+  }
+
+  registerCronAddHandler(handler: SideChannelCronAddHandler): () => void {
+    this.cronAddHandler = handler
+    return () => {
+      if (this.cronAddHandler === handler) {
+        this.cronAddHandler = undefined
       }
     }
   }
@@ -166,6 +186,14 @@ export class SideChannelService implements ReplyTargetRuntime {
     const target = this.targets.get(targetKey(project.projectId, sessionKey))
     if (!target) {
       throw new SideChannelError("session_not_found", "session reply target was not found", 404)
+    }
+    if (isMutedTarget(target)) {
+      return {
+        ok: true,
+        projectId: project.projectId,
+        sessionKey,
+        outboxRecorded: true,
+      }
     }
     const attachments = await prepareSideChannelAttachments({
       images: request.images,
@@ -199,7 +227,7 @@ export class SideChannelService implements ReplyTargetRuntime {
 
   private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
     const url = new URL(request.url, "http://127.0.0.1")
-    if (url.pathname !== this.sendPath) {
+    if (url.pathname !== this.sendPath && url.pathname !== this.cronAddPath) {
       return jsonResponse(404, false, undefined, {
         code: "not_found",
         message: "not found",
@@ -219,6 +247,10 @@ export class SideChannelService implements ReplyTargetRuntime {
     }
     try {
       const body = parseJsonBody(request.body)
+      if (url.pathname === this.cronAddPath) {
+        const result = await this.handleCronAdd(body)
+        return jsonResponse(200, true, result)
+      }
       const result = await this.send(body)
       return jsonResponse(200, true, result)
     } catch (error) {
@@ -250,6 +282,78 @@ export class SideChannelService implements ReplyTargetRuntime {
       return projects[0]
     }
     throw new SideChannelError("project_required", "project is required", 400)
+  }
+
+  private async handleCronAdd(request: SideChannelCronAddRequest): Promise<unknown> {
+    const project = await this.resolveProject(request.projectId ?? request.project)
+    const sessionKey = this.resolveSessionKey(project.projectId, request.sessionKey ?? request.session_key)
+    const target = this.targets.get(targetKey(project.projectId, sessionKey))
+    if (!target) {
+      throw new SideChannelError("session_not_found", "session reply target was not found", 404)
+    }
+    if (!this.cronAddHandler) {
+      throw new SideChannelError("cron_add_unavailable", "cron add handler is unavailable", 503)
+    }
+    if (request.exec?.trim()) {
+      await this.checkCronExecPermission(project.projectId, sessionKey, request.exec)
+    }
+    return this.cronAddHandler({
+      request,
+      projectId: project.projectId,
+      sessionKey,
+      target,
+    })
+  }
+
+  private resolveSessionKey(projectId: string, value: string | undefined): string {
+    const explicit = value?.trim()
+    if (explicit) return explicit
+    const matches = [...this.targets.values()].filter((target) => target.projectId === projectId)
+    if (matches.length === 1 && matches[0]) return matches[0].sessionKey
+    throw new SideChannelError("session_key_required", "sessionKey is required", 400)
+  }
+
+  private async checkCronExecPermission(
+    projectId: string,
+    sessionKey: string,
+    command: string,
+  ): Promise<void> {
+    const permission = await this.deps.permissionGuard?.check({
+      action: "shell.exec",
+      actor: { kind: "agent", id: "side-channel" },
+      resource: command,
+      context: {
+        projectId,
+        sessionKey,
+        source: "side-channel:/cron/add",
+      },
+    })
+    if (permission && !permission.allowed) {
+      this.deps.auditSink?.record({
+        action: "shell.exec",
+        actor: { kind: "agent", id: "side-channel" },
+        resource: command,
+        outcome: "denied",
+        metadata: {
+          projectId,
+          sessionKey,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new SideChannelError("permission_denied", permission.reason, 403)
+    }
+    this.deps.auditSink?.record({
+      action: "shell.exec",
+      actor: { kind: "agent", id: "side-channel" },
+      resource: command,
+      outcome: "allowed",
+      metadata: {
+        projectId,
+        sessionKey,
+        source: "side-channel:/cron/add",
+      },
+    })
   }
 
   private outbox(projectId: string): ReplyOutboxService {
@@ -305,13 +409,13 @@ function outboxPayload(
   }
 }
 
-function parseJsonBody(body: Buffer): SideChannelSendRequest {
+function parseJsonBody(body: Buffer): SideChannelSendRequest & SideChannelCronAddRequest {
   try {
     const value = JSON.parse(body.toString("utf8")) as unknown
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new Error("JSON body must be an object")
     }
-    return value as SideChannelSendRequest
+    return value as SideChannelSendRequest & SideChannelCronAddRequest
   } catch (error) {
     throw new SideChannelError(
       "invalid_json",
@@ -373,6 +477,10 @@ function cryptoTimingSafeEqual(a: Buffer, b: Buffer): boolean {
 
 function targetKey(projectId: string, sessionKey: string): string {
   return `${projectId}:${sessionKey}`
+}
+
+function isMutedTarget(target: ReplyTarget): boolean {
+  return target.metadata?.muted === true || target.replyCtx?.muted === true
 }
 
 export class SideChannelError extends Error {

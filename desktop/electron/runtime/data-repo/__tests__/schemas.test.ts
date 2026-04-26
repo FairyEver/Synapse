@@ -12,11 +12,13 @@ import {
   repoPendingPushesSchema,
   repoRepositoriesSchema,
   secretsSchema,
+  scheduledHeartbeatSchema,
+  scheduledJobsSchema,
   workspaceBindingsSchema,
 } from "../index"
 
 describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
-  it("allSchemas exposes all 12 SPEC §5 namespaces", () => {
+  it("allSchemas exposes runtime namespaces", () => {
     const names = allSchemas.map((s) => s.name).sort()
     expect(names).toEqual(
       [
@@ -31,6 +33,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "repo.pending-pushes",
         "repo.repositories",
         "secrets",
+        "scheduled.heartbeat",
+        "scheduled.jobs",
         "workspace.bindings",
       ].sort(),
     )
@@ -59,6 +63,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(outboxSchema.backend).toBe("sqlite")
     expect(repoPendingPushesSchema.backend).toBe("sqlite")
     expect(repoRepositoriesSchema.backend).toBe("json")
+    expect(scheduledJobsSchema.backend).toBe("json")
+    expect(scheduledHeartbeatSchema.backend).toBe("json")
   })
 
   it("encrypted flag is set only on `secrets`", () => {
@@ -209,6 +215,45 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         createdAt: "2026-04-25",
         retryCount: 0,
         lastError: null,
+      }),
+    ).toBe(true)
+    expect(
+      scheduledJobsSchema.validate({
+        id: "scheduled:1",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        platform: "feishu",
+        connectorId: "feishu:proj-1",
+        sessionKey: "feishu:oc_group:ou_user",
+        kind: "prompt",
+        cronExpr: "*/30 * * * *",
+        prompt: "check",
+        enabled: true,
+        silent: false,
+        mute: false,
+        sessionMode: "reuse",
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
+        runCount: 0,
+      }),
+    ).toBe(true)
+    expect(
+      scheduledHeartbeatSchema.validate({
+        id: "heartbeat:1",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        platform: "feishu",
+        connectorId: "feishu:proj-1",
+        sessionKey: "feishu:oc_group:ou_user",
+        enabled: true,
+        paused: false,
+        intervalMins: 60,
+        prompt: "check",
+        silent: false,
+        mute: false,
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
+        runCount: 0,
       }),
     ).toBe(true)
   })

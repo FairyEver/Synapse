@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FolderOpen, Play, QrCode, RefreshCw, Save, Square, Trash2 } from "lucide-react"
+import { FolderOpen, Pause, Play, QrCode, RefreshCw, RotateCcw, Save, Square, Trash2 } from "lucide-react"
 import QRCode from "qrcode"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +18,13 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -28,9 +35,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { useAppNotifications } from "@/app-shell/notifications"
 import type {
   SynapseFeishuConnectorRuntimeStatus,
+  SynapseFeishuHeartbeat,
+  SynapseFeishuScheduledJob,
   SynapseFeishuSetupBeginResult,
   SynapseFeishuSetupPollResult,
   SynapseFeishuWorkspaceBinding,
@@ -62,6 +72,20 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
   const [workspaceBindings, setWorkspaceBindings] =
     useState<SynapseFeishuWorkspaceBindingsSummary>({ project: [], shared: [] })
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false)
+  const [scheduledJobs, setScheduledJobs] = useState<SynapseFeishuScheduledJob[]>([])
+  const [heartbeats, setHeartbeats] = useState<SynapseFeishuHeartbeat[]>([])
+  const [isLoadingAutomation, setIsLoadingAutomation] = useState(false)
+  const [jobKind, setJobKind] = useState<"prompt" | "exec">("prompt")
+  const [jobSessionKey, setJobSessionKey] = useState("")
+  const [jobCronExpr, setJobCronExpr] = useState("")
+  const [jobBody, setJobBody] = useState("")
+  const [jobDescription, setJobDescription] = useState("")
+  const [jobSessionMode, setJobSessionMode] = useState<"reuse" | "new_per_run">("reuse")
+  const [jobSilent, setJobSilent] = useState(false)
+  const [jobMute, setJobMute] = useState(false)
+  const [heartbeatSessionKey, setHeartbeatSessionKey] = useState("")
+  const [heartbeatIntervalMins, setHeartbeatIntervalMins] = useState("60")
+  const [heartbeatPrompt, setHeartbeatPrompt] = useState("")
 
   const feishu = window.synapse?.connectors.feishu
 
@@ -97,6 +121,25 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
   useEffect(() => {
     void refreshWorkspace()
   }, [refreshWorkspace])
+
+  const refreshAutomation = useCallback(async () => {
+    if (!projectId || !feishu) return
+    setIsLoadingAutomation(true)
+    try {
+      const [jobs, heartbeatEntries] = await Promise.all([
+        feishu.listScheduledJobs(projectId),
+        feishu.listHeartbeats(projectId),
+      ])
+      setScheduledJobs(jobs)
+      setHeartbeats(heartbeatEntries)
+    } finally {
+      setIsLoadingAutomation(false)
+    }
+  }, [feishu, projectId])
+
+  useEffect(() => {
+    void refreshAutomation()
+  }, [refreshAutomation])
 
   useEffect(() => {
     if (!setup?.qrUrl) {
@@ -264,6 +307,123 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
     )
     await refreshWorkspace()
   }, [feishu, projectId, promise, refreshWorkspace])
+
+  const handleCreateJob = useCallback(async () => {
+    const connectorId = status?.connector?.id
+    if (!projectId || !feishu || !connectorId) return
+    await promise(
+      () => feishu.createScheduledJob({
+        projectId,
+        connectorId,
+        sessionKey: jobSessionKey.trim(),
+        kind: jobKind,
+        cronExpr: jobCronExpr.trim(),
+        prompt: jobKind === "prompt" ? jobBody.trim() : undefined,
+        exec: jobKind === "exec" ? jobBody.trim() : undefined,
+        description: jobDescription.trim() || undefined,
+        sessionMode: jobSessionMode,
+        silent: jobSilent,
+        mute: jobMute,
+      }),
+      {
+        loading: "正在创建定时任务...",
+        success: "定时任务已创建。",
+      },
+    )
+    setJobCronExpr("")
+    setJobBody("")
+    setJobDescription("")
+    await refreshAutomation()
+  }, [
+    feishu,
+    jobBody,
+    jobCronExpr,
+    jobDescription,
+    jobKind,
+    jobMute,
+    jobSessionKey,
+    jobSessionMode,
+    jobSilent,
+    projectId,
+    promise,
+    refreshAutomation,
+    status?.connector?.id,
+  ])
+
+  const handleToggleJobEnabled = useCallback(async (
+    job: SynapseFeishuScheduledJob,
+  ) => {
+    if (!projectId || !feishu) return
+    await feishu.setScheduledJobEnabled({ projectId, id: job.id, enabled: !job.enabled })
+    await refreshAutomation()
+  }, [feishu, projectId, refreshAutomation])
+
+  const handleToggleJobMuted = useCallback(async (
+    job: SynapseFeishuScheduledJob,
+  ) => {
+    if (!projectId || !feishu) return
+    await feishu.setScheduledJobMuted({ projectId, id: job.id, mute: !job.mute })
+    await refreshAutomation()
+  }, [feishu, projectId, refreshAutomation])
+
+  const handleDeleteJob = useCallback(async (job: SynapseFeishuScheduledJob) => {
+    if (!projectId || !feishu) return
+    await feishu.deleteScheduledJob({ projectId, id: job.id })
+    await refreshAutomation()
+  }, [feishu, projectId, refreshAutomation])
+
+  const handleRunJob = useCallback(async (job: SynapseFeishuScheduledJob) => {
+    if (!projectId || !feishu) return
+    await feishu.runScheduledJob({ projectId, id: job.id })
+    await refreshAutomation()
+  }, [feishu, projectId, refreshAutomation])
+
+  const handleSaveHeartbeat = useCallback(async () => {
+    const connectorId = status?.connector?.id
+    const intervalMins = Number(heartbeatIntervalMins)
+    if (!projectId || !feishu || !connectorId || !Number.isInteger(intervalMins)) return
+    await promise(
+      () => feishu.upsertHeartbeat({
+        projectId,
+        connectorId,
+        sessionKey: heartbeatSessionKey.trim(),
+        intervalMins,
+        prompt: heartbeatPrompt.trim() || undefined,
+      }),
+      {
+        loading: "正在保存 Heartbeat...",
+        success: "Heartbeat 已保存。",
+      },
+    )
+    await refreshAutomation()
+  }, [
+    feishu,
+    heartbeatIntervalMins,
+    heartbeatPrompt,
+    heartbeatSessionKey,
+    projectId,
+    promise,
+    refreshAutomation,
+    status?.connector?.id,
+  ])
+
+  const handlePauseHeartbeat = useCallback(async (heartbeat: SynapseFeishuHeartbeat) => {
+    if (!projectId || !feishu) return
+    await feishu.pauseHeartbeat({ projectId, id: heartbeat.id })
+    await refreshAutomation()
+  }, [feishu, projectId, refreshAutomation])
+
+  const handleResumeHeartbeat = useCallback(async (heartbeat: SynapseFeishuHeartbeat) => {
+    if (!projectId || !feishu) return
+    await feishu.resumeHeartbeat({ projectId, id: heartbeat.id })
+    await refreshAutomation()
+  }, [feishu, projectId, refreshAutomation])
+
+  const handleRunHeartbeat = useCallback(async (heartbeat: SynapseFeishuHeartbeat) => {
+    if (!projectId || !feishu) return
+    await feishu.runHeartbeat({ projectId, id: heartbeat.id })
+    await refreshAutomation()
+  }, [feishu, projectId, refreshAutomation])
 
   if (!projectId) {
     return (
@@ -488,6 +648,47 @@ function FeishuConnectorPanel({ projectId }: FeishuConnectorPanelProps) {
           isLoading={isLoadingWorkspace}
           onUnbind={handleUnbindWorkspace}
         />
+
+        <Separator />
+
+        <AutomationSection
+          connectorId={status?.connector?.id}
+          jobs={scheduledJobs}
+          heartbeats={heartbeats}
+          isLoading={isLoadingAutomation}
+          jobKind={jobKind}
+          jobSessionKey={jobSessionKey}
+          jobCronExpr={jobCronExpr}
+          jobBody={jobBody}
+          jobDescription={jobDescription}
+          jobSessionMode={jobSessionMode}
+          jobSilent={jobSilent}
+          jobMute={jobMute}
+          heartbeatSessionKey={heartbeatSessionKey}
+          heartbeatIntervalMins={heartbeatIntervalMins}
+          heartbeatPrompt={heartbeatPrompt}
+          onJobKindChange={setJobKind}
+          onJobSessionKeyChange={setJobSessionKey}
+          onJobCronExprChange={setJobCronExpr}
+          onJobBodyChange={setJobBody}
+          onJobDescriptionChange={setJobDescription}
+          onJobSessionModeChange={setJobSessionMode}
+          onJobSilentChange={setJobSilent}
+          onJobMuteChange={setJobMute}
+          onCreateJob={handleCreateJob}
+          onToggleJobEnabled={handleToggleJobEnabled}
+          onToggleJobMuted={handleToggleJobMuted}
+          onDeleteJob={handleDeleteJob}
+          onRunJob={handleRunJob}
+          onHeartbeatSessionKeyChange={setHeartbeatSessionKey}
+          onHeartbeatIntervalMinsChange={setHeartbeatIntervalMins}
+          onHeartbeatPromptChange={setHeartbeatPrompt}
+          onSaveHeartbeat={handleSaveHeartbeat}
+          onPauseHeartbeat={handlePauseHeartbeat}
+          onResumeHeartbeat={handleResumeHeartbeat}
+          onRunHeartbeat={handleRunHeartbeat}
+          onRefresh={refreshAutomation}
+        />
       </CardContent>
     </Card>
   )
@@ -548,6 +749,382 @@ function WorkspaceBindingTable({
   )
 }
 
+function AutomationSection({
+  connectorId,
+  jobs,
+  heartbeats,
+  isLoading,
+  jobKind,
+  jobSessionKey,
+  jobCronExpr,
+  jobBody,
+  jobDescription,
+  jobSessionMode,
+  jobSilent,
+  jobMute,
+  heartbeatSessionKey,
+  heartbeatIntervalMins,
+  heartbeatPrompt,
+  onJobKindChange,
+  onJobSessionKeyChange,
+  onJobCronExprChange,
+  onJobBodyChange,
+  onJobDescriptionChange,
+  onJobSessionModeChange,
+  onJobSilentChange,
+  onJobMuteChange,
+  onCreateJob,
+  onToggleJobEnabled,
+  onToggleJobMuted,
+  onDeleteJob,
+  onRunJob,
+  onHeartbeatSessionKeyChange,
+  onHeartbeatIntervalMinsChange,
+  onHeartbeatPromptChange,
+  onSaveHeartbeat,
+  onPauseHeartbeat,
+  onResumeHeartbeat,
+  onRunHeartbeat,
+  onRefresh,
+}: {
+  connectorId?: string
+  jobs: readonly SynapseFeishuScheduledJob[]
+  heartbeats: readonly SynapseFeishuHeartbeat[]
+  isLoading: boolean
+  jobKind: "prompt" | "exec"
+  jobSessionKey: string
+  jobCronExpr: string
+  jobBody: string
+  jobDescription: string
+  jobSessionMode: "reuse" | "new_per_run"
+  jobSilent: boolean
+  jobMute: boolean
+  heartbeatSessionKey: string
+  heartbeatIntervalMins: string
+  heartbeatPrompt: string
+  onJobKindChange: (value: "prompt" | "exec") => void
+  onJobSessionKeyChange: (value: string) => void
+  onJobCronExprChange: (value: string) => void
+  onJobBodyChange: (value: string) => void
+  onJobDescriptionChange: (value: string) => void
+  onJobSessionModeChange: (value: "reuse" | "new_per_run") => void
+  onJobSilentChange: (value: boolean) => void
+  onJobMuteChange: (value: boolean) => void
+  onCreateJob: () => void
+  onToggleJobEnabled: (job: SynapseFeishuScheduledJob) => void
+  onToggleJobMuted: (job: SynapseFeishuScheduledJob) => void
+  onDeleteJob: (job: SynapseFeishuScheduledJob) => void
+  onRunJob: (job: SynapseFeishuScheduledJob) => void
+  onHeartbeatSessionKeyChange: (value: string) => void
+  onHeartbeatIntervalMinsChange: (value: string) => void
+  onHeartbeatPromptChange: (value: string) => void
+  onSaveHeartbeat: () => void
+  onPauseHeartbeat: (heartbeat: SynapseFeishuHeartbeat) => void
+  onResumeHeartbeat: (heartbeat: SynapseFeishuHeartbeat) => void
+  onRunHeartbeat: (heartbeat: SynapseFeishuHeartbeat) => void
+  onRefresh: () => void
+}) {
+  const canCreateJob = Boolean(connectorId && jobSessionKey.trim() && jobCronExpr.trim() && jobBody.trim())
+  const canSaveHeartbeat = Boolean(connectorId && heartbeatSessionKey.trim() && Number(heartbeatIntervalMins) > 0)
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">定时任务</span>
+          <Badge variant="secondary">{jobs.length}</Badge>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={isLoading}
+          onClick={() => onRefresh()}
+          aria-label="刷新定时任务"
+        >
+          <RefreshCw className={isLoading ? "size-4 animate-spin" : "size-4"} />
+        </Button>
+      </div>
+
+      <FieldGroup>
+        <div className="grid gap-4 md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)]">
+          <Field>
+            <FieldLabel>类型</FieldLabel>
+            <Select value={jobKind} onValueChange={(value) => onJobKindChange(value as "prompt" | "exec")}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="prompt">Prompt</SelectItem>
+                <SelectItem value="exec">命令</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="feishu-cron-session">Session Key</FieldLabel>
+            <Input
+              id="feishu-cron-session"
+              value={jobSessionKey}
+              onChange={(event) => onJobSessionKeyChange(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="feishu-cron-expr">Cron</FieldLabel>
+            <Input
+              id="feishu-cron-expr"
+              value={jobCronExpr}
+              onChange={(event) => onJobCronExprChange(event.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
+          <Field>
+            <FieldLabel htmlFor="feishu-cron-body">
+              {jobKind === "exec" ? "命令（管理员）" : "Prompt"}
+            </FieldLabel>
+            {jobKind === "exec" ? (
+              <FieldDescription>创建命令任务需要飞书管理员。</FieldDescription>
+            ) : null}
+            <Textarea
+              id="feishu-cron-body"
+              value={jobBody}
+              onChange={(event) => onJobBodyChange(event.target.value)}
+            />
+          </Field>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="feishu-cron-desc">描述</FieldLabel>
+              <Input
+                id="feishu-cron-desc"
+                value={jobDescription}
+                onChange={(event) => onJobDescriptionChange(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel>会话</FieldLabel>
+              <Select
+                value={jobSessionMode}
+                onValueChange={(value) => onJobSessionModeChange(value as "reuse" | "new_per_run")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="reuse">复用</SelectItem>
+                  <SelectItem value="new_per_run">每次新建</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field orientation="horizontal">
+              <FieldLabel htmlFor="feishu-cron-silent">Silent</FieldLabel>
+              <Switch id="feishu-cron-silent" checked={jobSilent} onCheckedChange={onJobSilentChange} />
+            </Field>
+            <Field orientation="horizontal">
+              <FieldLabel htmlFor="feishu-cron-mute">Mute</FieldLabel>
+              <Switch id="feishu-cron-mute" checked={jobMute} onCheckedChange={onJobMuteChange} />
+            </Field>
+          </FieldGroup>
+        </div>
+        <div>
+          <Button disabled={!canCreateJob} onClick={() => onCreateJob()}>
+            <Save />
+            创建定时任务
+          </Button>
+        </div>
+      </FieldGroup>
+
+      <ScheduledJobTable
+        jobs={jobs}
+        isLoading={isLoading}
+        onToggleEnabled={onToggleJobEnabled}
+        onToggleMuted={onToggleJobMuted}
+        onDelete={onDeleteJob}
+        onRun={onRunJob}
+      />
+
+      <Separator />
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">Heartbeat</span>
+        <Badge variant="secondary">{heartbeats.length}</Badge>
+      </div>
+      <FieldGroup>
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_10rem]">
+          <Field>
+            <FieldLabel htmlFor="feishu-heartbeat-session">Session Key</FieldLabel>
+            <Input
+              id="feishu-heartbeat-session"
+              value={heartbeatSessionKey}
+              onChange={(event) => onHeartbeatSessionKeyChange(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="feishu-heartbeat-interval">分钟</FieldLabel>
+            <Input
+              id="feishu-heartbeat-interval"
+              type="number"
+              min={1}
+              value={heartbeatIntervalMins}
+              onChange={(event) => onHeartbeatIntervalMinsChange(event.target.value)}
+            />
+          </Field>
+        </div>
+        <Field>
+          <FieldLabel htmlFor="feishu-heartbeat-prompt">Prompt</FieldLabel>
+          <Textarea
+            id="feishu-heartbeat-prompt"
+            value={heartbeatPrompt}
+            onChange={(event) => onHeartbeatPromptChange(event.target.value)}
+          />
+        </Field>
+        <div>
+          <Button disabled={!canSaveHeartbeat} onClick={() => onSaveHeartbeat()}>
+            <Save />
+            保存 Heartbeat
+          </Button>
+        </div>
+      </FieldGroup>
+
+      <HeartbeatTable
+        heartbeats={heartbeats}
+        isLoading={isLoading}
+        onPause={onPauseHeartbeat}
+        onResume={onResumeHeartbeat}
+        onRun={onRunHeartbeat}
+      />
+    </div>
+  )
+}
+
+function ScheduledJobTable({
+  jobs,
+  isLoading,
+  onToggleEnabled,
+  onToggleMuted,
+  onDelete,
+  onRun,
+}: {
+  jobs: readonly SynapseFeishuScheduledJob[]
+  isLoading: boolean
+  onToggleEnabled: (job: SynapseFeishuScheduledJob) => void
+  onToggleMuted: (job: SynapseFeishuScheduledJob) => void
+  onDelete: (job: SynapseFeishuScheduledJob) => void
+  onRun: (job: SynapseFeishuScheduledJob) => void
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ID</TableHead>
+          <TableHead>类型</TableHead>
+          <TableHead>状态</TableHead>
+          <TableHead>下次</TableHead>
+          <TableHead>上次</TableHead>
+          <TableHead className="w-36 text-right">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {jobs.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={6} className="text-muted-foreground">
+              {isLoading ? "加载中..." : "暂无定时任务"}
+            </TableCell>
+          </TableRow>
+        ) : jobs.map((job) => (
+          <TableRow key={job.id}>
+            <TableCell className="font-mono text-xs">{job.description ?? job.id}</TableCell>
+            <TableCell>{job.kind === "exec" ? "命令" : "Prompt"}</TableCell>
+            <TableCell>
+              <div className="flex flex-wrap gap-1">
+                <Badge variant={job.enabled ? "default" : "secondary"}>
+                  {job.enabled ? "启用" : "禁用"}
+                </Badge>
+                {job.mute ? <Badge variant="outline">Mute</Badge> : null}
+                {job.silent ? <Badge variant="outline">Silent</Badge> : null}
+              </div>
+            </TableCell>
+            <TableCell className="font-mono text-xs">{formatDate(job.nextRunAt)}</TableCell>
+            <TableCell className="font-mono text-xs">{formatDate(job.lastRunAt)}</TableCell>
+            <TableCell>
+              <div className="flex justify-end gap-1">
+                <Button variant="ghost" size="icon" onClick={() => onRun(job)} aria-label="运行">
+                  <Play />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => onToggleEnabled(job)} aria-label="启用状态">
+                  {job.enabled ? <Pause /> : <Play />}
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => onToggleMuted(job)} aria-label="静默状态">
+                  <Square />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => onDelete(job)} aria-label="删除">
+                  <Trash2 />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+function HeartbeatTable({
+  heartbeats,
+  isLoading,
+  onPause,
+  onResume,
+  onRun,
+}: {
+  heartbeats: readonly SynapseFeishuHeartbeat[]
+  isLoading: boolean
+  onPause: (heartbeat: SynapseFeishuHeartbeat) => void
+  onResume: (heartbeat: SynapseFeishuHeartbeat) => void
+  onRun: (heartbeat: SynapseFeishuHeartbeat) => void
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Session</TableHead>
+          <TableHead className="text-right">分钟</TableHead>
+          <TableHead>状态</TableHead>
+          <TableHead>下次</TableHead>
+          <TableHead className="w-28 text-right">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {heartbeats.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={5} className="text-muted-foreground">
+              {isLoading ? "加载中..." : "暂无 Heartbeat"}
+            </TableCell>
+          </TableRow>
+        ) : heartbeats.map((heartbeat) => (
+          <TableRow key={heartbeat.id}>
+            <TableCell className="font-mono text-xs">{heartbeat.sessionKey}</TableCell>
+            <TableCell className="text-right font-mono text-xs">{heartbeat.intervalMins}</TableCell>
+            <TableCell>{heartbeat.paused || !heartbeat.enabled ? "暂停" : "启用"}</TableCell>
+            <TableCell className="font-mono text-xs">{formatDate(heartbeat.nextRunAt)}</TableCell>
+            <TableCell>
+              <div className="flex justify-end gap-1">
+                <Button variant="ghost" size="icon" onClick={() => onRun(heartbeat)} aria-label="运行 Heartbeat">
+                  <RotateCcw />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => heartbeat.paused ? onResume(heartbeat) : onPause(heartbeat)}
+                  aria-label="暂停 Heartbeat"
+                >
+                  {heartbeat.paused ? <Play /> : <Pause />}
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
 function statusLabel(status: string): string {
   switch (status) {
     case "connecting":
@@ -561,6 +1138,13 @@ function statusLabel(status: string): string {
     default:
       return "未连接"
   }
+}
+
+function formatDate(value: string | undefined): string {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
 export { FeishuConnectorPanel }

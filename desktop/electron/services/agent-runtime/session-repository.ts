@@ -125,6 +125,30 @@ export class AgentSessionRepository {
     return conversation
   }
 
+  async createSideSession(input: CreateAgentSessionInput): Promise<ConversationEntryV1> {
+    const now = this.isoNow()
+    const conversation: ConversationEntryV1 = {
+      id: input.id
+        ?? conversationId(input.platform ?? "local", input.sessionKey, this.idFactory(), input.workspaceKey),
+      schemaVersion: 1,
+      projectId: this.projectId,
+      sessionKey: input.sessionKey,
+      platform: input.platform,
+      channelKey: input.channelKey,
+      workspaceKey: input.workspaceKey,
+      workspacePath: input.workspacePath,
+      history: [],
+      userMeta: input.userMeta,
+      active: false,
+      name: input.name ?? input.sessionKey,
+      resumePolicy: input.resumePolicy ?? "fresh",
+      createdAt: now,
+      updatedAt: now,
+    }
+    await this.conversations.upsert(conversation)
+    return conversation
+  }
+
   async setActiveSession(
     sessionKey: string,
     conversationIdValue: string,

@@ -38,11 +38,52 @@ export interface SideChannelSendResult {
   readonly outboxRecorded: true
 }
 
+export interface SideChannelCronAddRequest {
+  readonly project?: string
+  readonly projectId?: string
+  readonly sessionKey?: string
+  readonly session_key?: string
+  readonly cronExpr?: string
+  readonly cron_expr?: string
+  readonly prompt?: string
+  readonly exec?: string
+  readonly workDir?: string
+  readonly work_dir?: string
+  readonly description?: string
+  readonly silent?: boolean
+  readonly mute?: boolean
+  readonly sessionMode?: "reuse" | "new_per_run" | "new-per-run"
+  readonly session_mode?: "reuse" | "new_per_run" | "new-per-run"
+  readonly mode?: string
+  readonly timeoutMins?: number
+  readonly timeout_mins?: number
+}
+
+export interface SideChannelCronAddContext {
+  readonly request: SideChannelCronAddRequest
+  readonly projectId: string
+  readonly sessionKey: string
+  readonly target: ReplyTarget
+}
+
+export interface SideChannelCronAddResult {
+  readonly ok: true
+  readonly projectId: string
+  readonly sessionKey: string
+  readonly jobId: string
+  readonly nextRunAt?: string
+}
+
+export type SideChannelCronAddHandler = (
+  context: SideChannelCronAddContext,
+) => Promise<SideChannelCronAddResult>
+
 export interface SideChannelStatus {
   readonly enabled: boolean
   readonly bindAddress?: string
   readonly port?: number
   readonly sendPath: string
+  readonly cronAddPath: string
 }
 
 export interface ReplyTransportDispatcher {

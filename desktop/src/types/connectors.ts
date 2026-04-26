@@ -124,3 +124,100 @@ export type SynapseFeishuManualCredentialsPayload = {
   appSecret: string
   ownerOpenId?: string
 }
+
+export type SynapseFeishuScheduledJob = {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  platform: "feishu"
+  connectorId: string
+  sessionKey: string
+  channelKey?: string
+  channelName?: string
+  workspaceKey?: string
+  workspacePath?: string
+  kind: "prompt" | "exec"
+  cronExpr: string
+  prompt?: string
+  exec?: string
+  workDir?: string
+  description?: string
+  enabled: boolean
+  silent: boolean
+  mute: boolean
+  sessionMode: "reuse" | "new_per_run"
+  modeOverride?: string
+  timeoutMins?: number
+  createdAt: string
+  updatedAt: string
+  createdBy?: string
+  lastRunAt?: string
+  lastError?: string
+  lastStatus?: "success" | "failed" | "timeout" | "skipped"
+  nextRunAt?: string
+  runCount: number
+}
+
+export type SynapseFeishuScheduledJobPayload = {
+  projectId: string
+  connectorId: string
+  sessionKey: string
+  channelKey?: string
+  channelName?: string
+  workspaceKey?: string
+  workspacePath?: string
+  kind: "prompt" | "exec"
+  cronExpr: string
+  prompt?: string
+  exec?: string
+  workDir?: string
+  description?: string
+  enabled?: boolean
+  silent?: boolean
+  mute?: boolean
+  sessionMode?: "reuse" | "new_per_run" | "new-per-run"
+  modeOverride?: string
+  timeoutMins?: number
+}
+
+export type SynapseFeishuHeartbeat = {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  platform: "feishu"
+  connectorId: string
+  sessionKey: string
+  channelKey?: string
+  workspaceKey?: string
+  workspacePath?: string
+  enabled: boolean
+  paused: boolean
+  intervalMins: number
+  prompt: string
+  silent: boolean
+  mute: boolean
+  timeoutMins?: number
+  createdAt: string
+  updatedAt: string
+  lastRunAt?: string
+  lastError?: string
+  lastStatus?: "success" | "failed" | "timeout" | "skipped"
+  nextRunAt?: string
+  runCount: number
+}
+
+export type SynapseFeishuHeartbeatPayload = {
+  projectId: string
+  connectorId: string
+  sessionKey: string
+  channelKey?: string
+  workspaceKey?: string
+  workspacePath?: string
+  intervalMins: number
+  prompt?: string
+  enabled?: boolean
+  paused?: boolean
+  silent?: boolean
+  mute?: boolean
+  timeoutMins?: number
+}

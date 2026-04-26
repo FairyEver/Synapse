@@ -32,7 +32,11 @@ import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseFeishuConnectorRuntimeStatus,
   SynapseFeishuConnectorSummary,
+  SynapseFeishuHeartbeat,
+  SynapseFeishuHeartbeatPayload,
   SynapseFeishuManualCredentialsPayload,
+  SynapseFeishuScheduledJob,
+  SynapseFeishuScheduledJobPayload,
   SynapseFeishuSetupBeginResult,
   SynapseFeishuSetupPollResult,
   SynapseFeishuWorkspaceBinding,
@@ -288,6 +292,35 @@ export type SynapseBridge = {
       unbindWorkspaceBinding: (
         payload: SynapseFeishuWorkspaceUnbindPayload,
       ) => Promise<{ ok: true }>
+      listScheduledJobs: (projectId: string) => Promise<SynapseFeishuScheduledJob[]>
+      createScheduledJob: (
+        payload: SynapseFeishuScheduledJobPayload,
+      ) => Promise<SynapseFeishuScheduledJob>
+      deleteScheduledJob: (
+        payload: { projectId: string; id: string },
+      ) => Promise<{ ok: true }>
+      setScheduledJobEnabled: (
+        payload: { projectId: string; id: string; enabled: boolean },
+      ) => Promise<SynapseFeishuScheduledJob>
+      setScheduledJobMuted: (
+        payload: { projectId: string; id: string; mute: boolean },
+      ) => Promise<SynapseFeishuScheduledJob>
+      runScheduledJob: (
+        payload: { projectId: string; id: string },
+      ) => Promise<SynapseFeishuScheduledJob | null>
+      listHeartbeats: (projectId: string) => Promise<SynapseFeishuHeartbeat[]>
+      upsertHeartbeat: (
+        payload: SynapseFeishuHeartbeatPayload,
+      ) => Promise<SynapseFeishuHeartbeat>
+      pauseHeartbeat: (
+        payload: { projectId: string; id: string },
+      ) => Promise<SynapseFeishuHeartbeat>
+      resumeHeartbeat: (
+        payload: { projectId: string; id: string },
+      ) => Promise<SynapseFeishuHeartbeat>
+      runHeartbeat: (
+        payload: { projectId: string; id: string },
+      ) => Promise<SynapseFeishuHeartbeat | null>
     }
   }
 }

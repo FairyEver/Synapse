@@ -40,6 +40,13 @@ import { createProviderConfigProjectService } from "../services/provider-config"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { FeishuConnectorService } from "../services/connectors"
 import { SideChannelService } from "../services/side-channel"
+import {
+  CronExecutionService,
+  HeartbeatRepository,
+  HeartbeatService,
+  ScheduledJobRepository,
+  SchedulerService,
+} from "../services/scheduler"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -50,7 +57,7 @@ import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
-import { createMainProcessRuntime } from "../runtime/process"
+import { createControlledProcessRunner, createMainProcessRuntime } from "../runtime/process"
 import type { NetworkServiceRegistry } from "../runtime/network"
 import { createNetworkServiceRegistry } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
@@ -445,5 +452,94 @@ export const coreFeishuConnectorDescriptor: ServiceDescriptor<FeishuConnectorSer
   },
   stop(service) {
     return service.stop()
+  },
+}
+
+export const coreSchedulerDescriptor: ServiceDescriptor<SchedulerService> = {
+  id: "core.scheduler",
+  criticality: "degraded",
+  dependsOn: [
+    "core.project-containers",
+    "core.side-channel",
+    "core.feishu-connector",
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const sideChannel = ctx.registry.get<SideChannelService>("core.side-channel")
+    const feishuConnector = ctx.registry.get<FeishuConnectorService>("core.feishu-connector")
+    const execution = new CronExecutionService({
+      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+      dataRepository,
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      sideChannel,
+      feishuConnector,
+      listProjects: listConfiguredProjects,
+      logger: ctx.logger.child("scheduler.execution"),
+    })
+    const service = new SchedulerService({
+      repository: new ScheduledJobRepository({
+        jobs: dataRepository.namespace("scheduled.jobs"),
+      }),
+      execution,
+      sideChannel,
+      logger: ctx.logger.child("scheduler"),
+    })
+    feishuConnector.registerSchedulerService(service)
+    return service
+  },
+  start(service) {
+    return service.start()
+  },
+  stop(service) {
+    service.stop()
+  },
+}
+
+export const coreHeartbeatDescriptor: ServiceDescriptor<HeartbeatService> = {
+  id: "core.heartbeat",
+  criticality: "degraded",
+  dependsOn: [
+    "core.project-containers",
+    "core.side-channel",
+    "core.feishu-connector",
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const sideChannel = ctx.registry.get<SideChannelService>("core.side-channel")
+    const feishuConnector = ctx.registry.get<FeishuConnectorService>("core.feishu-connector")
+    const execution = new CronExecutionService({
+      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+      dataRepository,
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      sideChannel,
+      feishuConnector,
+      listProjects: listConfiguredProjects,
+      logger: ctx.logger.child("heartbeat.execution"),
+    })
+    const service = new HeartbeatService({
+      repository: new HeartbeatRepository({
+        heartbeats: dataRepository.namespace("scheduled.heartbeat"),
+      }),
+      execution,
+      logger: ctx.logger.child("heartbeat"),
+    })
+    feishuConnector.registerHeartbeatService(service)
+    return service
+  },
+  start(service) {
+    return service.start()
+  },
+  stop(service) {
+    service.stop()
   },
 }

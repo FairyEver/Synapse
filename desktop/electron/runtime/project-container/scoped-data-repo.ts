@@ -20,6 +20,8 @@ const PROJECT_SCOPED_NAMES = new Set([
   "conversations",
   "outbox",
   "audit",
+  "scheduled.jobs",
+  "scheduled.heartbeat",
 ])
 
 export class ProjectScopedDataRepoImpl implements ProjectScopedDataRepo {

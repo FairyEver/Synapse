@@ -17,6 +17,8 @@ import {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentMessage,
 } from "../../agent-runtime"
+import type { ReplyTarget } from "../../reply-target"
+import type { HeartbeatService, SchedulerService } from "../../scheduler"
 import type { SideChannelService } from "../../side-channel"
 import { ConnectorRepository } from "../connector-repository"
 import type { ConnectorRecord, FeishuConnectorSummary } from "../types"
@@ -32,7 +34,7 @@ import {
   type FeishuSetupPollResult,
 } from "./feishu-types"
 import { isFeishuAdmin, normalizeFeishuMessage } from "./message-normalizer"
-import { FeishuReplyService } from "./reply-service"
+import { FeishuReplyService, feishuReplyContext } from "./reply-service"
 import { FeishuSetupService, secretId } from "./setup-service"
 import { feishuSdkClientFactory } from "./sdk-client"
 import {
@@ -148,6 +150,9 @@ export class FeishuConnectorService {
   private readonly running = new Map<string, RunningFeishuConnector>()
   private readonly initFlows = new Map<string, WorkspaceInitFlow>()
   private readonly workspaceReapers = new Map<string, ReturnType<typeof setInterval>>()
+  private replyService: FeishuReplyService | undefined
+  private schedulerService: Pick<SchedulerService, "handleFeishuCommand"> | undefined
+  private heartbeatService: Pick<HeartbeatService, "handleFeishuCommand"> | undefined
   private unregisterDispatcher: (() => void) | undefined
 
   constructor(deps: FeishuConnectorServiceDeps) {
@@ -170,13 +175,41 @@ export class FeishuConnectorService {
 
   start(): void {
     if (this.unregisterDispatcher) return
-    const replyService = new FeishuReplyService({
+    const replyService = this.getReplyService()
+    this.unregisterDispatcher = this.deps.sideChannel.registerDispatcher("feishu", replyService)
+  }
+
+  registerSchedulerService(service: Pick<SchedulerService, "handleFeishuCommand">): void {
+    this.schedulerService = service
+  }
+
+  registerHeartbeatService(service: Pick<HeartbeatService, "handleFeishuCommand">): void {
+    this.heartbeatService = service
+  }
+
+  assertReplyTargetAvailable(target: ReplyTarget): void {
+    const ctx = feishuReplyContext(target)
+    if (!this.running.has(ctx.connectorId)) {
+      throw new Error(`Feishu connector "${ctx.connectorId}" is not running`)
+    }
+  }
+
+  sendAutomationMessage(target: ReplyTarget, content: string): Promise<void> {
+    return this.getReplyService().dispatchSideChannelSend(target, {
+      message: content,
+      attachments: [],
+    })
+  }
+
+  private getReplyService(): FeishuReplyService {
+    if (this.replyService) return this.replyService
+    this.replyService = new FeishuReplyService({
       clientForConnector: (connectorId) => this.running.get(connectorId)?.client,
       permissionGuard: this.deps.permissionGuard,
       auditSink: this.deps.auditSink,
       logger: this.deps.logger,
     })
-    this.unregisterDispatcher = this.deps.sideChannel.registerDispatcher("feishu", replyService)
+    return this.replyService
   }
 
   async stop(): Promise<void> {
@@ -423,6 +456,11 @@ export class FeishuConnectorService {
           return
         }
         if (resolved.status === "unresolved") {
+          if (isAutomationCommand(normalized.message.content)) {
+            if (await this.handleAutomationCommand(connector, normalized.message, running)) {
+              return
+            }
+          }
           if (await this.handleWorkspaceInitFlow(connector, normalized.message, workspaceConfig, running)) {
             return
           }
@@ -438,6 +476,9 @@ export class FeishuConnectorService {
             },
           }
         }
+      }
+      if (await this.handleAutomationCommand(connector, normalized.message, running)) {
+        return
       }
       const { agent } = await this.resolveProjectAgent(projectId)
       await agent.send(normalized.message)
@@ -679,6 +720,47 @@ export class FeishuConnectorService {
         await reply("用法：/workspace [bind|route|init|unbind|list|shared]")
         return true
     }
+  }
+
+  private async handleAutomationCommand(
+    connector: ConnectorRecord,
+    message: AgentMessage,
+    running: RunningFeishuConnector | undefined,
+  ): Promise<boolean> {
+    if (!isAutomationCommand(message.content)) return false
+    const reply = (content: string) =>
+      running?.client.replyText(message.replyCtx as FeishuReplyContext, content)
+    const isAdmin = isFeishuAdmin(connector, message.userId ?? "")
+    if (isCronAddExec(message.content) && !isAdmin) {
+      this.recordAudit("denied", connector.projectId, connector.id, "cron_addexec", undefined, {
+        sessionKey: message.sessionKey,
+        userId: message.userId,
+        reason: "operator_not_allowed",
+      })
+    }
+    const context = {
+      projectId: connector.projectId,
+      connectorId: connector.id,
+      message,
+      isAdmin,
+      reply,
+    }
+    if (this.schedulerService && await this.schedulerService.handleFeishuCommand(context)) {
+      this.recordAudit("allowed", connector.projectId, connector.id, "cron_command", undefined, {
+        sessionKey: message.sessionKey,
+        userId: message.userId,
+      })
+      return true
+    }
+    if (this.heartbeatService && await this.heartbeatService.handleFeishuCommand(context)) {
+      this.recordAudit("allowed", connector.projectId, connector.id, "heartbeat_command", undefined, {
+        sessionKey: message.sessionKey,
+        userId: message.userId,
+      })
+      return true
+    }
+    await reply("自动化服务未启动。")
+    return true
   }
 
   private async handleWorkspaceInitFlow(
@@ -1177,6 +1259,14 @@ function parseWorkspaceCommand(content: string): { readonly args: readonly strin
   if (!match) return null
   const args = (match[2] ?? "").trim()
   return { args: args ? args.split(/\s+/) : [] }
+}
+
+function isAutomationCommand(content: string): boolean {
+  return /^(\/cron|\/heartbeat)(?:\s|$)/i.test(content.trim())
+}
+
+function isCronAddExec(content: string): boolean {
+  return /^\/cron\s+addexec(?:\s|$)/i.test(content.trim())
 }
 
 function formatBindingList(

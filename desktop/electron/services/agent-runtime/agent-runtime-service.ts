@@ -92,6 +92,7 @@ export interface AgentRuntimeStatus {
 }
 
 interface PendingPermissionState extends AgentPendingPermission {
+  readonly stateKey: string
   readonly liveSession: AgentLiveSession
   resolve(): void
 }
@@ -153,6 +154,57 @@ export class AgentRuntimeService {
     }
 
     const state = this.stateFor(message)
+    if (state.busy && state.queue.length >= this.queueLimit()) {
+      return this.finishWithError(message, conversation.id, "Session queue is full")
+    }
+
+    return new Promise<AgentRuntimeTurnResult>((resolve) => {
+      state.queue.push({
+        message,
+        conversationId: conversation.id,
+        resolve,
+      })
+      if (!state.busy) {
+        void this.processQueue(state)
+      }
+    })
+  }
+
+  async sendNewSession(
+    message: AgentMessage,
+    name: string,
+  ): Promise<AgentRuntimeTurnResult> {
+    if (message.projectId !== this.deps.projectId) {
+      throw new Error(
+        `AgentRuntime project mismatch: expected "${this.deps.projectId}", got "${message.projectId}"`,
+      )
+    }
+
+    const conversation = await this.repository.createSideSession({
+      sessionKey: message.sessionKey,
+      platform: message.platform,
+      channelKey: message.channelKey,
+      workspaceKey: message.workspaceKey,
+      workspacePath: message.workspacePath,
+      name,
+      userMeta: {
+        userId: message.userId,
+        userName: message.userName,
+        chatName: message.chatName,
+        platform: message.platform,
+        channelKey: message.channelKey,
+        workspaceKey: message.workspaceKey,
+        workspacePath: message.workspacePath,
+      },
+      resumePolicy: "fresh",
+    })
+    this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
+    const governance = this.deps.governance?.evaluateMessage(message)
+    if (governance && !governance.allowed) {
+      return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
+    }
+
+    const state = this.stateFor(message, conversation.id)
     if (state.busy && state.queue.length >= this.queueLimit()) {
       return this.finishWithError(message, conversation.id, "Session queue is full")
     }
@@ -272,8 +324,9 @@ export class AgentRuntimeService {
       pending.projectId,
       pending.workspaceKey,
     ))
-    if (state?.pending?.requestId === request.requestId) {
-      state.pending = undefined
+    const pendingState = this.states.get(pending.stateKey) ?? state
+    if (pendingState?.pending?.requestId === request.requestId) {
+      pendingState.pending = undefined
     }
     pending.resolve()
   }
@@ -565,6 +618,7 @@ export class AgentRuntimeService {
       const pending: PendingPermissionState = {
         requestId: event.requestId,
         projectId: this.deps.projectId,
+        stateKey: state.key,
         sessionKey: message.sessionKey,
         workspaceKey: message.workspaceKey,
         workspacePath: message.workspacePath,
@@ -653,6 +707,7 @@ export class AgentRuntimeService {
       scope: { sessionId: conversationIdValue },
       timestamp: this.isoNow(),
     })
+    if (shouldSuppressReply(message)) return
     this.deps.outbox?.recordAgentEvent(target, event)
     this.deps.replyTargets?.dispatchAgentEvent(target, event)
   }
@@ -683,8 +738,13 @@ export class AgentRuntimeService {
     })
   }
 
-  private stateFor(message: AgentMessage): RuntimeSessionState {
-    const key = runtimeKey(message.sessionKey, message.projectId, message.workspaceKey)
+  private stateFor(message: AgentMessage, sideSessionId?: string): RuntimeSessionState {
+    const key = runtimeKey(
+      message.sessionKey,
+      message.projectId,
+      message.workspaceKey,
+      sideSessionId,
+    )
     const existing = this.states.get(key)
     if (existing) {
       existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
@@ -756,8 +816,13 @@ function reusableAgentSessionId(
   return conversation.agentSessionId
 }
 
-function runtimeKey(sessionKey: string, projectId: string, workspaceKey?: string): string {
-  return `${projectId}:${workspaceKey ?? "default"}:${sessionKey}`
+function runtimeKey(
+  sessionKey: string,
+  projectId: string,
+  workspaceKey?: string,
+  sideSessionId?: string,
+): string {
+  return `${projectId}:${workspaceKey ?? "default"}:${sideSessionId ?? "active"}:${sessionKey}`
 }
 
 function permissionActionForTool(toolName: string): PermissionAction {
@@ -787,6 +852,10 @@ function replyCtxRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
+function shouldSuppressReply(message: AgentMessage): boolean {
+  return replyCtxRecord(message.replyCtx)?.muted === true
+}
+
 function replyTargetFromMessage(
   message: AgentMessage,
   conversationIdValue: string,
@@ -805,6 +874,13 @@ function replyTargetFromMessage(
       ? { kind: "bridge", connectorId: bridgePlatform ?? message.platform }
       : { kind: message.platform || kind || "local-renderer" },
     replyCtx,
+    metadata: {
+      channelKey: message.channelKey,
+      channelName: message.channelName,
+      workspaceKey: message.workspaceKey,
+      workspacePath: message.workspacePath,
+      muted: replyCtx?.muted,
+    },
   }
 }
 

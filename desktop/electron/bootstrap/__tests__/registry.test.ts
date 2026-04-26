@@ -79,11 +79,13 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.data-store",
         "core.event-bus",
         "core.feishu-connector",
+        "core.heartbeat",
         "core.logging",
         "core.network-registry",
         "core.permission-guard",
         "core.process-runtime",
         "core.project-containers",
+        "core.scheduler",
         "core.side-channel",
         "core.update",
         "core.window-manager",
@@ -132,6 +134,22 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
     ])
+    expect(byId.get("core.scheduler")?.dependsOn).toEqual([
+      "core.project-containers",
+      "core.side-channel",
+      "core.feishu-connector",
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.heartbeat")?.dependsOn).toEqual([
+      "core.project-containers",
+      "core.side-channel",
+      "core.feishu-connector",
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config"])
@@ -160,6 +178,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.project-containers")).toBeLessThan(idx("core.side-channel"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.feishu-connector"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
+    expect(idx("core.feishu-connector")).toBeLessThan(idx("core.scheduler"))
+    expect(idx("core.feishu-connector")).toBeLessThan(idx("core.heartbeat"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.data-store")).toBeLessThan(idx("repo.pending-pushes"))
     expect(idx("core.app-icon")).toBeLessThan(idx("ui.tray"))
