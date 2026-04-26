@@ -37,6 +37,8 @@ import { pendingPushesService } from "../services/pending-pushes-service"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService } from "../services/agent-runtime"
 import { createProviderConfigProjectService } from "../services/provider-config"
+import { BridgeAdapterService } from "../services/bridge-adapter"
+import { SideChannelService } from "../services/side-channel"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -346,5 +348,72 @@ export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectCo
     registry.registerService(createProviderConfigProjectService())
     registry.registerService(createAgentRuntimeProjectService())
     return registry
+  },
+}
+
+async function listConfiguredProjects() {
+  const config = await configStore.load()
+  return config.repositories.map((repository) => ({
+    projectId: repository.uuid,
+    name: repository.name,
+    workspacePath: repository.localPath,
+  }))
+}
+
+export const coreSideChannelDescriptor: ServiceDescriptor<SideChannelService> = {
+  id: "core.side-channel",
+  criticality: "degraded",
+  dependsOn: [
+    "core.network-registry",
+    "core.project-containers",
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    return new SideChannelService({
+      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+      networkRegistry: ctx.registry.get<NetworkServiceRegistry>("core.network-registry"),
+      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      listProjects: listConfiguredProjects,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("side-channel"),
+    })
+  },
+  start(service) {
+    return service.start()
+  },
+  stop(service) {
+    return service.stop()
+  },
+}
+
+export const coreBridgeAdapterDescriptor: ServiceDescriptor<BridgeAdapterService> = {
+  id: "core.bridge-adapter",
+  criticality: "degraded",
+  dependsOn: [
+    "core.network-registry",
+    "core.project-containers",
+    "core.side-channel",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    return new BridgeAdapterService({
+      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+      networkRegistry: ctx.registry.get<NetworkServiceRegistry>("core.network-registry"),
+      sideChannel: ctx.registry.get<SideChannelService>("core.side-channel"),
+      listProjects: listConfiguredProjects,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("bridge-adapter"),
+    })
+  },
+  start(service) {
+    return service.start()
+  },
+  stop(service) {
+    return service.stop()
   },
 }

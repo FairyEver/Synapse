@@ -18,7 +18,7 @@ import { InMemoryAuditSink, createPermissionGuard } from "../../../runtime/secur
 import { CodexExecAdapter, type CodexProcessRunner } from "../adapters/codex-exec"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
 import { ProviderConfigService } from "../../provider-config"
-import { ReplyOutboxService } from "../../reply-target"
+import { ReplyOutboxService, type ReplyTarget } from "../../reply-target"
 import type {
   AgentAdapter,
   AgentEvent,
@@ -170,6 +170,64 @@ describe("AgentRuntimeService", () => {
       "--json",
       "-",
     ])
+  })
+
+  it("remembers bridge reply targets, dispatches agent events, and injects side-channel env", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const outboxService = new ReplyOutboxService({ projectId: "project-1", outbox })
+    const replyTargets = new FakeReplyTargets()
+    const runner = new FakeRunner([
+      JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { type: "agent_message", content: [{ type: "output_text", text: "done" }] },
+      }),
+      JSON.stringify({ type: "turn.completed" }),
+    ])
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter: new CodexExecAdapter(runner),
+      outbox: outboxService,
+      replyTargets,
+    })
+
+    await service.send({
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      platform: "bridge",
+      content: "hello",
+      replyCtx: {
+        kind: "bridge",
+        platform: "bridge",
+        replyCtx: "ctx-1",
+      },
+    })
+    await outboxService.flushForTests()
+
+    expect(replyTargets.remembered[0]).toEqual(expect.objectContaining({
+      transport: { kind: "bridge", connectorId: "bridge" },
+      replyCtx: expect.objectContaining({ replyCtx: "ctx-1" }),
+    }))
+    expect(replyTargets.dispatched.map((item) => item.event.type)).toEqual(["text", "result"])
+    expect(runner.requests[0]).toEqual(expect.objectContaining({
+      env: expect.objectContaining({
+        CC_PROJECT: "project-1",
+        CC_SESSION_KEY: "bridge:s1",
+      }),
+      envAllowlist: expect.arrayContaining(["CC_PROJECT", "CC_SESSION_KEY"]),
+    }))
+    expect(await outbox.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        destination: expect.objectContaining({
+          platform: "bridge",
+          connectorId: "bridge",
+          sessionKey: "bridge:s1",
+        }),
+      }),
+    ]))
   })
 
   it("handles /model before the adapter and clears the current agent session id", async () => {
@@ -560,6 +618,26 @@ class FakeLiveSession implements AgentLiveSession {
   }
 
   async close(): Promise<void> {}
+}
+
+class FakeReplyTargets {
+  readonly remembered: ReplyTarget[] = []
+  readonly dispatched: Array<{ readonly target: ReplyTarget; readonly event: AgentEvent }> = []
+
+  rememberReplyTarget(target: ReplyTarget): void {
+    this.remembered.push(target)
+  }
+
+  dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void {
+    this.dispatched.push({ target, event })
+  }
+
+  getAgentEnv(projectId: string, sessionKey: string): Record<string, string> {
+    return {
+      CC_PROJECT: projectId,
+      CC_SESSION_KEY: sessionKey,
+    }
+  }
 }
 
 class AsyncQueue<T> {

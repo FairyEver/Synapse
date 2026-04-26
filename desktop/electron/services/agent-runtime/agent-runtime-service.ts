@@ -8,6 +8,7 @@ import type {
 } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService } from "../reply-target"
+import type { ReplyTarget } from "../reply-target"
 import {
   prepareCodexRuntime,
   type ProviderConfigService,
@@ -54,6 +55,11 @@ export interface AgentRuntimeServiceDeps {
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
+  readonly replyTargets?: {
+    rememberReplyTarget(target: ReplyTarget): void
+    dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void
+    getAgentEnv(projectId: string, sessionKey: string): Record<string, string> | undefined
+  }
 }
 
 export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter
@@ -123,6 +129,7 @@ export class AgentRuntimeService {
     }
 
     const conversation = await this.repository.getOrCreateActive(message)
+    this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
       return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
@@ -286,6 +293,48 @@ export class AgentRuntimeService {
     return this.clearCurrentAgentSessionId(sessionKey, platform)
   }
 
+  async createSession(
+    input: {
+      readonly sessionKey: string
+      readonly platform?: string
+      readonly name?: string
+    },
+  ): Promise<ConversationEntryV1> {
+    return this.repository.createSession({
+      sessionKey: input.sessionKey,
+      platform: input.platform,
+      name: input.name,
+      resumePolicy: "resume",
+    })
+  }
+
+  async switchSession(
+    sessionKey: string,
+    conversationIdValue: string,
+    platform?: string,
+  ): Promise<ConversationEntryV1> {
+    return this.repository.setActiveSession(sessionKey, conversationIdValue, platform)
+  }
+
+  async deleteSession(conversationIdValue: string): Promise<boolean> {
+    const conversation = await this.repository.get(conversationIdValue)
+    if (!conversation) return false
+    if (conversation.active) {
+      const state = this.states.get(runtimeKey(conversation.sessionKey, this.deps.projectId))
+      if (state?.pending) {
+        this.pendingPermissions.delete(state.pending.requestId)
+        state.pending = undefined
+      }
+      if (state?.liveSession) {
+        await state.liveSession.close()
+        state.liveSession = undefined
+      }
+      this.states.delete(runtimeKey(conversation.sessionKey, this.deps.projectId))
+    }
+    await this.repository.deleteSession(conversationIdValue)
+    return true
+  }
+
   private async processQueue(state: RuntimeSessionState): Promise<void> {
     state.busy = true
     try {
@@ -343,6 +392,7 @@ export class AgentRuntimeService {
       workDir: this.deps.workDir as string,
       threadId,
       agentSessionId: threadId,
+      sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
       actor: { kind: "user" },
     })
 
@@ -372,7 +422,7 @@ export class AgentRuntimeService {
     conversation: ConversationEntryV1,
     adapter: AgentAdapter,
   ): Promise<AgentRuntimeTurnResult> {
-    const liveSession = await this.getLiveSession(state, conversation, adapter)
+    const liveSession = await this.getLiveSession(state, conversation, adapter, message)
     const events: AgentEvent[] = []
     let resultText = ""
     let error: string | undefined
@@ -424,6 +474,7 @@ export class AgentRuntimeService {
     state: RuntimeSessionState,
     conversation: ConversationEntryV1,
     adapter: AgentAdapter,
+    message: AgentMessage,
   ): Promise<AgentLiveSession> {
     if (
       state.liveSession
@@ -443,6 +494,7 @@ export class AgentRuntimeService {
       workDir: this.deps.workDir as string,
       threadId: agentSessionId,
       agentSessionId,
+      sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
       actor: { kind: "user" },
     })
     if (!liveSession) {
@@ -536,6 +588,7 @@ export class AgentRuntimeService {
     conversationIdValue: string,
     event: AgentEvent,
   ): void {
+    const target = replyTargetFromMessage(message, conversationIdValue, event)
     this.deps.eventBus?.emit({
       domain: "agent",
       type: event.type,
@@ -548,15 +601,8 @@ export class AgentRuntimeService {
       scope: { sessionId: conversationIdValue },
       timestamp: this.isoNow(),
     })
-    this.deps.outbox?.recordAgentEvent({
-      projectId: this.deps.projectId,
-      sessionKey: message.sessionKey,
-      conversationId: conversationIdValue,
-      threadId: event.threadId ?? event.agentSessionId,
-      messageId: message.messageId,
-      transport: { kind: message.platform || "local-renderer" },
-      replyCtx: replyCtxRecord(message.replyCtx),
-    }, event)
+    this.deps.outbox?.recordAgentEvent(target, event)
+    this.deps.replyTargets?.dispatchAgentEvent(target, event)
   }
 
   private recordPermissionAudit(
@@ -668,6 +714,31 @@ function replyCtxRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null
     ? value as Record<string, unknown>
     : undefined
+}
+
+function replyTargetFromMessage(
+  message: AgentMessage,
+  conversationIdValue: string,
+  event?: AgentEvent,
+): ReplyTarget {
+  const replyCtx = replyCtxRecord(message.replyCtx)
+  const kind = stringValue(replyCtx?.kind)
+  const bridgePlatform = stringValue(replyCtx?.platform)
+  return {
+    projectId: message.projectId,
+    sessionKey: message.sessionKey,
+    conversationId: conversationIdValue,
+    threadId: event?.threadId ?? event?.agentSessionId,
+    messageId: message.messageId,
+    transport: kind === "bridge"
+      ? { kind: "bridge", connectorId: bridgePlatform ?? message.platform }
+      : { kind: message.platform || kind || "local-renderer" },
+    replyCtx,
+  }
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined
 }
 
 function isPromptCommandRoute(

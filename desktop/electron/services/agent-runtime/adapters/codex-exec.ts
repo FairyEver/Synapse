@@ -80,8 +80,8 @@ export class CodexExecAdapter implements AgentAdapter {
       args,
       cwd: context.workDir,
       stdin: message.content,
-      env: this.options.env,
-      envAllowlist: this.options.envAllowlist,
+      env: mergeEnv(this.options.env, context.sessionEnv),
+      envAllowlist: mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
       timeoutMs: this.options.timeoutMs,
       output: { stdout: "json-lines", stderr: "buffer" },
       onStdoutLine: (line) => parser.pushLine(line),
@@ -107,6 +107,23 @@ export class CodexExecAdapter implements AgentAdapter {
 
     return parser.finalize()
   }
+}
+
+function mergeEnv(
+  base: Record<string, string | undefined> | undefined,
+  sessionEnv: Record<string, string> | undefined,
+): Record<string, string | undefined> | undefined {
+  if (!base && !sessionEnv) return undefined
+  return { ...(base ?? {}), ...(sessionEnv ?? {}) }
+}
+
+function mergeEnvAllowlist(
+  base: readonly string[] | undefined,
+  sessionEnv: Record<string, string> | undefined,
+): readonly string[] | undefined {
+  const values = new Set(base ?? [])
+  for (const key of Object.keys(sessionEnv ?? {})) values.add(key)
+  return values.size > 0 ? [...values] : undefined
 }
 
 export function buildCodexExecArgs(options: CodexExecArgsOptions): string[] {

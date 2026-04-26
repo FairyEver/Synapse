@@ -142,6 +142,36 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(repoPendingPushesDescriptor.dependsOn).toEqual(["core.data-store"])
   })
 
+  it("coreSideChannelDescriptor is degraded and depends on network/project foundations", async () => {
+    const { coreSideChannelDescriptor } = await importBootstrap()
+    expect(coreSideChannelDescriptor.id).toBe("core.side-channel")
+    expect(coreSideChannelDescriptor.criticality).toBe("degraded")
+    expect(coreSideChannelDescriptor.dependsOn).toEqual([
+      "core.network-registry",
+      "core.project-containers",
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(coreSideChannelDescriptor.start).toBeTypeOf("function")
+    expect(coreSideChannelDescriptor.stop).toBeTypeOf("function")
+  })
+
+  it("coreBridgeAdapterDescriptor is degraded and depends on side-channel", async () => {
+    const { coreBridgeAdapterDescriptor } = await importBootstrap()
+    expect(coreBridgeAdapterDescriptor.id).toBe("core.bridge-adapter")
+    expect(coreBridgeAdapterDescriptor.criticality).toBe("degraded")
+    expect(coreBridgeAdapterDescriptor.dependsOn).toEqual([
+      "core.network-registry",
+      "core.project-containers",
+      "core.side-channel",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(coreBridgeAdapterDescriptor.start).toBeTypeOf("function")
+    expect(coreBridgeAdapterDescriptor.stop).toBeTypeOf("function")
+  })
+
   it("createUiTrayDescriptor produces a degraded descriptor depending on core.app-icon", async () => {
     const { createUiTrayDescriptor } = await importBootstrap()
     const cb = vi.fn()

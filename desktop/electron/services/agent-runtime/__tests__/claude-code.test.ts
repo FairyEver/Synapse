@@ -43,6 +43,10 @@ describe("Claude Code adapter", () => {
       projectId: "project-1",
       workDir: "/repo",
       agentSessionId: "claude-session-1",
+      sessionEnv: {
+        CC_PROJECT: "project-1",
+        CC_SESSION_KEY: "bridge:s1",
+      },
       actor: { kind: "user" },
     })
 
@@ -51,6 +55,11 @@ describe("Claude Code adapter", () => {
         command: "claude-test",
         action: "agent.spawn",
         cwd: "/repo",
+        env: expect.objectContaining({
+          CC_PROJECT: "project-1",
+          CC_SESSION_KEY: "bridge:s1",
+        }),
+        envAllowlist: expect.arrayContaining(["CC_PROJECT", "CC_SESSION_KEY"]),
       }),
     )
 

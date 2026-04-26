@@ -111,6 +111,7 @@ export interface AgentExecutionContext {
   readonly workDir: string
   readonly threadId?: string
   readonly agentSessionId?: string
+  readonly sessionEnv?: Record<string, string>
   readonly actor: ActorIdentity
 }
 

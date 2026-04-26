@@ -23,7 +23,7 @@ export type PermissionAction =
   | "secret.write"
 
 export type ActorIdentity =
-  | { kind: "user" }
+  | { kind: "user"; id?: string; display?: string }
   | { kind: "extension"; id: string }
   | { kind: "agent"; id: string }
   | { kind: "connector"; id: string }

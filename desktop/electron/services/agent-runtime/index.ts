@@ -10,7 +10,7 @@ import {
 } from "../provider-config"
 import { ReplyOutboxService } from "../reply-target"
 import { CodexExecAdapter } from "./adapters/codex-exec"
-import { AgentRuntimeService } from "./agent-runtime-service"
+import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
 export {
@@ -102,6 +102,10 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         permissionGuard,
         auditSink,
       })
+      const replyTargets = optionalService<NonNullable<AgentRuntimeServiceDeps["replyTargets"]>>(
+        ctx.globalRegistry,
+        "core.side-channel",
+      )
       return new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -115,8 +119,17 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         auditSink,
         outbox,
         providerConfig,
+        replyTargets,
       })
     },
+  }
+}
+
+function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {
+  try {
+    return registry.get<T>(id)
+  } catch {
+    return undefined
   }
 }
 

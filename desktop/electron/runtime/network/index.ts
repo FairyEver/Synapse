@@ -18,3 +18,11 @@ export type {
 } from "./registry"
 export { isFreePort, pickNextAvailablePort } from "./ports"
 export type { PickPortArgs } from "./ports"
+export { createLocalNetworkHostLifecycle } from "./local-host"
+export type {
+  LocalHttpRequest,
+  LocalHttpResponse,
+  LocalNetworkHostHandler,
+  LocalWebSocketConnection,
+  LocalWebSocketUpgradeDecision,
+} from "./local-host"

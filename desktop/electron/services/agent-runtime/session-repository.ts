@@ -192,6 +192,11 @@ export class AgentSessionRepository {
     return conversation
   }
 
+  async deleteSession(conversationIdValue: string): Promise<void> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    await this.conversations.remove(conversation.id)
+  }
+
   private async requireConversation(conversationIdValue: string): Promise<ConversationEntryV1> {
     const conversation = await this.get(conversationIdValue)
     if (!conversation) {

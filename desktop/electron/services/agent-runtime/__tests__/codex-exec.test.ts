@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import {
   CodexJsonLineParser,
+  CodexExecAdapter,
   buildCodexExecArgs,
 } from "../adapters/codex-exec"
+import type { ControlledProcessResult, ControlledProcessRunRequest } from "../../../runtime/process"
+import type { CodexProcessRunner } from "../adapters/codex-exec"
 
 describe("Codex exec adapter", () => {
   it("builds new-session exec args with prompt over stdin", () => {
@@ -52,6 +55,45 @@ describe("Codex exec adapter", () => {
       "--json",
       "-",
     ])
+  })
+
+  it("injects per-session env through the controlled process allowlist", async () => {
+    const runner = new EnvCaptureRunner()
+    const adapter = new CodexExecAdapter(runner, {
+      env: { EXISTING: "1" },
+      envAllowlist: ["EXISTING"],
+    })
+
+    await adapter.execute({
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      platform: "bridge",
+      content: "hello",
+    }, {
+      projectId: "project-1",
+      workDir: "/repo",
+      sessionEnv: {
+        CC_PROJECT: "project-1",
+        CC_SESSION_KEY: "bridge:s1",
+        SYNAPSE_SIDE_CHANNEL_TOKEN: "tok",
+      },
+      actor: { kind: "user" },
+    })
+
+    expect(runner.requests[0]).toEqual(expect.objectContaining({
+      env: expect.objectContaining({
+        EXISTING: "1",
+        CC_PROJECT: "project-1",
+        CC_SESSION_KEY: "bridge:s1",
+        SYNAPSE_SIDE_CHANNEL_TOKEN: "tok",
+      }),
+      envAllowlist: expect.arrayContaining([
+        "EXISTING",
+        "CC_PROJECT",
+        "CC_SESSION_KEY",
+        "SYNAPSE_SIDE_CHANNEL_TOKEN",
+      ]),
+    }))
   })
 })
 
@@ -155,3 +197,19 @@ describe("Codex JSONL parser", () => {
     ])
   })
 })
+
+class EnvCaptureRunner implements CodexProcessRunner {
+  readonly requests: ControlledProcessRunRequest[] = []
+
+  async run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult> {
+    this.requests.push(request)
+    return {
+      exitCode: 0,
+      signal: null,
+      stdout: JSON.stringify({ type: "turn.completed" }),
+      stderr: "",
+      timedOut: false,
+      durationMs: 1,
+    }
+  }
+}

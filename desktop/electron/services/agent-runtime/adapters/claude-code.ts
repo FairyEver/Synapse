@@ -62,8 +62,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         mode: this.options.mode,
       }),
       cwd: context.workDir,
-      env: this.options.env,
-      envAllowlist: this.options.envAllowlist,
+      env: mergeEnv(this.options.env, context.sessionEnv),
+      envAllowlist: mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv),
       output: { stdout: "json-lines", stderr: "buffer" },
       metadata: {
         adapter: this.agentType,
@@ -77,6 +77,23 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     liveSessionRef.current = new ClaudeCodeLiveSession(session, this.agentType, bufferedLines)
     return liveSessionRef.current
   }
+}
+
+function mergeEnv(
+  base: Record<string, string | undefined> | undefined,
+  sessionEnv: Record<string, string> | undefined,
+): Record<string, string | undefined> | undefined {
+  if (!base && !sessionEnv) return undefined
+  return { ...(base ?? {}), ...(sessionEnv ?? {}) }
+}
+
+function mergeEnvAllowlist(
+  base: readonly string[] | undefined,
+  sessionEnv: Record<string, string> | undefined,
+): readonly string[] | undefined {
+  const values = new Set(base ?? [])
+  for (const key of Object.keys(sessionEnv ?? {})) values.add(key)
+  return values.size > 0 ? [...values] : undefined
 }
 
 export function buildClaudeCodeArgs(options: ClaudeCodeArgsOptions = {}): string[] {

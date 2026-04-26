@@ -20,6 +20,7 @@ import type { AuditSink, PermissionGuard } from "../runtime/security"
 import {
   coreAppIconDescriptor,
   coreAuditSinkDescriptor,
+  coreBridgeAdapterDescriptor,
   coreConfigDescriptor,
   coreDataRepositoryDescriptor,
   coreDataStoreDescriptor,
@@ -29,6 +30,7 @@ import {
   corePermissionGuardDescriptor,
   coreProcessRuntimeDescriptor,
   coreProjectContainerRegistryDescriptor,
+  coreSideChannelDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
   createUiTrayDescriptor,
@@ -61,6 +63,8 @@ export function buildServiceRegistry(
   registry.register(coreWindowManagerDescriptor)
   registry.register(coreEventBusDescriptor)
   registry.register(coreProjectContainerRegistryDescriptor)
+  registry.register(coreSideChannelDescriptor)
+  registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDataStoreDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)

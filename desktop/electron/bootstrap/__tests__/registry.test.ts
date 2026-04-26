@@ -73,6 +73,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       [
         "core.audit-sink",
         "core.app-icon",
+        "core.bridge-adapter",
         "core.config",
         "core.data-repository",
         "core.data-store",
@@ -82,6 +83,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.permission-guard",
         "core.process-runtime",
         "core.project-containers",
+        "core.side-channel",
         "core.update",
         "core.window-manager",
         "repo.maintenance",
@@ -105,6 +107,20 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.project-containers")?.dependsOn).toEqual([
       "core.event-bus",
       "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.side-channel")?.dependsOn).toEqual([
+      "core.network-registry",
+      "core.project-containers",
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.bridge-adapter")?.dependsOn).toEqual([
+      "core.network-registry",
+      "core.project-containers",
+      "core.side-channel",
       "core.permission-guard",
       "core.audit-sink",
     ])
@@ -133,6 +149,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.event-bus")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))
+    expect(idx("core.project-containers")).toBeLessThan(idx("core.side-channel"))
+    expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.data-store")).toBeLessThan(idx("repo.pending-pushes"))
     expect(idx("core.app-icon")).toBeLessThan(idx("ui.tray"))

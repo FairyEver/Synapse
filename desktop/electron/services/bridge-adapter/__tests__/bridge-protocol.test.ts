@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest"
+
+import {
+  normalizeCapabilities,
+  parseBridgeBase,
+  parseBridgeMessage,
+  parseBridgeRegister,
+  sanitizeBridgeMetadata,
+} from "../bridge-protocol"
+
+describe("bridge protocol schema", () => {
+  it("accepts register and defaults text capability", () => {
+    const parsed = parseBridgeRegister({
+      type: "register",
+      platform: "adapter",
+      capabilities: ["card"],
+    })
+    expect(parsed.ok).toBe(true)
+    expect([...normalizeCapabilities(parsed.ok ? parsed.value.capabilities : [])].sort())
+      .toEqual(["card", "text"])
+  })
+
+  it("rejects register without platform", () => {
+    const parsed = parseBridgeRegister({
+      type: "register",
+      capabilities: ["text"],
+    })
+    expect(parsed.ok).toBe(false)
+  })
+
+  it("rejects message without session or user", () => {
+    expect(parseBridgeMessage({
+      type: "message",
+      user_id: "u1",
+      content: "hello",
+      reply_ctx: "ctx",
+    }).ok).toBe(false)
+    expect(parseBridgeMessage({
+      type: "message",
+      session_key: "s1",
+      content: "hello",
+      reply_ctx: "ctx",
+    }).ok).toBe(false)
+  })
+
+  it("parses unknown types without throwing", () => {
+    expect(parseBridgeBase({ type: "something_new" })).toEqual({
+      ok: true,
+      type: "something_new",
+    })
+  })
+
+  it("removes token-like metadata keys", () => {
+    expect(sanitizeBridgeMetadata({
+      control_plane: ["capabilities_snapshot_v1"],
+      token: "secret",
+      nested: { authorization: "bearer", ok: true },
+    })).toEqual({
+      control_plane: ["capabilities_snapshot_v1"],
+      nested: { ok: true },
+    })
+  })
+})
