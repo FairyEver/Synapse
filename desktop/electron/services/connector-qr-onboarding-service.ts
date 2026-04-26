@@ -7,7 +7,7 @@ import type { PermissionGuard, AuditSink } from "../runtime/security"
 import type { ConnectorRegistryService } from "./connector-registry-service"
 import type { ConnectorSecretStoreService } from "./connector-secret-store-service"
 
-export type ConnectorQrPlatform = "feishu" | "lark" | "weixin"
+export type ConnectorQrPlatform = "feishu" | "lark"
 export type ConnectorQrStatus = "waiting" | "scanned" | "success" | "expired" | "denied" | "cancelled" | "failed"
 
 export type ConnectorQrHttpRequest = {
@@ -47,19 +47,6 @@ export type FeishuRegistrationPoll = {
   tenantBrand?: string
   error?: string
   errorDescription?: string
-}
-
-export type WeixinQrPayload = {
-  qrCode?: string
-  qrCodeImageContent?: string
-}
-
-export type WeixinQrPoll = {
-  status?: string
-  botToken?: string
-  ilinkBotId?: string
-  baseUrl?: string
-  ilinkUserId?: string
 }
 
 export type ConnectorQrSession = {
@@ -123,7 +110,6 @@ type SaveCompletedQrInput = {
 
 const FEISHU_ACCOUNTS_BASE_URL = "https://accounts.feishu.cn"
 const LARK_ACCOUNTS_BASE_URL = "https://accounts.larksuite.com"
-const WEIXIN_DEFAULT_API_URL = "https://ilinkai.weixin.qq.com"
 
 let sequence = 0
 
@@ -139,6 +125,10 @@ function sessionId(platform: ConnectorQrPlatform): string {
 
 function errorText(code: string, description: string | undefined): string {
   return description ? `${code}: ${description}` : code
+}
+
+function isSupportedPlatform(type: string): type is ConnectorQrPlatform {
+  return type === "feishu" || type === "lark"
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -198,37 +188,12 @@ function mapFeishuPoll(raw: Record<string, unknown>): FeishuRegistrationPoll {
   }
 }
 
-function mapWeixinBegin(raw: Record<string, unknown>): WeixinQrPayload {
-  return {
-    qrCode: readString(raw.qrcode),
-    qrCodeImageContent: readString(raw.qrcode_img_content),
-  }
-}
-
-function mapWeixinPoll(raw: Record<string, unknown>): WeixinQrPoll {
-  return {
-    status: readString(raw.status),
-    botToken: readString(raw.bot_token),
-    ilinkBotId: readString(raw.ilink_bot_id),
-    baseUrl: readString(raw.baseurl),
-    ilinkUserId: readString(raw.ilink_user_id),
-  }
-}
-
 function toPublicSession(session: ConnectorQrSession): ConnectorQrPublicSession {
   let result: Record<string, string> | null = null
   if (session.result) {
-    if (session.platform === "weixin") {
-      result = {
-        ...(session.result.ilinkBotId ? { ilinkBotId: session.result.ilinkBotId } : {}),
-        ...(session.result.baseUrl ? { baseUrl: session.result.baseUrl } : {}),
-        ...(session.result.ilinkUserId ? { ilinkUserId: session.result.ilinkUserId } : {}),
-      }
-    } else {
-      result = {
-        ...(session.result.appId ? { appId: session.result.appId } : {}),
-        ...(session.result.ownerOpenId ? { ownerOpenId: session.result.ownerOpenId } : {}),
-      }
+    result = {
+      ...(session.result.appId ? { appId: session.result.appId } : {}),
+      ...(session.result.ownerOpenId ? { ownerOpenId: session.result.ownerOpenId } : {}),
     }
   }
 
@@ -344,23 +309,6 @@ export function resolveFeishuSetupInputs(
   }
 }
 
-export function resolveWeixinSetupMode(
-  requestedMode: "auto" | "new" | "bind",
-  token: string,
-): { mode: "new" | "bind"; error: string | null } {
-  const hasToken = Boolean(trimString(token))
-  if (requestedMode === "auto") {
-    return { mode: hasToken ? "bind" : "new", error: null }
-  }
-  if (requestedMode === "bind" && !hasToken) {
-    return { mode: "bind", error: "bind mode requires --token" }
-  }
-  if (requestedMode === "new" && hasToken) {
-    return { mode: "new", error: "new/QR mode does not accept --token; use `cc-connect weixin bind --token ...`" }
-  }
-  return { mode: requestedMode, error: null }
-}
-
 export class ConnectorQrOnboardingService {
   private readonly httpClient: ConnectorQrHttpClient
   private readonly config: ConfigAccess | null
@@ -461,76 +409,12 @@ export class ConnectorQrOnboardingService {
     }
   }
 
-  beginWeixinQr(payload: WeixinQrPayload): ConnectorQrSession {
-    const qrContent = trimString(payload.qrCodeImageContent)
-    const deviceCode = trimString(payload.qrCode)
-    if (!qrContent || !deviceCode) {
-      return this.failed("weixin", "empty qrcode_img_content from server")
-    }
-
-    return {
-      id: sessionId("weixin"),
-      platform: "weixin",
-      status: "waiting",
-      mode: "new",
-      qrContent,
-      deviceCode,
-      baseUrl: WEIXIN_DEFAULT_API_URL,
-      intervalSeconds: 1,
-      expiresAt: null,
-      refreshCount: 1,
-      result: null,
-      error: null,
-    }
-  }
-
-  pollWeixinQr(session: ConnectorQrSession, poll: WeixinQrPoll): ConnectorQrSession {
-    if (session.platform !== "weixin" || (session.status !== "waiting" && session.status !== "scanned")) {
-      return session
-    }
-
-    switch (poll.status) {
-      case undefined:
-      case "":
-      case "wait":
-        return { ...session, status: "waiting" }
-      case "scaned":
-        return { ...session, status: "scanned" }
-      case "expired":
-        return { ...session, status: "expired", refreshCount: session.refreshCount + 1, error: "qrcode expired" }
-      case "confirmed": {
-        const botToken = trimString(poll.botToken)
-        const ilinkBotId = trimString(poll.ilinkBotId)
-        if (!ilinkBotId) {
-          return { ...session, status: "failed", error: "login confirmed but ilink_bot_id missing" }
-        }
-        if (!botToken) {
-          return { ...session, status: "failed", error: "login confirmed but bot_token missing" }
-        }
-        return {
-          ...session,
-          status: "success",
-          result: {
-            botToken,
-            ilinkBotId,
-            ...(trimString(poll.baseUrl) ? { baseUrl: trimString(poll.baseUrl) as string } : {}),
-            ...(trimString(poll.ilinkUserId) ? { ilinkUserId: trimString(poll.ilinkUserId) as string } : {}),
-          },
-        }
-      }
-      default:
-        return { ...session, status: "waiting" }
-    }
-  }
-
   cancel(session: ConnectorQrSession): ConnectorQrSession {
     return { ...session, status: "cancelled" }
   }
 
   async beginQr(platform: ConnectorQrPlatform): Promise<ConnectorQrPublicSession> {
-    const session = platform === "weixin"
-      ? await this.beginWeixinQrFromRemote()
-      : await this.beginFeishuQrFromRemote(platform)
+    const session = await this.beginFeishuQrFromRemote(platform)
 
     this.sessions.set(session.id, session)
     return toPublicSession(session)
@@ -544,9 +428,7 @@ export class ConnectorQrOnboardingService {
 
     let next: ConnectorQrSession
     try {
-      next = session.platform === "weixin"
-        ? await this.pollWeixinQrFromRemote(session)
-        : await this.pollFeishuQrFromRemote(session)
+      next = await this.pollFeishuQrFromRemote(session)
     } catch (error) {
       next = {
         ...session,
@@ -573,20 +455,6 @@ export class ConnectorQrOnboardingService {
       throw new Error("扫码尚未完成。")
     }
 
-    if (session.platform === "weixin") {
-      return this.saveConnectorToProject({
-        projectId: input.projectId,
-        type: "weixin",
-        nameSuffix: "weixin",
-        options: {
-          token: session.result.botToken,
-          base_url: session.result.baseUrl ?? WEIXIN_DEFAULT_API_URL,
-          account_id: session.result.ilinkBotId,
-          ilink_user_id: session.result.ilinkUserId,
-        },
-      })
-    }
-
     return this.saveConnectorToProject({
       projectId: input.projectId,
       type: session.platform,
@@ -600,6 +468,10 @@ export class ConnectorQrOnboardingService {
   }
 
   async saveManualPlatform(input: SaveManualPlatformInput): Promise<ConnectorQrSaveResult> {
+    if (!isSupportedPlatform(input.type)) {
+      throw new Error("当前仅支持新增 Feishu 或 Lark。")
+    }
+
     return this.saveConnectorToProject({
       projectId: input.projectId,
       type: input.type,
@@ -663,34 +535,6 @@ export class ConnectorQrOnboardingService {
     return { ...current, baseUrl }
   }
 
-  private async beginWeixinQrFromRemote(apiBase = WEIXIN_DEFAULT_API_URL): Promise<ConnectorQrSession> {
-    const trimmedBase = apiBase.replace(/\/+$/, "")
-    const url = new URL(`${trimmedBase}/ilink/bot/get_bot_qrcode`)
-    url.searchParams.set("bot_type", "3")
-    const raw = await this.getJson(url.toString(), "weixin get_bot_qrcode", {
-      timeoutMs: 15_000,
-    })
-
-    return {
-      ...this.beginWeixinQr(mapWeixinBegin(raw)),
-      baseUrl: trimmedBase,
-    }
-  }
-
-  private async pollWeixinQrFromRemote(session: ConnectorQrSession): Promise<ConnectorQrSession> {
-    const apiBase = session.baseUrl ?? WEIXIN_DEFAULT_API_URL
-    const url = new URL(`${apiBase.replace(/\/+$/, "")}/ilink/bot/get_qrcode_status`)
-    url.searchParams.set("qrcode", session.deviceCode ?? "")
-    const raw = await this.getJson(url.toString(), "weixin get_qrcode_status", {
-      headers: { "iLink-App-ClientVersion": "1" },
-      timeoutMs: 40_000,
-    })
-    return {
-      ...this.pollWeixinQr(session, mapWeixinPoll(raw)),
-      baseUrl: apiBase,
-    }
-  }
-
   private async feishuRegistrationCall(
     baseUrl: string,
     action: string,
@@ -730,25 +574,6 @@ export class ConnectorQrOnboardingService {
       }
       throw error
     }
-  }
-
-  private async getJson(
-    url: string,
-    context: string,
-    options: { headers?: Record<string, string>; timeoutMs?: number } = {},
-  ): Promise<Record<string, unknown>> {
-    await this.checkNetworkPermission(url)
-    const response = await this.httpClient({
-      method: "GET",
-      url,
-      headers: options.headers,
-      timeoutMs: options.timeoutMs,
-    })
-    this.recordNetworkAudit(url, response.status >= 200 && response.status < 300 ? "allowed" : "failed")
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`${context}: http ${response.status}`)
-    }
-    return parseJsonObject(response.body, context)
   }
 
   private async checkNetworkPermission(url: string): Promise<void> {
@@ -866,7 +691,7 @@ export class ConnectorQrOnboardingService {
       mode: "new",
       qrContent: null,
       deviceCode: null,
-      baseUrl: platform === "weixin" ? WEIXIN_DEFAULT_API_URL : FEISHU_ACCOUNTS_BASE_URL,
+      baseUrl: FEISHU_ACCOUNTS_BASE_URL,
       intervalSeconds: 0,
       expiresAt: null,
       refreshCount: 0,

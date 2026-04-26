@@ -481,11 +481,12 @@ function ProjectDetailPanel({
                   <div key={platform.id} className="rounded-lg border border-border p-3">
                     <div className="space-y-1">
                       <p className="font-medium">{platform.name}</p>
-                      <p className="text-sm text-muted-foreground">{platform.type}</p>
+                      <p className="text-sm text-muted-foreground">{getPlatformLabel(platform.type)}</p>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Badge variant="outline">{platform.status}</Badge>
                       <Badge variant="outline">{platform.enabled ? "启用" : "停用"}</Badge>
+                      {SUPPORTED_PLATFORM_TYPES.has(platform.type) ? null : <Badge variant="secondary">不支持</Badge>}
                       {platform.allowFrom ? <Badge variant="outline">{platform.allowFrom}</Badge> : null}
                     </div>
                   </div>
@@ -952,21 +953,11 @@ function ProjectProviderDialog({
   )
 }
 
-const QR_PLATFORM_TYPES = new Set(["feishu", "lark", "weixin"])
-const MANUAL_PLATFORM_ORDER = ["telegram", "discord", "slack", "dingtalk", "wecom", "qq", "qqbot", "line", "weibo"]
+const SUPPORTED_PLATFORM_TYPES = new Set(["feishu", "lark"])
+const QR_PLATFORM_TYPES = new Set(["feishu", "lark"])
 const PLATFORM_LABELS: Record<string, string> = {
-  dingtalk: "DingTalk",
-  discord: "Discord",
   feishu: "Feishu",
   lark: "Lark",
-  line: "LINE",
-  qq: "QQ",
-  qqbot: "QQ Bot",
-  slack: "Slack",
-  telegram: "Telegram",
-  wecom: "WeCom",
-  weibo: "Weibo",
-  weixin: "Weixin",
 }
 
 const OPTION_LABELS: Record<string, string> = {
@@ -1017,7 +1008,7 @@ function PlatformConnectionDialog({
   const [isOpen, setIsOpen] = useState(false)
   const [descriptors, setDescriptors] = useState<SynapseConnectorDescriptor[]>([])
   const [descriptorError, setDescriptorError] = useState<string | null>(null)
-  const [platform, setPlatform] = useState("telegram")
+  const [platform, setPlatform] = useState<SynapseConnectorQrPlatform>("feishu")
 
   useEffect(() => {
     if (!isOpen || descriptors.length > 0) {
@@ -1055,23 +1046,13 @@ function PlatformConnectionDialog({
     [descriptors],
   )
   const platformOptions = useMemo(() => {
-    const manualOptions = MANUAL_PLATFORM_ORDER
-      .map((type) => ({
-        value: type,
-        label: descriptorMap.get(type)?.label ?? PLATFORM_LABELS[type] ?? type,
-        method: "manual" as const,
-      }))
-
-    return [
-      ...manualOptions,
-      { value: "feishu", label: descriptorMap.get("feishu")?.label ?? PLATFORM_LABELS.feishu, method: "qr" as const },
-      { value: "lark", label: descriptorMap.get("lark")?.label ?? PLATFORM_LABELS.lark, method: "qr" as const },
-      { value: "weixin", label: descriptorMap.get("weixin")?.label ?? PLATFORM_LABELS.weixin, method: "qr" as const },
-    ]
+    return (["feishu", "lark"] as const).map((type) => ({
+      value: type,
+      label: descriptorMap.get(type)?.label ?? PLATFORM_LABELS[type],
+    }))
   }, [descriptorMap])
 
   const selected = platformOptions.find((option) => option.value === platform) ?? platformOptions[0]
-  const selectedDescriptor = descriptorMap.get(selected.value)
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -1092,7 +1073,7 @@ function PlatformConnectionDialog({
               id="platform-kind"
               className="w-full"
               value={platform}
-              onChange={(event) => setPlatform(event.target.value)}
+              onChange={(event) => setPlatform(event.target.value as SynapseConnectorQrPlatform)}
             >
               {platformOptions.map((option) => (
                 <NativeSelectOption key={option.value} value={option.value}>
@@ -1102,29 +1083,21 @@ function PlatformConnectionDialog({
             </NativeSelect>
           </Field>
           <FieldError>{descriptorError}</FieldError>
-          {selected.method === "manual" ? (
-            selectedDescriptor ? (
-              <ManualPlatformForm
-                key={selectedDescriptor.type}
-                descriptor={selectedDescriptor}
-                project={project}
-                onRefreshConfig={onRefreshConfig}
-                onClose={() => setIsOpen(false)}
-              />
-            ) : null
-          ) : (
-            <QrPlatformOnboardingForm
-              key={selected.value}
-              platform={selected.value as SynapseConnectorQrPlatform}
-              project={project}
-              onRefreshConfig={onRefreshConfig}
-              onClose={() => setIsOpen(false)}
-            />
-          )}
+          <QrPlatformOnboardingForm
+            key={selected.value}
+            platform={selected.value}
+            project={project}
+            onRefreshConfig={onRefreshConfig}
+            onClose={() => setIsOpen(false)}
+          />
         </FieldGroup>
       </DialogContent>
     </Dialog>
   )
+}
+
+function getPlatformLabel(type: string): string {
+  return PLATFORM_LABELS[type] ?? type
 }
 
 function ManualPlatformForm({

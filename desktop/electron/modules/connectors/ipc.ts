@@ -56,7 +56,7 @@ const draftInputSchema = z.object({
   secretRefs: z.record(z.string(), z.string()).optional(),
 })
 
-const qrPlatformSchema = z.enum(["feishu", "lark", "weixin"])
+const qrPlatformSchema = z.enum(["feishu", "lark"])
 
 const qrSessionSchema = z.object({
   sessionId: z.string(),

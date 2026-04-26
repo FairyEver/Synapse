@@ -50,7 +50,7 @@ export type SynapseConnectorDraft = {
   warnings: string[]
 }
 
-export type SynapseConnectorQrPlatform = "feishu" | "lark" | "weixin"
+export type SynapseConnectorQrPlatform = "feishu" | "lark"
 
 export type SynapseConnectorQrStatus =
   | "waiting"

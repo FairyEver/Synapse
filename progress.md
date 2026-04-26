@@ -1,21 +1,18 @@
-# CC Connect 融合开发方案进度记录
+# Stage 14 Feishu/Lark Runtime Migration Progress
 
-## 2026-04-25 19:02 CST
+## 2026-04-26
 
-- 接收任务：阅读四份 CC Connect 融合文档，仅编写开发方案，不改业务代码。
-- 使用 `planning-with-files-zh` 记录复杂规划任务的过程。
-- 已确认项目根目录没有既有 `task_plan.md`、`findings.md`、`progress.md`。
-- 已创建本次任务的轻量规划文件。
-- 已完成四份输入文档的标题结构扫描。
-- 已阅读 `产品设计.md` 正文，确认产品层要求覆盖会话、项目、连接、自动化、Provider、IDE、规则/Skill/Prompt、命令、安全、文件引用、语音附件、系统治理等。
-- 已阅读 `架构方案.md`、`功能覆盖.md`、`约束与风险.md`，确认技术原则是吸收架构、重建 TypeScript/Electron 服务、分阶段闭环落地。
-- 已对照当前 Synapse 目录、`App.tsx`、preload/bridge 类型、ServiceRegistry/IpcModule/DataRepository 等基础设施。
-- 已写入 `待办/融合cc-connet/开发方案.md`。
-- 已自检开发方案章节、功能覆盖矩阵、阶段计划、验收标准、风险控制和当前仓库落点。
-- 未修改业务代码，未启动 dev server，未运行浏览器或 Playwright。
-
-## 2026-04-25 Stop Hook 修正
-
-- 收到 planning hook 提示任务未完成，已按要求重新读取 `task_plan.md`、`progress.md`、`findings.md`。
-- 确认任务实际已完成，原因是 `task_plan.md` 使用表格状态，检查脚本只识别 `### 阶段` + `**状态：** complete` 或 `[complete]` 格式。
-- 已将 `task_plan.md` 改为检查脚本可识别的阶段格式。
+- 接收 Stage 14 任务：Synapse 外部平台仅保留 Feishu/Lark，并完整迁移 CC Connect Feishu/Lark runtime。
+- 已读取技能约束：`shadcn`、`karpathy-guidelines`、`planning-with-files-zh`。
+- 已读取项目 UI 规则：`.claude/rules/design.md`、`.claude/rules/ui-rules.md`。
+- 已确认当前仓库路径为 `/Users/liyang/Documents/code/github/Synapse`，当前分支 `main`，相对 `origin/main` ahead 76。
+- 已将规划文件切换为 Stage 14 当前任务。
+- 已创建工作分支 `codex/stage14-feishu-lark-runtime`。
+- 已阅读用户指定 CC Connect 源码中的 Feishu/Lark registration、config 写入、runtime Start、WebSocket、message receive、reply send、card action、bot menu、core Engine 和接口。
+- 已阅读用户指定 Synapse 源码中的 connector registry、QR onboarding、IPC/preload、renderer connectors module、AgentSessionConnectService、BridgeService、ManagementApiService、bootstrap descriptors 和相关测试。
+- 已新增 `14.0-feishu-lark-runtime-state.md` 与 `14.1-feishu-lark-source-trace.md`。
+- B01：已将内置 descriptors、QR 平台类型、IPC schema 和添加平台 UI 裁剪为 Feishu/Lark。
+- B01：非 Feishu/Lark manual save 现在拒绝写入；历史平台连接继续展示并标记“不支持”。
+- B01 验证：`pnpm --filter @synapse/desktop exec vitest run tests/unit/connector-qr.test.ts tests/unit/connectors.test.ts` 通过，16 tests。
+- 已新增 `14.2-platform-scope-prune-report.md`。
+- 当前回合未继续 Stage 14 代码实现；用户在设计双 Codex 对话长任务运行系统。已建议采用 Controller/Worker 文件交接流，由 Controller 写入 `.ai-control/prompts/current-worker-prompt.md`，Worker 用固定短句读取并执行。

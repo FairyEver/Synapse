@@ -2,69 +2,51 @@ import { describe, expect, it } from "vitest"
 import { ConnectorRegistryService } from "../../electron/services/connector-registry-service"
 
 describe("connector registry", () => {
-  it("registers CC Connect platform descriptors and capability map", () => {
+  it("exposes only Feishu and Lark built-in platform descriptors", () => {
     const registry = new ConnectorRegistryService()
     const types = registry.listDescriptors().map((descriptor) => descriptor.type)
 
-    expect(types).toEqual([
-      "dingtalk",
-      "discord",
-      "feishu",
-      "lark",
-      "line",
-      "qq",
-      "qqbot",
-      "slack",
-      "telegram",
-      "wecom",
-      "weibo",
-      "weixin",
-    ])
-
-    expect(registry.getDescriptor("telegram")?.capabilities).toEqual(expect.arrayContaining([
-      "image.in",
-      "file.out",
-      "reply-context.reconstruct",
-    ]))
+    expect(types).toEqual(["feishu", "lark"])
     expect(registry.getDescriptor("feishu")?.capabilities).toEqual(expect.arrayContaining([
       "card.out",
       "button.out",
       "progress.card",
     ]))
-    expect(registry.getDescriptor("wecom")?.capabilities).toEqual(expect.arrayContaining([
-      "audio.in",
-      "async.recover",
+    expect(registry.getDescriptor("lark")?.options.map((option) => option.name)).toEqual(expect.arrayContaining([
+      "app_id",
+      "app_secret",
+      "domain",
+      "group_reply_all",
+      "thread_isolation",
     ]))
   })
 
   it("keeps raw platform secrets out of connector JSON", () => {
     const registry = new ConnectorRegistryService()
     const draft = registry.createConnectorDraft({
-      type: "slack",
+      type: "feishu",
       name: "workspace-a",
       options: {
-        bot_token: "xoxb-secret",
-        app_token: "xapp-secret",
+        app_id: "cli_123",
+        app_secret: "sec_hidden",
         allow_from: "U1,U2",
       },
     })
 
     expect(draft.connector).toMatchObject({
-      id: "connector:slack:workspace-a",
-      type: "slack",
+      id: "connector:feishu:workspace-a",
+      type: "feishu",
       status: "configured",
       allowFrom: "U1,U2",
       secretRefs: {
-        bot_token: "connector:slack:workspace-a:bot-token",
-        app_token: "connector:slack:workspace-a:app-token",
+        app_secret: "connector:feishu:workspace-a:app-secret",
       },
     })
-    expect(draft.secrets.map((secret) => secret.value)).toEqual(["xoxb-secret", "xapp-secret"])
-    expect(JSON.stringify(draft.connector)).not.toContain("xoxb-secret")
-    expect(JSON.stringify(draft.connector)).not.toContain("xapp-secret")
+    expect(draft.secrets.map((secret) => secret.value)).toEqual(["sec_hidden"])
+    expect(JSON.stringify(draft.connector)).not.toContain("sec_hidden")
   })
 
-  it("marks missing required credentials invalid without attempting real platform connections", () => {
+  it("rejects non Feishu/Lark platform drafts as unsupported legacy types", () => {
     const registry = new ConnectorRegistryService()
     const draft = registry.createConnectorDraft({
       type: "telegram",
@@ -73,20 +55,19 @@ describe("connector registry", () => {
 
     expect(draft.connector.status).toBe("invalid")
     expect(draft.issues).toEqual([{
-      code: "missing_required_option",
-      option: "token",
-      message: "telegram.token is required",
+      code: "unknown_connector_type",
+      message: "unknown connector type \"telegram\"",
     }])
   })
 
   it("preserves disabled connector state and warns on open allow_from", () => {
     const registry = new ConnectorRegistryService()
     const draft = registry.createConnectorDraft({
-      type: "line",
+      type: "lark",
       enabled: false,
       options: {
-        channel_secret: "secret",
-        channel_token: "token",
+        app_id: "cli_lark",
+        app_secret: "sec_lark",
       },
     })
 

@@ -5,7 +5,6 @@ import {
   ConnectorQrOnboardingService,
   type ConnectorQrHttpClient,
   resolveFeishuSetupInputs,
-  resolveWeixinSetupMode,
 } from "../../electron/services/connector-qr-onboarding-service"
 import { ConnectorRegistryService } from "../../electron/services/connector-registry-service"
 import type { ConnectorSecretStoreService } from "../../electron/services/connector-secret-store-service"
@@ -305,126 +304,55 @@ describe("connector QR onboarding service", () => {
     })
   })
 
-  it("resolves Weixin bind/new modes and QR states", () => {
-    expect(resolveWeixinSetupMode("auto", "")).toEqual({ mode: "new", error: null })
-    expect(resolveWeixinSetupMode("auto", "token")).toEqual({ mode: "bind", error: null })
-    expect(resolveWeixinSetupMode("new", "token").error).toContain("new/QR mode does not accept --token")
-
-    const service = new ConnectorQrOnboardingService()
-    const session = service.beginWeixinQr({
-      qrCode: "qr-key",
-      qrCodeImageContent: "https://weixin.example.test/qr",
-    })
-
-    expect(session).toMatchObject({
-      platform: "weixin",
-      status: "waiting",
-      deviceCode: "qr-key",
-      qrContent: "https://weixin.example.test/qr",
-      refreshCount: 1,
-    })
-    expect(service.pollWeixinQr(session, { status: "scaned" }).status).toBe("scanned")
-    expect(service.pollWeixinQr(session, { status: "expired" })).toMatchObject({
-      status: "expired",
-      refreshCount: 2,
-      error: "qrcode expired",
-    })
-    expect(service.pollWeixinQr(session, {
-      status: "confirmed",
-      botToken: "bot-token",
-      ilinkBotId: "bot-id",
-      baseUrl: "https://ilink.example.test",
-      ilinkUserId: "wx-user",
-    })).toMatchObject({
-      status: "success",
-      result: {
-        botToken: "bot-token",
-        ilinkBotId: "bot-id",
-        baseUrl: "https://ilink.example.test",
-        ilinkUserId: "wx-user",
-      },
-    })
-  })
-
-  it("begins and polls Weixin QR onboarding through ilink", async () => {
-    const { client, requests } = createMockHttpClient([
-      { body: { qrcode: "qr-key", qrcode_img_content: "https://weixin.example.test/qr" } },
-      { body: { status: "wait" } },
-      { body: { status: "scaned" } },
-      { body: { status: "expired" } },
-    ])
-    const service = new ConnectorQrOnboardingService({ httpClient: client })
-    const session = await service.beginQr("weixin")
-
-    expect(session).toMatchObject({
-      platform: "weixin",
-      status: "waiting",
-      qrContent: "https://weixin.example.test/qr",
-    })
-    expect(requests[0]?.url).toContain("/ilink/bot/get_bot_qrcode?bot_type=3")
-    expect(await service.pollQr(session.sessionId)).toMatchObject({ status: "waiting" })
-    expect(await service.pollQr(session.sessionId)).toMatchObject({ status: "scanned" })
-    expect(requests[2]?.headers).toMatchObject({ "iLink-App-ClientVersion": "1" })
-    expect(await service.pollQr(session.sessionId)).toMatchObject({ status: "expired" })
-  })
-
-  it("rejects Weixin confirmed responses without bot_token or ilink_bot_id", () => {
-    const service = new ConnectorQrOnboardingService()
-    const session = service.beginWeixinQr({
-      qrCode: "qr-key",
-      qrCodeImageContent: "https://weixin.example.test/qr",
-    })
-
-    expect(service.pollWeixinQr(session, { status: "confirmed", botToken: "bot-token" })).toMatchObject({
-      status: "failed",
-      error: "login confirmed but ilink_bot_id missing",
-    })
-    expect(service.pollWeixinQr(session, { status: "confirmed", ilinkBotId: "bot-id" })).toMatchObject({
-      status: "failed",
-      error: "login confirmed but bot_token missing",
-    })
-  })
-
-  it("saves Weixin token into secret refs only", async () => {
+  it("saves Lark app_secret into secret refs after registration completion", async () => {
     const harness = createSaveHarness()
     const { client } = createMockHttpClient([
-      { body: { qrcode: "qr-key", qrcode_img_content: "https://weixin.example.test/qr" } },
-      { body: { status: "confirmed", bot_token: "wx-token-hidden", ilink_bot_id: "bot-id", baseurl: "https://ilink.example.test", ilink_user_id: "wx-user" } },
+      { body: { supported_auth_methods: ["client_secret"] } },
+      { body: { device_code: "device-1", verification_uri_complete: "https://qr.example.test" } },
+      { body: { error: "authorization_pending", user_info: { tenant_brand: "lark" } } },
+      { body: { client_id: "cli_lark", client_secret: "sec_lark_hidden", user_info: { tenant_brand: "lark", open_id: "ou_owner" } } },
     ])
     const service = new ConnectorQrOnboardingService({
       ...harness.options,
       httpClient: client,
     })
-    const session = await service.beginQr("weixin")
+    const session = await service.beginQr("lark")
     const completed = await service.pollQr(session.sessionId)
 
-    expect(JSON.stringify(completed)).not.toContain("wx-token-hidden")
+    expect(completed).toMatchObject({
+      platform: "lark",
+      status: "success",
+      result: {
+        appId: "cli_lark",
+        ownerOpenId: "ou_owner",
+      },
+    })
+    expect(JSON.stringify(completed)).not.toContain("sec_lark_hidden")
     const result = await service.saveCompletedQr({ sessionId: session.sessionId, projectId: "project-1" })
 
     expect(result.connection).toMatchObject({
-      type: "weixin",
+      type: "lark",
       status: "configured",
       options: {
-        base_url: "https://ilink.example.test",
-        account_id: "bot-id",
-        ilink_user_id: "wx-user",
+        app_id: "cli_lark",
+        owner_open_id: "ou_owner",
       },
       secretRefs: {
-        token: "connector:weixin:synapse-weixin:token",
+        app_secret: "connector:lark:synapse-lark:app-secret",
       },
     })
     expect(harness.secrets).toEqual([{
-      id: "connector:weixin:synapse-weixin:token",
-      value: "wx-token-hidden",
+      id: "connector:lark:synapse-lark:app-secret",
+      value: "sec_lark_hidden",
     }])
-    expect(JSON.stringify(harness.config.global.projects)).not.toContain("wx-token-hidden")
+    expect(JSON.stringify(harness.config.global.projects)).not.toContain("sec_lark_hidden")
   })
 
-  it("saves manual platform secrets through the main-side secret store", async () => {
+  it("rejects manual saves for unsupported legacy platforms", async () => {
     const harness = createSaveHarness()
     const service = new ConnectorQrOnboardingService(harness.options)
 
-    const result = await service.saveManualPlatform({
+    await expect(service.saveManualPlatform({
       projectId: "project-1",
       type: "slack",
       options: {
@@ -432,18 +360,8 @@ describe("connector QR onboarding service", () => {
         app_token: "xapp-hidden",
         allow_from: "U1",
       },
-    })
-
-    expect(result.connection).toMatchObject({
-      type: "slack",
-      status: "configured",
-      secretRefs: {
-        bot_token: "connector:slack:synapse-slack:bot-token",
-        app_token: "connector:slack:synapse-slack:app-token",
-      },
-    })
-    expect(harness.secrets.map((secret) => secret.value)).toEqual(["xoxb-hidden", "xapp-hidden"])
-    expect(JSON.stringify(harness.config.global.projects)).not.toContain("xoxb-hidden")
-    expect(JSON.stringify(harness.config.global.projects)).not.toContain("xapp-hidden")
+    })).rejects.toThrow("当前仅支持新增 Feishu 或 Lark。")
+    expect(harness.secrets).toEqual([])
+    expect(harness.config.global.projects[0]?.platformConnections).toEqual([])
   })
 })
