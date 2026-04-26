@@ -54,6 +54,50 @@ export type SynapseSwitchAgentSessionPayload = {
   sessionId: string
 }
 
+export type SynapseCommandGroup = "session" | "settings" | "info" | "advanced"
+
+export type SynapseCommandSource = "builtin" | "custom"
+
+export type SynapseCommandCatalogItem = {
+  id: string
+  command: string
+  aliases: string[]
+  title: string
+  description: string
+  group: SynapseCommandGroup
+  source: SynapseCommandSource
+  disabled: boolean
+  highRisk: boolean
+  argsMode: "none" | "text"
+}
+
+export type SynapseListCommandsPayload = {
+  projectId: string
+}
+
+export type SynapseListCommandsResult = {
+  commands: SynapseCommandCatalogItem[]
+}
+
+export type SynapseExecuteCommandPayload = {
+  projectId: string
+  sessionId: string
+  sessionKey?: string
+  command: string
+  permissionDecision?: "allow" | "deny"
+}
+
+export type SynapseCommandExecutionResult = {
+  status: "completed" | "error" | "permission_required" | "denied"
+  command: string
+  title: string
+  content: string
+  format: "text" | "markdown"
+  error: string | null
+  session: SynapseAgentSessionDetail | null
+  requiresPermission: boolean
+}
+
 export type SynapseSendAgentMessagePayload = {
   projectId: string
   sessionId: string

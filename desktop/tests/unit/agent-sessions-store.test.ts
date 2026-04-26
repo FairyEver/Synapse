@@ -240,6 +240,115 @@ describe("agent sessions store service", () => {
     })).rejects.toThrow("permission request not found")
   })
 
+  it("lists and executes safe commands with disabled-command filtering", async () => {
+    const service = new AgentSessionsStoreService({ namespace: null, now: clock() })
+    const projects = [project({ disabledCommands: ["upgrade"] })]
+    const created = await service.createSession(projects, {
+      projectId: "project-1",
+      sessionKey: "bridge:web-admin:alpha",
+    })
+
+    const catalog = await service.listCommands(projects, { projectId: "project-1" })
+    expect(catalog.commands.find((command) => command.id === "status")).toMatchObject({
+      command: "/status",
+      group: "info",
+      disabled: false,
+    })
+    expect(catalog.commands.find((command) => command.id === "upgrade")).toMatchObject({
+      command: "/upgrade",
+      disabled: true,
+      highRisk: true,
+    })
+
+    const status = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      sessionKey: created.sessionKey,
+      command: "/status",
+    })
+
+    expect(status).toMatchObject({
+      status: "completed",
+      command: "/status",
+      title: "状态",
+      error: null,
+      requiresPermission: false,
+    })
+    expect(status.content).toContain("项目：alpha")
+
+    await service.appendHistoryForTest("project-1", "bridge:web-admin:alpha", "user", "hello")
+    const history = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      command: "/history",
+    })
+    expect(history.content).toContain("user: hello")
+
+    const disabled = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      command: "/upgrade",
+    })
+    expect(disabled).toMatchObject({
+      status: "error",
+      error: "command disabled",
+    })
+  })
+
+  it("creates a new session from /new and gates high-risk commands", async () => {
+    const service = new AgentSessionsStoreService({ namespace: null, now: clock() })
+    const projects = [project()]
+    const created = await service.createSession(projects, {
+      projectId: "project-1",
+      sessionKey: "bridge:web-admin:alpha",
+    })
+
+    const next = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: created.id,
+      sessionKey: created.sessionKey,
+      command: "/new research",
+    })
+    expect(next.status).toBe("completed")
+    expect(next.session).toMatchObject({
+      name: "research",
+      sessionKey: created.sessionKey,
+    })
+    expect(next.session?.id).not.toBe(created.id)
+
+    const gated = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: next.session?.id ?? created.id,
+      sessionKey: created.sessionKey,
+      command: "/shell ls",
+    })
+    expect(gated).toMatchObject({
+      status: "permission_required",
+      requiresPermission: true,
+    })
+
+    const denied = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: next.session?.id ?? created.id,
+      sessionKey: created.sessionKey,
+      command: "/shell ls",
+      permissionDecision: "deny",
+    })
+    expect(denied.status).toBe("denied")
+
+    const allowed = await service.executeCommand(projects, {
+      projectId: "project-1",
+      sessionId: next.session?.id ?? created.id,
+      sessionKey: created.sessionKey,
+      command: "/shell ls",
+      permissionDecision: "allow",
+    })
+    expect(allowed).toMatchObject({
+      status: "error",
+      error: "runtime not connected",
+    })
+  })
+
   it("rejects empty input before starting an engine turn", async () => {
     const service = new AgentSessionsStoreService({ namespace: null, now: clock() })
     const projects = [project()]

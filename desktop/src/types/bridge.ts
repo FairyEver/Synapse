@@ -83,9 +83,13 @@ import type {
 import type { SynapseAppUpdateState } from "./update"
 import type {
   SynapseAgentSessionDetail,
+  SynapseCommandExecutionResult,
+  SynapseExecuteCommandPayload,
   SynapseAgentSessionListResult,
   SynapseCreateAgentSessionPayload,
   SynapseGetAgentSessionPayload,
+  SynapseListCommandsPayload,
+  SynapseListCommandsResult,
   SynapseRespondPermissionPayload,
   SynapseRespondPermissionResult,
   SynapseSendAgentMessagePayload,
@@ -237,6 +241,8 @@ export type SynapseBridge = {
     getDetail: (payload: SynapseGetAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
     create: (payload: SynapseCreateAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
     switchSession: (payload: SynapseSwitchAgentSessionPayload) => Promise<SynapseAgentSessionDetail>
+    listCommands: (payload: SynapseListCommandsPayload) => Promise<SynapseListCommandsResult>
+    executeCommand: (payload: SynapseExecuteCommandPayload) => Promise<SynapseCommandExecutionResult>
     send: (payload: SynapseSendAgentMessagePayload) => Promise<SynapseSendAgentMessageResult>
     respondPermission: (payload: SynapseRespondPermissionPayload) => Promise<SynapseRespondPermissionResult>
   }

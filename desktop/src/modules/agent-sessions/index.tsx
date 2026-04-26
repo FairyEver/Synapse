@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react"
-import { Bot, Brain, Check, Copy, Loader2, MessageSquare, Plus, RefreshCw, Send, Terminal, User, Wrench, X } from "lucide-react"
+import { Bot, Brain, Check, Copy, Loader2, MessageSquare, Plus, RefreshCw, Send, Slash, Terminal, User, Wrench, X } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,14 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -18,6 +26,14 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
@@ -27,6 +43,9 @@ import type {
   SynapseAgentSessionEventRecord,
   SynapseAgentSessionDetail,
   SynapseAgentSessionSummary,
+  SynapseCommandCatalogItem,
+  SynapseCommandExecutionResult,
+  SynapseCommandGroup,
   SynapseMessageInteraction,
   SynapsePendingPermission,
   SynapseSessionMessage,
@@ -404,6 +423,142 @@ function EventStream({
   )
 }
 
+const commandGroupLabels: Record<SynapseCommandGroup, string> = {
+  session: "会话",
+  settings: "设置",
+  info: "信息",
+  advanced: "高级",
+}
+
+const commandGroupOrder: SynapseCommandGroup[] = ["session", "settings", "info", "advanced"]
+
+function commandStatusLabel(status: SynapseCommandExecutionResult["status"]): string {
+  switch (status) {
+    case "completed":
+      return "完成"
+    case "error":
+      return "失败"
+    case "permission_required":
+      return "待确认"
+    case "denied":
+      return "已拒绝"
+  }
+}
+
+function CommandPalette({
+  open,
+  commands,
+  loading,
+  onOpenChange,
+  onSelect,
+}: {
+  open: boolean
+  commands: SynapseCommandCatalogItem[]
+  loading: boolean
+  onOpenChange: (open: boolean) => void
+  onSelect: (command: SynapseCommandCatalogItem) => void
+}) {
+  const grouped = useMemo(
+    () => commandGroupOrder.map((group) => ({
+      group,
+      commands: commands.filter((command) => command.group === group),
+    })).filter((entry) => entry.commands.length > 0),
+    [commands],
+  )
+
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="命令"
+      description="搜索命令"
+      data-track="agent-session-command-palette"
+    >
+      <CommandInput placeholder="搜索命令" />
+      <CommandList>
+        <CommandEmpty>{loading ? "加载中" : "没有命令"}</CommandEmpty>
+        {grouped.map((entry) => (
+          <CommandGroup key={entry.group} heading={commandGroupLabels[entry.group]}>
+            {entry.commands.map((command) => (
+              <CommandItem
+                key={command.id}
+                value={`${command.command} ${command.title} ${command.description} ${command.aliases.join(" ")}`}
+                disabled={command.disabled}
+                onSelect={() => onSelect(command)}
+                data-track={`agent-command-${command.id}`}
+              >
+                <Slash className="size-4 text-muted-foreground" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{command.command}</span>
+                    <span className="truncate text-muted-foreground">{command.title}</span>
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">{command.description}</p>
+                </div>
+                {command.highRisk ? <Badge variant="outline">确认</Badge> : null}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
+      </CommandList>
+    </CommandDialog>
+  )
+}
+
+function CommandResultSheet({
+  result,
+  busy,
+  onOpenChange,
+  onPermissionDecision,
+}: {
+  result: SynapseCommandExecutionResult | null
+  busy: boolean
+  onOpenChange: (open: boolean) => void
+  onPermissionDecision: (decision: "allow" | "deny") => void
+}) {
+  return (
+    <Sheet open={Boolean(result)} onOpenChange={onOpenChange} data-track="agent-command-result">
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>{result?.title ?? "命令"}</SheetTitle>
+          <SheetDescription>{result?.command ?? ""}</SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-auto px-4">
+          {result ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={result.status === "error" ? "destructive" : "secondary"}>
+                  {commandStatusLabel(result.status)}
+                </Badge>
+                {result.requiresPermission ? <Badge variant="outline">需要确认</Badge> : null}
+              </div>
+              {result.format === "markdown" ? (
+                <MarkdownContent content={result.content} />
+              ) : (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{result.content}</p>
+              )}
+              {result.error ? <p className="text-sm text-destructive">{result.error}</p> : null}
+            </div>
+          ) : null}
+        </div>
+        {result?.requiresPermission ? (
+          <SheetFooter>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={busy} onClick={() => onPermissionDecision("deny")}>
+                拒绝
+              </Button>
+              <Button type="button" disabled={busy} onClick={() => onPermissionDecision("allow")}>
+                {busy ? <Loader2 data-icon="inline-start" className="size-4 animate-spin" /> : null}
+                继续
+              </Button>
+            </div>
+          </SheetFooter>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 function AgentSessionsModule() {
   const { config, isReady } = useAppConfig()
   const [sessions, setSessions] = useState<SynapseAgentSessionSummary[]>([])
@@ -417,6 +572,11 @@ function AgentSessionsModule() {
   const [eventsBySession, setEventsBySession] = useState<Record<string, SynapseAgentSessionEventRecord[]>>({})
   const [pendingPermissions, setPendingPermissions] = useState<Record<string, SynapsePendingPermission | null>>({})
   const [permissionBusy, setPermissionBusy] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
+  const [commands, setCommands] = useState<SynapseCommandCatalogItem[]>([])
+  const [commandLoading, setCommandLoading] = useState(false)
+  const [commandResult, setCommandResult] = useState<SynapseCommandExecutionResult | null>(null)
+  const [commandBusy, setCommandBusy] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -492,6 +652,81 @@ function AgentSessionsModule() {
       setDetailLoading(false)
     }
   }, [projects, selectedProject])
+
+  const loadCommands = useCallback(async () => {
+    const project = detail ? projects.find((item) => item.id === detail.projectId) : selectedProject
+    if (!project) {
+      setCommands([])
+      return
+    }
+
+    setCommandLoading(true)
+    try {
+      const result = await requireBridgeDomain("agentSessions").listCommands({
+        projectId: project.id,
+      })
+      setCommands(result.commands)
+    } catch (loadError) {
+      logger.error("Failed to load agent commands.", loadError)
+      setSendError(loadError instanceof Error ? loadError.message : "读取命令失败。")
+    } finally {
+      setCommandLoading(false)
+    }
+  }, [detail, projects, selectedProject])
+
+  const openCommandPalette = useCallback(() => {
+    setCommandOpen(true)
+    void loadCommands()
+  }, [loadCommands])
+
+  const applyCommandResult = useCallback(async (result: SynapseCommandExecutionResult) => {
+    setCommandResult(result)
+    if (result.session) {
+      const list = await requireBridgeDomain("agentSessions").list()
+      setSessions(list.sessions)
+      setSelectedId(result.session.id)
+      setDetail(result.session)
+    }
+  }, [])
+
+  const executeCommand = useCallback(async (
+    command: string,
+    permissionDecision?: "allow" | "deny",
+  ) => {
+    if (!detail || commandBusy) {
+      return
+    }
+
+    setCommandBusy(true)
+    setSendError(null)
+    try {
+      const result = await requireBridgeDomain("agentSessions").executeCommand({
+        projectId: detail.projectId,
+        sessionId: detail.id,
+        sessionKey: detail.sessionKey,
+        command,
+        ...(permissionDecision ? { permissionDecision } : undefined),
+      })
+      await applyCommandResult(result)
+    } catch (executeError) {
+      logger.error("Failed to execute agent command.", executeError)
+      setSendError(executeError instanceof Error ? executeError.message : "命令执行失败。")
+    } finally {
+      setCommandBusy(false)
+    }
+  }, [applyCommandResult, commandBusy, detail])
+
+  const handleCommandSelect = useCallback((command: SynapseCommandCatalogItem) => {
+    setCommandOpen(false)
+    void executeCommand(command.command)
+  }, [executeCommand])
+
+  const handleCommandPermissionDecision = useCallback((decision: "allow" | "deny") => {
+    if (!commandResult) {
+      return
+    }
+    void executeCommand(commandResult.command, decision)
+  }, [commandResult, executeCommand])
 
   const handleSend = useCallback(async () => {
     if (!detail || sending) {
@@ -587,11 +822,16 @@ function AgentSessionsModule() {
   }, [detail, permissionBusy])
 
   const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "/" && input.trim() === "") {
+      event.preventDefault()
+      openCommandPalette()
+      return
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       void handleSend()
     }
-  }, [handleSend])
+  }, [handleSend, input, openCommandPalette])
 
   useEffect(() => {
     if (!isReady) {
@@ -741,6 +981,16 @@ function AgentSessionsModule() {
                     rows={3}
                   />
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-lg"
+                  onClick={openCommandPalette}
+                  disabled={sending || permissionBusy || commandBusy}
+                  aria-label="命令"
+                >
+                  <Slash data-icon="inline-start" className="size-4" />
+                </Button>
                 <Button type="submit" size="icon-lg" disabled={sending || permissionBusy || !input.trim()}>
                   {sending ? (
                     <Loader2 data-icon="inline-start" className="size-4 animate-spin" />
@@ -753,6 +1003,23 @@ function AgentSessionsModule() {
           </CardContent>
         </Card>
       </div>
+      <CommandPalette
+        open={commandOpen}
+        commands={commands}
+        loading={commandLoading}
+        onOpenChange={setCommandOpen}
+        onSelect={handleCommandSelect}
+      />
+      <CommandResultSheet
+        result={commandResult}
+        busy={commandBusy}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCommandResult(null)
+          }
+        }}
+        onPermissionDecision={handleCommandPermissionDecision}
+      />
     </section>
   )
 }

@@ -64,6 +64,46 @@ const sendMessageRequestSchema = z.object({
   message: z.string(),
 })
 
+const listCommandsRequestSchema = z.object({
+  projectId: z.string(),
+})
+
+const commandCatalogItemSchema = z.object({
+  id: z.string(),
+  command: z.string(),
+  aliases: z.array(z.string()),
+  title: z.string(),
+  description: z.string(),
+  group: z.enum(["session", "settings", "info", "advanced"]),
+  source: z.enum(["builtin", "custom"]),
+  disabled: z.boolean(),
+  highRisk: z.boolean(),
+  argsMode: z.enum(["none", "text"]),
+})
+
+const listCommandsResponseSchema = z.object({
+  commands: z.array(commandCatalogItemSchema),
+})
+
+const executeCommandRequestSchema = z.object({
+  projectId: z.string(),
+  sessionId: z.string(),
+  sessionKey: z.string().optional(),
+  command: z.string(),
+  permissionDecision: z.enum(["allow", "deny"]).optional(),
+})
+
+const executeCommandResponseSchema = z.object({
+  status: z.enum(["completed", "error", "permission_required", "denied"]),
+  command: z.string(),
+  title: z.string(),
+  content: z.string(),
+  format: z.enum(["text", "markdown"]),
+  error: z.string().nullable(),
+  session: sessionDetailSchema.nullable(),
+  requiresPermission: z.boolean(),
+})
+
 const eventRecordSchema = z.object({
   sessionId: z.string(),
   seq: z.number(),
@@ -123,12 +163,22 @@ const respondPermissionResponseSchema = z.object({
 type GetSessionRequest = z.infer<typeof getSessionRequestSchema>
 type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
 type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
+type ListCommandsRequest = z.infer<typeof listCommandsRequestSchema>
+type ExecuteCommandRequest = z.infer<typeof executeCommandRequestSchema>
 type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
 
+async function config(ctx: IpcHandlerContext) {
+  return ctx.resolve<typeof configStore>("core.config").load()
+}
+
 async function projects(ctx: IpcHandlerContext) {
+  return (await config(ctx)).global.projects
+}
+
+async function globalProviders(ctx: IpcHandlerContext) {
   const config = await ctx.resolve<typeof configStore>("core.config").load()
-  return config.global.projects
+  return config.global.providers
 }
 
 function sessionsService(ctx: IpcHandlerContext): AgentSessionsStoreService {
@@ -165,6 +215,21 @@ export const agentSessionsIpcModule: IpcModule = {
       request: switchSessionRequestSchema,
       response: sessionDetailSchema,
       handler: async (ctx, input: SwitchSessionRequest) => sessionsService(ctx).switchSession(await projects(ctx), input),
+    },
+    listCommands: {
+      kind: "invoke",
+      channel: "synapse:agent-sessions:list-commands",
+      request: listCommandsRequestSchema,
+      response: listCommandsResponseSchema,
+      handler: async (ctx, input: ListCommandsRequest) => sessionsService(ctx).listCommands(await projects(ctx), input),
+    },
+    executeCommand: {
+      kind: "invoke",
+      channel: "synapse:agent-sessions:execute-command",
+      request: executeCommandRequestSchema,
+      response: executeCommandResponseSchema,
+      handler: async (ctx, input: ExecuteCommandRequest) =>
+        sessionsService(ctx).executeCommand(await projects(ctx), input, await globalProviders(ctx)),
     },
     send: {
       kind: "invoke",
