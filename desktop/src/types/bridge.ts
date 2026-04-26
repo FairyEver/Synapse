@@ -30,6 +30,13 @@ import type {
 import type { SynapseCliDetectResult } from "./cli"
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
+  SynapseFeishuConnectorRuntimeStatus,
+  SynapseFeishuConnectorSummary,
+  SynapseFeishuManualCredentialsPayload,
+  SynapseFeishuSetupBeginResult,
+  SynapseFeishuSetupPollResult,
+} from "./connectors"
+import type {
   SynapseContentDownloadResult,
   SynapseContentDetail,
   SynapseContentHistoryEntry,
@@ -249,5 +256,19 @@ export type SynapseBridge = {
     ) => Promise<{ ok: true }>
     getProviders: (projectId: string) => Promise<SynapseAgentProviderState>
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void
+  }
+  connectors: {
+    feishu: {
+      beginSetup: (projectId: string) => Promise<SynapseFeishuSetupBeginResult>
+      pollSetup: (setupId: string) => Promise<SynapseFeishuSetupPollResult>
+      saveSetup: (setupId: string) => Promise<SynapseFeishuConnectorSummary>
+      saveManualCredentials: (
+        payload: SynapseFeishuManualCredentialsPayload,
+      ) => Promise<SynapseFeishuConnectorSummary>
+      getStatus: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
+      start: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
+      stop: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
+      list: (projectId: string) => Promise<SynapseFeishuConnectorSummary[]>
+    }
   }
 }

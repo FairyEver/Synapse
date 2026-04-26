@@ -97,6 +97,16 @@ const IPC_CHANNELS = {
     "getProviders": "synapse:agent:get-providers",
     "event": "synapse:events:agent",
   },
+  "connectors": {
+    "feishuBeginSetup": "synapse:connectors:feishu:begin-setup",
+    "feishuPollSetup": "synapse:connectors:feishu:poll-setup",
+    "feishuSaveSetup": "synapse:connectors:feishu:save-setup",
+    "feishuSaveManualCredentials": "synapse:connectors:feishu:save-manual-credentials",
+    "feishuGetStatus": "synapse:connectors:feishu:get-status",
+    "feishuStart": "synapse:connectors:feishu:start",
+    "feishuStop": "synapse:connectors:feishu:stop",
+    "feishuList": "synapse:connectors:feishu:list",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -318,6 +328,26 @@ const synapseBridge: SynapseBridge = {
     respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),
     getProviders: (projectId) => invoke(IPC_CHANNELS.agent.getProviders)({ projectId }),
     onEvent: subscribe(EVENT_CHANNELS.agent.event) as unknown as SynapseBridge["agent"]["onEvent"],
+  },
+  connectors: {
+    feishu: {
+      beginSetup: (projectId) =>
+        invoke(IPC_CHANNELS.connectors.feishuBeginSetup)({ projectId }),
+      pollSetup: (setupId) =>
+        invoke(IPC_CHANNELS.connectors.feishuPollSetup)({ setupId }),
+      saveSetup: (setupId) =>
+        invoke(IPC_CHANNELS.connectors.feishuSaveSetup)({ setupId }),
+      saveManualCredentials: (payload) =>
+        invoke(IPC_CHANNELS.connectors.feishuSaveManualCredentials)(payload),
+      getStatus: (projectId) =>
+        invoke(IPC_CHANNELS.connectors.feishuGetStatus)({ projectId }),
+      start: (projectId) =>
+        invoke(IPC_CHANNELS.connectors.feishuStart)({ projectId }),
+      stop: (projectId) =>
+        invoke(IPC_CHANNELS.connectors.feishuStop)({ projectId }),
+      list: (projectId) =>
+        invoke(IPC_CHANNELS.connectors.feishuList)({ projectId }),
+    },
   },
 }
 

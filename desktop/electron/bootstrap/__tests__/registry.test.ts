@@ -78,6 +78,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.data-repository",
         "core.data-store",
         "core.event-bus",
+        "core.feishu-connector",
         "core.logging",
         "core.network-registry",
         "core.permission-guard",
@@ -124,6 +125,13 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
     ])
+    expect(byId.get("core.feishu-connector")?.dependsOn).toEqual([
+      "core.project-containers",
+      "core.side-channel",
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config"])
@@ -150,6 +158,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.project-containers")).toBeLessThan(idx("core.side-channel"))
+    expect(idx("core.side-channel")).toBeLessThan(idx("core.feishu-connector"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.data-store")).toBeLessThan(idx("repo.pending-pushes"))

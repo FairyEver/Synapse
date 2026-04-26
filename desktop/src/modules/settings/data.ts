@@ -5,6 +5,7 @@ import {
   FolderGit2,
   FolderKanban,
   Info,
+  Plug,
   ScrollText,
   Settings2,
   Shield,
@@ -39,6 +40,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Blocks,
     label: "工具",
     description: "编辑器与命令行工具。",
+  },
+  {
+    id: "connectors",
+    icon: Plug,
+    label: "连接器",
+    description: "飞书远程控制。",
   },
   {
     id: "variables",

@@ -38,6 +38,7 @@ import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService } from "../services/agent-runtime"
 import { createProviderConfigProjectService } from "../services/provider-config"
 import { BridgeAdapterService } from "../services/bridge-adapter"
+import { FeishuConnectorService } from "../services/connectors"
 import { SideChannelService } from "../services/side-channel"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
@@ -412,6 +413,35 @@ export const coreBridgeAdapterDescriptor: ServiceDescriptor<BridgeAdapterService
   },
   start(service) {
     return service.start()
+  },
+  stop(service) {
+    return service.stop()
+  },
+}
+
+export const coreFeishuConnectorDescriptor: ServiceDescriptor<FeishuConnectorService> = {
+  id: "core.feishu-connector",
+  criticality: "degraded",
+  dependsOn: [
+    "core.project-containers",
+    "core.side-channel",
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    return new FeishuConnectorService({
+      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+      sideChannel: ctx.registry.get<SideChannelService>("core.side-channel"),
+      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      listProjects: listConfiguredProjects,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("feishu-connector"),
+    })
+  },
+  start(service) {
+    service.start()
   },
   stop(service) {
     return service.stop()

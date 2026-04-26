@@ -95,6 +95,16 @@ export const IPC_CHANNELS = {
     "getProviders": "synapse:agent:get-providers",
     "event": "synapse:events:agent",
   },
+  "connectors": {
+    "feishuBeginSetup": "synapse:connectors:feishu:begin-setup",
+    "feishuPollSetup": "synapse:connectors:feishu:poll-setup",
+    "feishuSaveSetup": "synapse:connectors:feishu:save-setup",
+    "feishuSaveManualCredentials": "synapse:connectors:feishu:save-manual-credentials",
+    "feishuGetStatus": "synapse:connectors:feishu:get-status",
+    "feishuStart": "synapse:connectors:feishu:start",
+    "feishuStop": "synapse:connectors:feishu:stop",
+    "feishuList": "synapse:connectors:feishu:list",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS
