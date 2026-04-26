@@ -421,6 +421,77 @@ export const outboxSchema: NamespaceSchema<OutboxEntryV1> = {
     && typeof (v as OutboxEntryV1).updatedAt === "string",
 }
 
+export type AgentCommandKindV1 = "prompt" | "exec"
+export type AgentCommandSourceV1 = "runtime" | "file"
+
+export interface AgentCommandEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  name: string
+  description?: string
+  kind: AgentCommandKindV1
+  prompt?: string
+  exec?: string
+  workDir?: string
+  enabled: boolean
+  source: AgentCommandSourceV1
+  allowedPlatforms?: string[]
+  adminOnly: boolean
+  createdAt: string
+  updatedAt: string
+  createdBy?: string
+}
+
+export const agentCommandsSchema: NamespaceSchema<AgentCommandEntryV1> = {
+  name: "agent.commands",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AgentCommandEntryV1 =>
+    isAnyRecord<AgentCommandEntryV1>(v)
+    && (v as AgentCommandEntryV1).schemaVersion === 1
+    && typeof (v as AgentCommandEntryV1).id === "string"
+    && typeof (v as AgentCommandEntryV1).projectId === "string"
+    && typeof (v as AgentCommandEntryV1).name === "string"
+    && isOptionalString((v as AgentCommandEntryV1).description)
+    && ((v as AgentCommandEntryV1).kind === "prompt" || (v as AgentCommandEntryV1).kind === "exec")
+    && isOptionalString((v as AgentCommandEntryV1).prompt)
+    && isOptionalString((v as AgentCommandEntryV1).exec)
+    && isOptionalString((v as AgentCommandEntryV1).workDir)
+    && typeof (v as AgentCommandEntryV1).enabled === "boolean"
+    && ((v as AgentCommandEntryV1).source === "runtime" || (v as AgentCommandEntryV1).source === "file")
+    && ((v as AgentCommandEntryV1).allowedPlatforms === undefined || isStringArray((v as AgentCommandEntryV1).allowedPlatforms))
+    && typeof (v as AgentCommandEntryV1).adminOnly === "boolean"
+    && typeof (v as AgentCommandEntryV1).createdAt === "string"
+    && typeof (v as AgentCommandEntryV1).updatedAt === "string"
+    && isOptionalString((v as AgentCommandEntryV1).createdBy),
+}
+
+export interface AgentCommandSettingsEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  agentNativeSlashAllowlist: string[]
+  remoteAgentNativeSlashAllowlist: string[]
+  updatedAt: string
+}
+
+export const agentCommandSettingsSchema: NamespaceSchema<AgentCommandSettingsEntryV1> = {
+  name: "agent.command-settings",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AgentCommandSettingsEntryV1 =>
+    isAnyRecord<AgentCommandSettingsEntryV1>(v)
+    && (v as AgentCommandSettingsEntryV1).schemaVersion === 1
+    && typeof (v as AgentCommandSettingsEntryV1).id === "string"
+    && typeof (v as AgentCommandSettingsEntryV1).projectId === "string"
+    && isStringArray((v as AgentCommandSettingsEntryV1).agentNativeSlashAllowlist)
+    && isStringArray((v as AgentCommandSettingsEntryV1).remoteAgentNativeSlashAllowlist)
+    && typeof (v as AgentCommandSettingsEntryV1).updatedAt === "string",
+}
+
 export type ScheduledJobKindV1 = "prompt" | "exec"
 export type ScheduledJobPlatformV1 = "feishu"
 export type ScheduledJobSessionModeV1 = "reuse" | "new_per_run"

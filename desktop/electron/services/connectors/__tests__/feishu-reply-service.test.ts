@@ -47,6 +47,22 @@ describe("FeishuReplyService", () => {
     expect(JSON.stringify(client.calls[1]?.[1])).toContain("req-1")
     expect(JSON.stringify(client.calls[1]?.[1])).toContain("project-1")
   })
+
+  it("buffers streamed text and sends one final reply", async () => {
+    const client = new FakeFeishuClient()
+    const service = new FeishuReplyService({
+      clientForConnector: () => client,
+    })
+    const target = feishuTarget()
+
+    await service.dispatchAgentEvent(target, { type: "text", content: "hello " })
+    await service.dispatchAgentEvent(target, { type: "text", content: "world" })
+    await service.dispatchAgentEvent(target, { type: "result", content: "hello world", done: true })
+
+    expect(client.calls).toEqual([
+      ["replyText", "hello world"],
+    ])
+  })
 })
 
 function feishuTarget(): ReplyTarget {

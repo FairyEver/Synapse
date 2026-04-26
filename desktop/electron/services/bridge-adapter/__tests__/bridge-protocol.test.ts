@@ -4,6 +4,7 @@ import {
   normalizeCapabilities,
   parseBridgeBase,
   parseBridgeMessage,
+  parseBridgePreviewAck,
   parseBridgeRegister,
   sanitizeBridgeMetadata,
 } from "../bridge-protocol"
@@ -47,6 +48,21 @@ describe("bridge protocol schema", () => {
     expect(parseBridgeBase({ type: "something_new" })).toEqual({
       ok: true,
       type: "something_new",
+    })
+  })
+
+  it("accepts preview acknowledgements", () => {
+    expect(parseBridgePreviewAck({
+      type: "preview_ack",
+      ref_id: "ref-1",
+      preview_handle: "message-1",
+    })).toEqual({
+      ok: true,
+      value: {
+        type: "preview_ack",
+        ref_id: "ref-1",
+        preview_handle: "message-1",
+      },
     })
   })
 

@@ -95,6 +95,38 @@ describe("Codex exec adapter", () => {
       ]),
     }))
   })
+
+  it("streams parsed events through the execution context callback", async () => {
+    const runner = new StreamingRunner([
+      JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "agent_message",
+          content: [{ type: "output_text", text: "hello" }],
+        },
+      }),
+      JSON.stringify({ type: "turn.completed" }),
+    ])
+    const adapter = new CodexExecAdapter(runner)
+    const seen: string[] = []
+
+    const result = await adapter.execute({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local",
+      content: "hello",
+    }, {
+      projectId: "project-1",
+      workDir: "/repo",
+      actor: { kind: "user" },
+      onEvent: (event) => seen.push(event.type),
+    })
+
+    expect(seen).toEqual(["text", "result"])
+    expect(result.resultText).toBe("hello")
+    expect(result.threadId).toBe("thread-1")
+  })
 })
 
 describe("Codex JSONL parser", () => {
@@ -207,6 +239,26 @@ class EnvCaptureRunner implements CodexProcessRunner {
       exitCode: 0,
       signal: null,
       stdout: JSON.stringify({ type: "turn.completed" }),
+      stderr: "",
+      timedOut: false,
+      durationMs: 1,
+    }
+  }
+}
+
+class StreamingRunner implements CodexProcessRunner {
+  private readonly lines: readonly string[]
+
+  constructor(lines: readonly string[]) {
+    this.lines = lines
+  }
+
+  async run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult> {
+    for (const line of this.lines) request.onStdoutLine?.(line)
+    return {
+      exitCode: 0,
+      signal: null,
+      stdout: "",
       stderr: "",
       timedOut: false,
       durationMs: 1,

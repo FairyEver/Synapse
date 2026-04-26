@@ -7,6 +7,12 @@ import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { FeishuReplyContext, FeishuRuntimeClient } from "./feishu-types"
 import { reconstructFeishuReplyContext } from "./session"
+import {
+  appendCompactProgressEntry,
+  progressEntryFromEvent,
+  renderCompactProgress,
+  type CompactProgressEntry,
+} from "../../agent-runtime/preview-progress"
 
 export interface FeishuReplyServiceDeps {
   readonly clientForConnector: (connectorId: string) => FeishuRuntimeClient | undefined
@@ -16,8 +22,18 @@ export interface FeishuReplyServiceDeps {
   readonly logger?: StructuredLogger
 }
 
+interface FeishuTurnState {
+  text: string
+  progressEntries: readonly CompactProgressEntry[]
+  lastProgressAt?: number
+}
+
+const PROGRESS_FALLBACK_INTERVAL_MS = 5000
+const FEISHU_TEXT_MAX_RUNES = 3900
+
 export class FeishuReplyService implements ReplyTransportDispatcher {
   private readonly deps: FeishuReplyServiceDeps
+  private readonly turns = new Map<string, FeishuTurnState>()
 
   constructor(deps: FeishuReplyServiceDeps) {
     this.deps = deps
@@ -25,24 +41,28 @@ export class FeishuReplyService implements ReplyTransportDispatcher {
 
   async dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void> {
     try {
+      const turn = this.turnFor(target)
       switch (event.type) {
         case "text":
-          await this.sendText(target, event.content)
+          turn.text += event.content
           break
         case "result":
-          if (event.content.trim()) await this.sendText(target, event.content)
+          if ((event.content || turn.text).trim()) {
+            await this.sendText(target, event.content || turn.text)
+          }
+          this.turns.delete(this.turnKey(target))
           break
         case "error":
           await this.sendText(target, event.message)
+          this.turns.delete(this.turnKey(target))
           break
         case "permissionRequest":
           await this.sendPermissionCard(target, event)
           break
-        case "toolResult":
-          if (event.content?.trim()) await this.sendText(target, event.content)
-          break
         case "thinking":
         case "toolUse":
+        case "toolResult":
+          await this.sendProgressFallback(target, turn, event)
           break
         default: {
           const exhaustive: never = event
@@ -82,12 +102,33 @@ export class FeishuReplyService implements ReplyTransportDispatcher {
 
   private async sendText(target: ReplyTarget, content: string): Promise<void> {
     const { client, ctx } = await this.resolveClient(target)
+    const safeContent = truncateRunes(content, FEISHU_TEXT_MAX_RUNES)
     if (ctx.messageId) {
-      await client.replyText(ctx, content)
+      await client.replyText(ctx, safeContent)
     } else {
-      await client.createText(ctx, content)
+      await client.createText(ctx, safeContent)
     }
     this.recordAudit("allowed", target, "reply")
+  }
+
+  private async sendProgressFallback(
+    target: ReplyTarget,
+    turn: FeishuTurnState,
+    event: AgentEvent,
+  ): Promise<void> {
+    const entry = progressEntryFromEvent(event)
+    if (!entry) return
+    turn.progressEntries = appendCompactProgressEntry(turn.progressEntries, entry)
+    const now = Date.now()
+    if (
+      event.type !== "toolResult"
+      && turn.lastProgressAt !== undefined
+      && now - turn.lastProgressAt < PROGRESS_FALLBACK_INTERVAL_MS
+    ) {
+      return
+    }
+    turn.lastProgressAt = now
+    await this.sendText(target, renderCompactProgress(turn.progressEntries))
   }
 
   private async sendPermissionCard(
@@ -167,6 +208,27 @@ export class FeishuReplyService implements ReplyTransportDispatcher {
         error,
       },
     })
+  }
+
+  private turnFor(target: ReplyTarget): FeishuTurnState {
+    const key = this.turnKey(target)
+    const existing = this.turns.get(key)
+    if (existing) return existing
+    const created: FeishuTurnState = {
+      text: "",
+      progressEntries: [],
+    }
+    this.turns.set(key, created)
+    return created
+  }
+
+  private turnKey(target: ReplyTarget): string {
+    return [
+      target.projectId,
+      target.sessionKey,
+      target.conversationId ?? "",
+      target.messageId ?? "",
+    ].join(":")
   }
 }
 
@@ -258,4 +320,10 @@ function stringValue(value: unknown): string | undefined {
 
 function booleanValue(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined
+}
+
+function truncateRunes(value: string, maxRunes: number): string {
+  const runes = [...value]
+  if (runes.length <= maxRunes) return value
+  return `${runes.slice(0, maxRunes).join("")}...`
 }

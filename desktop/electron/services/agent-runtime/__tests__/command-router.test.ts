@@ -5,11 +5,13 @@ import type {
   DataChangeEvent,
   DataChangeListener,
   DataNamespace,
+  AgentCommandEntryV1,
   ProviderEntryV1,
   SecretEntryV1,
 } from "../../../runtime/data-repo"
 import { ProviderConfigService } from "../../provider-config"
 import { AgentCommandRouter } from "../command-router"
+import { CustomCommandRegistry } from "../command-registry"
 import type { AgentMessage } from "../types"
 
 describe("AgentCommandRouter", () => {
@@ -114,6 +116,37 @@ describe("AgentCommandRouter", () => {
 
     const passthrough = await router.handle(baseMessage("/plan-status"), baseConversation())
     expect(passthrough).toBeNull()
+  })
+
+  it("routes custom prompt and exec commands", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+    const registry = new CustomCommandRegistry({
+      projectId: "project-1",
+      commands,
+      now: fixedNow,
+    })
+    await registry.addPrompt({ name: "explain", prompt: "Explain {{args}}" })
+    await registry.addExec({ name: "local-build", exec: "pnpm build" })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "codex",
+      providerConfig,
+      customCommands: registry,
+      resetSession: async () => baseConversation(),
+      runCustomCommand: async (command, args) => `${command.name}:${args.join(",")}`,
+    })
+
+    expect(await router.handle(baseMessage("/explain a b"), baseConversation()))
+      .toEqual({ kind: "prompt", content: "Explain a b" })
+    expect(expectRuntimeResult(
+      await router.handle({
+        ...baseMessage("/local-build --prod"),
+        platform: "local-renderer",
+      }, baseConversation()),
+    ).resultText).toBe("local-build:--prod")
   })
 })
 

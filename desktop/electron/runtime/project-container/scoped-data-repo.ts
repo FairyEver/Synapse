@@ -20,6 +20,8 @@ const PROJECT_SCOPED_NAMES = new Set([
   "conversations",
   "outbox",
   "audit",
+  "agent.commands",
+  "agent.command-settings",
   "scheduled.jobs",
   "scheduled.heartbeat",
 ])

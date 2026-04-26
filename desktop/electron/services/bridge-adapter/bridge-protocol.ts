@@ -45,6 +45,13 @@ export const bridgePingSchema = z.object({
   type: z.literal("ping"),
 })
 
+export const bridgePreviewAckSchema = z.object({
+  type: z.literal("preview_ack"),
+  ref_id: z.string().trim().min(1),
+  preview_handle: z.string().trim().min(1).optional(),
+  session_key: z.string().trim().min(1).optional(),
+})
+
 export const bridgeBaseSchema = z.object({
   type: z.string().trim().min(1),
 })
@@ -52,6 +59,7 @@ export const bridgeBaseSchema = z.object({
 export type BridgeRegister = z.infer<typeof bridgeRegisterSchema>
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>
 export type BridgeCardAction = z.infer<typeof bridgeCardActionSchema>
+export type BridgePreviewAck = z.infer<typeof bridgePreviewAckSchema>
 
 export type BridgeProtocolError = {
   readonly code: string
@@ -94,6 +102,16 @@ export function parseBridgeCardAction(value: unknown):
   const parsed = bridgeCardActionSchema.safeParse(value)
   if (!parsed.success) {
     return { ok: false, error: zodError("invalid_card_action", parsed.error) }
+  }
+  return { ok: true, value: parsed.data }
+}
+
+export function parseBridgePreviewAck(value: unknown):
+  | { readonly ok: true; readonly value: BridgePreviewAck }
+  | { readonly ok: false; readonly error: BridgeProtocolError } {
+  const parsed = bridgePreviewAckSchema.safeParse(value)
+  if (!parsed.success) {
+    return { ok: false, error: zodError("invalid_preview_ack", parsed.error) }
   }
   return { ok: true, value: parsed.data }
 }

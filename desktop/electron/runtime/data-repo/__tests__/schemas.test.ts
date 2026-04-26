@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   allSchemas,
   auditSchema,
+  agentCommandSettingsSchema,
+  agentCommandsSchema,
   connectorsSchema,
   conversationsSchema,
   coreConfigSchema,
@@ -23,6 +25,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(names).toEqual(
       [
         "audit",
+        "agent.command-settings",
+        "agent.commands",
         "connectors",
         "conversations",
         "core.config",
@@ -254,6 +258,31 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         createdAt: "2026-04-25T00:00:00Z",
         updatedAt: "2026-04-25T00:00:00Z",
         runCount: 0,
+      }),
+    ).toBe(true)
+    expect(
+      agentCommandsSchema.validate({
+        id: "agent-command:1",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        name: "review",
+        kind: "prompt",
+        prompt: "Review {{args}}",
+        enabled: true,
+        source: "runtime",
+        adminOnly: false,
+        createdAt: "2026-04-25T00:00:00Z",
+        updatedAt: "2026-04-25T00:00:00Z",
+      }),
+    ).toBe(true)
+    expect(
+      agentCommandSettingsSchema.validate({
+        id: "agent-command-settings:proj-1",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        agentNativeSlashAllowlist: ["help"],
+        remoteAgentNativeSlashAllowlist: [],
+        updatedAt: "2026-04-25T00:00:00Z",
       }),
     ).toBe(true)
   })

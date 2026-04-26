@@ -3,6 +3,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseAgentPendingPermission,
+  SynapseAgentPublishedCommand,
   SynapseAgentProviderState,
   SynapseAgentSessionSummary,
   SynapseAgentStatus,
@@ -22,6 +23,7 @@ type UseAgentChatState = {
   pendingPermissions: SynapseAgentPendingPermission[]
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
+  commands: SynapseAgentPublishedCommand[]
   selectedSessionKey: string
   loading: boolean
   sending: boolean
@@ -38,6 +40,7 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
   const [pendingPermissions, setPendingPermissions] = useState<SynapseAgentPendingPermission[]>([])
   const [status, setStatus] = useState<SynapseAgentStatus | null>(null)
   const [providers, setProviders] = useState<SynapseAgentProviderState | null>(null)
+  const [commands, setCommands] = useState<SynapseAgentPublishedCommand[]>([])
   const [selectedSessionKey, setSelectedSessionKeyRaw] = useState(DEFAULT_LOCAL_SESSION_KEY)
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
@@ -76,11 +79,12 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     setLoading(true)
     setError(null)
     try {
-      const [nextStatus, nextSessions, nextProviders, nextPending] = await Promise.all([
+      const [nextStatus, nextSessions, nextProviders, nextPending, nextCommands] = await Promise.all([
         bridge.agent.status(projectId),
         bridge.agent.listSessions(projectId),
         bridge.agent.getProviders(projectId),
         bridge.agent.listPendingPermissions(projectId),
+        bridge.agent.listCommands(projectId),
       ])
       const currentSessionKey = selectedSessionKeyRef.current
       const nextSessionKey = nextSessions.some((session) => session.sessionKey === currentSessionKey)
@@ -90,6 +94,7 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
       setSessions(nextSessions)
       setProviders(nextProviders)
       setPendingPermissions(nextPending)
+      setCommands(nextCommands)
       setSelectedSessionKeyRaw(nextSessionKey)
       await loadTimeline(nextSessionKey)
     } catch (rawError) {
@@ -156,6 +161,7 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
       setPendingPermissions([])
       setStatus(null)
       setProviders(null)
+      setCommands([])
       setSelectedSessionKeyRaw(DEFAULT_LOCAL_SESSION_KEY)
       setError(null)
       setLoading(false)
@@ -185,6 +191,7 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     pendingPermissions,
     status,
     providers,
+    commands,
     selectedSessionKey,
     loading,
     sending,

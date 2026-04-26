@@ -95,6 +95,8 @@ const IPC_CHANNELS = {
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",
     "getProviders": "synapse:agent:get-providers",
+    "listCommands": "synapse:agent:list-commands",
+    "openReference": "synapse:agent:open-reference",
     "event": "synapse:events:agent",
   },
   "connectors": {
@@ -343,6 +345,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.agent.listPendingPermissions)({ projectId }),
     respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),
     getProviders: (projectId) => invoke(IPC_CHANNELS.agent.getProviders)({ projectId }),
+    listCommands: (projectId) => invoke(IPC_CHANNELS.agent.listCommands)({ projectId }),
+    openReference: (args) => invoke(IPC_CHANNELS.agent.openReference)(args),
     onEvent: subscribe(EVENT_CHANNELS.agent.event) as unknown as SynapseBridge["agent"]["onEvent"],
   },
   connectors: {

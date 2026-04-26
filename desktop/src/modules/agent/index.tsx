@@ -1,12 +1,24 @@
 import { type FormEvent, useState } from "react"
-import { Send } from "lucide-react"
+import { Command as CommandIcon, Send } from "lucide-react"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
+import type { SynapseAgentTimelineEntry } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
 import { useAgentChat } from "./hooks/use-agent-chat"
@@ -17,6 +29,7 @@ function AgentModule() {
   const projectId = activeRepository?.uuid
   const chat = useAgentChat(projectId)
   const [draft, setDraft] = useState("")
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -27,6 +40,10 @@ function AgentModule() {
   }
 
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
+  const openReference = (reference: string) => {
+    if (!projectId) return
+    void requireSynapseBridge().agent.openReference({ projectId, reference })
+  }
   const sidebar = (
     <AgentSessionSidebar
       sessions={chat.sessions}
@@ -57,6 +74,37 @@ function AgentModule() {
             {chat.status?.pendingPermissions ? (
               <Badge variant="outline">权限 {chat.status.pendingPermissions}</Badge>
             ) : null}
+            <Popover open={paletteOpen} onOpenChange={setPaletteOpen}>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="outline" size="sm">
+                  <CommandIcon data-icon="inline-start" />
+                  命令
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0">
+                <Command>
+                  <CommandInput placeholder="搜索命令" />
+                  <CommandList>
+                    <CommandEmpty>无命令</CommandEmpty>
+                    <CommandGroup>
+                      {chat.commands.map((command) => (
+                        <CommandItem
+                          key={`${command.source}:${command.name}`}
+                          value={`/${command.name}`}
+                          onSelect={() => {
+                            setDraft(`/${command.name} `)
+                            setPaletteOpen(false)
+                          }}
+                        >
+                          <span className="truncate">/{command.name}</span>
+                          <CommandShortcut>{command.kind}</CommandShortcut>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
@@ -83,9 +131,7 @@ function AgentModule() {
                   <span>{labelForRole(entry.role)}</span>
                   <span>{formatEntryTime(entry.timestamp)}</span>
                 </div>
-                <p className="whitespace-pre-wrap rounded-md bg-muted px-3 py-2 text-sm text-foreground">
-                  {entry.content}
-                </p>
+                <MessageContent entry={entry} onOpenReference={openReference} />
               </article>
             ))}
           </div>
@@ -109,6 +155,34 @@ function AgentModule() {
   )
 }
 
+function MessageContent({
+  entry,
+  onOpenReference,
+}: {
+  readonly entry: SynapseAgentTimelineEntry
+  readonly onOpenReference: (reference: string) => void
+}) {
+  const segments = splitLocalReferences(entry.content)
+  return (
+    <div className="whitespace-pre-wrap rounded-md bg-muted px-3 py-2 text-sm text-foreground">
+      {segments.map((segment, index) => segment.kind === "text" ? (
+        <span key={`${entry.id}:text:${String(index)}`}>{segment.value}</span>
+      ) : (
+        <Button
+          key={`${entry.id}:ref:${String(index)}`}
+          type="button"
+          variant="link"
+          size="sm"
+          className="h-auto px-1 py-0 align-baseline"
+          onClick={() => onOpenReference(segment.value)}
+        >
+          {segment.value}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
 function labelForRole(role: "user" | "assistant" | "system" | "tool"): string {
   switch (role) {
     case "user":
@@ -124,6 +198,30 @@ function labelForRole(role: "user" | "assistant" | "system" | "tool"): string {
       return exhaustive
     }
   }
+}
+
+type MessageSegment =
+  | { readonly kind: "text"; readonly value: string }
+  | { readonly kind: "reference"; readonly value: string }
+
+const LOCAL_REFERENCE_PATTERN = /(\[[^\]]+\]\((?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^)]+\)|(?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^\s`),]+(?::\d+(?::\d+)?)?)/g
+
+function splitLocalReferences(content: string): readonly MessageSegment[] {
+  const segments: MessageSegment[] = []
+  let lastIndex = 0
+  for (const match of content.matchAll(LOCAL_REFERENCE_PATTERN)) {
+    const value = match[0]
+    const index = match.index ?? 0
+    if (index > lastIndex) {
+      segments.push({ kind: "text", value: content.slice(lastIndex, index) })
+    }
+    segments.push({ kind: "reference", value })
+    lastIndex = index + value.length
+  }
+  if (lastIndex < content.length) {
+    segments.push({ kind: "text", value: content.slice(lastIndex) })
+  }
+  return segments.length > 0 ? segments : [{ kind: "text", value: content }]
 }
 
 export { AgentModule }

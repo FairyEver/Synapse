@@ -25,6 +25,8 @@ export {
 } from "./repo-repositories"
 export {
   auditSchema,
+  agentCommandSettingsSchema,
+  agentCommandsSchema,
   connectorsSchema,
   conversationsSchema,
   outboxSchema,
@@ -35,6 +37,10 @@ export {
   secretsSchema,
   workspaceBindingsSchema,
   type AuditEntryV1,
+  type AgentCommandEntryV1,
+  type AgentCommandKindV1,
+  type AgentCommandSettingsEntryV1,
+  type AgentCommandSourceV1,
   type ConnectorAllowlistV1,
   type ConnectorDedupeStateV1,
   type ConnectorEntryV1,
@@ -67,6 +73,8 @@ import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import {
   auditSchema,
+  agentCommandSettingsSchema,
+  agentCommandsSchema,
   connectorsSchema,
   conversationsSchema,
   outboxSchema,
@@ -89,6 +97,8 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   providersSchema,
   projectsSchema,
   workspaceBindingsSchema,
+  agentCommandsSchema,
+  agentCommandSettingsSchema,
   scheduledJobsSchema,
   scheduledHeartbeatSchema,
   connectorsSchema,

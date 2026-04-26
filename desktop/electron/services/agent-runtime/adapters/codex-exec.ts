@@ -62,7 +62,7 @@ export class CodexExecAdapter implements AgentAdapter {
     message: AgentMessage,
     context: AgentExecutionContext,
   ): Promise<AgentExecutionResult> {
-    const parser = new CodexJsonLineParser(context.threadId)
+    const parser = new CodexJsonLineParser(context.threadId, context.onEvent)
     const args = buildCodexExecArgs({
       workDir: context.workDir,
       threadId: context.threadId,
@@ -177,12 +177,14 @@ export class CodexJsonLineParser {
   private readonly events: AgentEvent[] = []
   private readonly textParts: string[] = []
   private readonly pendingMessages: string[] = []
+  private readonly onEvent: ((event: AgentEvent) => void) | undefined
   private currentThreadId: string | undefined
   private currentError: string | undefined
   private lines = 0
 
-  constructor(initialThreadId?: string) {
+  constructor(initialThreadId?: string, onEvent?: (event: AgentEvent) => void) {
     this.currentThreadId = initialThreadId
+    this.onEvent = onEvent
   }
 
   get lineCount(): number {
@@ -366,15 +368,18 @@ export class CodexJsonLineParser {
 
   private emit(event: AgentEvent): void {
     const threadId = this.currentThreadId
+    let emitted: AgentEvent
     if (threadId) {
-      this.events.push({
+      emitted = {
         ...event,
         agentSessionId: threadId,
         threadId,
-      } as AgentEvent)
-      return
+      } as AgentEvent
+    } else {
+      emitted = event
     }
-    this.events.push(event)
+    this.events.push(emitted)
+    this.onEvent?.(emitted)
   }
 }
 

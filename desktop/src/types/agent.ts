@@ -101,6 +101,15 @@ export interface SynapseAgentProviderState {
   readonly activeMode?: string
 }
 
+export interface SynapseAgentPublishedCommand {
+  readonly name: string
+  readonly description?: string
+  readonly source: "builtin" | "custom" | "skill" | "agent-native"
+  readonly kind: "builtin" | "prompt" | "exec" | "skill" | "agent-native"
+  readonly adminOnly: boolean
+  readonly allowedPlatforms?: string[]
+}
+
 export interface SynapseAgentPendingPermission {
   readonly requestId: string
   readonly projectId: string

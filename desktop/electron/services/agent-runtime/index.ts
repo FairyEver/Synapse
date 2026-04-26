@@ -1,4 +1,9 @@
-import type { ConversationEntryV1, DataRepository, OutboxEntryV1 } from "../../runtime/data-repo"
+import type {
+  AgentCommandEntryV1,
+  ConversationEntryV1,
+  DataRepository,
+  OutboxEntryV1,
+} from "../../runtime/data-repo"
 import type { ProjectScopedService } from "../../runtime/project-container"
 import {
   createControlledProcessRunner,
@@ -11,6 +16,8 @@ import {
 import { ReplyOutboxService } from "../reply-target"
 import { CodexExecAdapter } from "./adapters/codex-exec"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
+import { CustomCommandRegistry } from "./command-registry"
+import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
 export {
@@ -32,6 +39,14 @@ export {
   type RegisteredPromptCommand,
 } from "./command-router"
 export {
+  BUILTIN_COMMANDS,
+  CustomCommandRegistry,
+  commandAllowedOnPlatform,
+  expandCustomCommandPrompt,
+  normalizeCommandName,
+  type PublishedAgentCommand,
+} from "./command-registry"
+export {
   AgentGovernanceService,
   MessageDedupe,
   OutgoingTokenBucketLimiter,
@@ -49,6 +64,11 @@ export {
   type CreateAgentSessionInput,
   type SaveAgentSessionInput,
 } from "./session-repository"
+export {
+  SkillRegistry,
+  buildSkillInvocationPrompt,
+  type AgentSkill,
+} from "./skill-registry"
 export {
   CodexExecAdapter,
   CodexJsonLineParser,
@@ -106,6 +126,14 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         ctx.globalRegistry,
         "core.side-channel",
       )
+      const customCommands = new CustomCommandRegistry({
+        projectId: ctx.projectId,
+        commands: ctx.dataRepo.namespace<AgentCommandEntryV1>("agent.commands"),
+        workspacePath: ctx.projectMeta.workspacePath,
+      })
+      const skills = new SkillRegistry({
+        workspacePath: ctx.projectMeta.workspacePath,
+      })
       return new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -120,6 +148,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         outbox,
         providerConfig,
         replyTargets,
+        customCommands,
+        skills,
+        commandRunner: runner,
       })
     },
   }

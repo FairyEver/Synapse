@@ -1,4 +1,8 @@
-import type { ConversationEntryV1, DataNamespace } from "../../runtime/data-repo"
+import type { AgentCommandEntryV1, ConversationEntryV1, DataNamespace } from "../../runtime/data-repo"
+import type {
+  ControlledProcessResult,
+  ControlledProcessRunRequest,
+} from "../../runtime/process"
 import type { ScopedEventBus } from "../../runtime/project-container"
 import type {
   ActorIdentity,
@@ -19,7 +23,14 @@ import type {
   AgentCommandRouterResult,
   RegisteredPromptCommand,
 } from "./command-router"
+import type { CustomCommandRegistry, PublishedAgentCommand } from "./command-registry"
+import { BUILTIN_COMMANDS } from "./command-registry"
 import type { AgentGovernanceDecision, AgentGovernanceService } from "./governance"
+import {
+  parseReferenceViewOptions,
+  renderReferenceView,
+  resolveLocalReference,
+} from "./references"
 import {
   AgentSessionRepository,
   conversationId,
@@ -34,6 +45,11 @@ import type {
   AgentPermissionResponseRequest,
   AgentRuntimeTurnResult,
 } from "./types"
+import type { SkillRegistry } from "./skill-registry"
+
+export interface AgentCommandProcessRunner {
+  run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
+}
 
 export interface AgentRuntimeServiceDeps {
   readonly projectId: string
@@ -55,6 +71,9 @@ export interface AgentRuntimeServiceDeps {
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
+  readonly customCommands?: CustomCommandRegistry
+  readonly skills?: SkillRegistry
+  readonly commandRunner?: AgentCommandProcessRunner
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void
@@ -121,7 +140,13 @@ export class AgentRuntimeService {
         registeredPromptCommands: deps.registeredPromptCommands,
         agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
         unknownSlashBehavior: deps.unknownSlashBehavior,
+        customCommands: deps.customCommands,
+        skills: deps.skills,
         resetSession: (message) => this.resetMessageSession(message),
+        showReference: (message, args) => this.showReferenceForMessage(message, args),
+        listCommands: (message) => this.listPublishedCommands(message.platform),
+        runCustomCommand: (command, args, message) =>
+          this.runCustomCommand(command, args, message),
       })
       : undefined
   }
@@ -254,6 +279,21 @@ export class AgentRuntimeService {
 
   async getSession(conversationIdValue: string): Promise<ConversationEntryV1 | null> {
     return this.repository.get(conversationIdValue)
+  }
+
+  async listPublishedCommands(platform = "local-renderer"): Promise<readonly PublishedAgentCommand[]> {
+    const custom = (await this.deps.customCommands?.listPublished() ?? [])
+      .filter((command) => !command.allowedPlatforms
+        || command.allowedPlatforms.some((allowed) => allowed.toLowerCase() === platform.toLowerCase()))
+    const skills = await this.deps.skills?.listPublished() ?? []
+    const native = (this.deps.agentNativeSlashAllowlist ?? []).map((name) => ({
+      name,
+      source: "agent-native" as const,
+      kind: "agent-native" as const,
+      adminOnly: false,
+      allowedPlatforms: ["local-renderer"],
+    }))
+    return [...BUILTIN_COMMANDS, ...custom, ...skills, ...native]
   }
 
   async respondPermission(request: AgentPermissionResponseRequest): Promise<void> {
@@ -488,6 +528,7 @@ export class AgentRuntimeService {
     workDir: string,
   ): Promise<AgentRuntimeTurnResult> {
     const threadId = reusableAgentSessionId(conversation, adapter.agentType)
+    const streamedEvents = new WeakSet<AgentEvent>()
     const execution = await adapter.execute(message, {
       projectId: this.deps.projectId,
       workDir,
@@ -495,9 +536,14 @@ export class AgentRuntimeService {
       agentSessionId: threadId,
       sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
       actor: { kind: "user" },
+      onEvent: (event) => {
+        streamedEvents.add(event)
+        this.emitEvent(message, conversation.id, event)
+      },
     })
 
     for (const event of execution.events) {
+      if (streamedEvents.has(event)) continue
       this.emitEvent(message, conversation.id, event)
     }
 
@@ -769,6 +815,102 @@ export class AgentRuntimeService {
     return this.resetSession(message.sessionKey, message.platform, message.workspaceKey)
   }
 
+  private async showReferenceForMessage(
+    message: AgentMessage,
+    args: readonly string[],
+  ): Promise<string> {
+    const parsed = parseReferenceViewOptions(args)
+    if (!parsed) return "Use /show <path[:line]>."
+    const workDir = this.workDirFor(message)
+    if (!workDir) throw new Error("Project workspace path is required")
+    const reference = resolveLocalReference(parsed.reference, workDir)
+    if (!reference) return "Reference is outside the workspace or invalid."
+    const actor: ActorIdentity = { kind: "user", id: message.userId }
+    const permission = await this.deps.permissionGuard?.check({
+      action: "fs.read.outside-userdata",
+      actor,
+      resource: reference.path,
+      context: {
+        projectId: this.deps.projectId,
+        sessionKey: message.sessionKey,
+        workspacePath: workDir,
+        command: "/show",
+      },
+    })
+    if (permission && !permission.allowed) {
+      this.deps.auditSink?.record({
+        action: "fs.read.outside-userdata",
+        actor,
+        resource: reference.path,
+        outcome: "denied",
+        metadata: {
+          projectId: this.deps.projectId,
+          sessionKey: message.sessionKey,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new Error(permission.reason)
+    }
+    try {
+      const content = await renderReferenceView(parsed.reference, workDir, parsed.options)
+      this.deps.auditSink?.record({
+        action: "fs.read.outside-userdata",
+        actor,
+        resource: reference.path,
+        outcome: "allowed",
+        metadata: {
+          projectId: this.deps.projectId,
+          sessionKey: message.sessionKey,
+          command: "/show",
+        },
+      })
+      return content
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error)
+      this.deps.auditSink?.record({
+        action: "fs.read.outside-userdata",
+        actor,
+        resource: reference.path,
+        outcome: "failed",
+        metadata: {
+          projectId: this.deps.projectId,
+          sessionKey: message.sessionKey,
+          command: "/show",
+          error: messageText,
+        },
+      })
+      throw error
+    }
+  }
+
+  private async runCustomCommand(
+    command: AgentCommandEntryV1,
+    args: readonly string[],
+    message: AgentMessage,
+  ): Promise<string> {
+    if (!this.deps.commandRunner) throw new Error("Command execution is unavailable")
+    if (!command.exec?.trim()) throw new Error("Command is missing exec body")
+    const workDir = command.workDir ?? this.workDirFor(message)
+    if (!workDir) throw new Error("Project workspace path is required")
+    const result = await this.deps.commandRunner.run({
+      actor: { kind: "user", id: message.userId },
+      action: "shell.exec",
+      command: shellCommand(),
+      args: shellArgs(`${command.exec} ${args.join(" ")}`.trim()),
+      cwd: workDir,
+      timeoutMs: 60_000,
+      output: { stdout: "buffer", stderr: "buffer" },
+      metadata: {
+        projectId: this.deps.projectId,
+        sessionKey: message.sessionKey,
+        command: `/${command.name}`,
+        platform: message.platform,
+      },
+    })
+    return formatCommandResult(command.name, result)
+  }
+
   private workDirFor(message: AgentMessage): string | undefined {
     return message.workspacePath ?? this.deps.workDir
   }
@@ -892,6 +1034,35 @@ function isPromptCommandRoute(
   result: AgentCommandRouterResult,
 ): result is Extract<AgentCommandRouterResult, { kind: "prompt" }> {
   return "kind" in result && result.kind === "prompt"
+}
+
+function shellCommand(): string {
+  return process.platform === "win32" ? "powershell.exe" : "sh"
+}
+
+function shellArgs(command: string): readonly string[] {
+  return process.platform === "win32"
+    ? ["-NoProfile", "-Command", command]
+    : ["-c", command]
+}
+
+function formatCommandResult(name: string, result: ControlledProcessResult): string {
+  const output = [result.stdout, result.stderr]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join("\n")
+  const status = result.timedOut
+    ? `Command timed out: /${name}`
+    : result.exitCode === 0
+      ? `Command completed: /${name}`
+      : `Command failed: /${name} (${String(result.exitCode ?? result.signal ?? "unknown")})`
+  return output ? `${status}\n\n${truncateRunes(output, 4000)}` : status
+}
+
+function truncateRunes(value: string, maxRunes: number): string {
+  const runes = [...value]
+  if (runes.length <= maxRunes) return value
+  return `${runes.slice(0, maxRunes).join("")}...`
 }
 
 export type { AgentGovernanceDecision }

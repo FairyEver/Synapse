@@ -1,13 +1,16 @@
+import { shell } from "electron"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import {
   AgentRuntimeService,
   AGENT_RUNTIME_SERVICE_ID,
   type AgentEvent,
 } from "../../services/agent-runtime"
+import { resolveLocalReference } from "../../services/agent-runtime/references"
 import {
   ProviderConfigService,
   PROVIDER_CONFIG_SERVICE_ID,
@@ -37,6 +40,10 @@ const respondPermissionRequestSchema = projectRequestSchema.extend({
   requestId: z.string().min(1),
   behavior: z.enum(["allow", "deny"]),
   message: z.string().optional(),
+})
+
+const openReferenceRequestSchema = projectRequestSchema.extend({
+  reference: z.string().min(1),
 })
 
 const timelineEntrySchema = z.object({
@@ -86,6 +93,15 @@ const providerStateSchema = z.object({
   activeProviderId: z.string().optional(),
   activeModel: z.string().optional(),
   activeMode: z.string().optional(),
+})
+
+const publishedCommandSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  source: z.enum(["builtin", "custom", "skill", "agent-native"]),
+  kind: z.enum(["builtin", "prompt", "exec", "skill", "agent-native"]),
+  adminOnly: z.boolean(),
+  allowedPlatforms: z.array(z.string()).optional(),
 })
 
 const agentEventBaseSchema = {
@@ -162,11 +178,17 @@ const respondPermissionResultSchema = z.object({
   ok: z.literal(true),
 })
 
+const openReferenceResultSchema = z.object({
+  ok: z.literal(true),
+  path: z.string(),
+})
+
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SessionsRequest = z.infer<typeof sessionsRequestSchema>
 type TimelineRequest = z.infer<typeof timelineRequestSchema>
 type SendRequest = z.infer<typeof sendRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
+type OpenReferenceRequest = z.infer<typeof openReferenceRequestSchema>
 
 const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
 const LOCAL_RENDERER_PLATFORM = "local-renderer"
@@ -296,6 +318,68 @@ export const agentIpcModule: IpcModule = {
             scope: provider.scope,
           })),
         }
+      },
+    },
+    listCommands: {
+      kind: "invoke",
+      channel: "synapse:agent:list-commands",
+      request: projectRequestSchema,
+      response: z.array(publishedCommandSchema),
+      handler: async (ctx, request: ProjectRequest) => {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        return agent.listPublishedCommands(LOCAL_RENDERER_PLATFORM)
+      },
+    },
+    openReference: {
+      kind: "invoke",
+      channel: "synapse:agent:open-reference",
+      request: openReferenceRequestSchema,
+      response: openReferenceResultSchema,
+      handler: async (ctx, request: OpenReferenceRequest) => {
+        const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const reference = resolveLocalReference(request.reference, project.localPath)
+        if (!reference) throw new Error("Reference is outside the workspace or invalid.")
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const actor = { kind: "user" as const, id: "renderer" }
+        const permission = await permissionGuard.check({
+          action: "fs.read.outside-userdata",
+          actor,
+          resource: reference.path,
+          context: {
+            projectId: request.projectId,
+            command: "open-reference",
+          },
+        })
+        if (!permission.allowed) {
+          auditSink.record({
+            action: "fs.read.outside-userdata",
+            actor,
+            resource: reference.path,
+            outcome: "denied",
+            metadata: {
+              projectId: request.projectId,
+              reason: permission.reason,
+              policyId: permission.policyId,
+            },
+          })
+          throw new Error(permission.reason)
+        }
+        const error = await shell.openPath(reference.path)
+        auditSink.record({
+          action: "fs.read.outside-userdata",
+          actor,
+          resource: reference.path,
+          outcome: error ? "failed" : "allowed",
+          metadata: {
+            projectId: request.projectId,
+            command: "open-reference",
+            line: reference.line,
+            error: error || undefined,
+          },
+        })
+        if (error) throw new Error(error)
+        return { ok: true, path: reference.path }
       },
     },
   },

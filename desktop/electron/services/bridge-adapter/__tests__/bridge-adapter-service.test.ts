@@ -135,11 +135,11 @@ describe("BridgeAdapterService", () => {
     await service.stop()
   })
 
-  it("sends reply, update, typing, and side-channel payloads to fake adapter", async () => {
+  it("sends reply, compact progress, typing, and side-channel payloads to fake adapter", async () => {
     const { service, port } = await startBridge()
     const ws = await registeredBridge(port, "tok", ["text", "typing", "update_message", "image"])
     const target = bridgeTarget()
-    const messages = readJsonN(ws, 4)
+    const messages = readJsonN(ws, 6)
 
     await service.dispatchAgentEvent(target, { type: "thinking", content: "thinking" })
     await service.dispatchAgentEvent(target, { type: "toolUse", toolName: "Bash" })
@@ -156,19 +156,80 @@ describe("BridgeAdapterService", () => {
     })
 
     const received = await messages
-    expect(received[0]).toEqual(expect.objectContaining({ type: "typing" }))
+    expect(received[0]).toEqual(expect.objectContaining({ type: "typing_start" }))
     expect(received[1]).toEqual(expect.objectContaining({
       type: "update_message",
-      content: "Using Bash",
+      content: expect.stringContaining("Thinking"),
     }))
     expect(received[2]).toEqual(expect.objectContaining({
+      type: "update_message",
+      content: expect.stringContaining("Using Bash"),
+    }))
+    expect(received[3]).toEqual(expect.objectContaining({
+      type: "typing_stop",
+    }))
+    expect(received[4]).toEqual(expect.objectContaining({
       type: "reply",
       content: "done",
     }))
-    expect(received[3]).toEqual(expect.objectContaining({
+    expect(received[5]).toEqual(expect.objectContaining({
       type: "reply",
       content: "chart",
       attachments: [expect.objectContaining({ kind: "image", file_name: "chart.png" })],
+    }))
+    ws.close()
+    await service.stop()
+  })
+
+  it("uses preview_start, preview_ack, and update_message for streamed text", async () => {
+    const { service, port } = await startBridge()
+    const ws = await registeredBridge(port, "tok", ["text", "preview", "update_message"])
+    const target = bridgeTarget()
+
+    const stream = service.dispatchAgentEvent(target, { type: "text", content: "hello" })
+    const preview = await readJson(ws) as { ref_id: string }
+    expect(preview).toEqual(expect.objectContaining({
+      type: "preview_start",
+      content: "hello",
+    }))
+    ws.send(JSON.stringify({
+      type: "preview_ack",
+      ref_id: preview.ref_id,
+      preview_handle: "preview-1",
+    }))
+    await stream
+
+    const final = readJson(ws)
+    await service.dispatchAgentEvent(target, { type: "result", content: "hello world", done: true })
+    await expect(final).resolves.toEqual(expect.objectContaining({
+      type: "update_message",
+      preview_handle: "preview-1",
+      content: "hello world",
+    }))
+    ws.close()
+    await service.stop()
+  })
+
+  it("publishes command capabilities to control-plane adapters", async () => {
+    const agent = new FakeAgentRuntime()
+    const { service, port } = await startBridge(agent)
+    const ws = await openBridge(port, "tok")
+    const messages = readJsonN(ws, 2)
+    ws.send(JSON.stringify({
+      type: "register",
+      platform: "bridge",
+      capabilities: ["text"],
+      metadata: { control_plane: ["capabilities_snapshot_v1"] },
+    }))
+
+    const received = await messages
+    expect(received[0]).toEqual({ type: "register_ack", ok: true })
+    expect(received[1]).toEqual(expect.objectContaining({
+      type: "capabilities_snapshot",
+      projects: [expect.objectContaining({
+        project: "project-1",
+        commands: [expect.objectContaining({ name: "status" })],
+      })],
     }))
     ws.close()
     await service.stop()
@@ -194,7 +255,7 @@ describe("BridgeAdapterService", () => {
     }))
     expect(received[1]).toEqual(expect.objectContaining({
       type: "reply",
-      content: "ok",
+      content: expect.stringContaining("ok"),
     }))
     ws.close()
     await service.stop()
@@ -419,6 +480,15 @@ class FakeAgentRuntime {
 
   async deleteSession(id: string): Promise<boolean> {
     return this.sessions.delete(id)
+  }
+
+  async listPublishedCommands(): Promise<readonly Record<string, unknown>[]> {
+    return [{
+      name: "status",
+      source: "builtin",
+      kind: "builtin",
+      adminOnly: false,
+    }]
   }
 }
 

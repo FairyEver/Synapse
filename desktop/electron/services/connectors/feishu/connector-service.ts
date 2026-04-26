@@ -481,10 +481,17 @@ export class FeishuConnectorService {
         return
       }
       const { agent } = await this.resolveProjectAgent(projectId)
-      await agent.send(normalized.message)
+      const agentMessage = {
+        ...normalized.message,
+        replyCtx: {
+          ...(normalized.message.replyCtx as Record<string, unknown>),
+          isAdmin: isFeishuAdmin(connector, normalized.message.userId ?? ""),
+        },
+      }
+      await agent.send(agentMessage)
       this.recordAudit("allowed", projectId, connectorId, "message", undefined, {
-        sessionKey: normalized.message.sessionKey,
-        messageId: normalized.message.messageId,
+        sessionKey: agentMessage.sessionKey,
+        messageId: agentMessage.messageId,
       })
     } catch (error) {
       await this.markDegraded(connectorId, error)

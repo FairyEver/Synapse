@@ -117,6 +117,7 @@ export interface AgentExecutionContext {
   readonly agentSessionId?: string
   readonly sessionEnv?: Record<string, string>
   readonly actor: ActorIdentity
+  onEvent?(event: AgentEvent): void
 }
 
 export interface AgentExecutionResult {

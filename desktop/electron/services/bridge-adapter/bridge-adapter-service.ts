@@ -28,12 +28,20 @@ import {
   parseBridgeBase,
   parseBridgeCardAction,
   parseBridgeMessage,
+  parseBridgePreviewAck,
   parseBridgeRegister,
   sanitizeBridgeMetadata,
   type BridgeCardAction,
   type BridgeMessage,
   type BridgeRegister,
 } from "./bridge-protocol"
+import {
+  appendCompactProgressEntry,
+  compactProgressPayload,
+  progressEntryFromEvent,
+  renderCompactProgress,
+  type CompactProgressEntry,
+} from "../agent-runtime/preview-progress"
 import type {
   BridgeAdapterStatus,
   BridgeAdapterSummary,
@@ -63,9 +71,26 @@ interface BridgeAdapterConnection {
   readonly capabilities: Set<string>
   readonly metadata?: Record<string, unknown>
   readonly connection: LocalWebSocketConnection
+  readonly previewAcks: Map<string, BridgePreviewAckWaiter>
   readonly registeredAt: string
   lastSeenAt: string
   connected: boolean
+}
+
+interface BridgePreviewAckWaiter {
+  resolve(handle: string): void
+  reject(error: Error): void
+  timeout: ReturnType<typeof setTimeout>
+}
+
+interface BridgeTurnState {
+  text: string
+  previewHandle?: string
+  previewPending?: Promise<string>
+  previewFailed?: boolean
+  progressEntries: readonly CompactProgressEntry[]
+  lastFallbackProgressAt?: number
+  typingActive?: boolean
 }
 
 const NETWORK_SERVICE_ID = "bridge.adapter"
@@ -73,6 +98,8 @@ const DEFAULT_BRIDGE_PATH = "/bridge/ws"
 const DEFAULT_SESSIONS_PATH = "/bridge/sessions"
 const DEFAULT_BRIDGE_PORT = 9810
 const CAPABILITIES_SNAPSHOT_PROTO = "capabilities_snapshot_v1"
+const PREVIEW_ACK_TIMEOUT_MS = 2000
+const PROGRESS_FALLBACK_INTERVAL_MS = 3000
 
 export class BridgeAdapterService implements BridgeOutboundDispatcher {
   private readonly deps: BridgeAdapterServiceDeps
@@ -80,6 +107,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
   private readonly path: string
   private readonly sessionsPath: string
   private readonly adapters = new Map<string, BridgeAdapterConnection>()
+  private readonly turns = new Map<string, BridgeTurnState>()
   private binding: ResolvedNetworkBinding | undefined
   private disposeDispatcher: (() => void) | undefined
 
@@ -160,39 +188,46 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       .sort((a, b) => a.platform.localeCompare(b.platform))
   }
 
+  async publishCapabilitiesSnapshot(): Promise<void> {
+    for (const adapter of this.adapters.values()) {
+      if (!adapter.connected) continue
+      if (!metadataStringListContains(adapter.metadata, "control_plane", CAPABILITIES_SNAPSHOT_PROTO)) continue
+      adapter.connection.sendJson(await this.capabilitiesSnapshot(adapter.platform))
+    }
+  }
+
   async dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void> {
     const adapter = this.adapterForTarget(target)
+    const turn = this.turnFor(adapter, target)
     switch (event.type) {
       case "text":
+        turn.text += event.content
+        await this.sendPreviewText(adapter, target, turn, turn.text)
+        break
       case "result":
-        await this.sendReply(adapter, target, event.content)
+        await this.sendFinal(adapter, target, turn, event.content || turn.text)
         break
       case "thinking":
-        if (adapter.capabilities.has("typing")) {
-          adapter.connection.sendJson({
-            type: "typing",
-            session_key: target.sessionKey,
-            reply_ctx: target.replyCtx?.replyCtx,
-            active: true,
-          })
-        }
+        this.sendTyping(adapter, target, turn, true)
+        await this.sendProgress(adapter, target, turn, event)
         break
       case "error":
+        this.sendTyping(adapter, target, turn, false)
         adapter.connection.sendJson({
           type: "error",
           session_key: target.sessionKey,
           reply_ctx: target.replyCtx?.replyCtx,
           error: { code: "agent_error", message: event.message },
         })
+        this.turns.delete(this.turnKey(adapter, target))
         break
       case "permissionRequest":
+        this.sendTyping(adapter, target, turn, false)
         await this.sendPermission(adapter, target, event)
         break
       case "toolUse":
-        await this.sendProgress(adapter, target, `Using ${event.toolName}`)
-        break
       case "toolResult":
-        await this.sendProgress(adapter, target, event.content ?? event.toolName)
+        await this.sendProgress(adapter, target, turn, event)
         break
       default: {
         const exhaustive: never = event
@@ -278,7 +313,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     const adapter = this.registerAdapter(connection, parsed.value)
     connection.sendJson({ type: "register_ack", ok: true })
     if (metadataStringListContains(adapter.metadata, "control_plane", CAPABILITIES_SNAPSHOT_PROTO)) {
-      connection.sendJson(await this.capabilitiesSnapshot())
+      connection.sendJson(await this.capabilitiesSnapshot(adapter.platform))
     }
     return adapter
   }
@@ -294,6 +329,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       capabilities: normalizeCapabilities(register.capabilities),
       metadata: sanitizeBridgeMetadata(register.metadata),
       connection,
+      previewAcks: new Map(),
       registeredAt: now,
       lastSeenAt: now,
       connected: true,
@@ -314,6 +350,14 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     if (current?.id !== adapter.id) return
     adapter.connected = false
     adapter.lastSeenAt = this.isoNow()
+    for (const waiter of adapter.previewAcks.values()) {
+      clearTimeout(waiter.timeout)
+      waiter.reject(new Error("bridge adapter disconnected"))
+    }
+    adapter.previewAcks.clear()
+    for (const key of this.turns.keys()) {
+      if (key.startsWith(`${adapter.id}:`)) this.turns.delete(key)
+    }
     this.recordAdapterAudit("allowed", adapter.platform, "disconnected")
   }
 
@@ -333,6 +377,9 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         break
       case "card_action":
         await this.handleCardAction(adapter, value)
+        break
+      case "preview_ack":
+        this.handlePreviewAck(adapter, value)
         break
       case "ping":
         adapter.connection.sendJson({ type: "pong", ts: Date.now() })
@@ -419,6 +466,19 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         action.reply_ctx,
       )
     }
+  }
+
+  private handlePreviewAck(adapter: BridgeAdapterConnection, value: unknown): void {
+    const parsed = parseBridgePreviewAck(value)
+    if (!parsed.ok) {
+      this.sendProtocolError(adapter, parsed.error.code, parsed.error.message)
+      return
+    }
+    const waiter = adapter.previewAcks.get(parsed.value.ref_id)
+    if (!waiter) return
+    adapter.previewAcks.delete(parsed.value.ref_id)
+    clearTimeout(waiter.timeout)
+    waiter.resolve(parsed.value.preview_handle ?? parsed.value.ref_id)
   }
 
   private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
@@ -578,6 +638,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     target: ReplyTarget,
     content: string,
   ): Promise<void> {
+    if (!content.trim()) return
     adapter.connection.sendJson({
       type: "reply",
       session_key: target.sessionKey,
@@ -586,21 +647,158 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     })
   }
 
+  private async sendPreviewText(
+    adapter: BridgeAdapterConnection,
+    target: ReplyTarget,
+    turn: BridgeTurnState,
+    content: string,
+  ): Promise<void> {
+    if (!canPreview(adapter) || !content.trim()) return
+    const started = await this.ensurePreview(adapter, target, turn, content)
+    if (!started && turn.previewHandle) {
+      this.sendUpdateMessage(adapter, target, content, turn.previewHandle)
+    }
+  }
+
+  private async sendFinal(
+    adapter: BridgeAdapterConnection,
+    target: ReplyTarget,
+    turn: BridgeTurnState,
+    content: string,
+  ): Promise<void> {
+    this.sendTyping(adapter, target, turn, false)
+    const clean = content.trim()
+    if (!clean) {
+      this.turns.delete(this.turnKey(adapter, target))
+      return
+    }
+    if (canPreview(adapter) && !turn.previewFailed) {
+      if (!turn.previewHandle && turn.previewPending) {
+        try {
+          turn.previewHandle = await turn.previewPending
+        } catch {
+          turn.previewFailed = true
+        }
+      }
+      if (turn.previewHandle) {
+        this.sendUpdateMessage(adapter, target, content, turn.previewHandle)
+        this.turns.delete(this.turnKey(adapter, target))
+        return
+      }
+    }
+    await this.sendReply(adapter, target, content)
+    this.turns.delete(this.turnKey(adapter, target))
+  }
+
   private async sendProgress(
     adapter: BridgeAdapterConnection,
     target: ReplyTarget,
-    content: string,
+    turn: BridgeTurnState,
+    event: AgentEvent,
   ): Promise<void> {
+    const entry = progressEntryFromEvent(event)
+    if (!entry) return
+    turn.progressEntries = appendCompactProgressEntry(turn.progressEntries, entry)
+    const state = event.type === "error" ? "failed" : "running"
+    const content = renderCompactProgress(turn.progressEntries, state)
     if (adapter.capabilities.has("update_message")) {
-      adapter.connection.sendJson({
-        type: "update_message",
-        session_key: target.sessionKey,
-        reply_ctx: target.replyCtx?.replyCtx,
-        content,
+      this.sendUpdateMessage(adapter, target, content, turn.previewHandle, {
+        progress: compactProgressPayload(turn.progressEntries, state),
       })
       return
     }
-    await this.sendReply(adapter, target, content)
+    const now = Date.now()
+    if (
+      event.type === "toolResult"
+      || turn.lastFallbackProgressAt === undefined
+      || now - turn.lastFallbackProgressAt >= PROGRESS_FALLBACK_INTERVAL_MS
+    ) {
+      turn.lastFallbackProgressAt = now
+      await this.sendReply(adapter, target, content)
+    }
+  }
+
+  private async ensurePreview(
+    adapter: BridgeAdapterConnection,
+    target: ReplyTarget,
+    turn: BridgeTurnState,
+    content: string,
+  ): Promise<boolean> {
+    if (turn.previewHandle || turn.previewFailed) return false
+    if (turn.previewPending) {
+      try {
+        turn.previewHandle = await turn.previewPending
+      } catch {
+        turn.previewFailed = true
+      }
+      return false
+    }
+
+    const refId = randomUUID()
+    turn.previewPending = this.waitForPreviewAck(adapter, refId)
+    adapter.connection.sendJson({
+      type: "preview_start",
+      ref_id: refId,
+      session_key: target.sessionKey,
+      reply_ctx: target.replyCtx?.replyCtx,
+      content,
+    })
+    try {
+      turn.previewHandle = await turn.previewPending
+      return true
+    } catch {
+      turn.previewFailed = true
+      return false
+    } finally {
+      turn.previewPending = undefined
+    }
+  }
+
+  private waitForPreviewAck(
+    adapter: BridgeAdapterConnection,
+    refId: string,
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        adapter.previewAcks.delete(refId)
+        reject(new Error(`preview ack timed out for ${refId}`))
+      }, PREVIEW_ACK_TIMEOUT_MS)
+      adapter.previewAcks.set(refId, { resolve, reject, timeout })
+    })
+  }
+
+  private sendUpdateMessage(
+    adapter: BridgeAdapterConnection,
+    target: ReplyTarget,
+    content: string,
+    previewHandle?: string,
+    extra: Record<string, unknown> = {},
+  ): void {
+    adapter.connection.sendJson({
+      type: "update_message",
+      session_key: target.sessionKey,
+      reply_ctx: target.replyCtx?.replyCtx,
+      preview_handle: previewHandle,
+      content,
+      ...extra,
+    })
+  }
+
+  private sendTyping(
+    adapter: BridgeAdapterConnection,
+    target: ReplyTarget,
+    turn: BridgeTurnState,
+    active: boolean,
+  ): void {
+    if (!adapter.capabilities.has("typing")) return
+    if (active && turn.typingActive) return
+    if (!active && !turn.typingActive) return
+    turn.typingActive = active
+    adapter.connection.sendJson({
+      type: active ? "typing_start" : "typing_stop",
+      session_key: target.sessionKey,
+      reply_ctx: target.replyCtx?.replyCtx,
+    })
   }
 
   private async sendPermission(
@@ -647,16 +845,43 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     })
   }
 
-  private async capabilitiesSnapshot(): Promise<Record<string, unknown>> {
+  private async capabilitiesSnapshot(platform = "bridge"): Promise<Record<string, unknown>> {
     const projects = await this.deps.listProjects()
     return {
       type: "capabilities_snapshot",
       v: 1,
       host: { id: "synapse", name: "Synapse" },
-      projects: projects.map((project) => ({
+      projects: await Promise.all(projects.map(async (project) => ({
         project: project.projectId,
-        commands: [],
-      })),
+        commands: await this.commandsForProject(project, platform),
+      }))),
+    }
+  }
+
+  private async commandsForProject(
+    project: BridgeProjectSummary,
+    platform: string,
+  ): Promise<readonly Record<string, unknown>[]> {
+    try {
+      const container = await this.deps.projectContainers.open(project.projectId, {
+        name: project.name,
+        workspacePath: project.workspacePath,
+      })
+      const agent = container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+      return (await agent.listPublishedCommands(platform)).map((command) => ({
+        name: command.name,
+        description: command.description,
+        source: command.source,
+        kind: command.kind,
+        admin_only: command.adminOnly,
+        allowed_platforms: command.allowedPlatforms,
+      }))
+    } catch (error) {
+      this.deps.logger?.warn("Bridge capabilities command listing failed.", {
+        projectId: project.projectId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return []
     }
   }
 
@@ -704,6 +929,28 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
 
   private isoNow(): string {
     return new Date().toISOString()
+  }
+
+  private turnFor(adapter: BridgeAdapterConnection, target: ReplyTarget): BridgeTurnState {
+    const key = this.turnKey(adapter, target)
+    const existing = this.turns.get(key)
+    if (existing) return existing
+    const created: BridgeTurnState = {
+      text: "",
+      progressEntries: [],
+    }
+    this.turns.set(key, created)
+    return created
+  }
+
+  private turnKey(adapter: BridgeAdapterConnection, target: ReplyTarget): string {
+    return [
+      adapter.id,
+      target.projectId,
+      target.sessionKey,
+      target.conversationId,
+      stringValue(target.replyCtx?.replyCtx) ?? "",
+    ].join(":")
   }
 }
 
@@ -757,6 +1004,10 @@ function timingSafeEqualText(a: string, b: string): boolean {
   const bBytes = Buffer.from(b)
   if (aBytes.length !== bBytes.length) return false
   return timingSafeEqual(aBytes, bBytes)
+}
+
+function canPreview(adapter: BridgeAdapterConnection): boolean {
+  return adapter.capabilities.has("preview") && adapter.capabilities.has("update_message")
 }
 
 function ensurePath(value: string): string {
