@@ -1,0 +1,9 @@
+{
+  "id": "bark-notification",
+  "name": "bark-notification",
+  "title": "Bark 通知",
+  "description": "通过 Bark 发送标题和内容明确的推送通知",
+  "category": "integration",
+  "icon": "workflow",
+  "iconBg": "teal"
+}
