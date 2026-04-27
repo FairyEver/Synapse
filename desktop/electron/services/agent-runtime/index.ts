@@ -15,14 +15,23 @@ import {
   createProviderConfigServiceFromDataRepository,
   type ProviderRuntimeView,
 } from "../provider-config"
+import {
+  agentRuntimeDefinitionById,
+} from "../definitions/generated/main-registry"
+import type {
+  AgentRuntimeDefinition,
+  AgentRuntimeProcessRunner,
+} from "../../../src/definitions/main-types"
 import { ReplyOutboxService } from "../reply-target"
-import { CodexExecAdapter } from "./adapters/codex-exec"
-import { ClaudeCodeAdapter } from "./adapters/claude-code"
 import type { AgentAdapter } from "./types"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
+
+const agentRuntimeDefinitionsByStringId: ReadonlyMap<string, AgentRuntimeDefinition> = new Map(
+  agentRuntimeDefinitionById,
+)
 
 export {
   AgentRuntimeService,
@@ -151,9 +160,15 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workDir: ctx.projectMeta.workspacePath,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
-        adapter: new CodexExecAdapter(runner),
+        adapter: createAdapterFromRuntimeDefinition({
+          projectId: ctx.projectId,
+          agentType: "codex",
+          providers: [],
+          env: {},
+          envAllowlist: [],
+        }, runner),
         agentType: "codex",
-        adapterFactory: (view) => adapterFromRuntimeView(view, runner),
+        adapterFactory: (view) => createAdapterFromRuntimeDefinition(view, runner),
         eventBus: ctx.eventBus,
         logger: ctx.logger,
         permissionGuard,
@@ -170,41 +185,21 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
   }
 }
 
+export function createAdapterFromRuntimeDefinition(
+  view: ProviderRuntimeView,
+  runner: AgentRuntimeProcessRunner,
+): AgentAdapter {
+  const definition = agentRuntimeDefinitionsByStringId.get(view.agentType)
+  if (!definition) {
+    throw new Error(`Unknown agent runtime: ${view.agentType}`)
+  }
+  return definition.createAdapter(view, runner)
+}
+
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {
   try {
     return registry.get<T>(id)
   } catch {
     return undefined
   }
-}
-
-function adapterFromRuntimeView(
-  view: ProviderRuntimeView,
-  runner: ReturnType<typeof createControlledProcessRunner>,
-): AgentAdapter {
-  if (view.agentType === "claude-code") {
-    return new ClaudeCodeAdapter(runner, {
-      model: view.model,
-      effort: view.provider?.effort,
-      mode: view.mode,
-      env: view.env,
-      envAllowlist: view.envAllowlist,
-    })
-  }
-  return new CodexExecAdapter(runner, {
-    model: view.model,
-    provider: view.provider?.id,
-    baseUrl: view.baseUrl,
-    effort: view.provider?.effort,
-    mode: view.mode,
-    backend: "app-server",
-    env: {
-      ...view.env,
-      CODEX_HOME: view.provider?.codex?.codexHome ?? view.env.CODEX_HOME,
-    },
-    envAllowlist: [
-      ...view.envAllowlist,
-      ...(view.provider?.codex?.codexHome ? ["CODEX_HOME"] : []),
-    ],
-  })
 }

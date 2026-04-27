@@ -2,12 +2,15 @@ import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import type { EditorScanRuleItem } from "../../types/editor-scan"
 import { extractContentIdFromSynapseFile, isSynapseFile, pathExists } from "../../../electron/services/editor-adapters/utils"
-import { createMainLogger } from "../../../electron/services/log-store"
 import { decodeYamlScalar } from "./shared-yaml-scalar"
 
-const logger = createMainLogger("service.editor-scan")
 const SYNAPSE_RULE_BEGIN_RE = /<!--\s*synapse-rule:([A-Za-z0-9_.-]+):begin\s*-->/
 const SYNAPSE_RULE_END_RE = /<!--\s*synapse-rule:[A-Za-z0-9_.-]+:end\s*-->/
+
+async function warnScanFailure(message: string, details: { path: string; error: unknown }): Promise<void> {
+  const { createMainLogger } = await import("../../../electron/services/log-store.js")
+  createMainLogger("service.editor-scan").warn(message, details)
+}
 
 function previewLines(text: string, metadata?: Record<string, string>): string {
   return (metadata?.description?.trim() || text).split("\n").slice(0, 3).join("\n").trim()
@@ -76,7 +79,7 @@ export async function scanClaudeCodeRules(dirPath: string): Promise<EditorScanRu
         content: text,
       })
     } catch (error) {
-      logger.warn("Failed to scan Claude Code rule.", { path: filePath, error })
+      await warnScanFailure("Failed to scan Claude Code rule.", { path: filePath, error })
     }
   }
 
@@ -114,7 +117,7 @@ export async function scanCursorRules(dirPath: string): Promise<EditorScanRuleIt
         content: text,
       })
     } catch (error) {
-      logger.warn("Failed to scan Cursor rule.", { path: filePath, error })
+      await warnScanFailure("Failed to scan Cursor rule.", { path: filePath, error })
     }
   }
 
