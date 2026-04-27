@@ -10,6 +10,7 @@ import {
   buildCodexExecArgs,
 } from "../adapters/codex-exec"
 import type { ControlledProcessResult, ControlledProcessRunRequest } from "../../../runtime/process"
+import type { ControlledProcessSession } from "../../../runtime/process"
 import type { CodexProcessRunner } from "../adapters/codex-exec"
 
 describe("Codex exec adapter", () => {
@@ -130,6 +131,134 @@ describe("Codex exec adapter", () => {
     expect(seen).toEqual(["text", "result"])
     expect(result.resultText).toBe("hello")
     expect(result.threadId).toBe("thread-1")
+  })
+
+  it("bridges codex app-server approval requests through a live session", async () => {
+    const runner = new FakeCodexAppServerRunner()
+    const adapter = new CodexExecAdapter(runner, {
+      command: "codex-test",
+      model: "gpt-5.5",
+      effort: "high",
+      backend: "app-server",
+    })
+
+    const session = await adapter.startSession?.({
+      projectId: "project-1",
+      workDir: "/repo",
+      sessionEnv: {
+        CC_PROJECT: "project-1",
+        CC_SESSION_KEY: "bridge:s1",
+      },
+      actor: { kind: "user" },
+    })
+
+    expect(session).toBeDefined()
+    expect(runner.requests[0]).toEqual(expect.objectContaining({
+      command: "codex-test",
+      args: ["app-server", "--listen", "stdio://", "-c", "model_reasoning_effort=\"high\""],
+      cwd: "/repo",
+      env: expect.objectContaining({
+        CC_PROJECT: "project-1",
+        CC_SESSION_KEY: "bridge:s1",
+      }),
+      envAllowlist: expect.arrayContaining(["CC_PROJECT", "CC_SESSION_KEY"]),
+    }))
+    expect(runner.session.writes.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({ method: "initialize" }),
+      { method: "initialized", params: null },
+      expect.objectContaining({
+        method: "thread/start",
+        params: expect.objectContaining({
+          approvalPolicy: "on-request",
+          sandbox: "read-only",
+          model: "gpt-5.5",
+        }),
+      }),
+    ])
+
+    await session?.send({
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      platform: "bridge",
+      content: "hello",
+    })
+
+    expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual(
+      expect.objectContaining({
+        method: "turn/start",
+        params: expect.objectContaining({
+          threadId: "thread-1",
+          input: [{ type: "text", text: "hello", text_elements: [] }],
+          effort: "high",
+          approvalPolicy: "on-request",
+        }),
+      }),
+    )
+
+    runner.emitServerRequest({
+      id: "approval-1",
+      method: "item/commandExecution/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-1",
+        command: "pwd",
+        cwd: "/repo",
+      },
+    })
+
+    expect(await session?.nextEvent()).toEqual(
+      expect.objectContaining({
+        type: "permissionRequest",
+        requestId: "approval-1",
+        toolName: "Bash",
+        toolInput: "pwd",
+        toolInputRaw: expect.objectContaining({ command: "pwd" }),
+      }),
+    )
+
+    await session?.respondPermission("approval-1", { behavior: "allow" })
+
+    expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      id: "approval-1",
+      result: { decision: "accept" },
+    })
+
+    runner.emitServerRequest({
+      id: "mcp-1",
+      method: "mcpServer/elicitation/request",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        serverName: "synapse-database",
+        mode: "url",
+        message: "Authorize MCP",
+        url: "http://127.0.0.1:23578/mcp",
+        elicitationId: "elicit-1",
+        _meta: null,
+      },
+    })
+
+    expect(await session?.nextEvent()).toEqual(
+      expect.objectContaining({
+        type: "permissionRequest",
+        requestId: "mcp-1",
+        toolName: "MCP Elicitation",
+        toolInput: "Authorize MCP",
+        toolInputRaw: expect.objectContaining({ serverName: "synapse-database" }),
+      }),
+    )
+
+    await session?.respondPermission("mcp-1", { behavior: "deny" })
+
+    expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      id: "mcp-1",
+      result: {
+        action: "decline",
+        content: null,
+        _meta: null,
+      },
+    })
   })
 })
 
@@ -308,6 +437,100 @@ class StreamingRunner implements CodexProcessRunner {
       stderr: "",
       timedOut: false,
       durationMs: 1,
+    }
+  }
+}
+
+class FakeCodexAppServerRunner implements CodexProcessRunner {
+  readonly requests: ControlledProcessRunRequest[] = []
+  readonly session = new FakeCodexAppServerSession()
+
+  async run(): Promise<ControlledProcessResult> {
+    throw new Error("run is not used by live session tests")
+  }
+
+  async start(request: ControlledProcessRunRequest): Promise<ControlledProcessSession> {
+    this.requests.push(request)
+    this.session.onLine = request.onStdoutLine
+    return this.session
+  }
+
+  emitServerRequest(value: Record<string, unknown>): void {
+    this.session.onLine?.(JSON.stringify(value))
+  }
+}
+
+class FakeCodexAppServerSession implements ControlledProcessSession {
+  readonly writes: string[] = []
+  onLine?: (line: string) => void
+  closed = false
+  private waitResolve: ((result: ControlledProcessResult) => void) | undefined
+  private readonly waitPromise = new Promise<ControlledProcessResult>((resolve) => {
+    this.waitResolve = resolve
+  })
+
+  async writeStdin(input: string | Uint8Array): Promise<void> {
+    const line = typeof input === "string" ? input.trimEnd() : Buffer.from(input).toString("utf8").trimEnd()
+    this.writes.push(line)
+    this.respondToClientRequest(line)
+  }
+
+  async endStdin(input?: string | Uint8Array): Promise<void> {
+    if (input !== undefined) await this.writeStdin(input)
+    this.closed = true
+  }
+
+  wait(): Promise<ControlledProcessResult> {
+    return this.waitPromise
+  }
+
+  async close(): Promise<ControlledProcessResult> {
+    this.closed = true
+    const result = {
+      exitCode: 0,
+      signal: null,
+      stdout: "",
+      stderr: "",
+      timedOut: false,
+      durationMs: 1,
+    }
+    this.waitResolve?.(result)
+    return result
+  }
+
+  alive(): boolean {
+    return !this.closed
+  }
+
+  private respondToClientRequest(line: string): void {
+    const request = JSON.parse(line) as {
+      readonly id?: number | string
+      readonly method?: string
+    }
+    if (request.id === undefined) return
+    switch (request.method) {
+      case "initialize":
+        this.onLine?.(JSON.stringify({ id: request.id, result: { protocolVersion: "0.1.0" } }))
+        break
+      case "thread/start":
+        this.onLine?.(JSON.stringify({
+          id: request.id,
+          result: {
+            cwd: "/repo",
+            model: "gpt-5.5",
+            reasoningEffort: "high",
+            thread: { id: "thread-1" },
+          },
+        }))
+        break
+      case "turn/start":
+        this.onLine?.(JSON.stringify({
+          id: request.id,
+          result: { turn: { id: "turn-1" } },
+        }))
+        break
+      default:
+        break
     }
   }
 }

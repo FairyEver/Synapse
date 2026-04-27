@@ -197,6 +197,7 @@ function adapterFromRuntimeView(
     baseUrl: view.baseUrl,
     effort: view.provider?.effort,
     mode: view.mode,
+    backend: "app-server",
     env: {
       ...view.env,
       CODEX_HOME: view.provider?.codex?.codexHome ?? view.env.CODEX_HOME,

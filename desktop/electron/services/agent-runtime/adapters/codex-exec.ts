@@ -6,14 +6,18 @@ import { homedir } from "node:os"
 import type {
   ControlledProcessResult,
   ControlledProcessRunRequest,
+  ControlledProcessSession,
 } from "../../../runtime/process"
 import type {
   AgentAdapter,
   AgentEvent,
   AgentExecutionContext,
   AgentExecutionResult,
+  AgentLiveSession,
   AgentMessage,
+  AgentPermissionDecision,
   AgentResultMetadata,
+  AgentUserQuestion,
 } from "../types"
 
 const CODEX_TOOL_NAMES: Record<string, string> = {
@@ -28,6 +32,7 @@ const TOOL_RESULT_MAX_RUNES = 500
 
 export interface CodexProcessRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
+  start?(request: ControlledProcessRunRequest): Promise<ControlledProcessSession>
 }
 
 export interface CodexExecOptions {
@@ -40,6 +45,7 @@ export interface CodexExecOptions {
   readonly env?: Record<string, string | undefined>
   readonly envAllowlist?: readonly string[]
   readonly timeoutMs?: number
+  readonly backend?: "exec" | "app-server"
 }
 
 export interface CodexExecArgsOptions {
@@ -55,6 +61,7 @@ export interface CodexExecArgsOptions {
 
 export class CodexExecAdapter implements AgentAdapter {
   readonly agentType = "codex"
+  readonly startSession?: AgentAdapter["startSession"]
 
   private readonly runner: CodexProcessRunner
   private readonly options: CodexExecOptions
@@ -62,6 +69,9 @@ export class CodexExecAdapter implements AgentAdapter {
   constructor(runner: CodexProcessRunner, options: CodexExecOptions = {}) {
     this.runner = runner
     this.options = options
+    if (options.backend === "app-server") {
+      this.startSession = (context) => this.startAppServerSession(context)
+    }
   }
 
   async execute(
@@ -123,6 +133,58 @@ export class CodexExecAdapter implements AgentAdapter {
     }
 
     return parser.finalize()
+  }
+
+  private async startAppServerSession(context: AgentExecutionContext): Promise<AgentLiveSession> {
+    if (!this.runner.start) {
+      throw new Error("Codex app-server live session requires a process runner with start support")
+    }
+
+    const env = mergeEnv(this.options.env, context.sessionEnv)
+    const envAllowlist = mergeEnvAllowlist(this.options.envAllowlist, context.sessionEnv)
+    const bufferedLines: string[] = []
+    const liveSessionRef: { current?: CodexAppServerLiveSession } = {}
+    const processSession = await this.runner.start({
+      actor: context.actor,
+      action: "agent.spawn",
+      command: this.options.command ?? "codex",
+      args: buildCodexAppServerArgs({
+        provider: this.options.provider,
+        baseUrl: this.options.baseUrl,
+        effort: this.options.effort,
+      }),
+      cwd: context.workDir,
+      env,
+      envAllowlist,
+      isolation: mergeProcessIsolation(
+        context.processIsolation,
+        envAllowlist,
+      ),
+      timeoutMs: this.options.timeoutMs,
+      output: { stdout: "json-lines", stderr: "buffer" },
+      onStdoutLine: (line) => {
+        if (liveSessionRef.current) liveSessionRef.current.handleLine(line)
+        else bufferedLines.push(line)
+      },
+      metadata: {
+        adapter: this.agentType,
+        projectId: context.projectId,
+        appServer: true,
+      },
+    })
+
+    const liveSession = new CodexAppServerLiveSession(processSession, this.agentType, {
+      model: this.options.model,
+      provider: this.options.provider,
+      effort: this.options.effort,
+      mode: this.options.mode,
+      workDir: context.workDir,
+      threadId: context.agentSessionId ?? context.threadId,
+      codexHome: stringValue(env?.CODEX_HOME),
+    }, bufferedLines)
+    liveSessionRef.current = liveSession
+    await liveSession.initialize()
+    return liveSession
   }
 }
 
@@ -203,6 +265,474 @@ export function buildCodexExecArgs(options: CodexExecArgsOptions): string[] {
     args.push("--json", "--cd", options.workDir, "-")
   }
   return args
+}
+
+export interface CodexAppServerArgsOptions {
+  readonly provider?: string
+  readonly baseUrl?: string
+  readonly effort?: string
+}
+
+export function buildCodexAppServerArgs(options: CodexAppServerArgsOptions = {}): string[] {
+  const args = ["app-server", "--listen", "stdio://"]
+  if (options.provider) {
+    args.push("-c", `model_provider=${JSON.stringify(options.provider)}`)
+  }
+  if (options.baseUrl) {
+    args.push("-c", `openai_base_url=${JSON.stringify(options.baseUrl)}`)
+  }
+  if (options.effort) {
+    args.push("-c", `model_reasoning_effort=${JSON.stringify(options.effort)}`)
+  }
+  return args
+}
+
+interface CodexAppServerLiveOptions {
+  readonly model?: string
+  readonly provider?: string
+  readonly effort?: string
+  readonly mode?: string
+  readonly workDir: string
+  readonly threadId?: string
+  readonly codexHome?: string
+}
+
+interface JsonRpcError {
+  readonly code?: number
+  readonly message?: string
+}
+
+interface PendingJsonRpc {
+  resolve(value: unknown): void
+  reject(error: Error): void
+}
+
+interface PendingServerRequest {
+  readonly id: unknown
+  readonly method: string
+  readonly params: Record<string, unknown>
+}
+
+class CodexAppServerLiveSession implements AgentLiveSession {
+  readonly agentType: string
+
+  private readonly processSession: ControlledProcessSession
+  private readonly options: CodexAppServerLiveOptions
+  private readonly queue = new AsyncEventQueue()
+  private readonly pendingRpc = new Map<string, PendingJsonRpc>()
+  private readonly pendingServerRequests = new Map<string, PendingServerRequest>()
+  private readonly parser: CodexJsonLineParser
+  private nextRequestId = 1
+  private sessionId: string | undefined
+  private currentTurnId: string | undefined
+
+  constructor(
+    processSession: ControlledProcessSession,
+    agentType: string,
+    options: CodexAppServerLiveOptions,
+    bufferedLines: readonly string[] = [],
+  ) {
+    this.processSession = processSession
+    this.agentType = agentType
+    this.options = options
+    this.sessionId = options.threadId
+    this.parser = new CodexJsonLineParser(options.threadId, (event) => this.queue.push(event), {
+      model: options.model,
+      effort: options.effort,
+      workDir: options.workDir,
+      codexHome: options.codexHome,
+    })
+    for (const line of bufferedLines) {
+      this.handleLine(line)
+    }
+    void this.waitForExit()
+  }
+
+  async initialize(): Promise<void> {
+    await this.request("initialize", {
+      clientInfo: {
+        name: "synapse-codex-agent",
+        title: "Synapse Codex Agent",
+        version: "0.1.0",
+      },
+      capabilities: {
+        experimentalApi: true,
+        optOutNotificationMethods: [
+          "command/exec/outputDelta",
+          "item/agentMessage/delta",
+          "item/plan/delta",
+          "item/fileChange/outputDelta",
+          "item/reasoning/summaryTextDelta",
+          "item/reasoning/textDelta",
+        ],
+      },
+    })
+    await this.notify("initialized", null)
+    await this.ensureThread()
+  }
+
+  async send(message: AgentMessage): Promise<void> {
+    if (!this.sessionId) {
+      throw new Error("Codex app-server thread id is empty")
+    }
+
+    const params: Record<string, unknown> = {
+      threadId: this.sessionId,
+      input: [
+        {
+          type: "text",
+          text: message.content,
+          text_elements: [],
+        },
+      ],
+    }
+    if (this.options.model) params.model = this.options.model
+    if (this.options.effort) params.effort = this.options.effort
+    const mode = codexAppServerModeSettings(message.modeOverride ?? this.options.mode)
+    params.approvalPolicy = mode.approvalPolicy
+    params.approvalsReviewer = "user"
+
+    const response = asRecord(await this.request("turn/start", params))
+    const turn = asRecord(response?.turn)
+    this.currentTurnId = stringValue(turn?.id)
+  }
+
+  async respondPermission(
+    requestId: string,
+    decision: AgentPermissionDecision,
+  ): Promise<void> {
+    const pending = this.pendingServerRequests.get(requestId)
+    if (!pending) {
+      throw new Error(`Codex app-server permission request "${requestId}" is not pending`)
+    }
+    this.pendingServerRequests.delete(requestId)
+
+    const result = this.permissionResponse(pending, decision)
+    if (result instanceof Error) {
+      await this.writeJsonLine({
+        id: pending.id,
+        error: {
+          code: -32000,
+          message: result.message,
+        },
+      })
+      return
+    }
+
+    await this.writeJsonLine({
+      id: pending.id,
+      result,
+    })
+  }
+
+  nextEvent(): Promise<AgentEvent | null> {
+    return this.queue.next()
+  }
+
+  currentSessionId(): string | undefined {
+    return this.sessionId
+  }
+
+  alive(): boolean {
+    return this.processSession.alive()
+  }
+
+  async close(): Promise<void> {
+    await this.processSession.close()
+    this.queue.close()
+  }
+
+  handleLine(line: string): void {
+    const raw = parseRecord(line)
+    if (!raw) return
+    const method = stringValue(raw.method)
+    const hasId = Object.prototype.hasOwnProperty.call(raw, "id")
+    if (method && hasId) {
+      this.handleServerRequest(raw, method)
+      return
+    }
+    if (hasId) {
+      this.handleClientResponse(raw)
+      return
+    }
+    if (method) {
+      this.handleNotification(method, raw.params)
+    }
+  }
+
+  private async ensureThread(): Promise<void> {
+    const mode = codexAppServerModeSettings(this.options.mode)
+    const params: Record<string, unknown> = {
+      experimentalRawEvents: false,
+      persistExtendedHistory: false,
+      approvalPolicy: mode.approvalPolicy,
+      approvalsReviewer: "user",
+      sandbox: mode.sandbox,
+    }
+    if (this.options.model) params.model = this.options.model
+    if (this.options.provider) params.modelProvider = this.options.provider
+
+    const method = this.options.threadId ? "thread/resume" : "thread/start"
+    if (this.options.threadId) {
+      params.threadId = this.options.threadId
+      params.persistExtendedHistory = true
+    }
+
+    const response = asRecord(await this.request(method, params))
+    const thread = asRecord(response?.thread)
+    const threadId = stringValue(thread?.id)
+    if (!threadId) {
+      throw new Error(`codex app-server ${method} returned empty thread id`)
+    }
+    this.sessionId = threadId
+    this.parser.pushLine(JSON.stringify({ type: "thread.started", thread_id: threadId }))
+  }
+
+  private request(method: string, params: unknown): Promise<unknown> {
+    const id = this.nextRequestId
+    this.nextRequestId += 1
+    const key = rpcKey(id)
+    const promise = new Promise<unknown>((resolve, reject) => {
+      this.pendingRpc.set(key, { resolve, reject })
+    })
+    void this.writeJsonLine({ id, method, params }).catch((error: unknown) => {
+      const pending = this.pendingRpc.get(key)
+      this.pendingRpc.delete(key)
+      const pendingError = error instanceof Error ? error : new Error(String(error))
+      pending?.reject(pendingError)
+    })
+    return promise
+  }
+
+  private async notify(method: string, params: unknown): Promise<void> {
+    await this.writeJsonLine({ method, params })
+  }
+
+  private async writeJsonLine(value: unknown): Promise<void> {
+    await this.processSession.writeStdin(`${JSON.stringify(value)}\n`)
+  }
+
+  private handleClientResponse(raw: Record<string, unknown>): void {
+    const key = rpcKey(raw.id)
+    const pending = this.pendingRpc.get(key)
+    if (!pending) return
+    this.pendingRpc.delete(key)
+
+    const error = asRecord(raw.error) as JsonRpcError | null
+    if (error) {
+      pending.reject(new Error(error.message ?? "codex app-server request failed"))
+      return
+    }
+    pending.resolve(raw.result)
+  }
+
+  private handleServerRequest(raw: Record<string, unknown>, method: string): void {
+    const requestId = stringFromUnknown(raw.id)
+    if (!requestId) return
+    const params = asRecord(raw.params) ?? {}
+    this.pendingServerRequests.set(requestId, {
+      id: raw.id,
+      method,
+      params,
+    })
+
+    const permission = this.serverRequestPermissionEvent(requestId, method, params)
+    if (permission) {
+      this.queue.push(this.withSession(permission))
+      return
+    }
+
+    void this.writeJsonLine({
+      id: raw.id,
+      error: {
+        code: -32601,
+        message: `Unsupported codex app-server request: ${method}`,
+      },
+    })
+    this.pendingServerRequests.delete(requestId)
+  }
+
+  private handleNotification(method: string, paramsValue: unknown): void {
+    const params = asRecord(paramsValue)
+    switch (method) {
+      case "turn/started": {
+        const turn = asRecord(params?.turn)
+        this.currentTurnId = stringValue(turn?.id)
+        this.parser.pushLine(JSON.stringify({ type: "turn.started" }))
+        break
+      }
+      case "item/started":
+        this.parser.pushLine(JSON.stringify({
+          type: "item.started",
+          item: asRecord(params?.item) ?? undefined,
+        }))
+        break
+      case "item/completed":
+        this.parser.pushLine(JSON.stringify({
+          type: "item.completed",
+          item: asRecord(params?.item) ?? undefined,
+        }))
+        break
+      case "turn/completed":
+        this.parser.pushLine(JSON.stringify({ type: "turn.completed" }))
+        break
+      case "error": {
+        const error = asRecord(params?.error)
+        this.parser.pushError(stringValue(error?.message) ?? "codex app-server error")
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  private serverRequestPermissionEvent(
+    requestId: string,
+    method: string,
+    params: Record<string, unknown>,
+  ): AgentEvent | null {
+    switch (method) {
+      case "item/commandExecution/requestApproval":
+        return {
+          type: "permissionRequest",
+          requestId,
+          toolName: "Bash",
+          toolInput: stringValue(params.command) ?? stringValue(params.reason) ?? stringFromUnknown(params),
+          toolInputRaw: params,
+        }
+      case "item/fileChange/requestApproval":
+        return {
+          type: "permissionRequest",
+          requestId,
+          toolName: "FileChange",
+          toolInput: stringValue(params.grantRoot) ?? stringValue(params.reason) ?? stringFromUnknown(params),
+          toolInputRaw: params,
+        }
+      case "item/permissions/requestApproval":
+        return {
+          type: "permissionRequest",
+          requestId,
+          toolName: "Permissions",
+          toolInput: stringValue(params.reason) ?? stringFromUnknown(params.permissions),
+          toolInputRaw: params,
+        }
+      case "mcpServer/elicitation/request":
+        return {
+          type: "permissionRequest",
+          requestId,
+          toolName: "MCP Elicitation",
+          toolInput: stringValue(params.message) ?? stringValue(params.url) ?? stringFromUnknown(params),
+          toolInputRaw: params,
+        }
+      case "item/tool/requestUserInput":
+        return {
+          type: "permissionRequest",
+          requestId,
+          toolName: "AskUserQuestion",
+          toolInput: stringFromUnknown(params.questions),
+          toolInputRaw: params,
+          questions: parseCodexUserQuestions(params),
+        }
+      default:
+        return null
+    }
+  }
+
+  private permissionResponse(
+    pending: PendingServerRequest,
+    decision: AgentPermissionDecision,
+  ): Record<string, unknown> | Error {
+    const allowed = decision.behavior === "allow"
+    switch (pending.method) {
+      case "item/commandExecution/requestApproval":
+        return { decision: allowed ? "accept" : "decline" }
+      case "item/fileChange/requestApproval":
+        return { decision: allowed ? "accept" : "decline" }
+      case "item/permissions/requestApproval":
+        if (!allowed) {
+          return new Error(decision.message ?? "Permission denied")
+        }
+        return {
+          permissions: grantedPermissionsFromRequest(pending.params.permissions),
+          scope: "turn",
+        }
+      case "mcpServer/elicitation/request":
+        return {
+          action: allowed ? "accept" : "decline",
+          content: allowed ? decision.updatedInput ?? {} : null,
+          _meta: null,
+        }
+      case "item/tool/requestUserInput":
+        return {
+          answers: allowed ? decision.updatedInput?.answers ?? {} : {},
+        }
+      default:
+        return new Error(`Unsupported codex app-server request: ${pending.method}`)
+    }
+  }
+
+  private withSession<T extends AgentEvent>(event: T): T {
+    if (!this.sessionId) return event
+    return {
+      ...event,
+      agentSessionId: this.sessionId,
+      threadId: this.sessionId,
+    } as T
+  }
+
+  private async waitForExit(): Promise<void> {
+    const result = await this.processSession.wait()
+    this.rejectPendingRpc(trimmedOrDefault(result.error ?? result.stderr, "codex app-server exited"))
+    if (result.error || (result.exitCode !== 0 && result.exitCode !== null)) {
+      this.queue.push(this.withSession({
+        type: "error",
+        message: trimmedOrDefault(
+          result.error ?? result.stderr,
+          `codex app-server exited with code ${String(result.exitCode)}`,
+        ),
+      }))
+    }
+    this.queue.close()
+  }
+
+  private rejectPendingRpc(message: string): void {
+    const pending = [...this.pendingRpc.values()]
+    this.pendingRpc.clear()
+    for (const entry of pending) {
+      entry.reject(new Error(message))
+    }
+  }
+}
+
+class AsyncEventQueue {
+  private readonly values: AgentEvent[] = []
+  private readonly waiters: Array<(value: AgentEvent | null) => void> = []
+  private closed = false
+
+  push(event: AgentEvent): void {
+    const waiter = this.waiters.shift()
+    if (waiter) {
+      waiter(event)
+      return
+    }
+    this.values.push(event)
+  }
+
+  next(): Promise<AgentEvent | null> {
+    const value = this.values.shift()
+    if (value) return Promise.resolve(value)
+    if (this.closed) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      this.waiters.push(resolve)
+    })
+  }
+
+  close(): void {
+    this.closed = true
+    for (const waiter of this.waiters.splice(0)) {
+      waiter(null)
+    }
+  }
 }
 
 export interface CodexParseResult extends AgentExecutionResult {
@@ -499,6 +1029,77 @@ function codexToolSuccess(status: string, exitCode?: number): boolean {
   if (exitCode !== undefined) return exitCode === 0
   const normalized = status.trim().toLowerCase()
   return ["completed", "success", "succeeded", "ok"].includes(normalized)
+}
+
+function codexAppServerModeSettings(mode: string | undefined): {
+  readonly approvalPolicy: "on-request" | "never"
+  readonly sandbox: "read-only" | "workspace-write" | "danger-full-access"
+} {
+  switch (normalizeCodexMode(mode)) {
+    case "auto-edit":
+    case "full-auto":
+      return { approvalPolicy: "never", sandbox: "workspace-write" }
+    case "yolo":
+      return { approvalPolicy: "never", sandbox: "danger-full-access" }
+    default:
+      return { approvalPolicy: "on-request", sandbox: "read-only" }
+  }
+}
+
+function normalizeCodexMode(mode: string | undefined): string {
+  const value = mode?.trim()
+  if (!value || value === "default" || value === "suggest") return "suggest"
+  return value
+}
+
+function parseRecord(line: string): Record<string, unknown> | null {
+  try {
+    return asRecord(JSON.parse(line))
+  } catch {
+    return null
+  }
+}
+
+function rpcKey(id: unknown): string {
+  return typeof id === "string" || typeof id === "number" ? String(id) : stringFromUnknown(id)
+}
+
+function parseCodexUserQuestions(input: Record<string, unknown>): AgentUserQuestion[] | undefined {
+  const questions = input.questions
+  if (!Array.isArray(questions)) return undefined
+  const parsed = questions.flatMap((value): AgentUserQuestion[] => {
+    const record = asRecord(value)
+    const question = stringValue(record?.question)
+    if (!question) return []
+    return [{
+      question,
+      header: stringValue(record?.header),
+      options: parseCodexQuestionOptions(record?.options),
+    }]
+  })
+  return parsed.length > 0 ? parsed : undefined
+}
+
+function parseCodexQuestionOptions(value: unknown): AgentUserQuestion["options"] {
+  if (!Array.isArray(value)) return undefined
+  const options = value.flatMap((item): NonNullable<AgentUserQuestion["options"]>[number][] => {
+    const record = asRecord(item)
+    const label = stringValue(record?.label)
+    if (!label) return []
+    return [{ label, description: stringValue(record?.description) }]
+  })
+  return options.length > 0 ? options : undefined
+}
+
+function grantedPermissionsFromRequest(value: unknown): Record<string, unknown> {
+  const request = asRecord(value)
+  if (!request) return {}
+  const granted: Record<string, unknown> = {}
+  const network = request.network
+  const fileSystem = request.fileSystem
+  if (network !== undefined && network !== null) granted.network = network
+  if (fileSystem !== undefined && fileSystem !== null) granted.fileSystem = fileSystem
+  return granted
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
