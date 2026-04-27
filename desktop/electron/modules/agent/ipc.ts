@@ -477,12 +477,13 @@ export const agentIpcModule: IpcModule = {
           const provider = request.projectId && providerConfig
             ? await providerConfig.getProjectProviderState(request.projectId, definition.id)
             : undefined
+          const activeProvider = provider?.activeProvider
           const issues: string[] = []
           if (binary && !path) issues.push("cli-not-installed")
-          if (request.projectId && (!provider || provider.providers.length === 0 || !provider.activeProviderId)) {
+          if (request.projectId && (!provider || provider.providers.length === 0 || !activeProvider)) {
             issues.push("provider-not-configured")
           }
-          if (request.projectId && provider?.activeProviderId && !provider.activeModel) {
+          if (request.projectId && activeProvider && !provider.activeModel) {
             issues.push("model-not-selected")
           }
           return {
@@ -497,9 +498,9 @@ export const agentIpcModule: IpcModule = {
             },
             provider: request.projectId ? {
               projectId: request.projectId,
-              configured: Boolean(provider?.activeProviderId),
-              activeProviderId: provider?.activeProviderId,
-              activeModel: provider?.activeModel,
+              configured: Boolean(activeProvider),
+              activeProviderId: activeProvider?.id,
+              activeModel: activeProvider ? provider?.activeModel : undefined,
             } : undefined,
             issues,
           }

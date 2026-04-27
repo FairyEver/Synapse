@@ -130,8 +130,18 @@ describe("agentIpcModule", () => {
         getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, agentType: string) => ({
           projectId: "project-1",
           agentType,
-          activeProviderId: agentType === "codex" ? "openai" : undefined,
-          activeModel: agentType === "codex" ? "gpt-5.4" : undefined,
+          activeProviderId: "openai",
+          activeModel: "gpt-5.4",
+          activeProvider: agentType === "codex"
+            ? {
+                id: "openai",
+                display: "OpenAI",
+                model: "gpt-5.4",
+                baseUrl: "https://api.example.test",
+                secretRef: "secret:openai",
+                scope: "global",
+              }
+            : undefined,
           providers: agentType === "codex"
             ? [{
                 id: "openai",
@@ -153,7 +163,11 @@ describe("agentIpcModule", () => {
         readonly id: string
         readonly ready: boolean
         readonly issues: readonly string[]
-        readonly provider?: { readonly activeProviderId?: string; readonly activeModel?: string }
+        readonly provider?: {
+          readonly configured: boolean
+          readonly activeProviderId?: string
+          readonly activeModel?: string
+        }
       }[]
     }
 
@@ -168,6 +182,12 @@ describe("agentIpcModule", () => {
       },
     }))
     expect(result.agents.find((agent) => agent.id === "claude-code")?.issues).toContain("provider-not-configured")
+    expect(result.agents.find((agent) => agent.id === "claude-code")?.provider).toEqual({
+      activeProviderId: undefined,
+      activeModel: undefined,
+      configured: false,
+      projectId: "project-1",
+    })
     expect(JSON.stringify(result)).not.toContain("secret:openai")
     expect(JSON.stringify(result)).not.toContain("secretRef")
   })
