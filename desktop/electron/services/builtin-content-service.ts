@@ -33,23 +33,23 @@ type BuiltinContentRecord = RepositorySeedContent & {
 }
 
 function createBuiltinContentId(type: SynapseContentType, rawId: string): string {
-  return `${BUILTIN_CONTENT_ID_PREFIX}:${type}:${rawId}`
+  return `${BUILTIN_CONTENT_ID_PREFIX}__${type}__${rawId}`
 }
 
 function parseBuiltinContentId(contentId: string): BuiltinContentIdParts | null {
-  const [prefix, rawType, ...rawIdParts] = contentId.split(":")
+  for (const type of ["rule", "skill", "prompt"] as const) {
+    const prefix = `${BUILTIN_CONTENT_ID_PREFIX}__${type}__`
 
-  if (
-    prefix !== BUILTIN_CONTENT_ID_PREFIX
-    || (rawType !== "rule" && rawType !== "skill" && rawType !== "prompt")
-    || rawIdParts.length === 0
-  ) {
-    return null
+    if (!contentId.startsWith(prefix)) {
+      continue
+    }
+
+    const rawId = contentId.slice(prefix.length)
+
+    return rawId ? { type, rawId } : null
   }
 
-  const rawId = rawIdParts.join(":")
-
-  return rawId ? { type: rawType, rawId } : null
+  return null
 }
 
 function isBuiltinContentId(contentId: string): boolean {

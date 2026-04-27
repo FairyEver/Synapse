@@ -36,6 +36,7 @@ type ModuleSidebarHeaderProps = {
   onAddClick?: () => void
   addDisabled?: boolean
   addTitle?: string
+  actions?: ReactNode
 }
 
 function ModuleSidebarHeader({
@@ -46,6 +47,7 @@ function ModuleSidebarHeader({
   onAddClick,
   addDisabled,
   addTitle,
+  actions,
 }: ModuleSidebarHeaderProps) {
   const showSearch = onSearchChange !== undefined
 
@@ -76,6 +78,7 @@ function ModuleSidebarHeader({
           <span className="sr-only">{addTitle}</span>
         </Button>
       ) : null}
+      {actions}
     </div>
   )
 }

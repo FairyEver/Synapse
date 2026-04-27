@@ -5,8 +5,8 @@ import { extractContentIdFromSynapseFile, isSynapseFile, pathExists } from "../.
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("service.editor-scan")
-const SYNAPSE_RULE_BEGIN_RE = /<!--\s*synapse-rule:([^:]+):begin\s*-->/
-const SYNAPSE_RULE_END_RE = /<!--\s*synapse-rule:[^:]+:end\s*-->/
+const SYNAPSE_RULE_BEGIN_RE = /<!--\s*synapse-rule:([A-Za-z0-9_.-]+):begin\s*-->/
+const SYNAPSE_RULE_END_RE = /<!--\s*synapse-rule:[A-Za-z0-9_.-]+:end\s*-->/
 
 function stripFrontmatter(text: string): string {
   if (!text.startsWith("---")) return text
@@ -169,7 +169,7 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
   }
 
   const unmarkedText = text.replace(
-    /<!--\s*synapse-rule:[^:]+:begin\s*-->[\s\S]*?<!--\s*synapse-rule:[^:]+:end\s*-->/g,
+    /<!--\s*synapse-rule:[A-Za-z0-9_.-]+:begin\s*-->[\s\S]*?<!--\s*synapse-rule:[A-Za-z0-9_.-]+:end\s*-->/g,
     "",
   ).trim()
 

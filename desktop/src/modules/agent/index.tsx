@@ -187,8 +187,8 @@ function AgentModule() {
           onRespond={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
         />
 
-        <ScrollArea className="min-h-0 flex-1 rounded-md border border-border">
-          <div className="flex flex-col gap-3 p-3">
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="flex flex-col gap-3 py-1 pr-2">
             {chat.timeline.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
                 暂无消息
@@ -234,7 +234,7 @@ function AgentWaitingIndicator({ text }: { readonly text: string }) {
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Agent</span>
       </div>
-      <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+      <div className="w-fit max-w-full rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
         {text}
       </div>
     </article>
@@ -250,7 +250,7 @@ function MessageContent({
 }) {
   const segments = splitLocalReferences(entry.content)
   return (
-    <div className="whitespace-pre-wrap rounded-md bg-muted px-3 py-2 text-sm text-foreground">
+    <div className="w-fit max-w-full whitespace-pre-wrap break-words rounded-md bg-muted/50 px-3 py-2 text-sm text-foreground">
       {segments.map((segment, index) => segment.kind === "text" ? (
         <span key={`${entry.id}:text:${String(index)}`}>{segment.value}</span>
       ) : (

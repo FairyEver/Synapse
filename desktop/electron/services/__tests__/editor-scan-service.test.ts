@@ -157,6 +157,29 @@ describe("editor scan quick publish", () => {
     expect(items.find((item) => item.name === "second")?.content).toBe("# Second\n\nOnly second.")
   })
 
+  it("scans Codex rule segments for builtin rules with file-name-safe IDs", async () => {
+    const root = await createTempDir()
+    const filePath = path.join(root, "AGENTS.md")
+    await writeFile(
+      filePath,
+      [
+        "<!-- synapse-rule:builtin__rule__data-store-shortcut:begin -->",
+        "Use sss.",
+        "<!-- synapse-rule:builtin__rule__data-store-shortcut:end -->",
+      ].join("\n"),
+    )
+
+    const items = await scanCodexRules(filePath)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      name: "builtin__rule__data-store-shortcut",
+      source: "synapse",
+      synapseContentId: "builtin__rule__data-store-shortcut",
+      content: "Use sss.",
+    })
+  })
+
   it("recognizes Cursor rules installed from Synapse by file name", async () => {
     const root = await createTempDir()
     const contentId = "abc123"

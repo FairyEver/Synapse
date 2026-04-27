@@ -16,11 +16,9 @@ import {
   ModuleSidebarItem,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
-import { Badge } from "@/components/ui/badge"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
-  agentCliLabel,
   formatEntryTime,
   sessionLabel,
 } from "../utils"
@@ -86,10 +84,7 @@ function AgentSessionSidebar({
       <ModuleSidebarList>
         {items.map((session) => {
           const canDelete = sessions.length > 0
-          const cliLabel = agentCliLabel(session.agentType)
-          const trailing = cliLabel || session.updatedAt
-            ? <SessionTrailing cliLabel={cliLabel} updatedAt={session.updatedAt} />
-            : null
+          const trailing = session.updatedAt ? <SessionTrailing updatedAt={session.updatedAt} /> : null
           return (
             <div key={session.id} className="flex items-center gap-1">
               <ModuleSidebarItem
@@ -137,23 +132,16 @@ function AgentSessionSidebar({
 }
 
 function SessionTrailing({
-  cliLabel,
   updatedAt,
 }: {
-  readonly cliLabel?: string
   readonly updatedAt?: string
 }) {
-  if (!cliLabel && !updatedAt) {
+  if (!updatedAt) {
     return null
   }
   return (
-    <span className="flex items-center gap-2">
-      {cliLabel ? <Badge variant="outline">{cliLabel}</Badge> : null}
-      {updatedAt ? (
-        <span className="text-xs text-muted-foreground">
-          {formatEntryTime(updatedAt)}
-        </span>
-      ) : null}
+    <span className="text-xs text-muted-foreground">
+      {formatEntryTime(updatedAt)}
     </span>
   )
 }

@@ -34,16 +34,23 @@ function DataStoreSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <Button variant="outline" size="sm" className="w-full justify-start" onClick={onImportTable}>
-        <FileInput data-icon="inline-start" />
-        导入表
-      </Button>
       <ModuleSidebarHeader
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="搜索数据表"
         onAddClick={onCreateTable}
         addTitle="新建表"
+        actions={(
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onImportTable}
+            title="导入表"
+          >
+            <FileInput />
+            <span className="sr-only">导入表</span>
+          </Button>
+        )}
       />
       <ModuleSidebarList>
         {filteredTables.length === 0 ? (
