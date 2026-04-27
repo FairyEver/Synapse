@@ -22,6 +22,7 @@ export type EditorGlobalDirectoryPaths = {
 
 export type EditorScanPathConfig = {
   globalSkillsPath: string | null
+  globalSkillPaths?: readonly string[]
   globalRulesPath: string | null
   rulesSupported: boolean
   detectionDir: string

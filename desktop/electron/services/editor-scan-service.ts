@@ -149,7 +149,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem
 type EditorScanPaths = {
   editorId: SynapseEditorId
   editorLabel: string
-  globalSkillsPath: string | null
+  globalSkillPaths: readonly string[]
   globalRulesPath: string | null
   rulesSupported: boolean
   detectionDir: string
@@ -161,12 +161,39 @@ function getEditorScanPaths(): EditorScanPaths[] {
     return {
       editorId: adapter.id,
       editorLabel: adapter.label,
-      globalSkillsPath: config.globalSkillsPath,
+      globalSkillPaths: config.globalSkillPaths ?? (config.globalSkillsPath ? [config.globalSkillsPath] : []),
       globalRulesPath: config.globalRulesPath,
       rulesSupported: config.rulesSupported,
       detectionDir: config.detectionDir,
     }
   })
+}
+
+async function scanSkillDirectories(
+  dirPaths: readonly string[],
+): Promise<{ skills: EditorScanSkillItem[]; duplicateSkillNames: string[] }> {
+  const skills: EditorScanSkillItem[] = []
+  const seenNames = new Set<string>()
+  const duplicateNames = new Set<string>()
+
+  for (const dirPath of dirPaths) {
+    const items = await scanSkillsDirectory(dirPath)
+
+    for (const item of items) {
+      if (seenNames.has(item.name)) {
+        duplicateNames.add(item.name)
+        continue
+      }
+
+      seenNames.add(item.name)
+      skills.push(item)
+    }
+  }
+
+  return {
+    skills,
+    duplicateSkillNames: Array.from(duplicateNames).sort((a, b) => a.localeCompare(b)),
+  }
 }
 
 async function scanRulesForEditor(
@@ -233,15 +260,16 @@ async function scanAll(): Promise<EditorScanResult> {
   const globalPromise = Promise.all(
     editorPaths.map(async (ep): Promise<EditorScanGlobalResult> => {
       const detected = await pathExists(ep.detectionDir)
-      const [skills, rules] = await Promise.all([
-        scanSkillsDirectory(ep.globalSkillsPath ?? ""),
+      const [skillScan, rules] = await Promise.all([
+        scanSkillDirectories(ep.globalSkillPaths),
         scanRulesForEditor(ep.editorId, ep.globalRulesPath),
       ])
       return {
         editorId: ep.editorId,
         editorLabel: ep.editorLabel,
         status: detected ? "detected" : "not-detected",
-        skills,
+        skills: skillScan.skills,
+        duplicateSkillNames: skillScan.duplicateSkillNames,
         rules,
         rulesSupported: ep.rulesSupported,
       }
@@ -470,5 +498,5 @@ async function prepareQuickPublishDraft(
   }
 }
 
-export { scanAll, readItemContent, listSkillFiles, prepareQuickPublishDraft }
+export { scanAll, readItemContent, listSkillFiles, prepareQuickPublishDraft, scanSkillDirectories }
 export type { SkillFileEntry }

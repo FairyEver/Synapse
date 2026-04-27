@@ -33,6 +33,11 @@ function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps
 
     return (
       <section>
+        {result.duplicateSkillNames.length > 0 && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            兼容目录存在重复 Skill，已优先显示主目录版本：{result.duplicateSkillNames.join(", ")}
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-2">
           {result.skills.map((skill) => (
             <ScanItemCard

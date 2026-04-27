@@ -24,6 +24,21 @@ function resolveCodexHomePath(): string {
   return getHomePath(".codex")
 }
 
+function resolveCodexGlobalSkillsPath(): string {
+  return getHomePath(".agents", "skills")
+}
+
+function resolveCodexCompatSkillsPath(): string {
+  return path.join(resolveCodexHomePath(), "skills")
+}
+
+function resolveCodexGlobalSkillPaths(): readonly string[] {
+  const primaryPath = resolveCodexGlobalSkillsPath()
+  const compatPath = resolveCodexCompatSkillsPath()
+
+  return primaryPath === compatPath ? [primaryPath] : [primaryPath, compatPath]
+}
+
 // Source of truth: document/不同编辑器存储规则.md (official-doc review, 2026-04-18).
 const codexAdapter: EditorAdapter = {
   id: "codex",
@@ -34,7 +49,7 @@ const codexAdapter: EditorAdapter = {
   resolveGlobalDirectoryPaths() {
     return {
       rulesPath: resolveCodexHomePath(),
-      skillsPath: getHomePath(".agents", "skills"),
+      skillsPath: resolveCodexGlobalSkillsPath(),
     }
   },
   async resolveGlobalTarget({ contentId, contentType, skillName, skillTitle }) {
@@ -68,18 +83,7 @@ const codexAdapter: EditorAdapter = {
         })
       }
       case "skill": {
-        const agentsHomePath = getHomePath(".agents")
-
-        if (!(await pathExists(agentsHomePath))) {
-          return createUnavailableTarget({
-            adapter: codexAdapter,
-            contentType,
-            message: "未检测到 Codex 的 Skills 目录，暂时不能解析全局安装位置。",
-            scope: "global",
-          })
-        }
-
-        const parentDirectoryPath = path.join(agentsHomePath, "skills")
+        const parentDirectoryPath = resolveCodexGlobalSkillsPath()
         const slug = resolveSkillSlug(skillName, skillTitle, contentId)
 
         // Check for conflict before resolving target path
@@ -178,7 +182,8 @@ const codexAdapter: EditorAdapter = {
   getScanPathConfig() {
     const codexHome = resolveCodexHomePath()
     return {
-      globalSkillsPath: getHomePath(".agents", "skills"),
+      globalSkillsPath: resolveCodexGlobalSkillsPath(),
+      globalSkillPaths: resolveCodexGlobalSkillPaths(),
       globalRulesPath: path.join(codexHome, "AGENTS.md"),
       rulesSupported: true,
       detectionDir: codexHome,
@@ -192,4 +197,11 @@ const codexAdapter: EditorAdapter = {
 
 const editorAdapter = codexAdapter
 
-export { codexAdapter, editorAdapter, resolveCodexHomePath }
+export {
+  codexAdapter,
+  editorAdapter,
+  resolveCodexCompatSkillsPath,
+  resolveCodexGlobalSkillPaths,
+  resolveCodexGlobalSkillsPath,
+  resolveCodexHomePath,
+}

@@ -46,6 +46,7 @@ const editorScanEditorResultSchema = z.object({
 
 const editorScanGlobalResultSchema = editorScanEditorResultSchema.extend({
   status: z.enum(["detected", "not-detected"]),
+  duplicateSkillNames: z.array(z.string()),
   rulesSupported: z.boolean(),
 })
 

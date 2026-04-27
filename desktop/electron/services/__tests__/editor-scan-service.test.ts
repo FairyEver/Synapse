@@ -13,7 +13,7 @@ vi.mock("electron", () => ({
 }))
 
 import { scanCodexRules, scanCursorRules } from "../../../src/ide-definitions/shared-rule-scanners"
-import { prepareQuickPublishDraft } from "../editor-scan-service"
+import { prepareQuickPublishDraft, scanSkillDirectories } from "../editor-scan-service"
 
 const tempDirs: string[] = []
 
@@ -28,6 +28,24 @@ afterEach(async () => {
 })
 
 describe("editor scan quick publish", () => {
+  it("merges Codex global skill directories and keeps the primary copy for duplicate names", async () => {
+    const root = await createTempDir()
+    const primaryDir = path.join(root, ".agents", "skills")
+    const compatDir = path.join(root, ".codex", "skills")
+    await mkdir(path.join(primaryDir, "reviewer"), { recursive: true })
+    await mkdir(path.join(compatDir, "reviewer"), { recursive: true })
+    await mkdir(path.join(compatDir, "legacy"), { recursive: true })
+    await writeFile(path.join(primaryDir, "reviewer", "SKILL.md"), "# Primary Reviewer\n")
+    await writeFile(path.join(compatDir, "reviewer", "SKILL.md"), "# Legacy Reviewer\n")
+    await writeFile(path.join(compatDir, "legacy", "SKILL.md"), "# Legacy\n")
+
+    const result = await scanSkillDirectories([primaryDir, compatDir])
+
+    expect(result.skills.map((skill) => skill.name)).toEqual(["reviewer", "legacy"])
+    expect(result.skills.find((skill) => skill.name === "reviewer")?.path).toBe(path.join(primaryDir, "reviewer"))
+    expect(result.duplicateSkillNames).toEqual(["reviewer"])
+  })
+
   it("creates a skill draft with nested binary attachments from the scan scope", async () => {
     const root = await createTempDir()
     const skillDir = path.join(root, "release-helper")

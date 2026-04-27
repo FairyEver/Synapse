@@ -29,6 +29,7 @@ export type EditorScanGlobalResult = {
   editorLabel: string
   status: EditorScanEditorStatus
   skills: EditorScanSkillItem[]
+  duplicateSkillNames: string[]
   rules: EditorScanRuleItem[]
   rulesSupported: boolean
 }
