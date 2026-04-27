@@ -306,6 +306,18 @@ class UpdateService {
     const cancellationToken = new CancellationToken()
     this.downloadCancellationToken = cancellationToken
     this.isCancellingDownload = false
+    this.setState({
+      status: "downloading",
+      message: "正在下载更新...",
+      error: null,
+      releaseVersion: updateInfo.version,
+      downloadPercent: this.state.downloadPercent ?? 0,
+      bytesPerSecond: null,
+      transferredBytes: this.state.transferredBytes ?? 0,
+      totalBytes: this.state.totalBytes,
+      canCheck: false,
+      downloadedFilePath: null,
+    })
 
     try {
       await autoUpdater.downloadUpdate(cancellationToken)

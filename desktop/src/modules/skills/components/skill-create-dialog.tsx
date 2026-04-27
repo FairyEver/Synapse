@@ -24,6 +24,7 @@ import { ContentAppearanceFields } from "@/modules/content/components/content-ap
 import { ContentCreateDialog } from "@/modules/content/components/content-create-dialog"
 import { useContentCreateForm } from "@/modules/content/hooks/use-content-create-form"
 import { useContentIconImage } from "@/modules/content/hooks/use-content-icon-image"
+import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import type {
   CreateSkillPayload,
   SkillCreateFilePayloadDraft,
@@ -44,6 +45,7 @@ type SkillCreateDialogProps = {
   existingNames?: string[]
   initialValue?: CreateSkillPayload | null
   mode?: "create" | "edit"
+  notices?: ContentCreateNotice[]
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: CreateSkillPayload) => Promise<void> | void
   open: boolean
@@ -171,6 +173,7 @@ function SkillCreateDialog({
   existingNames,
   initialValue = null,
   mode = "create",
+  notices = [],
   onOpenChange,
   onSubmit,
   open,
@@ -456,6 +459,7 @@ function SkillCreateDialog({
         discardDescription: "当前还没有保存，关闭后已填写的 Skill 内容和附件会被清空。",
       }}
       mode={mode}
+      notices={notices}
       onDialogOpenChange={handleDialogOpenChange}
       onDiscard={handleDiscard}
       onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}

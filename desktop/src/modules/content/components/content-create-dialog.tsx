@@ -10,9 +10,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { FormDialog } from "@/components/form-dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
+import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +35,7 @@ type ContentCreateDialogProps = {
   isSubmitting: boolean
   labels: ContentCreateDialogLabels
   mode: "create" | "edit"
+  notices?: ContentCreateNotice[]
   onDialogOpenChange: (open: boolean) => void
   onDiscard: () => void
   onDiscardConfirmOpenChange: (open: boolean) => void
@@ -54,6 +57,7 @@ function ContentCreateDialog({
   isSubmitting,
   labels,
   mode,
+  notices = [],
   onDialogOpenChange,
   onDiscard,
   onDiscardConfirmOpenChange,
@@ -91,15 +95,15 @@ function ContentCreateDialog({
         <AlertDialog open={isDuplicateWarningOpen} onOpenChange={onDuplicateWarningOpenChange}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>名称重复</AlertDialogTitle>
+              <AlertDialogTitle>名称已存在</AlertDialogTitle>
               <AlertDialogDescription>
-                当前仓库中已存在同名的内容，继续保存可能导致混淆。
+                当前仓库已有同名内容。
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>去修改</AlertDialogCancel>
               <AlertDialogAction onClick={onDuplicateWarningContinue}>
-                继续保存
+                另存为新内容
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -145,6 +149,15 @@ function ContentCreateDialog({
           )}
           onSubmit={onSubmit}
         >
+          {notices.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {notices.map((notice) => (
+                <Alert key={notice.id}>
+                  <AlertDescription>{notice.message}</AlertDescription>
+                </Alert>
+              ))}
+            </div>
+          ) : null}
           {children}
         </FormDialog>
       </Dialog>

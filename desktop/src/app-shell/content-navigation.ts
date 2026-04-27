@@ -1,4 +1,5 @@
 import type { CreateSkillPayload } from "@/modules/skills/types"
+import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import type { SynapseCreateRulePayload } from "@/types/content"
 
 const OPEN_CONTENT_REQUEST_EVENT = "synapse:open-content-request"
@@ -10,6 +11,7 @@ export type ContentOpenRequest =
       contentType: "rule"
       initialValue: SynapseCreateRulePayload
       sourceLabel: string
+      notices?: ContentCreateNotice[]
     }
   | {
       kind: "create"
@@ -17,6 +19,7 @@ export type ContentOpenRequest =
       contentType: "skill"
       initialValue: CreateSkillPayload
       sourceLabel: string
+      notices?: ContentCreateNotice[]
     }
   | {
       kind: "detail"

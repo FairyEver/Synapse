@@ -21,6 +21,7 @@ import { ContentAppearanceFields } from "@/modules/content/components/content-ap
 import { ContentCreateDialog } from "@/modules/content/components/content-create-dialog"
 import { useContentCreateForm } from "@/modules/content/hooks/use-content-create-form"
 import { useContentIconImage } from "@/modules/content/hooks/use-content-icon-image"
+import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import {
   createEmptyRulePayload,
   normalizeCreateRulePayload,
@@ -32,6 +33,7 @@ type RuleCreateDialogProps = {
   existingNames?: string[]
   initialValue?: SynapseCreateRulePayload | null
   mode?: "create" | "edit"
+  notices?: ContentCreateNotice[]
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: SynapseCreateRulePayload) => Promise<void> | void
   open: boolean
@@ -52,6 +54,7 @@ function RuleCreateDialog({
   existingNames,
   initialValue = null,
   mode = "create",
+  notices = [],
   onOpenChange,
   onSubmit,
   open,
@@ -240,6 +243,7 @@ function RuleCreateDialog({
         discardDescription: "当前还没有提交，关闭后已填写的 Rule 内容会被清空。",
       }}
       mode={mode}
+      notices={notices}
       onDialogOpenChange={handleDialogOpenChange}
       onDiscard={handleDiscard}
       onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}

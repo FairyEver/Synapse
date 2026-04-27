@@ -1,6 +1,7 @@
 import { createEmptyRulePayload, normalizeCreateRulePayload } from "@/modules/rules/utils"
 import type { CreateSkillPayload } from "@/modules/skills/types"
 import { rulesCategories, skillsCategories } from "@/config/categories"
+import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import {
   createEmptySkillPayload,
   normalizeCreateSkillPayload,
@@ -15,25 +16,50 @@ import type { SynapseCreateRulePayload } from "@/types/content"
 type ParsedFrontmatter = {
   metadata: Record<string, string>
   body: string
+  hasUnsupportedLines: boolean
+}
+
+type QuickPublishBuildResult<T> = {
+  payload: T
+  notices: ContentCreateNotice[]
+}
+
+type PickCategoryResult = {
+  category: string
+  unknown: boolean
 }
 
 const AUTO_DESCRIPTION_MAX_LENGTH = 120
+const FRONTMATTER_PARTIAL_NOTICE: ContentCreateNotice = {
+  id: "frontmatter-partial",
+  message: "元数据未完全识别，请检查已填内容。",
+}
+const UNKNOWN_CATEGORY_NOTICE: ContentCreateNotice = {
+  id: "unknown-category",
+  message: "未识别分类，已留空。",
+}
 
 function parseFrontmatter(text: string): ParsedFrontmatter {
   const metadata: Record<string, string> = {}
   if (!text.startsWith("---")) {
-    return { metadata, body: text.trim() }
+    return { metadata, body: text.trim(), hasUnsupportedLines: false }
   }
 
   const endIndex = text.indexOf("\n---", 3)
   if (endIndex === -1) {
-    return { metadata, body: text.trim() }
+    return { metadata, body: text.trim(), hasUnsupportedLines: true }
   }
 
   const block = text.slice(4, endIndex)
+  let hasUnsupportedLines = false
   for (const line of block.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
     const colonIndex = line.indexOf(":")
-    if (colonIndex <= 0) continue
+    if (colonIndex <= 0) {
+      hasUnsupportedLines = true
+      continue
+    }
     const key = line.slice(0, colonIndex).trim()
     const value = line.slice(colonIndex + 1).trim().replace(/^['"]|['"]$/g, "")
     if (key) {
@@ -44,6 +70,7 @@ function parseFrontmatter(text: string): ParsedFrontmatter {
   return {
     metadata,
     body: text.slice(endIndex + 4).trim(),
+    hasUnsupportedLines,
   }
 }
 
@@ -76,12 +103,12 @@ function toContentName(value: string, fallback: string): string {
 function pickCategory(
   value: string | undefined,
   categories: readonly { id: string }[],
-): string {
+): PickCategoryResult {
   if (value && categories.some((category) => category.id === value)) {
-    return value
+    return { category: value, unknown: false }
   }
 
-  return ""
+  return { category: "", unknown: Boolean(value) }
 }
 
 function extractHeadingTitle(content: string): string | null {
@@ -116,49 +143,73 @@ function shortenAutoDescription(value: string): string {
 
 function buildRuleQuickPublishPayload(
   draft: Extract<EditorScanQuickPublishDraft, { itemType: "rule" }>,
-): SynapseCreateRulePayload {
+): QuickPublishBuildResult<SynapseCreateRulePayload> {
   const parsed = parseFrontmatter(draft.content)
   const metadata = { ...parsed.metadata, ...draft.metadata }
   const fallbackName = fallbackNameFromPath(draft.itemName, draft.itemPath)
   const name = toContentName(metadata.name || fallbackName, "rule")
   const title = metadata.title || extractHeadingTitle(parsed.body) || stripMarkdownExtension(draft.itemName)
   const description = metadata.description || shortenAutoDescription(extractFirstParagraph(parsed.body))
+  const category = pickCategory(metadata.category, rulesCategories)
+  const notices = buildQuickPublishNotices(parsed, category)
 
-  return normalizeCreateRulePayload({
-    ...createEmptyRulePayload(),
-    name,
-    title,
-    description,
-    category: pickCategory(metadata.category, rulesCategories),
-    icon: "file-text",
-    content: parsed.body,
-  })
+  return {
+    payload: normalizeCreateRulePayload({
+      ...createEmptyRulePayload(),
+      name,
+      title,
+      description,
+      category: category.category,
+      icon: "file-text",
+      content: parsed.body,
+    }),
+    notices,
+  }
 }
 
 function buildSkillQuickPublishPayload(
   draft: Extract<EditorScanQuickPublishDraft, { itemType: "skill" }>,
-): CreateSkillPayload {
+): QuickPublishBuildResult<CreateSkillPayload> {
   const parsed = parseFrontmatter(draft.content)
   const metadata = { ...parsed.metadata, ...draft.metadata }
   const fallbackName = fallbackNameFromPath(draft.itemName, draft.itemPath)
   const name = toContentName(metadata.name || fallbackName, "skill")
   const title = metadata.title || extractHeadingTitle(parsed.body) || name
   const description = metadata.description || shortenAutoDescription(extractFirstParagraph(parsed.body))
+  const category = pickCategory(metadata.category, skillsCategories)
+  const notices = buildQuickPublishNotices(parsed, category)
 
-  return normalizeCreateSkillPayload({
-    ...createEmptySkillPayload(),
-    name,
-    title,
-    description,
-    category: pickCategory(metadata.category, skillsCategories),
-    icon: "wrench",
-    content: parsed.body,
-    files: draft.files.map((file) => ({
-      originalName: normalizeSkillAttachmentName(file.originalName),
-      size: file.size,
-      bytes: file.bytes,
-    })),
-  })
+  return {
+    payload: normalizeCreateSkillPayload({
+      ...createEmptySkillPayload(),
+      name,
+      title,
+      description,
+      category: category.category,
+      icon: "wrench",
+      content: parsed.body,
+      files: draft.files.map((file) => ({
+        originalName: normalizeSkillAttachmentName(file.originalName),
+        size: file.size,
+        bytes: file.bytes,
+      })),
+    }),
+    notices,
+  }
+}
+
+function buildQuickPublishNotices(
+  parsed: ParsedFrontmatter,
+  category: PickCategoryResult,
+): ContentCreateNotice[] {
+  const notices: ContentCreateNotice[] = []
+  if (parsed.hasUnsupportedLines) {
+    notices.push(FRONTMATTER_PARTIAL_NOTICE)
+  }
+  if (category.unknown) {
+    notices.push(UNKNOWN_CATEGORY_NOTICE)
+  }
+  return notices
 }
 
 function formatQuickPublishSourceLabel(

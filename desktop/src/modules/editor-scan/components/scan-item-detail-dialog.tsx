@@ -143,19 +143,23 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
       const sourceLabel = formatQuickPublishSourceLabel(item)
 
       if (draft.itemType === "rule") {
+        const result = buildRuleQuickPublishPayload(draft)
         requestOpenContentCreate({
           kind: "create",
           requestId: createContentOpenRequestId(),
           contentType: "rule",
-          initialValue: buildRuleQuickPublishPayload(draft),
+          initialValue: result.payload,
+          notices: result.notices,
           sourceLabel,
         })
       } else {
+        const result = buildSkillQuickPublishPayload(draft)
         requestOpenContentCreate({
           kind: "create",
           requestId: createContentOpenRequestId(),
           contentType: "skill",
-          initialValue: buildSkillQuickPublishPayload(draft),
+          initialValue: result.payload,
+          notices: result.notices,
           sourceLabel,
         })
       }
@@ -211,7 +215,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
     ? Object.entries(item.metadata).filter(([, v]) => v)
     : []
   const content = item.content ?? loadedContent
-  const primaryActionLabel = item.synapseContentId ? "从仓库中显示" : "保存到仓库"
+  const primaryActionLabel = item.synapseContentId ? "查看仓库内容" : "导入到仓库"
 
   return (
     <>
@@ -225,7 +229,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
           <AlertDialogHeader>
             <AlertDialogTitle>关联内容不可用</AlertDialogTitle>
             <AlertDialogDescription>
-              {fallbackReason} 可以作为新内容保存。
+              {fallbackReason} 可以作为新内容导入。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -236,7 +240,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
                 void publishAsNew()
               }}
             >
-              作为新内容保存
+              作为新内容导入
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

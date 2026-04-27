@@ -31,7 +31,8 @@ describe("quick publish payload builders", () => {
       metadata: {},
     }
 
-    const payload = buildRuleQuickPublishPayload(draft)
+    const result = buildRuleQuickPublishPayload(draft)
+    const { payload } = result
 
     expect(payload).toMatchObject({
       name: "release-rule",
@@ -42,9 +43,10 @@ describe("quick publish payload builders", () => {
     })
     expect(payload.icon).not.toBe("")
     expect(payload.iconBg).not.toBe("")
+    expect(result.notices).toEqual([])
   })
 
-  it("leaves category empty when the scanned category is unknown", () => {
+  it("leaves category empty and reports a notice when the scanned category is unknown", () => {
     const draft: EditorScanQuickPublishDraft = {
       itemType: "rule",
       itemPath: "/repo/AGENTS.md",
@@ -62,9 +64,63 @@ describe("quick publish payload builders", () => {
       metadata: {},
     }
 
-    const payload = buildRuleQuickPublishPayload(draft)
+    const result = buildRuleQuickPublishPayload(draft)
 
-    expect(payload.category).toBe("")
+    expect(result.payload.category).toBe("")
+    expect(result.notices).toEqual([
+      { id: "unknown-category", message: "未识别分类，已留空。" },
+    ])
+  })
+
+  it("reports a notice when frontmatter contains unsupported lines", () => {
+    const draft: EditorScanQuickPublishDraft = {
+      itemType: "rule",
+      itemPath: "/repo/AGENTS.md",
+      itemName: "Release Rule.md",
+      content: [
+        "---",
+        "name: release-rule",
+        "tags:",
+        "  - release",
+        "---",
+        "",
+        "# Release Rule",
+        "",
+        "Use this before publishing.",
+      ].join("\n"),
+      metadata: {},
+    }
+
+    const result = buildRuleQuickPublishPayload(draft)
+
+    expect(result.payload.name).toBe("release-rule")
+    expect(result.notices).toEqual([
+      { id: "frontmatter-partial", message: "元数据未完全识别，请检查已填内容。" },
+    ])
+  })
+
+  it("reports a notice when frontmatter is not closed", () => {
+    const draft: EditorScanQuickPublishDraft = {
+      itemType: "rule",
+      itemPath: "/repo/AGENTS.md",
+      itemName: "Release Rule.md",
+      content: [
+        "---",
+        "name: release-rule",
+        "",
+        "# Release Rule",
+        "",
+        "Use this before publishing.",
+      ].join("\n"),
+      metadata: {},
+    }
+
+    const result = buildRuleQuickPublishPayload(draft)
+
+    expect(result.payload.name).toBe("release-rule")
+    expect(result.notices).toEqual([
+      { id: "frontmatter-partial", message: "元数据未完全识别，请检查已填内容。" },
+    ])
   })
 
   it("keeps auto-generated descriptions short", () => {
@@ -81,7 +137,7 @@ describe("quick publish payload builders", () => {
       metadata: {},
     }
 
-    const payload = buildSkillQuickPublishPayload(draft)
+    const { payload } = buildSkillQuickPublishPayload(draft)
 
     expect(payload.description.length).toBeLessThanOrEqual(120)
     expect(payload.description).toMatch(/\.$/)
@@ -109,7 +165,8 @@ describe("quick publish payload builders", () => {
       metadata: {},
     }
 
-    const payload = buildSkillQuickPublishPayload(draft)
+    const result = buildSkillQuickPublishPayload(draft)
+    const { payload } = result
 
     expect(payload).toMatchObject({
       name: "release-helper",
@@ -124,6 +181,7 @@ describe("quick publish payload builders", () => {
     await expect(serializeCreateSkillFiles(payload.files)).resolves.toEqual([
       { originalName: "assets/template.bin", size: 3, bytes },
     ])
+    expect(result.notices).toEqual([])
   })
 
   it("formats compact source labels for local scan items", () => {

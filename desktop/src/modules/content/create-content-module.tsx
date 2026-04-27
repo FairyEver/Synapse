@@ -6,6 +6,7 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { useActiveRepository, useContentList, usePendingPushes } from "@/app-shell/use-repository-manager"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
+import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import type { SynapseContentMeta, SynapseContentType, SynapseCreateContentPayload } from "@/types/content"
 
 type ContentModuleConfig<T extends SynapseContentType> = {
@@ -18,6 +19,7 @@ type ContentModuleConfig<T extends SynapseContentType> = {
     submitDisabledReason?: string | null
     existingNames?: string[]
     initialValue?: SynapseCreateContentPayload<T> | null
+    notices?: ContentCreateNotice[]
     sourceLabel?: string | null
   }>
   DetailDialog: ComponentType<{
@@ -64,12 +66,14 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
     const [createInitialValue, setCreateInitialValue] =
       useState<SynapseCreateContentPayload<T> | null>(null)
+    const [createNotices, setCreateNotices] = useState<ContentCreateNotice[]>([])
     const [createSourceLabel, setCreateSourceLabel] = useState<string | null>(null)
     const consumedRequestIdRef = useRef<string | null>(null)
 
     const handleCreateDialogOpenChange = useCallback((nextOpen: boolean) => {
       if (!nextOpen) {
         setCreateInitialValue(null)
+        setCreateNotices([])
         setCreateSourceLabel(null)
       }
       setIsCreateDialogOpen(nextOpen)
@@ -89,6 +93,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
 
       consumedRequestIdRef.current = request.requestId
       setCreateInitialValue(request.initialValue as SynapseCreateContentPayload<T>)
+      setCreateNotices(request.notices ?? [])
       setCreateSourceLabel(request.sourceLabel)
       setIsCreateDialogOpen(true)
       onCreateDialogOpenChange?.(true)
@@ -147,6 +152,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           onPendingContentOpenRequestConsumed={onPendingContentOpenRequestConsumed}
           onCreateClick={() => {
             setCreateInitialValue(null)
+            setCreateNotices([])
             setCreateSourceLabel(null)
             handleCreateDialogOpenChange(true)
           }}
@@ -170,6 +176,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           submitDisabledReason={submitDisabledReason}
           existingNames={existingNames}
           initialValue={createInitialValue}
+          notices={createNotices}
           sourceLabel={createSourceLabel}
         />
       </>
