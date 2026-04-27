@@ -178,7 +178,7 @@ export const agentRuntimeDefinitions = [
 ${agentRuntimeDirs.map((dir) => `  ${toIdentifier(dir)}AgentRuntimeDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies AgentRuntimeDefinition[]
 
-export const agentRuntimeDefinitionById = new Map(
+export const agentRuntimeDefinitionById = new Map<string, AgentRuntimeDefinition>(
   agentRuntimeDefinitions.map((definition) => [definition.id, definition]),
 )
 

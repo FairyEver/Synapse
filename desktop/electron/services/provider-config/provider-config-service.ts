@@ -177,6 +177,10 @@ export class ProviderConfigService {
     agentType: AgentRuntimeAgentType,
     request: ProviderRuntimeRequest = {},
   ): Promise<ProviderRuntimeView> {
+    const definition = agentRuntimeDefinitionById.get(normalizeAgentType(agentType))
+    if (!definition) {
+      throw new Error(`Unknown agent runtime: ${agentType}`)
+    }
     const state = await this.getProjectProviderState(projectId, agentType)
     const provider = state.activeProvider
     const apiKey = provider?.secretRef
@@ -188,10 +192,6 @@ export class ProviderConfigService {
       : undefined
     const model = provider?.model ?? state.activeModel
     const mode = state.activeMode
-    const definition = agentRuntimeDefinitionById.get(normalizeAgentType(agentType))
-    if (!definition) {
-      throw new Error(`Unknown agent runtime: ${agentType}`)
-    }
     const envResult = definition.buildEnv({ provider, apiKey, model })
     const env = envResult.env
 

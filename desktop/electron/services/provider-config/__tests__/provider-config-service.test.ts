@@ -207,6 +207,39 @@ describe("ProviderConfigService", () => {
       .rejects
       .toThrow("Unknown agent runtime: unknown-agent")
   })
+
+  it("fails unknown runtime before reading an active provider secret", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const auditSink = new InMemoryAuditSink()
+    const service = new ProviderConfigService({
+      providers,
+      secrets,
+      permissionGuard: createPermissionGuard(),
+      auditSink,
+      now: fixedNow,
+    })
+
+    await secrets.upsert({
+      id: "secret-openai",
+      schemaVersion: 1,
+      kind: "api-key",
+      value: "sk-secret",
+    })
+    await service.upsertGlobalProvider({
+      id: "openai",
+      secretRef: "secret-openai",
+      model: "gpt-5.4",
+      agentTypes: ["unknown-agent"],
+    })
+    await service.setProjectProviderRefs("project-1", ["openai"])
+    await service.setActiveProvider("project-1", "openai")
+
+    await expect(service.resolveRuntimeConfig("project-1", "unknown-agent"))
+      .rejects
+      .toThrow("Unknown agent runtime: unknown-agent")
+    expect(auditSink.list().filter((entry) => entry.action === "secret.read")).toEqual([])
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
