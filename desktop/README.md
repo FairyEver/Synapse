@@ -149,7 +149,7 @@ UI 会根据状态启用或禁用安装按钮，并给出相应提示。
 新增 IDE 的固定目录是：
 
 ```text
-desktop/src/ide-definitions/<ide-id>/
+desktop/src/definitions/editor/<editor-id>/
 ```
 
 普通 IDE 只需要在这个目录中补齐定义文件。不要手改生成文件，也不要改 `editor-adapters/index.ts`、安装菜单、扫描服务、CLI 检测或 MCP 设置面板。`pnpm desktop:typecheck` 会先运行 `generate:ide-registry`，自动刷新 renderer / Electron 两侧 registry。
@@ -158,7 +158,7 @@ desktop/src/ide-definitions/<ide-id>/
 
 | 文件 | 必需 | 职责 |
 | --- | --- | --- |
-| `ide.ts` | 是 | IDE 展示元数据：`id`、`label`、`order`、`icon`、支持范围、支持内容类型 |
+| `editor.ts` | 是 | IDE 展示元数据：`id`、`label`、`order`、`icon`、支持范围、支持内容类型 |
 | `adapter.ts` | 是 | 解析全局 / 项目安装目标，导出 `editorAdapter` |
 | `install.ts` | 是 | Rule / Skill 写入策略，导出 `installStrategy` |
 | `scan.ts` | 是 | Rule 扫描策略，导出 `scanStrategy` |
@@ -170,8 +170,8 @@ desktop/src/ide-definitions/<ide-id>/
 
 ```text
 desktop/scripts/generate-ide-registry.mjs
-desktop/src/ide-definitions/generated/renderer-registry.ts
-desktop/electron/services/ide-definitions/generated/main-registry.ts
+desktop/src/definitions/generated/renderer-registry.ts
+desktop/electron/services/definitions/generated/main-registry.ts
 ```
 
 `generated/*` 只由脚本维护。
@@ -181,21 +181,21 @@ desktop/electron/services/ide-definitions/generated/main-registry.ts
 假设新增 `windsorf`，且它支持 Rule / Skill、没有 CLI、没有 MCP、没有安装前表单：
 
 ```text
-desktop/src/ide-definitions/windsorf/
+desktop/src/definitions/editor/windsorf/
   icon.png
-  ide.ts
+  editor.ts
   adapter.ts
   install.ts
   scan.ts
 ```
 
-`ide.ts` 只放展示与能力元数据：
+`editor.ts` 只放展示与能力元数据：
 
 ```ts
 import icon from "./icon.png"
-import type { SynapseIdeDefinition } from "../types"
+import type { SynapseEditorDefinition } from "../../types"
 
-export const ideDefinition = {
+export const editorDefinition = {
   id: "windsorf",
   label: "Windsorf",
   order: 40,
@@ -203,13 +203,13 @@ export const ideDefinition = {
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],
-} as const satisfies SynapseIdeDefinition
+} as const satisfies SynapseEditorDefinition
 ```
 
 `adapter.ts` 必须导出 `editorAdapter`，由统一服务调用：
 
 ```ts
-import type { EditorAdapter } from "../main-types"
+import type { EditorAdapter } from "../../main-types"
 
 const windsorfAdapter: EditorAdapter = {
   id: "windsorf",
@@ -246,7 +246,7 @@ export const editorAdapter = windsorfAdapter
 `install.ts` 负责写入格式。普通 Skill 可以复用 Synapse 标准目录写入：
 
 ```ts
-import type { EditorInstallStrategy } from "../main-types"
+import type { EditorInstallStrategy } from "../../main-types"
 import { writeSynapseSkillDirectory } from "../shared-skill-directory"
 
 export const installStrategy: EditorInstallStrategy = {
@@ -272,7 +272,7 @@ pnpm desktop:typecheck
 有配套 CLI 时，在同一目录增加 `cli.ts`：
 
 ```ts
-import type { SynapseCliDefinition } from "../types"
+import type { SynapseCliDefinition } from "../../types"
 
 export const cliDefinition = {
   id: "windsorf",
@@ -282,10 +282,10 @@ export const cliDefinition = {
 } as const satisfies SynapseCliDefinition
 ```
 
-有 MCP 注册能力时，增加 `mcp.ts`。`mcp.ts` 不导入图标，renderer 会自动使用 `ide.ts` 的 icon：
+有 MCP 注册能力时，增加 `mcp.ts`。`mcp.ts` 不导入图标，renderer 会自动使用 `editor.ts` 的 icon：
 
 ```ts
-import type { SynapseMcpDefinition } from "../types"
+import type { SynapseMcpDefinition } from "../../types"
 
 export const mcpDefinition = {
   target: "windsorf",
@@ -306,7 +306,7 @@ export const mcpDefinition = {
 项目 Rule 安装前需要额外表单时，增加 `forms.tsx`，导出 `installFormDefinition`：
 
 ```tsx
-import type { SynapseRuleProjectInstallFormProps } from "../types"
+import type { SynapseRuleProjectInstallFormProps } from "../../types"
 
 function WindsorfRuleProjectInstallForm(props: SynapseRuleProjectInstallFormProps) {
   // 表单确认后调用 props.onConfirm(values)

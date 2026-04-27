@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(scriptDir, "..")
-const definitionsRoot = path.join(packageRoot, "src", "ide-definitions")
-const rendererGeneratedDir = path.join(definitionsRoot, "generated")
-const mainGeneratedDir = path.join(packageRoot, "electron", "services", "ide-definitions", "generated")
+const definitionsRoot = path.join(packageRoot, "src", "definitions", "editor")
+const rendererGeneratedDir = path.join(packageRoot, "src", "definitions", "generated")
+const mainGeneratedDir = path.join(packageRoot, "electron", "services", "definitions", "generated")
 
 async function pathExists(filePath) {
   try {
@@ -22,8 +22,8 @@ async function listDefinitionDirectories() {
   const dirs = []
 
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === "generated") continue
-    if (await pathExists(path.join(definitionsRoot, entry.name, "ide.ts"))) {
+    if (!entry.isDirectory() || entry.name === "__tests__") continue
+    if (await pathExists(path.join(definitionsRoot, entry.name, "editor.ts"))) {
       dirs.push(entry.name)
     }
   }
@@ -36,39 +36,39 @@ function toIdentifier(value) {
 }
 
 function renderRendererRegistry(definitionDirs, cliDirs, mcpDirs, formDirs) {
-  const ideImports = definitionDirs.map((dir) => {
-    const name = `${toIdentifier(dir)}IdeDefinition`
-    return `import { ideDefinition as ${name} } from "../${dir}/ide"`
+  const editorImports = definitionDirs.map((dir) => {
+    const name = `${toIdentifier(dir)}EditorDefinition`
+    return `import { editorDefinition as ${name} } from "../editor/${dir}/editor"`
   })
   const cliImports = cliDirs.map((dir) => {
     const name = `${toIdentifier(dir)}CliDefinition`
-    return `import { cliDefinition as ${name} } from "../${dir}/cli"`
+    return `import { cliDefinition as ${name} } from "../editor/${dir}/cli"`
   })
   const mcpImports = mcpDirs.map((dir) => {
     const name = `${toIdentifier(dir)}McpDefinition`
-    return `import { mcpDefinition as ${name} } from "../${dir}/mcp"`
+    return `import { mcpDefinition as ${name} } from "../editor/${dir}/mcp"`
   })
   const formImports = formDirs.map((dir) => {
     const name = `${toIdentifier(dir)}InstallFormDefinition`
-    return `import { installFormDefinition as ${name} } from "../${dir}/forms"`
+    return `import { installFormDefinition as ${name} } from "../editor/${dir}/forms"`
   })
 
-  return `${ideImports.join("\n")}
+  return `${editorImports.join("\n")}
 ${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${formImports.join("\n")}
-import type { SynapseCliDefinition, SynapseIdeDefinition, SynapseInstallFormDefinition, SynapseRendererMcpDefinition } from "../types"
+import type { SynapseCliDefinition, SynapseEditorDefinition, SynapseInstallFormDefinition, SynapseRendererMcpDefinition } from "../types"
 
-export const ideDefinitions = [
-${definitionDirs.map((dir) => `  ${toIdentifier(dir)}IdeDefinition,`).join("\n")}
-].sort((left, right) => left.order - right.order) satisfies SynapseIdeDefinition[]
+export const editorDefinitions = [
+${definitionDirs.map((dir) => `  ${toIdentifier(dir)}EditorDefinition,`).join("\n")}
+].sort((left, right) => left.order - right.order) satisfies SynapseEditorDefinition[]
 
 export const cliDefinitions = [
 ${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseCliDefinition[]
 
 export const mcpDefinitions = [
-${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, icon: ${toIdentifier(dir)}IdeDefinition.icon },`).join("\n")}
+${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, icon: ${toIdentifier(dir)}EditorDefinition.icon },`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseRendererMcpDefinition[]
 
 export const installFormDefinitionByEditorId = new Map<string, SynapseInstallFormDefinition>([
@@ -80,23 +80,23 @@ ${formDirs.map((dir) => `  ["${dir}", ${toIdentifier(dir)}InstallFormDefinition]
 function renderMainRegistry(adapterDirs, cliDirs, mcpDirs) {
   const adapterImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}EditorAdapter`
-    return `import { editorAdapter as ${name} } from "../../../../src/ide-definitions/${dir}/adapter"`
+    return `import { editorAdapter as ${name} } from "../../../../src/definitions/editor/${dir}/adapter"`
   })
   const cliImports = cliDirs.map((dir) => {
     const name = `${toIdentifier(dir)}CliDefinition`
-    return `import { cliDefinition as ${name} } from "../../../../src/ide-definitions/${dir}/cli"`
+    return `import { cliDefinition as ${name} } from "../../../../src/definitions/editor/${dir}/cli"`
   })
   const mcpImports = mcpDirs.map((dir) => {
     const name = `${toIdentifier(dir)}McpDefinition`
-    return `import { mcpDefinition as ${name} } from "../../../../src/ide-definitions/${dir}/mcp"`
+    return `import { mcpDefinition as ${name} } from "../../../../src/definitions/editor/${dir}/mcp"`
   })
   const installImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}InstallStrategy`
-    return `import { installStrategy as ${name} } from "../../../../src/ide-definitions/${dir}/install"`
+    return `import { installStrategy as ${name} } from "../../../../src/definitions/editor/${dir}/install"`
   })
   const scanImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}ScanStrategy`
-    return `import { scanStrategy as ${name} } from "../../../../src/ide-definitions/${dir}/scan"`
+    return `import { scanStrategy as ${name} } from "../../../../src/definitions/editor/${dir}/scan"`
   })
 
   return `${adapterImports.join("\n")}
@@ -104,8 +104,8 @@ ${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${installImports.join("\n")}
 ${scanImports.join("\n")}
-import type { EditorAdapter, EditorInstallStrategy, EditorScanStrategy } from "../../../../src/ide-definitions/main-types"
-import type { SynapseMcpDefinition } from "../../../../src/ide-definitions/types"
+import type { EditorAdapter, EditorInstallStrategy, EditorScanStrategy } from "../../../../src/definitions/main-types"
+import type { SynapseMcpDefinition } from "../../../../src/definitions/types"
 
 export const editorAdapters = [
 ${adapterDirs.map((dir) => `  ${toIdentifier(dir)}EditorAdapter,`).join("\n")}
