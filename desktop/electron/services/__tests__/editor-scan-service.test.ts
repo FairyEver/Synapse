@@ -13,6 +13,10 @@ vi.mock("electron", () => ({
 }))
 
 import { scanCodexRules, scanCursorRules } from "../../../src/ide-definitions/shared-rule-scanners"
+import {
+  buildRuleQuickPublishPayload,
+  buildSkillQuickPublishPayload,
+} from "../../../src/modules/editor-scan/lib/quick-publish"
 import { prepareQuickPublishDraft, scanSkillDirectories } from "../editor-scan-service"
 
 const tempDirs: string[] = []
@@ -74,6 +78,150 @@ describe("editor scan quick publish", () => {
     expect(Array.from(draft.files[0]?.bytes ?? [])).toEqual([0, 255, 42])
     expect(draft.files.some((file) => file.originalName.includes(".synapse.json"))).toBe(false)
     expect(draft.files.some((file) => file.originalName.includes(".secret"))).toBe(false)
+  })
+
+  it("runs manual quick-publish fixtures through scan and import payload builders", async () => {
+    const root = await createTempDir()
+    const rulesPath = path.join(root, "AGENTS.md")
+    const skillsPath = path.join(root, ".agents", "skills")
+    const normalSkillDir = path.join(skillsPath, "normal-import-skill")
+    const unknownSkillDir = path.join(skillsPath, "unknown-category-skill")
+    const partialSkillDir = path.join(skillsPath, "partial-frontmatter-skill")
+
+    await mkdir(path.join(normalSkillDir, "assets"), { recursive: true })
+    await mkdir(unknownSkillDir, { recursive: true })
+    await mkdir(partialSkillDir, { recursive: true })
+    await writeFile(
+      rulesPath,
+      [
+        "<!-- synapse-rule:unknown-category-rule:begin -->",
+        "---",
+        "name: unknown-category-rule",
+        "category: category-that-does-not-exist",
+        "---",
+        "",
+        "# Unknown Category Rule",
+        "",
+        "Use this rule to verify the unknown category notice.",
+        "<!-- synapse-rule:unknown-category-rule:end -->",
+        "<!-- synapse-rule:partial-frontmatter-rule:begin -->",
+        "---",
+        "name: partial-frontmatter-rule",
+        "tags:",
+        "  - manual-test",
+        "---",
+        "",
+        "# Partial Frontmatter Rule",
+        "",
+        "Use this rule to verify the partial frontmatter notice.",
+        "<!-- synapse-rule:partial-frontmatter-rule:end -->",
+      ].join("\n"),
+    )
+    await writeFile(
+      path.join(normalSkillDir, "SKILL.md"),
+      [
+        "---",
+        "name: normal-import-skill",
+        "title: Normal Import Skill",
+        "description: Normal skill import case.",
+        "category: automation",
+        "---",
+        "",
+        "# Normal Import Skill",
+        "",
+        "Use this skill to verify the import flow and attachment transfer.",
+      ].join("\n"),
+    )
+    await writeFile(path.join(normalSkillDir, "assets", "template.txt"), "attachment")
+    await writeFile(
+      path.join(unknownSkillDir, "SKILL.md"),
+      [
+        "---",
+        "name: unknown-category-skill",
+        "category: category-that-does-not-exist",
+        "---",
+        "",
+        "# Unknown Category Skill",
+      ].join("\n"),
+    )
+    await writeFile(
+      path.join(partialSkillDir, "SKILL.md"),
+      [
+        "---",
+        "name: partial-frontmatter-skill",
+        "tags:",
+        "  - manual-test",
+        "---",
+        "",
+        "# Partial Frontmatter Skill",
+      ].join("\n"),
+    )
+
+    const rules = await scanCodexRules(rulesPath)
+    const unknownRule = rules.find((rule) => rule.name === "unknown-category-rule")
+    const partialRule = rules.find((rule) => rule.name === "partial-frontmatter-rule")
+
+    expect(buildRuleQuickPublishPayload({
+      itemType: "rule",
+      itemPath: rulesPath,
+      itemName: unknownRule?.name ?? "",
+      content: unknownRule?.content ?? "",
+      metadata: unknownRule?.metadata ?? {},
+    }).notices).toEqual([
+      { id: "unknown-category", message: "未识别分类，已留空。" },
+    ])
+    expect(buildRuleQuickPublishPayload({
+      itemType: "rule",
+      itemPath: rulesPath,
+      itemName: partialRule?.name ?? "",
+      content: partialRule?.content ?? "",
+      metadata: partialRule?.metadata ?? {},
+    }).notices).toEqual([
+      { id: "frontmatter-partial", message: "元数据未完全识别，请检查已填内容。" },
+    ])
+
+    const skillScan = await scanSkillDirectories([skillsPath])
+    expect(skillScan.skills.map((skill) => skill.name).sort()).toEqual([
+      "normal-import-skill",
+      "partial-frontmatter-skill",
+      "unknown-category-skill",
+    ])
+
+    const normalSkillDraft = await prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: normalSkillDir,
+      itemName: "normal-import-skill",
+      metadata: {},
+    })
+    expect(normalSkillDraft.itemType).toBe("skill")
+    if (normalSkillDraft.itemType !== "skill") return
+    const normalSkillResult = buildSkillQuickPublishPayload(normalSkillDraft)
+    expect(normalSkillResult.notices).toEqual([])
+    expect(normalSkillResult.payload.files.map((file) => file.originalName)).toEqual(["assets/template.txt"])
+
+    const unknownSkillDraft = await prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: unknownSkillDir,
+      itemName: "unknown-category-skill",
+      metadata: {},
+    })
+    expect(unknownSkillDraft.itemType).toBe("skill")
+    if (unknownSkillDraft.itemType !== "skill") return
+    expect(buildSkillQuickPublishPayload(unknownSkillDraft).notices).toEqual([
+      { id: "unknown-category", message: "未识别分类，已留空。" },
+    ])
+
+    const partialSkillDraft = await prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: partialSkillDir,
+      itemName: "partial-frontmatter-skill",
+      metadata: {},
+    })
+    expect(partialSkillDraft.itemType).toBe("skill")
+    if (partialSkillDraft.itemType !== "skill") return
+    expect(buildSkillQuickPublishPayload(partialSkillDraft).notices).toEqual([
+      { id: "frontmatter-partial", message: "元数据未完全识别，请检查已填内容。" },
+    ])
   })
 
   it("uses skill frontmatter description as the list preview", async () => {
