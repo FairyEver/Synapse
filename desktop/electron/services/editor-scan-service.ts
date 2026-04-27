@@ -14,11 +14,11 @@ import type {
 } from "../../src/types/editor-scan"
 import type { SynapseEditorId } from "../../src/types/editor"
 import { editorAdapters } from "./editor-adapters"
-import { editorScanStrategyById } from "./ide-definitions/generated/main-registry"
+import { editorScanStrategyById } from "./definitions/generated/main-registry"
 import { pathExists } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
-import { decodeYamlScalar } from "../../src/ide-definitions/shared-yaml-scalar"
+import { decodeYamlScalar } from "../../src/definitions/editor/shared-yaml-scalar"
 
 const logger = createMainLogger("service.editor-scan")
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"

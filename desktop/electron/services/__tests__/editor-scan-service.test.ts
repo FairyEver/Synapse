@@ -12,7 +12,7 @@ vi.mock("electron", () => ({
   },
 }))
 
-import { scanCodexRules, scanCursorRules } from "../../../src/ide-definitions/shared-rule-scanners"
+import { scanCodexRules, scanCursorRules } from "../../../src/definitions/editor/shared-rule-scanners"
 import {
   buildRuleQuickPublishPayload,
   buildSkillQuickPublishPayload,

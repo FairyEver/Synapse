@@ -1,1 +1,1 @@
-export { editorAdapterById, editorAdapters } from "../ide-definitions/generated/main-registry"
+export { editorAdapterById, editorAdapters } from "../definitions/generated/main-registry"

@@ -3,4 +3,4 @@ export type {
   EditorAdapterResolveContext,
   EditorGlobalDirectoryPaths,
   EditorScanPathConfig,
-} from "../../../src/ide-definitions/main-types"
+} from "../../../src/definitions/main-types"

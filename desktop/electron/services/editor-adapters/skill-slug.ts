@@ -1,4 +1,4 @@
-import { slugifySkillName } from "../../../src/ide-definitions/shared-skill-frontmatter"
+import { slugifySkillName } from "../../../src/definitions/editor/shared-skill-frontmatter"
 
 /**
  * Decide the slug used as the Skill directory name.

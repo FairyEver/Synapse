@@ -52,7 +52,7 @@ import {
 } from "@/modules/data-store/hooks/use-data-store"
 
 import { EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
-import { mcpDefinitions } from "@/ide-definitions/generated/renderer-registry"
+import { mcpDefinitions } from "@/definitions/generated/renderer-registry"
 
 const logger = createRendererLogger("settings.data-store")
 

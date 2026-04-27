@@ -3,8 +3,8 @@ import path from "node:path"
 import { homedir } from "node:os"
 import { shell } from "electron"
 import { createMainLogger } from "../services/log-store"
-import { mcpDefinitions } from "../services/ide-definitions/generated/main-registry"
-import type { SynapseMcpDefinition } from "../../src/ide-definitions/types"
+import { mcpDefinitions } from "../services/definitions/generated/main-registry"
+import type { SynapseMcpDefinition } from "../../src/definitions/types"
 import { SYNAPSE_DATA_SERVER_NAME, SYNAPSE_DATA_LEGACY_SERVER_NAMES } from "../../data-store/shared/server-identity"
 
 const logger = createMainLogger("data-store.mcp-installer")

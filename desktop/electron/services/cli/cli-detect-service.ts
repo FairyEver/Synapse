@@ -4,7 +4,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { promisify } from "node:util"
 import type { SynapseCliDetectResult, SynapseCliId } from "../../../src/types/cli"
-import { cliDefinitions } from "../ide-definitions/generated/main-registry"
+import { cliDefinitions } from "../definitions/generated/main-registry"
 import { createMainLogger } from "../log-store"
 
 const execFileAsync = promisify(execFile)

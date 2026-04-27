@@ -1,8 +1,8 @@
 import type { SynapseEditorId } from "@/types/editor"
-import { ideDefinitions } from "@/ide-definitions/generated/renderer-registry"
+import { editorDefinitions } from "@/definitions/generated/renderer-registry"
 
 const editorIconMap = new Map<string, string>(
-  ideDefinitions.map((definition) => [definition.id, definition.icon]),
+  editorDefinitions.map((definition) => [definition.id, definition.icon]),
 )
 
 const EDITOR_ICON_CLIP_STYLE: React.CSSProperties = { clipPath: "inset(6%)" }

@@ -47,7 +47,7 @@ import type {
 } from "@/types/editor"
 import { VariableSubstitutionDialog } from "./variable-substitution-dialog"
 import { detectPlaceholders } from "@/lib/variable-substitution"
-import { installFormDefinitionByEditorId } from "@/ide-definitions/generated/renderer-registry"
+import { installFormDefinitionByEditorId } from "@/definitions/generated/renderer-registry"
 
 const CUSTOM_PROJECT_OPTION = "__custom__"
 
