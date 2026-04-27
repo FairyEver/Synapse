@@ -18,6 +18,7 @@ import type {
   ProviderRuntimeRequest,
   ProviderRuntimeView,
 } from "./types"
+import { agentRuntimeDefinitionById } from "../definitions/generated/main-registry"
 
 export interface ProviderConfigServiceDeps {
   readonly providers: DataNamespace<ProviderEntryV1>
@@ -187,7 +188,12 @@ export class ProviderConfigService {
       : undefined
     const model = provider?.model ?? state.activeModel
     const mode = state.activeMode
-    const env = buildRuntimeEnv(agentType, provider, apiKey, model)
+    const definition = agentRuntimeDefinitionById.get(normalizeAgentType(agentType))
+    if (!definition) {
+      throw new Error(`Unknown agent runtime: ${agentType}`)
+    }
+    const envResult = definition.buildEnv({ provider, apiKey, model })
+    const env = envResult.env
 
     return {
       ...state,
@@ -197,7 +203,10 @@ export class ProviderConfigService {
       baseUrl: provider?.baseUrl,
       apiKey,
       env,
-      envAllowlist: Object.keys(env).filter((key) => env[key] !== undefined),
+      envAllowlist: [
+        ...Object.keys(env).filter((key) => env[key] !== undefined),
+        ...(envResult.extraEnvAllowlist ?? []),
+      ],
     }
   }
 
@@ -456,33 +465,6 @@ function setProviderModel(
     activeModel: model,
     updatedAt,
   }
-}
-
-function buildRuntimeEnv(
-  agentType: AgentRuntimeAgentType,
-  provider: ProviderConfigView | undefined,
-  apiKey: string | undefined,
-  model: string | undefined,
-): Record<string, string | undefined> {
-  if (!provider) return {}
-  const normalized = normalizeAgentType(agentType)
-  const env: Record<string, string | undefined> = {}
-  if (normalized === "claude-code") {
-    if (provider.baseUrl) {
-      env.ANTHROPIC_BASE_URL = provider.baseUrl
-      if (apiKey) {
-        env.ANTHROPIC_AUTH_TOKEN = apiKey
-        env.ANTHROPIC_API_KEY = ""
-      }
-    } else if (apiKey) {
-      env.ANTHROPIC_API_KEY = apiKey
-    }
-    if (model) env.ANTHROPIC_MODEL = model
-    return { ...env, ...provider.env }
-  }
-  if (apiKey) env.OPENAI_API_KEY = apiKey
-  if (provider.baseUrl) env.OPENAI_BASE_URL = provider.baseUrl
-  return { ...env, ...provider.env }
 }
 
 function secretValue(secret: SecretEntryV1 | null): string | undefined {

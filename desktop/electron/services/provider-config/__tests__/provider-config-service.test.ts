@@ -197,6 +197,16 @@ describe("ProviderConfigService", () => {
       mode: runtime.mode,
     })).toContain("acceptEdits")
   })
+
+  it("fails clearly when resolving runtime config for an unknown Agent", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const service = new ProviderConfigService({ providers, secrets, now: fixedNow })
+
+    await expect(service.resolveRuntimeConfig("project-1", "unknown-agent"))
+      .rejects
+      .toThrow("Unknown agent runtime: unknown-agent")
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
