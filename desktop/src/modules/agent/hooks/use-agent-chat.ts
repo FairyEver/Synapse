@@ -3,6 +3,8 @@ import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
+  SynapseAgentConversationUpdatedPayload,
+  SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
   SynapseAgentPublishedCommand,
   SynapseAgentProviderState,
@@ -85,6 +87,34 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     const bridge = requireSynapseBridge()
     setPendingPermissions(await bridge.agent.listPendingPermissions(projectId))
   }, [projectId])
+
+  const refreshConversationSnapshot = useCallback(async (target: {
+    readonly sessionKey: string
+    readonly conversationId: string
+  }) => {
+    if (!projectId) {
+      return
+    }
+    const bridge = requireSynapseBridge()
+    try {
+      const [nextSessions, nextPending] = await Promise.all([
+        bridge.agent.listSessions(projectId),
+        bridge.agent.listPendingPermissions(projectId),
+      ])
+      setSessions(nextSessions)
+      setPendingPermissions(nextPending)
+      if (matchesSelectedConversation(target, {
+        conversationId: selectedConversationIdRef.current,
+        sessionKey: selectedSessionKeyRef.current,
+      })) {
+        await loadTimeline(target)
+      }
+    } catch (rawError) {
+      const message = rawError instanceof Error ? rawError.message : "刷新会话失败"
+      logger.error("Agent conversation refresh failed.", rawError)
+      setError(message)
+    }
+  }, [loadTimeline, projectId])
 
   const refresh = useCallback(async () => {
     if (!projectId) {
@@ -292,15 +322,25 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     const bridge = requireSynapseBridge()
     return bridge.agent.onEvent((domainEvent) => {
       if (domainEvent.payload.projectId !== projectId) return
-      const eventConversationId = domainEvent.scope?.sessionId
-      const selectedConversation = selectedConversationIdRef.current
-      if (selectedConversation && eventConversationId !== selectedConversation) return
-      if (!selectedConversation && domainEvent.payload.sessionKey !== selectedSessionKeyRef.current) return
+      if (domainEvent.type === "conversationUpdated") {
+        if (!matchesSelectedConversation(domainEvent.payload, {
+          conversationId: selectedConversationIdRef.current,
+          sessionKey: selectedSessionKeyRef.current,
+        })) {
+          return
+        }
+        void refreshConversationSnapshot(domainEvent.payload)
+        return
+      }
+      if (!matchesSelectedEvent(domainEvent, {
+        conversationId: selectedConversationIdRef.current,
+        sessionKey: selectedSessionKeyRef.current,
+      })) return
       setActivityLabel(activityLabelForEvent(domainEvent.payload.event))
       setTimeline((current) => appendAgentEvent(current, domainEvent.payload.event, domainEvent.timestamp))
       void refreshPendingPermissions()
     })
-  }, [projectId, refreshPendingPermissions])
+  }, [projectId, refreshConversationSnapshot, refreshPendingPermissions])
 
   return {
     sessions,
@@ -391,4 +431,24 @@ function formatSessionNameTime(date: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   })
+}
+
+function matchesSelectedEvent(
+  domainEvent: SynapseAgentDomainEvent,
+  selected: { readonly conversationId?: string; readonly sessionKey: string },
+): boolean {
+  return matchesSelectedConversation({
+    conversationId: domainEvent.scope?.sessionId,
+    sessionKey: domainEvent.payload.sessionKey,
+  }, selected)
+}
+
+function matchesSelectedConversation(
+  target: Pick<SynapseAgentConversationUpdatedPayload, "sessionKey"> & { readonly conversationId?: string },
+  selected: { readonly conversationId?: string; readonly sessionKey: string },
+): boolean {
+  if (selected.conversationId) {
+    return target.conversationId === selected.conversationId
+  }
+  return target.sessionKey === selected.sessionKey
 }

@@ -123,6 +123,16 @@ const agentEventBaseSchema = {
   threadId: z.string().optional(),
 }
 
+const agentEventTypeSchema = z.enum([
+  "text",
+  "thinking",
+  "toolUse",
+  "toolResult",
+  "permissionRequest",
+  "result",
+  "error",
+])
+
 const agentEventSchema = z.discriminatedUnion("type", [
   z.object({ ...agentEventBaseSchema, type: z.literal("text"), content: z.string() }),
   z.object({ ...agentEventBaseSchema, type: z.literal("thinking"), content: z.string() }),
@@ -164,6 +174,38 @@ const agentEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
 ])
+
+const agentEventScopeSchema = z.object({
+  projectId: z.string().optional(),
+  sessionId: z.string().optional(),
+  repositoryId: z.string().optional(),
+}).optional()
+
+const agentStreamDomainEventSchema = z.object({
+  domain: z.literal("agent"),
+  type: agentEventTypeSchema,
+  payload: z.object({
+    event: agentEventSchema,
+    projectId: z.string(),
+    sessionKey: z.string(),
+    platform: z.string(),
+  }),
+  timestamp: z.string(),
+  scope: agentEventScopeSchema,
+})
+
+const agentConversationUpdatedDomainEventSchema = z.object({
+  domain: z.literal("agent"),
+  type: z.literal("conversationUpdated"),
+  payload: z.object({
+    projectId: z.string(),
+    sessionKey: z.string(),
+    platform: z.string(),
+    conversationId: z.string(),
+  }),
+  timestamp: z.string(),
+  scope: agentEventScopeSchema,
+})
 
 const sendResultSchema = z.object({
   projectId: z.string(),
@@ -456,22 +498,10 @@ export const agentIpcModule: IpcModule = {
     event: {
       kind: "event",
       channel: "synapse:events:agent",
-      payload: z.object({
-        domain: z.literal("agent"),
-        type: z.string(),
-        payload: z.object({
-          event: agentEventSchema,
-          projectId: z.string(),
-          sessionKey: z.string(),
-          platform: z.string(),
-        }),
-        timestamp: z.string(),
-        scope: z.object({
-          projectId: z.string().optional(),
-          sessionId: z.string().optional(),
-          repositoryId: z.string().optional(),
-        }).optional(),
-      }),
+      payload: z.discriminatedUnion("type", [
+        agentStreamDomainEventSchema,
+        agentConversationUpdatedDomainEventSchema,
+      ]),
     },
   },
 }

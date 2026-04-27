@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react"
 import { Command as CommandIcon, Send } from "lucide-react"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
@@ -22,7 +22,7 @@ import type { SynapseAgentTimelineEntry } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
 import { useAgentChat } from "./hooks/use-agent-chat"
-import { formatEntryTime } from "./utils"
+import { agentCliLabel, formatEntryTime, thinkingIndicatorText } from "./utils"
 
 function AgentModule() {
   const activeRepository = useActiveRepository()
@@ -30,6 +30,18 @@ function AgentModule() {
   const chat = useAgentChat(projectId)
   const [draft, setDraft] = useState("")
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [thinkingFrame, setThinkingFrame] = useState(0)
+
+  useEffect(() => {
+    if (!chat.sending) {
+      setThinkingFrame(0)
+      return undefined
+    }
+    const interval = window.setInterval(() => {
+      setThinkingFrame((current) => current + 1)
+    }, 500)
+    return () => window.clearInterval(interval)
+  }, [chat.sending])
 
   const submitDraft = () => {
     const content = draft.trim()
@@ -57,6 +69,9 @@ function AgentModule() {
   }
 
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
+  const selectedSession = chat.sessions.find((session) => session.id === chat.selectedConversationId)
+    ?? chat.sessions.find((session) => session.active)
+  const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
   const openReference = (reference: string) => {
     if (!projectId) return
     void requireSynapseBridge().agent.openReference({ projectId, reference })
@@ -77,8 +92,11 @@ function AgentModule() {
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
       <div className="flex h-full min-h-0 flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-medium">{activeRepository?.name ?? "未选择项目"}</h2>
+            {selectedCliLabel ? (
+              <Badge variant="outline">{selectedCliLabel}</Badge>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {activeProvider ? (
@@ -150,6 +168,9 @@ function AgentModule() {
                 <MessageContent entry={entry} onOpenReference={openReference} />
               </article>
             ))}
+            {chat.sending ? (
+              <AgentWaitingIndicator text={thinkingIndicatorText(thinkingFrame)} />
+            ) : null}
           </div>
         </ScrollArea>
 
@@ -170,6 +191,19 @@ function AgentModule() {
         </form>
       </div>
     </SidebarContentLayout>
+  )
+}
+
+function AgentWaitingIndicator({ text }: { readonly text: string }) {
+  return (
+    <article className="flex flex-col gap-1" aria-live="polite">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>Agent</span>
+      </div>
+      <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+        {text}
+      </div>
+    </article>
   )
 }
 

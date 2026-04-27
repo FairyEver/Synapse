@@ -5,6 +5,7 @@ import type {
 } from "@/types/agent"
 
 const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
+const THINKING_DOT = "·"
 
 function agentEventToTimelineEntry(
   event: SynapseAgentEvent,
@@ -94,12 +95,26 @@ function formatEntryTime(timestamp: string): string {
   })
 }
 
+function thinkingIndicatorText(frame: number): string {
+  const dotCount = ((frame % 4) + 4) % 4
+  return `thinking${THINKING_DOT.repeat(dotCount)}`
+}
+
+function agentCliLabel(agentType: string | undefined): string | undefined {
+  const normalized = agentType?.trim()
+  if (!normalized) return undefined
+  if (normalized === "claude-code") return "claudecode"
+  return normalized
+}
+
 export {
   DEFAULT_LOCAL_SESSION_KEY,
+  agentCliLabel,
   agentEventToTimelineEntry,
   defaultSessionId,
   defaultSessionKey,
   formatEntryTime,
   localUserTimelineEntry,
   sessionLabel,
+  thinkingIndicatorText,
 }

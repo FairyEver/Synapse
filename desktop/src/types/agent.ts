@@ -152,10 +152,15 @@ export interface SynapseAgentEventEnvelope {
   readonly platform: string
 }
 
-export interface SynapseAgentDomainEvent {
+export interface SynapseAgentConversationUpdatedPayload {
+  readonly projectId: string
+  readonly sessionKey: string
+  readonly platform: string
+  readonly conversationId: string
+}
+
+interface SynapseAgentDomainEventBase {
   readonly domain: "agent"
-  readonly type: SynapseAgentEvent["type"]
-  readonly payload: SynapseAgentEventEnvelope
   readonly timestamp: string
   readonly scope?: {
     readonly projectId?: string
@@ -163,3 +168,17 @@ export interface SynapseAgentDomainEvent {
     readonly repositoryId?: string
   }
 }
+
+export interface SynapseAgentStreamDomainEvent extends SynapseAgentDomainEventBase {
+  readonly type: SynapseAgentEvent["type"]
+  readonly payload: SynapseAgentEventEnvelope
+}
+
+export interface SynapseAgentConversationUpdatedDomainEvent extends SynapseAgentDomainEventBase {
+  readonly type: "conversationUpdated"
+  readonly payload: SynapseAgentConversationUpdatedPayload
+}
+
+export type SynapseAgentDomainEvent =
+  | SynapseAgentStreamDomainEvent
+  | SynapseAgentConversationUpdatedDomainEvent

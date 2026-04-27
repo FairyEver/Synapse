@@ -1064,6 +1064,9 @@ export class AgentRuntimeService {
     if (execution.resultText) {
       saved = await this.repository.appendHistory(saved.id, "assistant", execution.resultText)
     }
+    if (execution.agentSessionId || execution.resultText) {
+      this.emitConversationUpdated(saved)
+    }
     return saved
   }
 
@@ -1103,6 +1106,21 @@ export class AgentRuntimeService {
     if (shouldSuppressReply(message)) return
     this.deps.outbox?.recordAgentEvent(target, event)
     this.deps.replyTargets?.dispatchAgentEvent(target, event)
+  }
+
+  private emitConversationUpdated(conversation: ConversationEntryV1): void {
+    this.deps.eventBus?.emit({
+      domain: "agent",
+      type: "conversationUpdated",
+      payload: {
+        projectId: this.deps.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: conversation.platform ?? "local",
+        conversationId: conversation.id,
+      },
+      scope: { sessionId: conversation.id },
+      timestamp: this.isoNow(),
+    })
   }
 
   private recordPermissionAudit(

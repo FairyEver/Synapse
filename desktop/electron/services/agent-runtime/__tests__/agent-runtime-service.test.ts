@@ -15,6 +15,7 @@ import {
   type ControlledProcessRunRequest,
 } from "../../../runtime/process"
 import { InMemoryAuditSink, createPermissionGuard } from "../../../runtime/security"
+import type { ScopedEventBus } from "../../../runtime/project-container"
 import { CodexExecAdapter, type CodexProcessRunner } from "../adapters/codex-exec"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
 import { ProviderConfigService } from "../../provider-config"
@@ -228,6 +229,62 @@ describe("AgentRuntimeService", () => {
         }),
       }),
     ]))
+  })
+
+  it("emits a conversation update after persisting the assistant response", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const events: Array<Parameters<ScopedEventBus["emit"]>[0]> = []
+    const runner = new FakeRunner([
+      JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { type: "agent_message", content: [{ type: "output_text", text: "done" }] },
+      }),
+      JSON.stringify({ type: "turn.completed" }),
+    ])
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter: new CodexExecAdapter(runner),
+      eventBus: {
+        projectId: "project-1",
+        emit: (event) => {
+          events.push(event)
+        },
+        on: vi.fn(),
+        underlying: {} as ScopedEventBus["underlying"],
+      },
+      now: fixedNow,
+    })
+
+    const result = await service.send({
+      projectId: "project-1",
+      sessionKey: "local:user-1",
+      platform: "local",
+      userId: "user-1",
+      userName: "User One",
+      content: "hello",
+    })
+
+    const update = events.at(-1)
+    const saved = await conversations.get(result.conversationId)
+    expect(saved?.history.at(-1)).toEqual(expect.objectContaining({
+      role: "assistant",
+      content: "done",
+    }))
+    expect(events.map((event) => event.type)).toEqual(["text", "result", "conversationUpdated"])
+    expect(update).toEqual(expect.objectContaining({
+      domain: "agent",
+      type: "conversationUpdated",
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:user-1",
+        platform: "local",
+        conversationId: result.conversationId,
+      },
+      scope: { sessionId: result.conversationId },
+    }))
   })
 
   it("handles /model before the adapter and clears the current agent session id", async () => {

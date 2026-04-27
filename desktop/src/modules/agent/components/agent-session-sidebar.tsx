@@ -1,4 +1,4 @@
-import { Bot, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Plus, RefreshCw, Trash2 } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,9 +16,11 @@ import {
   ModuleSidebarItem,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
+import { Badge } from "@/components/ui/badge"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
+  agentCliLabel,
   formatEntryTime,
   sessionLabel,
 } from "../utils"
@@ -84,17 +86,16 @@ function AgentSessionSidebar({
       <ModuleSidebarList>
         {items.map((session) => {
           const canDelete = sessions.length > 0
+          const cliLabel = agentCliLabel(session.agentType)
+          const trailing = cliLabel || session.updatedAt
+            ? <SessionTrailing cliLabel={cliLabel} updatedAt={session.updatedAt} />
+            : null
           return (
             <div key={session.id} className="flex items-center gap-1">
               <ModuleSidebarItem
                 active={session.id === selectedConversationId || (!selectedConversationId && session.active)}
-                icon={Bot}
                 className="min-w-0 flex-1"
-                trailing={session.updatedAt ? (
-                  <span className="text-xs text-muted-foreground">
-                    {formatEntryTime(session.updatedAt)}
-                  </span>
-                ) : null}
+                trailing={trailing}
                 onClick={() => onSelect(session.id)}
               >
                 {sessionLabel(session)}
@@ -132,6 +133,28 @@ function AgentSessionSidebar({
         })}
       </ModuleSidebarList>
     </ModuleSidebar>
+  )
+}
+
+function SessionTrailing({
+  cliLabel,
+  updatedAt,
+}: {
+  readonly cliLabel?: string
+  readonly updatedAt?: string
+}) {
+  if (!cliLabel && !updatedAt) {
+    return null
+  }
+  return (
+    <span className="flex items-center gap-2">
+      {cliLabel ? <Badge variant="outline">{cliLabel}</Badge> : null}
+      {updatedAt ? (
+        <span className="text-xs text-muted-foreground">
+          {formatEntryTime(updatedAt)}
+        </span>
+      ) : null}
+    </span>
   )
 }
 
