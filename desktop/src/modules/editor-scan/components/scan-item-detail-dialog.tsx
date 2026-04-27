@@ -211,7 +211,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
     ? Object.entries(item.metadata).filter(([, v]) => v)
     : []
   const content = item.content ?? loadedContent
-  const primaryActionLabel = item.synapseContentId ? "从仓库中显示" : "保存到仓库..."
+  const primaryActionLabel = item.synapseContentId ? "从仓库中显示" : "保存到仓库"
 
   return (
     <>
