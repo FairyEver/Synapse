@@ -61,7 +61,7 @@ export type SynapseAgentCapabilities = {
   mcp: boolean
 }
 
-export type SynapseAgentDefinition = {
+export type SynapseAgentBaseDefinition = {
   id: string
   label: string
   order: number
@@ -69,4 +69,8 @@ export type SynapseAgentDefinition = {
   runtime: SynapseAgentRuntimeRequirement
   modes: readonly SynapseAgentModeOption[]
   capabilities: SynapseAgentCapabilities
+}
+
+export type SynapseAgentDefinition = SynapseAgentBaseDefinition & {
+  icon: string
 }

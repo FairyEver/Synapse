@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AgentRuntimePanel } from "@/modules/settings/components/agent-runtime-panel"
 import { EditorDirectoriesContent } from "@/modules/settings/components/editor-directories-panel"
 
-function ToolsPanel({ projectId }: { readonly projectId?: string }) {
+function ToolsPanel() {
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -14,7 +14,7 @@ function ToolsPanel({ projectId }: { readonly projectId?: string }) {
         </CardContent>
       </Card>
 
-      <AgentRuntimePanel projectId={projectId} />
+      <AgentRuntimePanel />
     </div>
   )
 }

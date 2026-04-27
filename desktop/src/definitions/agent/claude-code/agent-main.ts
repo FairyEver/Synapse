@@ -1,9 +1,9 @@
 import { ClaudeCodeAdapter } from "../../../../electron/services/agent-runtime/adapters/claude-code"
 import type { AgentRuntimeDefinition } from "../../main-types"
-import { agentDefinition } from "./agent"
+import { agentBaseDefinition } from "./agent-shared"
 
 export const agentRuntimeDefinition = {
-  ...agentDefinition,
+  ...agentBaseDefinition,
   createAdapter(view, runner) {
     return new ClaudeCodeAdapter(runner, {
       model: view.model,

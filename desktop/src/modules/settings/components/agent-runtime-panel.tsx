@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import type { SynapseAgentRuntimeStatusItem } from "@/types/agent"
 
@@ -14,6 +15,10 @@ type AgentRuntimePanelProps = {
 type AgentRuntimeRowProps = {
   readonly item: SynapseAgentRuntimeStatusItem
 }
+
+const agentIconById = new Map<string, string>(
+  agentDefinitions.map((definition) => [definition.id, definition.icon]),
+)
 
 function formatIssueText(item: SynapseAgentRuntimeStatusItem): string | null {
   const issue = item.issues.find((value) =>
@@ -39,16 +44,22 @@ function formatIssueText(item: SynapseAgentRuntimeStatusItem): string | null {
 
 function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
   const detail = formatIssueText(item) ?? item.provider?.activeModel ?? item.cli.path
+  const icon = agentIconById.get(item.id)
 
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
-      <div className="min-w-0">
-        <div className="font-medium">{item.label}</div>
-        {detail ? (
-          <div className="truncate text-sm text-muted-foreground" title={detail}>
-            {detail}
-          </div>
+      <div className="flex min-w-0 items-center gap-3">
+        {icon ? (
+          <img src={icon} alt="" className="size-8 shrink-0 rounded-md" />
         ) : null}
+        <div className="min-w-0">
+          <div className="font-medium">{item.label}</div>
+          {detail ? (
+            <div className="truncate text-sm text-muted-foreground" title={detail}>
+              {detail}
+            </div>
+          ) : null}
+        </div>
       </div>
       <Badge variant={item.ready ? "default" : "secondary"}>
         {item.ready ? "可用" : "未就绪"}

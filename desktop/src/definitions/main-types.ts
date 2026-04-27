@@ -17,7 +17,7 @@ import type {
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
 } from "../types/editor"
-import type { SynapseAgentDefinition } from "./types"
+import type { SynapseAgentBaseDefinition } from "./types"
 
 export type EditorAdapterResolveContext = {
   contentId: string
@@ -106,7 +106,7 @@ export type AgentRuntimeEnvResult = {
   readonly extraEnvAllowlist?: readonly string[]
 }
 
-export type AgentRuntimeDefinition = SynapseAgentDefinition & {
+export type AgentRuntimeDefinition = SynapseAgentBaseDefinition & {
   createAdapter(
     view: ProviderRuntimeView,
     runner: AgentRuntimeProcessRunner,

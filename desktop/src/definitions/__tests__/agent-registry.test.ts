@@ -14,6 +14,7 @@ describe("agent definition registry", () => {
     const claude = agentDefinitions.find((definition) => definition.id === "claude-code")
     const codex = agentDefinitions.find((definition) => definition.id === "codex")
 
+    expect(claude?.icon).toEqual(expect.any(String))
     expect(claude?.runtime).toEqual({ kind: "local-cli", binaries: ["claude"] })
     expect(claude?.modes.map((mode) => mode.key)).toEqual([
       "default",
@@ -23,6 +24,7 @@ describe("agent definition registry", () => {
       "bypassPermissions",
       "dontAsk",
     ])
+    expect(codex?.icon).toEqual(expect.any(String))
     expect(codex?.runtime).toEqual({ kind: "local-cli", binaries: ["codex"] })
     expect(codex?.modes.map((mode) => mode.key)).toEqual([
       "suggest",

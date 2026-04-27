@@ -3,6 +3,13 @@ import { describe, expect, it, vi } from "vitest"
 
 import { AgentRuntimePanel } from "@/modules/settings/components/agent-runtime-panel"
 
+vi.mock("@/definitions/generated/renderer-registry", () => ({
+  agentDefinitions: [
+    { id: "codex", icon: "codex-agent.png" },
+    { id: "claude-code", icon: "claude-code-agent.png" },
+  ],
+}))
+
 vi.mock("@/modules/settings/hooks/use-agent-runtime-status", () => ({
   useAgentRuntimeStatus: () => ({
     loading: false,
@@ -55,8 +62,10 @@ describe("AgentRuntimePanel", () => {
 
     expect(html).toContain("Agent")
     expect(html).toContain("Codex")
+    expect(html).toContain("codex-agent.png")
     expect(html).toContain("可用")
     expect(html).toContain("Claude Code")
+    expect(html).toContain("claude-code-agent.png")
     expect(html).toContain("未就绪")
     expect(html).toContain("未检测到 claude")
     expect(html).not.toContain("命令行工具")

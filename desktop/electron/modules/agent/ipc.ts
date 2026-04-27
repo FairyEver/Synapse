@@ -478,9 +478,10 @@ export const agentIpcModule: IpcModule = {
             ? await providerConfig.getProjectProviderState(request.projectId, definition.id)
             : undefined
           const activeProvider = provider?.activeProvider
+          const providerConfigured = Boolean(provider && provider.providers.length > 0)
           const issues: string[] = []
           if (binary && !path) issues.push("cli-not-installed")
-          if (request.projectId && (!provider || provider.providers.length === 0 || !activeProvider)) {
+          if (request.projectId && !providerConfigured) {
             issues.push("provider-not-configured")
           }
           if (request.projectId && activeProvider && !provider.activeModel) {
@@ -498,7 +499,7 @@ export const agentIpcModule: IpcModule = {
             },
             provider: request.projectId ? {
               projectId: request.projectId,
-              configured: Boolean(activeProvider),
+              configured: providerConfigured,
               activeProviderId: activeProvider?.id,
               activeModel: activeProvider ? provider?.activeModel : undefined,
             } : undefined,

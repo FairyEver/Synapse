@@ -192,6 +192,70 @@ describe("agentIpcModule", () => {
     expect(JSON.stringify(result)).not.toContain("secretRef")
   })
 
+  it("does not mark an agent provider as unconfigured when matching providers exist", async () => {
+    const harness = createHarness({
+      providerConfig: {
+        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, agentType: string) => ({
+          projectId: "project-1",
+          agentType,
+          activeProviderId: "openai",
+          activeModel: "gpt-5.4",
+          activeProvider: agentType === "codex"
+            ? {
+                id: "openai",
+                display: "OpenAI",
+                model: "gpt-5.4",
+                baseUrl: "https://api.example.test",
+                secretRef: "secret:openai",
+                scope: "global",
+              }
+            : undefined,
+          providers: agentType === "codex"
+            ? [{
+                id: "openai",
+                display: "OpenAI",
+                model: "gpt-5.4",
+                baseUrl: "https://api.example.test",
+                secretRef: "secret:openai",
+                scope: "global",
+              }]
+            : [{
+                id: "anthropic",
+                display: "Anthropic",
+                model: "claude-sonnet-4.5",
+                baseUrl: "https://api.anthropic.example.test",
+                secretRef: "secret:anthropic",
+                scope: "global",
+              }],
+        })),
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:get-runtime-status", {
+      projectId: "project-1",
+    }) as {
+      readonly agents: readonly {
+        readonly id: string
+        readonly issues: readonly string[]
+        readonly provider?: {
+          readonly configured: boolean
+          readonly activeProviderId?: string
+          readonly activeModel?: string
+        }
+      }[]
+    }
+
+    const claude = result.agents.find((agent) => agent.id === "claude-code")
+
+    expect(claude?.issues).not.toContain("provider-not-configured")
+    expect(claude?.provider).toEqual({
+      activeProviderId: undefined,
+      activeModel: undefined,
+      configured: true,
+      projectId: "project-1",
+    })
+  })
+
   it("returns the full conversation timeline when no limit is requested", async () => {
     const history = Array.from({ length: 101 }, (_, index) => ({
       role: "user" as const,
