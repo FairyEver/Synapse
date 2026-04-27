@@ -3,20 +3,14 @@ import path from "node:path"
 import type { EditorScanRuleItem } from "../types/editor-scan"
 import { extractContentIdFromSynapseFile, isSynapseFile, pathExists } from "../../electron/services/editor-adapters/utils"
 import { createMainLogger } from "../../electron/services/log-store"
+import { decodeYamlScalar } from "./shared-yaml-scalar"
 
 const logger = createMainLogger("service.editor-scan")
 const SYNAPSE_RULE_BEGIN_RE = /<!--\s*synapse-rule:([A-Za-z0-9_.-]+):begin\s*-->/
 const SYNAPSE_RULE_END_RE = /<!--\s*synapse-rule:[A-Za-z0-9_.-]+:end\s*-->/
 
-function stripFrontmatter(text: string): string {
-  if (!text.startsWith("---")) return text
-  const endIndex = text.indexOf("\n---", 3)
-  if (endIndex === -1) return text
-  return text.slice(endIndex + 4).trim()
-}
-
-function previewLines(text: string): string {
-  return stripFrontmatter(text).split("\n").slice(0, 3).join("\n").trim()
+function previewLines(text: string, metadata?: Record<string, string>): string {
+  return (metadata?.description?.trim() || text).split("\n").slice(0, 3).join("\n").trim()
 }
 
 async function readFullText(filePath: string): Promise<string> {
@@ -43,7 +37,7 @@ function parseFrontmatter(text: string): { metadata: Record<string, string>; bod
       const key = line.slice(0, colonIndex).trim()
       const value = line.slice(colonIndex + 1).trim()
       if (key) {
-        metadata[key] = value
+        metadata[key] = decodeYamlScalar(value)
       }
     }
   }
@@ -77,7 +71,7 @@ export async function scanClaudeCodeRules(dirPath: string): Promise<EditorScanRu
         path: filePath,
         source: synapse ? "synapse" : "external",
         synapseContentId: synapse ? extractContentIdFromSynapseFile(entry.name) : null,
-        preview: previewLines(body),
+        preview: previewLines(body, metadata),
         metadata,
         content: text,
       })
@@ -115,7 +109,7 @@ export async function scanCursorRules(dirPath: string): Promise<EditorScanRuleIt
         path: filePath,
         source: synapse || metadata.description?.includes("synapse") ? "synapse" : "external",
         synapseContentId: synapse ? extractContentIdFromSynapseFile(entry.name) : null,
-        preview: previewLines(body),
+        preview: previewLines(body, metadata),
         metadata,
         content: text,
       })

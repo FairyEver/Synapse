@@ -76,6 +76,30 @@ describe("editor scan quick publish", () => {
     expect(draft.files.some((file) => file.originalName.includes(".secret"))).toBe(false)
   })
 
+  it("uses skill frontmatter description as the list preview", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "pagespy-log-reader")
+    const description = "Read, decode, and summarize PageSpy/o-spy frontend log JSON exports. Use this skill whenever the user mentions PageSpy, o-spy, pagespy.huolala.cn, page-spy-web, rrweb-event, frontend log JSON, web session replay logs, or asks AI to understand a PageSpy exported .json file. This skill helps decode zlib-compressed entries, separate console/network/storage/system/meta/rrweb events, identify user actions, API failures, sensitive tokens, and produce a concise debugging summary."
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: pagespy-log-reader",
+        `description: ${description}`,
+        "---",
+        "",
+        "# PageSpy Log Reader",
+        "",
+        "## Purpose",
+      ].join("\n"),
+    )
+
+    const result = await scanSkillDirectories([root])
+
+    expect(result.skills[0]?.preview).toBe(description)
+  })
+
   it("uses ruleContent when preparing a rule draft", async () => {
     const root = await createTempDir()
     const filePath = path.join(root, "AGENTS.md")
@@ -213,5 +237,17 @@ describe("editor scan quick publish", () => {
       source: "synapse",
       synapseContentId: contentId,
     })
+  })
+
+  it("uses rule frontmatter description as the list preview", async () => {
+    const root = await createTempDir()
+    await writeFile(
+      path.join(root, "project.mdc"),
+      "---\ndescription: Project rule summary\n---\n# Rule\n\nKeep this in the detail body.",
+    )
+
+    const items = await scanCursorRules(root)
+
+    expect(items[0]?.preview).toBe("Project rule summary")
   })
 })

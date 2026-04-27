@@ -18,9 +18,9 @@ import { editorScanStrategyById } from "./ide-definitions/generated/main-registr
 import { pathExists } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
+import { decodeYamlScalar } from "../../src/ide-definitions/shared-yaml-scalar"
 
 const logger = createMainLogger("service.editor-scan")
-const PREVIEW_BYTE_LIMIT = 512
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
 const QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
 const QUICK_PUBLISH_SKILL_ATTACHMENT_TOTAL_MAX_SIZE = 50 * 1024 * 1024
@@ -40,15 +40,31 @@ const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
 
 // --- helpers ---
 
-function stripFrontmatter(text: string): string {
-  if (!text.startsWith("---")) return text
+function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
+  const metadata: Record<string, string> = {}
+  if (!text.startsWith("---")) return { metadata, body: text }
+
   const endIndex = text.indexOf("\n---", 3)
-  if (endIndex === -1) return text
-  return text.slice(endIndex + 4).trim()
+  if (endIndex === -1) return { metadata, body: text }
+
+  const frontmatterBlock = text.slice(4, endIndex)
+  for (const line of frontmatterBlock.split("\n")) {
+    const colonIndex = line.indexOf(":")
+    if (colonIndex > 0) {
+      const key = line.slice(0, colonIndex).trim()
+      const value = line.slice(colonIndex + 1).trim()
+      if (key) {
+        metadata[key] = decodeYamlScalar(value)
+      }
+    }
+  }
+
+  return { metadata, body: text.slice(endIndex + 4).trim() }
 }
 
 function previewLines(text: string): string {
-  return stripFrontmatter(text).split("\n").slice(0, 3).join("\n").trim()
+  const { metadata, body } = parseFrontmatter(text)
+  return (metadata.description?.trim() || body).split("\n").slice(0, 3).join("\n").trim()
 }
 
 function isSensitiveQuickPublishAttachment(relativeName: string): boolean {
@@ -61,16 +77,7 @@ function isSensitiveQuickPublishAttachment(relativeName: string): boolean {
 
 async function readPreview(filePath: string): Promise<string> {
   try {
-    const buf = Buffer.alloc(PREVIEW_BYTE_LIMIT)
-    const { open } = await import("node:fs/promises")
-    const fd = await open(filePath, "r")
-    try {
-      const { bytesRead } = await fd.read(buf, 0, PREVIEW_BYTE_LIMIT, 0)
-      const raw = buf.subarray(0, bytesRead).toString("utf8")
-      return previewLines(raw)
-    } finally {
-      await fd.close()
-    }
+    return previewLines(await readFile(filePath, "utf8"))
   } catch {
     return ""
   }

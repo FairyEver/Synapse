@@ -300,17 +300,6 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
                   在 Finder 中显示
                 </Button>
               </Menubar>
-
-              <Tabs
-                value={viewMode}
-                onValueChange={(v) => setViewMode(v === "source" ? "source" : "rendered")}
-                className="ml-auto shrink-0 gap-0"
-              >
-                <TabsList>
-                  <TabsTrigger value="rendered">预览</TabsTrigger>
-                  <TabsTrigger value="source">源码</TabsTrigger>
-                </TabsList>
-              </Tabs>
             </div>
             {quickPublishError ? (
               <Alert variant="destructive">
@@ -327,13 +316,30 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
             contentReady ? "opacity-100" : "opacity-0",
           )}>
             {contentReady ? (
-              <ScanItemContentArea
-                content={content}
-                error={error}
-                loading={loading}
-                viewMode={viewMode}
-                skillFiles={skillFiles}
-              />
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex items-center">
+                  <Tabs
+                    value={viewMode}
+                    onValueChange={(v) => setViewMode(v === "source" ? "source" : "rendered")}
+                    className="ml-auto shrink-0 gap-0"
+                  >
+                    <TabsList>
+                      <TabsTrigger value="rendered">预览</TabsTrigger>
+                      <TabsTrigger value="source">源码</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+
+                <div className="mt-4 min-h-0 flex-1 overflow-auto">
+                  <ScanItemContentArea
+                    content={content}
+                    error={error}
+                    loading={loading}
+                    viewMode={viewMode}
+                    skillFiles={skillFiles}
+                  />
+                </div>
+              </div>
             ) : null}
           </div>
 
@@ -426,12 +432,12 @@ function ScanItemContentArea({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <>
       <MarkdownViewer content={content} mode={viewMode} showTabs={false} surface="plain" />
       {skillFiles.length > 0 ? (
         <SkillFilesSection files={skillFiles} />
       ) : null}
-    </div>
+    </>
   )
 }
 
