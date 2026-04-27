@@ -50,3 +50,30 @@ export type SynapseRuleProjectInstallFormProps = {
 export type SynapseInstallFormDefinition = {
   RuleProjectInstallForm: ComponentType<SynapseRuleProjectInstallFormProps>
 }
+
+export type SynapseAgentModeOption = {
+  key: string
+  label: string
+}
+
+export type SynapseAgentRuntimeRequirement = {
+  kind: "local-cli"
+  binaries: readonly string[]
+}
+
+export type SynapseAgentCapabilities = {
+  chat: boolean
+  projectContext: boolean
+  permissions: boolean
+  mcp: boolean
+}
+
+export type SynapseAgentDefinition = {
+  id: string
+  label: string
+  order: number
+  relatedEditorId?: string
+  runtime: SynapseAgentRuntimeRequirement
+  modes: readonly SynapseAgentModeOption[]
+  capabilities: SynapseAgentCapabilities
+}

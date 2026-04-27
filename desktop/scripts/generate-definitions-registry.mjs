@@ -10,8 +10,6 @@ const agentDefinitionsRoot = path.join(definitionsRoot, "agent")
 const rendererGeneratedDir = path.join(definitionsRoot, "generated")
 const mainGeneratedDir = path.join(packageRoot, "electron", "services", "definitions", "generated")
 
-void agentDefinitionsRoot
-
 async function pathExists(filePath) {
   try {
     await access(filePath)
@@ -35,14 +33,34 @@ async function listEditorDefinitionDirectories() {
   return dirs.sort((left, right) => left.localeCompare(right))
 }
 
+async function listAgentDefinitionDirectories() {
+  if (!(await pathExists(agentDefinitionsRoot))) return []
+
+  const entries = await readdir(agentDefinitionsRoot, { withFileTypes: true })
+  const dirs = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === "__tests__") continue
+    if (await pathExists(path.join(agentDefinitionsRoot, entry.name, "agent.ts"))) {
+      dirs.push(entry.name)
+    }
+  }
+
+  return dirs.sort((left, right) => left.localeCompare(right))
+}
+
 function toIdentifier(value) {
   return value.replace(/[^a-zA-Z0-9]+(.)?/g, (_, next = "") => next.toUpperCase())
 }
 
-function renderRendererRegistry(definitionDirs, cliDirs, mcpDirs, formDirs) {
+function renderRendererRegistry(definitionDirs, agentDirs, cliDirs, mcpDirs, formDirs) {
   const editorImports = definitionDirs.map((dir) => {
     const name = `${toIdentifier(dir)}EditorDefinition`
     return `import { editorDefinition as ${name} } from "../editor/${dir}/editor"`
+  })
+  const agentImports = agentDirs.map((dir) => {
+    const name = `${toIdentifier(dir)}AgentDefinition`
+    return `import { agentDefinition as ${name} } from "../agent/${dir}/agent"`
   })
   const cliImports = cliDirs.map((dir) => {
     const name = `${toIdentifier(dir)}CliDefinition`
@@ -58,10 +76,12 @@ function renderRendererRegistry(definitionDirs, cliDirs, mcpDirs, formDirs) {
   })
 
   return `${editorImports.join("\n")}
+${agentImports.join("\n")}
 ${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${formImports.join("\n")}
 import type {
+  SynapseAgentDefinition,
   SynapseCliDefinition,
   SynapseEditorDefinition,
   SynapseInstallFormDefinition,
@@ -71,6 +91,10 @@ import type {
 export const editorDefinitions = [
 ${definitionDirs.map((dir) => `  ${toIdentifier(dir)}EditorDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseEditorDefinition[]
+
+export const agentDefinitions = [
+${agentDirs.map((dir) => `  ${toIdentifier(dir)}AgentDefinition,`).join("\n")}
+].sort((left, right) => left.order - right.order) satisfies SynapseAgentDefinition[]
 
 export const cliDefinitions = [
 ${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
@@ -148,6 +172,7 @@ ${adapterDirs.map((dir) => `  [${toIdentifier(dir)}EditorAdapter.id, ${toIdentif
 
 async function main() {
   const definitionDirs = await listEditorDefinitionDirectories()
+  const agentDirs = await listAgentDefinitionDirectories()
   const adapterDirs = []
   const importableCliDirs = []
   const importableMcpDirs = []
@@ -168,7 +193,7 @@ async function main() {
   await mkdir(rendererGeneratedDir, { recursive: true })
   await mkdir(mainGeneratedDir, { recursive: true })
 
-  await writeFile(path.join(rendererGeneratedDir, "renderer-registry.ts"), renderRendererRegistry(definitionDirs, importableCliDirs, importableMcpDirs, importableFormDirs), "utf8")
+  await writeFile(path.join(rendererGeneratedDir, "renderer-registry.ts"), renderRendererRegistry(definitionDirs, agentDirs, importableCliDirs, importableMcpDirs, importableFormDirs), "utf8")
   await writeFile(path.join(mainGeneratedDir, "main-registry.ts"), renderMainRegistry(adapterDirs, importableCliDirs, importableMcpDirs), "utf8")
 }
 
