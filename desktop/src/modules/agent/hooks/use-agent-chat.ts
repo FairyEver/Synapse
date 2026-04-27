@@ -31,7 +31,6 @@ type UseAgentChatState = {
   commands: SynapseAgentPublishedCommand[]
   selectedConversationId?: string
   selectedSessionKey: string
-  activityLabel: string | null
   loading: boolean
   sending: boolean
   error: string | null
@@ -52,7 +51,6 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
   const [commands, setCommands] = useState<SynapseAgentPublishedCommand[]>([])
   const [selectedConversationId, setSelectedConversationIdRaw] = useState<string | undefined>()
   const [selectedSessionKey, setSelectedSessionKeyRaw] = useState(DEFAULT_LOCAL_SESSION_KEY)
-  const [activityLabel, setActivityLabel] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeSendCount, setActiveSendCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -222,7 +220,6 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
       localUserTimelineEntry(trimmed, now, current.length),
     ])
     setActiveSendCount((count) => count + 1)
-    setActivityLabel("等待 Agent")
     setError(null)
     try {
       await bridge.agent.send({
@@ -237,7 +234,6 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
       setError(message)
     } finally {
       setActiveSendCount((count) => Math.max(0, count - 1))
-      setActivityLabel(null)
     }
   }, [projectId, refresh, sessions])
 
@@ -308,7 +304,6 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
       setCommands([])
       setSelectedConversationIdRaw(undefined)
       setSelectedSessionKeyRaw(DEFAULT_LOCAL_SESSION_KEY)
-      setActivityLabel(null)
       setError(null)
       setLoading(false)
       setActiveSendCount(0)
@@ -336,7 +331,6 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
         conversationId: selectedConversationIdRef.current,
         sessionKey: selectedSessionKeyRef.current,
       })) return
-      setActivityLabel(activityLabelForEvent(domainEvent.payload.event))
       setTimeline((current) => appendAgentEvent(current, domainEvent.payload.event, domainEvent.timestamp))
       void refreshPendingPermissions()
     })
@@ -351,7 +345,6 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     commands,
     selectedConversationId,
     selectedSessionKey,
-    activityLabel,
     loading,
     sending: activeSendCount > 0,
     error,
@@ -400,30 +393,6 @@ function appendAgentEvent(
   }
 
   return [...current, entry]
-}
-
-function activityLabelForEvent(
-  event: Parameters<typeof agentEventToTimelineEntry>[0],
-): string | null {
-  switch (event.type) {
-    case "thinking":
-      return "思考中"
-    case "toolUse":
-      return `${event.toolName} 运行中`
-    case "toolResult":
-      return "处理结果"
-    case "text":
-      return "回复中"
-    case "permissionRequest":
-      return "等待确认"
-    case "result":
-    case "error":
-      return null
-    default: {
-      const exhaustive: never = event
-      return exhaustive
-    }
-  }
 }
 
 function formatSessionNameTime(date: Date): string {

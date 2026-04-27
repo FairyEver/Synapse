@@ -108,9 +108,6 @@ function AgentModule() {
             {chat.status?.pendingPermissions ? (
               <Badge variant="outline">权限 {chat.status.pendingPermissions}</Badge>
             ) : null}
-            {chat.activityLabel ? (
-              <Badge variant="outline">{chat.activityLabel}</Badge>
-            ) : null}
             <Popover open={paletteOpen} onOpenChange={setPaletteOpen}>
               <PopoverTrigger asChild>
                 <Button type="button" variant="outline" size="sm">
