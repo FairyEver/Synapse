@@ -40,7 +40,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
  */
 const MODULE_SOURCES = [
   { id: "content", importPath: "../electron/modules/content/ipc.ts" },
-  { id: "cli", importPath: "../electron/modules/cli/ipc.ts" },
   { id: "config", importPath: "../electron/modules/config/ipc.ts" },
   { id: "identity", importPath: "../electron/modules/identity/ipc.ts" },
   { id: "user-profile", importPath: "../electron/modules/user-profile/ipc.ts" },

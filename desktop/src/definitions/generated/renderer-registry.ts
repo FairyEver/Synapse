@@ -4,8 +4,6 @@ import { editorDefinition as cursorEditorDefinition } from "../editor/cursor/edi
 import { editorDefinition as windsurfEditorDefinition } from "../editor/windsurf/editor"
 import { agentDefinition as claudeCodeAgentDefinition } from "../agent/claude-code/agent"
 import { agentDefinition as codexAgentDefinition } from "../agent/codex/agent"
-import { cliDefinition as claudeCodeCliDefinition } from "../editor/claude-code/cli"
-import { cliDefinition as codexCliDefinition } from "../editor/codex/cli"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../editor/claude-code/mcp"
 import { mcpDefinition as codexMcpDefinition } from "../editor/codex/mcp"
 import { mcpDefinition as cursorMcpDefinition } from "../editor/cursor/mcp"
@@ -15,7 +13,6 @@ import { installFormDefinition as cursorInstallFormDefinition } from "../editor/
 import { installFormDefinition as windsurfInstallFormDefinition } from "../editor/windsurf/forms"
 import type {
   SynapseAgentDefinition,
-  SynapseCliDefinition,
   SynapseEditorDefinition,
   SynapseInstallFormDefinition,
   SynapseRendererMcpDefinition,
@@ -32,11 +29,6 @@ export const agentDefinitions = [
   claudeCodeAgentDefinition,
   codexAgentDefinition,
 ].sort((left, right) => left.order - right.order) satisfies SynapseAgentDefinition[]
-
-export const cliDefinitions = [
-  claudeCodeCliDefinition,
-  codexCliDefinition,
-].sort((left, right) => left.order - right.order) satisfies SynapseCliDefinition[]
 
 export const mcpDefinitions = [
   { ...claudeCodeMcpDefinition, icon: claudeCodeEditorDefinition.icon },

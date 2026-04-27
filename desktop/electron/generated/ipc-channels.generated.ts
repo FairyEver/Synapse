@@ -27,9 +27,6 @@ export const IPC_CHANNELS = {
     "installToEditor": "synapse:content:install-to-editor",
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
   },
-  "cli": {
-    "detect": "synapse:cli:detect",
-  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",

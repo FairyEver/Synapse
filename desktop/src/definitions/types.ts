@@ -17,13 +17,6 @@ export type SynapseEditorDefinition = {
   supportedContentTypes: SynapseContentType[]
 }
 
-export type SynapseCliDefinition = {
-  id: string
-  label: string
-  order: number
-  binaries: string[]
-}
-
 export type SynapseMcpDefinition = {
   target: DataStoreMcpTarget
   label: string

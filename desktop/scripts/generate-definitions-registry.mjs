@@ -69,7 +69,7 @@ function toIdentifier(value) {
   return value.replace(/[^a-zA-Z0-9]+(.)?/g, (_, next = "") => next.toUpperCase())
 }
 
-function renderRendererRegistry(definitionDirs, agentDirs, cliDirs, mcpDirs, formDirs) {
+function renderRendererRegistry(definitionDirs, agentDirs, mcpDirs, formDirs) {
   const editorImports = definitionDirs.map((dir) => {
     const name = `${toIdentifier(dir)}EditorDefinition`
     return `import { editorDefinition as ${name} } from "../editor/${dir}/editor"`
@@ -77,10 +77,6 @@ function renderRendererRegistry(definitionDirs, agentDirs, cliDirs, mcpDirs, for
   const agentImports = agentDirs.map((dir) => {
     const name = `${toIdentifier(dir)}AgentDefinition`
     return `import { agentDefinition as ${name} } from "../agent/${dir}/agent"`
-  })
-  const cliImports = cliDirs.map((dir) => {
-    const name = `${toIdentifier(dir)}CliDefinition`
-    return `import { cliDefinition as ${name} } from "../editor/${dir}/cli"`
   })
   const mcpImports = mcpDirs.map((dir) => {
     const name = `${toIdentifier(dir)}McpDefinition`
@@ -93,12 +89,10 @@ function renderRendererRegistry(definitionDirs, agentDirs, cliDirs, mcpDirs, for
 
   return `${editorImports.join("\n")}
 ${agentImports.join("\n")}
-${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${formImports.join("\n")}
 import type {
   SynapseAgentDefinition,
-  SynapseCliDefinition,
   SynapseEditorDefinition,
   SynapseInstallFormDefinition,
   SynapseRendererMcpDefinition,
@@ -112,10 +106,6 @@ export const agentDefinitions = [
 ${agentDirs.map((dir) => `  ${toIdentifier(dir)}AgentDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseAgentDefinition[]
 
-export const cliDefinitions = [
-${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
-].sort((left, right) => left.order - right.order) satisfies SynapseCliDefinition[]
-
 export const mcpDefinitions = [
 ${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, icon: ${toIdentifier(dir)}EditorDefinition.icon },`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseRendererMcpDefinition[]
@@ -126,7 +116,7 @@ ${formDirs.map((dir) => `  ["${dir}", ${toIdentifier(dir)}InstallFormDefinition]
 `
 }
 
-function renderMainRegistry(adapterDirs, agentRuntimeDirs, cliDirs, mcpDirs) {
+function renderMainRegistry(adapterDirs, agentRuntimeDirs, mcpDirs) {
   const adapterImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}EditorAdapter`
     return `import { editorAdapter as ${name} } from "../../../../src/definitions/editor/${dir}/adapter"`
@@ -134,10 +124,6 @@ function renderMainRegistry(adapterDirs, agentRuntimeDirs, cliDirs, mcpDirs) {
   const agentRuntimeImports = agentRuntimeDirs.map((dir) => {
     const name = `${toIdentifier(dir)}AgentRuntimeDefinition`
     return `import { agentRuntimeDefinition as ${name} } from "../../../../src/definitions/agent/${dir}/agent-main"`
-  })
-  const cliImports = cliDirs.map((dir) => {
-    const name = `${toIdentifier(dir)}CliDefinition`
-    return `import { cliDefinition as ${name} } from "../../../../src/definitions/editor/${dir}/cli"`
   })
   const mcpImports = mcpDirs.map((dir) => {
     const name = `${toIdentifier(dir)}McpDefinition`
@@ -154,7 +140,6 @@ function renderMainRegistry(adapterDirs, agentRuntimeDirs, cliDirs, mcpDirs) {
 
   return `${adapterImports.join("\n")}
 ${agentRuntimeImports.join("\n")}
-${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${installImports.join("\n")}
 ${scanImports.join("\n")}
@@ -182,10 +167,6 @@ export const agentRuntimeDefinitionById = new Map<string, AgentRuntimeDefinition
   agentRuntimeDefinitions.map((definition) => [definition.id, definition]),
 )
 
-export const cliDefinitions = [
-${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
-].sort((left, right) => left.order - right.order)
-
 export const mcpDefinitions = [
 ${mcpDirs.map((dir) => `  ${toIdentifier(dir)}McpDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseMcpDefinition[]
@@ -205,13 +186,11 @@ async function main() {
   const agentDirs = await listAgentDefinitionDirectories()
   const agentRuntimeDirs = await listAgentRuntimeDefinitionDirectories()
   const adapterDirs = []
-  const importableCliDirs = []
   const importableMcpDirs = []
   const importableFormDirs = []
 
   for (const dir of definitionDirs) {
     if (await pathExists(path.join(editorDefinitionsRoot, dir, "adapter.ts"))) adapterDirs.push(dir)
-    if (await pathExists(path.join(editorDefinitionsRoot, dir, "cli.ts"))) importableCliDirs.push(dir)
     if (await pathExists(path.join(editorDefinitionsRoot, dir, "mcp.ts"))) importableMcpDirs.push(dir)
     if (
       await pathExists(path.join(editorDefinitionsRoot, dir, "forms.ts"))
@@ -224,8 +203,8 @@ async function main() {
   await mkdir(rendererGeneratedDir, { recursive: true })
   await mkdir(mainGeneratedDir, { recursive: true })
 
-  await writeFile(path.join(rendererGeneratedDir, "renderer-registry.ts"), renderRendererRegistry(definitionDirs, agentDirs, importableCliDirs, importableMcpDirs, importableFormDirs), "utf8")
-  await writeFile(path.join(mainGeneratedDir, "main-registry.ts"), renderMainRegistry(adapterDirs, agentRuntimeDirs, importableCliDirs, importableMcpDirs), "utf8")
+  await writeFile(path.join(rendererGeneratedDir, "renderer-registry.ts"), renderRendererRegistry(definitionDirs, agentDirs, importableMcpDirs, importableFormDirs), "utf8")
+  await writeFile(path.join(mainGeneratedDir, "main-registry.ts"), renderMainRegistry(adapterDirs, agentRuntimeDirs, importableMcpDirs), "utf8")
 }
 
 main().catch((error) => {

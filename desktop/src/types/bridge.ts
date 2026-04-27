@@ -30,7 +30,6 @@ import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "./backup"
-import type { SynapseCliDetectResult } from "./cli"
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseFeishuConnectorRuntimeStatus,
@@ -197,9 +196,6 @@ export type SynapseBridge = {
     resolveEditorInstallTarget: (
       payload: SynapseResolveEditorTargetPayload,
     ) => Promise<SynapseEditorResolvedTarget>
-  }
-  cli: {
-    detect: () => Promise<SynapseCliDetectResult[]>
   }
   config: {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>

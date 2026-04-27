@@ -11,7 +11,7 @@ import {
   type AgentEvent,
 } from "../../services/agent-runtime"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
-import { whichBin } from "../../services/cli/cli-detect-service"
+import { whichBin } from "../../services/agent-runtime/binary-detect-service"
 import {
   ProviderConfigService,
   PROVIDER_CONFIG_SERVICE_ID,

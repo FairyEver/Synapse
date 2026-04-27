@@ -29,9 +29,6 @@ const IPC_CHANNELS = {
     "installToEditor": "synapse:content:install-to-editor",
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
   },
-  "cli": {
-    "detect": "synapse:cli:detect",
-  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",
@@ -246,9 +243,6 @@ const synapseBridge: SynapseBridge = {
     readEditorInstallFormValues: invoke(IPC_CHANNELS.content.readEditorInstallFormValues),
     readIconImage: invoke(IPC_CHANNELS.content.readIconImage),
     resolveEditorInstallTarget: invoke(IPC_CHANNELS.content.resolveEditorInstallTarget),
-  },
-  cli: {
-    detect: invoke(IPC_CHANNELS.cli.detect),
   },
   config: {
     exportBackup: invoke(IPC_CHANNELS.config.exportBackup),

@@ -4,8 +4,6 @@ import { editorAdapter as cursorEditorAdapter } from "../../../../src/definition
 import { editorAdapter as windsurfEditorAdapter } from "../../../../src/definitions/editor/windsurf/adapter"
 import { agentRuntimeDefinition as claudeCodeAgentRuntimeDefinition } from "../../../../src/definitions/agent/claude-code/agent-main"
 import { agentRuntimeDefinition as codexAgentRuntimeDefinition } from "../../../../src/definitions/agent/codex/agent-main"
-import { cliDefinition as claudeCodeCliDefinition } from "../../../../src/definitions/editor/claude-code/cli"
-import { cliDefinition as codexCliDefinition } from "../../../../src/definitions/editor/codex/cli"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../../../../src/definitions/editor/claude-code/mcp"
 import { mcpDefinition as codexMcpDefinition } from "../../../../src/definitions/editor/codex/mcp"
 import { mcpDefinition as cursorMcpDefinition } from "../../../../src/definitions/editor/cursor/mcp"
@@ -45,11 +43,6 @@ export const agentRuntimeDefinitions = [
 export const agentRuntimeDefinitionById = new Map<string, AgentRuntimeDefinition>(
   agentRuntimeDefinitions.map((definition) => [definition.id, definition]),
 )
-
-export const cliDefinitions = [
-  claudeCodeCliDefinition,
-  codexCliDefinition,
-].sort((left, right) => left.order - right.order)
 
 export const mcpDefinitions = [
   claudeCodeMcpDefinition,

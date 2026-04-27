@@ -8,7 +8,6 @@ import type { IpcHandlerContext, IpcModule } from "../runtime/ipc/types"
 import { IpcRegistryImpl } from "../runtime/ipc/registry"
 import { createElectronTransportInstall } from "../runtime/ipc/electron-adapter"
 import { shellIpcModule } from "../modules/shell/ipc"
-import { cliIpcModule } from "../modules/cli/ipc"
 import { identityIpcModule } from "../modules/identity/ipc"
 import { userProfileIpcModule } from "../modules/user-profile/ipc"
 import { logIpcModule } from "../modules/log/ipc"
@@ -32,7 +31,6 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
 
   // Register migrated IpcModules (Phase 0.3)
   registry.register(shellIpcModule, ctx)
-  registry.register(cliIpcModule, ctx)
   registry.register(identityIpcModule, ctx)
   registry.register(userProfileIpcModule, ctx)
   registry.register(logIpcModule, ctx)
@@ -54,7 +52,6 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
  */
 export const registeredIpcModules: readonly IpcModule[] = [
   shellIpcModule,
-  cliIpcModule,
   identityIpcModule,
   userProfileIpcModule,
   logIpcModule,

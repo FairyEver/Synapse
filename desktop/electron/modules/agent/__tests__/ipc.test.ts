@@ -8,7 +8,7 @@ import { PROVIDER_CONFIG_SERVICE_ID } from "../../../services/provider-config"
 import { agentIpcModule } from "../ipc"
 import { configStore } from "../../../services/config-store"
 
-vi.mock("../../../services/cli/cli-detect-service", () => ({
+vi.mock("../../../services/agent-runtime/binary-detect-service", () => ({
   whichBin: vi.fn().mockResolvedValue(null),
 }))
 

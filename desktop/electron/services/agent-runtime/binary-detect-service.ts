@@ -3,19 +3,10 @@ import { access, constants } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { promisify } from "node:util"
-import type { SynapseCliDetectResult, SynapseCliId } from "../../../src/types/cli"
-import { cliDefinitions } from "../definitions/generated/main-registry"
 import { createMainLogger } from "../log-store"
 
 const execFileAsync = promisify(execFile)
 const logger = createMainLogger("service.cli-detect")
-
-const CLI_DEFINITIONS: ReadonlyArray<{ id: SynapseCliId; label: string; bin: string }> = cliDefinitions
-  .map((definition) => ({
-    id: definition.id as SynapseCliId,
-    label: definition.label,
-    bin: definition.binaries[0],
-  }))
 
 function getCommonBinDirs(): string[] {
   const home = homedir()
@@ -86,22 +77,4 @@ async function whichBin(bin: string): Promise<string | null> {
   return slow
 }
 
-async function detectClis(): Promise<SynapseCliDetectResult[]> {
-  logger.info("Starting CLI detection.", {
-    platform: process.platform,
-    shell: process.env.SHELL,
-    home: process.env.HOME,
-  })
-
-  const results = await Promise.all(
-    CLI_DEFINITIONS.map(async ({ id, label, bin }) => {
-      const binPath = await whichBin(bin)
-      logger.info("CLI detection result.", { id, bin, installed: binPath !== null, path: binPath })
-      return { id, label, installed: binPath !== null, path: binPath }
-    }),
-  )
-
-  return results
-}
-
-export { CLI_DEFINITIONS, detectClis, whichBin }
+export { whichBin }
