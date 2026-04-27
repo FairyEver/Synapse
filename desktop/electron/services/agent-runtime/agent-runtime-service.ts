@@ -145,6 +145,7 @@ export class AgentRuntimeService {
       ? new AgentCommandRouter({
         projectId: deps.projectId,
         agentType: this.agentType(),
+        resolveAgentType: () => this.getActiveAgentType(),
         providerConfig: deps.providerConfig,
         registeredPromptCommands: deps.registeredPromptCommands,
         agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
@@ -455,7 +456,7 @@ export class AgentRuntimeService {
   ): Promise<ConversationEntryV1 | null> {
     const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
     if (!conversation) return null
-    return this.repository.clearCurrentAgentSessionId(conversation.id, this.agentType())
+    return this.repository.clearCurrentAgentSessionId(conversation.id, await this.getActiveAgentType())
   }
 
   async resetSession(

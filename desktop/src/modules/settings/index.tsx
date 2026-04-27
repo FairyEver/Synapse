@@ -12,8 +12,8 @@ import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
-import { resolveAgentProjectScope } from "@/modules/agent/project-resolution"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
+import { resolveSettingsAgentProjectId } from "@/modules/settings/project-scope"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
 import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
@@ -73,8 +73,8 @@ function SettingsModule() {
     }),
     [activeRepository, config],
   )
-  const agentProjectScope = useMemo(
-    () => resolveAgentProjectScope(activeRepository, config.global.projects),
+  const settingsAgentProjectId = useMemo(
+    () => resolveSettingsAgentProjectId(activeRepository, config.global.projects),
     [activeRepository, config.global.projects],
   )
 
@@ -241,7 +241,7 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
         {isReady && activeCategory === "tools" ? (
-          <ToolsPanel projectId={agentProjectScope.defaultProjectId} />
+          <ToolsPanel projectId={settingsAgentProjectId} />
         ) : null}
         {isReady && activeCategory === "scheduled-tasks" ? (
           <ScheduledTasksPanel projects={config.global.projects} />

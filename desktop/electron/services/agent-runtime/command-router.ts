@@ -22,6 +22,7 @@ import {
 export interface AgentCommandRouterDeps {
   readonly projectId: string
   readonly agentType: string
+  resolveAgentType?(): Promise<string> | string
   readonly providerConfig: ProviderConfigService
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
@@ -161,9 +162,10 @@ export class AgentCommandRouter {
     conversation: ConversationEntryV1,
     args: readonly string[],
   ): Promise<AgentRuntimeTurnResult> {
+    const agentType = await this.resolveAgentType()
     const state = await this.deps.providerConfig.getProjectProviderState(
       this.deps.projectId,
-      this.deps.agentType,
+      agentType,
     )
     if (args.length === 0) {
       return commandResult(conversation.id, formatModelList(state.activeModel, state.activeProvider?.models ?? []))
@@ -175,7 +177,7 @@ export class AgentCommandRouter {
     }
 
     const target = resolveModelTarget(targetInput, state.activeProvider?.models ?? [])
-    await this.deps.providerConfig.setActiveModel(this.deps.projectId, target, this.deps.agentType)
+    await this.deps.providerConfig.setActiveModel(this.deps.projectId, target, agentType)
     const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
@@ -190,10 +192,11 @@ export class AgentCommandRouter {
     conversation: ConversationEntryV1,
     args: readonly string[],
   ): Promise<AgentRuntimeTurnResult> {
-    const modes = modesForAgent(this.deps.agentType)
+    const agentType = await this.resolveAgentType()
+    const modes = modesForAgent(agentType)
     const state = await this.deps.providerConfig.getProjectProviderState(
       this.deps.projectId,
-      this.deps.agentType,
+      agentType,
     )
     if (args.length === 0) {
       return commandResult(conversation.id, formatModeList(state.activeMode, modes))
@@ -204,7 +207,7 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, modeUsage(modes), true)
     }
 
-    await this.deps.providerConfig.setActiveMode(this.deps.projectId, target, this.deps.agentType)
+    await this.deps.providerConfig.setActiveMode(this.deps.projectId, target, agentType)
     const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
@@ -228,12 +231,13 @@ export class AgentCommandRouter {
   }
 
   private async handleStatus(conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult> {
+    const agentType = await this.resolveAgentType()
     const state = await this.deps.providerConfig.getProjectProviderState(
       this.deps.projectId,
-      this.deps.agentType,
+      agentType,
     )
     const lines = [
-      `Agent: ${this.deps.agentType}`,
+      `Agent: ${agentType}`,
       `Provider: ${state.activeProvider?.id ?? "default"}`,
       `Model: ${state.activeModel ?? "default"}`,
       `Mode: ${state.activeMode ?? "default"}`,
@@ -241,6 +245,10 @@ export class AgentCommandRouter {
       `Agent session: ${conversation.agentSessionId ?? "none"}`,
     ]
     return commandResult(conversation.id, lines.join("\n"), false, conversation.agentSessionId)
+  }
+
+  private async resolveAgentType(): Promise<string> {
+    return Promise.resolve(this.deps.resolveAgentType?.() ?? this.deps.agentType)
   }
 
   private async handleCommands(

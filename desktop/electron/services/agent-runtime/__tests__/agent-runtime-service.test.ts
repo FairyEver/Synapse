@@ -481,6 +481,34 @@ describe("AgentRuntimeService", () => {
       .toBe("gpt-5.3-codex")
   })
 
+  it("routes slash commands through the active agent type", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    await providerConfig.setActiveMode("project-1", "plan", "claude-code")
+    const adapter = new BlockingAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      agentType: "codex",
+      providerConfig,
+      now: fixedNow,
+    })
+
+    const switched = await service.send(baseMessage("/mode acceptEdits"))
+    const status = await service.send(baseMessage("/status"))
+
+    expect(switched.resultText).toBe("Mode changed: acceptEdits")
+    expect(status.resultText).toContain("Agent: claude-code")
+    expect(status.resultText).toContain("Mode: acceptEdits")
+    expect(adapter.started).toEqual([])
+    expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeMode)
+      .toBe("acceptEdits")
+  })
+
   it("handles /new and unknown slash commands without sending them to the adapter", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const providers = new MemoryNamespace<ProviderEntryV1>("providers")
