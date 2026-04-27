@@ -49,6 +49,22 @@ async function listAgentDefinitionDirectories() {
   return dirs.sort((left, right) => left.localeCompare(right))
 }
 
+async function listAgentRuntimeDefinitionDirectories() {
+  if (!(await pathExists(agentDefinitionsRoot))) return []
+
+  const entries = await readdir(agentDefinitionsRoot, { withFileTypes: true })
+  const dirs = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === "__tests__") continue
+    if (await pathExists(path.join(agentDefinitionsRoot, entry.name, "agent-main.ts"))) {
+      dirs.push(entry.name)
+    }
+  }
+
+  return dirs.sort((left, right) => left.localeCompare(right))
+}
+
 function toIdentifier(value) {
   return value.replace(/[^a-zA-Z0-9]+(.)?/g, (_, next = "") => next.toUpperCase())
 }
@@ -110,10 +126,14 @@ ${formDirs.map((dir) => `  ["${dir}", ${toIdentifier(dir)}InstallFormDefinition]
 `
 }
 
-function renderMainRegistry(adapterDirs, cliDirs, mcpDirs) {
+function renderMainRegistry(adapterDirs, agentRuntimeDirs, cliDirs, mcpDirs) {
   const adapterImports = adapterDirs.map((dir) => {
     const name = `${toIdentifier(dir)}EditorAdapter`
     return `import { editorAdapter as ${name} } from "../../../../src/definitions/editor/${dir}/adapter"`
+  })
+  const agentRuntimeImports = agentRuntimeDirs.map((dir) => {
+    const name = `${toIdentifier(dir)}AgentRuntimeDefinition`
+    return `import { agentRuntimeDefinition as ${name} } from "../../../../src/definitions/agent/${dir}/agent-main"`
   })
   const cliImports = cliDirs.map((dir) => {
     const name = `${toIdentifier(dir)}CliDefinition`
@@ -133,11 +153,13 @@ function renderMainRegistry(adapterDirs, cliDirs, mcpDirs) {
   })
 
   return `${adapterImports.join("\n")}
+${agentRuntimeImports.join("\n")}
 ${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${installImports.join("\n")}
 ${scanImports.join("\n")}
 import type {
+  AgentRuntimeDefinition,
   EditorAdapter,
   EditorInstallStrategy,
   EditorScanStrategy,
@@ -150,6 +172,14 @@ ${adapterDirs.map((dir) => `  ${toIdentifier(dir)}EditorAdapter,`).join("\n")}
 
 export const editorAdapterById = new Map(
   editorAdapters.map((adapter) => [adapter.id, adapter]),
+)
+
+export const agentRuntimeDefinitions = [
+${agentRuntimeDirs.map((dir) => `  ${toIdentifier(dir)}AgentRuntimeDefinition,`).join("\n")}
+].sort((left, right) => left.order - right.order) satisfies AgentRuntimeDefinition[]
+
+export const agentRuntimeDefinitionById = new Map(
+  agentRuntimeDefinitions.map((definition) => [definition.id, definition]),
 )
 
 export const cliDefinitions = [
@@ -173,6 +203,7 @@ ${adapterDirs.map((dir) => `  [${toIdentifier(dir)}EditorAdapter.id, ${toIdentif
 async function main() {
   const definitionDirs = await listEditorDefinitionDirectories()
   const agentDirs = await listAgentDefinitionDirectories()
+  const agentRuntimeDirs = await listAgentRuntimeDefinitionDirectories()
   const adapterDirs = []
   const importableCliDirs = []
   const importableMcpDirs = []
@@ -194,7 +225,7 @@ async function main() {
   await mkdir(mainGeneratedDir, { recursive: true })
 
   await writeFile(path.join(rendererGeneratedDir, "renderer-registry.ts"), renderRendererRegistry(definitionDirs, agentDirs, importableCliDirs, importableMcpDirs, importableFormDirs), "utf8")
-  await writeFile(path.join(mainGeneratedDir, "main-registry.ts"), renderMainRegistry(adapterDirs, importableCliDirs, importableMcpDirs), "utf8")
+  await writeFile(path.join(mainGeneratedDir, "main-registry.ts"), renderMainRegistry(adapterDirs, agentRuntimeDirs, importableCliDirs, importableMcpDirs), "utf8")
 }
 
 main().catch((error) => {

@@ -1,3 +1,14 @@
+import type {
+  ClaudeProcessRunner,
+} from "../../electron/services/agent-runtime/adapters/claude-code"
+import type {
+  CodexProcessRunner,
+} from "../../electron/services/agent-runtime/adapters/codex-exec"
+import type { AgentAdapter } from "../../electron/services/agent-runtime/types"
+import type {
+  ProviderConfigView,
+  ProviderRuntimeView,
+} from "../../electron/services/provider-config/types"
 import type { SynapseContentAttachmentRecord, SynapseContentDetail } from "../types/content"
 import type { SynapseContentType } from "../types/content"
 import type {
@@ -6,6 +17,7 @@ import type {
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
 } from "../types/editor"
+import type { SynapseAgentDefinition } from "./types"
 
 export type EditorAdapterResolveContext = {
   contentId: string
@@ -79,4 +91,25 @@ export type EditorScanRuleItem = import("../types/editor-scan").EditorScanRuleIt
 
 export type EditorScanStrategy = {
   scanRules(rulesPath: string | null): Promise<EditorScanRuleItem[]>
+}
+
+export type AgentRuntimeProcessRunner = CodexProcessRunner & ClaudeProcessRunner
+
+export type AgentRuntimeEnvInput = {
+  readonly provider?: ProviderConfigView
+  readonly apiKey?: string
+  readonly model?: string
+}
+
+export type AgentRuntimeEnvResult = {
+  readonly env: Record<string, string | undefined>
+  readonly extraEnvAllowlist?: readonly string[]
+}
+
+export type AgentRuntimeDefinition = SynapseAgentDefinition & {
+  createAdapter(
+    view: ProviderRuntimeView,
+    runner: AgentRuntimeProcessRunner,
+  ): AgentAdapter
+  buildEnv(input: AgentRuntimeEnvInput): AgentRuntimeEnvResult
 }

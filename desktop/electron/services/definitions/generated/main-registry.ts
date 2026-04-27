@@ -2,6 +2,8 @@ import { editorAdapter as claudeCodeEditorAdapter } from "../../../../src/defini
 import { editorAdapter as codexEditorAdapter } from "../../../../src/definitions/editor/codex/adapter"
 import { editorAdapter as cursorEditorAdapter } from "../../../../src/definitions/editor/cursor/adapter"
 import { editorAdapter as windsurfEditorAdapter } from "../../../../src/definitions/editor/windsurf/adapter"
+import { agentRuntimeDefinition as claudeCodeAgentRuntimeDefinition } from "../../../../src/definitions/agent/claude-code/agent-main"
+import { agentRuntimeDefinition as codexAgentRuntimeDefinition } from "../../../../src/definitions/agent/codex/agent-main"
 import { cliDefinition as claudeCodeCliDefinition } from "../../../../src/definitions/editor/claude-code/cli"
 import { cliDefinition as codexCliDefinition } from "../../../../src/definitions/editor/codex/cli"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../../../../src/definitions/editor/claude-code/mcp"
@@ -17,6 +19,7 @@ import { scanStrategy as codexScanStrategy } from "../../../../src/definitions/e
 import { scanStrategy as cursorScanStrategy } from "../../../../src/definitions/editor/cursor/scan"
 import { scanStrategy as windsurfScanStrategy } from "../../../../src/definitions/editor/windsurf/scan"
 import type {
+  AgentRuntimeDefinition,
   EditorAdapter,
   EditorInstallStrategy,
   EditorScanStrategy,
@@ -32,6 +35,15 @@ export const editorAdapters = [
 
 export const editorAdapterById = new Map(
   editorAdapters.map((adapter) => [adapter.id, adapter]),
+)
+
+export const agentRuntimeDefinitions = [
+  claudeCodeAgentRuntimeDefinition,
+  codexAgentRuntimeDefinition,
+].sort((left, right) => left.order - right.order) satisfies AgentRuntimeDefinition[]
+
+export const agentRuntimeDefinitionById = new Map(
+  agentRuntimeDefinitions.map((definition) => [definition.id, definition]),
 )
 
 export const cliDefinitions = [
