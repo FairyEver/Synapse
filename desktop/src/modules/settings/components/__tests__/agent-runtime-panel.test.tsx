@@ -1,0 +1,64 @@
+import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, it, vi } from "vitest"
+
+import { AgentRuntimePanel } from "@/modules/settings/components/agent-runtime-panel"
+
+vi.mock("@/modules/settings/hooks/use-agent-runtime-status", () => ({
+  useAgentRuntimeStatus: () => ({
+    loading: false,
+    refresh: vi.fn(),
+    status: {
+      agents: [
+        {
+          id: "codex",
+          label: "Codex",
+          ready: true,
+          cli: {
+            required: true,
+            binary: "codex",
+            installed: true,
+            path: "/usr/local/bin/codex",
+          },
+          provider: {
+            projectId: "project-1",
+            configured: true,
+            activeProviderId: "openai",
+            activeModel: "gpt-5",
+          },
+          issues: [],
+        },
+        {
+          id: "claude-code",
+          label: "Claude Code",
+          ready: false,
+          cli: {
+            required: true,
+            binary: "claude",
+            installed: false,
+            path: null,
+          },
+          provider: {
+            projectId: "project-1",
+            configured: false,
+          },
+          issues: ["cli-not-installed", "provider-not-configured"],
+        },
+      ],
+      projectId: "project-1",
+    },
+  }),
+}))
+
+describe("AgentRuntimePanel", () => {
+  it("renders agent runtime readiness without the legacy CLI tools title", () => {
+    const html = renderToStaticMarkup(<AgentRuntimePanel projectId="project-1" />)
+
+    expect(html).toContain("Agent")
+    expect(html).toContain("Codex")
+    expect(html).toContain("可用")
+    expect(html).toContain("Claude Code")
+    expect(html).toContain("未就绪")
+    expect(html).toContain("未检测到 claude")
+    expect(html).not.toContain("命令行工具")
+  })
+})

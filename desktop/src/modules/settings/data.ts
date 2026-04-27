@@ -45,7 +45,7 @@ const settingsCategories: SettingsCategory[] = [
     id: "tools",
     icon: Blocks,
     label: "工具",
-    description: "编辑器与命令行工具。",
+    description: "编辑器与 Agent。",
   },
   {
     id: "variables",
