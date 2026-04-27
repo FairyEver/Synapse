@@ -10,7 +10,7 @@ import type {
   SecretEntryV1,
 } from "../../../runtime/data-repo"
 import { ProviderConfigService } from "../../provider-config"
-import { AgentCommandRouter } from "../command-router"
+import { AgentCommandRouter, modesForAgent } from "../command-router"
 import { CustomCommandRegistry } from "../command-registry"
 import type { AgentMessage } from "../types"
 
@@ -168,6 +168,32 @@ describe("AgentCommandRouter", () => {
     const result = expectRuntimeResult(await router.handle(baseMessage("/compress"), baseConversation()))
 
     expect(result.resultText).toBe("Context compressed.")
+  })
+})
+
+describe("modesForAgent", () => {
+  it("reads Codex modes from Agent definitions", () => {
+    expect(modesForAgent("codex").map((mode) => mode.key)).toEqual([
+      "suggest",
+      "auto-edit",
+      "full-auto",
+      "yolo",
+    ])
+  })
+
+  it("reads Claude Code modes from Agent definitions", () => {
+    expect(modesForAgent("claude_code").map((mode) => mode.key)).toEqual([
+      "default",
+      "acceptEdits",
+      "plan",
+      "auto",
+      "bypassPermissions",
+      "dontAsk",
+    ])
+  })
+
+  it("throws a readable error for unknown Agent modes", () => {
+    expect(() => modesForAgent("unknown-agent")).toThrow("Unknown agent runtime: unknown-agent")
   })
 })
 

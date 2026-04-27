@@ -1,5 +1,6 @@
 import type { AgentCommandEntryV1, ConversationEntryV1, ProviderModelEntryV1 } from "../../runtime/data-repo"
 import type { ProviderConfigService } from "../provider-config"
+import { agentRuntimeDefinitionById } from "../definitions/generated/main-registry"
 import type {
   AgentEvent,
   AgentMessage,
@@ -467,22 +468,12 @@ export function resolveModelTarget(
 }
 
 export function modesForAgent(agentType: string): readonly ModeOption[] {
-  if (normalizeAgentType(agentType) === "claude-code") {
-    return [
-      { key: "default", label: "Default" },
-      { key: "acceptEdits", label: "Accept Edits" },
-      { key: "plan", label: "Plan" },
-      { key: "auto", label: "Auto" },
-      { key: "bypassPermissions", label: "Bypass Permissions" },
-      { key: "dontAsk", label: "Don't Ask" },
-    ]
+  const normalized = normalizeAgentType(agentType)
+  const definition = agentRuntimeDefinitionById.get(normalized)
+  if (!definition) {
+    throw new Error(`Unknown agent runtime: ${agentType}`)
   }
-  return [
-    { key: "suggest", label: "Suggest" },
-    { key: "auto-edit", label: "Auto Edit" },
-    { key: "full-auto", label: "Full Auto" },
-    { key: "yolo", label: "YOLO" },
-  ]
+  return definition.modes
 }
 
 function resolveModeTarget(input: string, modes: readonly ModeOption[]): string | null {
