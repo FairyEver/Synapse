@@ -23,6 +23,13 @@ describe("agentIpcModule", () => {
         localPath: "/repo",
         contentDirs: {},
       }],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
     } as never)
   })
 
@@ -117,6 +124,7 @@ describe("agentIpcModule", () => {
       timestamp: `2026-04-27T03:${String(index % 60).padStart(2, "0")}:00.000Z`,
     }))
     const getSession = vi.fn().mockResolvedValue({
+      projectId: "project-1",
       id: "conv-1",
       sessionKey: "local:renderer",
       active: true,
@@ -143,6 +151,7 @@ describe("agentIpcModule", () => {
 
   it("returns readable source labels for Feishu sessions", async () => {
     const listSessions = vi.fn().mockResolvedValue([{
+      projectId: "project-1",
       id: "feishu-conv",
       sessionKey: "feishu:oc_group:ou_user",
       platform: "feishu",
@@ -164,6 +173,7 @@ describe("agentIpcModule", () => {
       projectId: "project-1",
     })).resolves.toEqual([
       expect.objectContaining({
+        projectId: "project-1",
         id: "feishu-conv",
         platform: "feishu",
         sourceLabel: "Dev Group / User One",
@@ -171,8 +181,58 @@ describe("agentIpcModule", () => {
     ])
   })
 
+  it("opens AgentRuntime for configured project ids used by Feishu connectors", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repository One",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+      global: {
+        themeMode: "system",
+        projects: [{
+          id: "project-1",
+          name: "Project One",
+          path: "/repo",
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const listSessions = vi.fn().mockResolvedValue([{
+      projectId: "project-1",
+      id: "feishu-conv",
+      sessionKey: "feishu:oc_group:ou_user",
+      platform: "feishu",
+      active: true,
+      history: [],
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T01:00:00.000Z",
+    }])
+    const harness = createHarness({
+      agent: { listSessions },
+    })
+
+    await expect(harness.invoke("synapse:agent:list-sessions", {
+      projectId: "project-1",
+    })).resolves.toEqual([
+      expect.objectContaining({
+        projectId: "project-1",
+        id: "feishu-conv",
+        platform: "feishu",
+      }),
+    ])
+    expect(harness.projectContainers.open).toHaveBeenCalledWith("project-1", {
+      name: "Project One",
+      workspacePath: "/repo",
+    })
+  })
+
   it("creates and switches local renderer sessions", async () => {
     const created = {
+      projectId: "project-1",
       id: "conv-2",
       sessionKey: "local:renderer",
       name: "新会话",
@@ -201,6 +261,7 @@ describe("agentIpcModule", () => {
       projectId: "project-1",
       name: "新会话",
     })).toEqual(expect.objectContaining({
+      projectId: "project-1",
       id: "conv-2",
       sessionKey: "local:renderer",
       name: "新会话",
@@ -217,6 +278,7 @@ describe("agentIpcModule", () => {
       projectId: "project-1",
       conversationId: "conv-1",
     })).toEqual(expect.objectContaining({
+      projectId: "project-1",
       id: "conv-1",
       sessionKey: "local:renderer",
       name: "旧会话",
@@ -290,5 +352,5 @@ function createHarness(overrides: {
     moduleId: "agent",
     resolve,
   })
-  return harness
+  return Object.assign(harness, { projectContainers })
 }

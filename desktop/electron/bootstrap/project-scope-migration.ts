@@ -1,6 +1,7 @@
 import path from "node:path"
 
 import type {
+  ConversationEntryV1,
   ConnectorEntryV1,
   DataNamespace,
   DataRepository,
@@ -38,10 +39,12 @@ async function runMigration(
 
   const connectors = dataRepository.namespace<ConnectorEntryV1>("connectors")
   const workspaceBindings = dataRepository.namespace<WorkspaceBindingEntryV1>("workspace.bindings")
+  const conversations = dataRepository.namespace<ConversationEntryV1>("conversations")
   const scheduledJobs = dataRepository.namespace<ScheduledJobEntryV1>("scheduled.jobs")
   const heartbeats = dataRepository.namespace<HeartbeatEntryV1>("scheduled.heartbeat")
 
   await migrateConnectors(dataRepository, connectors, projectIdByRepositoryId, logger)
+  await migrateConversations(conversations, projectIdByRepositoryId)
   await migrateWorkspaceBindings(workspaceBindings, projectIdByRepositoryId)
   await migrateScheduledJobs(scheduledJobs, projectIdByRepositoryId)
   await migrateHeartbeats(heartbeats, projectIdByRepositoryId)
@@ -119,6 +122,24 @@ async function migrateConnectors(
     }
 
     await copySecret(dataRepository, connector.projectId, nextProjectId, logger)
+  }
+}
+
+async function migrateConversations(
+  conversations: DataNamespace<ConversationEntryV1>,
+  projectIdByRepositoryId: ReadonlyMap<string, string>,
+): Promise<void> {
+  const entries = await conversations.list()
+
+  for (const conversation of entries) {
+    const nextProjectId = projectIdByRepositoryId.get(conversation.projectId)
+    if (!nextProjectId) {
+      continue
+    }
+    await conversations.upsert({
+      ...conversation,
+      projectId: nextProjectId,
+    })
   }
 }
 

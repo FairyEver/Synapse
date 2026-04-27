@@ -25,22 +25,25 @@ import {
   formatEntryTime,
   sessionLabel,
 } from "../utils"
+import { conversationUnreadKey } from "../live-sync"
 
 type AgentSessionSidebarProps = {
   sessions: SynapseAgentSessionSummary[]
+  selectedProjectId?: string
   selectedConversationId?: string
   loading: boolean
   followFeishu: boolean
   unreadByConversationId: Record<string, number>
   onRefresh: () => void
   onCreate: () => void
-  onSelect: (conversationId: string) => void
-  onDelete: (conversationId: string) => void
+  onSelect: (session: SynapseAgentSessionSummary) => void
+  onDelete: (session: SynapseAgentSessionSummary) => void
   onFollowFeishuChange: (follow: boolean) => void
 }
 
 function AgentSessionSidebar({
   sessions,
+  selectedProjectId,
   selectedConversationId,
   loading,
   followFeishu,
@@ -54,6 +57,7 @@ function AgentSessionSidebar({
   const items = sessions.length > 0
     ? sessions
     : [{
+      projectId: "",
       id: DEFAULT_LOCAL_SESSION_KEY,
       sessionKey: DEFAULT_LOCAL_SESSION_KEY,
       name: "本地会话",
@@ -104,17 +108,22 @@ function AgentSessionSidebar({
       <ModuleSidebarList>
         {items.map((session) => {
           const canDelete = sessions.length > 0
-          const unread = unreadByConversationId[session.id] ?? 0
+          const unread = session.projectId
+            ? unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
+            : 0
           const trailing = (
             <SessionTrailing updatedAt={session.updatedAt} unread={unread} />
           )
           return (
-            <div key={session.id} className="flex items-center gap-1">
+            <div key={sessionItemKey(session)} className="flex items-center gap-1">
               <ModuleSidebarItem
-                active={session.id === selectedConversationId || (!selectedConversationId && session.active)}
+                active={isSelectedSession(session, selectedProjectId, selectedConversationId)
+                  || (!selectedConversationId && session.active)}
                 className="min-w-0 flex-1"
                 trailing={trailing}
-                onClick={() => onSelect(session.id)}
+                onClick={() => {
+                  if (sessions.length > 0) onSelect(session)
+                }}
               >
                 {sessionLabel(session)}
               </ModuleSidebarItem>
@@ -139,7 +148,7 @@ function AgentSessionSidebar({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>取消</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onDelete(session.id)}>
+                      <AlertDialogAction onClick={() => onDelete(session)}>
                         删除
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -152,6 +161,18 @@ function AgentSessionSidebar({
       </ModuleSidebarList>
     </ModuleSidebar>
   )
+}
+
+function sessionItemKey(session: Pick<SynapseAgentSessionSummary, "projectId" | "id">): string {
+  return `${session.projectId}:${session.id}`
+}
+
+function isSelectedSession(
+  session: Pick<SynapseAgentSessionSummary, "projectId" | "id">,
+  selectedProjectId: string | undefined,
+  selectedConversationId: string | undefined,
+): boolean {
+  return session.projectId === selectedProjectId && session.id === selectedConversationId
 }
 
 function SessionTrailing({

@@ -14,6 +14,7 @@ import {
   type ControlledProcessResult,
   type ControlledProcessRunRequest,
 } from "../../../runtime/process"
+import { createRecordingLogger } from "../../../runtime/lib/test-helpers"
 import { InMemoryAuditSink, createPermissionGuard } from "../../../runtime/security"
 import type { ScopedEventBus } from "../../../runtime/project-container"
 import { CodexExecAdapter, type CodexProcessRunner } from "../adapters/codex-exec"
@@ -295,6 +296,7 @@ describe("AgentRuntimeService", () => {
   it("emits conversation updates after Feishu user append and final assistant save", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const events: Array<Parameters<ScopedEventBus["emit"]>[0]> = []
+    const logger = createRecordingLogger()
     const eventSnapshots: Array<{
       readonly event: Parameters<ScopedEventBus["emit"]>[0]
       readonly history: Array<{ readonly role: string; readonly content: string }>
@@ -329,6 +331,7 @@ describe("AgentRuntimeService", () => {
         underlying: {} as ScopedEventBus["underlying"],
       },
       now: fixedNow,
+      logger,
     })
 
     const result = await service.send({
@@ -386,6 +389,42 @@ describe("AgentRuntimeService", () => {
       { role: "user", content: "hello from Feishu" },
       { role: "assistant", content: "done" },
     ])
+    expect(logger.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: "info",
+        message: "Agent conversation updated after user message.",
+        meta: expect.objectContaining({
+          projectId: "project-1",
+          sessionKey: "feishu:oc_group:ou_user",
+          platform: "feishu",
+          conversationId: result.conversationId,
+          contentLength: "hello from Feishu".length,
+          historyCount: 1,
+        }),
+      }),
+      expect.objectContaining({
+        level: "info",
+        message: "Agent conversation update event emitted.",
+        meta: expect.objectContaining({
+          projectId: "project-1",
+          sessionKey: "feishu:oc_group:ou_user",
+          platform: "feishu",
+          conversationId: result.conversationId,
+          historyCount: 1,
+        }),
+      }),
+      expect.objectContaining({
+        level: "info",
+        message: "Agent conversation update event emitted.",
+        meta: expect.objectContaining({
+          projectId: "project-1",
+          sessionKey: "feishu:oc_group:ou_user",
+          platform: "feishu",
+          conversationId: result.conversationId,
+          historyCount: 2,
+        }),
+      }),
+    ]))
   })
 
   it("handles /model before the adapter and clears the current agent session id", async () => {

@@ -11,6 +11,7 @@ import type {
   SecretEntryV1,
 } from "../../../runtime/data-repo"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
+import { createRecordingLogger } from "../../../runtime/lib/test-helpers"
 import {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentMessage,
@@ -30,6 +31,7 @@ describe("FeishuConnectorService", () => {
     const dataRepository = new MemoryDataRepository()
     const client = new FakeFeishuClient()
     const agent = new FakeAgentRuntime()
+    const logger = createRecordingLogger()
     agent.activeAgentType = "claude-code"
     const service = new FeishuConnectorService({
       dataRepository,
@@ -37,6 +39,7 @@ describe("FeishuConnectorService", () => {
       sideChannel: new FakeSideChannel() as unknown as SideChannelService,
       listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
       clientFactory: { create: () => client },
+      logger,
     })
     service.start()
     await service.saveManualCredentials({
@@ -76,6 +79,31 @@ describe("FeishuConnectorService", () => {
       sessionKey: "feishu:oc_group:ou_admin",
       channelKey: "feishu:oc_group",
     }))
+    expect(logger.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: "info",
+        message: "Feishu message normalized for agent routing.",
+        meta: expect.objectContaining({
+          projectId: "project-1",
+          connectorId: "feishu:project-1",
+          platform: "feishu",
+          sessionKey: "feishu:oc_group:ou_admin",
+          channelKey: "feishu:oc_group",
+          messageId: "m1",
+          contentLength: "run tests".length,
+        }),
+      }),
+      expect.objectContaining({
+        level: "info",
+        message: "Feishu message routed to AgentRuntime.",
+        meta: expect.objectContaining({
+          projectId: "project-1",
+          connectorId: "feishu:project-1",
+          sessionKey: "feishu:oc_group:ou_admin",
+          conversationId: "conv-1",
+        }),
+      }),
+    ]))
     const connector = await dataRepository.namespace<ConnectorEntryV1>("connectors").get("feishu:project-1")
     expect(connector?.dedupe?.lastMessageIds).toEqual(["m1"])
 

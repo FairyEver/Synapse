@@ -442,7 +442,7 @@ const synapseBridge: SynapseBridge = {
     },
   },
   ops: {
-    diagnostics: (payload) => invoke(IPC_CHANNELS.ops.diagnostics)(payload),
+    diagnostics: (payload) => invoke(IPC_CHANNELS.ops.diagnostics)(payload ?? {}),
     openLogDirectory: invoke(IPC_CHANNELS.ops.openLogDirectory),
     runAsGet: (projectId) => invoke(IPC_CHANNELS.ops.runAsGet)({ projectId }),
     runAsUpdate: (payload) => invoke(IPC_CHANNELS.ops.runAsUpdate)(payload),

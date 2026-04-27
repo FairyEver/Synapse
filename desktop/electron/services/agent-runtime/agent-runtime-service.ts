@@ -585,6 +585,12 @@ export class AgentRuntimeService {
         conversation = await this.repository.getOrCreateActive(message)
       }
       conversation = await this.repository.appendHistory(conversation.id, "user", message.content)
+      this.deps.logger?.info("Agent conversation updated after user message.", {
+        ...conversationLogContext(this.deps.projectId, conversation),
+        contentLength: message.content.length,
+        attachmentCount: message.attachments?.length ?? 0,
+        messageId: message.messageId,
+      })
       this.emitConversationUpdated(conversation)
 
       const workDir = this.workDirFor(message)
@@ -1104,12 +1110,24 @@ export class AgentRuntimeService {
       scope: { sessionId: conversationIdValue },
       timestamp: this.isoNow(),
     })
+    this.deps.logger?.debug("Agent stream event emitted.", {
+      projectId: this.deps.projectId,
+      conversationId: conversationIdValue,
+      sessionKey: message.sessionKey,
+      platform: message.platform,
+      eventType: event.type,
+      messageId: message.messageId,
+    })
     if (shouldSuppressReply(message)) return
     this.deps.outbox?.recordAgentEvent(target, event)
     this.deps.replyTargets?.dispatchAgentEvent(target, event)
   }
 
   private emitConversationUpdated(conversation: ConversationEntryV1): void {
+    this.deps.logger?.info("Agent conversation update event emitted.", conversationLogContext(
+      this.deps.projectId,
+      conversation,
+    ))
     this.deps.eventBus?.emit({
       domain: "agent",
       type: "conversationUpdated",
@@ -1654,6 +1672,24 @@ function compressionStateId(projectId: string, agentType: string): string {
 function estimateTokens(conversation: ConversationEntryV1): number {
   const chars = conversation.history.reduce((total, entry) => total + entry.content.length, 0)
   return Math.ceil(chars / 4)
+}
+
+function conversationLogContext(
+  projectId: string,
+  conversation: ConversationEntryV1,
+): Record<string, unknown> {
+  return {
+    projectId,
+    conversationId: conversation.id,
+    sessionKey: conversation.sessionKey,
+    platform: conversation.platform ?? "local",
+    channelKey: conversation.channelKey,
+    workspaceKey: conversation.workspaceKey,
+    workspacePath: conversation.workspacePath,
+    active: conversation.active,
+    historyCount: conversation.history.length,
+    updatedAt: conversation.updatedAt,
+  }
 }
 
 function minGapElapsed(lastCompressedAt: string | undefined, minGapMins: number): boolean {

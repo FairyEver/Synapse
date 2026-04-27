@@ -433,17 +433,32 @@ export class FeishuConnectorService {
       event,
     })
     if (normalized.kind === "ignored") {
+      this.deps.logger?.info("Feishu message ignored before agent routing.", {
+        ...rawFeishuEventLogContext(projectId, connectorId, event),
+        reason: normalized.reason,
+      })
       if (normalized.dedupe) await this.connectorRepository.updateDedupe(connectorId, normalized.dedupe)
       this.recordAudit("denied", projectId, connectorId, "message", undefined, {
         reason: normalized.reason,
       })
       return
     }
+    this.deps.logger?.info("Feishu message normalized for agent routing.", feishuMessageLogContext(
+      projectId,
+      connectorId,
+      normalized.message,
+    ))
 
     await this.connectorRepository.updateDedupe(connectorId, normalized.dedupe)
     const stopProcessingIndicator = await this.startProcessingIndicator(projectId, connectorId, normalized.message, running)
     try {
       const workspaceConfig = normalizeWorkspaceConfig(connector.workspaceConfig)
+      this.deps.logger?.info("Feishu workspace config checked for routing.", {
+        ...feishuMessageLogContext(projectId, connectorId, normalized.message),
+        workspaceEnabled: workspaceConfig.enabled,
+        hasBaseDir: Boolean(workspaceConfig.baseDir),
+        autoBindByChannelName: workspaceConfig.autoBindByChannelName,
+      })
       if (workspaceConfig.enabled) {
         if (!workspaceConfig.baseDir) {
           await running?.client.replyText(
@@ -464,6 +479,12 @@ export class FeishuConnectorService {
           return
         }
         if (resolved.status === "unresolved") {
+          this.deps.logger?.info("Feishu workspace unresolved before agent routing.", {
+            ...feishuMessageLogContext(projectId, connector.id, normalized.message),
+            workspaceResolution: resolved.status,
+            resolvedChannelKey: resolved.channelKey,
+            resolvedChannelName: resolved.channelName,
+          })
           if (isAutomationCommand(normalized.message.content)) {
             if (await this.handleAutomationCommand(connector, normalized.message, running)) {
               return
@@ -473,6 +494,14 @@ export class FeishuConnectorService {
             return
           }
         } else if (resolved.status === "resolved") {
+          this.deps.logger?.info("Feishu workspace resolved for agent routing.", {
+            ...feishuMessageLogContext(projectId, connector.id, normalized.message),
+            workspaceResolution: resolved.status,
+            resolvedChannelKey: resolved.channelKey,
+            resolvedChannelName: resolved.channelName,
+            resolvedWorkspacePath: resolved.workspacePath,
+            bindingScope: resolved.bindingScope,
+          })
           normalized = {
             ...normalized,
             message: {
@@ -496,7 +525,14 @@ export class FeishuConnectorService {
           isAdmin: isFeishuAdmin(connector, normalized.message.userId ?? ""),
         },
       }
-      await agent.send(agentMessage)
+      const result = await agent.send(agentMessage)
+      this.deps.logger?.info("Feishu message routed to AgentRuntime.", {
+        ...feishuMessageLogContext(projectId, connectorId, agentMessage),
+        conversationId: result.conversationId,
+        eventCount: result.events.length,
+        resultLength: result.resultText.length,
+        error: result.error,
+      })
       this.recordAudit("allowed", projectId, connectorId, "message", undefined, {
         sessionKey: agentMessage.sessionKey,
         messageId: agentMessage.messageId,
@@ -1389,6 +1425,58 @@ function actionValue(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function rawFeishuEventLogContext(
+  projectId: string,
+  connectorId: string,
+  event: FeishuMessageEvent,
+): Record<string, unknown> {
+  return {
+    projectId,
+    connectorId,
+    platform: "feishu",
+    messageId: event.message.message_id,
+    chatId: event.message.chat_id,
+    chatType: event.message.chat_type,
+    messageType: event.message.message_type,
+    rootId: event.message.root_id,
+    threadId: event.message.thread_id,
+    userId: event.sender.sender_id?.open_id,
+  }
+}
+
+function feishuMessageLogContext(
+  projectId: string,
+  connectorId: string,
+  message: AgentMessage,
+): Record<string, unknown> {
+  const replyCtx = recordValue(message.replyCtx)
+  return {
+    projectId,
+    connectorId,
+    platform: message.platform,
+    sessionKey: message.sessionKey,
+    channelKey: message.channelKey,
+    channelName: message.channelName,
+    chatId: stringValue(replyCtx.chatId),
+    chatType: message.chatType ?? stringValue(replyCtx.chatType),
+    messageId: message.messageId,
+    rootId: stringValue(replyCtx.rootId),
+    threadId: stringValue(replyCtx.threadId),
+    userId: message.userId,
+    workspaceKey: message.workspaceKey,
+    workspacePath: message.workspacePath,
+    replyInThread: typeof replyCtx.replyInThread === "boolean" ? replyCtx.replyInThread : undefined,
+    contentLength: message.content.length,
+    attachmentCount: message.attachments?.length ?? 0,
+  }
 }
 
 function permissionHandledCard(content: string): FeishuCardActionResponse {

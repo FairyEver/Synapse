@@ -8,6 +8,7 @@ describe("AgentSessionSidebar", () => {
     const html = renderToStaticMarkup(
       <AgentSessionSidebar
         sessions={[{
+          projectId: "project-1",
           id: "feishu-conv",
           sessionKey: "feishu:oc_group:ou_user",
           platform: "feishu",
@@ -17,10 +18,11 @@ describe("AgentSessionSidebar", () => {
           createdAt: "2026-04-27T00:00:00.000Z",
           updatedAt: "2026-04-27T01:00:00.000Z",
         }]}
+        selectedProjectId="project-local"
         selectedConversationId="local-conv"
         loading={false}
         followFeishu={true}
-        unreadByConversationId={{ "feishu-conv": 2 }}
+        unreadByConversationId={{ "project-1:feishu-conv": 2 }}
         onFollowFeishuChange={vi.fn()}
         onRefresh={vi.fn()}
         onCreate={vi.fn()}

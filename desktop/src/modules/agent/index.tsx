@@ -1,6 +1,7 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
 import { Command as CommandIcon, Copy, Send } from "lucide-react"
 import { toast } from "sonner"
+import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { createRendererLogger } from "@/app-shell/logging"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
@@ -24,6 +25,7 @@ import type { SynapseAgentTimelineEntry } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
 import { useAgentChat } from "./hooks/use-agent-chat"
+import { resolveAgentProjectScope } from "./project-resolution"
 import {
   agentCliLabel,
   formatAgentTranscript,
@@ -35,9 +37,12 @@ const logger = createRendererLogger("agent")
 
 function AgentModule() {
   const activeRepository = useActiveRepository()
-  const projectId = activeRepository?.uuid
+  const { config } = useAppConfig()
+  const projectScope = useMemo(() =>
+    resolveAgentProjectScope(activeRepository, config.global.projects),
+  [activeRepository, config.global.projects])
   const [draft, setDraft] = useState("")
-  const chat = useAgentChat(projectId, { inputDirty: draft.trim().length > 0 })
+  const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [thinkingFrame, setThinkingFrame] = useState(0)
 
@@ -54,7 +59,7 @@ function AgentModule() {
 
   const submitDraft = () => {
     const content = draft.trim()
-    if (!content || !projectId) return
+    if (!content || !chat.activeProjectId) return
     setDraft("")
     void chat.sendMessage(content)
   }
@@ -71,13 +76,14 @@ function AgentModule() {
   }
 
   const handleCommandSelect = (name: string) => {
-    if (!projectId) return
+    if (!chat.activeProjectId) return
     setDraft("")
     setPaletteOpen(false)
     void chat.sendMessage(`/${name}`)
   }
 
   const handleCopyTranscript = async () => {
+    const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId || chat.timeline.length === 0) return
     try {
       const result = await requireSynapseBridge().agent.getTimeline({
@@ -96,24 +102,27 @@ function AgentModule() {
   }
 
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
-  const selectedSession = chat.sessions.find((session) => session.id === chat.selectedConversationId)
+  const selectedSession = chat.sessions.find((session) =>
+    session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
     ?? chat.sessions.find((session) => session.active)
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
   const openReference = (reference: string) => {
+    const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId) return
     void requireSynapseBridge().agent.openReference({ projectId, reference })
   }
   const sidebar = (
     <AgentSessionSidebar
       sessions={chat.sessions}
+      selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
       loading={chat.loading || chat.sending}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
       onRefresh={() => void chat.refresh()}
       onCreate={() => void chat.createSession()}
-      onSelect={(conversationId) => void chat.selectSession(conversationId)}
-      onDelete={(conversationId) => void chat.deleteSession(conversationId)}
+      onSelect={(session) => void chat.selectSession(session)}
+      onDelete={(session) => void chat.deleteSession(session)}
       onFollowFeishuChange={chat.setFollowFeishu}
     />
   )
@@ -123,7 +132,7 @@ function AgentModule() {
       <div className="flex h-full min-h-0 flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-sm font-medium">{activeRepository?.name ?? "未选择项目"}</h2>
+            <h2 className="truncate text-sm font-medium">Agent</h2>
             {selectedCliLabel ? (
               <Badge variant="outline">{selectedCliLabel}</Badge>
             ) : null}
@@ -135,14 +144,14 @@ function AgentModule() {
             {chat.providers?.activeModel ? (
               <Badge variant="outline">{chat.providers.activeModel}</Badge>
             ) : null}
-            {chat.status?.pendingPermissions ? (
-              <Badge variant="outline">权限 {chat.status.pendingPermissions}</Badge>
+            {chat.pendingPermissions.length > 0 ? (
+              <Badge variant="outline">权限 {chat.pendingPermissions.length}</Badge>
             ) : null}
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={!projectId || chat.timeline.length === 0}
+              disabled={!chat.activeProjectId || chat.timeline.length === 0}
               onClick={() => void handleCopyTranscript()}
             >
               <Copy data-icon="inline-start" />
@@ -217,11 +226,11 @@ function AgentModule() {
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleInputKeyDown}
             placeholder="输入消息"
-            disabled={!projectId}
+            disabled={!chat.activeProjectId}
             rows={1}
             className="h-8 min-h-8 resize-none overflow-hidden py-1.5 focus-visible:border-input focus-visible:ring-0"
           />
-          <Button type="submit" disabled={!draft.trim() || !projectId}>
+          <Button type="submit" disabled={!draft.trim() || !chat.activeProjectId}>
             <Send data-icon="inline-start" />
             发送
           </Button>

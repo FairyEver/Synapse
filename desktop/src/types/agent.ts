@@ -66,6 +66,7 @@ export interface SynapseAgentTimelineEntry {
 }
 
 export interface SynapseAgentSessionSummary {
+  readonly projectId: string
   readonly id: string
   readonly sessionKey: string
   readonly name?: string

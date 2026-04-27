@@ -68,6 +68,7 @@ const timelineEntrySchema = z.object({
 })
 
 const sessionSummarySchema = z.object({
+  projectId: z.string(),
   id: z.string(),
   sessionKey: z.string(),
   name: z.string().optional(),
@@ -516,7 +517,7 @@ async function resolveProjectAgent(
   readonly project: { readonly uuid: string; readonly name: string; readonly localPath: string }
 }> {
   const config = await configStore.load()
-  const project = config.repositories.find((repository) => repository.uuid === projectId)
+  const project = resolveAgentProjectConfig(config, projectId)
   if (!project) {
     throw new Error("找不到当前项目。")
   }
@@ -533,9 +534,29 @@ async function resolveProjectAgent(
   }
 }
 
+function resolveAgentProjectConfig(
+  config: Awaited<ReturnType<typeof configStore.load>>,
+  projectId: string,
+): { readonly uuid: string; readonly name: string; readonly localPath: string } | null {
+  const repository = config.repositories.find((item) => item.uuid === projectId)
+  if (repository) {
+    return repository
+  }
+  const project = config.global.projects.find((item) => item.id === projectId)
+  if (!project) {
+    return null
+  }
+  return {
+    uuid: project.id,
+    name: project.name,
+    localPath: project.path,
+  }
+}
+
 function sessionSummary(session: ConversationEntryV1) {
   const last = session.history.at(-1)
   return {
+    projectId: session.projectId,
     id: session.id,
     sessionKey: session.sessionKey,
     name: session.name,

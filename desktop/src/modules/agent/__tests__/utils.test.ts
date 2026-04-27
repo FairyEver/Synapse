@@ -28,6 +28,7 @@ describe("agent utils", () => {
 
   it("uses source labels for Feishu session rows", () => {
     expect(sessionLabel({
+      projectId: "project-1",
       id: "feishu-conv",
       sessionKey: "feishu:oc_group:ou_user",
       platform: "feishu",
@@ -39,6 +40,7 @@ describe("agent utils", () => {
     })).toBe("Dev Group / User One")
 
     expect(sessionLabel({
+      projectId: "project-1",
       id: "named-conv",
       sessionKey: "local:named",
       name: "Named Session",
@@ -50,6 +52,7 @@ describe("agent utils", () => {
     })).toBe("Named Session")
 
     expect(sessionLabel({
+      projectId: "project-1",
       id: "source-conv",
       sessionKey: "local:source",
       sourceLabel: "Source Label",
@@ -60,6 +63,7 @@ describe("agent utils", () => {
     })).toBe("Source Label")
 
     expect(sessionLabel({
+      projectId: "project-1",
       id: "key-conv",
       sessionKey: "local:key",
       active: true,

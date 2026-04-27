@@ -1,6 +1,7 @@
 import type { SynapseAgentConversationUpdatedPayload } from "@/types/agent"
 
 type SelectedConversation = {
+  readonly projectId?: string
   readonly conversationId?: string
   readonly sessionKey: string
 }
@@ -12,6 +13,7 @@ type FollowDecisionInput = SynapseAgentConversationUpdatedPayload & {
 type FollowState = {
   readonly followFeishu: boolean
   readonly inputDirty: boolean
+  readonly selectedProjectId?: string
   readonly selectedConversationId?: string
   readonly selectedSessionKey: string
 }
@@ -24,9 +26,14 @@ type TimelineSnapshotState = {
 }
 
 function isSelectedConversation(
-  target: Pick<SynapseAgentConversationUpdatedPayload, "sessionKey"> & { readonly conversationId?: string },
+  target: Pick<SynapseAgentConversationUpdatedPayload, "projectId" | "sessionKey"> & {
+    readonly conversationId?: string
+  },
   selected: SelectedConversation,
 ): boolean {
+  if (selected.projectId && target.projectId !== selected.projectId) {
+    return false
+  }
   if (selected.conversationId) {
     return target.conversationId === selected.conversationId
   }
@@ -35,25 +42,30 @@ function isSelectedConversation(
 
 function incrementUnreadForConversation(
   current: UnreadState,
-  target: Pick<SynapseAgentConversationUpdatedPayload, "sessionKey"> & { readonly conversationId?: string },
+  target: Pick<SynapseAgentConversationUpdatedPayload, "projectId" | "sessionKey"> & {
+    readonly conversationId?: string
+  },
   selected: SelectedConversation,
 ): UnreadState {
   if (!target.conversationId || isSelectedConversation(target, selected)) {
     return current
   }
+  const key = conversationUnreadKey(target.projectId, target.conversationId)
   return {
     ...current,
-    [target.conversationId]: (current[target.conversationId] ?? 0) + 1,
+    [key]: (current[key] ?? 0) + 1,
   }
 }
 
 function clearConversationUnread(
   current: UnreadState,
+  projectId: string,
   conversationId: string,
 ): UnreadState {
-  if (current[conversationId] === undefined) return current
+  const key = conversationUnreadKey(projectId, conversationId)
+  if (current[key] === undefined) return current
   const next = { ...current }
-  delete next[conversationId]
+  delete next[key]
   return next
 }
 
@@ -65,13 +77,16 @@ function shouldAutoFollowConversation(
     && !state.inputDirty
     && target.platform === "feishu"
     && !isSelectedConversation(target, {
+      projectId: state.selectedProjectId,
       conversationId: state.selectedConversationId,
       sessionKey: state.selectedSessionKey,
     })
 }
 
 function shouldApplyTimelineSnapshot(
-  target: Pick<SynapseAgentConversationUpdatedPayload, "sessionKey"> & { readonly conversationId?: string },
+  target: Pick<SynapseAgentConversationUpdatedPayload, "projectId" | "sessionKey"> & {
+    readonly conversationId?: string
+  },
   selected: SelectedConversation,
   state: TimelineSnapshotState,
 ): boolean {
@@ -79,8 +94,13 @@ function shouldApplyTimelineSnapshot(
     && isSelectedConversation(target, selected)
 }
 
+function conversationUnreadKey(projectId: string, conversationId: string): string {
+  return `${projectId}:${conversationId}`
+}
+
 export {
   clearConversationUnread,
+  conversationUnreadKey,
   incrementUnreadForConversation,
   isSelectedConversation,
   shouldApplyTimelineSnapshot,
