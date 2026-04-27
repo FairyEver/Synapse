@@ -27,7 +27,7 @@ import type {
   SynapseRepositoryUpdatedEvent,
   SynapseRepositoryValidationResult,
 } from "@/types/repository"
-import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireBridgeDomain } from "@/lib/electron-bridge"
 
 export type RepositoryOperationState = {
   operation: SynapseRepositoryOperationKind | null
@@ -407,6 +407,9 @@ class RepositoryManager {
       })
 
       await this.refreshPendingPushes(uuid)
+      if (operation === "sync" && uuid === this.getActiveRepositoryUuid()) {
+        await this.refreshAllContent()
+      }
       this.notifyRepositorySubscribers()
       return result
     } catch (error) {
@@ -572,7 +575,7 @@ class RepositoryManager {
   }
 
   async refreshContentList<T extends SynapseContentType>(contentType: T): Promise<void> {
-    const bridge = window.synapse?.content
+    const bridge = getSynapseBridge()?.content
     if (!bridge) {
       this.contentErrors.set(contentType, new Error("Content bridge not available"))
       this.notifyContentSubscribers(contentType)
@@ -607,11 +610,11 @@ class RepositoryManager {
 
   // ===== 桥接检查 =====
   hasRepositoryBridge(): boolean {
-    return Boolean(window.synapse?.repository)
+    return Boolean(getSynapseBridge()?.repository)
   }
 
   hasContentBridge(): boolean {
-    return Boolean(window.synapse?.content)
+    return Boolean(getSynapseBridge()?.content)
   }
 
   // ===== 工具方法 =====
@@ -626,7 +629,7 @@ class RepositoryManager {
   }
 
   async chooseDirectory(): Promise<string | null> {
-    const bridge = window.synapse?.repository
+    const bridge = getSynapseBridge()?.repository
     if (!bridge) {
       return null
     }
@@ -641,7 +644,7 @@ class RepositoryManager {
   }
 
   async getPendingPushesFromBridge(uuid: string): Promise<SynapsePendingPushState> {
-    const bridge = window.synapse?.repository
+    const bridge = getSynapseBridge()?.repository
     if (!bridge) {
       return { count: 0, items: [] }
     }
@@ -702,7 +705,7 @@ class RepositoryManager {
 
   // ===== 内部方法 =====
   async refreshRepositoryStates(): Promise<void> {
-    const bridge = window.synapse?.repository
+    const bridge = getSynapseBridge()?.repository
     if (!bridge) {
       return
     }
@@ -732,7 +735,7 @@ class RepositoryManager {
   }
 
   private setupBridgeListeners(): void {
-    const bridge = window.synapse?.repository
+    const bridge = getSynapseBridge()?.repository
     if (!bridge) {
       return
     }

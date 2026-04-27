@@ -27,4 +27,17 @@ description: 使用 Bark 发送手机推送通知。Use when the user asks to se
 标题：打包完成
 内容：Synapse 打包已完成。
 
+URL 示例：
+
+```text
+https://api.day.app/${{ BARK_ID }}/构建完成/Synapse 打包成功
+https://api.day.app/${{ BARK_ID }}/打包完成/Synapse 打包已完成。
+```
+
+实际请求前必须对标题和内容进行 URL 编码，例如：
+
+```text
+https://api.day.app/${{ BARK_ID }}/%E6%9E%84%E5%BB%BA%E5%AE%8C%E6%88%90/Synapse%20%E6%89%93%E5%8C%85%E6%88%90%E5%8A%9F
+```
+
 不要在回复中展示完整的 `BARK_ID`。

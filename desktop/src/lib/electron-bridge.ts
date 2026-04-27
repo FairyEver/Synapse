@@ -6,7 +6,7 @@ const DEFAULT_BRIDGE_ERROR_MESSAGE =
 type SynapseBridgeDomain = Exclude<keyof SynapseBridge, "platform" | "versions">
 
 function getSynapseBridge(): SynapseBridge | undefined {
-  return window.synapse
+  return (window as Window & { synapse?: SynapseBridge }).synapse
 }
 
 function createMissingBridgeError(message = DEFAULT_BRIDGE_ERROR_MESSAGE): Error {
