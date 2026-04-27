@@ -70,6 +70,7 @@ export interface SynapseAgentSessionSummary {
   readonly sessionKey: string
   readonly name?: string
   readonly platform?: string
+  readonly sourceLabel?: string
   readonly agentType?: string
   readonly agentSessionId?: string
   readonly active: boolean

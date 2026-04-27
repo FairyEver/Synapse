@@ -141,6 +141,36 @@ describe("agentIpcModule", () => {
     }))
   })
 
+  it("returns readable source labels for Feishu sessions", async () => {
+    const listSessions = vi.fn().mockResolvedValue([{
+      id: "feishu-conv",
+      sessionKey: "feishu:oc_group:ou_user",
+      platform: "feishu",
+      channelKey: "feishu:oc_group",
+      active: true,
+      history: [],
+      userMeta: {
+        userName: "User One",
+        chatName: "Dev Group",
+      },
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T01:00:00.000Z",
+    }])
+    const harness = createHarness({
+      agent: { listSessions },
+    })
+
+    await expect(harness.invoke("synapse:agent:list-sessions", {
+      projectId: "project-1",
+    })).resolves.toEqual([
+      expect.objectContaining({
+        id: "feishu-conv",
+        platform: "feishu",
+        sourceLabel: "Dev Group / User One",
+      }),
+    ])
+  })
+
   it("creates and switches local renderer sessions", async () => {
     const created = {
       id: "conv-2",

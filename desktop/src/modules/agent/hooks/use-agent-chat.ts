@@ -3,7 +3,6 @@ import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
-  SynapseAgentConversationUpdatedPayload,
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
   SynapseAgentPublishedCommand,
@@ -19,6 +18,14 @@ import {
   defaultSessionKey,
   localUserTimelineEntry,
 } from "../utils"
+import {
+  clearConversationUnread,
+  incrementUnreadForConversation,
+  isSelectedConversation,
+  shouldApplyTimelineSnapshot,
+  shouldAutoFollowConversation,
+  type UnreadState,
+} from "../live-sync"
 
 const logger = createRendererLogger("agent")
 
@@ -29,6 +36,9 @@ type UseAgentChatState = {
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
   commands: SynapseAgentPublishedCommand[]
+  followFeishu: boolean
+  setFollowFeishu: (follow: boolean) => void
+  unreadByConversationId: UnreadState
   selectedConversationId?: string
   selectedSessionKey: string
   loading: boolean
@@ -42,40 +52,82 @@ type UseAgentChatState = {
   respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
 }
 
-function useAgentChat(projectId: string | undefined): UseAgentChatState {
+function useAgentChat(
+  projectId: string | undefined,
+  options: { readonly inputDirty?: boolean } = {},
+): UseAgentChatState {
   const [sessions, setSessions] = useState<SynapseAgentSessionSummary[]>([])
   const [timeline, setTimeline] = useState<SynapseAgentTimelineEntry[]>([])
   const [pendingPermissions, setPendingPermissions] = useState<SynapseAgentPendingPermission[]>([])
   const [status, setStatus] = useState<SynapseAgentStatus | null>(null)
   const [providers, setProviders] = useState<SynapseAgentProviderState | null>(null)
   const [commands, setCommands] = useState<SynapseAgentPublishedCommand[]>([])
+  const [followFeishu, setFollowFeishuRaw] = useState(false)
+  const [unreadByConversationId, setUnreadByConversationId] = useState<UnreadState>({})
   const [selectedConversationId, setSelectedConversationIdRaw] = useState<string | undefined>()
   const [selectedSessionKey, setSelectedSessionKeyRaw] = useState(DEFAULT_LOCAL_SESSION_KEY)
   const [loading, setLoading] = useState(false)
   const [activeSendCount, setActiveSendCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const followFeishuRef = useRef(followFeishu)
+  const inputDirtyRef = useRef(options.inputDirty ?? false)
   const selectedConversationIdRef = useRef<string | undefined>(selectedConversationId)
   const selectedSessionKeyRef = useRef(selectedSessionKey)
+  const selectRequestIdRef = useRef(0)
+  const timelineVersionRef = useRef(0)
+  followFeishuRef.current = followFeishu
+  inputDirtyRef.current = options.inputDirty ?? false
   selectedConversationIdRef.current = selectedConversationId
   selectedSessionKeyRef.current = selectedSessionKey
+
+  const setFollowFeishu = useCallback((follow: boolean) => {
+    followFeishuRef.current = follow
+    setFollowFeishuRaw(follow)
+  }, [])
+
+  const replaceTimeline = useCallback((entries: SynapseAgentTimelineEntry[]) => {
+    timelineVersionRef.current += 1
+    setTimeline(entries)
+  }, [])
+
+  const updateTimeline = useCallback((
+    updater: (current: SynapseAgentTimelineEntry[]) => SynapseAgentTimelineEntry[],
+  ) => {
+    timelineVersionRef.current += 1
+    setTimeline(updater)
+  }, [])
+
+  const clearTimeline = useCallback(() => {
+    replaceTimeline([])
+  }, [replaceTimeline])
 
   const loadTimeline = useCallback(async (target: {
     readonly sessionKey: string
     readonly conversationId?: string
   }) => {
     if (!projectId) {
-      setTimeline([])
+      clearTimeline()
       return
     }
     const bridge = requireSynapseBridge()
+    const capturedVersion = timelineVersionRef.current
     const result = await bridge.agent.getTimeline({
       projectId,
       sessionKey: target.sessionKey,
       conversationId: target.conversationId,
       limit: 100,
     })
-    setTimeline(result.entries)
-  }, [projectId])
+    if (!shouldApplyTimelineSnapshot(target, {
+      conversationId: selectedConversationIdRef.current,
+      sessionKey: selectedSessionKeyRef.current,
+    }, {
+      capturedVersion,
+      currentVersion: timelineVersionRef.current,
+    })) {
+      return
+    }
+    replaceTimeline(result.entries)
+  }, [clearTimeline, projectId, replaceTimeline])
 
   const refreshPendingPermissions = useCallback(async () => {
     if (!projectId) {
@@ -86,7 +138,7 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     setPendingPermissions(await bridge.agent.listPendingPermissions(projectId))
   }, [projectId])
 
-  const refreshConversationSnapshot = useCallback(async (target: {
+  const refreshConversationSnapshot = useCallback(async (_target: {
     readonly sessionKey: string
     readonly conversationId: string
   }) => {
@@ -101,23 +153,18 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
       ])
       setSessions(nextSessions)
       setPendingPermissions(nextPending)
-      if (matchesSelectedConversation(target, {
-        conversationId: selectedConversationIdRef.current,
-        sessionKey: selectedSessionKeyRef.current,
-      })) {
-        await loadTimeline(target)
-      }
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "刷新会话失败"
       logger.error("Agent conversation refresh failed.", rawError)
       setError(message)
     }
-  }, [loadTimeline, projectId])
+  }, [projectId])
 
   const refresh = useCallback(async () => {
     if (!projectId) {
       return
     }
+    selectRequestIdRef.current += 1
     const bridge = requireSynapseBridge()
     setLoading(true)
     setError(null)
@@ -157,6 +204,8 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
 
   const createSession = useCallback(async () => {
     if (!projectId) return
+    const requestId = selectRequestIdRef.current + 1
+    selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
     setError(null)
     try {
@@ -165,26 +214,39 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
         sessionKey: DEFAULT_LOCAL_SESSION_KEY,
         name: `新会话 ${formatSessionNameTime(new Date())}`,
       })
+      if (requestId !== selectRequestIdRef.current) {
+        setSessions((current) => current.some((item) => item.id === session.id)
+          ? current
+          : [{ ...session, active: false }, ...current])
+        toast("新会话已创建")
+        return
+      }
       selectedConversationIdRef.current = session.id
       selectedSessionKeyRef.current = session.sessionKey
       setSessions((current) => [session, ...current.map((item) => ({ ...item, active: false }))])
       setSelectedConversationIdRaw(session.id)
       setSelectedSessionKeyRaw(session.sessionKey)
-      setTimeline([])
+      setUnreadByConversationId((current) => clearConversationUnread(current, session.id))
+      clearTimeline()
       toast("新会话已创建")
       await refresh()
     } catch (rawError) {
+      if (requestId !== selectRequestIdRef.current) {
+        return
+      }
       const message = rawError instanceof Error ? rawError.message : "创建失败"
       logger.error("Agent session create failed.", rawError)
       setError(message)
     }
-  }, [projectId, refresh])
+  }, [clearTimeline, projectId, refresh])
 
   const selectSession = useCallback(async (conversationId: string) => {
     if (!projectId) return
     const target = sessions.find((session) => session.id === conversationId)
     if (!target) return
     const bridge = requireSynapseBridge()
+    const requestId = selectRequestIdRef.current + 1
+    selectRequestIdRef.current = requestId
     setError(null)
     try {
       const session = await bridge.agent.switchSession({
@@ -192,16 +254,23 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
         sessionKey: target.sessionKey,
         conversationId: target.id,
       })
+      if (requestId !== selectRequestIdRef.current) {
+        return
+      }
       selectedConversationIdRef.current = session.id
       selectedSessionKeyRef.current = session.sessionKey
       setSelectedConversationIdRaw(session.id)
       setSelectedSessionKeyRaw(session.sessionKey)
+      setUnreadByConversationId((current) => clearConversationUnread(current, session.id))
       setSessions((current) => current.map((session) => ({
         ...session,
         active: session.id === target.id,
       })))
       await loadTimeline({ sessionKey: session.sessionKey, conversationId: session.id })
     } catch (rawError) {
+      if (requestId !== selectRequestIdRef.current) {
+        return
+      }
       logger.error("Agent session switch failed.", rawError)
       setError(rawError instanceof Error ? rawError.message : "切换失败")
     }
@@ -215,7 +284,7 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     const sessionKey = sessions.find((session) => session.id === selectedConversationIdRef.current)?.sessionKey
       ?? selectedSessionKeyRef.current
     const now = new Date().toISOString()
-    setTimeline((current) => [
+    updateTimeline((current) => [
       ...current,
       localUserTimelineEntry(trimmed, now, current.length),
     ])
@@ -235,15 +304,28 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     } finally {
       setActiveSendCount((count) => Math.max(0, count - 1))
     }
-  }, [projectId, refresh, sessions])
+  }, [projectId, refresh, sessions, updateTimeline])
 
   const deleteSession = useCallback(async (conversationId: string) => {
     if (!projectId) return
+    const requestId = selectRequestIdRef.current + 1
+    selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
     const remaining = sessions.filter((session) => session.id !== conversationId)
+    const deletedSessionKey = sessions.find((session) => session.id === conversationId)?.sessionKey
+      ?? DEFAULT_LOCAL_SESSION_KEY
+    let resetUnreadAfterDelete = false
     setError(null)
     try {
       const result = await bridge.agent.deleteSession({ projectId, conversationId })
+      if (requestId !== selectRequestIdRef.current) {
+        if (result.ok) {
+          setUnreadByConversationId((current) => clearConversationUnread(current, conversationId))
+          toast("会话已删除")
+          void refreshConversationSnapshot({ sessionKey: deletedSessionKey, conversationId })
+        }
+        return
+      }
       if (!result.ok) {
         setError("会话不存在")
         return
@@ -256,6 +338,12 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
             sessionKey: next.sessionKey,
             conversationId: next.id,
           })
+          if (requestId !== selectRequestIdRef.current) {
+            setUnreadByConversationId((current) => clearConversationUnread(current, conversationId))
+            toast("会话已删除")
+            void refreshConversationSnapshot({ sessionKey: deletedSessionKey, conversationId })
+            return
+          }
           selectedConversationIdRef.current = session.id
           selectedSessionKeyRef.current = session.sessionKey
           setSelectedConversationIdRaw(session.id)
@@ -265,17 +353,25 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
           selectedSessionKeyRef.current = DEFAULT_LOCAL_SESSION_KEY
           setSelectedConversationIdRaw(undefined)
           setSelectedSessionKeyRaw(DEFAULT_LOCAL_SESSION_KEY)
-          setTimeline([])
+          clearTimeline()
+          setUnreadByConversationId({})
+          resetUnreadAfterDelete = true
         }
+      }
+      if (!resetUnreadAfterDelete) {
+        setUnreadByConversationId((current) => clearConversationUnread(current, conversationId))
       }
       toast("会话已删除")
       await refresh()
     } catch (rawError) {
+      if (requestId !== selectRequestIdRef.current) {
+        return
+      }
       const message = rawError instanceof Error ? rawError.message : "删除失败"
       logger.error("Agent session delete failed.", rawError)
       setError(message)
     }
-  }, [projectId, refresh, sessions])
+  }, [clearTimeline, projectId, refresh, refreshConversationSnapshot, sessions])
 
   const respondPermission = useCallback(async (
     requestId: string,
@@ -296,12 +392,14 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
 
   useEffect(() => {
     if (!projectId) {
+      selectRequestIdRef.current += 1
       setSessions([])
-      setTimeline([])
+      clearTimeline()
       setPendingPermissions([])
       setStatus(null)
       setProviders(null)
       setCommands([])
+      setUnreadByConversationId({})
       setSelectedConversationIdRaw(undefined)
       setSelectedSessionKeyRaw(DEFAULT_LOCAL_SESSION_KEY)
       setError(null)
@@ -310,7 +408,7 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
       return
     }
     void refresh()
-  }, [projectId, refresh])
+  }, [clearTimeline, projectId, refresh])
 
   useEffect(() => {
     if (!projectId) return undefined
@@ -318,23 +416,53 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     return bridge.agent.onEvent((domainEvent) => {
       if (domainEvent.payload.projectId !== projectId) return
       if (domainEvent.type === "conversationUpdated") {
-        if (!matchesSelectedConversation(domainEvent.payload, {
+        const selected = {
           conversationId: selectedConversationIdRef.current,
           sessionKey: selectedSessionKeyRef.current,
-        })) {
+        }
+        const selectedUpdate = isSelectedConversation(domainEvent.payload, selected)
+        const autoFollow = shouldAutoFollowConversation(domainEvent.payload, {
+          followFeishu: followFeishuRef.current,
+          inputDirty: inputDirtyRef.current,
+          selectedConversationId: selected.conversationId,
+          selectedSessionKey: selected.sessionKey,
+        })
+
+        void refreshConversationSnapshot(domainEvent.payload)
+        if (selectedUpdate || autoFollow) {
+          if (autoFollow) {
+            selectRequestIdRef.current += 1
+            selectedConversationIdRef.current = domainEvent.payload.conversationId
+            selectedSessionKeyRef.current = domainEvent.payload.sessionKey
+            setSelectedConversationIdRaw(domainEvent.payload.conversationId)
+            setSelectedSessionKeyRaw(domainEvent.payload.sessionKey)
+          }
+          setUnreadByConversationId((current) => clearConversationUnread(
+            current,
+            domainEvent.payload.conversationId,
+          ))
+          void loadTimeline(domainEvent.payload).catch((rawError: unknown) => {
+            const message = rawError instanceof Error ? rawError.message : "加载会话失败"
+            logger.error("Agent live timeline refresh failed.", rawError)
+            setError(message)
+          })
           return
         }
-        void refreshConversationSnapshot(domainEvent.payload)
+        setUnreadByConversationId((current) => incrementUnreadForConversation(
+          current,
+          domainEvent.payload,
+          selected,
+        ))
         return
       }
       if (!matchesSelectedEvent(domainEvent, {
         conversationId: selectedConversationIdRef.current,
         sessionKey: selectedSessionKeyRef.current,
       })) return
-      setTimeline((current) => appendAgentEvent(current, domainEvent.payload.event, domainEvent.timestamp))
+      updateTimeline((current) => appendAgentEvent(current, domainEvent.payload.event, domainEvent.timestamp))
       void refreshPendingPermissions()
     })
-  }, [projectId, refreshConversationSnapshot, refreshPendingPermissions])
+  }, [loadTimeline, projectId, refreshConversationSnapshot, refreshPendingPermissions, updateTimeline])
 
   return {
     sessions,
@@ -343,6 +471,9 @@ function useAgentChat(projectId: string | undefined): UseAgentChatState {
     status,
     providers,
     commands,
+    followFeishu,
+    setFollowFeishu,
+    unreadByConversationId,
     selectedConversationId,
     selectedSessionKey,
     loading,
@@ -406,18 +537,8 @@ function matchesSelectedEvent(
   domainEvent: SynapseAgentDomainEvent,
   selected: { readonly conversationId?: string; readonly sessionKey: string },
 ): boolean {
-  return matchesSelectedConversation({
+  return isSelectedConversation({
     conversationId: domainEvent.scope?.sessionId,
     sessionKey: domainEvent.payload.sessionKey,
   }, selected)
-}
-
-function matchesSelectedConversation(
-  target: Pick<SynapseAgentConversationUpdatedPayload, "sessionKey"> & { readonly conversationId?: string },
-  selected: { readonly conversationId?: string; readonly sessionKey: string },
-): boolean {
-  if (selected.conversationId) {
-    return target.conversationId === selected.conversationId
-  }
-  return target.sessionKey === selected.sessionKey
 }

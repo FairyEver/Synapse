@@ -72,6 +72,7 @@ const sessionSummarySchema = z.object({
   sessionKey: z.string(),
   name: z.string().optional(),
   platform: z.string().optional(),
+  sourceLabel: z.string().optional(),
   agentType: z.string().optional(),
   agentSessionId: z.string().optional(),
   active: z.boolean(),
@@ -539,6 +540,7 @@ function sessionSummary(session: ConversationEntryV1) {
     sessionKey: session.sessionKey,
     name: session.name,
     platform: session.platform,
+    sourceLabel: sessionSourceLabel(session),
     agentType: session.agentType,
     agentSessionId: session.agentSessionId,
     active: session.active,
@@ -547,6 +549,21 @@ function sessionSummary(session: ConversationEntryV1) {
     updatedAt: session.updatedAt,
     lastMessage: last ? historyEntry(session.id, last, session.history.length - 1) : undefined,
   }
+}
+
+function sessionSourceLabel(session: ConversationEntryV1): string | undefined {
+  const chatName = stringFromRecord(session.userMeta, "chatName")
+  const userName = stringFromRecord(session.userMeta, "userName")
+  if (chatName && userName) return `${chatName} / ${userName}`
+  return chatName ?? userName ?? session.channelKey
+}
+
+function stringFromRecord(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const item = value?.[key]
+  return typeof item === "string" && item.trim() ? item.trim() : undefined
 }
 
 async function resolveTimelineSession(

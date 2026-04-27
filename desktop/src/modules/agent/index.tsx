@@ -36,8 +36,8 @@ const logger = createRendererLogger("agent")
 function AgentModule() {
   const activeRepository = useActiveRepository()
   const projectId = activeRepository?.uuid
-  const chat = useAgentChat(projectId)
   const [draft, setDraft] = useState("")
+  const chat = useAgentChat(projectId, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [thinkingFrame, setThinkingFrame] = useState(0)
 
@@ -108,10 +108,13 @@ function AgentModule() {
       sessions={chat.sessions}
       selectedConversationId={chat.selectedConversationId}
       loading={chat.loading || chat.sending}
+      followFeishu={chat.followFeishu}
+      unreadByConversationId={chat.unreadByConversationId}
       onRefresh={() => void chat.refresh()}
       onCreate={() => void chat.createSession()}
       onSelect={(conversationId) => void chat.selectSession(conversationId)}
       onDelete={(conversationId) => void chat.deleteSession(conversationId)}
+      onFollowFeishuChange={chat.setFollowFeishu}
     />
   )
 

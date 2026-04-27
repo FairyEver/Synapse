@@ -4,6 +4,7 @@ import {
   agentCliLabel,
   formatAgentTranscript,
   formatEntryTime,
+  sessionLabel,
   thinkingIndicatorText,
 } from "../utils"
 
@@ -23,6 +24,49 @@ describe("agent utils", () => {
     expect(agentCliLabel("codex")).toBe("codex")
     expect(agentCliLabel("claude-code")).toBe("claudecode")
     expect(agentCliLabel(undefined)).toBeUndefined()
+  })
+
+  it("uses source labels for Feishu session rows", () => {
+    expect(sessionLabel({
+      id: "feishu-conv",
+      sessionKey: "feishu:oc_group:ou_user",
+      platform: "feishu",
+      sourceLabel: "Dev Group / User One",
+      active: true,
+      historyCount: 0,
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T01:00:00.000Z",
+    })).toBe("Dev Group / User One")
+
+    expect(sessionLabel({
+      id: "named-conv",
+      sessionKey: "local:named",
+      name: "Named Session",
+      sourceLabel: "Source Label",
+      active: true,
+      historyCount: 0,
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T01:00:00.000Z",
+    })).toBe("Named Session")
+
+    expect(sessionLabel({
+      id: "source-conv",
+      sessionKey: "local:source",
+      sourceLabel: "Source Label",
+      active: true,
+      historyCount: 0,
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T01:00:00.000Z",
+    })).toBe("Source Label")
+
+    expect(sessionLabel({
+      id: "key-conv",
+      sessionKey: "local:key",
+      active: true,
+      historyCount: 0,
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T01:00:00.000Z",
+    })).toBe("local:key")
   })
 
   it("formats the current conversation for clipboard copy", () => {

@@ -74,7 +74,8 @@ function roleForEvent(event: SynapseAgentEvent): SynapseAgentTimelineEntry["role
 }
 
 function sessionLabel(session: SynapseAgentSessionSummary): string {
-  return session.name || session.sessionKey || DEFAULT_LOCAL_SESSION_KEY
+  if (session.platform === "feishu" && session.sourceLabel) return session.sourceLabel
+  return session.name || session.sourceLabel || session.sessionKey || DEFAULT_LOCAL_SESSION_KEY
 }
 
 function defaultSessionKey(sessions: readonly SynapseAgentSessionSummary[]): string {

@@ -24,6 +24,7 @@
     "src/**/__tests__/**/*.tsx",
     "src/**/*.test.{ts,tsx}",
     "src/**/*.spec.{ts,tsx}",
+    "src/types/**/*.d.ts",
     "tests/**/*.ts",
     "vitest.config.ts"
   ]

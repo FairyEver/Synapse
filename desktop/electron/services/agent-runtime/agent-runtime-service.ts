@@ -585,6 +585,7 @@ export class AgentRuntimeService {
         conversation = await this.repository.getOrCreateActive(message)
       }
       conversation = await this.repository.appendHistory(conversation.id, "user", message.content)
+      this.emitConversationUpdated(conversation)
 
       const workDir = this.workDirFor(message)
       if (!workDir) {

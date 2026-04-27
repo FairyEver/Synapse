@@ -10,7 +10,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   ModuleSidebar,
   ModuleSidebarItem,
@@ -27,20 +30,26 @@ type AgentSessionSidebarProps = {
   sessions: SynapseAgentSessionSummary[]
   selectedConversationId?: string
   loading: boolean
+  followFeishu: boolean
+  unreadByConversationId: Record<string, number>
   onRefresh: () => void
   onCreate: () => void
   onSelect: (conversationId: string) => void
   onDelete: (conversationId: string) => void
+  onFollowFeishuChange: (follow: boolean) => void
 }
 
 function AgentSessionSidebar({
   sessions,
   selectedConversationId,
   loading,
+  followFeishu,
+  unreadByConversationId,
   onRefresh,
   onCreate,
   onSelect,
   onDelete,
+  onFollowFeishuChange,
 }: AgentSessionSidebarProps) {
   const items = sessions.length > 0
     ? sessions
@@ -81,10 +90,24 @@ function AgentSessionSidebar({
           </Button>
         </div>
       </div>
+      <div className="flex items-center justify-between px-1">
+        <Label htmlFor="agent-follow-feishu" className="text-xs text-muted-foreground">
+          跟随飞书
+        </Label>
+        <Switch
+          id="agent-follow-feishu"
+          size="sm"
+          checked={followFeishu}
+          onCheckedChange={onFollowFeishuChange}
+        />
+      </div>
       <ModuleSidebarList>
         {items.map((session) => {
           const canDelete = sessions.length > 0
-          const trailing = session.updatedAt ? <SessionTrailing updatedAt={session.updatedAt} /> : null
+          const unread = unreadByConversationId[session.id] ?? 0
+          const trailing = (
+            <SessionTrailing updatedAt={session.updatedAt} unread={unread} />
+          )
           return (
             <div key={session.id} className="flex items-center gap-1">
               <ModuleSidebarItem
@@ -133,15 +156,27 @@ function AgentSessionSidebar({
 
 function SessionTrailing({
   updatedAt,
+  unread,
 }: {
   readonly updatedAt?: string
+  readonly unread: number
 }) {
-  if (!updatedAt) {
+  if (!updatedAt && unread <= 0) {
     return null
   }
   return (
-    <span className="text-xs text-muted-foreground">
-      {formatEntryTime(updatedAt)}
+    <span className="flex items-center gap-1">
+      {unread > 0 ? (
+        <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+          {unread}
+          <span className="sr-only"> 条未读</span>
+        </Badge>
+      ) : null}
+      {updatedAt ? (
+        <span className="text-xs text-muted-foreground">
+          {formatEntryTime(updatedAt)}
+        </span>
+      ) : null}
     </span>
   )
 }

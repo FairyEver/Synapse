@@ -273,7 +273,12 @@ describe("AgentRuntimeService", () => {
       role: "assistant",
       content: "done",
     }))
-    expect(events.map((event) => event.type)).toEqual(["text", "result", "conversationUpdated"])
+    expect(events.map((event) => event.type)).toEqual([
+      "conversationUpdated",
+      "text",
+      "result",
+      "conversationUpdated",
+    ])
     expect(update).toEqual(expect.objectContaining({
       domain: "agent",
       type: "conversationUpdated",
@@ -285,6 +290,102 @@ describe("AgentRuntimeService", () => {
       },
       scope: { sessionId: result.conversationId },
     }))
+  })
+
+  it("emits conversation updates after Feishu user append and final assistant save", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const events: Array<Parameters<ScopedEventBus["emit"]>[0]> = []
+    const eventSnapshots: Array<{
+      readonly event: Parameters<ScopedEventBus["emit"]>[0]
+      readonly history: Array<{ readonly role: string; readonly content: string }>
+    }> = []
+    const runner = new FakeRunner([
+      JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { type: "agent_message", content: [{ type: "output_text", text: "done" }] },
+      }),
+      JSON.stringify({ type: "turn.completed" }),
+    ])
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter: new CodexExecAdapter(runner),
+      eventBus: {
+        projectId: "project-1",
+        emit: (event) => {
+          const sessionId = event.scope?.sessionId
+          events.push(event)
+          eventSnapshots.push({
+            event,
+            history: sessionId ? conversations.snapshot(sessionId)?.history.map((entry) => ({
+              role: entry.role,
+              content: entry.content,
+            })) ?? [] : [],
+          })
+        },
+        on: vi.fn(),
+        underlying: {} as ScopedEventBus["underlying"],
+      },
+      now: fixedNow,
+    })
+
+    const result = await service.send({
+      projectId: "project-1",
+      sessionKey: "feishu:oc_group:ou_user",
+      channelKey: "feishu:oc_group",
+      platform: "feishu",
+      userId: "ou_user",
+      userName: "User One",
+      chatName: "Feishu Group",
+      content: "hello from Feishu",
+    })
+
+    const updates = events.filter((event) => event.type === "conversationUpdated")
+    expect(updates).toEqual([
+      expect.objectContaining({
+        payload: {
+          projectId: "project-1",
+          sessionKey: "feishu:oc_group:ou_user",
+          platform: "feishu",
+          conversationId: result.conversationId,
+        },
+      }),
+      expect.objectContaining({
+        payload: {
+          projectId: "project-1",
+          sessionKey: "feishu:oc_group:ou_user",
+          platform: "feishu",
+          conversationId: result.conversationId,
+        },
+      }),
+    ])
+    expect(events.map((event) => event.type)).toEqual([
+      "conversationUpdated",
+      "text",
+      "result",
+      "conversationUpdated",
+    ])
+    expect(eventSnapshots.map((snapshot) => snapshot.event.type)).toEqual([
+      "conversationUpdated",
+      "text",
+      "result",
+      "conversationUpdated",
+    ])
+    expect(eventSnapshots[0]?.history).toEqual([
+      { role: "user", content: "hello from Feishu" },
+    ])
+    expect(eventSnapshots[1]?.history).toEqual([
+      { role: "user", content: "hello from Feishu" },
+    ])
+    expect(eventSnapshots[2]?.history).toEqual([
+      { role: "user", content: "hello from Feishu" },
+    ])
+    expect(eventSnapshots[3]?.history).toEqual([
+      { role: "user", content: "hello from Feishu" },
+      { role: "assistant", content: "done" },
+    ])
   })
 
   it("handles /model before the adapter and clears the current agent session id", async () => {
@@ -860,6 +961,10 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   }
 
   async get(id: string): Promise<T | null> {
+    return this.values.get(id) ?? null
+  }
+
+  snapshot(id: string): T | null {
     return this.values.get(id) ?? null
   }
 
