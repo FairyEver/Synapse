@@ -415,7 +415,8 @@ export const agentIpcModule: IpcModule = {
       response: providerStateSchema,
       handler: async (ctx, request: ProjectRequest) => {
         const { providerConfig } = await resolveProjectAgent(ctx.resolve, request.projectId)
-        const state = await providerConfig.getProjectProviderState(request.projectId, "codex")
+        const agentType = await providerConfig.getActiveAgentType(request.projectId, "codex")
+        const state = await providerConfig.getProjectProviderState(request.projectId, agentType)
         return {
           projectId: state.projectId,
           agentType: state.agentType,

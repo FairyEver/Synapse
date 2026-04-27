@@ -76,23 +76,25 @@ describe("agentIpcModule", () => {
   })
 
   it("returns provider summaries without secrets", async () => {
+    const getProjectProviderState = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      agentType: "claude-code",
+      activeProviderId: "anthropic",
+      activeModel: "claude-sonnet-4.5",
+      activeMode: "plan",
+      providers: [{
+        id: "anthropic",
+        display: "Anthropic",
+        model: "claude-sonnet-4.5",
+        baseUrl: "https://api.anthropic.example.test",
+        secretRef: "secret:anthropic",
+        scope: "global",
+      }],
+    })
     const harness = createHarness({
       providerConfig: {
-        getProjectProviderState: vi.fn().mockResolvedValue({
-          projectId: "project-1",
-          agentType: "codex",
-          activeProviderId: "openai",
-          activeModel: "gpt-5.4",
-          activeMode: "suggest",
-          providers: [{
-            id: "openai",
-            display: "OpenAI",
-            model: "gpt-5.4",
-            baseUrl: "https://api.example.test",
-            secretRef: "secret:openai",
-            scope: "global",
-          }],
-        }),
+        getActiveAgentType: vi.fn().mockResolvedValue("claude-code"),
+        getProjectProviderState,
       },
     })
 
@@ -102,19 +104,20 @@ describe("agentIpcModule", () => {
 
     expect(result).toEqual({
       projectId: "project-1",
-      agentType: "codex",
-      activeProviderId: "openai",
-      activeModel: "gpt-5.4",
-      activeMode: "suggest",
+      agentType: "claude-code",
+      activeProviderId: "anthropic",
+      activeModel: "claude-sonnet-4.5",
+      activeMode: "plan",
       providers: [{
-        id: "openai",
-        display: "OpenAI",
+        id: "anthropic",
+        display: "Anthropic",
         active: true,
-        model: "gpt-5.4",
-        baseUrl: "https://api.example.test",
+        model: "claude-sonnet-4.5",
+        baseUrl: "https://api.anthropic.example.test",
         scope: "global",
       }],
     })
+    expect(getProjectProviderState).toHaveBeenCalledWith("project-1", "claude-code")
   })
 
   it("returns the full conversation timeline when no limit is requested", async () => {
