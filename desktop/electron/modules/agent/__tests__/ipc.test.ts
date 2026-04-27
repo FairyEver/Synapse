@@ -168,6 +168,8 @@ describe("agentIpcModule", () => {
       },
     }))
     expect(result.agents.find((agent) => agent.id === "claude-code")?.issues).toContain("provider-not-configured")
+    expect(JSON.stringify(result)).not.toContain("secret:openai")
+    expect(JSON.stringify(result)).not.toContain("secretRef")
   })
 
   it("returns the full conversation timeline when no limit is requested", async () => {
