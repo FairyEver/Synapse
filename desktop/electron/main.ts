@@ -10,6 +10,7 @@ import { createMainLogger } from "./services/log-store"
 import { repositoryStore } from "./services/repository-store"
 import type { EventBus } from "./runtime/event-bus"
 import type { IpcHandlerContext } from "./runtime/ipc/types"
+import type { WindowManager } from "./runtime/window"
 import {
   attachActivateHandler,
   attachBeforeQuitHandler,
@@ -26,12 +27,14 @@ import {
 const logger = createMainLogger("main")
 const mainWindowState = createMainWindowState()
 let allowAppQuit = false
+let windowManager: WindowManager | undefined
 
 attachProcessLevelLogging()
 
 function focusOrCreateMainWindow(): void {
   showOrCreateMainWindow({
     state: mainWindowState,
+    windowManager,
     isAppQuitting: () => allowAppQuit,
   })
 }
@@ -75,8 +78,10 @@ if (!gotSingleInstanceLock) {
       }
 
       logger.info("Service registry started. Creating main window.")
+      windowManager = registry.get<WindowManager>("core.window-manager")
       createMainWindow({
         state: mainWindowState,
+        windowManager,
         isAppQuitting: () => allowAppQuit,
       })
 

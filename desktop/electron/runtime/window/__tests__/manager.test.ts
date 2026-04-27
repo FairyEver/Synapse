@@ -121,6 +121,15 @@ describe("WindowManager (T3.12)", () => {
     expect(b.sent[0]).toEqual({ channel: "synapse:test", payload: { v: 1 } })
   })
 
+  it("broadcast() reaches an externally attached main window", () => {
+    const manager = createWindowManager()
+    const main = makeFakeWindow(1)
+    manager.attach({ id: "main", role: "main" }, main)
+    const sent = manager.broadcast("synapse:test", { v: 1 })
+    expect(sent).toBe(1)
+    expect(main.sent[0]).toEqual({ channel: "synapse:test", payload: { v: 1 } })
+  })
+
   it("broadcast() filter excludes destroyed windows automatically", () => {
     const manager = createWindowManager()
     const a = makeFakeWindow(1)

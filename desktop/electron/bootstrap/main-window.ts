@@ -8,6 +8,7 @@
 import { BrowserWindow } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
+import { managedBrowserWindow, type WindowManager } from "../runtime/window"
 import { getWindowIconPath } from "../services/app-icon-service"
 import { createMainLogger } from "../services/log-store"
 
@@ -23,6 +24,7 @@ export function createMainWindowState(): MainWindowState {
 
 export interface MainWindowDeps {
   readonly state: MainWindowState
+  readonly windowManager?: WindowManager
   /** True when the app has reached `before-quit` and should not block window close. */
   readonly isAppQuitting: () => boolean
 }
@@ -47,6 +49,7 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
   })
 
   deps.state.current = window
+  deps.windowManager?.attach({ id: "main", role: "main" }, managedBrowserWindow(window, "main"))
 
   window.webContents.on("preload-error", (_event, preloadPath, error) => {
     logger.error("Preload script failed.", { error, preloadPath })

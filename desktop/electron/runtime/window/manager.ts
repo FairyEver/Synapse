@@ -50,6 +50,11 @@ export interface WindowDescriptor {
 export interface WindowManager {
   register(descriptor: WindowDescriptor): void
   /**
+   * Attach an externally created window so central broadcast can still reach it.
+   * Used while the app still creates the main BrowserWindow in bootstrap code.
+   */
+  attach(descriptor: Pick<WindowDescriptor, "id" | "role">, handle: ManagedWindow): void
+  /**
    * Open the window registered under `id`. `payload` is opaque — each
    * descriptor's `create` callback owns the schema; the manager passes it
    * through unchanged. Descriptors that need a strict shape should validate
@@ -89,6 +94,16 @@ export class WindowManagerImpl implements WindowManager {
       throw new Error(`Window descriptor "${descriptor.id}" already registered`)
     }
     this.windows.set(descriptor.id, { descriptor, handle: null })
+  }
+
+  attach(descriptor: Pick<WindowDescriptor, "id" | "role">, handle: ManagedWindow): void {
+    this.windows.set(descriptor.id, {
+      descriptor: {
+        ...descriptor,
+        create: () => handle,
+      },
+      handle,
+    })
   }
 
   open(id: string, payload?: unknown): ManagedWindow {

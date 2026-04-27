@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { resolveAgentProjectScope } from "../project-resolution"
 
 describe("resolveAgentProjectScope", () => {
-  it("includes every configured project and defaults to the project matching the active repository path", () => {
+  it("includes every configured project plus the active repository id for legacy local sessions", () => {
     expect(resolveAgentProjectScope({
       uuid: "repo-1",
       name: "Desktop",
@@ -13,7 +13,7 @@ describe("resolveAgentProjectScope", () => {
       { id: "project-1", name: "Desktop Project", path: "/Users/liyang/Desktop" },
     ])).toEqual({
       defaultProjectId: "project-1",
-      projectIds: ["project-2", "project-1"],
+      projectIds: ["project-2", "project-1", "repo-1"],
       repositoryId: "repo-1",
       repositoryName: "Desktop",
     })

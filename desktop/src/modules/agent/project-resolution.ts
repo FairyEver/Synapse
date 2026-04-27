@@ -17,11 +17,10 @@ function resolveAgentProjectScope(
     ? projects.find((project) => normalizePathForMatch(project.path) === repositoryPath)
     : undefined
   const fallbackRepositoryId = activeRepository?.uuid
-  const scopedProjectIds = projectIds.length > 0
-    ? projectIds
-    : fallbackRepositoryId
-      ? [fallbackRepositoryId]
-      : []
+  const scopedProjectIds = unique([
+    ...projectIds,
+    ...(fallbackRepositoryId ? [fallbackRepositoryId] : []),
+  ])
 
   return {
     projectIds: scopedProjectIds,
