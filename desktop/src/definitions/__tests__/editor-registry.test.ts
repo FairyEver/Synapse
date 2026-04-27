@@ -18,7 +18,7 @@ describe("editor definition registry", () => {
 
   it("keeps MCP and install form metadata renderer-safe", () => {
     expect(mcpDefinitions.map((definition) => definition.target)).toEqual([
-      "claude-code",
+      "claude",
       "cursor",
       "codex",
       "windsurf",

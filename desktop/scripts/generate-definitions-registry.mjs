@@ -77,7 +77,7 @@ ${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseCliDefinition[]
 
 export const mcpDefinitions = [
-${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, target: ${toIdentifier(dir)}EditorDefinition.id, icon: ${toIdentifier(dir)}EditorDefinition.icon },`).join("\n")}
+${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, icon: ${toIdentifier(dir)}EditorDefinition.icon },`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseRendererMcpDefinition[]
 
 export const installFormDefinitionByEditorId = new Map<string, SynapseInstallFormDefinition>([

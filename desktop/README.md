@@ -152,7 +152,7 @@ UI 会根据状态启用或禁用安装按钮，并给出相应提示。
 desktop/src/definitions/editor/<editor-id>/
 ```
 
-普通 IDE 只需要在这个目录中补齐定义文件。不要手改生成文件，也不要改 `editor-adapters/index.ts`、安装菜单、扫描服务、CLI 检测或 MCP 设置面板。`pnpm desktop:typecheck` 会先运行 `generate:ide-registry`，自动刷新 renderer / Electron 两侧 registry。
+普通 IDE 只需要在这个目录中补齐定义文件。不要手改生成文件，也不要改 `editor-adapters/index.ts`、安装菜单、扫描服务、CLI 检测或 MCP 设置面板。`pnpm desktop:typecheck` 会先运行 `generate:definitions-registry`，自动刷新 renderer / Electron 两侧 registry。
 
 ### 文件职责
 
@@ -169,7 +169,7 @@ desktop/src/definitions/editor/<editor-id>/
 生成入口：
 
 ```text
-desktop/scripts/generate-ide-registry.mjs
+desktop/scripts/generate-definitions-registry.mjs
 desktop/src/definitions/generated/renderer-registry.ts
 desktop/electron/services/definitions/generated/main-registry.ts
 ```
