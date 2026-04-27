@@ -624,6 +624,43 @@ describe("AgentRuntimeService", () => {
       expect.objectContaining({ action: "shell.exec", outcome: "denied" }),
     ])
   })
+
+  it("pauses and resumes Codex live turns through pending permissions", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const liveSession = new FakeLiveSession("codex", "codex-1")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter: new FakeLiveAdapter(liveSession),
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("codex permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    expect(service.listPendingPermissions()).toEqual([
+      expect.objectContaining({
+        requestId: "perm-1",
+        toolName: "Bash",
+        toolInput: "pwd",
+      }),
+    ])
+
+    await service.respondPermission({
+      requestId: "perm-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })
+
+    expect((await turn).resultText).toBe("permission allow")
+    expect(liveSession.permissionResponses).toEqual([
+      { requestId: "perm-1", decision: { behavior: "allow", updatedInput: { command: "pwd" } } },
+    ])
+    expect((await conversations.get(conversationId("local", "s1", "active")))).toEqual(
+      expect.objectContaining({ agentType: "codex", agentSessionId: "codex-1" }),
+    )
+  })
 })
 
 class FakeRunner implements CodexProcessRunner {
@@ -680,11 +717,12 @@ class BlockingAdapter implements AgentAdapter {
 }
 
 class FakeLiveAdapter implements AgentAdapter {
-  readonly agentType = "claude-code"
+  readonly agentType: string
   private readonly liveSession: FakeLiveSession
 
   constructor(liveSession: FakeLiveSession) {
     this.liveSession = liveSession
+    this.agentType = liveSession.agentType
   }
 
   async execute(): Promise<AgentExecutionResult> {
@@ -697,12 +735,19 @@ class FakeLiveAdapter implements AgentAdapter {
 }
 
 class FakeLiveSession implements AgentLiveSession {
-  readonly agentType = "claude-code"
+  readonly agentType: string
   readonly permissionResponses: Array<{
     readonly requestId: string
     readonly decision: AgentPermissionDecision
   }> = []
   private readonly queue = new AsyncQueue<AgentEvent>()
+
+  constructor(
+    agentType = "claude-code",
+    private readonly sessionId = "claude-1",
+  ) {
+    this.agentType = agentType
+  }
 
   async send(): Promise<void> {
     this.queue.push({
@@ -711,8 +756,8 @@ class FakeLiveSession implements AgentLiveSession {
       toolName: "Bash",
       toolInput: "pwd",
       toolInputRaw: { command: "pwd" },
-      agentSessionId: "claude-1",
-      threadId: "claude-1",
+      agentSessionId: this.sessionId,
+      threadId: this.sessionId,
     })
   }
 
@@ -725,8 +770,8 @@ class FakeLiveSession implements AgentLiveSession {
       type: "result",
       content: `permission ${decision.behavior}`,
       done: true,
-      agentSessionId: "claude-1",
-      threadId: "claude-1",
+      agentSessionId: this.sessionId,
+      threadId: this.sessionId,
     })
   }
 
@@ -735,7 +780,7 @@ class FakeLiveSession implements AgentLiveSession {
   }
 
   currentSessionId(): string | undefined {
-    return "claude-1"
+    return this.sessionId
   }
 
   alive(): boolean {

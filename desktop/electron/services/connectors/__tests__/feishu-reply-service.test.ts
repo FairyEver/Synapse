@@ -48,6 +48,29 @@ describe("FeishuReplyService", () => {
     expect(JSON.stringify(client.calls[1]?.[1])).toContain("project-1")
   })
 
+  it("sends Codex-origin permission events through the shared card path", async () => {
+    const client = new FakeFeishuClient()
+    const service = new FeishuReplyService({
+      clientForConnector: () => client,
+    })
+
+    await service.dispatchAgentEvent(feishuTarget(), {
+      type: "permissionRequest",
+      requestId: "codex-mcp-1",
+      toolName: "MCP Elicitation",
+      toolInput: "Authorize MCP",
+      toolInputRaw: { serverName: "synapse-database" },
+    })
+
+    expect(client.calls).toEqual([
+      ["sendCard", expect.objectContaining({
+        elements: expect.arrayContaining([expect.any(Object)]),
+      })],
+    ])
+    expect(JSON.stringify(client.calls[0]?.[1])).toContain("codex-mcp-1")
+    expect(JSON.stringify(client.calls[0]?.[1])).toContain("MCP Elicitation")
+  })
+
   it("buffers streamed text and sends one final reply", async () => {
     const client = new FakeFeishuClient()
     const service = new FeishuReplyService({

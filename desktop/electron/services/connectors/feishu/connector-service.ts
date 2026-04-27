@@ -1172,20 +1172,33 @@ export class FeishuConnectorService {
         operatorOpenId,
         reason: "operator_not_allowed",
       })
-      throw new Error("当前飞书用户无权处理该权限请求。")
+      return permissionHandledCard("无权处理此请求")
     }
     const { agent } = await this.resolveProjectAgent(projectId)
-    await agent.respondPermission({
-      requestId,
-      behavior,
-      actor: { kind: "user", id: `feishu:${operatorOpenId}` },
-    })
+    try {
+      await agent.respondPermission({
+        requestId,
+        behavior,
+        actor: { kind: "user", id: `feishu:${operatorOpenId}` },
+      })
+    } catch (error) {
+      if (isPermissionNotPendingError(error)) {
+        this.recordAudit("failed", projectId, connectorId, "card_action", error, {
+          requestId,
+          behavior,
+          operatorOpenId,
+          reason: "permission_not_pending",
+        })
+        return permissionHandledCard("请求已处理或已过期")
+      }
+      throw error
+    }
     this.recordAudit("allowed", projectId, connectorId, "card_action", undefined, {
       requestId,
       behavior,
       operatorOpenId,
     })
-    return permissionHandledCard(behavior)
+    return permissionHandledCard(behavior === "allow" ? "已允许" : "已拒绝")
   }
 
   private async resolveProjectAgent(projectId: string): Promise<{
@@ -1378,7 +1391,7 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
-function permissionHandledCard(behavior: "allow" | "deny"): FeishuCardActionResponse {
+function permissionHandledCard(content: string): FeishuCardActionResponse {
   return {
     config: { wide_screen_mode: true },
     header: {
@@ -1390,11 +1403,15 @@ function permissionHandledCard(behavior: "allow" | "deny"): FeishuCardActionResp
         tag: "div",
         text: {
           tag: "plain_text",
-          content: behavior === "allow" ? "已允许" : "已拒绝",
+          content,
         },
       },
     ],
   }
+}
+
+function isPermissionNotPendingError(error: unknown): boolean {
+  return error instanceof Error && /Permission request ".+" is not pending/.test(error.message)
 }
 
 const DEFAULT_WORKSPACE_IDLE_TIMEOUT_MS = 15 * 60 * 1000

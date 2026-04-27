@@ -164,9 +164,10 @@ describe("Codex exec adapter", () => {
       envAllowlist: expect.arrayContaining(["CC_PROJECT", "CC_SESSION_KEY"]),
     }))
     expect(runner.session.writes.map((line) => JSON.parse(line))).toEqual([
-      expect.objectContaining({ method: "initialize" }),
-      { method: "initialized", params: null },
+      expect.objectContaining({ jsonrpc: "2.0", method: "initialize" }),
+      { jsonrpc: "2.0", method: "initialized", params: null },
       expect.objectContaining({
+        jsonrpc: "2.0",
         method: "thread/start",
         params: expect.objectContaining({
           approvalPolicy: "on-request",
@@ -185,6 +186,7 @@ describe("Codex exec adapter", () => {
 
     expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual(
       expect.objectContaining({
+        jsonrpc: "2.0",
         method: "turn/start",
         params: expect.objectContaining({
           threadId: "thread-1",
@@ -220,6 +222,7 @@ describe("Codex exec adapter", () => {
     await session?.respondPermission("approval-1", { behavior: "allow" })
 
     expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      jsonrpc: "2.0",
       id: "approval-1",
       result: { decision: "accept" },
     })
@@ -252,11 +255,97 @@ describe("Codex exec adapter", () => {
     await session?.respondPermission("mcp-1", { behavior: "deny" })
 
     expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      jsonrpc: "2.0",
       id: "mcp-1",
       result: {
         action: "decline",
         content: null,
         _meta: null,
+      },
+    })
+
+    runner.emitServerRequest({
+      id: "legacy-exec-1",
+      method: "execCommandApproval",
+      params: { command: "pnpm test", cwd: "/repo" },
+    })
+
+    expect(await session?.nextEvent()).toEqual(
+      expect.objectContaining({
+        type: "permissionRequest",
+        requestId: "legacy-exec-1",
+        toolName: "Bash",
+        toolInput: "pnpm test",
+      }),
+    )
+
+    await session?.respondPermission("legacy-exec-1", { behavior: "deny" })
+
+    expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      jsonrpc: "2.0",
+      id: "legacy-exec-1",
+      result: { decision: "decline" },
+    })
+
+    runner.emitServerRequest({
+      id: "question-1",
+      method: "item/tool/requestUserInput",
+      params: {
+        questions: [{
+          id: "q1",
+          question: "Pick one",
+          options: [{ label: "A" }],
+        }],
+      },
+    })
+
+    expect(await session?.nextEvent()).toEqual(
+      expect.objectContaining({
+        type: "permissionRequest",
+        requestId: "question-1",
+        toolName: "AskUserQuestion",
+        questions: [{ question: "Pick one", options: [{ label: "A", description: undefined }] }],
+      }),
+    )
+
+    await session?.respondPermission("question-1", {
+      behavior: "allow",
+      updatedInput: { answers: { q1: { answers: ["A"] } } },
+    })
+
+    expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      jsonrpc: "2.0",
+      id: "question-1",
+      result: { answers: { q1: { answers: ["A"] } } },
+    })
+
+    runner.emitServerRequest({
+      id: "refresh-1",
+      method: "account/chatgptAuthTokens/refresh",
+      params: {},
+    })
+
+    expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      jsonrpc: "2.0",
+      id: "refresh-1",
+      error: {
+        code: -32000,
+        message: "ChatGPT auth token refresh is not available in this Synapse provider session.",
+      },
+    })
+
+    runner.emitServerRequest({
+      id: "tool-call-1",
+      method: "item/tool/call",
+      params: { namespace: "synapse", tool: "example", arguments: {} },
+    })
+
+    expect(JSON.parse(runner.session.writes.at(-1) ?? "{}")).toEqual({
+      jsonrpc: "2.0",
+      id: "tool-call-1",
+      error: {
+        code: -32601,
+        message: "Unsupported codex app-server request: item/tool/call",
       },
     })
   })
@@ -384,6 +473,107 @@ describe("Codex JSONL parser", () => {
       expect.objectContaining({ type: "toolResult", toolName: "Bash", content: "ok", exitCode: 0, success: true }),
       expect.objectContaining({ type: "toolUse", toolName: "read_file", toolInput: "{\"path\":\"a\"}" }),
       expect.objectContaining({ type: "toolResult", toolName: "read_file", content: "file", success: true }),
+    ])
+  })
+
+  it("maps camelCase app-server tool items to progress events", () => {
+    const parser = new CodexJsonLineParser("thread-1")
+    parser.pushLine(JSON.stringify({
+      type: "item.started",
+      item: { type: "commandExecution", command: "pwd" },
+    }))
+    parser.pushLine(JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "commandExecution",
+        command: "pwd",
+        status: "completed",
+        aggregatedOutput: "/repo",
+        exitCode: 0,
+      },
+    }))
+    parser.pushLine(JSON.stringify({
+      type: "item.started",
+      item: {
+        type: "mcpToolCall",
+        server: "synapse_database",
+        tool: "list_tables",
+        arguments: {},
+      },
+    }))
+    parser.pushLine(JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "mcpToolCall",
+        server: "synapse_database",
+        tool: "list_tables",
+        arguments: {},
+        status: "completed",
+        result: { content: [] },
+      },
+    }))
+    parser.pushLine(JSON.stringify({
+      type: "item.started",
+      item: {
+        type: "dynamicToolCall",
+        namespace: "synapse",
+        tool: "example",
+        arguments: {},
+      },
+    }))
+    parser.pushLine(JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "dynamicToolCall",
+        namespace: "synapse",
+        tool: "example",
+        arguments: {},
+        status: "completed",
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      },
+    }))
+    parser.pushLine(JSON.stringify({
+      type: "item.completed",
+      item: { type: "fileChange", changes: [], status: "completed" },
+    }))
+
+    expect(parser.finalize().events).toEqual([
+      expect.objectContaining({ type: "toolUse", toolName: "Bash", toolInput: "pwd" }),
+      expect.objectContaining({
+        type: "toolResult",
+        toolName: "Bash",
+        content: "/repo",
+        exitCode: 0,
+        success: true,
+      }),
+      expect.objectContaining({
+        type: "toolUse",
+        toolName: "synapse_database.list_tables",
+        toolInput: "{}",
+      }),
+      expect.objectContaining({
+        type: "toolResult",
+        toolName: "synapse_database.list_tables",
+        content: "{\"content\":[]}",
+        success: true,
+      }),
+      expect.objectContaining({
+        type: "toolUse",
+        toolName: "synapse.example",
+        toolInput: "{}",
+      }),
+      expect.objectContaining({
+        type: "toolResult",
+        toolName: "synapse.example",
+        content: "ok",
+        success: true,
+      }),
+      expect.objectContaining({
+        type: "toolUse",
+        toolName: "FileChange",
+        toolInput: "[]",
+      }),
     ])
   })
 

@@ -110,6 +110,85 @@ describe("FeishuConnectorService", () => {
     expect(client.stopped).toBe(true)
   })
 
+  it("returns a card response when a non-admin clicks a permission action", async () => {
+    const dataRepository = new MemoryDataRepository()
+    const agent = new FakeAgentRuntime()
+    const service = new FeishuConnectorService({
+      dataRepository,
+      projectContainers: fakeProjectContainers(agent),
+      sideChannel: new FakeSideChannel() as unknown as SideChannelService,
+      listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
+    })
+    service.start()
+    await service.saveManualCredentials({
+      projectId: "project-1",
+      appId: "cli_a",
+      appSecret: "secret_a",
+      ownerOpenId: "ou_admin",
+    })
+
+    const response = await service.handleCardAction({
+      operator: { open_id: "ou_other" },
+      action: {
+        value: {
+          projectId: "project-1",
+          connectorId: "feishu:project-1",
+          requestId: "req-1",
+          behavior: "allow",
+        },
+      },
+    })
+
+    expect(response).toEqual(expect.objectContaining({
+      elements: [
+        expect.objectContaining({
+          text: { tag: "plain_text", content: "无权处理此请求" },
+        }),
+      ],
+    }))
+    expect(agent.permissions).toEqual([])
+  })
+
+  it("returns a card response when the permission request is no longer pending", async () => {
+    const dataRepository = new MemoryDataRepository()
+    const agent = new FakeAgentRuntime()
+    agent.respondPermissionError = new Error('Permission request "req-old" is not pending')
+    const service = new FeishuConnectorService({
+      dataRepository,
+      projectContainers: fakeProjectContainers(agent),
+      sideChannel: new FakeSideChannel() as unknown as SideChannelService,
+      listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
+    })
+    service.start()
+    await service.saveManualCredentials({
+      projectId: "project-1",
+      appId: "cli_a",
+      appSecret: "secret_a",
+      ownerOpenId: "ou_admin",
+    })
+
+    const response = await service.handleCardAction({
+      operator: { open_id: "ou_admin" },
+      action: {
+        value: {
+          projectId: "project-1",
+          connectorId: "feishu:project-1",
+          requestId: "req-old",
+          behavior: "allow",
+        },
+      },
+    })
+
+    expect(response).toEqual(expect.objectContaining({
+      elements: [
+        expect.objectContaining({
+          text: { tag: "plain_text", content: "请求已处理或已过期" },
+        }),
+      ],
+    }))
+    expect(agent.permissions).toEqual([])
+  })
+
   it("binds Feishu channels to workspaces before sending agent turns", async () => {
     const baseDir = await mkdtemp(path.join(tmpdir(), "synapse-feishu-workspaces-"))
     const workspaceDir = path.join(baseDir, "repo-a")
@@ -207,6 +286,49 @@ describe("FeishuConnectorService", () => {
 
     await service.stopProject("project-1")
   })
+
+  it("routes Codex permission card actions to AgentRuntime without adapter branching", async () => {
+    const dataRepository = new MemoryDataRepository()
+    const client = new FakeFeishuClient()
+    const agent = new FakeAgentRuntime()
+    agent.activeAgentType = "codex"
+    const service = new FeishuConnectorService({
+      dataRepository,
+      projectContainers: fakeProjectContainers(agent),
+      sideChannel: new FakeSideChannel() as unknown as SideChannelService,
+      listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
+      clientFactory: { create: () => client },
+    })
+    service.start()
+    await service.saveManualCredentials({
+      projectId: "project-1",
+      appId: "cli_a",
+      appSecret: "secret_a",
+      ownerOpenId: "ou_admin",
+    })
+    await service.startProject("project-1")
+
+    await client.handlers?.onCardAction({
+      operator: { open_id: "ou_admin" },
+      action: {
+        value: {
+          projectId: "project-1",
+          connectorId: "feishu:project-1",
+          requestId: "codex-mcp-1",
+          behavior: "allow",
+        },
+      },
+    })
+
+    expect(agent.permissions).toEqual([
+      expect.objectContaining({
+        requestId: "codex-mcp-1",
+        behavior: "allow",
+      }),
+    ])
+
+    await service.stopProject("project-1")
+  })
 })
 
 class FakeFeishuClient implements FeishuRuntimeClient {
@@ -247,6 +369,7 @@ class FakeFeishuClient implements FeishuRuntimeClient {
 
 class FakeAgentRuntime {
   activeAgentType = "codex"
+  respondPermissionError: Error | undefined
   readonly messages: AgentMessage[] = []
   readonly permissions: AgentPermissionResponseRequest[] = []
 
@@ -264,6 +387,7 @@ class FakeAgentRuntime {
   }
 
   async respondPermission(request: AgentPermissionResponseRequest): Promise<void> {
+    if (this.respondPermissionError) throw this.respondPermissionError
     this.permissions.push(request)
   }
 }
