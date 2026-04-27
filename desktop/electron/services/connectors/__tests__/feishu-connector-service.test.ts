@@ -79,7 +79,7 @@ describe("FeishuConnectorService", () => {
     const connector = await dataRepository.namespace<ConnectorEntryV1>("connectors").get("feishu:project-1")
     expect(connector?.dedupe?.lastMessageIds).toEqual(["m1"])
 
-    await client.handlers?.onCardAction({
+    const cardActionResponse = await client.handlers?.onCardAction({
       operator: { open_id: "ou_admin" },
       action: {
         value: {
@@ -90,6 +90,16 @@ describe("FeishuConnectorService", () => {
         },
       },
     })
+    expect(cardActionResponse).toEqual(expect.objectContaining({
+      header: expect.objectContaining({
+        title: { tag: "plain_text", content: "权限确认" },
+      }),
+      elements: [
+        expect.objectContaining({
+          text: { tag: "plain_text", content: "已允许" },
+        }),
+      ],
+    }))
     expect(agent.permissions).toEqual([expect.objectContaining({
       requestId: "req-1",
       behavior: "allow",

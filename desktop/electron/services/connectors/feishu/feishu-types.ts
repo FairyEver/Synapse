@@ -118,6 +118,8 @@ export interface FeishuCardActionEvent {
   }
 }
 
+export type FeishuCardActionResponse = Record<string, unknown>
+
 export interface FeishuReplyContext extends Record<string, unknown> {
   readonly kind: "feishu"
   readonly connectorId: string
@@ -147,7 +149,9 @@ export type FeishuNormalizedInbound =
 
 export interface FeishuRuntimeClientHandlers {
   readonly onMessage: (event: FeishuMessageEvent) => void | Promise<void>
-  readonly onCardAction: (event: FeishuCardActionEvent) => void | Promise<void>
+  readonly onCardAction: (
+    event: FeishuCardActionEvent,
+  ) => FeishuCardActionResponse | void | Promise<FeishuCardActionResponse | void>
   readonly onError?: (error: Error) => void
   readonly onReconnecting?: () => void
   readonly onReconnected?: () => void

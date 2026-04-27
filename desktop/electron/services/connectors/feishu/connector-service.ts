@@ -26,6 +26,7 @@ import type { ConnectorRecord, FeishuConnectorSummary } from "../types"
 import {
   FEISHU_CONNECTOR_SERVICE_ID,
   type FeishuCardActionEvent,
+  type FeishuCardActionResponse,
   type FeishuClientFactory,
   type FeishuCredentialInput,
   type FeishuReplyContext,
@@ -1149,7 +1150,7 @@ export class FeishuConnectorService {
     }
   }
 
-  async handleCardAction(event: FeishuCardActionEvent): Promise<void> {
+  async handleCardAction(event: FeishuCardActionEvent): Promise<FeishuCardActionResponse> {
     const value = actionValue(event.action?.value)
     const requestId = stringValue(value.requestId)
     const behavior = value.behavior === "allow" || value.behavior === "deny"
@@ -1184,6 +1185,7 @@ export class FeishuConnectorService {
       behavior,
       operatorOpenId,
     })
+    return permissionHandledCard(behavior)
   }
 
   private async resolveProjectAgent(projectId: string): Promise<{
@@ -1374,6 +1376,25 @@ function actionValue(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function permissionHandledCard(behavior: "allow" | "deny"): FeishuCardActionResponse {
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      template: "orange",
+      title: { tag: "plain_text", content: "权限确认" },
+    },
+    elements: [
+      {
+        tag: "div",
+        text: {
+          tag: "plain_text",
+          content: behavior === "allow" ? "已允许" : "已拒绝",
+        },
+      },
+    ],
+  }
 }
 
 const DEFAULT_WORKSPACE_IDLE_TIMEOUT_MS = 15 * 60 * 1000
