@@ -17,6 +17,7 @@ import { editorAdapterService } from "./editor-adapter-service"
 import { editorInstallStrategyById } from "./ide-definitions/generated/main-registry"
 import { findSkillDirectoryByContentId } from "./editor-adapters/skill-identity"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
+import { builtinContentService } from "./builtin-content-service"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
@@ -199,8 +200,8 @@ class ContentInstallService {
           }
 
           const prepareSkillDirectory = installStrategy.prepareSkillDirectory
-          const repositoryRootPath = await getActiveRepositoryRootPath()
           const detail = await contentService.getSkillDetail(payload.contentId)
+          const repositoryRootPath = detail.source === "builtin" ? null : await getActiveRepositoryRootPath()
           const parentDirectoryPath = path.dirname(target.targetPath)
           const previousSkillDirectoryPath = payload.contentType === "skill"
             ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
@@ -230,17 +231,30 @@ class ContentInstallService {
               targetPath: target.targetPath,
               stagingDirectoryPath,
               detail: detailWithSubstitutions,
-              repositoryRootPath,
+              repositoryRootPath: repositoryRootPath ?? "",
               writeTextFile: async (filePath, content) => {
                 await writeFile(filePath, normalizeMarkdownContent(content), "utf8")
                 logger.info("Staged skill file.", { filePath })
               },
               copyAttachment: async (attachment, attachmentTargetPath) => {
-                await attachmentsPoolService.copyAttachmentToPath(
-                  repositoryRootPath,
-                  attachment,
-                  attachmentTargetPath,
-                )
+                if (detail.source === "builtin") {
+                  await builtinContentService.copyAttachmentToPath(
+                    payload.contentType,
+                    payload.contentId,
+                    attachment,
+                    attachmentTargetPath,
+                  )
+                } else {
+                  if (!repositoryRootPath) {
+                    throw new Error("当前还没有激活的本地目录。")
+                  }
+
+                  await attachmentsPoolService.copyAttachmentToPath(
+                    repositoryRootPath,
+                    attachment,
+                    attachmentTargetPath,
+                  )
+                }
                 logger.info("Staged skill attachment.", {
                   filePath: attachmentTargetPath,
                   originalName: attachment.originalName,

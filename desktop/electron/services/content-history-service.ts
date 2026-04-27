@@ -233,6 +233,8 @@ function buildSummary(
     deleted: snapshot.deleted,
     latestHistoryDirname: historyDirname,
     attachmentCount: attachments.length,
+    source: "repository",
+    isReadonly: false,
   }
 
   return {

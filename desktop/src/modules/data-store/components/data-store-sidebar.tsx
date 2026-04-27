@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
-import { Table2 } from "lucide-react"
+import { FileInput, Table2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import {
   ModuleSidebar,
   ModuleSidebarHeader,
@@ -13,6 +14,7 @@ type DataStoreSidebarProps = {
   activeTable: string | null
   onTableSelect: (name: string) => void
   onCreateTable: () => void
+  onImportTable: () => void
 }
 
 function DataStoreSidebar({
@@ -20,6 +22,7 @@ function DataStoreSidebar({
   activeTable,
   onTableSelect,
   onCreateTable,
+  onImportTable,
 }: DataStoreSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -31,6 +34,10 @@ function DataStoreSidebar({
 
   return (
     <ModuleSidebar variant="bare">
+      <Button variant="outline" size="sm" className="w-full justify-start" onClick={onImportTable}>
+        <FileInput data-icon="inline-start" />
+        导入表
+      </Button>
       <ModuleSidebarHeader
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}

@@ -23,6 +23,7 @@ import { useContentDownloadActions } from "@/modules/content/hooks/use-content-d
 import type { SynapseContentMeta } from "@/types/content"
 
 type ContentDetailMenubarProps = {
+  canDelete: boolean
   canEdit: boolean
   canOpenInNewWindow: boolean
   isFavorite: boolean
@@ -36,6 +37,7 @@ type ContentDetailMenubarProps = {
 }
 
 function ContentDetailMenubar({
+  canDelete,
   canEdit,
   canOpenInNewWindow,
   isFavorite,
@@ -75,16 +77,17 @@ function ContentDetailMenubar({
   return (
     <>
       <Menubar className="w-fit">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="rounded-sm px-1.5"
-          disabled={!canEdit}
-          onClick={onEdit}
-        >
-          编辑
-        </Button>
+        {canEdit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-sm px-1.5"
+            onClick={onEdit}
+          >
+            编辑
+          </Button>
+        ) : null}
 
         {primaryAction === "copy" ? (
           <>
@@ -178,16 +181,18 @@ function ContentDetailMenubar({
           </>
         )}
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="rounded-sm px-1.5"
-          disabled={isRepositoryInitializing || isSyncing}
-          onClick={onDelete}
-        >
-          删除
-        </Button>
+        {canDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-sm px-1.5"
+            disabled={isRepositoryInitializing || isSyncing}
+            onClick={onDelete}
+          >
+            删除
+          </Button>
+        ) : null}
 
         <Button
           type="button"

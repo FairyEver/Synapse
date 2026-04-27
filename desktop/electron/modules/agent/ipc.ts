@@ -301,7 +301,7 @@ export const agentIpcModule: IpcModule = {
           projectId: request.projectId,
           sessionKey: request.sessionKey ?? session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
           conversationId: session?.id,
-          entries: session ? historyEntries(session, request.limit ?? 100) : [],
+          entries: session ? historyEntries(session, request.limit) : [],
         }
       },
     },
@@ -569,9 +569,11 @@ async function resolveTimelineSession(
 
 function historyEntries(
   session: ConversationEntryV1,
-  limit: number,
+  limit?: number,
 ) {
-  const start = Math.max(0, session.history.length - limit)
+  const start = typeof limit === "number"
+    ? Math.max(0, session.history.length - limit)
+    : 0
   return session.history.slice(start).map((entry, index) =>
     historyEntry(session.id, entry, start + index))
 }

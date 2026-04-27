@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -15,6 +25,9 @@ import {
   createTable,
   deleteRow,
   dropTable,
+  exportTable,
+  importTable,
+  inspectTableImport,
   insertRow,
   updateColumnDescription,
   updateColumnChoices,
@@ -24,6 +37,7 @@ import {
   useDataStoreTables,
 } from "./hooks/use-data-store"
 import type { Column, ColumnKind, DataStoreWhereGroup } from "@/types/data-store"
+import type { DataStoreTableImportInspection } from "@/types/data-store"
 
 const logger = createRendererLogger("data-store")
 
@@ -36,6 +50,7 @@ function DataStoreModule() {
   const [filter, setFilter] = useState<DataStoreWhereGroup | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isSchemaSheetOpen, setIsSchemaSheetOpen] = useState(false)
+  const [pendingImport, setPendingImport] = useState<DataStoreTableImportInspection | null>(null)
   const dataTableViewRef = useRef<DataTableViewHandle | null>(null)
 
   const selectedTable = activeTable ?? tables[0]?.name ?? null
@@ -65,6 +80,63 @@ function DataStoreModule() {
     await dataTableViewRef.current?.commitPendingChanges()
     setIsCreateDialogOpen(true)
   }, [])
+
+  const handleExportTable = useCallback(async () => {
+    if (!selectedTable) return
+    try {
+      await promise(
+        async () => {
+          const result = await exportTable(selectedTable)
+          if (!result.success) return
+          logger.info("Table exported.", { table: selectedTable, path: result.path })
+          return result
+        },
+        { loading: "正在导出...", success: (result) => result?.success ? "已导出" : null },
+      )
+    } catch (error) {
+      logger.error("Table export failed.", { error })
+    }
+  }, [promise, selectedTable])
+
+  const handleChooseImportTable = useCallback(async () => {
+    await dataTableViewRef.current?.commitPendingChanges()
+    try {
+      const result = await inspectTableImport()
+      if (!result.success) return
+      setPendingImport({
+        tableName: result.tableName,
+        exists: result.exists,
+        sourcePath: result.sourcePath,
+      })
+    } catch (error) {
+      logger.error("Table import inspection failed.", { error })
+      showError(error instanceof Error ? error.message : "导入失败")
+    }
+  }, [showError])
+
+  const handleConfirmImportTable = useCallback(async () => {
+    if (!pendingImport) return
+    const sourcePath = pendingImport.sourcePath
+    try {
+      await promise(
+        async () => {
+          const result = await importTable(sourcePath)
+          if (!result.success || !result.tableName) {
+            throw new Error("导入失败")
+          }
+          await refreshTables()
+          setActiveTable(result.tableName)
+          setPage(1)
+          setFilter(null)
+          logger.info("Table imported.", { table: result.tableName })
+        },
+        { loading: "正在导入...", success: "已导入" },
+      )
+      setPendingImport(null)
+    } catch (error) {
+      logger.error("Table import failed.", { error })
+    }
+  }, [pendingImport, promise, refreshTables])
 
   const handleCreateTable = useCallback(
     async (name: string, columns: Column[], description?: string) => {
@@ -213,6 +285,9 @@ function DataStoreModule() {
       onCreateTable={() => {
         void handleOpenCreateDialog().catch(() => {})
       }}
+      onImportTable={() => {
+        void handleChooseImportTable()
+      }}
     />
   )
 
@@ -235,6 +310,7 @@ function DataStoreModule() {
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               onShowSchema={() => setIsSchemaSheetOpen(true)}
+              onExportTable={handleExportTable}
               filter={filter}
               onFilterChange={handleFilterChange}
             />
@@ -276,6 +352,29 @@ function DataStoreModule() {
         onUpdateColumnChoices={handleUpdateColumnChoices}
         onDropTable={handleDropTable}
       />
+
+      <AlertDialog open={pendingImport !== null} onOpenChange={(open) => { if (!open) setPendingImport(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{pendingImport?.exists ? "替换数据表" : "导入数据表"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingImport?.exists
+                ? "将删除本地同名表并导入文件中的数据。"
+                : `导入 ${pendingImport?.tableName ?? ""}`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void handleConfirmImportTable()
+              }}
+            >
+              {pendingImport?.exists ? "替换导入" : "导入"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarContentLayout>
   )
 }

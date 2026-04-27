@@ -108,12 +108,13 @@ export async function scanCursorRules(dirPath: string): Promise<EditorScanRuleIt
     try {
       const text = await readFullText(filePath)
       const { metadata, body } = parseFrontmatter(text)
+      const synapse = isSynapseFile(entry.name)
 
       items.push({
         name: entry.name,
         path: filePath,
-        source: metadata.description?.includes("synapse") ? "synapse" : "external",
-        synapseContentId: null,
+        source: synapse || metadata.description?.includes("synapse") ? "synapse" : "external",
+        synapseContentId: synapse ? extractContentIdFromSynapseFile(entry.name) : null,
         preview: previewLines(body),
         metadata,
         content: text,

@@ -72,6 +72,12 @@ type DataStoreStatus = {
   dbDirectoryPath: string
 }
 
+type DataStoreTableImportInspection = {
+  tableName: string
+  exists: boolean
+  sourcePath: string
+}
+
 type DataStoreCliStatus = {
   installed: boolean
   path: string
@@ -149,6 +155,7 @@ export type {
   DataStoreQueryParams,
   DataStoreQueryResult,
   DataStoreStatus,
+  DataStoreTableImportInspection,
   DataStoreTableInfo,
   DataStoreTableSchema,
   DataStoreWhereClause,

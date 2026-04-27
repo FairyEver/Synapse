@@ -116,7 +116,7 @@ function ContentDetailDialog<TPayload>({
   const { items: contentItems } = useContentList(contentType)
   const existingNames = useMemo(
     () => contentItems
-      .filter((ci) => ci.name && ci.id !== item?.id)
+      .filter((ci) => ci.source !== "builtin" && ci.name && ci.id !== item?.id)
       .map((ci) => ci.name!),
     [contentItems, item?.id],
   )
@@ -215,6 +215,7 @@ function ContentDetailDialog<TPayload>({
 
   const resolvedItem = detail ?? item
   const deleteTarget = detail ?? item
+  const isReadonly = resolvedItem.source === "builtin" || resolvedItem.isReadonly === true
   const categoryLabel = getCategoryLabel(item.type, resolvedItem.category)
   const authorLabel = resolveDisplayName(
     resolvedItem.createdBy,
@@ -468,7 +469,8 @@ function ContentDetailDialog<TPayload>({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <ContentDetailMenubar
-                    canEdit={Boolean(detail) && !isRepositoryInitializing && !isSyncing}
+                    canDelete={!isReadonly}
+                    canEdit={Boolean(detail) && !isReadonly && !isRepositoryInitializing && !isSyncing}
                     canOpenInNewWindow={Boolean(displayedVersion)}
                     isFavorite={isItemFavorite}
                     isRepositoryInitializing={Boolean(isRepositoryInitializing)}
@@ -527,7 +529,7 @@ function ContentDetailDialog<TPayload>({
         </DialogContent>
       </Dialog>
 
-      {detail ? renderCreateDialog({
+      {detail && !isReadonly ? renderCreateDialog({
         editingId: item?.id ?? null,
         existingNames,
         initialValue: buildInitialValue(detail),

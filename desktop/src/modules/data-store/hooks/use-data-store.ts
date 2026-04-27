@@ -11,6 +11,7 @@ import type {
   DataStoreQueryParams,
   DataStoreQueryResult,
   DataStoreStatus,
+  DataStoreTableImportInspection,
   DataStoreTableInfo,
   DataStoreTableSchema,
   DataStoreWhereClause,
@@ -163,6 +164,21 @@ async function importDB(): Promise<{ success: boolean }> {
   return requireSynapseBridge().dataStore.importDB()
 }
 
+async function exportTable(table: string): Promise<{ success: boolean; path?: string }> {
+  return requireSynapseBridge().dataStore.exportTable(table)
+}
+
+async function inspectTableImport(): Promise<
+  { success: false }
+  | ({ success: true } & DataStoreTableImportInspection)
+> {
+  return requireSynapseBridge().dataStore.inspectTableImport()
+}
+
+async function importTable(sourcePath: string): Promise<{ success: boolean; tableName?: string }> {
+  return requireSynapseBridge().dataStore.importTable(sourcePath)
+}
+
 async function installCLI(): Promise<{ success: boolean; path?: string; error?: string }> {
   return requireSynapseBridge().dataStore.installCLI()
 }
@@ -201,6 +217,7 @@ export {
   deleteRow,
   dropTable,
   exportDB,
+  exportTable,
   getCliDebugInfo,
   getCliStatus,
   getColumnChoicesUsage,
@@ -208,6 +225,8 @@ export {
   getMcpHttpStatus,
   getMcpStatus,
   importDB,
+  importTable,
+  inspectTableImport,
   insertRow,
   installCLI,
   openMCPSettings,

@@ -7,6 +7,7 @@ import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type { SynapseContentType } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
+import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { createMainLogger } from "./log-store"
@@ -200,8 +201,8 @@ class ContentDownloadService {
     id: string,
     targetPath: string,
   ): Promise<void> {
-    const repositoryRootPath = await getActiveRepositoryRootPath()
     const detail = await contentService.getDetail(contentType, id)
+    const repositoryRootPath = detail.source === "builtin" ? null : await getActiveRepositoryRootPath()
 
     await withTemporaryOutput(".zip", async (tempPath) => {
       const stagingRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-export-"))
@@ -217,11 +218,19 @@ class ContentDownloadService {
 
         for (const attachment of detail.attachments) {
           const attachmentTargetPath = path.join(stagingDirectoryPath, attachment.originalName)
-          await attachmentsPoolService.copyAttachmentToPath(
-            repositoryRootPath,
-            attachment,
-            attachmentTargetPath,
-          )
+          if (detail.source === "builtin") {
+            await builtinContentService.copyAttachmentToPath(contentType, id, attachment, attachmentTargetPath)
+          } else {
+            if (!repositoryRootPath) {
+              throw new Error("当前还没有激活的本地目录。")
+            }
+
+            await attachmentsPoolService.copyAttachmentToPath(
+              repositoryRootPath,
+              attachment,
+              attachmentTargetPath,
+            )
+          }
         }
 
         await createSkillArchive(stagingDirectoryPath, tempPath)

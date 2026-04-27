@@ -13,22 +13,78 @@ describe("quick publish payload builders", () => {
     const draft: EditorScanQuickPublishDraft = {
       itemType: "rule",
       itemPath: "/repo/AGENTS.md",
-      itemName: "Release-Rule.md",
-      content: "# Release Rule\n\nUse this before publishing.\n\nMore details.",
-      metadata: { description: "Publishing checklist." },
+      itemName: "Release Rule.md",
+      content: [
+        "---",
+        "name: Release Rule",
+        "title: Release Checklist",
+        "description: Publishing checklist.",
+        "category: workflow",
+        "---",
+        "",
+        "# Release Rule",
+        "",
+        "Use this before publishing.",
+        "",
+        "More details.",
+      ].join("\n"),
+      metadata: {},
     }
 
     const payload = buildRuleQuickPublishPayload(draft)
 
     expect(payload).toMatchObject({
       name: "release-rule",
-      title: "Release Rule",
+      title: "Release Checklist",
       description: "Publishing checklist.",
-      category: "",
-      content: draft.content,
+      category: "workflow",
+      content: "# Release Rule\n\nUse this before publishing.\n\nMore details.",
     })
     expect(payload.icon).not.toBe("")
     expect(payload.iconBg).not.toBe("")
+  })
+
+  it("leaves category empty when the scanned category is unknown", () => {
+    const draft: EditorScanQuickPublishDraft = {
+      itemType: "rule",
+      itemPath: "/repo/AGENTS.md",
+      itemName: "Release Rule.md",
+      content: [
+        "---",
+        "name: release-rule",
+        "category: unknown-category",
+        "---",
+        "",
+        "# Release Rule",
+        "",
+        "Use this before publishing.",
+      ].join("\n"),
+      metadata: {},
+    }
+
+    const payload = buildRuleQuickPublishPayload(draft)
+
+    expect(payload.category).toBe("")
+  })
+
+  it("keeps auto-generated descriptions short", () => {
+    const draft: EditorScanQuickPublishDraft = {
+      itemType: "skill",
+      itemPath: "/skills/release-helper",
+      itemName: "release-helper",
+      content: [
+        "# Release Helper",
+        "",
+        "This paragraph is intentionally long enough to exceed the quick publish description limit because imported content often begins with implementation notes rather than a concise summary.",
+      ].join("\n"),
+      files: [],
+      metadata: {},
+    }
+
+    const payload = buildSkillQuickPublishPayload(draft)
+
+    expect(payload.description.length).toBeLessThanOrEqual(120)
+    expect(payload.description).toMatch(/\.$/)
   })
 
   it("builds a skill create payload from frontmatter and keeps attachment bytes", async () => {
@@ -39,9 +95,10 @@ describe("quick publish payload builders", () => {
       itemName: "release-helper",
       content: [
         "---",
-        "name: release-helper",
+        "name: Release Helper",
         "title: Release Helper",
         "description: Draft release notes.",
+        "category: automation",
         "---",
         "",
         "# Usage",
@@ -58,7 +115,7 @@ describe("quick publish payload builders", () => {
       name: "release-helper",
       title: "Release Helper",
       description: "Draft release notes.",
-      category: "",
+      category: "automation",
       content: "# Usage\n\nRun the checklist.",
     })
     expect(payload.files).toHaveLength(1)

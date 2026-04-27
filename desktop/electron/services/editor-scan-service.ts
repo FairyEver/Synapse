@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from "node:fs/promises"
+import { lstat, readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import type {
   EditorScanGlobalResult,
@@ -22,6 +22,21 @@ import { createMainLogger } from "./log-store"
 const logger = createMainLogger("service.editor-scan")
 const PREVIEW_BYTE_LIMIT = 512
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
+const QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
+const QUICK_PUBLISH_SKILL_ATTACHMENT_TOTAL_MAX_SIZE = 50 * 1024 * 1024
+const QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_COUNT = 200
+const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_NAMES = new Set([
+  "id_dsa",
+  "id_ecdsa",
+  "id_ed25519",
+  "id_rsa",
+])
+const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
+  ".key",
+  ".p12",
+  ".pem",
+  ".pfx",
+])
 
 // --- helpers ---
 
@@ -34,6 +49,14 @@ function stripFrontmatter(text: string): string {
 
 function previewLines(text: string): string {
   return stripFrontmatter(text).split("\n").slice(0, 3).join("\n").trim()
+}
+
+function isSensitiveQuickPublishAttachment(relativeName: string): boolean {
+  const baseName = path.basename(relativeName).toLowerCase()
+  return (
+    QUICK_PUBLISH_SENSITIVE_ATTACHMENT_NAMES.has(baseName)
+    || QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS.has(path.extname(baseName))
+  )
 }
 
 async function readPreview(filePath: string): Promise<string> {
@@ -309,7 +332,8 @@ async function collectFiles(
     const relativeName = toPortableRelativePath(path.relative(baseDir, fullPath))
     if (skip.has(name) && currentDir === baseDir) continue
     try {
-      const fileStat = await stat(fullPath)
+      const fileStat = await lstat(fullPath)
+      if (fileStat.isSymbolicLink()) continue
       if (fileStat.isFile()) {
         entries.push({ name: relativeName, size: fileStat.size })
       } else if (fileStat.isDirectory()) {
@@ -349,6 +373,7 @@ async function collectSkillFileSnapshots(
   currentDir: string,
   skip: Set<string>,
   entries: EditorScanQuickPublishSkillFile[],
+  state: { fileCount: number; totalSize: number },
 ): Promise<void> {
   const children = await readdir(currentDir)
 
@@ -358,14 +383,32 @@ async function collectSkillFileSnapshots(
 
     const fullPath = path.join(currentDir, name)
     const relativeName = toPortableRelativePath(path.relative(baseDir, fullPath))
-    const fileStat = await stat(fullPath)
+    const fileStat = await lstat(fullPath)
+    if (fileStat.isSymbolicLink()) continue
 
     if (fileStat.isDirectory()) {
-      await collectSkillFileSnapshots(baseDir, fullPath, skip, entries)
+      await collectSkillFileSnapshots(baseDir, fullPath, skip, entries, state)
       continue
     }
 
     if (!fileStat.isFile()) continue
+    if (isSensitiveQuickPublishAttachment(relativeName)) {
+      throw new Error(`附件包含敏感文件：${relativeName}`)
+    }
+
+    if (fileStat.size > QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_SIZE) {
+      throw new Error(`附件超过 10MB：${relativeName}`)
+    }
+
+    state.fileCount += 1
+    if (state.fileCount > QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_COUNT) {
+      throw new Error(`附件数量超过 ${QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_COUNT} 个。`)
+    }
+
+    state.totalSize += fileStat.size
+    if (state.totalSize > QUICK_PUBLISH_SKILL_ATTACHMENT_TOTAL_MAX_SIZE) {
+      throw new Error("附件总大小超过 50MB。")
+    }
 
     const bytes = await readFile(fullPath)
     entries.push({
@@ -411,7 +454,10 @@ async function prepareQuickPublishDraft(
 
   const skip = new Set<string>([path.basename(mainFile), SYNAPSE_SKILL_ID_FILE])
   const files: EditorScanQuickPublishSkillFile[] = []
-  await collectSkillFileSnapshots(request.itemPath, request.itemPath, skip, files)
+  await collectSkillFileSnapshots(request.itemPath, request.itemPath, skip, files, {
+    fileCount: 0,
+    totalSize: 0,
+  })
   files.sort((a, b) => a.originalName.localeCompare(b.originalName))
 
   return {

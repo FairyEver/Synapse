@@ -1,5 +1,6 @@
 import { createEmptyRulePayload, normalizeCreateRulePayload } from "@/modules/rules/utils"
 import type { CreateSkillPayload } from "@/modules/skills/types"
+import { rulesCategories, skillsCategories } from "@/config/categories"
 import {
   createEmptySkillPayload,
   normalizeCreateSkillPayload,
@@ -15,6 +16,8 @@ type ParsedFrontmatter = {
   metadata: Record<string, string>
   body: string
 }
+
+const AUTO_DESCRIPTION_MAX_LENGTH = 120
 
 function parseFrontmatter(text: string): ParsedFrontmatter {
   const metadata: Record<string, string> = {}
@@ -57,6 +60,30 @@ function fallbackNameFromPath(itemName: string, itemPath: string): string {
   return stripMarkdownExtension(baseName).trim()
 }
 
+function toContentName(value: string, fallback: string): string {
+  const normalized = value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "")
+
+  return normalized || fallback
+}
+
+function pickCategory(
+  value: string | undefined,
+  categories: readonly { id: string }[],
+): string {
+  if (value && categories.some((category) => category.id === value)) {
+    return value
+  }
+
+  return ""
+}
+
 function extractHeadingTitle(content: string): string | null {
   const heading = content.split("\n").find((line) => line.trim().startsWith("# "))
   return heading ? heading.replace(/^#\s*/, "").trim() || null : null
@@ -78,23 +105,33 @@ function extractFirstParagraph(content: string): string {
   return paragraphLines.join(" ").trim()
 }
 
+function shortenAutoDescription(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length <= AUTO_DESCRIPTION_MAX_LENGTH) {
+    return trimmed
+  }
+
+  return `${trimmed.slice(0, AUTO_DESCRIPTION_MAX_LENGTH - 1).trimEnd()}.`
+}
+
 function buildRuleQuickPublishPayload(
   draft: Extract<EditorScanQuickPublishDraft, { itemType: "rule" }>,
 ): SynapseCreateRulePayload {
   const parsed = parseFrontmatter(draft.content)
   const metadata = { ...parsed.metadata, ...draft.metadata }
-  const name = metadata.name || fallbackNameFromPath(draft.itemName, draft.itemPath)
-  const title = extractHeadingTitle(parsed.body) || stripMarkdownExtension(draft.itemName)
-  const description = metadata.description || extractFirstParagraph(parsed.body)
+  const fallbackName = fallbackNameFromPath(draft.itemName, draft.itemPath)
+  const name = toContentName(metadata.name || fallbackName, "rule")
+  const title = metadata.title || extractHeadingTitle(parsed.body) || stripMarkdownExtension(draft.itemName)
+  const description = metadata.description || shortenAutoDescription(extractFirstParagraph(parsed.body))
 
   return normalizeCreateRulePayload({
     ...createEmptyRulePayload(),
     name,
     title,
     description,
-    category: "",
+    category: pickCategory(metadata.category, rulesCategories),
     icon: "file-text",
-    content: draft.content,
+    content: parsed.body,
   })
 }
 
@@ -103,16 +140,17 @@ function buildSkillQuickPublishPayload(
 ): CreateSkillPayload {
   const parsed = parseFrontmatter(draft.content)
   const metadata = { ...parsed.metadata, ...draft.metadata }
-  const name = metadata.name || fallbackNameFromPath(draft.itemName, draft.itemPath)
+  const fallbackName = fallbackNameFromPath(draft.itemName, draft.itemPath)
+  const name = toContentName(metadata.name || fallbackName, "skill")
   const title = metadata.title || extractHeadingTitle(parsed.body) || name
-  const description = metadata.description || extractFirstParagraph(parsed.body)
+  const description = metadata.description || shortenAutoDescription(extractFirstParagraph(parsed.body))
 
   return normalizeCreateSkillPayload({
     ...createEmptySkillPayload(),
     name,
     title,
     description,
-    category: "",
+    category: pickCategory(metadata.category, skillsCategories),
     icon: "wrench",
     content: parsed.body,
     files: draft.files.map((file) => ({

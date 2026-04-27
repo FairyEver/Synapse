@@ -200,6 +200,43 @@ function registerDataStoreHandlers(): void {
     return { success: true }
   })
 
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.exportTable, async (event, table: string) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(ownerWindow!, {
+      title: "导出表",
+      defaultPath: `${table}.synapse-table.sql`,
+      filters: [{ name: "Synapse Table Export", extensions: ["sql"] }],
+    })
+
+    if (result.canceled || !result.filePath) {
+      return { success: false }
+    }
+
+    dataStoreService.exportTable(table, result.filePath)
+    return { success: true, path: result.filePath }
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.inspectTableImport, async (event) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(ownerWindow!, {
+      title: "导入表",
+      filters: [{ name: "Synapse Table Export", extensions: ["sql"] }],
+      properties: ["openFile"],
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false }
+    }
+
+    const inspection = dataStoreService.inspectTableImport(result.filePaths[0])
+    return { success: true, ...inspection }
+  })
+
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.importTable, async (_event, sourcePath: string) => {
+    const tableName = dataStoreService.importTable(sourcePath)
+    return { success: true, tableName }
+  })
+
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.installCLI, async () => {
     return installCli()
   })

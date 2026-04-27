@@ -18,6 +18,7 @@ import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { contentHistoryService } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { contentWriteService, type ContentWriteResult } from "./content-write-service"
+import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { runGitCommand, type GitCommandResult } from "./git-command"
 import { createMainLogger } from "./log-store"
@@ -66,6 +67,12 @@ function createDeferredMutationMessage(): string {
 
 function createLocalMutationMessage(): string {
   return "本地目录已更新。"
+}
+
+function assertMutableContentId(contentId: string): void {
+  if (builtinContentService.isBuiltinContentId(contentId)) {
+    throw new Error("内置资源不可编辑或删除。")
+  }
 }
 
 function runRepositoryGitCommand(
@@ -254,6 +261,8 @@ class ContentSubmissionService {
   }
 
   async updateContent(request: SynapseUpdateContentRequest): Promise<SynapseContentMutationResult> {
+    assertMutableContentId(request.payload.id)
+
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
 
@@ -279,18 +288,24 @@ class ContentSubmissionService {
   }
 
   async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
+    assertMutableContentId(payload.id)
+
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
     return this.deleteWithConflictCheck(payload, identity)
   }
 
   async restoreContent(payload: SynapseRestoreContentPayload): Promise<SynapseContentMutationResult> {
+    assertMutableContentId(payload.id)
+
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
     return this.restoreWithConflictCheck(payload, identity)
   }
 
   async purgeContent(payload: SynapsePurgeContentPayload): Promise<SynapseContentMutationResult> {
+    assertMutableContentId(payload.id)
+
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
     return this.purgeAndCommit(payload, identity)

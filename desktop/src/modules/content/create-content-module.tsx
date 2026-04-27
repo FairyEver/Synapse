@@ -56,7 +56,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const { promise } = useAppNotifications()
     const { createContent, items } = useContentList<T>(config.contentType)
     const existingNames = useMemo(
-      () => items.filter((item) => item.name).map((item) => item.name!),
+      () => items.filter((item) => item.source !== "builtin" && item.name).map((item) => item.name!),
       [items],
     )
     const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")

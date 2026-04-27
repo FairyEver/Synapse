@@ -1,6 +1,8 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react"
-import { Command as CommandIcon, Send } from "lucide-react"
+import { Command as CommandIcon, Copy, Send } from "lucide-react"
+import { toast } from "sonner"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
+import { createRendererLogger } from "@/app-shell/logging"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +24,14 @@ import type { SynapseAgentTimelineEntry } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
 import { useAgentChat } from "./hooks/use-agent-chat"
-import { agentCliLabel, formatEntryTime, thinkingIndicatorText } from "./utils"
+import {
+  agentCliLabel,
+  formatAgentTranscript,
+  formatEntryTime,
+  thinkingIndicatorText,
+} from "./utils"
+
+const logger = createRendererLogger("agent")
 
 function AgentModule() {
   const activeRepository = useActiveRepository()
@@ -68,6 +77,24 @@ function AgentModule() {
     void chat.sendMessage(`/${name}`)
   }
 
+  const handleCopyTranscript = async () => {
+    if (!projectId || chat.timeline.length === 0) return
+    try {
+      const result = await requireSynapseBridge().agent.getTimeline({
+        projectId,
+        sessionKey: chat.selectedSessionKey,
+        conversationId: chat.selectedConversationId,
+      })
+      const transcript = formatAgentTranscript(result.entries)
+      if (!transcript.trim()) return
+      await window.navigator.clipboard.writeText(transcript)
+      toast("已复制")
+    } catch (rawError) {
+      logger.error("Agent transcript copy failed.", rawError)
+      toast("复制失败")
+    }
+  }
+
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
   const selectedSession = chat.sessions.find((session) => session.id === chat.selectedConversationId)
     ?? chat.sessions.find((session) => session.active)
@@ -108,6 +135,16 @@ function AgentModule() {
             {chat.status?.pendingPermissions ? (
               <Badge variant="outline">权限 {chat.status.pendingPermissions}</Badge>
             ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!projectId || chat.timeline.length === 0}
+              onClick={() => void handleCopyTranscript()}
+            >
+              <Copy data-icon="inline-start" />
+              复制
+            </Button>
             <Popover open={paletteOpen} onOpenChange={setPaletteOpen}>
               <PopoverTrigger asChild>
                 <Button type="button" variant="outline" size="sm">

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
+import { mkdtemp, rm, writeFile, mkdir, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -12,7 +12,7 @@ vi.mock("electron", () => ({
   },
 }))
 
-import { scanCodexRules } from "../../../src/ide-definitions/shared-rule-scanners"
+import { scanCodexRules, scanCursorRules } from "../../../src/ide-definitions/shared-rule-scanners"
 import { prepareQuickPublishDraft } from "../editor-scan-service"
 
 const tempDirs: string[] = []
@@ -80,6 +80,58 @@ describe("editor scan quick publish", () => {
     })
   })
 
+  it("rejects oversized skill attachments before reading them into the draft", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    await writeFile(path.join(skillDir, "large.bin"), new Uint8Array((10 * 1024 * 1024) + 1))
+
+    await expect(prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      metadata: {},
+    })).rejects.toThrow("超过 10MB")
+  })
+
+  it("rejects sensitive skill attachment names before creating a draft", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    await writeFile(path.join(skillDir, "id_rsa"), "private key")
+
+    await expect(prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      metadata: {},
+    })).rejects.toThrow("敏感文件")
+  })
+
+  it("skips symlinked files when preparing a skill draft", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    const outsideFilePath = path.join(root, "secret.txt")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    await writeFile(path.join(skillDir, "notes.txt"), "notes")
+    await writeFile(outsideFilePath, "secret")
+    await symlink(outsideFilePath, path.join(skillDir, "linked-secret.txt"))
+
+    const draft = await prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      metadata: {},
+    })
+
+    expect(draft.itemType).toBe("skill")
+    if (draft.itemType !== "skill") return
+    expect(draft.files.map((file) => file.originalName)).toEqual(["notes.txt"])
+  })
+
   it("keeps the exact content for each Codex rule segment", async () => {
     const root = await createTempDir()
     const filePath = path.join(root, "AGENTS.md")
@@ -103,5 +155,22 @@ describe("editor scan quick publish", () => {
 
     expect(items.find((item) => item.name === "first")?.content).toBe("# First\n\nOnly first.")
     expect(items.find((item) => item.name === "second")?.content).toBe("# Second\n\nOnly second.")
+  })
+
+  it("recognizes Cursor rules installed from Synapse by file name", async () => {
+    const root = await createTempDir()
+    const contentId = "abc123"
+    await writeFile(
+      path.join(root, `synapse_${contentId}.mdc`),
+      "---\ndescription: Project rule\n---\n# Rule\n",
+    )
+
+    const items = await scanCursorRules(root)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      source: "synapse",
+      synapseContentId: contentId,
+    })
   })
 })

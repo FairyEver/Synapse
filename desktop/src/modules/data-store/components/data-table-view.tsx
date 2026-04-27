@@ -8,10 +8,16 @@ import {
   useRef,
   useState,
 } from "react"
-import { Funnel, Pencil, SlidersHorizontal, Trash2 } from "lucide-react"
+import { FileOutput, Funnel, Pencil, SlidersHorizontal, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Menubar } from "@/components/ui/menubar"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   Table,
   TableBody,
@@ -71,6 +77,7 @@ type DataTableViewProps = {
   onUpdate: (id: number, data: Record<string, unknown>) => Promise<void> | void
   onDelete: (id: number) => void
   onShowSchema: () => void
+  onExportTable: () => Promise<void> | void
   filter: DataStoreWhereGroup | null
   onFilterChange: (filter: DataStoreWhereGroup | null) => void
 }
@@ -93,6 +100,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     onUpdate,
     onDelete,
     onShowSchema,
+    onExportTable,
     filter,
     onFilterChange,
   },
@@ -211,6 +219,11 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     onShowSchema()
   }, [commitPendingChanges, onShowSchema])
 
+  const handleExportTable = useCallback(async () => {
+    await commitPendingChanges()
+    await onExportTable()
+  }, [commitPendingChanges, onExportTable])
+
   const handleStartAdding = useCallback(async () => {
     if (isAdding) {
       return
@@ -299,6 +312,26 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             <Funnel className="size-4" />
             <span className="sr-only">筛选</span>
           </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="导出表"
+                  onClick={() => {
+                    void handleExportTable().catch((error) => {
+                      toast(error instanceof Error ? error.message : "导出失败")
+                    })
+                  }}
+                >
+                  <FileOutput />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>导出表</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
         <Menubar className="w-fit">
           <DropdownMenu>

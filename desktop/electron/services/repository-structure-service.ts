@@ -8,39 +8,21 @@ import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "../../src/constants/defa
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
-  SynapseContentAttachmentRecord,
-  SynapseContentAttachmentsRecord,
-  SynapseContentMetaRecord,
-  SynapseContentSnapshotRecord,
-  SynapseContentType,
-} from "../../src/types/content"
-import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
   SynapseRepositoryInitializationPreview,
   SynapseRepositoryInitializationResult,
 } from "../../src/types/repository"
-import { attachmentsPoolService } from "./attachments-pool-service"
 import { contentIndexService } from "./content-index-service"
-import {
-  CONTENT_ATTACHMENTS_FILE_NAME,
-  CONTENT_MAIN_FILE_NAME,
-  CONTENT_META_FILE_NAME,
-  HISTORY_DIRECTORY_NAME,
-  resolveContentDirectoryPath,
-} from "./content-history-service"
 import { runGitTextCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
-import { readRepositorySeedContents, type RepositorySeedContent } from "./repository-template-service"
 import { repositoryStore } from "./repository-store"
 import { userProfileService } from "./user-profile-service"
 
 const SYNAPSE_BOT_NAME = "Synapse Bot"
 const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
-const SYNAPSE_SEED_AUTHOR_ID = "synapse"
-const SYNAPSE_SEED_AUTHOR_NAME = "Synapse"
 const logger = createMainLogger("service.repository-structure")
 
 function isGitDirectory(entry: Dirent): boolean {
@@ -58,9 +40,6 @@ async function readTopLevelEntries(repoRootPath: string): Promise<Dirent[]> {
 function getNonGitEntries(entries: Dirent[]): Dirent[] {
   return entries.filter((entry) => !isGitDirectory(entry))
 }
-
-
-
 function runStructureGitCommand(
   cwd: string,
   args: string[],
@@ -128,22 +107,6 @@ async function writeGitkeep(directoryPath: string): Promise<void> {
   await rename(temporaryPath, targetPath)
 }
 
-function normalizeMarkdownContent(content: string): string {
-  return content.endsWith("\n") ? content : `${content}\n`
-}
-
-async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
-}
-
-function buildHistoryDirname(userId: string, at: Date): string {
-  const compactTimestamp = `${at.toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`
-  const rand6 = randomUUID().replace(/-/g, "").slice(0, 6)
-
-  return `${compactTimestamp}__${userId}__${rand6}`
-}
-
 function normalizeRepositoryName(name: string): string {
   const nextName = name.trim()
 
@@ -171,102 +134,9 @@ function createRepositoryConfig(name: string, localPath: string): SynapseReposit
   }
 }
 
-function createMetaRecord(
-  contentId: string,
-  contentType: SynapseContentType,
-  createdAt: string,
-): SynapseContentMetaRecord {
-  return {
-    schemaVersion: 1,
-    id: contentId,
-    type: contentType,
-    createdBy: SYNAPSE_SEED_AUTHOR_ID,
-    createdByDisplayName: SYNAPSE_SEED_AUTHOR_NAME,
-    createdAt,
-  }
-}
-
-function createSnapshotRecord(
-  seed: RepositorySeedContent,
-  modifiedAt: string,
-): SynapseContentSnapshotRecord {
-  return {
-    schemaVersion: 1,
-    title: seed.title,
-    ...(seed.name != null ? { name: seed.name } : {}),
-    description: seed.description,
-    category: seed.category,
-    icon: seed.icon,
-    iconBg: seed.iconBg,
-    modifiedBy: SYNAPSE_SEED_AUTHOR_ID,
-    modifiedByDisplayName: SYNAPSE_SEED_AUTHOR_NAME,
-    modifiedAt,
-    deleted: false,
-  }
-}
-
-function createAttachmentsRecord(
-  files: SynapseContentAttachmentRecord[],
-): SynapseContentAttachmentsRecord {
-  return {
-    schemaVersion: 1,
-    files,
-  }
-}
-
-async function writeSeedContent(
-  repository: SynapseRepositoryConfig,
-  seed: RepositorySeedContent,
-): Promise<void> {
-  const createdAt = new Date().toISOString()
-  const historyDirname = buildHistoryDirname(SYNAPSE_SEED_AUTHOR_ID, new Date(createdAt))
-  const contentDirectoryPath = resolveContentDirectoryPath(repository, seed.type, seed.id)
-  const historyDirectoryPath = path.join(contentDirectoryPath, HISTORY_DIRECTORY_NAME, historyDirname)
-  const attachments =
-    seed.attachments && seed.attachments.length > 0
-      ? await attachmentsPoolService.writeAttachments(
-        repository.localPath,
-        seed.attachments.map((attachment) => {
-          return {
-            originalName: attachment.originalName,
-            size: attachment.bytes.byteLength,
-            bytes: attachment.bytes,
-          }
-        }),
-      )
-      : {
-        records: [] as SynapseContentAttachmentRecord[],
-      }
-
-  await mkdir(historyDirectoryPath, { recursive: true })
-  await writeJsonFile(
-    path.join(contentDirectoryPath, CONTENT_META_FILE_NAME),
-    createMetaRecord(seed.id, seed.type, createdAt),
-  )
-  await writeJsonFile(
-    path.join(historyDirectoryPath, "snapshot.json"),
-    createSnapshotRecord(seed, createdAt),
-  )
-  await writeFile(
-    path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME),
-    normalizeMarkdownContent(seed.content),
-    "utf8",
-  )
-  await writeJsonFile(
-    path.join(historyDirectoryPath, CONTENT_ATTACHMENTS_FILE_NAME),
-    createAttachmentsRecord(attachments.records),
-  )
-}
-
 async function scaffoldNewLocalRepository(repository: SynapseRepositoryConfig): Promise<void> {
-  const seeds = await readRepositorySeedContents()
-
   for (const directoryName of getRepositorySkeletonDirectories(repository)) {
     await mkdir(path.join(repository.localPath, directoryName), { recursive: true })
-  }
-
-  for (const seed of seeds) {
-    await writeSeedContent(repository, seed)
   }
 }
 
@@ -409,7 +279,6 @@ class RepositoryStructureService {
   async initializeStructure(
     repository: SynapseRepositoryConfig,
   ): Promise<SynapseRepositoryInitializationResult> {
-    const seeds = await readRepositorySeedContents()
     const repositoryState = await repositoryStore.getRepositoryState(repository)
 
     if (repositoryState.status !== "ready") {
@@ -430,10 +299,6 @@ class RepositoryStructureService {
 
     for (const directoryName of getRepositorySkeletonDirectories(repository)) {
       await writeGitkeep(path.join(repository.localPath, directoryName))
-    }
-
-    for (const seed of seeds) {
-      await writeSeedContent(repository, seed)
     }
 
     let pendingPushCount = 0

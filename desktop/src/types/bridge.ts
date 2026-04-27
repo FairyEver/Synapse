@@ -10,6 +10,7 @@ import type {
   DataStoreQueryParams,
   DataStoreQueryResult,
   DataStoreStatus,
+  DataStoreTableImportInspection,
   DataStoreTableInfo,
   DataStoreTableSchema,
   DataStoreWhereClause,
@@ -292,6 +293,12 @@ export type SynapseBridge = {
     getStatus: () => Promise<DataStoreStatus>
     exportDB: () => Promise<{ success: boolean; path?: string }>
     importDB: () => Promise<{ success: boolean }>
+    exportTable: (table: string) => Promise<{ success: boolean; path?: string }>
+    inspectTableImport: () => Promise<
+      { success: false }
+      | ({ success: true } & DataStoreTableImportInspection)
+    >
+    importTable: (sourcePath: string) => Promise<{ success: boolean; tableName?: string }>
     installCLI: () => Promise<{ success: boolean; path?: string; error?: string }>
     getCliStatus: () => Promise<DataStoreCliStatus>
     getCliDebugInfo: () => Promise<DataStoreCliDebugInfo>

@@ -110,6 +110,37 @@ describe("agentIpcModule", () => {
     })
   })
 
+  it("returns the full conversation timeline when no limit is requested", async () => {
+    const history = Array.from({ length: 101 }, (_, index) => ({
+      role: "user" as const,
+      content: `message ${String(index + 1)}`,
+      timestamp: `2026-04-27T03:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    }))
+    const getSession = vi.fn().mockResolvedValue({
+      id: "conv-1",
+      sessionKey: "local:renderer",
+      active: true,
+      history,
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z",
+    })
+    const harness = createHarness({
+      agent: {
+        getSession,
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:get-timeline", {
+      projectId: "project-1",
+      conversationId: "conv-1",
+    }) as { readonly entries: readonly { readonly content: string }[] }
+
+    expect(result.entries).toHaveLength(101)
+    expect(result.entries[0]).toEqual(expect.objectContaining({
+      content: "message 1",
+    }))
+  })
+
   it("creates and switches local renderer sessions", async () => {
     const created = {
       id: "conv-2",

@@ -1,5 +1,6 @@
 export type SynapseContentType = "rule" | "skill" | "prompt"
 export type SynapseContentViewMode = "rendered" | "source"
+export type SynapseContentSource = "repository" | "builtin"
 
 export type SynapseContentSchemaVersion = 1
 
@@ -66,6 +67,8 @@ type SynapseContentSummaryBase = {
   deleted: boolean
   latestHistoryDirname: string
   attachmentCount: number
+  source?: SynapseContentSource
+  isReadonly?: boolean
 }
 
 export type SynapseContentMeta<T extends SynapseContentType = SynapseContentType> =

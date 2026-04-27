@@ -96,6 +96,8 @@ function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | nul
     deleted: row.deleted === 1,
     latestHistoryDirname: row.latest_history_dirname,
     attachmentCount: typeof row.attachment_count === "number" ? row.attachment_count : 0,
+    source: "repository",
+    isReadonly: false,
   } as SynapseContentMeta
 }
 

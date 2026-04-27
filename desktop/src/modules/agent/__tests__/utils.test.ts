@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { agentCliLabel, thinkingIndicatorText } from "../utils"
+import {
+  agentCliLabel,
+  formatAgentTranscript,
+  formatEntryTime,
+  thinkingIndicatorText,
+} from "../utils"
 
 describe("agent utils", () => {
   it("cycles the waiting indicator text through three middle dots", () => {
@@ -18,5 +23,39 @@ describe("agent utils", () => {
     expect(agentCliLabel("codex")).toBe("codex")
     expect(agentCliLabel("claude-code")).toBe("claudecode")
     expect(agentCliLabel(undefined)).toBeUndefined()
+  })
+
+  it("formats the current conversation for clipboard copy", () => {
+    const entries = [
+      {
+        id: "one",
+        role: "user",
+        content: "你好",
+        timestamp: "2026-04-27T03:15:00.000Z",
+      },
+      {
+        id: "two",
+        role: "assistant",
+        content: "第一行\n第二行",
+        timestamp: "2026-04-27T03:16:00.000Z",
+      },
+      {
+        id: "three",
+        role: "tool",
+        content: "read_file",
+        timestamp: "2026-04-27T03:17:00.000Z",
+      },
+    ] as const
+
+    expect(formatAgentTranscript(entries)).toBe([
+      `用户 ${formatEntryTime(entries[0].timestamp)}`,
+      "你好",
+      "",
+      `Agent ${formatEntryTime(entries[1].timestamp)}`,
+      "第一行\n第二行",
+      "",
+      `工具 ${formatEntryTime(entries[2].timestamp)}`,
+      "read_file",
+    ].join("\n"))
   })
 })

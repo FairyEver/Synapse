@@ -62,6 +62,12 @@ type DataStoreStatus = {
   dbDirectoryPath: string
 }
 
+type DataStoreTableImportInspection = {
+  tableName: string
+  exists: boolean
+  sourcePath: string
+}
+
 type DataStoreServerInfo = {
   port: number
   token: string
@@ -77,6 +83,7 @@ export type {
   DataStoreQueryResult,
   DataStoreServerInfo,
   DataStoreStatus,
+  DataStoreTableImportInspection,
   DataStoreTableInfo,
   DataStoreTableSchema,
   DataStoreWhereClause,

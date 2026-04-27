@@ -95,6 +95,30 @@ function formatEntryTime(timestamp: string): string {
   })
 }
 
+function formatAgentTranscript(entries: readonly SynapseAgentTimelineEntry[]): string {
+  return entries.map((entry) => [
+    `${labelForRole(entry.role)} ${formatEntryTime(entry.timestamp)}`,
+    entry.content.trimEnd(),
+  ].join("\n")).join("\n\n")
+}
+
+function labelForRole(role: SynapseAgentTimelineEntry["role"]): string {
+  switch (role) {
+    case "user":
+      return "用户"
+    case "assistant":
+      return "Agent"
+    case "tool":
+      return "工具"
+    case "system":
+      return "系统"
+    default: {
+      const exhaustive: never = role
+      return exhaustive
+    }
+  }
+}
+
 function thinkingIndicatorText(frame: number): string {
   const dotCount = ((frame % 4) + 4) % 4
   return `thinking${THINKING_DOT.repeat(dotCount)}`
@@ -113,6 +137,7 @@ export {
   agentEventToTimelineEntry,
   defaultSessionId,
   defaultSessionKey,
+  formatAgentTranscript,
   formatEntryTime,
   localUserTimelineEntry,
   sessionLabel,

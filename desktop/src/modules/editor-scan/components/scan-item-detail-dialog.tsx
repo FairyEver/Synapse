@@ -31,6 +31,12 @@ import { Menubar } from "@/components/ui/menubar"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -205,7 +211,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
     ? Object.entries(item.metadata).filter(([, v]) => v)
     : []
   const content = item.content ?? loadedContent
-  const primaryActionLabel = item.synapseContentId ? "从仓库中显示" : "发布到仓库"
+  const primaryActionLabel = item.synapseContentId ? "从仓库中显示" : "保存到仓库..."
 
   return (
     <>
@@ -219,7 +225,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
           <AlertDialogHeader>
             <AlertDialogTitle>关联内容不可用</AlertDialogTitle>
             <AlertDialogDescription>
-              {fallbackReason} 可以作为新内容发布。
+              {fallbackReason} 可以作为新内容保存。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -230,7 +236,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
                 void publishAsNew()
               }}
             >
-              作为新内容发布
+              作为新内容保存
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -295,17 +301,6 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
                 </Button>
               </Menubar>
 
-              <Button
-                type="button"
-                size="sm"
-                disabled={isQuickPublishBusy || disabledReason !== null}
-                title={disabledReason ?? primaryActionLabel}
-                onClick={() => void handlePrimaryAction()}
-              >
-                {isQuickPublishBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-                {primaryActionLabel}
-              </Button>
-
               <Tabs
                 value={viewMode}
                 onValueChange={(v) => setViewMode(v === "source" ? "source" : "rendered")}
@@ -342,15 +337,35 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
             ) : null}
           </div>
 
-          <div className="border-t px-5 py-3">
+          <div className="flex items-center gap-3 border-t px-5 py-3">
             <button
               type="button"
-              className="flex max-w-full items-center gap-1 text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
+              className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground/50 transition-colors hover:text-foreground"
               onClick={handleOpenInFinder}
             >
               <FolderOpen className="size-3 shrink-0" />
               <span className="truncate">{item.path}</span>
             </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isQuickPublishBusy || disabledReason !== null}
+                      onClick={() => void handlePrimaryAction()}
+                    >
+                      {isQuickPublishBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+                      {primaryActionLabel}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {disabledReason ? (
+                  <TooltipContent>{disabledReason}</TooltipContent>
+                ) : null}
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </DialogContent>
       </Dialog>
