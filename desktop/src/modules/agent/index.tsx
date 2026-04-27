@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
-import { Command as CommandIcon, Copy, Send } from "lucide-react"
+import { ArrowUp, Command as CommandIcon, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { cn } from "@/lib/utils"
 import type { SynapseAgentTimelineEntry } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
@@ -206,13 +207,11 @@ function AgentModule() {
                 暂无消息
               </p>
             ) : chat.timeline.map((entry) => (
-              <article key={entry.id} className="flex flex-col gap-1">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{labelForRole(entry.role)}</span>
-                  <span>{formatEntryTime(entry.timestamp)}</span>
-                </div>
-                <MessageContent entry={entry} onOpenReference={openReference} />
-              </article>
+              <AgentMessageItem
+                key={entry.id}
+                entry={entry}
+                onOpenReference={openReference}
+              />
             ))}
             {chat.sending ? (
               <AgentWaitingIndicator text={thinkingIndicatorText(thinkingFrame)} />
@@ -220,34 +219,99 @@ function AgentModule() {
           </div>
         </ScrollArea>
 
-        <form className="flex shrink-0 items-end gap-2" onSubmit={handleSubmit}>
-          <Textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleInputKeyDown}
-            placeholder="输入消息"
-            disabled={!chat.activeProjectId}
-            rows={1}
-            className="h-8 min-h-8 resize-none overflow-hidden py-1.5 focus-visible:border-input focus-visible:ring-0"
-          />
-          <Button type="submit" disabled={!draft.trim() || !chat.activeProjectId}>
-            <Send data-icon="inline-start" />
-            发送
-          </Button>
-        </form>
+        <AgentComposer
+          draft={draft}
+          disabled={!chat.activeProjectId}
+          canSend={Boolean(draft.trim() && chat.activeProjectId)}
+          onDraftChange={setDraft}
+          onInputKeyDown={handleInputKeyDown}
+          onSubmit={handleSubmit}
+        />
       </div>
     </SidebarContentLayout>
   )
 }
 
+function AgentComposer({
+  draft,
+  disabled,
+  canSend,
+  onDraftChange,
+  onInputKeyDown,
+  onSubmit,
+}: {
+  readonly draft: string
+  readonly disabled: boolean
+  readonly canSend: boolean
+  readonly onDraftChange: (value: string) => void
+  readonly onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
+  readonly onSubmit: (event: FormEvent) => void
+}) {
+  return (
+    <form className="flex shrink-0 items-end gap-2 rounded-full bg-muted/50 px-2 py-1.5" onSubmit={onSubmit}>
+      <Textarea
+        value={draft}
+        onChange={(event) => onDraftChange(event.target.value)}
+        onKeyDown={onInputKeyDown}
+        placeholder="输入消息"
+        disabled={disabled}
+        rows={1}
+        className="h-8 min-h-8 flex-1 resize-none overflow-hidden border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
+      />
+      <Button
+        type="submit"
+        size="icon"
+        className="shrink-0 rounded-full"
+        disabled={!canSend}
+        aria-label="发送"
+      >
+        <ArrowUp data-icon="inline-start" />
+      </Button>
+    </form>
+  )
+}
+
 function AgentWaitingIndicator({ text }: { readonly text: string }) {
   return (
-    <article className="flex flex-col gap-1" aria-live="polite">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>Agent</span>
+    <article className="flex justify-start" aria-live="polite">
+      <div className="flex max-w-[78%] flex-col items-start gap-1">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Agent</span>
+        </div>
+        <div className="max-w-full rounded-2xl rounded-bl-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          {text}
+        </div>
       </div>
-      <div className="w-fit max-w-full rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-        {text}
+    </article>
+  )
+}
+
+function AgentMessageItem({
+  entry,
+  onOpenReference,
+}: {
+  readonly entry: SynapseAgentTimelineEntry
+  readonly onOpenReference: (reference: string) => void
+}) {
+  const outgoing = entry.role === "user"
+  return (
+    <article className={cn("flex", outgoing ? "justify-end" : "justify-start")}>
+      <div className={cn(
+        "flex max-w-[78%] flex-col gap-1",
+        outgoing ? "items-end" : "items-start",
+      )}>
+        <div className={cn(
+          "flex items-center gap-2 text-xs text-muted-foreground",
+          outgoing ? "justify-end" : "justify-start",
+        )}>
+          <span>{labelForRole(entry.role)}</span>
+          <span>{formatEntryTime(entry.timestamp)}</span>
+        </div>
+        <MessageContent
+          entry={entry}
+          outgoing={outgoing}
+          onOpenReference={onOpenReference}
+        />
       </div>
     </article>
   )
@@ -255,14 +319,23 @@ function AgentWaitingIndicator({ text }: { readonly text: string }) {
 
 function MessageContent({
   entry,
+  outgoing,
   onOpenReference,
 }: {
   readonly entry: SynapseAgentTimelineEntry
+  readonly outgoing: boolean
   readonly onOpenReference: (reference: string) => void
 }) {
   const segments = splitLocalReferences(entry.content)
   return (
-    <div className="w-fit max-w-full whitespace-pre-wrap break-words rounded-md bg-muted/50 px-3 py-2 text-sm text-foreground">
+    <div
+      className={cn(
+        "max-w-full whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed",
+        outgoing
+          ? "rounded-br-md bg-gradient-to-b from-blue-500 to-blue-600 text-white"
+          : "rounded-bl-md bg-muted/50 text-foreground",
+      )}
+    >
       {segments.map((segment, index) => segment.kind === "text" ? (
         <span key={`${entry.id}:text:${String(index)}`}>{segment.value}</span>
       ) : (
@@ -271,7 +344,10 @@ function MessageContent({
           type="button"
           variant="link"
           size="sm"
-          className="h-auto px-1 py-0 align-baseline"
+          className={cn(
+            "h-auto px-1 py-0 align-baseline",
+            outgoing ? "text-inherit hover:text-inherit" : null,
+          )}
           onClick={() => onOpenReference(segment.value)}
         >
           {segment.value}
@@ -322,4 +398,4 @@ function splitLocalReferences(content: string): readonly MessageSegment[] {
   return segments.length > 0 ? segments : [{ kind: "text", value: content }]
 }
 
-export { AgentModule }
+export { AgentComposer, AgentMessageItem, AgentModule }
