@@ -16,7 +16,11 @@ import { scanStrategy as claudeCodeScanStrategy } from "../../../../src/definiti
 import { scanStrategy as codexScanStrategy } from "../../../../src/definitions/editor/codex/scan"
 import { scanStrategy as cursorScanStrategy } from "../../../../src/definitions/editor/cursor/scan"
 import { scanStrategy as windsurfScanStrategy } from "../../../../src/definitions/editor/windsurf/scan"
-import type { EditorAdapter, EditorInstallStrategy, EditorScanStrategy } from "../../../../src/definitions/main-types"
+import type {
+  EditorAdapter,
+  EditorInstallStrategy,
+  EditorScanStrategy,
+} from "../../../../src/definitions/main-types"
 import type { SynapseMcpDefinition } from "../../../../src/definitions/types"
 
 export const editorAdapters = [

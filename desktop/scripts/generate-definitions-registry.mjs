@@ -4,9 +4,13 @@ import { fileURLToPath } from "node:url"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(scriptDir, "..")
-const definitionsRoot = path.join(packageRoot, "src", "definitions", "editor")
-const rendererGeneratedDir = path.join(packageRoot, "src", "definitions", "generated")
+const definitionsRoot = path.join(packageRoot, "src", "definitions")
+const editorDefinitionsRoot = path.join(definitionsRoot, "editor")
+const agentDefinitionsRoot = path.join(definitionsRoot, "agent")
+const rendererGeneratedDir = path.join(definitionsRoot, "generated")
 const mainGeneratedDir = path.join(packageRoot, "electron", "services", "definitions", "generated")
+
+void agentDefinitionsRoot
 
 async function pathExists(filePath) {
   try {
@@ -17,13 +21,13 @@ async function pathExists(filePath) {
   }
 }
 
-async function listDefinitionDirectories() {
-  const entries = await readdir(definitionsRoot, { withFileTypes: true })
+async function listEditorDefinitionDirectories() {
+  const entries = await readdir(editorDefinitionsRoot, { withFileTypes: true })
   const dirs = []
 
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === "__tests__") continue
-    if (await pathExists(path.join(definitionsRoot, entry.name, "editor.ts"))) {
+    if (await pathExists(path.join(editorDefinitionsRoot, entry.name, "editor.ts"))) {
       dirs.push(entry.name)
     }
   }
@@ -57,7 +61,12 @@ function renderRendererRegistry(definitionDirs, cliDirs, mcpDirs, formDirs) {
 ${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${formImports.join("\n")}
-import type { SynapseCliDefinition, SynapseEditorDefinition, SynapseInstallFormDefinition, SynapseRendererMcpDefinition } from "../types"
+import type {
+  SynapseCliDefinition,
+  SynapseEditorDefinition,
+  SynapseInstallFormDefinition,
+  SynapseRendererMcpDefinition,
+} from "../types"
 
 export const editorDefinitions = [
 ${definitionDirs.map((dir) => `  ${toIdentifier(dir)}EditorDefinition,`).join("\n")}
@@ -68,7 +77,7 @@ ${cliDirs.map((dir) => `  ${toIdentifier(dir)}CliDefinition,`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseCliDefinition[]
 
 export const mcpDefinitions = [
-${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, icon: ${toIdentifier(dir)}EditorDefinition.icon },`).join("\n")}
+${mcpDirs.map((dir) => `  { ...${toIdentifier(dir)}McpDefinition, target: ${toIdentifier(dir)}EditorDefinition.id, icon: ${toIdentifier(dir)}EditorDefinition.icon },`).join("\n")}
 ].sort((left, right) => left.order - right.order) satisfies SynapseRendererMcpDefinition[]
 
 export const installFormDefinitionByEditorId = new Map<string, SynapseInstallFormDefinition>([
@@ -104,7 +113,11 @@ ${cliImports.join("\n")}
 ${mcpImports.join("\n")}
 ${installImports.join("\n")}
 ${scanImports.join("\n")}
-import type { EditorAdapter, EditorInstallStrategy, EditorScanStrategy } from "../../../../src/definitions/main-types"
+import type {
+  EditorAdapter,
+  EditorInstallStrategy,
+  EditorScanStrategy,
+} from "../../../../src/definitions/main-types"
 import type { SynapseMcpDefinition } from "../../../../src/definitions/types"
 
 export const editorAdapters = [
@@ -134,19 +147,19 @@ ${adapterDirs.map((dir) => `  [${toIdentifier(dir)}EditorAdapter.id, ${toIdentif
 }
 
 async function main() {
-  const definitionDirs = await listDefinitionDirectories()
+  const definitionDirs = await listEditorDefinitionDirectories()
   const adapterDirs = []
   const importableCliDirs = []
   const importableMcpDirs = []
   const importableFormDirs = []
 
   for (const dir of definitionDirs) {
-    if (await pathExists(path.join(definitionsRoot, dir, "adapter.ts"))) adapterDirs.push(dir)
-    if (await pathExists(path.join(definitionsRoot, dir, "cli.ts"))) importableCliDirs.push(dir)
-    if (await pathExists(path.join(definitionsRoot, dir, "mcp.ts"))) importableMcpDirs.push(dir)
+    if (await pathExists(path.join(editorDefinitionsRoot, dir, "adapter.ts"))) adapterDirs.push(dir)
+    if (await pathExists(path.join(editorDefinitionsRoot, dir, "cli.ts"))) importableCliDirs.push(dir)
+    if (await pathExists(path.join(editorDefinitionsRoot, dir, "mcp.ts"))) importableMcpDirs.push(dir)
     if (
-      await pathExists(path.join(definitionsRoot, dir, "forms.ts"))
-      || await pathExists(path.join(definitionsRoot, dir, "forms.tsx"))
+      await pathExists(path.join(editorDefinitionsRoot, dir, "forms.ts"))
+      || await pathExists(path.join(editorDefinitionsRoot, dir, "forms.tsx"))
     ) {
       importableFormDirs.push(dir)
     }

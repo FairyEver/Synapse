@@ -11,7 +11,12 @@ import { mcpDefinition as windsurfMcpDefinition } from "../editor/windsurf/mcp"
 import { installFormDefinition as claudeCodeInstallFormDefinition } from "../editor/claude-code/forms"
 import { installFormDefinition as cursorInstallFormDefinition } from "../editor/cursor/forms"
 import { installFormDefinition as windsurfInstallFormDefinition } from "../editor/windsurf/forms"
-import type { SynapseCliDefinition, SynapseEditorDefinition, SynapseInstallFormDefinition, SynapseRendererMcpDefinition } from "../types"
+import type {
+  SynapseCliDefinition,
+  SynapseEditorDefinition,
+  SynapseInstallFormDefinition,
+  SynapseRendererMcpDefinition,
+} from "../types"
 
 export const editorDefinitions = [
   claudeCodeEditorDefinition,
@@ -26,10 +31,10 @@ export const cliDefinitions = [
 ].sort((left, right) => left.order - right.order) satisfies SynapseCliDefinition[]
 
 export const mcpDefinitions = [
-  { ...claudeCodeMcpDefinition, icon: claudeCodeEditorDefinition.icon },
-  { ...codexMcpDefinition, icon: codexEditorDefinition.icon },
-  { ...cursorMcpDefinition, icon: cursorEditorDefinition.icon },
-  { ...windsurfMcpDefinition, icon: windsurfEditorDefinition.icon },
+  { ...claudeCodeMcpDefinition, target: claudeCodeEditorDefinition.id, icon: claudeCodeEditorDefinition.icon },
+  { ...codexMcpDefinition, target: codexEditorDefinition.id, icon: codexEditorDefinition.icon },
+  { ...cursorMcpDefinition, target: cursorEditorDefinition.id, icon: cursorEditorDefinition.icon },
+  { ...windsurfMcpDefinition, target: windsurfEditorDefinition.id, icon: windsurfEditorDefinition.icon },
 ].sort((left, right) => left.order - right.order) satisfies SynapseRendererMcpDefinition[]
 
 export const installFormDefinitionByEditorId = new Map<string, SynapseInstallFormDefinition>([
