@@ -8,6 +8,10 @@ import { PROVIDER_CONFIG_SERVICE_ID } from "../../../services/provider-config"
 import { agentIpcModule } from "../ipc"
 import { configStore } from "../../../services/config-store"
 
+vi.mock("../../../services/cli/cli-detect-service", () => ({
+  whichBin: vi.fn().mockResolvedValue(null),
+}))
+
 vi.mock("../../../services/config-store", () => ({
   configStore: {
     load: vi.fn(),
@@ -118,6 +122,52 @@ describe("agentIpcModule", () => {
       }],
     })
     expect(getProjectProviderState).toHaveBeenCalledWith("project-1", "claude-code")
+  })
+
+  it("returns Agent runtime readiness without exposing secrets", async () => {
+    const harness = createHarness({
+      providerConfig: {
+        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, agentType: string) => ({
+          projectId: "project-1",
+          agentType,
+          activeProviderId: agentType === "codex" ? "openai" : undefined,
+          activeModel: agentType === "codex" ? "gpt-5.4" : undefined,
+          providers: agentType === "codex"
+            ? [{
+                id: "openai",
+                display: "OpenAI",
+                model: "gpt-5.4",
+                baseUrl: "https://api.example.test",
+                secretRef: "secret:openai",
+                scope: "global",
+              }]
+            : [],
+        })),
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:get-runtime-status", {
+      projectId: "project-1",
+    }) as {
+      readonly agents: readonly {
+        readonly id: string
+        readonly ready: boolean
+        readonly issues: readonly string[]
+        readonly provider?: { readonly activeProviderId?: string; readonly activeModel?: string }
+      }[]
+    }
+
+    expect(result.agents.map((agent) => agent.id)).toEqual(["claude-code", "codex"])
+    expect(result.agents.find((agent) => agent.id === "codex")).toEqual(expect.objectContaining({
+      ready: expect.any(Boolean),
+      provider: {
+        activeProviderId: "openai",
+        activeModel: "gpt-5.4",
+        configured: true,
+        projectId: "project-1",
+      },
+    }))
+    expect(result.agents.find((agent) => agent.id === "claude-code")?.issues).toContain("provider-not-configured")
   })
 
   it("returns the full conversation timeline when no limit is requested", async () => {

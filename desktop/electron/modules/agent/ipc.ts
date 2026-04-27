@@ -11,11 +11,13 @@ import {
   type AgentEvent,
 } from "../../services/agent-runtime"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
+import { whichBin } from "../../services/cli/cli-detect-service"
 import {
   ProviderConfigService,
   PROVIDER_CONFIG_SERVICE_ID,
 } from "../../services/provider-config"
 import { configStore } from "../../services/config-store"
+import { agentRuntimeDefinitions } from "../../services/definitions/generated/main-registry"
 
 const projectRequestSchema = z.object({
   projectId: z.string().min(1),
@@ -58,6 +60,10 @@ const respondPermissionRequestSchema = projectRequestSchema.extend({
 
 const openReferenceRequestSchema = projectRequestSchema.extend({
   reference: z.string().min(1),
+})
+
+const runtimeStatusRequestSchema = z.object({
+  projectId: z.string().optional(),
 })
 
 const timelineEntrySchema = z.object({
@@ -109,6 +115,28 @@ const providerStateSchema = z.object({
   activeProviderId: z.string().optional(),
   activeModel: z.string().optional(),
   activeMode: z.string().optional(),
+})
+
+const runtimeStatusSchema = z.object({
+  projectId: z.string().optional(),
+  agents: z.array(z.object({
+    id: z.string(),
+    label: z.string(),
+    ready: z.boolean(),
+    cli: z.object({
+      required: z.boolean(),
+      binary: z.string().optional(),
+      installed: z.boolean(),
+      path: z.string().nullable(),
+    }),
+    provider: z.object({
+      projectId: z.string().optional(),
+      configured: z.boolean(),
+      activeProviderId: z.string().optional(),
+      activeModel: z.string().optional(),
+    }).optional(),
+    issues: z.array(z.string()),
+  })),
 })
 
 const publishedCommandSchema = z.object({
@@ -431,6 +459,54 @@ export const agentIpcModule: IpcModule = {
             baseUrl: provider.baseUrl,
             scope: provider.scope,
           })),
+        }
+      },
+    },
+    getRuntimeStatus: {
+      kind: "invoke",
+      channel: "synapse:agent:get-runtime-status",
+      request: runtimeStatusRequestSchema,
+      response: runtimeStatusSchema,
+      handler: async (ctx, request: { projectId?: string }) => {
+        const providerConfig = request.projectId
+          ? (await resolveProjectAgent(ctx.resolve, request.projectId)).providerConfig
+          : undefined
+        const agents = await Promise.all(agentRuntimeDefinitions.map(async (definition) => {
+          const binary = definition.runtime.binaries[0]
+          const path = binary ? await whichBin(binary) : null
+          const provider = request.projectId && providerConfig
+            ? await providerConfig.getProjectProviderState(request.projectId, definition.id)
+            : undefined
+          const issues: string[] = []
+          if (binary && !path) issues.push("cli-not-installed")
+          if (request.projectId && (!provider || provider.providers.length === 0 || !provider.activeProviderId)) {
+            issues.push("provider-not-configured")
+          }
+          if (request.projectId && provider?.activeProviderId && !provider.activeModel) {
+            issues.push("model-not-selected")
+          }
+          return {
+            id: definition.id,
+            label: definition.label,
+            ready: issues.length === 0,
+            cli: {
+              required: definition.runtime.kind === "local-cli",
+              binary,
+              installed: path !== null,
+              path,
+            },
+            provider: request.projectId ? {
+              projectId: request.projectId,
+              configured: Boolean(provider?.activeProviderId),
+              activeProviderId: provider?.activeProviderId,
+              activeModel: provider?.activeModel,
+            } : undefined,
+            issues,
+          }
+        }))
+        return {
+          projectId: request.projectId,
+          agents,
         }
       },
     },

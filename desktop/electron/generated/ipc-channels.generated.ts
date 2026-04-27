@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",
     "getProviders": "synapse:agent:get-providers",
+    "getRuntimeStatus": "synapse:agent:get-runtime-status",
     "listCommands": "synapse:agent:list-commands",
     "openReference": "synapse:agent:open-reference",
     "event": "synapse:events:agent",

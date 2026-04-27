@@ -20,6 +20,7 @@ import type {
   SynapseAgentPendingPermission,
   SynapseAgentPublishedCommand,
   SynapseAgentProviderState,
+  SynapseAgentRuntimeStatus,
   SynapseAgentSendResult,
   SynapseAgentSessionSummary,
   SynapseAgentStatus,
@@ -332,6 +333,9 @@ export type SynapseBridge = {
       args: { projectId: string; requestId: string; behavior: "allow" | "deny"; message?: string },
     ) => Promise<{ ok: true }>
     getProviders: (projectId: string) => Promise<SynapseAgentProviderState>
+    getRuntimeStatus: (
+      request: { projectId?: string },
+    ) => Promise<SynapseAgentRuntimeStatus>
     listCommands: (projectId: string) => Promise<SynapseAgentPublishedCommand[]>
     openReference: (args: { projectId: string; reference: string }) => Promise<{ ok: true; path: string }>
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void

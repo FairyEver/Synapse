@@ -109,6 +109,34 @@ export interface SynapseAgentProviderState {
   readonly activeMode?: string
 }
 
+export interface SynapseAgentRuntimeCliStatus {
+  readonly required: boolean
+  readonly binary?: string
+  readonly installed: boolean
+  readonly path: string | null
+}
+
+export interface SynapseAgentRuntimeProviderStatus {
+  readonly projectId?: string
+  readonly configured: boolean
+  readonly activeProviderId?: string
+  readonly activeModel?: string
+}
+
+export interface SynapseAgentRuntimeStatusItem {
+  readonly id: string
+  readonly label: string
+  readonly ready: boolean
+  readonly cli: SynapseAgentRuntimeCliStatus
+  readonly provider?: SynapseAgentRuntimeProviderStatus
+  readonly issues: string[]
+}
+
+export interface SynapseAgentRuntimeStatus {
+  readonly projectId?: string
+  readonly agents: SynapseAgentRuntimeStatusItem[]
+}
+
 export interface SynapseAgentPublishedCommand {
   readonly name: string
   readonly description?: string
