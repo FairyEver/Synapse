@@ -59,6 +59,7 @@ export const IPC_CHANNELS = {
     "scanAll": "synapse:editor-scan:scan-all",
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
+    "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",

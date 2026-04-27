@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { purgeContent, restoreContent } from "@/app-shell/content"
+import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile, useIdentity, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useActiveRepository, usePendingPushes, useRepositoryState } from "@/app-shell/use-repository-manager"
@@ -85,6 +86,8 @@ type ContentBrowserPageProps = {
   onCreateDialogOpenChange?: (open: boolean) => void
   onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
+  pendingContentOpenRequest?: ContentOpenRequest | null
+  onPendingContentOpenRequestConsumed?: (requestId: string) => void
   renderDetailDialog: (props: ContentBrowserDetailDialogProps) => ReactNode
 }
 
@@ -398,6 +401,8 @@ function ContentBrowserPage({
   onCreateDialogOpenChange,
   onDetailDialogOpenChange,
   onInstallDialogOpenChange,
+  pendingContentOpenRequest,
+  onPendingContentOpenRequestConsumed,
   renderDetailDialog,
 }: ContentBrowserPageProps) {
   const definition = getContentTypeDefinition(contentType)
@@ -405,7 +410,7 @@ function ContentBrowserPage({
   const activeRepository = useActiveRepository()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
-  const { categories, error, isLoading, items, totalCount } = useContentCatalog(contentType)
+  const { categories, error, isLoading, items, refresh, totalCount } = useContentCatalog(contentType)
   const { favoriteIds } = useContentFavorites(contentType)
   const { recentlyViewedIds, addRecentlyViewed } = useContentRecentlyViewed(contentType)
   const { sortOrder, setSortOrder } = useContentSortOrder()
@@ -428,6 +433,8 @@ function ContentBrowserPage({
     setActiveCategoryIdRaw(nextId)
   }, [contentType, logger])
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
+  const consumedOpenRequestIdRef = useRef<string | null>(null)
+  const refreshedOpenRequestIdRef = useRef<string | null>(null)
   const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
   const [busyItemId, setBusyItemId] = useState<string | null>(null)
   const [deletedFilter, setDeletedFilterRaw] = useState<"mine" | "all">("mine")
@@ -521,6 +528,55 @@ function ContentBrowserPage({
 
     onDetailDialogOpenChange?.(true)
   }, [items, onDetailDialogOpenChange, selectedItem])
+
+  useEffect(() => {
+    const request = pendingContentOpenRequest
+    if (
+      !request
+      || request.contentType !== contentType
+      || request.kind !== "detail"
+      || consumedOpenRequestIdRef.current === request.requestId
+      || isLoading
+    ) {
+      return
+    }
+
+    const item = items.find((candidate) => candidate.id === request.contentId) ?? null
+    if (!item && items.length === 0 && refreshedOpenRequestIdRef.current !== request.requestId) {
+      refreshedOpenRequestIdRef.current = request.requestId
+      void refresh()
+      return
+    }
+
+    consumedOpenRequestIdRef.current = request.requestId
+
+    if (item) {
+      logger.info("Content detail opened from external request.", {
+        contentId: item.id,
+        contentType: item.type,
+      })
+      setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
+      addRecentlyViewed(contentType, item.id)
+      setSelectedItem(item)
+    } else {
+      logger.warn("Content detail external request target not found.", {
+        contentId: request.contentId,
+        contentType,
+      })
+    }
+
+    onPendingContentOpenRequestConsumed?.(request.requestId)
+  }, [
+    addRecentlyViewed,
+    contentType,
+    isLoading,
+    items,
+    logger,
+    onPendingContentOpenRequestConsumed,
+    pendingContentOpenRequest,
+    refresh,
+    setActiveCategoryId,
+  ])
 
   const itemsInActiveCategory = useMemo(
     () => {

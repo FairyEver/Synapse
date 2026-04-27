@@ -47,6 +47,7 @@ type SkillCreateDialogProps = {
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: CreateSkillPayload) => Promise<void> | void
   open: boolean
+  sourceLabel?: string | null
   submitDisabled?: boolean
   submitDisabledReason?: string | null
   editingId?: string | null
@@ -173,6 +174,7 @@ function SkillCreateDialog({
   onOpenChange,
   onSubmit,
   open,
+  sourceLabel = null,
   submitDisabled = false,
   submitDisabledReason = null,
   editingId = null,
@@ -461,6 +463,7 @@ function SkillCreateDialog({
       onDuplicateWarningOpenChange={setIsDuplicateWarningOpen}
       onSubmit={handleFormSubmit}
       open={open}
+      sourceLabel={sourceLabel}
       submitDisabled={submitDisabled}
       submitDisabledReason={submitDisabledReason}
       submitError={submitError}

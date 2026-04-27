@@ -80,7 +80,12 @@ import type {
   SynapseReadEditorInstallFormValuesResult,
   SynapseResolveEditorTargetPayload,
 } from "./editor"
-import type { EditorScanResult, EditorScanSkillFileEntry } from "./editor-scan"
+import type {
+  EditorScanQuickPublishDraft,
+  EditorScanQuickPublishRequest,
+  EditorScanResult,
+  EditorScanSkillFileEntry,
+} from "./editor-scan"
 import type {
   SynapseLogClearResult,
   SynapseLogExportResult,
@@ -227,6 +232,9 @@ export type SynapseBridge = {
     scanAll: () => Promise<EditorScanResult>
     readItemContent: (filePath: string) => Promise<string>
     listSkillFiles: (dirPath: string) => Promise<EditorScanSkillFileEntry[]>
+    prepareQuickPublishDraft: (
+      request: EditorScanQuickPublishRequest,
+    ) => Promise<EditorScanQuickPublishDraft>
   }
   shell: {
     showItemInFolder: (filePath: string) => void

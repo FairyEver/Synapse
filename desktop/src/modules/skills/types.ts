@@ -5,6 +5,7 @@ export type SkillCreateFilePayloadDraft = {
   sha256?: string
   size: number
   file?: File
+  bytes?: Uint8Array
 }
 
 export type CreateSkillPayload = Omit<SynapseCreateSkillPayload, "files"> & {

@@ -1,7 +1,25 @@
 import { useCallback, useEffect, useState } from "react"
 import { File, FolderOpen, LoaderCircle } from "lucide-react"
+import { readDetail } from "@/app-shell/content"
+import {
+  createContentOpenRequestId,
+  requestOpenContentCreate,
+  requestOpenContentDetail,
+} from "@/app-shell/content-navigation"
+import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogContent,
@@ -22,22 +40,18 @@ import {
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { useActiveRepository, usePendingPushes } from "@/app-shell/use-repository-manager"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
-import type { EditorScanItemSource, EditorScanSkillFileEntry } from "@/types/editor-scan"
+import type { EditorScanSkillFileEntry, ScanItemForDetail } from "@/types/editor-scan"
 import { useScanItemContent, useSkillFiles } from "../hooks/use-scan-item-content"
+import {
+  buildRuleQuickPublishPayload,
+  buildSkillQuickPublishPayload,
+  formatQuickPublishSourceLabel,
+} from "../lib/quick-publish"
 
 const logger = createRendererLogger("editor-scan")
-
-type ScanItemForDetail = {
-  type: "skill" | "rule"
-  name: string
-  path: string
-  source: EditorScanItemSource
-  preview: string
-  fileCount?: number
-  metadata?: Record<string, string>
-}
 
 type ScanItemDetailDialogProps = {
   item: ScanItemForDetail | null
@@ -46,18 +60,28 @@ type ScanItemDetailDialogProps = {
 }
 
 function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialogProps) {
-  const { content, loading, error } = useScanItemContent(open ? item?.path ?? null : null)
+  const { content: loadedContent, loading, error } = useScanItemContent(
+    open && item?.content == null ? item?.path ?? null : null,
+  )
   const skillFiles = useSkillFiles(
     open && item?.type === "skill" ? item.path : null,
   )
+  const activeRepository = useActiveRepository()
+  const { currentRepoProfileState } = useCurrentRepoProfile()
+  const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
   const { success, error: notifyError } = useAppNotifications()
   const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered")
   const [contentReady, setContentReady] = useState(false)
+  const [quickPublishError, setQuickPublishError] = useState<string | null>(null)
+  const [isQuickPublishBusy, setIsQuickPublishBusy] = useState(false)
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
       setViewMode("rendered")
       setContentReady(false)
+      setQuickPublishError(null)
+      setFallbackReason(null)
       return
     }
     const timer = setTimeout(() => setContentReady(true), 200)
@@ -65,6 +89,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
   }, [open])
 
   const handleCopy = useCallback(async () => {
+    const content = item?.content ?? loadedContent
     if (!content) return
     try {
       await navigator.clipboard.writeText(content)
@@ -73,23 +98,147 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
     } catch {
       notifyError("复制失败。")
     }
-  }, [content, item?.path, success, notifyError])
+  }, [item?.content, loadedContent, item?.path, success, notifyError])
 
   const handleOpenInFinder = useCallback(() => {
     if (!item) return
     getSynapseBridge()?.shell.showItemInFolder(item.path)
   }, [item])
 
+  const disabledReason =
+    !activeRepository
+      ? "先选择本地目录"
+      : currentRepoProfileState?.status === "needs-onboarding"
+        ? "先完成当前目录的身份设置"
+        : (pendingPushState?.count ?? 0) > 0
+          ? "正在同步变更，请稍后"
+          : !item?.path
+            ? "本地路径为空"
+            : null
+
+  const publishAsNew = useCallback(async () => {
+    if (!item || disabledReason) return
+    setIsQuickPublishBusy(true)
+    setQuickPublishError(null)
+
+    try {
+      const bridge = getSynapseBridge()
+      if (!bridge) {
+        throw new Error("当前窗口无法读取本地内容。")
+      }
+
+      const draft = await bridge.editorScan.prepareQuickPublishDraft({
+        itemType: item.type,
+        itemPath: item.path,
+        itemName: item.name,
+        ruleContent: item.type === "rule" ? item.content : undefined,
+        metadata: item.metadata,
+      })
+      const sourceLabel = formatQuickPublishSourceLabel(item)
+
+      if (draft.itemType === "rule") {
+        requestOpenContentCreate({
+          kind: "create",
+          requestId: createContentOpenRequestId(),
+          contentType: "rule",
+          initialValue: buildRuleQuickPublishPayload(draft),
+          sourceLabel,
+        })
+      } else {
+        requestOpenContentCreate({
+          kind: "create",
+          requestId: createContentOpenRequestId(),
+          contentType: "skill",
+          initialValue: buildSkillQuickPublishPayload(draft),
+          sourceLabel,
+        })
+      }
+
+      onOpenChange(false)
+    } catch (error) {
+      logger.error("Quick publish draft preparation failed.", { path: item.path, error })
+      setQuickPublishError(error instanceof Error ? error.message : "读取本地内容失败。")
+    } finally {
+      setIsQuickPublishBusy(false)
+    }
+  }, [disabledReason, item, onOpenChange])
+
+  const handlePrimaryAction = useCallback(async () => {
+    if (!item || disabledReason) return
+
+    if (!item.synapseContentId) {
+      await publishAsNew()
+      return
+    }
+
+    setIsQuickPublishBusy(true)
+    setQuickPublishError(null)
+    try {
+      const detail = await readDetail(item.type, item.synapseContentId)
+      if (detail.deleted) {
+        setFallbackReason("仓库内容已删除。")
+        return
+      }
+
+      requestOpenContentDetail({
+        kind: "detail",
+        requestId: createContentOpenRequestId(),
+        contentType: item.type,
+        contentId: item.synapseContentId,
+      })
+      onOpenChange(false)
+    } catch (error) {
+      logger.warn("Linked repository content is unavailable.", {
+        contentId: item.synapseContentId,
+        contentType: item.type,
+        error,
+      })
+      setFallbackReason("仓库内容不可用。")
+    } finally {
+      setIsQuickPublishBusy(false)
+    }
+  }, [disabledReason, item, onOpenChange, publishAsNew])
+
   if (!item) return null
 
   const metaEntries = item.metadata
     ? Object.entries(item.metadata).filter(([, v]) => v)
     : []
+  const content = item.content ?? loadedContent
+  const primaryActionLabel = item.synapseContentId ? "从仓库中显示" : "发布到仓库"
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
-        <DialogHeader className="px-5 pt-5">
+    <>
+      <AlertDialog
+        open={fallbackReason !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setFallbackReason(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>关联内容不可用</AlertDialogTitle>
+            <AlertDialogDescription>
+              {fallbackReason} 可以作为新内容发布。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setFallbackReason(null)
+                void publishAsNew()
+              }}
+            >
+              作为新内容发布
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
+          <DialogHeader className="px-5 pt-5">
           <DialogTitle className="sr-only">{item.name}</DialogTitle>
           <DialogDescription className="sr-only">
             {item.type === "skill" ? "Skill" : "Rule"} 详情
@@ -146,6 +295,17 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
                 </Button>
               </Menubar>
 
+              <Button
+                type="button"
+                size="sm"
+                disabled={isQuickPublishBusy || disabledReason !== null}
+                title={disabledReason ?? primaryActionLabel}
+                onClick={() => void handlePrimaryAction()}
+              >
+                {isQuickPublishBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+                {primaryActionLabel}
+              </Button>
+
               <Tabs
                 value={viewMode}
                 onValueChange={(v) => setViewMode(v === "source" ? "source" : "rendered")}
@@ -157,38 +317,44 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
                 </TabsList>
               </Tabs>
             </div>
+            {quickPublishError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{quickPublishError}</AlertDescription>
+              </Alert>
+            ) : null}
           </div>
-        </DialogHeader>
+          </DialogHeader>
 
-        <Separator className="mt-5" />
+          <Separator className="mt-5" />
 
-        <div className={cn(
-          "flex min-h-0 flex-1 flex-col px-5 py-4 transition-opacity duration-200",
-          contentReady ? "opacity-100" : "opacity-0",
-        )}>
-          {contentReady ? (
-            <ScanItemContentArea
-              content={content}
-              error={error}
-              loading={loading}
-              viewMode={viewMode}
-              skillFiles={skillFiles}
-            />
-          ) : null}
-        </div>
+          <div className={cn(
+            "flex min-h-0 flex-1 flex-col px-5 py-4 transition-opacity duration-200",
+            contentReady ? "opacity-100" : "opacity-0",
+          )}>
+            {contentReady ? (
+              <ScanItemContentArea
+                content={content}
+                error={error}
+                loading={loading}
+                viewMode={viewMode}
+                skillFiles={skillFiles}
+              />
+            ) : null}
+          </div>
 
-        <div className="border-t px-5 py-3">
-          <button
-            type="button"
-            className="flex max-w-full items-center gap-1 text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
-            onClick={handleOpenInFinder}
-          >
-            <FolderOpen className="size-3 shrink-0" />
-            <span className="truncate">{item.path}</span>
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+          <div className="border-t px-5 py-3">
+            <button
+              type="button"
+              className="flex max-w-full items-center gap-1 text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
+              onClick={handleOpenInFinder}
+            >
+              <FolderOpen className="size-3 shrink-0" />
+              <span className="truncate">{item.path}</span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -283,4 +449,3 @@ function SkillFilesSection({ files }: { files: EditorScanSkillFileEntry[] }) {
 }
 
 export { ScanItemDetailDialog }
-export type { ScanItemForDetail }

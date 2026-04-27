@@ -40,6 +40,7 @@ type ContentCreateDialogProps = {
   onDuplicateWarningOpenChange?: (open: boolean) => void
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
   open: boolean
+  sourceLabel?: string | null
   submitDisabled?: boolean
   submitDisabledReason?: string | null
   submitError: string | null
@@ -60,6 +61,7 @@ function ContentCreateDialog({
   onDuplicateWarningOpenChange,
   onSubmit,
   open,
+  sourceLabel = null,
   submitDisabled = false,
   submitDisabledReason = null,
   submitError,
@@ -107,6 +109,7 @@ function ContentCreateDialog({
       <Dialog open={open} onOpenChange={onDialogOpenChange}>
         <FormDialog
           title={mode === "create" ? labels.title.create : labels.title.edit}
+          description={sourceLabel}
           contentClassName={mode === "edit" ? "sm:max-w-[850px]" : "sm:max-w-[520px]"}
           footer={(
             <>

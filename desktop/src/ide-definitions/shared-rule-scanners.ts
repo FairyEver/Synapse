@@ -79,6 +79,7 @@ export async function scanClaudeCodeRules(dirPath: string): Promise<EditorScanRu
         synapseContentId: synapse ? extractContentIdFromSynapseFile(entry.name) : null,
         preview: previewLines(body),
         metadata,
+        content: text,
       })
     } catch (error) {
       logger.warn("Failed to scan Claude Code rule.", { path: filePath, error })
@@ -115,6 +116,7 @@ export async function scanCursorRules(dirPath: string): Promise<EditorScanRuleIt
         synapseContentId: null,
         preview: previewLines(body),
         metadata,
+        content: text,
       })
     } catch (error) {
       logger.warn("Failed to scan Cursor rule.", { path: filePath, error })
@@ -158,6 +160,7 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
         synapseContentId: ruleId,
         preview: previewLines(ruleLines.join("\n")),
         metadata: {},
+        content: ruleLines.join("\n").trim(),
       })
       continue
     }
@@ -182,6 +185,7 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
         synapseContentId: null,
         preview: previewLines(section),
         metadata: {},
+        content: section.trim(),
       })
     }
   } else {
@@ -192,6 +196,7 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
       synapseContentId: null,
       preview: previewLines(unmarkedText),
       metadata: {},
+      content: unmarkedText,
     })
   }
 

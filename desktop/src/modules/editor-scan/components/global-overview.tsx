@@ -1,10 +1,24 @@
-import type { EditorScanGlobalResult, EditorScanRuleItem, EditorScanSkillItem } from "@/types/editor-scan"
+import type {
+  EditorScanGlobalResult,
+  EditorScanRuleItem,
+  EditorScanScope,
+  EditorScanSkillItem,
+} from "@/types/editor-scan"
+import type { SynapseEditorId } from "@/types/editor"
 import { ScanItemCard } from "./scan-item-card"
 
 type GlobalOverviewProps = {
   result: EditorScanGlobalResult
   contentTab: "skill" | "rule"
-  onItemClick?: (item: EditorScanSkillItem | EditorScanRuleItem, type: "skill" | "rule") => void
+  onItemClick?: (
+    item: EditorScanSkillItem | EditorScanRuleItem,
+    type: "skill" | "rule",
+    context: {
+      editorId: SynapseEditorId
+      editorLabel: string
+      scope: EditorScanScope
+    },
+  ) => void
 }
 
 function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps) {
@@ -27,7 +41,11 @@ function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps
               path={skill.path}
               source={skill.source}
               preview={skill.preview}
-              onClick={() => onItemClick?.(skill, "skill")}
+              onClick={() => onItemClick?.(skill, "skill", {
+                editorId: result.editorId,
+                editorLabel: result.editorLabel,
+                scope: "global",
+              })}
             />
           ))}
         </div>
@@ -65,7 +83,11 @@ function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps
             source={rule.source}
             preview={rule.preview}
             metadata={rule.metadata}
-            onClick={() => onItemClick?.(rule, "rule")}
+            onClick={() => onItemClick?.(rule, "rule", {
+              editorId: result.editorId,
+              editorLabel: result.editorLabel,
+              scope: "global",
+            })}
           />
         ))}
       </div>

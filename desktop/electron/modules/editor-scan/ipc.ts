@@ -7,7 +7,13 @@
 
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
-import { scanAll, readItemContent, listSkillFiles } from "../../services/editor-scan-service"
+import type { EditorScanQuickPublishRequest } from "../../../src/types/editor-scan"
+import {
+  scanAll,
+  readItemContent,
+  listSkillFiles,
+  prepareQuickPublishDraft,
+} from "../../services/editor-scan-service"
 
 // Schemas
 const editorScanItemSourceSchema = z.enum(["synapse", "external"])
@@ -28,6 +34,7 @@ const editorScanRuleItemSchema = z.object({
   synapseContentId: z.string().nullable(),
   preview: z.string(),
   metadata: z.record(z.string(), z.string()),
+  content: z.string().optional(),
 })
 
 const editorScanEditorResultSchema = z.object({
@@ -59,6 +66,38 @@ const skillFileInfoSchema = z.object({
   size: z.number(),
 })
 
+const quickPublishRequestSchema = z.object({
+  itemType: z.enum(["skill", "rule"]),
+  itemPath: z.string(),
+  itemName: z.string(),
+  ruleContent: z.string().optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+})
+
+const quickPublishSkillFileSchema = z.object({
+  originalName: z.string(),
+  size: z.number(),
+  bytes: z.instanceof(Uint8Array),
+})
+
+const quickPublishDraftSchema = z.discriminatedUnion("itemType", [
+  z.object({
+    itemType: z.literal("rule"),
+    itemPath: z.string(),
+    itemName: z.string(),
+    content: z.string(),
+    metadata: z.record(z.string(), z.string()),
+  }),
+  z.object({
+    itemType: z.literal("skill"),
+    itemPath: z.string(),
+    itemName: z.string(),
+    content: z.string(),
+    files: z.array(quickPublishSkillFileSchema),
+    metadata: z.record(z.string(), z.string()),
+  }),
+])
+
 export const editorScanIpcModule: IpcModule = {
   id: "editor-scan",
   methods: {
@@ -87,6 +126,15 @@ export const editorScanIpcModule: IpcModule = {
       response: z.array(skillFileInfoSchema),
       handler: async (_ctx, request: { dirPath: string }) => {
         return listSkillFiles(request.dirPath)
+      },
+    },
+    prepareQuickPublishDraft: {
+      kind: "invoke",
+      channel: "synapse:editor-scan:prepare-quick-publish-draft",
+      request: quickPublishRequestSchema,
+      response: quickPublishDraftSchema,
+      handler: async (_ctx, request: EditorScanQuickPublishRequest) => {
+        return prepareQuickPublishDraft(request)
       },
     },
   },

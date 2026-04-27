@@ -2,7 +2,12 @@ import { useMemo } from "react"
 import { FolderKanban } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { SynapseEditorId } from "@/types/editor"
-import type { EditorScanProjectResult, EditorScanRuleItem, EditorScanSkillItem } from "@/types/editor-scan"
+import type {
+  EditorScanProjectResult,
+  EditorScanRuleItem,
+  EditorScanScope,
+  EditorScanSkillItem,
+} from "@/types/editor-scan"
 import { ScanItemCard } from "./scan-item-card"
 
 type ProjectOverviewProps = {
@@ -10,7 +15,16 @@ type ProjectOverviewProps = {
   selectedEditorId: SynapseEditorId
   selectedEditorLabel: string
   contentTab: "skill" | "rule"
-  onItemClick?: (item: EditorScanSkillItem | EditorScanRuleItem, type: "skill" | "rule") => void
+  onItemClick?: (
+    item: EditorScanSkillItem | EditorScanRuleItem,
+    type: "skill" | "rule",
+    context: {
+      editorId: SynapseEditorId
+      editorLabel: string
+      scope: EditorScanScope
+      projectName: string
+    },
+  ) => void
 }
 
 function ProjectOverview({
@@ -72,13 +86,18 @@ function ProjectOverview({
                 <div className="grid grid-cols-2 gap-2">
                   {items.map((item) => (
                     <ScanItemCard
-                      key={item.path}
+                      key={`${item.path}-${item.name}`}
                       name={item.name}
                       path={item.path}
                       source={item.source}
                       preview={item.preview}
                       metadata={"metadata" in item ? item.metadata : undefined}
-                      onClick={() => onItemClick?.(item, contentTab)}
+                      onClick={() => onItemClick?.(item, contentTab, {
+                        editorId: selectedEditorId,
+                        editorLabel: selectedEditorLabel,
+                        scope: "project",
+                        projectName: project.projectName,
+                      })}
                     />
                   ))}
                 </div>

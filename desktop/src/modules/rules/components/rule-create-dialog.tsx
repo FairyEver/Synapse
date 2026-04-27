@@ -35,6 +35,7 @@ type RuleCreateDialogProps = {
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: SynapseCreateRulePayload) => Promise<void> | void
   open: boolean
+  sourceLabel?: string | null
   submitDisabled?: boolean
   submitDisabledReason?: string | null
   editingId?: string | null
@@ -54,6 +55,7 @@ function RuleCreateDialog({
   onOpenChange,
   onSubmit,
   open,
+  sourceLabel = null,
   submitDisabled = false,
   submitDisabledReason = null,
   editingId = null,
@@ -245,6 +247,7 @@ function RuleCreateDialog({
       onDuplicateWarningOpenChange={setIsDuplicateWarningOpen}
       onSubmit={handleFormSubmit}
       open={open}
+      sourceLabel={sourceLabel}
       submitDisabled={submitDisabled}
       submitDisabledReason={submitDisabledReason}
       submitError={submitError}

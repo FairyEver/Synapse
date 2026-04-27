@@ -5,6 +5,9 @@ import type {
   EditorScanItemSource,
   EditorScanProjectEntry,
   EditorScanProjectResult,
+  EditorScanQuickPublishDraft,
+  EditorScanQuickPublishRequest,
+  EditorScanQuickPublishSkillFile,
   EditorScanResult,
   EditorScanRuleItem,
   EditorScanSkillItem,
@@ -283,6 +286,10 @@ type SkillFileEntry = {
   size: number
 }
 
+function toPortableRelativePath(relativeName: string): string {
+  return relativeName.split(path.sep).join("/")
+}
+
 async function collectFiles(
   baseDir: string,
   currentDir: string,
@@ -299,7 +306,7 @@ async function collectFiles(
   for (const name of children) {
     if (name.startsWith(".")) continue
     const fullPath = path.join(currentDir, name)
-    const relativeName = path.relative(baseDir, fullPath)
+    const relativeName = toPortableRelativePath(path.relative(baseDir, fullPath))
     if (skip.has(name) && currentDir === baseDir) continue
     try {
       const fileStat = await stat(fullPath)
@@ -337,5 +344,85 @@ async function listSkillFiles(dirPath: string): Promise<SkillFileEntry[]> {
   }
 }
 
-export { scanAll, readItemContent, listSkillFiles }
+async function collectSkillFileSnapshots(
+  baseDir: string,
+  currentDir: string,
+  skip: Set<string>,
+  entries: EditorScanQuickPublishSkillFile[],
+): Promise<void> {
+  const children = await readdir(currentDir)
+
+  for (const name of children) {
+    if (name.startsWith(".")) continue
+    if (skip.has(name) && currentDir === baseDir) continue
+
+    const fullPath = path.join(currentDir, name)
+    const relativeName = toPortableRelativePath(path.relative(baseDir, fullPath))
+    const fileStat = await stat(fullPath)
+
+    if (fileStat.isDirectory()) {
+      await collectSkillFileSnapshots(baseDir, fullPath, skip, entries)
+      continue
+    }
+
+    if (!fileStat.isFile()) continue
+
+    const bytes = await readFile(fullPath)
+    entries.push({
+      originalName: relativeName,
+      size: fileStat.size,
+      bytes: new Uint8Array(bytes),
+    })
+  }
+}
+
+async function prepareQuickPublishDraft(
+  request: EditorScanQuickPublishRequest,
+): Promise<EditorScanQuickPublishDraft> {
+  if (request.itemType === "rule") {
+    const content = request.ruleContent ?? await readFile(request.itemPath, "utf8")
+    if (!content.trim()) {
+      throw new Error("Rule 正文为空。")
+    }
+
+    return {
+      itemType: "rule",
+      itemPath: request.itemPath,
+      itemName: request.itemName,
+      content,
+      metadata: request.metadata ?? {},
+    }
+  }
+
+  const info = await stat(request.itemPath)
+  if (!info.isDirectory()) {
+    throw new Error("Skill 路径不是文件夹。")
+  }
+
+  const mainFile = await resolveSkillMainFile(request.itemPath)
+  if (!mainFile) {
+    throw new Error("未找到 Skill 主文件。")
+  }
+
+  const content = await readFile(mainFile, "utf8")
+  if (!content.trim()) {
+    throw new Error("Skill 主说明为空。")
+  }
+
+  const skip = new Set<string>([path.basename(mainFile), SYNAPSE_SKILL_ID_FILE])
+  const files: EditorScanQuickPublishSkillFile[] = []
+  await collectSkillFileSnapshots(request.itemPath, request.itemPath, skip, files)
+  files.sort((a, b) => a.originalName.localeCompare(b.originalName))
+
+  return {
+    itemType: "skill",
+    itemPath: request.itemPath,
+    itemName: request.itemName,
+    content,
+    files,
+    metadata: request.metadata ?? {},
+  }
+}
+
+export { scanAll, readItemContent, listSkillFiles, prepareQuickPublishDraft }
 export type { SkillFileEntry }

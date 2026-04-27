@@ -8,13 +8,18 @@ import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { useAppNotifications } from "@/app-shell/notifications"
 import type { SynapseEditorId } from "@/types/editor"
 import { EDITOR_ORDER } from "@/lib/editor-registry"
-import type { EditorScanRuleItem, EditorScanSkillItem } from "@/types/editor-scan"
+import type {
+  EditorScanRuleItem,
+  EditorScanScope,
+  EditorScanSkillItem,
+  ScanItemForDetail,
+} from "@/types/editor-scan"
 import { useEditorScan } from "./hooks/use-editor-scan"
 import { EditorScanSidebar } from "./components/editor-scan-sidebar"
 import { GlobalOverview } from "./components/global-overview"
 import { ProjectOverview } from "./components/project-overview"
 import { EmptyScanState } from "./components/empty-scan-state"
-import { ScanItemDetailDialog, type ScanItemForDetail } from "./components/scan-item-detail-dialog"
+import { ScanItemDetailDialog } from "./components/scan-item-detail-dialog"
 
 type ContentTab = "skill" | "rule"
 type ScopeTab = "global" | "project"
@@ -39,7 +44,16 @@ function EditorScanModule() {
   }, [refresh, showSuccess, showError])
 
   const handleItemClick = useCallback(
-    (item: EditorScanSkillItem | EditorScanRuleItem, type: "skill" | "rule") => {
+    (
+      item: EditorScanSkillItem | EditorScanRuleItem,
+      type: "skill" | "rule",
+      context: {
+        editorId: SynapseEditorId
+        editorLabel: string
+        scope: EditorScanScope
+        projectName?: string
+      },
+    ) => {
       setDetailItem({
         type,
         name: item.name,
@@ -48,6 +62,12 @@ function EditorScanModule() {
         preview: item.preview,
         fileCount: "fileCount" in item ? item.fileCount : undefined,
         metadata: "metadata" in item ? item.metadata : undefined,
+        synapseContentId: item.synapseContentId,
+        editorId: context.editorId,
+        editorLabel: context.editorLabel,
+        scope: context.scope,
+        projectName: context.projectName,
+        content: "content" in item ? item.content : undefined,
       })
       setDetailOpen(true)
     },

@@ -1,4 +1,5 @@
-import { type ComponentType, useCallback, useMemo, useState } from "react"
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -16,6 +17,8 @@ type ContentModuleConfig<T extends SynapseContentType> = {
     submitDisabled?: boolean
     submitDisabledReason?: string | null
     existingNames?: string[]
+    initialValue?: SynapseCreateContentPayload<T> | null
+    sourceLabel?: string | null
   }>
   DetailDialog: ComponentType<{
     item: SynapseContentMeta<T> | null
@@ -33,6 +36,8 @@ type ContentModuleProps = {
   onCreateDialogOpenChange?: (open: boolean) => void
   onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
+  pendingContentOpenRequest?: ContentOpenRequest | null
+  onPendingContentOpenRequestConsumed?: (requestId: string) => void
 }
 
 function createContentModule<T extends SynapseContentType>(config: ContentModuleConfig<T>) {
@@ -42,6 +47,8 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     onCreateDialogOpenChange,
     onDetailDialogOpenChange,
     onInstallDialogOpenChange,
+    pendingContentOpenRequest,
+    onPendingContentOpenRequestConsumed,
   }: ContentModuleProps) {
     const logger = useMemo(() => createRendererLogger(config.contentType), [config.contentType])
     const activeRepository = useActiveRepository()
@@ -55,11 +62,42 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
     const isSyncing = (pendingPushState?.count ?? 0) > 0
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+    const [createInitialValue, setCreateInitialValue] =
+      useState<SynapseCreateContentPayload<T> | null>(null)
+    const [createSourceLabel, setCreateSourceLabel] = useState<string | null>(null)
+    const consumedRequestIdRef = useRef<string | null>(null)
 
     const handleCreateDialogOpenChange = useCallback((nextOpen: boolean) => {
+      if (!nextOpen) {
+        setCreateInitialValue(null)
+        setCreateSourceLabel(null)
+      }
       setIsCreateDialogOpen(nextOpen)
       onCreateDialogOpenChange?.(nextOpen)
     }, [onCreateDialogOpenChange])
+
+    useEffect(() => {
+      const request = pendingContentOpenRequest
+      if (
+        !request
+        || request.contentType !== config.contentType
+        || request.kind !== "create"
+        || consumedRequestIdRef.current === request.requestId
+      ) {
+        return
+      }
+
+      consumedRequestIdRef.current = request.requestId
+      setCreateInitialValue(request.initialValue as SynapseCreateContentPayload<T>)
+      setCreateSourceLabel(request.sourceLabel)
+      setIsCreateDialogOpen(true)
+      onCreateDialogOpenChange?.(true)
+      onPendingContentOpenRequestConsumed?.(request.requestId)
+    }, [
+      onCreateDialogOpenChange,
+      onPendingContentOpenRequestConsumed,
+      pendingContentOpenRequest,
+    ])
 
     const handleSubmit = (payload: SynapseCreateContentPayload<T>) => {
       logger.info("Content create submitted.", { contentType: config.contentType, repositoryUuid: activeRepository?.uuid ?? null })
@@ -105,7 +143,13 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       <>
         <ContentBrowserPage
           contentType={config.contentType}
-          onCreateClick={() => handleCreateDialogOpenChange(true)}
+          pendingContentOpenRequest={pendingContentOpenRequest}
+          onPendingContentOpenRequestConsumed={onPendingContentOpenRequestConsumed}
+          onCreateClick={() => {
+            setCreateInitialValue(null)
+            setCreateSourceLabel(null)
+            handleCreateDialogOpenChange(true)
+          }}
           onCreateDialogOpenChange={onCreateDialogOpenChange}
           onDetailDialogOpenChange={onDetailDialogOpenChange}
           onInstallDialogOpenChange={onInstallDialogOpenChange}
@@ -125,6 +169,8 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           submitDisabled={submitDisabledReason !== null}
           submitDisabledReason={submitDisabledReason}
           existingNames={existingNames}
+          initialValue={createInitialValue}
+          sourceLabel={createSourceLabel}
         />
       </>
     )

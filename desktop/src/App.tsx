@@ -7,6 +7,8 @@ import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { useAppShellToolbarState } from "@/app-shell/use-app-shell-toolbar-state"
 import { useAppConfig } from "@/app-shell/config"
+import type { ContentOpenRequest } from "@/app-shell/content-navigation"
+import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
 import { createRendererLogger } from "@/app-shell/logging"
 import { publishActiveAppTab, requestOpenSettingsAbout, subscribeOpenSettingsTab } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -79,6 +81,8 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
   onCreateDialogOpenChange?: (open: boolean) => void
   onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
+  pendingContentOpenRequest?: ContentOpenRequest | null
+  onPendingContentOpenRequestConsumed?: (requestId: string) => void
 }>> = {
   rule: RulesModule,
   skill: SkillsModule,
@@ -103,6 +107,8 @@ function MainApp() {
   contentDialogStatesRef.current = contentDialogStates
   const [isPendingPushDialogOpen, setIsPendingPushDialogOpenRaw] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
+  const [pendingContentOpenRequest, setPendingContentOpenRequest] =
+    useState<ContentOpenRequest | null>(null)
 
   // 检查是否需要显示空状态页面
   const hasNoRepositories = !hasRepositories
@@ -242,6 +248,19 @@ function MainApp() {
       setActiveTab("settings", "shortcut")
     })
   }, [setActiveTab])
+
+  useEffect(() => {
+    return subscribeContentOpenRequest((request) => {
+      setActiveTab(request.contentType, "shortcut")
+      setPendingContentOpenRequest(request)
+    })
+  }, [setActiveTab])
+
+  const handlePendingContentOpenRequestConsumed = useCallback((requestId: string) => {
+    setPendingContentOpenRequest((current) =>
+      current?.requestId === requestId ? null : current,
+    )
+  }, [])
 
   useEffect(() => {
     const bridge = getSynapseBridge()
@@ -406,6 +425,8 @@ function MainApp() {
                 onCreateDialogOpenChange={dialogHandlers.create}
                 onDetailDialogOpenChange={dialogHandlers.detail}
                 onInstallDialogOpenChange={dialogHandlers.install}
+                pendingContentOpenRequest={pendingContentOpenRequest}
+                onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}
               />
             )
           })}

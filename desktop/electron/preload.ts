@@ -61,6 +61,7 @@ const IPC_CHANNELS = {
     "scanAll": "synapse:editor-scan:scan-all",
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
+    "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
@@ -284,6 +285,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["editor-scan"].readItemContent)({ filePath }),
     listSkillFiles: (dirPath: string) =>
       invoke(IPC_CHANNELS["editor-scan"].listSkillFiles)({ dirPath }),
+    prepareQuickPublishDraft: (request) =>
+      invoke(IPC_CHANNELS["editor-scan"].prepareQuickPublishDraft)(request),
   },
   shell: {
     showItemInFolder: (filePath: string) => {

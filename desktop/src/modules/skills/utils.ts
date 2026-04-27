@@ -202,7 +202,9 @@ async function serializeCreateSkillFiles(
       originalName: file.originalName,
       sha256: file.sha256,
       size: file.size,
-      bytes: file.file ? new Uint8Array(await file.file.arrayBuffer()) : undefined,
+      bytes: file.file
+        ? new Uint8Array(await file.file.arrayBuffer())
+        : file.bytes,
     })),
   )
 }
