@@ -269,18 +269,10 @@ pnpm desktop:typecheck
 
 ### 可选能力
 
-有配套 CLI 时，在同一目录增加 `cli.ts`：
-
-```ts
-import type { SynapseCliDefinition } from "../../types"
-
-export const cliDefinition = {
-  id: "windsorf",
-  label: "Windsorf",
-  order: 40,
-  binaries: ["windsorf"],
-} as const satisfies SynapseCliDefinition
-```
+有 Agent runtime 能力时，在 `desktop/src/definitions/agent/<id>/agent.ts`
+声明 renderer-safe 元数据，并在 `agent-main.ts` 声明主进程 runtime 行为。
+本地 CLI 二进制依赖放在 Agent 的 `runtime.binaries` 中，设置页会从
+Agent runtime status 派生可用状态。
 
 有 MCP 注册能力时，增加 `mcp.ts`。`mcp.ts` 不导入图标，renderer 会自动使用 `editor.ts` 的 icon：
 

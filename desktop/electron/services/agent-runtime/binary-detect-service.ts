@@ -6,7 +6,7 @@ import { promisify } from "node:util"
 import { createMainLogger } from "../log-store"
 
 const execFileAsync = promisify(execFile)
-const logger = createMainLogger("service.cli-detect")
+const logger = createMainLogger("service.agent-runtime.binary-detect")
 
 function getCommonBinDirs(): string[] {
   const home = homedir()
