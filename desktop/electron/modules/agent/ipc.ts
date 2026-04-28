@@ -18,6 +18,7 @@ import {
 } from "../../services/provider-config"
 import { configStore } from "../../services/config-store"
 import { agentRuntimeDefinitions } from "../../services/definitions/generated/main-registry"
+import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 
 const projectRequestSchema = z.object({
   projectId: z.string().min(1),
@@ -66,12 +67,68 @@ const runtimeStatusRequestSchema = z.object({
   projectId: z.string().optional(),
 })
 
-const timelineEntrySchema = z.object({
+const timelineBaseSchema = {
   id: z.string(),
-  role: z.enum(["user", "assistant", "system", "tool"]),
-  content: z.string(),
   timestamp: z.string(),
-})
+  agentType: z.string().optional(),
+  agentSessionId: z.string().optional(),
+  threadId: z.string().optional(),
+}
+
+const timelineItemSchema = z.discriminatedUnion("kind", [
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("message"),
+    role: z.enum(["user", "assistant", "system", "tool"]),
+    content: z.string(),
+    legacy: z.boolean().optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("thinking"),
+    content: z.string(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("toolCall"),
+    toolName: z.string(),
+    toolInput: z.string().optional(),
+    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("toolResult"),
+    toolName: z.string(),
+    content: z.string().optional(),
+    status: z.string().optional(),
+    exitCode: z.number().optional(),
+    success: z.boolean().optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("permissionRequest"),
+    requestId: z.string(),
+    toolName: z.string(),
+    toolInput: z.string().optional(),
+    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("error"),
+    message: z.string(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("result"),
+    content: z.string(),
+    metadata: z.object({
+      model: z.string().optional(),
+      effort: z.string().optional(),
+      contextRemainingPercent: z.number().optional(),
+      workDir: z.string().optional(),
+    }).optional(),
+  }),
+])
 
 const sessionSummarySchema = z.object({
   projectId: z.string(),
@@ -86,7 +143,7 @@ const sessionSummarySchema = z.object({
   historyCount: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  lastMessage: timelineEntrySchema.optional(),
+  lastMessage: timelineItemSchema.optional(),
 })
 
 const statusSchema = z.object({
@@ -252,7 +309,7 @@ const timelineResultSchema = z.object({
   projectId: z.string(),
   sessionKey: z.string(),
   conversationId: z.string().optional(),
-  entries: z.array(timelineEntrySchema),
+  entries: z.array(timelineItemSchema),
 })
 
 const pendingPermissionSchema = z.object({
@@ -647,7 +704,7 @@ function sessionSummary(session: ConversationEntryV1) {
     historyCount: session.history.length,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
-    lastMessage: last ? historyEntry(session.id, last, session.history.length - 1) : undefined,
+    lastMessage: last ? historyEntry(session.id, last, session.history.length - 1, session.agentType) : undefined,
   }
 }
 
@@ -692,18 +749,14 @@ function historyEntries(
     ? Math.max(0, session.history.length - limit)
     : 0
   return session.history.slice(start).map((entry, index) =>
-    historyEntry(session.id, entry, start + index))
+    historyEntry(session.id, entry, start + index, session.agentType))
 }
 
 function historyEntry(
   sessionId: string,
   entry: ConversationEntryV1["history"][number],
   index: number,
+  agentType?: string,
 ) {
-  return {
-    id: `${sessionId}:history:${index}`,
-    role: entry.role,
-    content: entry.content,
-    timestamp: entry.timestamp,
-  }
+  return historyRecordToTimelineItem(sessionId, entry, index, agentType)
 }
