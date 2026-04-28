@@ -20,7 +20,7 @@ const profile: SynapseAgentDisplayProfile = {
 }
 
 describe("AgentThinkingEvent", () => {
-  it("renders without separator borders", () => {
+  it("renders with full-row hover and the chevron after the label", () => {
     const html = renderToStaticMarkup(<AgentThinkingEvent
       item={{
         id: "thinking-1",
@@ -33,6 +33,8 @@ describe("AgentThinkingEvent", () => {
 
     expect(html).toContain("Thinking")
     expect(html).toContain("analysis")
+    expect(html).toContain("w-full")
     expect(html).not.toContain("border-y border-border")
+    expect(html.indexOf("Thinking")).toBeLessThan(html.indexOf("lucide-chevron-down"))
   })
 })

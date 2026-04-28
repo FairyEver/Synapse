@@ -1,4 +1,4 @@
-import { ChevronDown, Clipboard, Terminal } from "lucide-react"
+import { ChevronDown, Clipboard } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,15 +38,14 @@ function AgentToolEvent({
   return (
     <Collapsible defaultOpen={defaultOpen} className="py-1">
       <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="min-w-0 justify-start px-1">
-          <ChevronDown data-icon="inline-start" />
-          <Terminal data-icon="inline-start" />
+        <Button type="button" variant="ghost" size="sm" className="w-full min-w-0 justify-start px-1">
           <span className="truncate">{label}</span>
           {status ? (
             <Badge variant={failed ? "destructive" : "secondary"} className="ml-1 shrink-0">
               {status}
             </Badge>
           ) : null}
+          <ChevronDown data-icon="inline-end" />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>

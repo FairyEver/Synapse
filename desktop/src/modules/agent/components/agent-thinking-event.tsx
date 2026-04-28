@@ -21,8 +21,8 @@ function AgentThinkingEvent({
     <Collapsible defaultOpen={!profile.thinkingDefaultCollapsed} className="py-1">
       <CollapsibleTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="w-full justify-start px-1">
-          <ChevronDown data-icon="inline-start" />
           Thinking
+          <ChevronDown data-icon="inline-end" />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>

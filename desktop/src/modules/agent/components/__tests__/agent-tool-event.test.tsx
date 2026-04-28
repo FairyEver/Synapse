@@ -41,7 +41,10 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("Bash")
     expect(html).not.toContain("Running")
     expect(html).toContain("pnpm test")
+    expect(html).toContain("w-full")
+    expect(html).not.toContain("lucide-terminal")
     expect(html).not.toContain("border-y border-border")
+    expect(html.indexOf("Bash")).toBeLessThan(html.indexOf("lucide-chevron-down"))
   })
 
   it("places result status next to the tool title", () => {
@@ -60,6 +63,7 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("Done")
     expect(html).not.toContain("justify-between")
     expect(html.indexOf("Bash")).toBeLessThan(html.indexOf("Done"))
+    expect(html.indexOf("Done")).toBeLessThan(html.indexOf("lucide-chevron-down"))
   })
 
   it("opens failed tool results even when profile default is collapsed", () => {
