@@ -39,9 +39,27 @@ describe("AgentToolEvent", () => {
     />)
 
     expect(html).toContain("Bash")
-    expect(html).toContain("Running")
+    expect(html).not.toContain("Running")
     expect(html).toContain("pnpm test")
     expect(html).not.toContain("border-y border-border")
+  })
+
+  it("places result status next to the tool title", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-success",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "ok",
+        success: true,
+      }}
+      profile={profile}
+    />)
+
+    expect(html).toContain("Done")
+    expect(html).not.toContain("justify-between")
+    expect(html.indexOf("Bash")).toBeLessThan(html.indexOf("Done"))
   })
 
   it("opens failed tool results even when profile default is collapsed", () => {

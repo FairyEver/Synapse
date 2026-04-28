@@ -34,19 +34,21 @@ function AgentToolEvent({
     body,
     rule?.defaultCollapsed ?? profile.toolDefaultCollapsed,
   )
-  const status = statusLabel(item, profile)
+  const status = item.kind === "toolCall" ? null : statusLabel(item, profile)
   return (
     <Collapsible defaultOpen={defaultOpen} className="py-1">
-      <div className="flex items-center justify-between gap-2">
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="min-w-0 justify-start px-1">
-            <ChevronDown data-icon="inline-start" />
-            <Terminal data-icon="inline-start" />
-            <span className="truncate">{label}</span>
-          </Button>
-        </CollapsibleTrigger>
-        <Badge variant={failed ? "destructive" : "secondary"}>{status}</Badge>
-      </div>
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="min-w-0 justify-start px-1">
+          <ChevronDown data-icon="inline-start" />
+          <Terminal data-icon="inline-start" />
+          <span className="truncate">{label}</span>
+          {status ? (
+            <Badge variant={failed ? "destructive" : "secondary"} className="ml-1 shrink-0">
+              {status}
+            </Badge>
+          ) : null}
+        </Button>
+      </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="flex flex-col gap-2 px-1 pb-3 pt-2">
           {body ? (
