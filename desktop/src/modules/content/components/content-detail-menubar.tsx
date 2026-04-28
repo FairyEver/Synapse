@@ -18,6 +18,7 @@ import {
   MenubarMenu,
   MenubarTrigger,
 } from "@/components/ui/menubar"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { useContentDownloadActions } from "@/modules/content/hooks/use-content-download-actions"
 import type { SynapseContentMeta } from "@/types/content"
@@ -76,6 +77,7 @@ function ContentDetailMenubar({
     loadInstallTargets,
     openInstallDialogForEditorId,
   } = useContentDownloadActions({ item, onInstalled })
+  const { warning } = useAppNotifications()
 
   const definition = getContentTypeDefinition(item.type)
   const primaryAction = definition.listPrimaryAction ?? "download"
@@ -101,10 +103,16 @@ function ContentDetailMenubar({
         projectPath: installTargetRequest.projectPath,
         scope: installTargetRequest.scope,
       },
-    }).finally(() => {
-      onInstallTargetRequestConsumed?.()
     })
-  }, [installTargetRequest, onInstallTargetRequestConsumed, openInstallDialogForEditorId])
+      .then((opened) => {
+        if (!opened) {
+          warning("未找到可用的安装目标。")
+        }
+      })
+      .finally(() => {
+        onInstallTargetRequestConsumed?.()
+      })
+  }, [installTargetRequest, onInstallTargetRequestConsumed, openInstallDialogForEditorId, warning])
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getEditorAdapters } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseContentType } from "@/types/content"
@@ -26,11 +26,13 @@ function useEditorAdaptersForContentType({
   const [adapters, setAdapters] = useState<SynapseEditorAdapterSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const loadPromiseRef = useRef<Promise<SynapseEditorAdapterSummary[]> | null>(null)
 
   useEffect(() => {
     setAdapters(null)
     setError(null)
     setIsLoading(false)
+    loadPromiseRef.current = null
   }, [contentType])
 
   const filteredAdapters = useMemo(
@@ -39,8 +41,12 @@ function useEditorAdaptersForContentType({
   )
 
   const load = useCallback(async (): Promise<SynapseEditorAdapterSummary[]> => {
-    if (!enabled || isLoading || adapters) {
+    if (!enabled || adapters) {
       return filteredAdapters
+    }
+
+    if (loadPromiseRef.current) {
+      return loadPromiseRef.current
     }
 
     setIsLoading(true)
@@ -49,32 +55,38 @@ function useEditorAdaptersForContentType({
 
     logger.info("Loading editor targets.", { contentType })
 
-    try {
-      const nextAdapters = await getEditorAdapters()
-      const nextFilteredAdapters = filterAdaptersForContentType(nextAdapters, contentType)
+    const loadPromise = getEditorAdapters()
+      .then((nextAdapters) => {
+        const nextFilteredAdapters = filterAdaptersForContentType(nextAdapters, contentType)
 
-      setAdapters(nextAdapters)
-      logger.info("Editor targets loaded.", {
-        adapterCount: nextAdapters.length,
-        contentType,
-        elapsedMs: Math.round(performance.now() - startedAt),
-        supportedCount: nextFilteredAdapters.length,
+        setAdapters(nextAdapters)
+        logger.info("Editor targets loaded.", {
+          adapterCount: nextAdapters.length,
+          contentType,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          supportedCount: nextFilteredAdapters.length,
+        })
+
+        return nextFilteredAdapters
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "读取编辑器列表失败。")
+        logger.error("Failed to load editor targets.", {
+          contentType,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          error: err,
+        })
+
+        return []
+      })
+      .finally(() => {
+        setIsLoading(false)
+        loadPromiseRef.current = null
       })
 
-      return nextFilteredAdapters
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "读取编辑器列表失败。")
-      logger.error("Failed to load editor targets.", {
-        contentType,
-        elapsedMs: Math.round(performance.now() - startedAt),
-        error: err,
-      })
-
-      return []
-    } finally {
-      setIsLoading(false)
-    }
-  }, [adapters, contentType, enabled, filteredAdapters, isLoading, logger])
+    loadPromiseRef.current = loadPromise
+    return loadPromise
+  }, [adapters, contentType, enabled, filteredAdapters, logger])
 
   return {
     error,
