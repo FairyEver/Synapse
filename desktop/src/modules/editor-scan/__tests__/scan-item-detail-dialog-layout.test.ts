@@ -64,4 +64,16 @@ describe("scan item detail dialog layout", () => {
     expect(source).not.toContain("正在安装到")
     expect(source).not.toContain("安装失败。")
   })
+
+  it("keeps shared editor write target copy wording neutral", async () => {
+    const source = await readFile(
+      new URL("../../content/components/editor-write-target-selector.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("解析全局复制位置失败。")
+    expect(source).toContain("解析项目复制位置失败。")
+    expect(source).toContain("复制后会替换旧 Skill")
+    expect(source).toContain("不能复制到这个位置")
+  })
 })

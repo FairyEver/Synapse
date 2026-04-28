@@ -74,6 +74,7 @@ function EditorWriteTargetSelector({
   resolveTarget,
 }: EditorWriteTargetSelectorProps) {
   const definition = getContentTypeDefinition(contentType)
+  const copy = actionKind === "copy"
   const logger = useMemo(() => createRendererLogger(loggerName), [loggerName])
   const [scope, setScope] = useState<SynapseEditorInstallScope>("global")
   const [projectSelection, setProjectSelection] = useState<string>(CUSTOM_PROJECT_OPTION)
@@ -144,7 +145,9 @@ function EditorWriteTargetSelector({
           return
         }
 
-        const message = error instanceof Error ? error.message : "解析全局安装位置失败。"
+        const message = error instanceof Error
+          ? error.message
+          : copy ? "解析全局复制位置失败。" : "解析全局安装位置失败。"
         logger.error("Failed to resolve global editor target.", {
           editorId: editor.id,
           elapsedMs: Math.round(performance.now() - startedAt),
@@ -161,7 +164,7 @@ function EditorWriteTargetSelector({
     return () => {
       cancelled = true
     }
-  }, [editor.id, editor.supportsGlobal, logger, onError, open, resolveTarget])
+  }, [copy, editor.id, editor.supportsGlobal, logger, onError, open, resolveTarget])
 
   useEffect(() => {
     if (!open || !editor.supportsProject) {
@@ -211,7 +214,9 @@ function EditorWriteTargetSelector({
           return
         }
 
-        const message = error instanceof Error ? error.message : "解析项目安装位置失败。"
+        const message = error instanceof Error
+          ? error.message
+          : copy ? "解析项目复制位置失败。" : "解析项目安装位置失败。"
         logger.error("Failed to resolve project editor target.", {
           editorId: editor.id,
           elapsedMs: Math.round(performance.now() - startedAt),
@@ -229,7 +234,7 @@ function EditorWriteTargetSelector({
     return () => {
       cancelled = true
     }
-  }, [editor.id, editor.supportsProject, logger, onError, open, projectPath, resolveTarget])
+  }, [copy, editor.id, editor.supportsProject, logger, onError, open, projectPath, resolveTarget])
 
   useEffect(() => {
     if (scope === "global" && globalScopeDisabled && editor.supportsProject) {
@@ -351,7 +356,7 @@ function EditorWriteTargetSelector({
           {activeTargetState.isLoading ? (
             <p className="flex items-center gap-2 text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />
-              {actionKind === "install" ? "正在解析安装路径" : "正在解析复制路径"}
+              {copy ? "正在解析复制路径" : "正在解析安装路径"}
             </p>
           ) : activeTargetState.error ? (
             <p className="text-destructive">{activeTargetState.error}</p>
@@ -368,16 +373,20 @@ function EditorWriteTargetSelector({
             <>
               <p className="break-all text-muted-foreground">{activeTarget.targetPath}</p>
               <p className="text-xs text-destructive">
-                该位置已存在同名 Skill，安装将替换旧 Skill（旧 Skill 会被备份）。
+                {copy
+                  ? "该位置已存在同名 Skill，复制后会替换旧 Skill。"
+                  : "该位置已存在同名 Skill，安装将替换旧 Skill（旧 Skill 会被备份）。"}
               </p>
             </>
           ) : activeTarget ? (
             <p className="text-muted-foreground">
-              {activeTarget.message ?? "当前环境暂时不能安装到这个位置。"}
+              {activeTarget.message ?? (copy
+                ? "当前环境暂时不能复制到这个位置。"
+                : "当前环境暂时不能安装到这个位置。")}
             </p>
           ) : (
             <p className="text-muted-foreground">
-              {actionKind === "install" ? "先选择一个可用的安装范围。" : "先选择一个可用的复制范围。"}
+              {copy ? "先选择一个可用的复制范围。" : "先选择一个可用的安装范围。"}
             </p>
           )}
         </div>
