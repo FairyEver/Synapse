@@ -12,7 +12,7 @@ const baseEntry = {
 } satisfies Omit<SynapseAgentMessageTimelineItem, "role">
 
 describe("AgentMessageEvent", () => {
-  it("right-aligns user messages with a primary outgoing bubble", () => {
+  it("right-aligns user messages with a subtle outgoing bubble", () => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent
         item={{ ...baseEntry, role: "user" }}
@@ -21,11 +21,13 @@ describe("AgentMessageEvent", () => {
     )
 
     expect(html).toContain("justify-end")
-    expect(html).toContain("bg-primary")
-    expect(html).toContain("text-primary-foreground")
+    expect(html).toContain("bg-muted")
+    expect(html).toContain("text-foreground")
+    expect(html).not.toContain("bg-primary")
+    expect(html).not.toContain("text-primary-foreground")
   })
 
-  it("left-aligns assistant messages with a neutral incoming bubble", () => {
+  it("left-aligns assistant messages without an incoming bubble surface", () => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent
         item={{ ...baseEntry, role: "assistant" }}
@@ -34,11 +36,13 @@ describe("AgentMessageEvent", () => {
     )
 
     expect(html).toContain("justify-start")
-    expect(html).toContain("bg-muted/50")
+    expect(html).toContain("max-w-[76ch]")
+    expect(html).not.toContain("bg-muted")
     expect(html).not.toContain("bg-primary")
+    expect(html).not.toContain("rounded-2xl")
   })
 
-  it("wraps long message content inside the bubble", () => {
+  it("wraps long message content and preserves whitespace treatment", () => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent
         item={{
@@ -53,5 +57,21 @@ describe("AgentMessageEvent", () => {
     expect(html).toContain("min-w-0")
     expect(html).toContain("break-words")
     expect(html).toContain("whitespace-pre-wrap")
+  })
+
+  it("keeps local references clickable", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={{
+          ...baseEntry,
+          role: "assistant",
+          content: "/Users/liyang/project/file.ts:12",
+        }}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("<button")
+    expect(html).toContain("/Users/liyang/project/file.ts:12")
   })
 })

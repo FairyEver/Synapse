@@ -6,7 +6,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Separator } from "@/components/ui/separator"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPermissionRequestTimelineItem,
@@ -37,10 +36,10 @@ function AgentToolEvent({
   )
   const status = statusLabel(item, profile)
   return (
-    <Collapsible defaultOpen={defaultOpen} className="rounded-md border border-border">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
+    <Collapsible defaultOpen={defaultOpen} className="border-y border-border py-1">
+      <div className="flex items-center justify-between gap-2">
         <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="min-w-0 justify-start px-0">
+          <Button type="button" variant="ghost" size="sm" className="min-w-0 justify-start px-1">
             <ChevronDown data-icon="inline-start" />
             <Terminal data-icon="inline-start" />
             <span className="truncate">{label}</span>
@@ -49,10 +48,9 @@ function AgentToolEvent({
         <Badge variant={failed ? "destructive" : "secondary"}>{status}</Badge>
       </div>
       <CollapsibleContent>
-        <Separator />
-        <div className="flex flex-col gap-2 p-3">
+        <div className="flex flex-col gap-2 px-1 pb-3 pt-2">
           {body ? (
-            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm">
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm leading-7">
               {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}
             </pre>
           ) : null}

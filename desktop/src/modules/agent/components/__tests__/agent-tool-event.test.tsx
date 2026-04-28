@@ -41,6 +41,7 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("Bash")
     expect(html).toContain("Running")
     expect(html).toContain("pnpm test")
+    expect(html).toContain("border-y border-border")
   })
 
   it("opens failed tool results even when profile default is collapsed", () => {
@@ -59,6 +60,26 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("UnknownTool")
     expect(html).toContain("Failed")
     expect(html).toContain("boom")
+  })
+
+  it("keeps exit code and copy action for expanded tool results", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-3",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "command output",
+        exitCode: 2,
+        success: false,
+      }}
+      profile={profile}
+    />)
+
+    expect(html).toContain("command output")
+    expect(html).toContain("exit 2")
+    expect(html).toContain("复制")
+    expect(html).toContain("lucide-clipboard")
   })
 
   it("opens permission requests by default", () => {
