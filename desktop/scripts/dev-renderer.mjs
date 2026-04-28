@@ -5,7 +5,7 @@
  */
 import { spawn } from "node:child_process"
 
-const port = process.env.SYNAPSE_DEV_PORT ?? "5173"
+const port = process.env.SYNAPSE_DEV_PORT ?? "19731"
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 let isStopping = false
 

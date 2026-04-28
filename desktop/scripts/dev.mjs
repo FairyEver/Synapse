@@ -8,7 +8,7 @@ import { createServer } from "node:net"
 
 const host = "127.0.0.1"
 const requestedPort = process.env.SYNAPSE_DEV_PORT
-const defaultPort = 5173
+const defaultPort = 19731
 const startPort = Number.parseInt(requestedPort ?? String(defaultPort), 10)
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 let isStopping = false

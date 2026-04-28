@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Synapse 产品介绍站（VitePress）",
   "scripts": {
-    "dev": "vitepress dev",
+    "dev": "vitepress dev --port 19773",
     "build": "vitepress build",
     "preview": "vitepress preview"
   },

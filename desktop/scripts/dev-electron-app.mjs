@@ -7,7 +7,7 @@ import { spawn } from "node:child_process"
 import { rm } from "node:fs/promises"
 import path from "node:path"
 
-const port = process.env.SYNAPSE_DEV_PORT ?? "5173"
+const port = process.env.SYNAPSE_DEV_PORT ?? "19731"
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? `http://127.0.0.1:${port}`
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 const electronBuildDir = path.resolve("dist-electron")
