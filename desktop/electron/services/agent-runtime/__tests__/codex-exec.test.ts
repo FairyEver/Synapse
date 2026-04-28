@@ -388,6 +388,35 @@ describe("Codex JSONL parser", () => {
     )
   })
 
+  it("does not carry result text across turns when reused by a live session", () => {
+    const parser = new CodexJsonLineParser()
+    parser.pushLine(JSON.stringify({ type: "thread.started", thread_id: "thread-1" }))
+    parser.pushLine(JSON.stringify({ type: "turn.started" }))
+    parser.pushLine(JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "agent_message",
+        content: [{ type: "output_text", text: "first" }],
+      },
+    }))
+    parser.pushLine(JSON.stringify({ type: "turn.completed" }))
+    parser.pushLine(JSON.stringify({ type: "turn.started" }))
+    parser.pushLine(JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "agent_message",
+        content: [{ type: "output_text", text: "second" }],
+      },
+    }))
+    parser.pushLine(JSON.stringify({ type: "turn.completed" }))
+
+    const results = parser.finalize().events.filter((event) => event.type === "result")
+    expect(results).toEqual([
+      expect.objectContaining({ content: "first" }),
+      expect.objectContaining({ content: "second" }),
+    ])
+  })
+
   it("attaches Codex footer metadata and context remaining", async () => {
     const codexHome = await mkdtemp(path.join(tmpdir(), "synapse-codex-home-"))
     const sessionDir = path.join(codexHome, "sessions", "2026", "04", "26")

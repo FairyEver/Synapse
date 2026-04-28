@@ -358,6 +358,8 @@ export class CodexJsonLineParser {
         break
       case "turn.started":
         this.pendingMessages.length = 0
+        this.textParts.length = 0
+        this.currentError = undefined
         break
       case "item.started":
         this.handleItemStarted(asRecord(raw.item))

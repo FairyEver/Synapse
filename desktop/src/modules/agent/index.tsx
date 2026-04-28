@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowUp, Command as CommandIcon, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
@@ -46,6 +46,7 @@ function AgentModule() {
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [thinkingFrame, setThinkingFrame] = useState(0)
+  const timelineBottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!chat.sending) {
@@ -57,6 +58,26 @@ function AgentModule() {
     }, 500)
     return () => window.clearInterval(interval)
   }, [chat.sending])
+
+  const latestEntry = chat.timeline.at(-1)
+
+  useEffect(() => {
+    const bottom = timelineBottomRef.current
+    if (!bottom) return undefined
+    const frame = window.requestAnimationFrame(() => {
+      bottom.scrollIntoView({ block: "end" })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    chat.selectedProjectId,
+    chat.selectedConversationId,
+    chat.selectedSessionKey,
+    chat.timeline.length,
+    latestEntry?.id,
+    latestEntry?.timestamp,
+    latestEntry?.content,
+    chat.sending,
+  ])
 
   const submitDraft = () => {
     const content = draft.trim()
@@ -200,8 +221,8 @@ function AgentModule() {
           onRespond={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
         />
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-3 py-1 pr-2">
+        <ScrollArea className="min-h-0 min-w-0 flex-1">
+          <div className="flex min-w-0 flex-col gap-3 py-1 pr-2">
             {chat.timeline.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
                 暂无消息
@@ -216,6 +237,7 @@ function AgentModule() {
             {chat.sending ? (
               <AgentWaitingIndicator text={thinkingIndicatorText(thinkingFrame)} />
             ) : null}
+            <div ref={timelineBottomRef} aria-hidden="true" />
           </div>
         </ScrollArea>
 
@@ -295,9 +317,9 @@ function AgentMessageItem({
 }) {
   const outgoing = entry.role === "user"
   return (
-    <article className={cn("flex", outgoing ? "justify-end" : "justify-start")}>
+    <article className={cn("flex min-w-0", outgoing ? "justify-end" : "justify-start")}>
       <div className={cn(
-        "flex max-w-[78%] flex-col gap-1",
+        "flex min-w-0 max-w-[78%] flex-col gap-1",
         outgoing ? "items-end" : "items-start",
       )}>
         <div className={cn(
@@ -330,7 +352,7 @@ function MessageContent({
   return (
     <div
       className={cn(
-        "max-w-full whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed",
+        "min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-all rounded-2xl px-3 py-2 text-sm leading-relaxed",
         outgoing
           ? "rounded-br-md bg-gradient-to-b from-blue-500 to-blue-600 text-white"
           : "rounded-bl-md bg-muted/50 text-foreground",
@@ -345,7 +367,7 @@ function MessageContent({
           variant="link"
           size="sm"
           className={cn(
-            "h-auto px-1 py-0 align-baseline",
+            "h-auto min-w-0 max-w-full whitespace-normal break-all px-1 py-0 text-left align-baseline",
             outgoing ? "text-inherit hover:text-inherit" : null,
           )}
           onClick={() => onOpenReference(segment.value)}

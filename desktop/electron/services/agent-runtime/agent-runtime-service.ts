@@ -713,6 +713,7 @@ export class AgentRuntimeService {
         timedOut: true,
       }
     }
+    await this.saveEventHistory(conversation.id, execution.events)
     const saved = await this.finishExecSideSession(
       state,
       conversation,
@@ -787,6 +788,7 @@ export class AgentRuntimeService {
       partialText = appendRelayText(partialText, event)
       this.emitEvent(message, conversation.id, event)
       await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
+      await this.saveEventHistory(conversation.id, event)
 
       if (event.type === "permissionRequest") {
         await liveSession.respondPermission(event.requestId, {
@@ -840,6 +842,7 @@ export class AgentRuntimeService {
         if (!event) break
         this.emitEvent(message, conversation.id, event)
         await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
+        await this.saveEventHistory(conversation.id, event)
         if (event.type === "permissionRequest") {
           await liveSession.respondPermission(event.requestId, {
             behavior: "deny",
@@ -899,6 +902,7 @@ export class AgentRuntimeService {
       if (streamedEvents.has(event)) continue
       this.emitEvent(message, conversation.id, event)
     }
+    await this.saveEventHistory(conversation.id, execution.events)
 
     const saved = await this.saveExecutionResult(conversation, {
       resultText: execution.resultText,
@@ -939,6 +943,7 @@ export class AgentRuntimeService {
       events.push(event)
       this.emitEvent(message, conversation.id, event)
       await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
+      await this.saveEventHistory(conversation.id, event)
 
       if (event.type === "permissionRequest") {
         await this.awaitPendingPermission(state, message, conversation.id, event, liveSession)
@@ -1050,6 +1055,23 @@ export class AgentRuntimeService {
       agentSessionId,
       resumePolicy: "resume",
     })
+  }
+
+  private async saveEventHistory(
+    conversationIdValue: string,
+    events: AgentEvent | readonly AgentEvent[],
+  ): Promise<void> {
+    const eventList = Array.isArray(events) ? events : [events]
+    for (const event of eventList) {
+      const entry = historyEntryForAgentEvent(event)
+      if (!entry) continue
+      await this.repository.appendHistory(
+        conversationIdValue,
+        entry.role,
+        entry.content,
+        entry.metadata,
+      )
+    }
   }
 
   private async saveExecutionResult(
@@ -1668,6 +1690,87 @@ function runtimeCommandResult(
 
 function compressionStateId(projectId: string, agentType: string): string {
   return `compress:${projectId}:${agentType}`
+}
+
+function historyEntryForAgentEvent(event: AgentEvent): Pick<
+  ConversationEntryV1["history"][number],
+  "role" | "content" | "metadata"
+> | null {
+  switch (event.type) {
+    case "toolUse":
+      return {
+        role: "tool",
+        content: event.toolInput ? `${event.toolName}\n${event.toolInput}` : event.toolName,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          agentSessionId: event.agentSessionId,
+          threadId: event.threadId,
+          toolName: event.toolName,
+          toolInputRaw: event.toolInputRaw,
+        }),
+      }
+    case "toolResult":
+      return {
+        role: "tool",
+        content: event.content?.trim() || event.toolName,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          agentSessionId: event.agentSessionId,
+          threadId: event.threadId,
+          toolName: event.toolName,
+          status: event.status,
+          exitCode: event.exitCode,
+          success: event.success,
+        }),
+      }
+    case "thinking":
+      return {
+        role: "system",
+        content: event.content,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          agentSessionId: event.agentSessionId,
+          threadId: event.threadId,
+        }),
+      }
+    case "permissionRequest":
+      return {
+        role: "system",
+        content: event.toolInput ? `${event.toolName}\n${event.toolInput}` : event.toolName,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          agentSessionId: event.agentSessionId,
+          threadId: event.threadId,
+          requestId: event.requestId,
+          toolName: event.toolName,
+          toolInputRaw: event.toolInputRaw,
+          questions: event.questions,
+        }),
+      }
+    case "error":
+      return {
+        role: "system",
+        content: event.message,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          agentSessionId: event.agentSessionId,
+          threadId: event.threadId,
+        }),
+      }
+    case "text":
+    case "result":
+      return null
+    default: {
+      const exhaustive: never = event
+      return exhaustive
+    }
+  }
+}
+
+function compactMetadata(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  )
 }
 
 function estimateTokens(conversation: ConversationEntryV1): number {

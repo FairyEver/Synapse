@@ -38,4 +38,22 @@ describe("AgentMessageItem", () => {
     expect(html).toContain("bg-muted/50")
     expect(html).not.toContain("from-blue-500")
   })
+
+  it("wraps long message content inside the bubble", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageItem
+        entry={{
+          ...baseEntry,
+          role: "assistant",
+          content: "very-long-token-without-natural-breaks/very-long-token-without-natural-breaks",
+        }}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("min-w-0")
+    expect(html).toContain("overflow-hidden")
+    expect(html).toContain("break-all")
+    expect(html).toContain("whitespace-pre-wrap")
+  })
 })

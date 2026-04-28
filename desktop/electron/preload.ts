@@ -5,11 +5,6 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron"
-import type { IpcChannelMap } from "./generated/ipc-channels.generated"
-import {
-  createDomainEventPayloadSubscription,
-  createRawPayloadSubscription,
-} from "./preload-event-subscriptions"
 import type { SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
 import type { DataStoreChangeEvent } from "../src/types/data-store"
@@ -19,6 +14,8 @@ import type {
   SynapseRepositoryUpdatedEvent,
 } from "../src/types/repository"
 import type { SynapseAppUpdateState } from "../src/types/update"
+import type { IpcChannelMap } from "./generated/ipc-channels.generated"
+import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
 
 const IPC_CHANNELS = {
   "content": {
@@ -208,6 +205,47 @@ const DATA_STORE_CHANNELS = {
   openMCPSettings: "synapse:data-store:open-mcp-settings",
   registerMCP: "synapse:data-store:register-mcp",
 } as const
+
+type RawSubscribe = (channel: string) => (listener: (payload: unknown) => void) => Unsubscribe
+
+const channelForDomain = (domain: EventDomain): string => `synapse:events:${domain}`
+
+function isDomainEvent(
+  payload: unknown,
+  domain: EventDomain,
+  type: string,
+): payload is DomainEvent {
+  if (typeof payload !== "object" || payload === null) {
+    return false
+  }
+
+  const event = payload as Partial<DomainEvent>
+
+  return event.domain === domain && event.type === type && "payload" in event
+}
+
+function createDomainEventPayloadSubscription<TPayload>(
+  subscribeToChannel: RawSubscribe,
+  domain: EventDomain,
+  type: string,
+): (listener: (payload: TPayload) => void) => Unsubscribe {
+  return (listener) =>
+    subscribeToChannel(channelForDomain(domain))((event) => {
+      if (isDomainEvent(event, domain, type)) {
+        listener(event.payload as TPayload)
+      }
+    })
+}
+
+function createRawPayloadSubscription<TPayload>(
+  subscribeToChannel: RawSubscribe,
+  channel: string,
+): (listener: (payload: TPayload) => void) => Unsubscribe {
+  return (listener) =>
+    subscribeToChannel(channel)((payload) => {
+      listener(payload as TPayload)
+    })
+}
 
 // Helper to create invoke wrapper
 const invoke = (channel: string) => (args?: unknown) => ipcRenderer.invoke(channel, args)

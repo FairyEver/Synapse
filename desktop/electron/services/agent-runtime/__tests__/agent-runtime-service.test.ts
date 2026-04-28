@@ -174,6 +174,75 @@ describe("AgentRuntimeService", () => {
     ])
   })
 
+  it("persists tool events as conversation history before the final assistant reply", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const runner = new FakeRunner([
+      JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+      JSON.stringify({ type: "turn.started" }),
+      JSON.stringify({
+        type: "item.started",
+        item: { type: "command_execution", command: "pwd" },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          status: "completed",
+          aggregated_output: "/repo",
+          exit_code: 0,
+        },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "agent_message",
+          content: [{ type: "output_text", text: "done" }],
+        },
+      }),
+      JSON.stringify({ type: "turn.completed" }),
+    ])
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter: new CodexExecAdapter(runner),
+      now: fixedNow,
+    })
+
+    const result = await service.send({
+      projectId: "project-1",
+      sessionKey: "local:user-1",
+      platform: "local",
+      userId: "user-1",
+      userName: "User One",
+      content: "where am I",
+    })
+
+    const saved = await conversations.get(result.conversationId)
+    expect(saved?.history).toEqual([
+      expect.objectContaining({ role: "user", content: "where am I" }),
+      expect.objectContaining({
+        role: "tool",
+        content: "Bash\npwd",
+        metadata: expect.objectContaining({
+          agentEventType: "toolUse",
+          toolName: "Bash",
+        }),
+      }),
+      expect.objectContaining({
+        role: "tool",
+        content: "/repo",
+        metadata: expect.objectContaining({
+          agentEventType: "toolResult",
+          toolName: "Bash",
+          exitCode: 0,
+          success: true,
+        }),
+      }),
+      expect.objectContaining({ role: "assistant", content: "done" }),
+    ])
+  })
+
   it("remembers bridge reply targets, dispatches agent events, and injects side-channel env", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
