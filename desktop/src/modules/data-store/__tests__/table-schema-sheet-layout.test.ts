@@ -18,4 +18,30 @@ describe("TableSchemaSheet table description editor", () => {
     expect(tableIndex).toBeGreaterThan(-1)
     expect(descriptionIndex).toBeLessThan(tableIndex)
   })
+
+  it("guards Escape cancel from the blur commit path", async () => {
+    const source = await readFile(
+      new URL("../components/table-schema-sheet.tsx", import.meta.url),
+      "utf8",
+    )
+
+    const commitIndex = source.indexOf("const commitTableDescription")
+    const commitGuardIndex = source.indexOf("if (skipTableDescriptionCommitRef.current)", commitIndex)
+    const commitGuardResetIndex = source.indexOf("skipTableDescriptionCommitRef.current = false", commitGuardIndex)
+    const commitGuardReturnIndex = source.indexOf("return", commitGuardResetIndex)
+    const saveIndex = source.indexOf("await onUpdateTableDescription", commitIndex)
+    const escapeIndex = source.indexOf('event.key === "Escape"')
+    const escapeGuardIndex = source.indexOf("skipTableDescriptionCommitRef.current = true", escapeIndex)
+    const escapeBlurIndex = source.indexOf("event.currentTarget.blur()", escapeGuardIndex)
+
+    expect(source).toContain("const skipTableDescriptionCommitRef = useRef(false)")
+    expect(commitIndex).toBeGreaterThan(-1)
+    expect(commitGuardIndex).toBeGreaterThan(commitIndex)
+    expect(commitGuardResetIndex).toBeGreaterThan(commitGuardIndex)
+    expect(commitGuardReturnIndex).toBeGreaterThan(commitGuardResetIndex)
+    expect(commitGuardReturnIndex).toBeLessThan(saveIndex)
+    expect(escapeIndex).toBeGreaterThan(-1)
+    expect(escapeGuardIndex).toBeGreaterThan(escapeIndex)
+    expect(escapeBlurIndex).toBeGreaterThan(escapeGuardIndex)
+  })
 })

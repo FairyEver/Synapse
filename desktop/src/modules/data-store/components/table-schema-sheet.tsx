@@ -78,6 +78,7 @@ function TableSchemaSheet({
   const [editingDesc, setEditingDesc] = useState("")
   const [editingChoicesCol, setEditingChoicesCol] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const skipTableDescriptionCommitRef = useRef(false)
 
   const editingChoicesColumn = useMemo(
     () => (schema && editingChoicesCol ? schema.columns.find((c) => c.name === editingChoicesCol) ?? null : null),
@@ -89,6 +90,11 @@ function TableSchemaSheet({
   }, [schema?.description, schema?.name])
 
   const commitTableDescription = useCallback(async () => {
+    if (skipTableDescriptionCommitRef.current) {
+      skipTableDescriptionCommitRef.current = false
+      return
+    }
+
     if (!schema) return
 
     const nextDescription = tableDescription.trim()
@@ -155,6 +161,7 @@ function TableSchemaSheet({
                   event.currentTarget.blur()
                 }
                 if (event.key === "Escape") {
+                  skipTableDescriptionCommitRef.current = true
                   setTableDescription(schema.description)
                   event.currentTarget.blur()
                 }
