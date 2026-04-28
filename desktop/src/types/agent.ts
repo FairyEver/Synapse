@@ -58,12 +58,112 @@ export type SynapseAgentEvent =
       threadId?: string
     }
 
-export interface SynapseAgentTimelineEntry {
+export type SynapseAgentTimelineKind =
+  | "message"
+  | "thinking"
+  | "toolCall"
+  | "toolResult"
+  | "permissionRequest"
+  | "error"
+  | "result"
+
+interface SynapseAgentTimelineBase {
   readonly id: string
+  readonly kind: SynapseAgentTimelineKind
+  readonly timestamp: string
+  readonly agentType?: string
+  readonly agentSessionId?: string
+  readonly threadId?: string
+}
+
+export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "message"
   readonly role: "user" | "assistant" | "system" | "tool"
   readonly content: string
-  readonly timestamp: string
+  readonly legacy?: boolean
 }
+
+export interface SynapseAgentThinkingTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "thinking"
+  readonly content: string
+}
+
+export interface SynapseAgentToolCallTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "toolCall"
+  readonly toolName: string
+  readonly toolInput?: string
+  readonly toolInputRaw?: Record<string, unknown>
+}
+
+export interface SynapseAgentToolResultTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "toolResult"
+  readonly toolName: string
+  readonly content?: string
+  readonly status?: string
+  readonly exitCode?: number
+  readonly success?: boolean
+}
+
+export interface SynapseAgentPermissionRequestTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "permissionRequest"
+  readonly requestId: string
+  readonly toolName: string
+  readonly toolInput?: string
+  readonly toolInputRaw?: Record<string, unknown>
+}
+
+export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "error"
+  readonly message: string
+}
+
+export interface SynapseAgentResultTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "result"
+  readonly content: string
+  readonly metadata?: {
+    readonly model?: string
+    readonly effort?: string
+    readonly contextRemainingPercent?: number
+    readonly workDir?: string
+  }
+}
+
+export type SynapseAgentTimelineItem =
+  | SynapseAgentMessageTimelineItem
+  | SynapseAgentThinkingTimelineItem
+  | SynapseAgentToolCallTimelineItem
+  | SynapseAgentToolResultTimelineItem
+  | SynapseAgentPermissionRequestTimelineItem
+  | SynapseAgentErrorTimelineItem
+  | SynapseAgentResultTimelineItem
+
+export type SynapseAgentToolCollapseDefault = "expanded" | "collapsed" | "auto"
+
+export interface SynapseAgentToolDisplayRule {
+  readonly label?: string
+  readonly defaultCollapsed?: SynapseAgentToolCollapseDefault
+  readonly previewLines?: number
+  readonly previewChars?: number
+}
+
+export interface SynapseAgentDisplayProfile {
+  readonly agentLabel: string
+  readonly thinkingDefaultCollapsed: boolean
+  readonly toolDefaultCollapsed: SynapseAgentToolCollapseDefault
+  readonly toolPreviewLines: number
+  readonly toolPreviewChars: number
+  readonly aliases?: Record<string, string>
+  readonly tools?: Record<string, SynapseAgentToolDisplayRule>
+  readonly statusLabels: {
+    readonly pending: string
+    readonly running: string
+    readonly success: string
+    readonly error: string
+    readonly denied: string
+  }
+}
+
+export type SynapseAgentTimelineEntry = SynapseAgentTimelineItem
 
 export interface SynapseAgentSessionSummary {
   readonly projectId: string
@@ -78,7 +178,7 @@ export interface SynapseAgentSessionSummary {
   readonly historyCount: number
   readonly createdAt: string
   readonly updatedAt: string
-  readonly lastMessage?: SynapseAgentTimelineEntry
+  readonly lastMessage?: SynapseAgentTimelineItem
 }
 
 export interface SynapseAgentStatus {
@@ -172,7 +272,7 @@ export interface SynapseAgentTimelineResult {
   readonly projectId: string
   readonly sessionKey: string
   readonly conversationId?: string
-  readonly entries: SynapseAgentTimelineEntry[]
+  readonly entries: SynapseAgentTimelineItem[]
 }
 
 export interface SynapseAgentEventEnvelope {

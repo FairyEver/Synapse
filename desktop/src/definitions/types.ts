@@ -2,6 +2,7 @@ import type { ComponentType } from "react"
 import type { SynapseContentMeta } from "../types/content"
 import type { SynapseContentType } from "../types/content"
 import type { DataStoreMcpTarget } from "../types/data-store"
+import type { SynapseAgentDisplayProfile } from "../types/agent"
 import type {
   SynapseEditorInstallFormValues,
   SynapseEditorResolvedTarget,
@@ -69,6 +70,7 @@ export type SynapseAgentBaseDefinition = {
   runtime: SynapseAgentRuntimeRequirement
   modes: readonly SynapseAgentModeOption[]
   capabilities: SynapseAgentCapabilities
+  displayProfile: SynapseAgentDisplayProfile
 }
 
 export type SynapseAgentDefinition = SynapseAgentBaseDefinition & {

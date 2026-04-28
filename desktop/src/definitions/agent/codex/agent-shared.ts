@@ -21,4 +21,29 @@ export const agentBaseDefinition = {
     permissions: true,
     mcp: true,
   },
+  displayProfile: {
+    agentLabel: "Codex",
+    thinkingDefaultCollapsed: true,
+    toolDefaultCollapsed: "auto",
+    toolPreviewLines: 6,
+    toolPreviewChars: 1200,
+    aliases: {
+      Bash: "Bash",
+      FileChange: "File change",
+      read_file: "Read file",
+      apply_patch: "Apply patch",
+    },
+    tools: {
+      Bash: { defaultCollapsed: "auto", previewLines: 8, previewChars: 1600 },
+      FileChange: { defaultCollapsed: "expanded", previewLines: 12, previewChars: 2000 },
+      read_file: { defaultCollapsed: "collapsed", previewLines: 6, previewChars: 1200 },
+    },
+    statusLabels: {
+      pending: "Pending",
+      running: "Running",
+      success: "Done",
+      error: "Failed",
+      denied: "Denied",
+    },
+  },
 } as const satisfies SynapseAgentBaseDefinition
