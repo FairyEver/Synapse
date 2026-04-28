@@ -18,15 +18,15 @@ function AgentThinkingEvent({
   readonly profile: SynapseAgentDisplayProfile
 }) {
   return (
-    <Collapsible defaultOpen={!profile.thinkingDefaultCollapsed} className="rounded-md border border-border">
+    <Collapsible defaultOpen={!profile.thinkingDefaultCollapsed} className="border-y border-border py-1">
       <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="w-full justify-start">
+        <Button type="button" variant="ghost" size="sm" className="w-full justify-start px-1">
           <ChevronDown data-icon="inline-start" />
           Thinking
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <pre className="whitespace-pre-wrap break-words px-3 pb-3 text-sm text-muted-foreground">
+        <pre className="whitespace-pre-wrap break-words px-1 pb-3 pt-1 text-sm leading-7 text-muted-foreground">
           {item.content}
         </pre>
       </CollapsibleContent>
