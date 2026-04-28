@@ -91,7 +91,7 @@ const cursorAdapter: EditorAdapter = {
       targetExists: conflict.targetExists,
     })
   },
-  async resolveProjectTarget(projectPath, { contentId, contentType, skillName, skillTitle }) {
+  async resolveProjectTarget(projectPath, { contentId, contentType, skillName, skillTitle, ruleName }) {
     if (!isSupportedEditorPlatform()) {
       return createUnsupportedPlatformTarget({
         adapter: cursorAdapter,
@@ -122,7 +122,7 @@ const cursorAdapter: EditorAdapter = {
             resolvedProjectPath,
             ".cursor",
             "rules",
-            getRuleFileName(contentId),
+            getRuleFileName(ruleName ?? contentId),
           ),
         })
       case "skill": {

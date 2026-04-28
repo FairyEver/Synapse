@@ -160,7 +160,8 @@ function getHomePath(...segments: string[]): string {
 }
 
 function getRuleFileName(contentId: string): string {
-  return `${contentId.trim()}.mdc`
+  const baseName = path.basename(contentId.trim()).replace(/\.(md|mdc)$/iu, "")
+  return `${baseName}.mdc`
 }
 
 function isSupportedEditorPlatform(): boolean {

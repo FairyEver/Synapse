@@ -31,7 +31,7 @@ export type SynapseRendererMcpDefinition = SynapseMcpDefinition & {
 
 export type SynapseRuleProjectInstallFormProps = {
   editorId: string
-  item: SynapseContentMeta<"rule">
+  item: Pick<SynapseContentMeta<"rule">, "description">
   isSubmitting: boolean
   onConfirm: (values: SynapseEditorInstallFormValues) => void
   onError: (message: string) => void

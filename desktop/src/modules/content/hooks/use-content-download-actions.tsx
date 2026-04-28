@@ -2,15 +2,15 @@ import type { ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   downloadContent,
-  getEditorAdapters,
   readContent,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { EditorIcon } from "@/components/editor-icon"
 import { getContentTypeDefinition } from "@/config/content-types"
-import { getEditorIconSrc, EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
 import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
+import { useEditorAdaptersForContentType } from "@/modules/content/hooks/use-editor-adapters-for-content-type"
 import type { SynapseContentMeta } from "@/types/content"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 
@@ -44,12 +44,9 @@ function useContentDownloadActions({
     () => createRendererLogger(`content.action.${item.type}`),
     [item.type],
   )
-  const [adapters, setAdapters] = useState<SynapseEditorAdapterSummary[] | null>(null)
-  const [adaptersError, setAdaptersError] = useState<string | null>(null)
   const [isCopying, setIsCopying] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false)
-  const [isLoadingAdapters, setIsLoadingAdapters] = useState(false)
   const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
   const onInstallDialogOpenChangeRef = useRef(onInstallDialogOpenChange)
 
@@ -58,9 +55,16 @@ function useContentDownloadActions({
   const canDownload = definition.capabilities.canDownload
   const canInstall = definition.capabilities.canInstallToEditor
   const isBusy = isCopying || isDownloading
-  const filteredAdapters = (adapters ?? []).filter((adapter) => (
-    adapter.supportedContentTypes.includes(item.type)
-  ))
+  const {
+    error: adaptersError,
+    filteredAdapters,
+    isLoading: isLoadingAdapters,
+    load: loadInstallTargets,
+  } = useEditorAdaptersForContentType({
+    contentType: item.type,
+    enabled: canInstall,
+    loggerName: `content.action.${item.type}`,
+  })
 
   const openInstallDialog = useCallback((editor: SynapseEditorAdapterSummary) => {
     setSelectedEditor(editor)
@@ -96,46 +100,6 @@ function useContentDownloadActions({
   useEffect(() => {
     onInstallDialogOpenChangeRef.current?.(isInstallDialogOpen)
   }, [isInstallDialogOpen])
-
-  const loadInstallTargets = useCallback(() => {
-    if (!canInstall || isLoadingAdapters) {
-      return
-    }
-
-    setIsLoadingAdapters(true)
-    setAdaptersError(null)
-    const startedAt = performance.now()
-    logger.info("Loading install targets.", {
-      contentId: item.id,
-      contentType: item.type,
-    })
-
-    void getEditorAdapters()
-      .then((nextAdapters) => {
-        setAdapters(nextAdapters)
-        logger.info("Install targets loaded.", {
-          adapterCount: nextAdapters.length,
-          contentId: item.id,
-          contentType: item.type,
-          elapsedMs: Math.round(performance.now() - startedAt),
-          supportedCount: nextAdapters.filter((adapter) => (
-            adapter.supportedContentTypes.includes(item.type)
-          )).length,
-        })
-      })
-      .catch((error) => {
-        setAdaptersError(error instanceof Error ? error.message : "读取编辑器列表失败。")
-        logger.error("Failed to load install targets.", {
-          contentId: item.id,
-          contentType: item.type,
-          elapsedMs: Math.round(performance.now() - startedAt),
-          error,
-        })
-      })
-      .finally(() => {
-        setIsLoadingAdapters(false)
-      })
-  }, [canInstall, isLoadingAdapters, item.id, item.type, logger])
 
   const handleDownload = useCallback(async () => {
     if (isBusy || !canDownload) {
@@ -244,19 +208,14 @@ function useContentDownloadActions({
             : adaptersError
               ? [{ key: "editors-error", label: adaptersError, disabled: true }]
               : filteredAdapters.length > 0
-                ? filteredAdapters.map((adapter) => {
-                    const iconSrc = getEditorIconSrc(adapter.id)
-                    return {
-                      key: `install-${adapter.id}`,
-                      label: adapter.label,
-                      icon: iconSrc ? (
-                        <img src={iconSrc} alt={adapter.label} className="size-5 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
-                      ) : undefined,
-                      onSelect: () => {
-                        openInstallDialog(adapter)
-                      },
-                    }
-                  })
+                ? filteredAdapters.map((adapter) => ({
+                    key: `install-${adapter.id}`,
+                    label: adapter.label,
+                    icon: <EditorIcon editorId={adapter.id} />,
+                    onSelect: () => {
+                      openInstallDialog(adapter)
+                    },
+                  }))
                 : [{ key: "no-install-target", label: "当前没有可用的安装目标", disabled: true }],
         })
       }
@@ -307,19 +266,14 @@ function useContentDownloadActions({
       if (isLoadingAdapters) return [{ key: "loading-editors", label: "正在读取编辑器", disabled: true }]
       if (adaptersError) return [{ key: "editors-error", label: adaptersError, disabled: true }]
       if (filteredAdapters.length === 0) return [{ key: "no-install-target", label: "当前没有可用的安装目标", disabled: true }]
-      return filteredAdapters.map((adapter) => {
-        const iconSrc = getEditorIconSrc(adapter.id)
-        return {
-          key: `install-${adapter.id}`,
-          label: adapter.label,
-          icon: iconSrc ? (
-            <img src={iconSrc} alt={adapter.label} className="size-5 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
-          ) : undefined,
-          onSelect: () => {
-            openInstallDialog(adapter)
-          },
-        }
-      })
+      return filteredAdapters.map((adapter) => ({
+        key: `install-${adapter.id}`,
+        label: adapter.label,
+        icon: <EditorIcon editorId={adapter.id} />,
+        onSelect: () => {
+          openInstallDialog(adapter)
+        },
+      }))
     },
     [adaptersError, canInstall, filteredAdapters, isLoadingAdapters, openInstallDialog],
   )

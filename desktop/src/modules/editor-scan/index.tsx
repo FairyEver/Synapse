@@ -210,6 +210,7 @@ function EditorScanModule() {
 
       <ScanItemDetailDialog
         item={detailItem}
+        onCopied={refresh}
         open={detailOpen}
         onOpenChange={setDetailOpen}
       />

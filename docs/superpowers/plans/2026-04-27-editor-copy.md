@@ -4,7 +4,7 @@
 
 **Goal:** Add single-item `复制到编辑器` from the IDE scan detail dialog so one local Rule or Skill can be copied into another editor while leaving the source untouched.
 
-**Architecture:** Add a focused main-process editor copy service for local scan items, then expose it through a narrow IPC/bridge surface. The renderer adds one copy dialog under `editor-scan`, reusing existing editor adapter target resolution, shadcn components, and project selection patterns without changing the existing import-to-repository flow.
+**Architecture:** Add a focused main-process editor copy service for local scan items, then expose it through a narrow IPC/bridge surface. The renderer first extracts the existing install target range/project selector so repository install and IDE copy share one UI and state implementation; IDE copy adds only the target-editor selection step and its copy submit action.
 
 **Tech Stack:** Electron main process, React, TypeScript, Vitest, zod IPC modules, shadcn/ui + Radix, Tailwind token utilities.
 
@@ -15,6 +15,7 @@
 | File | Action | Responsibility |
 |---|---|---|
 | `desktop/src/types/editor-copy.ts` | Create | Shared copy request, resolved target, and result types. |
+| `desktop/electron/services/editor-file-write-utils.ts` | Create | Shared atomic file/directory write helpers used by install and copy services. |
 | `desktop/electron/services/editor-copy-service.ts` | Create | Resolve copy targets and copy one local scan item to a target editor. |
 | `desktop/electron/services/__tests__/editor-copy-service.test.ts` | Create | Main-process tests for Rule copy, Skill copy, conflicts, same-path defense, and attachment filtering. |
 | `desktop/electron/modules/editor-copy/ipc.ts` | Create | IPC methods for resolving a copy target and executing copy. |
@@ -24,7 +25,11 @@
 | `desktop/electron/preload.ts` | Modify | Expose `window.synapse.editorCopy`. |
 | `desktop/src/types/bridge.ts` | Modify | Add typed renderer bridge surface for `editorCopy`. |
 | `desktop/src/app-shell/editor-copy.ts` | Create | Small renderer wrapper around the bridge methods. |
-| `desktop/src/modules/editor-scan/components/editor-copy-dialog.tsx` | Create | Target editor, scope, project path, target preview, overwrite confirm, and copy action UI. |
+| `desktop/src/modules/content/components/editor-install-target-selector.tsx` | Create | Shared global/project/project-path/target-preview UI used by content install and editor copy. |
+| `desktop/src/modules/content/components/content-install-dialog.tsx` | Modify | Reuse `EditorInstallTargetSelector` while keeping repository install behavior unchanged. |
+| `desktop/src/modules/content/hooks/use-editor-adapters-for-content-type.ts` | Create | Shared editor adapter loading/filtering hook for install menus and copy target selection. |
+| `desktop/src/modules/content/hooks/use-content-download-actions.tsx` | Modify | Use the shared editor adapter hook instead of owning duplicate loading state. |
+| `desktop/src/modules/editor-scan/components/editor-copy-dialog.tsx` | Create | Target editor selection, shared install-target selector, overwrite confirm, and copy action UI. |
 | `desktop/src/modules/editor-scan/components/scan-item-detail-dialog.tsx` | Modify | Add footer `复制到编辑器` button and mount the copy dialog. |
 | `desktop/src/modules/editor-scan/index.tsx` | Modify | Refresh scan data after copy succeeds. |
 | `desktop/src/modules/editor-scan/__tests__/scan-item-detail-dialog-layout.test.ts` | Modify | Assert footer includes copy wording and keeps import/detail wording. |

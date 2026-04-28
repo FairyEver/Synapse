@@ -4,7 +4,7 @@ import {
   ModuleSidebarItem,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
-import { getEditorIconSrc, EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
+import { EditorIcon } from "@/components/editor-icon"
 import { EDITOR_ORDER, getEditorLabel } from "@/lib/editor-registry"
 import type { SynapseEditorId } from "@/types/editor"
 import type { EditorScanResult } from "@/types/editor-scan"
@@ -65,32 +65,25 @@ function EditorScanSidebar({
   return (
     <ModuleSidebar variant="bare">
       <ModuleSidebarList>
-        {summaries.map((s) => {
-          const iconSrc = getEditorIconSrc(s.editorId)
-          return (
-            <ModuleSidebarItem
-              key={s.editorId}
-              active={s.editorId === selectedEditorId}
-              onClick={() => onSelect(s.editorId)}
-              iconElement={
-                iconSrc ? (
-                  <img src={iconSrc} alt={s.label} className="size-4 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
-                ) : null
-              }
-              trailing={
-                s.detected ? (
-                  <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {s.skillCount + s.ruleCount}
-                  </span>
-                ) : (
-                  <span className="text-[11px] text-muted-foreground">—</span>
-                )
-              }
-            >
-              {s.label}
-            </ModuleSidebarItem>
-          )
-        })}
+        {summaries.map((s) => (
+          <ModuleSidebarItem
+            key={s.editorId}
+            active={s.editorId === selectedEditorId}
+            onClick={() => onSelect(s.editorId)}
+            iconElement={<EditorIcon editorId={s.editorId} className="size-4" />}
+            trailing={
+              s.detected ? (
+                <span className="text-[11px] tabular-nums text-muted-foreground">
+                  {s.skillCount + s.ruleCount}
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">—</span>
+              )
+            }
+          >
+            {s.label}
+          </ModuleSidebarItem>
+        ))}
       </ModuleSidebarList>
     </ModuleSidebar>
   )

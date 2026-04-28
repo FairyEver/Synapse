@@ -58,6 +58,10 @@ export const IPC_CHANNELS = {
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
   },
+  "editor-copy": {
+    "resolveTarget": "synapse:editor-copy:resolve-target",
+    "copy": "synapse:editor-copy:copy",
+  },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
     "createDirectory": "synapse:editor:create-directory",

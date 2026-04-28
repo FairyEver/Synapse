@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { isFileNotFoundError, isPermissionError, pathExists } from "./fs-utils"
+import { pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type {
@@ -20,12 +20,14 @@ import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
 import { builtinContentService } from "./builtin-content-service"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
+import {
+  formatEditorWriteFailure,
+  readExistingTextFile,
+  replaceDirectoryAtomically,
+  replaceFileAtomically,
+} from "./editor-file-write-utils"
 
 const logger = createMainLogger("service.content-install")
-
-function normalizeMarkdownContent(content: string): string {
-  return content.endsWith("\n") ? content : `${content}\n`
-}
 
 async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   const config = await configStore.load()
@@ -45,99 +47,11 @@ async function getActiveRepositoryRootPath(): Promise<string> {
   return repositoryState.gitRootPath ?? repository.localPath
 }
 
-async function swapPathAtomically(replacementPath: string, targetPath: string): Promise<void> {
-  const parentDirectoryPath = path.dirname(targetPath)
-  const targetName = path.basename(targetPath)
-
-  await mkdir(parentDirectoryPath, { recursive: true })
-
-  const backupPath = path.join(
-    parentDirectoryPath,
-    `.synapse-install-backup-${targetName}-${Date.now()}`,
-  )
-  const hadExistingTarget = await pathExists(targetPath)
-  let movedExistingTarget = false
-  let movedReplacement = false
-
-  try {
-    if (hadExistingTarget) {
-      await rename(targetPath, backupPath)
-      movedExistingTarget = true
-    }
-
-    await rename(replacementPath, targetPath)
-    movedReplacement = true
-  } catch (error) {
-    if (movedExistingTarget && !movedReplacement) {
-      await rename(backupPath, targetPath).catch((err) => logger.warn("Failed to restore backup", err))
-    }
-
-    throw error
-  } finally {
-    if (movedExistingTarget && movedReplacement) {
-      await rm(backupPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up backup", err))
-    }
-  }
-}
-
-async function readExistingTextFile(targetPath: string): Promise<string> {
-  try {
-    return await readFile(targetPath, "utf8")
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return ""
-    }
-
-    throw error
-  }
-}
-
-async function replaceFileAtomically(targetPath: string, content: string): Promise<void> {
-  const parentDirectoryPath = path.dirname(targetPath)
-
-  await mkdir(parentDirectoryPath, { recursive: true })
-
-  const tempDirectoryPath = await mkdtemp(path.join(parentDirectoryPath, ".synapse-install-file-"))
-  const tempFilePath = path.join(tempDirectoryPath, path.basename(targetPath))
-
-  try {
-    await writeFile(tempFilePath, normalizeMarkdownContent(content), "utf8")
-    await swapPathAtomically(tempFilePath, targetPath)
-    logger.info("Wrote file atomically.", { targetPath })
-  } finally {
-    await rm(tempDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up temp directory", err))
-  }
-}
-
-async function replaceDirectoryAtomically(
-  targetPath: string,
-  populate: (stagingDirectoryPath: string) => Promise<void>,
-): Promise<void> {
-  const parentDirectoryPath = path.dirname(targetPath)
-
-  await mkdir(parentDirectoryPath, { recursive: true })
-
-  const stagingDirectoryPath = await mkdtemp(path.join(parentDirectoryPath, ".synapse-install-dir-"))
-
-  try {
-    await populate(stagingDirectoryPath)
-    await swapPathAtomically(stagingDirectoryPath, targetPath)
-  } catch (error) {
-    await rm(stagingDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging directory", err))
-    throw error
-  }
-}
-
 function formatInstallFailure(error: unknown, targetPath: string): Error {
-  if (isPermissionError(error)) {
-    return new Error(`目标位置不可写：${targetPath}`)
-  }
-
-  if (error instanceof Error) {
-    return error
-  }
-
-  return new Error("安装失败，请稍后重试。")
+  const formatted = formatEditorWriteFailure(error, targetPath)
+  return formatted.message === "写入失败，请稍后重试。"
+    ? new Error("安装失败，请稍后重试。")
+    : formatted
 }
 
 class ContentInstallService {
@@ -233,7 +147,7 @@ class ContentInstallService {
               detail: detailWithSubstitutions,
               repositoryRootPath: repositoryRootPath ?? "",
               writeTextFile: async (filePath, content) => {
-                await writeFile(filePath, normalizeMarkdownContent(content), "utf8")
+                await writeFile(filePath, content.endsWith("\n") ? content : `${content}\n`, "utf8")
                 logger.info("Staged skill file.", { filePath })
               },
               copyAttachment: async (attachment, attachmentTargetPath) => {

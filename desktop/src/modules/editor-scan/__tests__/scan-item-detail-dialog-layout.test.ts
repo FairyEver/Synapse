@@ -39,4 +39,27 @@ describe("scan item detail dialog layout", () => {
     expect(source).not.toContain("名称重复")
     expect(source).not.toContain("继续保存")
   })
+
+  it("offers editor copy from scan item details", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("复制到编辑器")
+    expect(source).toContain("<EditorCopyDialog")
+  })
+
+  it("reuses the shared editor install target selector for editor copy", async () => {
+    const source = await readFile(
+      new URL("../components/editor-copy-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("EditorInstallTargetSelector")
+    expect(source).toContain("EditorIcon")
+    expect(source).toContain("resolveEditorCopyTarget")
+    expect(source).toContain("copyToEditor")
+    expect(source).toContain("安装")
+  })
 })

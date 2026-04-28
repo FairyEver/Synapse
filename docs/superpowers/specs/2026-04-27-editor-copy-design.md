@@ -43,19 +43,26 @@
 
 footer 左侧继续显示本地路径，不改变现有布局。
 
-### 复制弹窗
+### 复制流程
 
-点击 `复制到编辑器` 后打开新弹窗：
+点击 `复制到编辑器` 后先打开目标编辑器选择弹窗。这个弹窗把仓库内容“安装”下拉菜单里的编辑器选择改成弹窗形式，选择后进入与现有“安装到编辑器”一致的目标范围弹窗。
 
-- 标题：`复制到编辑器`
-- 字段：`目标编辑器`
+目标编辑器选择弹窗：
+
+- 标题：`选择编辑器`
+- 列表：支持当前 Rule / Skill 类型的编辑器
+- 取消按钮：`取消`
+
+目标范围弹窗复用现有安装弹窗 UI：
+
+- 标题：`安装到 {editor}`
 - 字段：`范围`
 - 字段：`项目目录`，仅项目范围显示
 - 区块：`目标位置`
 - 取消按钮：`取消`
-- 确认按钮：`复制`
+- 确认按钮：`安装`
 
-目标编辑器列表排除当前来源的同一编辑器，避免用户把内容复制回完全相同的位置。
+目标编辑器允许选择当前来源的同一编辑器。全局到项目、项目到全局、项目 A 到项目 B 都允许。唯一禁止条件是解析后的目标路径与源路径完全相同。
 
 范围使用现有安装语义：
 
@@ -204,8 +211,11 @@ type EditorCopyPayload = {
 新增组件：
 
 - `desktop/src/modules/editor-scan/components/editor-copy-dialog.tsx`
+- `desktop/src/modules/content/components/editor-install-target-selector.tsx`
 
-在 `ScanItemDetailDialog` 中维护打开状态并传入当前 item。
+在 `ScanItemDetailDialog` 中维护打开状态并传入当前 item。`editor-copy-dialog` 只负责 IDE 扫描项复制流程：第一步选择编辑器，第二步复用公共目标范围选择器，最后接 `editorCopy.copy`。
+
+现有 `ContentInstallDialog` 也改为复用 `EditorInstallTargetSelector`。这样全局 / 项目 / 项目目录 / 目标路径解析 / 目标位置展示只维护一套。
 
 UI 使用现有 shadcn 组件：
 

@@ -3,9 +3,9 @@ import { FolderPlus } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { EditorIcon } from "@/components/editor-icon"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { getEditorIconSrc, EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseEditorGlobalDirectory } from "@/types/editor"
 
@@ -121,12 +121,7 @@ function EditorDirectoriesContent() {
           {index > 0 ? <Separator /> : null}
           <div className="flex flex-col gap-3 px-4 py-3">
             <div className="flex items-center gap-2 font-medium">
-              {(() => {
-                const iconSrc = getEditorIconSrc(dir.editorId)
-                return iconSrc ? (
-                  <img src={iconSrc} alt={dir.label} className="size-5 shrink-0" style={EDITOR_ICON_CLIP_STYLE} />
-                ) : null
-              })()}
+              <EditorIcon editorId={dir.editorId} />
               {dir.label}
             </div>
             <div className="flex flex-col gap-1.5">

@@ -45,6 +45,7 @@ const MODULE_SOURCES = [
   { id: "user-profile", importPath: "../electron/modules/user-profile/ipc.ts" },
   { id: "log", importPath: "../electron/modules/log/ipc.ts" },
   { id: "editor-scan", importPath: "../electron/modules/editor-scan/ipc.ts" },
+  { id: "editor-copy", importPath: "../electron/modules/editor-copy/ipc.ts" },
   { id: "editor", importPath: "../electron/modules/editor/ipc.ts" },
   { id: "shell", importPath: "../electron/modules/shell/ipc.ts" },
   { id: "repository", importPath: "../electron/modules/repository/ipc.ts" },

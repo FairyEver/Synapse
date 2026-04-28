@@ -82,6 +82,11 @@ import type {
   SynapseResolveEditorTargetPayload,
 } from "./editor"
 import type {
+  SynapseCopyToEditorPayload,
+  SynapseEditorCopyResult,
+  SynapseResolveEditorCopyTargetPayload,
+} from "./editor-copy"
+import type {
   EditorScanQuickPublishDraft,
   EditorScanQuickPublishRequest,
   EditorScanResult,
@@ -233,6 +238,12 @@ export type SynapseBridge = {
     prepareQuickPublishDraft: (
       request: EditorScanQuickPublishRequest,
     ) => Promise<EditorScanQuickPublishDraft>
+  }
+  editorCopy: {
+    copy: (payload: SynapseCopyToEditorPayload) => Promise<SynapseEditorCopyResult>
+    resolveTarget: (
+      payload: SynapseResolveEditorCopyTargetPayload,
+    ) => Promise<SynapseEditorResolvedTarget>
   }
   shell: {
     showItemInFolder: (filePath: string) => void

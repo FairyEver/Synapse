@@ -56,16 +56,18 @@ import {
   buildSkillQuickPublishPayload,
   formatQuickPublishSourceLabel,
 } from "../lib/quick-publish"
+import { EditorCopyDialog } from "./editor-copy-dialog"
 
 const logger = createRendererLogger("editor-scan")
 
 type ScanItemDetailDialogProps = {
   item: ScanItemForDetail | null
+  onCopied?: () => Promise<void> | void
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialogProps) {
+function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDetailDialogProps) {
   const { content: loadedContent, loading, error } = useScanItemContent(
     open && item?.content == null ? item?.path ?? null : null,
   )
@@ -81,6 +83,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
   const [quickPublishError, setQuickPublishError] = useState<string | null>(null)
   const [isQuickPublishBusy, setIsQuickPublishBusy] = useState(false)
   const [fallbackReason, setFallbackReason] = useState<string | null>(null)
+  const [isEditorCopyOpen, setIsEditorCopyOpen] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -88,6 +91,7 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
       setContentReady(false)
       setQuickPublishError(null)
       setFallbackReason(null)
+      setIsEditorCopyOpen(false)
       return
     }
     const timer = setTimeout(() => setContentReady(true), 200)
@@ -356,29 +360,48 @@ function ScanItemDetailDialog({ item, open, onOpenChange }: ScanItemDetailDialog
               <FolderOpen className="size-3 shrink-0" />
               <span className="truncate">{item.path}</span>
             </button>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={isQuickPublishBusy || disabledReason !== null}
-                      onClick={() => void handlePrimaryAction()}
-                    >
-                      {isQuickPublishBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-                      {primaryActionLabel}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {disabledReason ? (
-                  <TooltipContent>{disabledReason}</TooltipContent>
-                ) : null}
-              </Tooltip>
-            </TooltipProvider>
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isQuickPublishBusy || disabledReason !== null}
+                        onClick={() => void handlePrimaryAction()}
+                      >
+                        {isQuickPublishBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+                        {primaryActionLabel}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {disabledReason ? (
+                    <TooltipContent>{disabledReason}</TooltipContent>
+                  ) : null}
+                </Tooltip>
+              </TooltipProvider>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!content}
+                onClick={() => setIsEditorCopyOpen(true)}
+              >
+                复制到编辑器
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <EditorCopyDialog
+        content={content}
+        item={item}
+        onCopied={onCopied}
+        open={isEditorCopyOpen}
+        onOpenChange={setIsEditorCopyOpen}
+      />
     </>
   )
 }
