@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { resolveEditorInstallStatus } from "@/app-shell/editor-install-status"
 import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -52,9 +52,13 @@ function useEditorInstallStatus({
   const [entries, setEntries] = useState<SynapseEditorInstallStatusEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const requestSeqRef = useRef(0)
   const canLoad = open && isInstallableContentDetail(detail)
 
   const refresh = useCallback(async () => {
+    const requestSeq = requestSeqRef.current + 1
+    requestSeqRef.current = requestSeq
+
     if (!canLoad || !isInstallableContentDetail(detail)) {
       setEntries([])
       setError(null)
@@ -76,6 +80,10 @@ function useEditorInstallStatus({
         title: detail.title,
       })
 
+      if (requestSeqRef.current !== requestSeq) {
+        return
+      }
+
       setEntries(result.entries)
       logger.info("Editor install status resolved.", {
         contentId: detail.id,
@@ -85,6 +93,10 @@ function useEditorInstallStatus({
         itemId: item?.id ?? null,
       })
     } catch (err) {
+      if (requestSeqRef.current !== requestSeq) {
+        return
+      }
+
       setError(err instanceof Error ? err.message : "读取安装状态失败。")
       logger.error("Failed to resolve editor install status.", {
         contentId: detail.id,
@@ -94,6 +106,10 @@ function useEditorInstallStatus({
         itemId: item?.id ?? null,
       })
     } finally {
+      if (requestSeqRef.current !== requestSeq) {
+        return
+      }
+
       setIsLoading(false)
     }
   }, [canLoad, content, detail, item, logger, projects])

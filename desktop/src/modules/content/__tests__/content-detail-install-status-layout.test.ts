@@ -14,6 +14,7 @@ describe("content detail install status hook source", () => {
     expect(source).toContain("projects: toStatusProjects(projects)")
     expect(source).toContain("refreshSignal")
     expect(source).toContain("isInstallableContentDetail")
+    expect(source).toContain("requestSeqRef")
     expect(source).toContain("export { useEditorInstallStatus }")
   })
 })
