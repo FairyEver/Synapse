@@ -18,7 +18,7 @@ function AgentThinkingEvent({
   readonly profile: SynapseAgentDisplayProfile
 }) {
   return (
-    <Collapsible defaultOpen={!profile.thinkingDefaultCollapsed} className="border-y border-border py-1">
+    <Collapsible defaultOpen={!profile.thinkingDefaultCollapsed} className="py-1">
       <CollapsibleTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="w-full justify-start px-1">
           <ChevronDown data-icon="inline-start" />

@@ -41,7 +41,7 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("Bash")
     expect(html).toContain("Running")
     expect(html).toContain("pnpm test")
-    expect(html).toContain("border-y border-border")
+    expect(html).not.toContain("border-y border-border")
   })
 
   it("opens failed tool results even when profile default is collapsed", () => {

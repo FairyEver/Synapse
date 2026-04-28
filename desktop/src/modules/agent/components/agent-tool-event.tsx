@@ -36,7 +36,7 @@ function AgentToolEvent({
   )
   const status = statusLabel(item, profile)
   return (
-    <Collapsible defaultOpen={defaultOpen} className="border-y border-border py-1">
+    <Collapsible defaultOpen={defaultOpen} className="py-1">
       <div className="flex items-center justify-between gap-2">
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="min-w-0 justify-start px-1">
