@@ -3,6 +3,7 @@ import path from "node:path"
 import { pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type {
   SynapseContentInstallResult,
   SynapseInstallToEditorPayload,
@@ -29,6 +30,51 @@ import {
 
 const logger = createMainLogger("service.content-install")
 
+type EditorWriteSecurityDeps = {
+  actor: ActorIdentity
+  auditSink: AuditSink
+  permissionGuard: PermissionGuard
+}
+
+async function checkEditorWritePermission(
+  deps: EditorWriteSecurityDeps | undefined,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+  const permission = await deps.permissionGuard.check({
+    action: "fs.write",
+    actor: deps.actor,
+    context: metadata,
+    resource,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
+      action: "fs.write",
+      actor: deps.actor,
+      metadata,
+      outcome: "denied",
+      resource,
+    })
+    throw new Error("没有写入该位置的权限。")
+  }
+}
+
+function recordEditorWriteAudit(
+  deps: EditorWriteSecurityDeps | undefined,
+  resource: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.write",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource,
+  })
+}
+
 async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   const config = await configStore.load()
   const repository = getActiveRepositoryConfig(config)
@@ -54,9 +100,10 @@ function formatInstallFailure(error: unknown, targetPath: string): Error {
     : formatted
 }
 
-class ContentInstallService {
+export class ContentInstallService {
   async installToEditor(
     payload: SynapseInstallToEditorPayload,
+    security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
     const target = await editorAdapterService.resolveTarget(payload)
     const definition = getContentTypeDefinition(payload.contentType)
@@ -64,6 +111,16 @@ class ContentInstallService {
     if (target.status !== "ready") {
       throw new Error(target.message ?? "当前编辑器暂时不能安装到这个位置。")
     }
+
+    const auditMetadata = {
+      contentId: payload.contentId,
+      contentType: payload.contentType,
+      editorId: payload.editorId,
+      operation: "install",
+      scope: payload.scope,
+    }
+
+    await checkEditorWritePermission(security, target.targetPath, auditMetadata)
 
     try {
       switch (definition.install.kind) {
@@ -126,9 +183,12 @@ class ContentInstallService {
             const targetExists = await pathExists(target.targetPath)
             if (targetExists && target.targetPath !== previousSkillDirectoryPath) {
               const backupPath = `${target.targetPath}-backup`
-              await rename(target.targetPath, backupPath).catch((err) => {
-                logger.warn("Failed to backup existing skill directory", { targetPath: target.targetPath, error: err })
-              })
+              try {
+                await rename(target.targetPath, backupPath)
+              } catch (error) {
+                logger.warn("Failed to backup existing skill directory", { targetPath: target.targetPath, error })
+                throw new Error("备份旧 Skill 失败，未替换目标。")
+              }
             }
           }
 
@@ -190,8 +250,11 @@ class ContentInstallService {
           throw new Error(`不支持 ${definition.singularLabel} 的安装方式。`)
       }
     } catch (error) {
+      recordEditorWriteAudit(security, target.targetPath, "failed", auditMetadata)
       throw formatInstallFailure(error, target.targetPath)
     }
+
+    recordEditorWriteAudit(security, target.targetPath, "allowed", auditMetadata)
 
     logger.info("Content installed to editor target.", {
       contentId: payload.contentId,

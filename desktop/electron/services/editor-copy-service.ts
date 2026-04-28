@@ -7,6 +7,7 @@ import type {
   SynapseEditorCopySource,
   SynapseResolveEditorCopyTargetPayload,
 } from "../../src/types/editor-copy"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type {
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
@@ -27,6 +28,51 @@ import {
 const logger = createMainLogger("service.editor-copy")
 const MARKDOWN_EXTENSION_PATTERN = /\.(md|mdc)$/iu
 const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
+
+type EditorWriteSecurityDeps = {
+  actor: ActorIdentity
+  auditSink: AuditSink
+  permissionGuard: PermissionGuard
+}
+
+async function checkEditorWritePermission(
+  deps: EditorWriteSecurityDeps | undefined,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+  const permission = await deps.permissionGuard.check({
+    action: "fs.write",
+    actor: deps.actor,
+    context: metadata,
+    resource,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
+      action: "fs.write",
+      actor: deps.actor,
+      metadata,
+      outcome: "denied",
+      resource,
+    })
+    throw new Error("没有写入该位置的权限。")
+  }
+}
+
+function recordEditorWriteAudit(
+  deps: EditorWriteSecurityDeps | undefined,
+  resource: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.write",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource,
+  })
+}
 
 function stripRuleExtension(value: string): string {
   return value.replace(MARKDOWN_EXTENSION_PATTERN, "")
@@ -149,7 +195,10 @@ class EditorCopyService {
     return normalizeCopyTarget(payload.source, target)
   }
 
-  async copy(payload: SynapseCopyToEditorPayload): Promise<SynapseEditorCopyResult> {
+  async copy(
+    payload: SynapseCopyToEditorPayload,
+    security?: EditorWriteSecurityDeps,
+  ): Promise<SynapseEditorCopyResult> {
     const target = await this.resolveTarget(payload)
 
     if (target.status !== "ready") {
@@ -160,6 +209,16 @@ class EditorCopyService {
       throw new Error("目标位置已有内容。")
     }
 
+    const auditMetadata = {
+      contentType: payload.source.itemType,
+      editorId: payload.targetEditorId,
+      operation: "copy",
+      scope: payload.targetScope,
+      sourceEditorId: payload.source.editorId,
+    }
+
+    await checkEditorWritePermission(security, target.targetPath, auditMetadata)
+
     try {
       if (payload.source.itemType === "rule") {
         await this.copyRule(payload, target)
@@ -167,8 +226,11 @@ class EditorCopyService {
         await this.copySkill(payload, target)
       }
     } catch (error) {
+      recordEditorWriteAudit(security, target.targetPath, "failed", auditMetadata)
       throw formatEditorWriteFailure(error, target.targetPath)
     }
+
+    recordEditorWriteAudit(security, target.targetPath, "allowed", auditMetadata)
 
     logger.info("Copied scan item to editor target.", {
       contentType: payload.source.itemType,

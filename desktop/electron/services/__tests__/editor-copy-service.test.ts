@@ -14,6 +14,10 @@ vi.mock("electron", () => ({
 
 import { EditorCopyService } from "../editor-copy-service"
 import type { SynapseEditorCopySource } from "../../../src/types/editor-copy"
+import {
+  createPermissionGuard,
+  InMemoryAuditSink,
+} from "../../runtime/security"
 
 const tempRoots: string[] = []
 
@@ -120,5 +124,36 @@ describe("EditorCopyService", () => {
     })
 
     await expect(readFile(targetPath, "utf8")).resolves.toContain("Review carefully.")
+  })
+
+  it("records an allowed fs.write audit after copying to an editor target", async () => {
+    const root = await createTempRoot()
+    const sourcePath = path.join(root, "source", "review-rule.md")
+    const projectPath = path.join(root, "project")
+    await mkdir(path.dirname(sourcePath), { recursive: true })
+    await mkdir(projectPath, { recursive: true })
+    await writeFile(sourcePath, "Review carefully.", "utf8")
+
+    const auditSink = new InMemoryAuditSink()
+    const service = new EditorCopyService()
+    const result = await service.copy({
+      source: createRuleSource(sourcePath),
+      targetEditorId: "cursor",
+      targetProjectPath: projectPath,
+      targetScope: "project",
+    }, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        outcome: "allowed",
+        resource: result.targetPath,
+      }),
+    ])
   })
 })

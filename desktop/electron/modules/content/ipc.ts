@@ -10,6 +10,7 @@ import { app, dialog } from "electron"
 import path from "node:path"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { getContentTypeDefinition } from "../../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../../src/lib/config"
 import type { SynapseContentType } from "../../../src/types/content"
@@ -407,9 +408,13 @@ export const contentIpcModule: IpcModule = {
       channel: "synapse:content:install-to-editor",
       request: anySchema,
       response: anySchema,
-      handler: async (_ctx, payload: SynapseInstallToEditorPayload) => {
+      handler: async (ctx, payload: SynapseInstallToEditorPayload) => {
         logger.info(`Handling content.installToEditor request. contentType: ${payload.contentType}, contentId: ${payload.contentId}, editorId: ${payload.editorId}, scope: ${payload.scope}`)
-        return contentInstallService.installToEditor(payload)
+        return contentInstallService.installToEditor(payload, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
       },
     },
     readEditorInstallFormValues: {

@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
   SynapseCopyToEditorPayload,
   SynapseResolveEditorCopyTargetPayload,
@@ -27,7 +28,7 @@ export const editorCopyIpcModule: IpcModule = {
       channel: "synapse:editor-copy:copy",
       request: anySchema,
       response: anySchema,
-      handler: async (_ctx, payload: SynapseCopyToEditorPayload) => {
+      handler: async (ctx, payload: SynapseCopyToEditorPayload) => {
         logger.info("Handling editor copy request.", {
           contentType: payload.source.itemType,
           sourceEditorId: payload.source.editorId,
@@ -35,7 +36,11 @@ export const editorCopyIpcModule: IpcModule = {
           targetEditorId: payload.targetEditorId,
           targetScope: payload.targetScope,
         })
-        return editorCopyService.copy(payload)
+        return editorCopyService.copy(payload, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
       },
     },
   },
