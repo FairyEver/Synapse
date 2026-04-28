@@ -15,7 +15,6 @@ const UPDATE_CHANNELS = {
   stateChanged: "synapse:update:state-changed",
   openUpdatePage: "synapse:update:open-update-page",
 } as const
-import { isTrustedRendererContents } from "../ipc/validated-ipc"
 import { createMainLogger } from "./log-store"
 
 const autoUpdater: AppUpdater = electronUpdater.autoUpdater
@@ -72,7 +71,7 @@ class UpdateService {
   private state: SynapseAppUpdateState = createBaseState()
   private downloadCancellationToken: CancellationToken | null = null
   private isCancellingDownload = false
-  private isAutoCheck = false
+  private activeUpdateMode: "manual" | "auto" | null = null
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
@@ -84,6 +83,24 @@ class UpdateService {
   private clearDownloadTracking(): void {
     this.downloadCancellationToken = null
     this.isCancellingDownload = false
+  }
+
+  private beginUpdateFlow(mode: "manual" | "auto"): void {
+    this.activeUpdateMode = mode
+  }
+
+  private clearUpdateFlow(mode?: "manual" | "auto"): void {
+    if (!mode || this.activeUpdateMode === mode) {
+      this.activeUpdateMode = null
+    }
+  }
+
+  private isManualUpdateFlow(): boolean {
+    return this.activeUpdateMode === "manual"
+  }
+
+  private isAutoUpdateFlow(): boolean {
+    return this.activeUpdateMode === "auto"
   }
 
   private isDownloadCancelledError(error: unknown): boolean {
@@ -153,7 +170,7 @@ class UpdateService {
 
     autoUpdater.on("checking-for-update", () => {
       logger.info("Checking for updates.")
-      if (!this.isAutoCheck) {
+      if (this.isManualUpdateFlow()) {
         this.setState({
           status: "checking",
           message: "正在检查更新...",
@@ -173,9 +190,9 @@ class UpdateService {
       logger.info("Update is available.", {
         version: updateInfo.version,
       })
-      if (this.isAutoCheck) {
+      if (this.isAutoUpdateFlow()) {
         this.handleAutoCheckUpdateAvailable(updateInfo)
-      } else {
+      } else if (this.isManualUpdateFlow()) {
         this.handleUpdateAvailable(updateInfo)
       }
     })
@@ -184,7 +201,7 @@ class UpdateService {
       logger.info("No update available.", {
         version: updateInfo.version,
       })
-      if (!this.isAutoCheck) {
+      if (this.isManualUpdateFlow()) {
         this.setState({
           status: "not-available",
           message: "当前已经是最新版本。",
@@ -199,10 +216,11 @@ class UpdateService {
           downloadedFilePath: null,
         })
       }
+      this.clearUpdateFlow()
     })
 
     autoUpdater.on("download-progress", (progressInfo) => {
-      if (!this.isAutoCheck) {
+      if (this.isManualUpdateFlow()) {
         this.handleDownloadProgress(progressInfo)
       }
     })
@@ -212,7 +230,7 @@ class UpdateService {
         version: event.version,
         downloadedFile: event.downloadedFile,
       })
-      if (!this.isAutoCheck) {
+      if (this.isManualUpdateFlow()) {
         this.handleUpdateDownloaded(event)
       }
     })
@@ -221,20 +239,25 @@ class UpdateService {
       logger.info("Update download cancelled.", {
         version: updateInfo.version,
       })
-      if (!this.isAutoCheck) {
+      if (this.isManualUpdateFlow()) {
         this.handleDownloadCancelled(updateInfo)
       }
     })
 
     autoUpdater.on("error", (error) => {
       logger.error("App updater reported an error.", error)
-      if (!this.isAutoCheck) {
+      if (this.isManualUpdateFlow()) {
         if (this.isDownloadCancelledError(error)) {
           this.handleDownloadCancelled()
           return
         }
 
         this.handleError(error)
+        return
+      }
+
+      if (this.isAutoUpdateFlow()) {
+        this.clearUpdateFlow("auto")
       }
     })
 
@@ -265,7 +288,7 @@ class UpdateService {
       return this.getState()
     }
 
-    this.isAutoCheck = false
+    this.beginUpdateFlow("manual")
 
     try {
       await autoUpdater.checkForUpdates()
@@ -348,6 +371,7 @@ class UpdateService {
 
   private handleUpdateDownloaded(event: UpdateDownloadedEvent): void {
     this.clearDownloadTracking()
+    this.clearUpdateFlow("manual")
 
     this.setState({
       status: "downloaded",
@@ -364,6 +388,7 @@ class UpdateService {
 
   private handleDownloadCancelled(updateInfo?: UpdateInfo): void {
     this.clearDownloadTracking()
+    this.clearUpdateFlow("manual")
 
     if (this.state.status !== "downloading" && this.state.status !== "available") {
       return
@@ -385,6 +410,7 @@ class UpdateService {
 
   private handleError(error: unknown): void {
     this.clearDownloadTracking()
+    this.clearUpdateFlow()
 
     const message =
       error instanceof Error && error.message.trim()
@@ -417,7 +443,6 @@ class UpdateService {
       this.windowManager.broadcast(
         UPDATE_CHANNELS.stateChanged,
         nextState,
-        (window) => isTrustedRendererContents(window as unknown as Electron.WebContents)
       )
     }
   }
@@ -437,12 +462,16 @@ class UpdateService {
         || this.state.status === "available"
         || this.state.status === "downloading"
         || this.state.status === "downloaded"
+        || this.activeUpdateMode !== null
       ) {
         return
       }
 
-      this.isAutoCheck = true
-      autoUpdater.checkForUpdates().catch(() => {})
+      this.beginUpdateFlow("auto")
+      autoUpdater.checkForUpdates().catch((error) => {
+        logger.warn("Auto update check failed.", { error })
+        this.clearUpdateFlow("auto")
+      })
     }
 
     setTimeout(runAutoCheck, AUTO_CHECK_INITIAL_DELAY_MS)
@@ -450,6 +479,8 @@ class UpdateService {
   }
 
   private handleAutoCheckUpdateAvailable(updateInfo: UpdateInfo): void {
+    this.clearUpdateFlow("auto")
+
     if (this.lastNotifiedVersion === updateInfo.version) {
       return
     }
@@ -492,7 +523,6 @@ class UpdateService {
       this.windowManager.broadcast(
         UPDATE_CHANNELS.openUpdatePage,
         {},
-        (w) => isTrustedRendererContents(w as unknown as Electron.WebContents)
       )
 
       if (!hasVisibleWindow) {

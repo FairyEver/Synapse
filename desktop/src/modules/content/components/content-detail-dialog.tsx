@@ -41,7 +41,10 @@ import {
   invalidateIconImageCache,
 } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
-import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
+import {
+  useContentDetailState,
+  type SynapseLoadedContentVersion,
+} from "@/modules/content/hooks/use-content-detail-state"
 import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
 import type { ConflictState } from "@/modules/content/types/conflict"
 import type {
@@ -65,9 +68,12 @@ type ContentDetailDialogLabels = {
   loadingTitle: string
 }
 
-type ContentDetailDialogProps<TPayload> = {
-  contentType: SynapseContentType
-  item: SynapseContentMeta | null
+type ContentDetailDialogProps<
+  TPayload,
+  TContentType extends SynapseContentType,
+> = {
+  contentType: TContentType
+  item: SynapseContentMeta<TContentType> | null
   labels: ContentDetailDialogLabels
   logCategory: string
   onContentChanged?: () => void
@@ -87,13 +93,13 @@ type ContentDetailDialogProps<TPayload> = {
   }) => ReactNode
   renderVersionView: (props: {
     mode: "rendered" | "source"
-    version: SynapseContentDetail<SynapseContentType>
+    version: SynapseLoadedContentVersion<TContentType>
   }) => ReactNode
-  buildInitialValue: (detail: SynapseContentDetail<SynapseContentType>) => TPayload
+  buildInitialValue: (detail: SynapseContentDetail<TContentType>) => TPayload
   serializePayload?: (payload: TPayload) => Promise<TPayload> | TPayload
 }
 
-function ContentDetailDialog<TPayload>({
+function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>({
   contentType,
   item,
   labels,
@@ -106,7 +112,7 @@ function ContentDetailDialog<TPayload>({
   renderVersionView,
   buildInitialValue,
   serializePayload,
-}: ContentDetailDialogProps<TPayload>) {
+}: ContentDetailDialogProps<TPayload, TContentType>) {
   const logger = useMemo(() => createRendererLogger(logCategory), [logCategory])
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const repoProfileMap = useRepoProfileMap()
@@ -143,7 +149,7 @@ function ContentDetailDialog<TPayload>({
     setSelectedHistoryDirname: setSelectedHistoryDirnameRaw,
     setViewMode: setViewModeRaw,
     viewMode,
-  } = useContentDetailState({
+  } = useContentDetailState<TContentType>({
     invalidTypeMessage: `读取到的内容不是 ${labels.singular}。`,
     item,
     loadDetailErrorMessage: `读取 ${labels.singular} 详情失败。`,

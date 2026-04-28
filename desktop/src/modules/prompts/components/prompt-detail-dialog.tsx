@@ -6,7 +6,6 @@ import { buildBaseContentInitialValue } from "@/modules/content/lib/content-payl
 import { PromptCreateDialog } from "@/modules/prompts/components/prompt-create-dialog"
 import { PromptVersionView } from "@/modules/prompts/components/prompt-version-view"
 import type { SynapseCreatePromptPayload, SynapsePromptMeta } from "@/types/content"
-import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
 
 type PromptDetailDialogProps = {
   item: SynapsePromptMeta | null
@@ -39,7 +38,7 @@ function PromptDetailDialog({
   refreshSignal = 0,
 }: PromptDetailDialogProps) {
   return (
-    <ContentDetailDialog<SynapseCreatePromptPayload>
+    <ContentDetailDialog
       contentType="prompt"
       item={item}
       labels={PROMPT_LABELS}
@@ -53,7 +52,7 @@ function PromptDetailDialog({
         <PromptVersionView
           mode={mode}
           surface="plain"
-          version={version as unknown as SynapseLoadedContentVersion<"prompt">}
+          version={version}
         />
       )}
       buildInitialValue={buildBaseContentInitialValue}

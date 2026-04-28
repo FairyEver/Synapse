@@ -91,7 +91,8 @@ vi.mock("../log-store", () => ({
 }))
 
 vi.mock("../../ipc/validated-ipc", () => ({
-  isTrustedRendererContents: () => true,
+  isTrustedRendererContents: (webContents: { getURL: () => string }) =>
+    webContents.getURL() === "app://trusted",
 }))
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
@@ -113,6 +114,7 @@ describe("UpdateService", () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     if (platformDescriptor) {
       Object.defineProperty(process, "platform", platformDescriptor)
     }
@@ -127,5 +129,95 @@ describe("UpdateService", () => {
     expect(state.status).toBe("downloading")
     expect(state.downloadPercent).toBe(0)
     expect(state.message).toBe("正在下载更新...")
+  })
+
+  it("broadcasts manual update state changes to managed windows", async () => {
+    const { updateService } = await importUpdateService()
+    const sent: Array<{ channel: string; payload: unknown }> = []
+
+    updateService.setWindowManager({
+      attach: vi.fn(),
+      broadcast: vi.fn((channel, payload, filter) => {
+        const window = {
+          id: 1,
+          role: "main" as const,
+          isDestroyed: () => false,
+          isVisible: () => true,
+          isMinimized: () => false,
+          show: vi.fn(),
+          focus: vi.fn(),
+          restore: vi.fn(),
+          send: (nextChannel: string, nextPayload: unknown) => {
+            sent.push({ channel: nextChannel, payload: nextPayload })
+          },
+          close: vi.fn(),
+        }
+
+        if (filter && !filter(window)) {
+          return 0
+        }
+
+        window.send(channel, payload)
+        return 1
+      }),
+      close: vi.fn(),
+      getAllWindows: vi.fn(() => []),
+      list: vi.fn(() => []),
+      open: vi.fn(),
+      register: vi.fn(),
+    })
+
+    await updateService.checkForUpdates()
+
+    expect(sent).toContainEqual({
+      channel: "synapse:update:state-changed",
+      payload: expect.objectContaining({
+        downloadPercent: 0,
+        status: "downloading",
+      }),
+    })
+  })
+
+  it("does not handle a stale auto-check result as a manual update", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    const staleAutoCheckResolvers: Array<() => void> = []
+
+    updaterMock.autoUpdater.checkForUpdates
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        staleAutoCheckResolvers.push(() => {
+          updaterMock.autoUpdater.emit("update-available", {
+            version: "0.2.50",
+            files: [{ url: "Synapse-0.2.50-mac-arm64.zip" }],
+          })
+          resolve({
+            isUpdateAvailable: true,
+            updateInfo: { version: "0.2.50" },
+            versionInfo: { version: "0.2.50" },
+          })
+        })
+      }))
+      .mockImplementationOnce(async () => {
+        updaterMock.autoUpdater.emit("checking-for-update")
+        updaterMock.autoUpdater.emit("update-not-available", { version: "0.2.28" })
+        return {
+          isUpdateAvailable: false,
+          updateInfo: { version: "0.2.28" },
+          versionInfo: { version: "0.2.28" },
+        }
+      })
+
+    updateService.startAutoCheck()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(staleAutoCheckResolvers.length).toBeGreaterThan(0)
+
+    const manualState = await updateService.checkForUpdates()
+    expect(manualState.status).toBe("not-available")
+
+    staleAutoCheckResolvers[0]?.()
+    await Promise.resolve()
+
+    expect(updaterMock.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
+    expect(updateService.getState().status).toBe("not-available")
   })
 })

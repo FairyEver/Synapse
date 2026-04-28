@@ -7,7 +7,6 @@ import { SkillVersionView } from "@/modules/skills/components/skill-version-view
 import type { CreateSkillPayload } from "@/modules/skills/types"
 import { serializeCreateSkillFiles } from "@/modules/skills/utils"
 import type { SynapseContentDetail, SynapseSkillMeta } from "@/types/content"
-import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
 
 type SkillDetailDialogProps = {
   item: SynapseSkillMeta | null
@@ -40,7 +39,7 @@ function SkillDetailDialog({
   refreshSignal = 0,
 }: SkillDetailDialogProps) {
   return (
-    <ContentDetailDialog<CreateSkillPayload>
+    <ContentDetailDialog
       contentType="skill"
       item={item}
       labels={SKILL_LABELS}
@@ -54,7 +53,7 @@ function SkillDetailDialog({
         <SkillVersionView
           mode={mode}
           surface="plain"
-          version={version as unknown as SynapseLoadedContentVersion<"skill">}
+          version={version}
         />
       )}
       buildInitialValue={(detail: SynapseContentDetail): CreateSkillPayload => ({

@@ -6,7 +6,19 @@
 
 import { contextBridge, ipcRenderer } from "electron"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
+import {
+  createDomainEventPayloadSubscription,
+  createRawPayloadSubscription,
+} from "./preload-event-subscriptions"
 import type { SynapseBridge } from "../src/types/bridge"
+import type { SynapseAgentDomainEvent } from "../src/types/agent"
+import type { DataStoreChangeEvent } from "../src/types/data-store"
+import type {
+  SynapsePendingPushUpdatedEvent,
+  SynapseRepositoryProgressEvent,
+  SynapseRepositoryUpdatedEvent,
+} from "../src/types/repository"
+import type { SynapseAppUpdateState } from "../src/types/update"
 
 const IPC_CHANNELS = {
   "content": {
@@ -150,17 +162,9 @@ const IPC_CHANNELS = {
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
 const EVENT_CHANNELS = {
-  repository: {
-    pendingPushesUpdated: "synapse:repository:pending-pushes-updated",
-    progress: "synapse:repository:progress",
-    updated: "synapse:repository:updated",
-  },
   update: {
     stateChanged: "synapse:update:state-changed",
     openUpdatePage: "synapse:update:open-update-page",
-  },
-  dataStore: {
-    changed: "synapse:data-store:changed",
   },
   agent: {
     event: "synapse:events:agent",
@@ -304,12 +308,24 @@ const synapseBridge: SynapseBridge = {
     getStates: invoke(IPC_CHANNELS.repository.getStates),
     initializeStructure: (repositoryUuid) =>
       invoke(IPC_CHANNELS.repository.initializeStructure)({ repositoryUuid }),
-    onPendingPushesUpdated: subscribe(EVENT_CHANNELS.repository.pendingPushesUpdated) as unknown as SynapseBridge["repository"]["onPendingPushesUpdated"],
+    onPendingPushesUpdated: createDomainEventPayloadSubscription<SynapsePendingPushUpdatedEvent>(
+      subscribe,
+      "repository",
+      "repository.pendingPushesUpdated",
+    ),
     runMaintenance: (repositoryUuid) =>
       invoke(IPC_CHANNELS.repository.runMaintenance)({ repositoryUuid }),
     sync: (repositoryUuid) => invoke(IPC_CHANNELS.repository.sync)({ repositoryUuid }),
-    onProgress: subscribe(EVENT_CHANNELS.repository.progress) as unknown as SynapseBridge["repository"]["onProgress"],
-    onUpdated: subscribe(EVENT_CHANNELS.repository.updated) as unknown as SynapseBridge["repository"]["onUpdated"],
+    onProgress: createDomainEventPayloadSubscription<SynapseRepositoryProgressEvent>(
+      subscribe,
+      "repository",
+      "repository.progress",
+    ),
+    onUpdated: createDomainEventPayloadSubscription<SynapseRepositoryUpdatedEvent>(
+      subscribe,
+      "repository",
+      "repository.updated",
+    ),
     validateDirectory: (targetPath) =>
       invoke(IPC_CHANNELS.repository.validateDirectory)({ targetPath }),
   },
@@ -318,8 +334,14 @@ const synapseBridge: SynapseBridge = {
     checkForUpdates: invoke(IPC_CHANNELS.update.checkForUpdates),
     getState: invoke(IPC_CHANNELS.update.getState),
     installUpdate: invoke(IPC_CHANNELS.update.installUpdate),
-    onStateChanged: subscribe(EVENT_CHANNELS.update.stateChanged) as unknown as SynapseBridge["updater"]["onStateChanged"],
-    onOpenUpdatePage: subscribe(EVENT_CHANNELS.update.openUpdatePage) as unknown as SynapseBridge["updater"]["onOpenUpdatePage"],
+    onStateChanged: createRawPayloadSubscription<SynapseAppUpdateState>(
+      subscribe,
+      EVENT_CHANNELS.update.stateChanged,
+    ),
+    onOpenUpdatePage: createRawPayloadSubscription<void>(
+      subscribe,
+      EVENT_CHANNELS.update.openUpdatePage,
+    ),
   },
   dataStore: {
     listTables: invoke(DATA_STORE_CHANNELS.listTables),
@@ -360,7 +382,11 @@ const synapseBridge: SynapseBridge = {
     openMCPSettings: (target) =>
       invoke(DATA_STORE_CHANNELS.openMCPSettings)(target),
     registerMCP: (target) => invoke(DATA_STORE_CHANNELS.registerMCP)(target),
-    onChanged: subscribe(EVENT_CHANNELS.dataStore.changed) as unknown as SynapseBridge["dataStore"]["onChanged"],
+    onChanged: createDomainEventPayloadSubscription<DataStoreChangeEvent>(
+      subscribe,
+      "data-store",
+      "data-store.changed",
+    ),
   },
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
@@ -377,7 +403,10 @@ const synapseBridge: SynapseBridge = {
     getRuntimeStatus: invoke(IPC_CHANNELS.agent.getRuntimeStatus),
     listCommands: (projectId) => invoke(IPC_CHANNELS.agent.listCommands)({ projectId }),
     openReference: (args) => invoke(IPC_CHANNELS.agent.openReference)(args),
-    onEvent: subscribe(EVENT_CHANNELS.agent.event) as unknown as SynapseBridge["agent"]["onEvent"],
+    onEvent: createRawPayloadSubscription<SynapseAgentDomainEvent>(
+      subscribe,
+      EVENT_CHANNELS.agent.event,
+    ),
   },
   connectors: {
     feishu: {
