@@ -87,6 +87,10 @@ import type {
   SynapseResolveEditorCopyTargetPayload,
 } from "./editor-copy"
 import type {
+  SynapseEditorInstallStatusResult,
+  SynapseResolveEditorInstallStatusPayload,
+} from "./editor-install-status"
+import type {
   EditorScanQuickPublishDraft,
   EditorScanQuickPublishRequest,
   EditorScanResult,
@@ -244,6 +248,11 @@ export type SynapseBridge = {
     resolveTarget: (
       payload: SynapseResolveEditorCopyTargetPayload,
     ) => Promise<SynapseEditorResolvedTarget>
+  }
+  editorInstallStatus: {
+    resolveForContent: (
+      payload: SynapseResolveEditorInstallStatusPayload,
+    ) => Promise<SynapseEditorInstallStatusResult>
   }
   shell: {
     showItemInFolder: (filePath: string) => void
