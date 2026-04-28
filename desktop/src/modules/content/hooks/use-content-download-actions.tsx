@@ -10,9 +10,10 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { EditorIcon } from "@/components/editor-icon"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
+import type { EditorWriteTargetInitialSelection } from "@/modules/content/components/editor-write-target-selector"
 import { useEditorAdaptersForContentType } from "@/modules/content/hooks/use-editor-adapters-for-content-type"
 import type { SynapseContentMeta } from "@/types/content"
-import type { SynapseEditorAdapterSummary } from "@/types/editor"
+import type { SynapseEditorAdapterSummary, SynapseEditorId } from "@/types/editor"
 
 type ContentActionMenuItem = {
   key: string
@@ -30,11 +31,13 @@ type ContentActionMenuSection = {
 
 type UseContentDownloadActionsProps = {
   item: SynapseContentMeta
+  onInstalled?: () => Promise<void> | void
   onInstallDialogOpenChange?: (open: boolean) => void
 }
 
 function useContentDownloadActions({
   item,
+  onInstalled,
   onInstallDialogOpenChange,
 }: UseContentDownloadActionsProps) {
   const definition = getContentTypeDefinition(item.type)
@@ -47,6 +50,8 @@ function useContentDownloadActions({
   const [isCopying, setIsCopying] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false)
+  const [initialInstallSelection, setInitialInstallSelection] =
+    useState<EditorWriteTargetInitialSelection | null>(null)
   const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
   const onInstallDialogOpenChangeRef = useRef(onInstallDialogOpenChange)
 
@@ -67,6 +72,7 @@ function useContentDownloadActions({
   })
 
   const openInstallDialog = useCallback((editor: SynapseEditorAdapterSummary) => {
+    setInitialInstallSelection(null)
     setSelectedEditor(editor)
     setIsInstallDialogOpen((prevOpen) => {
       if (prevOpen !== true) {
@@ -83,6 +89,10 @@ function useContentDownloadActions({
   }, [item.id, item.type, logger])
 
   const handleInstallDialogOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen) {
+      setInitialInstallSelection(null)
+    }
+
     setIsInstallDialogOpen((prevOpen) => {
       if (prevOpen !== nextOpen) {
         logger.info("Content install dialog visibility changed.", {
@@ -96,6 +106,33 @@ function useContentDownloadActions({
       return nextOpen
     })
   }, [item.id, item.type, logger, selectedEditor])
+
+  const openInstallDialogForEditorId = useCallback(async ({
+    editorId,
+    initialSelection,
+  }: {
+    editorId: SynapseEditorId
+    initialSelection: EditorWriteTargetInitialSelection
+  }): Promise<boolean> => {
+    const adaptersToSearch = filteredAdapters.length > 0
+      ? filteredAdapters
+      : await loadInstallTargets()
+    const adapter = adaptersToSearch.find((candidate) => candidate.id === editorId)
+
+    if (!adapter) {
+      logger.warn("Requested editor install target is unavailable.", {
+        contentId: item.id,
+        contentType: item.type,
+        editorId,
+      })
+      return false
+    }
+
+    setInitialInstallSelection(initialSelection)
+    setSelectedEditor(adapter)
+    setIsInstallDialogOpen(true)
+    return true
+  }, [filteredAdapters, item.id, item.type, loadInstallTargets, logger])
 
   useEffect(() => {
     onInstallDialogOpenChangeRef.current?.(isInstallDialogOpen)
@@ -293,7 +330,9 @@ function useContentDownloadActions({
     installDialog: canInstall ? (
       <ContentInstallDialog
         editor={selectedEditor}
+        initialSelection={initialInstallSelection}
         item={item}
+        onInstalled={onInstalled}
         open={isInstallDialogOpen}
         onOpenChange={handleInstallDialogOpenChange}
         projects={config.global.projects}
@@ -304,6 +343,7 @@ function useContentDownloadActions({
     isCopying,
     isDownloading,
     loadInstallTargets,
+    openInstallDialogForEditorId,
   }
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   openContentDetailWindow,
 } from "@/app-shell/content"
+import { useAppConfig } from "@/app-shell/config"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -34,8 +35,12 @@ import { formatDateTime } from "@/lib/date-time"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
-import { ContentDetailMenubar } from "@/modules/content/components/content-detail-menubar"
+import {
+  ContentDetailMenubar,
+  type ContentInstallTargetRequest,
+} from "@/modules/content/components/content-detail-menubar"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
+import { EditorInstallStatusPanel } from "@/modules/content/components/editor-install-status-panel"
 import {
   ContentItemIcon,
   invalidateIconImageCache,
@@ -46,6 +51,7 @@ import {
   type SynapseLoadedContentVersion,
 } from "@/modules/content/hooks/use-content-detail-state"
 import { useContentFavorites } from "@/modules/content/hooks/use-content-favorites"
+import { useEditorInstallStatus } from "@/modules/content/hooks/use-editor-install-status"
 import type { ConflictState } from "@/modules/content/types/conflict"
 import type {
   SynapseContentDetail,
@@ -53,6 +59,7 @@ import type {
   SynapseContentType,
   SynapseUpdateContentPayload,
 } from "@/types/content"
+import type { SynapseEditorInstallStatusEntry } from "@/types/editor-install-status"
 
 type ContentDetailDialogLabels = {
   singular: string
@@ -115,6 +122,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
 }: ContentDetailDialogProps<TPayload, TContentType>) {
   const logger = useMemo(() => createRendererLogger(logCategory), [logCategory])
   const { currentRepoProfileState } = useCurrentRepoProfile()
+  const { config } = useAppConfig()
   const repoProfileMap = useRepoProfileMap()
   const activeRepository = useActiveRepository()
   const { error, promise } = useAppNotifications()
@@ -130,6 +138,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [conflictState, setConflictState] = useState<ConflictState<TPayload> | null>(null)
   const [contentReady, setContentReady] = useState(false)
+  const [installStatusRefreshSignal, setInstallStatusRefreshSignal] = useState(0)
+  const [installTargetRequest, setInstallTargetRequest] = useState<ContentInstallTargetRequest | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -157,6 +167,14 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     logCategory,
     open,
     refreshSignal,
+  })
+  const editorInstallStatus = useEditorInstallStatus({
+    content: displayedVersion?.content ?? detail?.content ?? null,
+    detail,
+    item,
+    open,
+    projects: config.global.projects,
+    refreshSignal: installStatusRefreshSignal,
   })
   const viewModeRef = useRef(viewMode)
   viewModeRef.current = viewMode
@@ -204,6 +222,31 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     }
     setSelectedHistoryDirnameRaw(nextHistoryDirname)
   }, [contentType, item?.id, logger, setSelectedHistoryDirnameRaw])
+
+  const handleInstallStatusRefresh = useCallback(() => {
+    setInstallStatusRefreshSignal((value) => value + 1)
+  }, [])
+
+  const handleOpenInstallTarget = useCallback((entry: SynapseEditorInstallStatusEntry) => {
+    const project = entry.projectId
+      ? config.global.projects.find((candidate) => candidate.id === entry.projectId)
+      : null
+    const projectPath = entry.scope === "project" ? project?.path : undefined
+
+    logger.info("Install requested from status panel.", {
+      contentId: item?.id ?? null,
+      contentType,
+      editorId: entry.editorId,
+      projectId: entry.projectId ?? null,
+      scope: entry.scope,
+    })
+    setInstallTargetRequest({
+      editorId: entry.editorId,
+      projectId: entry.projectId,
+      projectPath,
+      scope: entry.scope,
+    })
+  }, [config.global.projects, contentType, item?.id, logger])
 
   useEffect(() => {
     if (!open) {
@@ -478,6 +521,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
                     canDelete={!isReadonly}
                     canEdit={Boolean(detail) && !isReadonly && !isRepositoryInitializing && !isSyncing}
                     canOpenInNewWindow={Boolean(displayedVersion)}
+                    installTargetRequest={installTargetRequest}
                     isFavorite={isItemFavorite}
                     isRepositoryInitializing={Boolean(isRepositoryInitializing)}
                     isSyncing={isSyncing}
@@ -490,6 +534,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
                       logger.info("Edit dialog opened.", { contentId: item.id, contentType })
                       setIsEditOpen(true)
                     }}
+                    onInstalled={handleInstallStatusRefresh}
+                    onInstallTargetRequestConsumed={() => setInstallTargetRequest(null)}
                     onOpenInNewWindow={() => {
                       void handleOpenInNewWindow()
                     }}
@@ -514,22 +560,35 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             contentReady ? "opacity-100" : "opacity-0",
           )}>
             {contentReady ? (
-              <ContentDetailPanel
-                detail={detail}
-                displayedVersion={displayedVersion}
-                emptyDescription={labels.emptyDescription}
-                emptyTitle={labels.emptyTitle}
-                errorTitle={labels.errorTitle}
-                history={historyEntries}
-                isLoading={isLoading}
-                loadingTitle={labels.loadingTitle}
-                onSelectedHistoryDirnameChange={handleHistorySelectionChange}
-                onViewModeChange={handleViewModeChange}
-                previewError={previewError}
-                renderVersion={renderVersionView}
-                selectedHistoryDirname={selectedHistoryDirname}
-                viewMode={viewMode}
-              />
+              <>
+                {detail?.type === "rule" || detail?.type === "skill" ? (
+                  <div className="mb-4">
+                    <EditorInstallStatusPanel
+                      entries={editorInstallStatus.entries}
+                      error={editorInstallStatus.error}
+                      isLoading={editorInstallStatus.isLoading}
+                      onOpenInstallTarget={handleOpenInstallTarget}
+                      onRefresh={editorInstallStatus.refresh}
+                    />
+                  </div>
+                ) : null}
+                <ContentDetailPanel
+                  detail={detail}
+                  displayedVersion={displayedVersion}
+                  emptyDescription={labels.emptyDescription}
+                  emptyTitle={labels.emptyTitle}
+                  errorTitle={labels.errorTitle}
+                  history={historyEntries}
+                  isLoading={isLoading}
+                  loadingTitle={labels.loadingTitle}
+                  onSelectedHistoryDirnameChange={handleHistorySelectionChange}
+                  onViewModeChange={handleViewModeChange}
+                  previewError={previewError}
+                  renderVersion={renderVersionView}
+                  selectedHistoryDirname={selectedHistoryDirname}
+                  viewMode={viewMode}
+                />
+              </>
             ) : null}
           </div>
         </DialogContent>

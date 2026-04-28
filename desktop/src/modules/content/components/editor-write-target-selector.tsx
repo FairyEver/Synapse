@@ -42,10 +42,17 @@ type EditorWriteTargetSelection = {
   scope: SynapseEditorInstallScope
 }
 
+type EditorWriteTargetInitialSelection = {
+  projectId?: string
+  projectPath?: string
+  scope: SynapseEditorInstallScope
+}
+
 type EditorWriteTargetSelectorProps = {
   actionKind: "install" | "copy"
   contentType: Extract<SynapseContentType, "rule" | "skill">
   editor: SynapseEditorAdapterSummary
+  initialSelection?: EditorWriteTargetInitialSelection | null
   loggerName: string
   onError?: (message: string) => void
   onSelectionChange: (selection: EditorWriteTargetSelection) => void
@@ -66,6 +73,7 @@ function EditorWriteTargetSelector({
   actionKind,
   contentType,
   editor,
+  initialSelection,
   loggerName,
   onError,
   onSelectionChange,
@@ -97,12 +105,39 @@ function EditorWriteTargetSelector({
       return
     }
 
-    setScope(editor.supportsGlobal ? "global" : "project")
-    setProjectSelection(projects[0]?.id ?? CUSTOM_PROJECT_OPTION)
-    setCustomProjectPath("")
+    const nextScope =
+      initialSelection?.scope === "project" && editor.supportsProject
+        ? "project"
+        : initialSelection?.scope === "global" && editor.supportsGlobal
+          ? "global"
+          : editor.supportsGlobal ? "global" : "project"
+    const initialProject = initialSelection?.projectId
+      ? projects.find((project) => project.id === initialSelection.projectId)
+      : null
+
+    setScope(nextScope)
+    if (initialProject) {
+      setProjectSelection(initialProject.id)
+      setCustomProjectPath("")
+    } else if (initialSelection?.projectPath) {
+      setProjectSelection(CUSTOM_PROJECT_OPTION)
+      setCustomProjectPath(initialSelection.projectPath)
+    } else {
+      setProjectSelection(projects[0]?.id ?? CUSTOM_PROJECT_OPTION)
+      setCustomProjectPath("")
+    }
     setGlobalTargetState(createIdleTargetState())
     setProjectTargetState(createIdleTargetState())
-  }, [editor.id, editor.supportsGlobal, open, projects])
+  }, [
+    editor.id,
+    editor.supportsGlobal,
+    editor.supportsProject,
+    initialSelection?.projectId,
+    initialSelection?.projectPath,
+    initialSelection?.scope,
+    open,
+    projects,
+  ])
 
   useEffect(() => {
     if (!open || !editor.supportsGlobal) {
@@ -396,4 +431,8 @@ function EditorWriteTargetSelector({
 }
 
 export { EditorWriteTargetSelector }
-export type { EditorWriteTargetSelection, ResolveEditorTargetInput }
+export type {
+  EditorWriteTargetInitialSelection,
+  EditorWriteTargetSelection,
+  ResolveEditorTargetInput,
+}

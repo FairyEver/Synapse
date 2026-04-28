@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,17 +21,28 @@ import {
 import { getContentTypeDefinition } from "@/config/content-types"
 import { useContentDownloadActions } from "@/modules/content/hooks/use-content-download-actions"
 import type { SynapseContentMeta } from "@/types/content"
+import type { SynapseEditorId, SynapseEditorInstallScope } from "@/types/editor"
+
+type ContentInstallTargetRequest = {
+  editorId: SynapseEditorId
+  projectId?: string
+  projectPath?: string
+  scope: SynapseEditorInstallScope
+}
 
 type ContentDetailMenubarProps = {
   canDelete: boolean
   canEdit: boolean
   canOpenInNewWindow: boolean
+  installTargetRequest?: ContentInstallTargetRequest | null
   isFavorite: boolean
   isRepositoryInitializing: boolean
   isSyncing?: boolean
   item: SynapseContentMeta
   onDelete: () => void
   onEdit: () => void
+  onInstalled?: () => Promise<void> | void
+  onInstallTargetRequestConsumed?: () => void
   onOpenInNewWindow: () => void
   onToggleFavorite: () => Promise<void>
 }
@@ -40,12 +51,15 @@ function ContentDetailMenubar({
   canDelete,
   canEdit,
   canOpenInNewWindow,
+  installTargetRequest,
   isFavorite,
   isRepositoryInitializing,
   isSyncing = false,
   item,
   onDelete,
   onEdit,
+  onInstalled,
+  onInstallTargetRequestConsumed,
   onOpenInNewWindow,
   onToggleFavorite,
 }: ContentDetailMenubarProps) {
@@ -60,7 +74,8 @@ function ContentDetailMenubar({
     installMenuItems,
     isBusy,
     loadInstallTargets,
-  } = useContentDownloadActions({ item })
+    openInstallDialogForEditorId,
+  } = useContentDownloadActions({ item, onInstalled })
 
   const definition = getContentTypeDefinition(item.type)
   const primaryAction = definition.listPrimaryAction ?? "download"
@@ -73,6 +88,23 @@ function ContentDetailMenubar({
       void handleCopy()
     }
   }, [hasAttachments, handleCopy])
+
+  useEffect(() => {
+    if (!installTargetRequest) {
+      return
+    }
+
+    void openInstallDialogForEditorId({
+      editorId: installTargetRequest.editorId,
+      initialSelection: {
+        projectId: installTargetRequest.projectId,
+        projectPath: installTargetRequest.projectPath,
+        scope: installTargetRequest.scope,
+      },
+    }).finally(() => {
+      onInstallTargetRequestConsumed?.()
+    })
+  }, [installTargetRequest, onInstallTargetRequestConsumed, openInstallDialogForEditorId])
 
   return (
     <>
@@ -247,3 +279,4 @@ function ContentDetailMenubar({
 }
 
 export { ContentDetailMenubar }
+export type { ContentInstallTargetRequest }

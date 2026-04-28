@@ -61,6 +61,7 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain("复制到")
     expect(source).toContain("复制失败。")
     expect(source).toContain("复制后会被替换")
+    expect(source).toContain("await onCopied?.()")
     expect(source).not.toContain("正在安装到")
     expect(source).not.toContain("安装失败。")
   })

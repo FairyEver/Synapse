@@ -39,13 +39,16 @@ import { installFormDefinitionByEditorId } from "@/definitions/generated/rendere
 import { buildRepositoryVariablesPatch } from "@/modules/content/lib/repository-variables"
 import {
   EditorWriteTargetSelector,
+  type EditorWriteTargetInitialSelection,
   type EditorWriteTargetSelection,
   type ResolveEditorTargetInput,
 } from "./editor-write-target-selector"
 
 type ContentInstallDialogProps = {
   editor: SynapseEditorAdapterSummary | null
+  initialSelection?: EditorWriteTargetInitialSelection | null
   item: SynapseContentMeta
+  onInstalled?: () => Promise<void> | void
   onOpenChange: (open: boolean) => void
   open: boolean
   projects: SynapseProjectConfig[]
@@ -53,7 +56,9 @@ type ContentInstallDialogProps = {
 
 function ContentInstallDialog({
   editor,
+  initialSelection,
   item,
+  onInstalled,
   onOpenChange,
   open,
   projects,
@@ -194,6 +199,7 @@ function ContentInstallDialog({
         scope,
         targetPath: result.targetPath,
       })
+      await onInstalled?.()
       setIsRuleProjectInstallFormOpen(false)
       onOpenChange(false)
     } catch (error) {
@@ -417,6 +423,7 @@ function ContentInstallDialog({
                 actionKind="install"
                 contentType={item.type}
                 editor={editor}
+                initialSelection={initialSelection}
                 loggerName={`content.install.${item.type}`}
                 onError={setInstallError}
                 onSelectionChange={setSelection}
