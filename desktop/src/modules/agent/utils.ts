@@ -1,7 +1,9 @@
 import type {
   SynapseAgentEvent,
+  SynapseAgentMessageTimelineItem,
   SynapseAgentSessionSummary,
   SynapseAgentTimelineEntry,
+  SynapseAgentTimelineItem,
 } from "@/types/agent"
 
 const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
@@ -14,6 +16,7 @@ function agentEventToTimelineEntry(
 ): SynapseAgentTimelineEntry {
   return {
     id: `event:${timestamp}:${event.type}:${index}`,
+    kind: "message",
     role: roleForEvent(event),
     content: contentForEvent(event),
     timestamp,
@@ -27,6 +30,7 @@ function localUserTimelineEntry(
 ): SynapseAgentTimelineEntry {
   return {
     id: `local:${timestamp}:user:${index}`,
+    kind: "message",
     role: "user",
     content,
     timestamp,
@@ -54,7 +58,7 @@ function contentForEvent(event: SynapseAgentEvent): string {
   }
 }
 
-function roleForEvent(event: SynapseAgentEvent): SynapseAgentTimelineEntry["role"] {
+function roleForEvent(event: SynapseAgentEvent): SynapseAgentMessageTimelineItem["role"] {
   switch (event.type) {
     case "text":
     case "result":
@@ -96,14 +100,14 @@ function formatEntryTime(timestamp: string): string {
   })
 }
 
-function formatAgentTranscript(entries: readonly SynapseAgentTimelineEntry[]): string {
+function formatAgentTranscript(entries: readonly SynapseAgentTimelineItem[]): string {
   return entries.map((entry) => [
-    `${labelForRole(entry.role)} ${formatEntryTime(entry.timestamp)}`,
-    entry.content.trimEnd(),
+    `${labelForTimelineItem(entry)} ${formatEntryTime(entry.timestamp)}`,
+    timelineItemText(entry).trimEnd(),
   ].join("\n")).join("\n\n")
 }
 
-function labelForRole(role: SynapseAgentTimelineEntry["role"]): string {
+function labelForRole(role: SynapseAgentMessageTimelineItem["role"]): string {
   switch (role) {
     case "user":
       return "用户"
@@ -115,6 +119,49 @@ function labelForRole(role: SynapseAgentTimelineEntry["role"]): string {
       return "系统"
     default: {
       const exhaustive: never = role
+      return exhaustive
+    }
+  }
+}
+
+function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
+  switch (entry.kind) {
+    case "message":
+      return labelForRole(entry.role)
+    case "thinking":
+      return "Thinking"
+    case "toolCall":
+    case "toolResult":
+      return "工具"
+    case "permissionRequest":
+      return "权限"
+    case "error":
+      return "错误"
+    case "result":
+      return "结果"
+    default: {
+      const exhaustive: never = entry
+      return exhaustive
+    }
+  }
+}
+
+function timelineItemText(entry: SynapseAgentTimelineItem): string {
+  switch (entry.kind) {
+    case "message":
+    case "thinking":
+    case "result":
+      return entry.content
+    case "toolCall":
+      return entry.toolInput ? `${entry.toolName}\n${entry.toolInput}` : entry.toolName
+    case "toolResult":
+      return entry.content?.trim() || entry.toolName
+    case "permissionRequest":
+      return entry.toolInput ? `${entry.toolName}\n${entry.toolInput}` : entry.toolName
+    case "error":
+      return entry.message
+    default: {
+      const exhaustive: never = entry
       return exhaustive
     }
   }

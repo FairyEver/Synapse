@@ -77,20 +77,22 @@ describe("agent utils", () => {
     const entries = [
       {
         id: "one",
+        kind: "message",
         role: "user",
         content: "你好",
         timestamp: "2026-04-27T03:15:00.000Z",
       },
       {
         id: "two",
+        kind: "message",
         role: "assistant",
         content: "第一行\n第二行",
         timestamp: "2026-04-27T03:16:00.000Z",
       },
       {
         id: "three",
-        role: "tool",
-        content: "read_file",
+        kind: "toolCall",
+        toolName: "read_file",
         timestamp: "2026-04-27T03:17:00.000Z",
       },
     ] as const
