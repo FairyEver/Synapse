@@ -32,7 +32,7 @@ describe("AgentTimeline", () => {
       />,
     )
 
-    expect(html).toContain("gap-2")
+    expect(html).toContain("gap-0")
     expect(html).not.toContain("gap-5")
   })
 })
