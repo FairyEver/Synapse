@@ -174,6 +174,7 @@ export class ContentInstallService {
           const detail = await contentService.getSkillDetail(payload.contentId)
           const repositoryRootPath = detail.source === "builtin" ? null : await getActiveRepositoryRootPath()
           const parentDirectoryPath = path.dirname(target.targetPath)
+          let backupPathForRestore: string | null = null
           const previousSkillDirectoryPath = payload.contentType === "skill"
             ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
             : null
@@ -185,6 +186,7 @@ export class ContentInstallService {
               const backupPath = `${target.targetPath}-backup`
               try {
                 await rename(target.targetPath, backupPath)
+                backupPathForRestore = backupPath
               } catch (error) {
                 logger.warn("Failed to backup existing skill directory", { targetPath: target.targetPath, error })
                 throw new Error("备份旧 Skill 失败，未替换目标。")
@@ -199,43 +201,60 @@ export class ContentInstallService {
               }
             : detail
 
-          await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
-            await prepareSkillDirectory({
-              payload,
-              targetPath: target.targetPath,
-              stagingDirectoryPath,
-              detail: detailWithSubstitutions,
-              repositoryRootPath: repositoryRootPath ?? "",
-              writeTextFile: async (filePath, content) => {
-                await writeFile(filePath, content.endsWith("\n") ? content : `${content}\n`, "utf8")
-                logger.info("Staged skill file.", { filePath })
-              },
-              copyAttachment: async (attachment, attachmentTargetPath) => {
-                if (detail.source === "builtin") {
-                  await builtinContentService.copyAttachmentToPath(
-                    payload.contentType,
-                    payload.contentId,
-                    attachment,
-                    attachmentTargetPath,
-                  )
-                } else {
-                  if (!repositoryRootPath) {
-                    throw new Error("当前还没有激活的本地目录。")
-                  }
+          try {
+            await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
+              await prepareSkillDirectory({
+                payload,
+                targetPath: target.targetPath,
+                stagingDirectoryPath,
+                detail: detailWithSubstitutions,
+                repositoryRootPath: repositoryRootPath ?? "",
+                writeTextFile: async (filePath, content) => {
+                  await writeFile(filePath, content.endsWith("\n") ? content : `${content}\n`, "utf8")
+                  logger.info("Staged skill file.", { filePath })
+                },
+                copyAttachment: async (attachment, attachmentTargetPath) => {
+                  if (detail.source === "builtin") {
+                    await builtinContentService.copyAttachmentToPath(
+                      payload.contentType,
+                      payload.contentId,
+                      attachment,
+                      attachmentTargetPath,
+                    )
+                  } else {
+                    if (!repositoryRootPath) {
+                      throw new Error("当前还没有激活的本地目录。")
+                    }
 
-                  await attachmentsPoolService.copyAttachmentToPath(
-                    repositoryRootPath,
-                    attachment,
-                    attachmentTargetPath,
-                  )
-                }
-                logger.info("Staged skill attachment.", {
-                  filePath: attachmentTargetPath,
-                  originalName: attachment.originalName,
-                })
-              },
+                    await attachmentsPoolService.copyAttachmentToPath(
+                      repositoryRootPath,
+                      attachment,
+                      attachmentTargetPath,
+                    )
+                  }
+                  logger.info("Staged skill attachment.", {
+                    filePath: attachmentTargetPath,
+                    originalName: attachment.originalName,
+                  })
+                },
+              })
             })
-          })
+          } catch (error) {
+            if (backupPathForRestore && await pathExists(backupPathForRestore)) {
+              try {
+                await rm(target.targetPath, { recursive: true, force: true })
+                await rename(backupPathForRestore, target.targetPath)
+              } catch (restoreError) {
+                logger.warn("Failed to restore backed up skill directory", {
+                  backupPath: backupPathForRestore,
+                  targetPath: target.targetPath,
+                  error: restoreError,
+                })
+              }
+            }
+
+            throw error
+          }
 
           if (
             previousSkillDirectoryPath

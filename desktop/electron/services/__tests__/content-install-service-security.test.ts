@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -129,6 +129,52 @@ describe("ContentInstallService security", () => {
       permissionGuard: createPermissionGuard(),
     })).rejects.toThrow("备份旧 Skill 失败，未替换目标。")
 
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        outcome: "failed",
+        resource: targetPath,
+      }),
+    ])
+  })
+
+  it("restores the old Skill directory when replacement fails after backup", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockRejectedValue(new Error("prepare failed"))
+
+    const auditSink = new InMemoryAuditSink()
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      replaceConfirmed: true,
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("prepare failed")
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
     expect(auditSink.list()).toEqual([
       expect.objectContaining({
         action: "fs.write",
