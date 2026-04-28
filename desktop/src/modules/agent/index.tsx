@@ -155,8 +155,8 @@ function AgentModule() {
 
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
+      <div className="flex h-full min-h-0 flex-col gap-4 bg-background">
+        <div className="flex items-center justify-between gap-3 px-2 py-1">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-medium">Agent</h2>
             {selectedCliLabel ? (
@@ -262,7 +262,10 @@ function AgentComposer({
   readonly onSubmit: (event: FormEvent) => void
 }) {
   return (
-    <form className="flex shrink-0 items-end gap-2 rounded-md border border-border bg-background px-2 py-1.5" onSubmit={onSubmit}>
+    <form
+      className="mx-auto flex w-full max-w-4xl shrink-0 items-end gap-2 rounded-2xl border border-border bg-background px-3 py-2"
+      onSubmit={onSubmit}
+    >
       <Textarea
         value={draft}
         onChange={(event) => onDraftChange(event.target.value)}
@@ -270,7 +273,7 @@ function AgentComposer({
         placeholder="输入消息"
         disabled={disabled}
         rows={1}
-        className="h-8 min-h-8 flex-1 resize-none overflow-hidden border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
+        className="h-9 min-h-9 flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-2 shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
       />
       <Button
         type="submit"
