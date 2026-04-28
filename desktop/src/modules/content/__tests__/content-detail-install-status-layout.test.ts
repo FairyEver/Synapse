@@ -13,6 +13,7 @@ describe("content detail install status hook source", () => {
     expect(source).toContain("contentType: detail.type")
     expect(source).toContain("projects: toStatusProjects(projects)")
     expect(source).toContain("refreshSignal")
+    expect(source).toContain("isInstallableContentDetail")
     expect(source).toContain("export { useEditorInstallStatus }")
   })
 })

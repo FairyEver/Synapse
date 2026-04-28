@@ -10,7 +10,7 @@ import type {
 
 type UseEditorInstallStatusInput = {
   content: string | null
-  detail: SynapseContentDetail<"rule" | "skill"> | null
+  detail: SynapseContentDetail | null
   item: SynapseContentMeta | null
   open: boolean
   projects: SynapseProjectConfig[]
@@ -34,6 +34,12 @@ function toStatusProjects(
   }))
 }
 
+function isInstallableContentDetail(
+  detail: SynapseContentDetail | null,
+): detail is SynapseContentDetail<"rule" | "skill"> {
+  return detail?.type === "rule" || detail?.type === "skill"
+}
+
 function useEditorInstallStatus({
   content,
   detail,
@@ -46,12 +52,10 @@ function useEditorInstallStatus({
   const [entries, setEntries] = useState<SynapseEditorInstallStatusEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const canLoad = Boolean(
-    open && detail && (detail.type === "rule" || detail.type === "skill"),
-  )
+  const canLoad = open && isInstallableContentDetail(detail)
 
   const refresh = useCallback(async () => {
-    if (!canLoad || !detail) {
+    if (!canLoad || !isInstallableContentDetail(detail)) {
       setEntries([])
       setError(null)
       setIsLoading(false)
