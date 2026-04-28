@@ -111,6 +111,23 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ table: "notes" })
   })
 
+  it("maps table description updates to the data-store IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.dataStore.updateTableDescription({
+      table: "customer_orders",
+      description: "客户订单",
+    })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:data-store:update-table-description",
+      {
+        table: "customer_orders",
+        description: "客户订单",
+      },
+    )
+  })
+
   it("passes direct update event payloads through", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
