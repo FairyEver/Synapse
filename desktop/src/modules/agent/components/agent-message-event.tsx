@@ -22,7 +22,7 @@ function AgentMessageEvent({
       <div className={cn(
         "min-w-0 whitespace-pre-wrap break-words text-sm leading-7",
         outgoing
-          ? "max-w-[72%] rounded-2xl bg-muted px-4 py-2.5 text-foreground"
+          ? "max-w-[72%] rounded-xl bg-muted px-4 py-2 text-foreground"
           : "max-w-[76ch] px-1 py-2 text-foreground",
       )}>
         {segments.map((segment, index) => segment.kind === "text" ? (
