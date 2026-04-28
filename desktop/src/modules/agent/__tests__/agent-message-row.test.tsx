@@ -1,48 +1,47 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
-import { AgentMessageItem } from "../index"
-import type { SynapseAgentTimelineEntry } from "@/types/agent"
+import type { SynapseAgentMessageTimelineItem } from "@/types/agent"
+import { AgentMessageEvent } from "../components/agent-message-event"
 
 const baseEntry = {
   id: "message-1",
+  kind: "message",
   content: "你好",
   timestamp: "2026-04-27T03:15:00.000Z",
-} satisfies Omit<SynapseAgentTimelineEntry, "role">
+} satisfies Omit<SynapseAgentMessageTimelineItem, "role">
 
-describe("AgentMessageItem", () => {
-  it("right-aligns user messages with a blue outgoing bubble", () => {
+describe("AgentMessageEvent", () => {
+  it("right-aligns user messages with a primary outgoing bubble", () => {
     const html = renderToStaticMarkup(
-      <AgentMessageItem
-        entry={{ ...baseEntry, role: "user" }}
+      <AgentMessageEvent
+        item={{ ...baseEntry, role: "user" }}
         onOpenReference={vi.fn()}
       />,
     )
 
-    expect(html).toContain("items-end")
-    expect(html).toContain("bg-gradient-to-b")
-    expect(html).toContain("from-blue-500")
-    expect(html).toContain("to-blue-600")
-    expect(html).toContain("text-white")
+    expect(html).toContain("justify-end")
+    expect(html).toContain("bg-primary")
+    expect(html).toContain("text-primary-foreground")
   })
 
   it("left-aligns assistant messages with a neutral incoming bubble", () => {
     const html = renderToStaticMarkup(
-      <AgentMessageItem
-        entry={{ ...baseEntry, role: "assistant" }}
+      <AgentMessageEvent
+        item={{ ...baseEntry, role: "assistant" }}
         onOpenReference={vi.fn()}
       />,
     )
 
-    expect(html).toContain("items-start")
+    expect(html).toContain("justify-start")
     expect(html).toContain("bg-muted/50")
-    expect(html).not.toContain("from-blue-500")
+    expect(html).not.toContain("bg-primary")
   })
 
   it("wraps long message content inside the bubble", () => {
     const html = renderToStaticMarkup(
-      <AgentMessageItem
-        entry={{
+      <AgentMessageEvent
+        item={{
           ...baseEntry,
           role: "assistant",
           content: "very-long-token-without-natural-breaks/very-long-token-without-natural-breaks",
@@ -52,8 +51,7 @@ describe("AgentMessageItem", () => {
     )
 
     expect(html).toContain("min-w-0")
-    expect(html).toContain("overflow-hidden")
-    expect(html).toContain("break-all")
+    expect(html).toContain("break-words")
     expect(html).toContain("whitespace-pre-wrap")
   })
 })

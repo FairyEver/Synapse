@@ -1,7 +1,7 @@
 import type {
   SynapseAgentEvent,
   SynapseAgentTimelineItem,
-} from "@/types/agent"
+} from "../types/agent"
 
 type TimelineRecordRole = "user" | "assistant" | "system" | "tool"
 

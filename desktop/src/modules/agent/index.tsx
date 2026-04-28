@@ -18,23 +18,36 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import { cn } from "@/lib/utils"
-import type { SynapseAgentTimelineEntry } from "@/types/agent"
+import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
+import { AgentTimeline } from "./components/agent-timeline"
 import { useAgentChat } from "./hooks/use-agent-chat"
 import { resolveAgentProjectScope } from "./project-resolution"
 import {
   agentCliLabel,
   formatAgentTranscript,
-  formatEntryTime,
-  thinkingIndicatorText,
 } from "./utils"
 
 const logger = createRendererLogger("agent")
+
+const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
+  agentLabel: "Agent",
+  thinkingDefaultCollapsed: true,
+  toolDefaultCollapsed: "auto",
+  toolPreviewLines: 6,
+  toolPreviewChars: 1200,
+  statusLabels: {
+    pending: "Pending",
+    running: "Running",
+    success: "Done",
+    error: "Failed",
+    denied: "Denied",
+  },
+}
 
 function AgentModule() {
   const activeRepository = useActiveRepository()
@@ -45,19 +58,7 @@ function AgentModule() {
   const [draft, setDraft] = useState("")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [thinkingFrame, setThinkingFrame] = useState(0)
   const timelineBottomRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!chat.sending) {
-      setThinkingFrame(0)
-      return undefined
-    }
-    const interval = window.setInterval(() => {
-      setThinkingFrame((current) => current + 1)
-    }, 500)
-    return () => window.clearInterval(interval)
-  }, [chat.sending])
 
   const latestEntry = chat.timeline.at(-1)
 
@@ -75,7 +76,6 @@ function AgentModule() {
     chat.timeline.length,
     latestEntry?.id,
     latestEntry?.timestamp,
-    latestEntry?.content,
     chat.sending,
   ])
 
@@ -127,6 +127,10 @@ function AgentModule() {
   const selectedSession = chat.sessions.find((session) =>
     session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
     ?? chat.sessions.find((session) => session.active)
+  const selectedAgentDefinition = agentDefinitions.find((definition) =>
+    definition.id === selectedSession?.agentType)
+  const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
+    ?? DEFAULT_AGENT_DISPLAY_PROFILE
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
   const openReference = (reference: string) => {
     const projectId = chat.selectedProjectId ?? chat.activeProjectId
@@ -221,25 +225,13 @@ function AgentModule() {
           onRespond={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
         />
 
-        <ScrollArea className="min-h-0 min-w-0 flex-1">
-          <div className="flex min-w-0 flex-col gap-3 py-1 pr-2">
-            {chat.timeline.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                暂无消息
-              </p>
-            ) : chat.timeline.map((entry) => (
-              <AgentMessageItem
-                key={entry.id}
-                entry={entry}
-                onOpenReference={openReference}
-              />
-            ))}
-            {chat.sending ? (
-              <AgentWaitingIndicator text={thinkingIndicatorText(thinkingFrame)} />
-            ) : null}
-            <div ref={timelineBottomRef} aria-hidden="true" />
-          </div>
-        </ScrollArea>
+        <AgentTimeline
+          items={chat.timeline}
+          profile={selectedDisplayProfile}
+          sending={chat.sending}
+          onOpenReference={openReference}
+          bottomRef={timelineBottomRef}
+        />
 
         <AgentComposer
           draft={draft}
@@ -270,7 +262,7 @@ function AgentComposer({
   readonly onSubmit: (event: FormEvent) => void
 }) {
   return (
-    <form className="flex shrink-0 items-end gap-2 rounded-full bg-muted/50 px-2 py-1.5" onSubmit={onSubmit}>
+    <form className="flex shrink-0 items-end gap-2 rounded-md border border-border bg-background px-2 py-1.5" onSubmit={onSubmit}>
       <Textarea
         value={draft}
         onChange={(event) => onDraftChange(event.target.value)}
@@ -293,131 +285,4 @@ function AgentComposer({
   )
 }
 
-function AgentWaitingIndicator({ text }: { readonly text: string }) {
-  return (
-    <article className="flex justify-start" aria-live="polite">
-      <div className="flex max-w-[78%] flex-col items-start gap-1">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>Agent</span>
-        </div>
-        <div className="max-w-full rounded-2xl rounded-bl-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          {text}
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function AgentMessageItem({
-  entry,
-  onOpenReference,
-}: {
-  readonly entry: SynapseAgentTimelineEntry
-  readonly onOpenReference: (reference: string) => void
-}) {
-  const outgoing = entry.role === "user"
-  return (
-    <article className={cn("flex min-w-0", outgoing ? "justify-end" : "justify-start")}>
-      <div className={cn(
-        "flex min-w-0 max-w-[78%] flex-col gap-1",
-        outgoing ? "items-end" : "items-start",
-      )}>
-        <div className={cn(
-          "flex items-center gap-2 text-xs text-muted-foreground",
-          outgoing ? "justify-end" : "justify-start",
-        )}>
-          <span>{labelForRole(entry.role)}</span>
-          <span>{formatEntryTime(entry.timestamp)}</span>
-        </div>
-        <MessageContent
-          entry={entry}
-          outgoing={outgoing}
-          onOpenReference={onOpenReference}
-        />
-      </div>
-    </article>
-  )
-}
-
-function MessageContent({
-  entry,
-  outgoing,
-  onOpenReference,
-}: {
-  readonly entry: SynapseAgentTimelineEntry
-  readonly outgoing: boolean
-  readonly onOpenReference: (reference: string) => void
-}) {
-  const segments = splitLocalReferences(entry.content)
-  return (
-    <div
-      className={cn(
-        "min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-all rounded-2xl px-3 py-2 text-sm leading-relaxed",
-        outgoing
-          ? "rounded-br-md bg-gradient-to-b from-blue-500 to-blue-600 text-white"
-          : "rounded-bl-md bg-muted/50 text-foreground",
-      )}
-    >
-      {segments.map((segment, index) => segment.kind === "text" ? (
-        <span key={`${entry.id}:text:${String(index)}`}>{segment.value}</span>
-      ) : (
-        <Button
-          key={`${entry.id}:ref:${String(index)}`}
-          type="button"
-          variant="link"
-          size="sm"
-          className={cn(
-            "h-auto min-w-0 max-w-full whitespace-normal break-all px-1 py-0 text-left align-baseline",
-            outgoing ? "text-inherit hover:text-inherit" : null,
-          )}
-          onClick={() => onOpenReference(segment.value)}
-        >
-          {segment.value}
-        </Button>
-      ))}
-    </div>
-  )
-}
-
-function labelForRole(role: "user" | "assistant" | "system" | "tool"): string {
-  switch (role) {
-    case "user":
-      return "用户"
-    case "assistant":
-      return "Agent"
-    case "tool":
-      return "工具"
-    case "system":
-      return "系统"
-    default: {
-      const exhaustive: never = role
-      return exhaustive
-    }
-  }
-}
-
-type MessageSegment =
-  | { readonly kind: "text"; readonly value: string }
-  | { readonly kind: "reference"; readonly value: string }
-
-const LOCAL_REFERENCE_PATTERN = /(\[[^\]]+\]\((?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^)]+\)|(?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^\s`),]+(?::\d+(?::\d+)?)?)/g
-
-function splitLocalReferences(content: string): readonly MessageSegment[] {
-  const segments: MessageSegment[] = []
-  let lastIndex = 0
-  for (const match of content.matchAll(LOCAL_REFERENCE_PATTERN)) {
-    const value = match[0]
-    const index = match.index ?? 0
-    if (index > lastIndex) {
-      segments.push({ kind: "text", value: content.slice(lastIndex, index) })
-    }
-    segments.push({ kind: "reference", value })
-    lastIndex = index + value.length
-  }
-  if (lastIndex < content.length) {
-    segments.push({ kind: "text", value: content.slice(lastIndex) })
-  }
-  return segments.length > 0 ? segments : [{ kind: "text", value: content }]
-}
-
-export { AgentComposer, AgentMessageItem, AgentModule }
+export { AgentComposer, AgentModule }
