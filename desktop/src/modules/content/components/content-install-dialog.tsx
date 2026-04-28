@@ -5,10 +5,9 @@ import {
   readContent,
   resolveEditorInstallTarget,
 } from "@/app-shell/content"
-import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useActiveRepository } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, useRepositoryActions } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -28,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { getContentTypeDefinition } from "@/config/content-types"
-import type { SynapseProjectConfig, SynapseVariable } from "@/types/config"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseContentMeta } from "@/types/content"
 import type {
   SynapseEditorAdapterSummary,
@@ -37,6 +36,7 @@ import type {
 import { VariableSubstitutionDialog } from "./variable-substitution-dialog"
 import { detectPlaceholders } from "@/lib/variable-substitution"
 import { installFormDefinitionByEditorId } from "@/definitions/generated/renderer-registry"
+import { buildRepositoryVariablesPatch } from "@/modules/content/lib/repository-variables"
 import {
   EditorInstallTargetSelector,
   type EditorInstallTargetSelection,
@@ -63,9 +63,9 @@ function ContentInstallDialog({
     () => createRendererLogger(`content.install.${item.type}`),
     [item.type],
   )
-  const { promise } = useAppNotifications()
-  const { config, updateConfig } = useAppConfig()
+  const { promise, warning } = useAppNotifications()
   const activeRepository = useActiveRepository()
+  const { updateRepository } = useRepositoryActions()
   const [preloadedContent, setPreloadedContent] = useState<string | null>(null)
   const [isVariableConfirmOpen, setIsVariableConfirmOpen] = useState(false)
   const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([])
@@ -232,31 +232,13 @@ function ContentInstallDialog({
 
     if (saveToRepo && activeRepository) {
       try {
-        const existingVariables = activeRepository.variables ?? []
-        const newVariables: SynapseVariable[] = []
-
-        for (const [name, value] of Object.entries(substitutions)) {
-          if (!value) continue
-          const exists = existingVariables.some(
-            (v) => v.name.toLowerCase() === name.toLowerCase(),
-          )
-          if (!exists) {
-            newVariables.push({ name, value })
-          }
+        const patch = buildRepositoryVariablesPatch(activeRepository, substitutions)
+        if (patch) {
+          await updateRepository(activeRepository.uuid, patch)
         }
-
-        if (newVariables.length > 0) {
-          await updateConfig({
-            repositories: config.repositories.map((repo) =>
-              repo.uuid === activeRepository.uuid
-                ? { ...repo, variables: [...existingVariables, ...newVariables] }
-                : repo,
-            ),
-          })
-        }
-      } catch {
-        // toast 提示但不阻塞安装
-        logger.warn("Failed to save variables to repository.")
+      } catch (error) {
+        logger.warn("Failed to save variables to repository.", { error })
+        warning("变量未保存，安装会继续。")
       }
     }
 
@@ -337,9 +319,7 @@ function ContentInstallDialog({
         placeholders={detectedPlaceholders}
         repositoryVariables={activeRepository?.variables ?? []}
         repositoryUuid={activeRepository?.uuid ?? null}
-        onConfirm={(substitutions, saveToRepo) => {
-          void handleVariableConfirm(substitutions, saveToRepo)
-        }}
+        onConfirm={handleVariableConfirm}
       />
 
       {RuleProjectInstallForm && item.type === "rule" ? (

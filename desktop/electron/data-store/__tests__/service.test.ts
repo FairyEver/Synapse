@@ -71,4 +71,21 @@ describe("DataStoreService table descriptions", () => {
       description: "",
     }))
   })
+
+  it("rejects non-exact numeric writes", () => {
+    service.createTable("metrics", [
+      { name: "count_value", kind: "integer" },
+      { name: "score_value", kind: "decimal" },
+    ])
+
+    expect(() => service.insert("metrics", { count_value: "12abc" })).toThrow(/count_value/)
+    expect(() => service.insert("metrics", { score_value: "1.2x" })).toThrow(/score_value/)
+
+    service.insert("metrics", { count_value: "12", score_value: "1.25" })
+    const result = service.query({ table: "metrics" })
+    expect(result.rows[0]).toMatchObject({
+      count_value: 12,
+      score_value: 1.25,
+    })
+  })
 })

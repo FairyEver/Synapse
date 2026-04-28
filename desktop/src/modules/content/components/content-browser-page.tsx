@@ -71,9 +71,13 @@ import { useContentFavorites } from "@/modules/content/hooks/use-content-favorit
 import { useContentRecentlyViewed } from "@/modules/content/hooks/use-content-recently-viewed"
 import { useContentSortOrder } from "@/modules/content/hooks/use-content-sort-order"
 import { useDeletedContent } from "@/modules/content/hooks/use-deleted-content"
+import {
+  countSavedContentMutations,
+  isContentMutationSaved,
+} from "@/modules/content/lib/content-mutation"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentSortOrder } from "@/types/config"
-import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
+import type { SynapseContentMeta, SynapseContentMutationResult, SynapseContentType } from "@/types/content"
 
 type ContentBrowserDetailDialogProps = {
   item: SynapseContentMeta | null
@@ -449,7 +453,8 @@ function ContentBrowserPage({
     setDeletedFilterRaw(nextFilter)
   }, [contentType, logger])
   const [batchAction, setBatchAction] = useState<"restore" | "purge" | null>(null)
-  const batchBusyRef = useRef(false)
+  const [busyBatchAction, setBusyBatchAction] = useState<"restore" | "purge" | null>(null)
+  const isBatchBusy = busyBatchAction !== null
   const isDeletedView = activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID
   const { localIdentityState } = useIdentity()
   const currentUserId = localIdentityState?.status === "ready" ? localIdentityState.identity.userId : null
@@ -872,28 +877,28 @@ function ContentBrowserPage({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    disabled={filteredItems.length === 0 || batchBusyRef.current}
+                    disabled={filteredItems.length === 0 || isBatchBusy}
                     onClick={() => {
                       logger.info("Batch action dialog opened.", { action: "restore", contentType })
                       setBatchAction("restore")
                     }}
                   >
                     <RotateCcw className="mr-1 size-3.5" />
-                    全部恢复
+                    {busyBatchAction === "restore" ? "恢复中..." : "全部恢复"}
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
-                    disabled={filteredItems.length === 0 || batchBusyRef.current}
+                    disabled={filteredItems.length === 0 || isBatchBusy}
                     onClick={() => {
                       logger.info("Batch action dialog opened.", { action: "purge", contentType })
                       setBatchAction("purge")
                     }}
                   >
                     <Trash2 className="mr-1 size-3.5" />
-                    全部删除
+                    {busyBatchAction === "purge" ? "删除中..." : "全部删除"}
                   </Button>
                 </div>
               </div>
@@ -915,14 +920,20 @@ function ContentBrowserPage({
                       const startedAt = performance.now()
                       logger.info("Content restore initiated.", { contentId: item.id, contentType })
                       try {
-                        await restoreContent({
+                        const result = await restoreContent({
                           id: item.id,
                           type: contentType,
                           baseHistoryDirname: item.latestHistoryDirname,
                         })
+                        if (!isContentMutationSaved(result)) {
+                          logger.warn("Content restore conflict detected.", { contentId: item.id, contentType, latestHistoryDirname: result.latestHistoryDirname })
+                          toast.warning("内容已变化，请刷新后重试。")
+                          void deletedContent.refresh()
+                          return
+                        }
                         logger.info("Content restored.", { contentId: item.id, contentType, elapsedMs: Math.round(performance.now() - startedAt) })
                         toast.success(`已恢复「${item.title}」`)
-                        void deletedContent.refresh()
+                        void Promise.all([deletedContent.refresh(), refresh()])
                       } catch (err) {
                         logger.error("Content restore failed.", { contentId: item.id, contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
                         toast.error("恢复失败，请稍后重试。")
@@ -1022,46 +1033,62 @@ function ContentBrowserPage({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={isBatchBusy}>取消</AlertDialogCancel>
             <AlertDialogAction
               className={batchAction === "purge" ? "bg-destructive text-white hover:bg-destructive/90" : ""}
+              disabled={isBatchBusy}
               onClick={async () => {
+                if (isBatchBusy) return
                 const action = batchAction
                 const targets = [...filteredItems]
                 setBatchAction(null)
                 if (!action || targets.length === 0) return
                 const startedAt = performance.now()
                 logger.info("Batch action initiated.", { action, contentType, count: targets.length })
-                batchBusyRef.current = true
+                setBusyBatchAction(action)
+                const results: SynapseContentMutationResult[] = []
                 let successCount = 0
-                for (const item of targets) {
-                  try {
-                    if (action === "restore") {
-                      await restoreContent({
-                        id: item.id,
-                        type: contentType,
-                        baseHistoryDirname: item.latestHistoryDirname,
-                      })
-                    } else {
-                      await purgeContent({ id: item.id, type: contentType })
+                try {
+                  for (const item of targets) {
+                    try {
+                      if (action === "restore") {
+                        const result = await restoreContent({
+                          id: item.id,
+                          type: contentType,
+                          baseHistoryDirname: item.latestHistoryDirname,
+                        })
+                        results.push(result)
+                      } else {
+                        await purgeContent({ id: item.id, type: contentType })
+                        successCount++
+                      }
+                    } catch (err) {
+                      logger.error("Batch action item failed.", { action, contentId: item.id, contentType, error: err })
                     }
-                    successCount++
-                  } catch (err) {
-                    logger.error("Batch action item failed.", { action, contentId: item.id, contentType, error: err })
                   }
-                }
-                batchBusyRef.current = false
-                logger.info("Batch action completed.", { action, contentType, successCount, total: targets.length, elapsedMs: Math.round(performance.now() - startedAt) })
-                void deletedContent.refresh()
-                const verb = action === "restore" ? "恢复" : "永久删除"
-                if (successCount === targets.length) {
-                  toast.success(`已${verb} ${successCount} 项内容`)
-                } else {
-                  toast.warning(`${verb}了 ${successCount}/${targets.length} 项，部分操作失败`)
+                  if (action === "restore") {
+                    successCount = countSavedContentMutations(results)
+                  }
+                  logger.info("Batch action completed.", { action, contentType, successCount, total: targets.length, elapsedMs: Math.round(performance.now() - startedAt) })
+                  if (action === "restore") {
+                    void Promise.all([deletedContent.refresh(), refresh()])
+                  } else {
+                    void deletedContent.refresh()
+                  }
+                  const verb = action === "restore" ? "恢复" : "永久删除"
+                  if (successCount === targets.length) {
+                    toast.success(`已${verb} ${successCount} 项内容`)
+                  } else if (action === "restore" && results.length > successCount) {
+                    toast.warning(`已${verb} ${successCount}/${targets.length} 项，部分内容已变化`)
+                  } else {
+                    toast.warning(`${verb}了 ${successCount}/${targets.length} 项，部分操作失败`)
+                  }
+                } finally {
+                  setBusyBatchAction(null)
                 }
               }}
             >
-              {batchAction === "restore" ? "全部恢复" : "全部永久删除"}
+              {isBatchBusy ? "处理中..." : batchAction === "restore" ? "全部恢复" : "全部永久删除"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

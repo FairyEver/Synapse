@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import {
+  EMPTY_DATA_STORE_QUERY_RESULT,
+  getCurrentDataStoreError,
+  getCurrentDataStoreQueryResult,
+  getCurrentDataStoreSchema,
+  type DataStoreQueryState,
+  type DataStoreSchemaState,
+} from "@/modules/data-store/utils"
 import type {
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
@@ -8,25 +16,30 @@ import type {
   DataStoreMcpServerInfo,
   DataStoreMcpStatus,
   DataStoreMcpTarget,
-  DataStoreQueryParams,
-  DataStoreQueryResult,
   DataStoreStatus,
   DataStoreTableImportInspection,
   DataStoreTableInfo,
-  DataStoreTableSchema,
   DataStoreWhereClause,
 } from "@/types/data-store"
+
+function toLoadError(error: unknown): Error {
+  return error instanceof Error ? error : new Error("读取失败")
+}
 
 function useDataStoreTables() {
   const [tables, setTables] = useState<DataStoreTableInfo[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
 
   const refresh = useCallback(async () => {
+    setLoading(true)
     try {
       const result = await requireSynapseBridge().dataStore.listTables()
       setTables(result)
-    } catch {
+      setError(null)
+    } catch (loadError) {
       setTables([])
+      setError(toLoadError(loadError))
     } finally {
       setLoading(false)
     }
@@ -36,17 +49,25 @@ function useDataStoreTables() {
     void refresh()
   }, [refresh])
 
-  return { tables, loading, refresh }
+  return { tables, loading, error, refresh }
 }
 
 function useDataStoreQuery(table: string | null, page: number, where?: DataStoreWhereClause | null) {
-  const [data, setData] = useState<DataStoreQueryResult>({ rows: [], total: 0 })
+  const [state, setState] = useState<DataStoreQueryState>({
+    table: null,
+    data: EMPTY_DATA_STORE_QUERY_RESULT,
+    error: null,
+  })
   const [loading, setLoading] = useState(false)
+  const requestIdRef = useRef(0)
   const pageSize = 50
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current
+
     if (!table) {
-      setData({ rows: [], total: 0 })
+      setState({ table: null, data: EMPTY_DATA_STORE_QUERY_RESULT, error: null })
+      setLoading(false)
       return
     }
 
@@ -58,11 +79,15 @@ function useDataStoreQuery(table: string | null, page: number, where?: DataStore
         limit: pageSize,
         offset: (page - 1) * pageSize,
       })
-      setData(result)
-    } catch {
-      setData({ rows: [], total: 0 })
+      if (requestId !== requestIdRef.current) return
+      setState({ table, data: result, error: null })
+    } catch (loadError) {
+      if (requestId !== requestIdRef.current) return
+      setState({ table, data: EMPTY_DATA_STORE_QUERY_RESULT, error: toLoadError(loadError) })
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [table, page, where])
 
@@ -70,18 +95,27 @@ function useDataStoreQuery(table: string | null, page: number, where?: DataStore
     void refresh()
   }, [refresh])
 
-  return { ...data, loading, refresh, pageSize }
+  return {
+    ...getCurrentDataStoreQueryResult(table, state),
+    loading,
+    error: getCurrentDataStoreError(table, state),
+    refresh,
+    pageSize,
+  }
 }
 
 function useDataStoreStatus() {
   const [status, setStatus] = useState<DataStoreStatus | null>(null)
+  const [error, setError] = useState<Error | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const result = await requireSynapseBridge().dataStore.getStatus()
       setStatus(result)
-    } catch {
+      setError(null)
+    } catch (loadError) {
       setStatus(null)
+      setError(toLoadError(loadError))
     }
   }, [])
 
@@ -89,27 +123,39 @@ function useDataStoreStatus() {
     void refresh()
   }, [refresh])
 
-  return { status, refresh }
+  return { status, error, refresh }
 }
 
 function useDataStoreSchema(table: string | null) {
-  const [schema, setSchema] = useState<DataStoreTableSchema | null>(null)
+  const [state, setState] = useState<DataStoreSchemaState>({
+    table: null,
+    schema: null,
+    error: null,
+  })
   const [loading, setLoading] = useState(false)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current
+
     if (!table) {
-      setSchema(null)
+      setState({ table: null, schema: null, error: null })
+      setLoading(false)
       return
     }
 
     setLoading(true)
     try {
       const result = await requireSynapseBridge().dataStore.describeTable(table)
-      setSchema(result)
-    } catch {
-      setSchema(null)
+      if (requestId !== requestIdRef.current) return
+      setState({ table, schema: result, error: null })
+    } catch (loadError) {
+      if (requestId !== requestIdRef.current) return
+      setState({ table, schema: null, error: toLoadError(loadError) })
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [table])
 
@@ -117,7 +163,12 @@ function useDataStoreSchema(table: string | null) {
     void refresh()
   }, [refresh])
 
-  return { schema, loading, refresh }
+  return {
+    schema: getCurrentDataStoreSchema(table, state),
+    loading,
+    error: getCurrentDataStoreError(table, state),
+    refresh,
+  }
 }
 
 async function createTable(name: string, columns: Column[], description?: string): Promise<void> {

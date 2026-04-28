@@ -18,6 +18,7 @@ import {
   DATA_TABLE_STICKY_ACTION_COLUMN_CLASS,
   formatCellValue,
 } from "./data-table-layout"
+import { parseRowEditorCellValue } from "./row-editor-values"
 
 type RowEditorProps = {
   columns: Column[]
@@ -62,14 +63,20 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
   const savePromiseRef = useRef<Promise<void> | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [values, setValues] = useState<Record<string, string>>(() => initialValues)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [invalidColumnName, setInvalidColumnName] = useState<string | null>(null)
   const isDirty = useMemo(
     () => editableColumns.some((col) => (values[col.name] ?? "") !== (initialValues[col.name] ?? "")),
     [editableColumns, initialValues, values],
   )
 
   const handleChange = useCallback((colName: string, value: string) => {
+    if (invalidColumnName === colName) {
+      setInvalidColumnName(null)
+      setValidationError(null)
+    }
     setValues((prev) => ({ ...prev, [colName]: value }))
-  }, [])
+  }, [invalidColumnName])
 
   const handleCancel = useCallback(() => {
     if (isSaving) {
@@ -92,32 +99,21 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
     const data: Record<string, unknown> = {}
     for (const col of editableColumns) {
       const raw = values[col.name] ?? ""
-      if (col.kind === "integer") {
-        data[col.name] = raw ? parseInt(raw, 10) : null
-      } else if (col.kind === "decimal") {
-        data[col.name] = raw ? parseFloat(raw) : null
-      } else if (col.kind === "json") {
-        try {
-          data[col.name] = raw ? JSON.parse(raw) : null
-        } catch {
-          data[col.name] = raw
-        }
-      } else if (col.kind === "boolean") {
-        if (raw === "true") data[col.name] = true
-        else if (raw === "false") data[col.name] = false
-        else data[col.name] = null
-      } else if (col.kind === "multi_choice") {
-        try {
-          const parsed = raw ? JSON.parse(raw) : []
-          data[col.name] = Array.isArray(parsed) ? parsed : []
-        } catch {
-          data[col.name] = []
-        }
-      } else {
-        data[col.name] = raw || null
+      try {
+        data[col.name] = parseRowEditorCellValue(col, raw)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "输入不合法"
+        setInvalidColumnName(col.name)
+        setValidationError(message)
+        const input = inputRefs.current[col.name]
+        input?.focus()
+        input?.select()
+        return Promise.reject(error)
       }
     }
 
+    setInvalidColumnName(null)
+    setValidationError(null)
     setIsSaving(true)
     const savePromise = Promise.resolve(onSave(data))
       .catch((error) => {
@@ -163,109 +159,122 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
   )
 
   return (
-    <TableRow
-      data-row-editor="true"
-      className="bg-muted/40 hover:bg-muted/40"
-    >
-      <TableCell className={`${DATA_TABLE_COLUMN_CLASS} font-mono text-muted-foreground`}>
-        {initialData?.id != null ? String(initialData.id) : ""}
-      </TableCell>
-      {editableColumns.map((col) => {
-        const isSingleChoice = col.kind === "single_choice" && col.choices && col.choices.length > 0
-        const isMultiChoice = col.kind === "multi_choice" && col.choices && col.choices.length > 0
-        const isBool = col.kind === "boolean"
-
-        if (isMultiChoice) {
-          let selected: string[] = []
-          try { selected = JSON.parse(values[col.name] || "[]") } catch { /* empty */ }
-          if (!Array.isArray(selected)) selected = []
-          return (
-            <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
-              <DataTableCellChoice
-                multiple
-                value={selected}
-                options={col.choices!}
-                disabled={isSaving}
-                onChange={(next) => handleChange(col.name, JSON.stringify(next))}
-                onFocus={() => {
-                  activeColumnNameRef.current = col.name
-                }}
-              />
-            </TableCell>
-          )
-        }
-
-        if (isSingleChoice || isBool) {
-          const options = isBool
-            ? [{ value: "true", label: "true" }, { value: "false", label: "false" }]
-            : col.choices!.map((v) => ({ value: v, label: v }))
-          return (
-            <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
-              <DataTableCellChoice
-                value={values[col.name] ?? ""}
-                options={options}
-                disabled={isSaving}
-                onChange={(next) => handleChange(col.name, next)}
-                onFocus={() => {
-                  activeColumnNameRef.current = col.name
-                }}
-              />
-            </TableCell>
-          )
-        }
-
-        return (
-          <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
-            <DataTableCellInput
-              ref={(node) => {
-                inputRefs.current[col.name] = node
-              }}
-              disabled={isSaving}
-              value={values[col.name] ?? ""}
-              onChange={(e) => handleChange(col.name, e.target.value)}
-              onFocus={() => {
-                activeColumnNameRef.current = col.name
-              }}
-              onKeyDown={handleInputKeyDown}
-            />
-          </TableCell>
-        )
-      })}
-      {systemTimeColumns.map((col) => (
-        <TableCell
-          key={col.name}
-          className={`${DATA_TABLE_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
-        >
-          {formatCellValue(initialData?.[col.name], col.kind, col.name)}
+    <>
+      <TableRow
+        data-row-editor="true"
+        className="bg-muted/40 hover:bg-muted/40"
+      >
+        <TableCell className={`${DATA_TABLE_COLUMN_CLASS} font-mono text-muted-foreground`}>
+          {initialData?.id != null ? String(initialData.id) : ""}
         </TableCell>
-      ))}
-      <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="default"
-            size="icon-xs"
-            className="rounded-sm"
-            disabled={isSaving}
-            onClick={() => {
-              void handleSave().catch(() => {})
-            }}
+        {editableColumns.map((col) => {
+          const isSingleChoice = col.kind === "single_choice" && col.choices && col.choices.length > 0
+          const isMultiChoice = col.kind === "multi_choice" && col.choices && col.choices.length > 0
+          const isBool = col.kind === "boolean"
+
+          if (isMultiChoice) {
+            let selected: string[] = []
+            try { selected = JSON.parse(values[col.name] || "[]") } catch { /* empty */ }
+            if (!Array.isArray(selected)) selected = []
+            return (
+              <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
+                <DataTableCellChoice
+                  multiple
+                  value={selected}
+                  options={col.choices!}
+                  disabled={isSaving}
+                  onChange={(next) => handleChange(col.name, JSON.stringify(next))}
+                  onFocus={() => {
+                    activeColumnNameRef.current = col.name
+                  }}
+                />
+              </TableCell>
+            )
+          }
+
+          if (isSingleChoice || isBool) {
+            const options = isBool
+              ? [{ value: "true", label: "true" }, { value: "false", label: "false" }]
+              : col.choices!.map((v) => ({ value: v, label: v }))
+            return (
+              <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
+                <DataTableCellChoice
+                  value={values[col.name] ?? ""}
+                  options={options}
+                  disabled={isSaving}
+                  onChange={(next) => handleChange(col.name, next)}
+                  onFocus={() => {
+                    activeColumnNameRef.current = col.name
+                  }}
+                />
+              </TableCell>
+            )
+          }
+
+          return (
+            <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
+              <DataTableCellInput
+                ref={(node) => {
+                  inputRefs.current[col.name] = node
+                }}
+                aria-invalid={invalidColumnName === col.name}
+                disabled={isSaving}
+                value={values[col.name] ?? ""}
+                onChange={(e) => handleChange(col.name, e.target.value)}
+                onFocus={() => {
+                  activeColumnNameRef.current = col.name
+                }}
+                onKeyDown={handleInputKeyDown}
+              />
+            </TableCell>
+          )
+        })}
+        {systemTimeColumns.map((col) => (
+          <TableCell
+            key={col.name}
+            className={`${DATA_TABLE_COLUMN_CLASS} truncate font-mono text-muted-foreground`}
           >
-            <Check className="size-3.5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-xs"
-            className="rounded-sm"
-            disabled={isSaving}
-            onClick={handleCancel}
+            {formatCellValue(initialData?.[col.name], col.kind, col.name)}
+          </TableCell>
+        ))}
+        <TableCell className={`${DATA_TABLE_STICKY_ACTION_COLUMN_CLASS} py-0.5`}>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="default"
+              size="icon-xs"
+              className="rounded-sm"
+              disabled={isSaving}
+              onClick={() => {
+                void handleSave().catch(() => {})
+              }}
+            >
+              <Check className="size-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-xs"
+              className="rounded-sm"
+              disabled={isSaving}
+              onClick={handleCancel}
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+      {validationError ? (
+        <TableRow>
+          <TableCell
+            colSpan={1 + editableColumns.length + systemTimeColumns.length + 1}
+            className="bg-background text-sm text-destructive"
           >
-            <X className="size-3.5" />
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
+            {validationError}
+          </TableCell>
+        </TableRow>
+      ) : null}
+    </>
   )
 })
 
-export { RowEditor }
+export { RowEditor, parseRowEditorCellValue }
 export type { RowEditorHandle }

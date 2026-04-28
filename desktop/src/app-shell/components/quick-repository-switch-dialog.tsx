@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
   useHasRunningRepositoryOperation,
@@ -62,6 +63,7 @@ function QuickRepositorySwitchDialog() {
     switchingRepositoryUuid,
     switchActiveRepository,
   } = useActiveRepositorySwitch()
+  const { error: showError } = useAppNotifications()
 
   const hasRunningRepositoryOperation = useHasRunningRepositoryOperation()
   const repositoryStates = useRepositoryStatesMap(repositories)
@@ -102,6 +104,11 @@ function QuickRepositorySwitchDialog() {
               const repoState = repositoryStates.get(repository.uuid)
               const isMissing = repoState?.status === "missing"
               const isDisabled = isActive || hasRunningRepositoryOperation || isSwitchingRepository || isMissing
+              const isBlockedByOperation =
+                !isActive
+                && !isMissing
+                && !isSwitchingCurrentRepository
+                && (hasRunningRepositoryOperation || isSwitchingRepository)
 
               return (
                 <CommandItem
@@ -121,11 +128,19 @@ function QuickRepositorySwitchDialog() {
                       repositoryName: repository.name,
                     })
 
-                    void switchActiveRepository(repository.uuid).then((didSwitch) => {
-                      if (didSwitch) {
-                        closeRepositorySwitchDialog()
-                      }
-                    }).catch(() => {})
+                    void switchActiveRepository(repository.uuid)
+                      .then((didSwitch) => {
+                        if (didSwitch) {
+                          closeRepositorySwitchDialog()
+                        }
+                      })
+                      .catch((error) => {
+                        logger.error("Repository switch failed.", {
+                          error,
+                          repositoryUuid: repository.uuid,
+                        })
+                        showError(error instanceof Error ? error.message : "切换失败")
+                      })
                   }}
                 >
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -137,6 +152,9 @@ function QuickRepositorySwitchDialog() {
                       ) : null}
                       {isMissing ? (
                         <Badge variant="destructive">目录不存在</Badge>
+                      ) : null}
+                      {isBlockedByOperation ? (
+                        <Badge variant="outline">操作中</Badge>
                       ) : null}
                     </div>
                     <span className="break-all text-muted-foreground">

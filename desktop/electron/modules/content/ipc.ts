@@ -308,7 +308,14 @@ export const contentIpcModule: IpcModule = {
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.restoreContent(payload)
-        await notifyPendingPushesUpdated(eventBus)
+        const repository = await resolveActiveRepository()
+
+        await notifyPendingPushesUpdated(eventBus, repository)
+
+        if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
+          scheduleBackgroundPush(eventBus, repository)
+        }
+
         return result
       },
     },

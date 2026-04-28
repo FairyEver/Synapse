@@ -14,7 +14,7 @@ type VariableSubstitutionDialogProps = {
   placeholders: string[]
   repositoryVariables: SynapseVariable[]
   repositoryUuid: string | null
-  onConfirm: (substitutions: Record<string, string>, saveToRepo: boolean) => void
+  onConfirm: (substitutions: Record<string, string>, saveToRepo: boolean) => Promise<void> | void
 }
 
 function matchVariable(
@@ -36,6 +36,7 @@ function VariableSubstitutionDialog({
 }: VariableSubstitutionDialogProps) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [saveToRepo, setSaveToRepo] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const initialValues = useMemo(() => {
     const result: Record<string, string> = {}
@@ -50,6 +51,7 @@ function VariableSubstitutionDialog({
     if (open) {
       setValues(initialValues)
       setSaveToRepo(false)
+      setIsSubmitting(false)
     }
   }, [open, initialValues])
 
@@ -57,12 +59,26 @@ function VariableSubstitutionDialog({
     setValues((prev) => ({ ...prev, [name]: value }))
   }, [])
 
-  const handleSubmit = useCallback(() => {
-    onConfirm(values, saveToRepo)
-  }, [onConfirm, saveToRepo, values])
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitting) {
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await onConfirm(values, saveToRepo)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [isSubmitting, onConfirm, saveToRepo, values])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!isSubmitting) onOpenChange(next)
+      }}
+    >
       <FormDialog
         title="变量替换"
         description="以下占位符将在安装时被替换。留空则保留原文。"
@@ -73,18 +89,20 @@ function VariableSubstitutionDialog({
                 id="save-to-repo"
                 checked={saveToRepo}
                 onCheckedChange={setSaveToRepo}
-                disabled={!repositoryUuid}
+                disabled={!repositoryUuid || isSubmitting}
               />
               <Label htmlFor="save-to-repo" className="text-sm font-normal">
                 保存新变量到仓库
               </Label>
             </div>
-            <Button type="submit">继续安装</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "安装中..." : "继续安装"}
+            </Button>
           </div>
         }
         onSubmit={(e) => {
           e.preventDefault()
-          handleSubmit()
+          void handleSubmit()
         }}
       >
         <div className="flex flex-col">
@@ -97,6 +115,7 @@ function VariableSubstitutionDialog({
                 </Label>
                 <Input
                   placeholder="替换值"
+                  disabled={isSubmitting}
                   value={values[name] ?? ""}
                   onChange={(e) => handleValueChange(name, e.target.value)}
                 />

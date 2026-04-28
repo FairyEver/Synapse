@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Package } from "lucide-react"
+import { LoaderCircle, Package, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -43,7 +43,7 @@ import type { DataStoreTableImportInspection } from "@/types/data-store"
 const logger = createRendererLogger("data-store")
 
 function DataStoreModule() {
-  const { tables, refresh: refreshTables } = useDataStoreTables()
+  const { tables, loading: tablesLoading, error: tablesError, refresh: refreshTables } = useDataStoreTables()
   const { error: showError, success: showSuccess, promise } = useAppNotifications()
 
   const [activeTable, setActiveTable] = useState<string | null>(null)
@@ -55,8 +55,10 @@ function DataStoreModule() {
   const dataTableViewRef = useRef<DataTableViewHandle | null>(null)
 
   const selectedTable = activeTable ?? tables[0]?.name ?? null
-  const { rows, total, refresh: refreshQuery, pageSize } = useDataStoreQuery(selectedTable, page, filter)
-  const { schema, refresh: refreshSchema } = useDataStoreSchema(selectedTable)
+  const { rows, total, error: queryError, refresh: refreshQuery, pageSize } = useDataStoreQuery(selectedTable, page, filter)
+  const { schema, error: schemaError, refresh: refreshSchema } = useDataStoreSchema(selectedTable)
+  const loadError = tablesError ?? queryError ?? schemaError
+  const isLoadingSelection = tablesLoading || Boolean(selectedTable && !schema && !loadError)
 
   const handleTableSelect = useCallback(
     async (name: string) => {
@@ -308,9 +310,32 @@ function DataStoreModule() {
     />
   )
 
+  const handleRetryLoad = () => {
+    void refreshTables()
+    void refreshQuery()
+    void refreshSchema()
+  }
+
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
-      {selectedTable && schema ? (
+      {loadError ? (
+        <div className="flex h-full flex-col">
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <TriangleAlert className="size-10 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">读取失败</p>
+              <p className="text-xs text-muted-foreground">{loadError.message}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRetryLoad}
+              >
+                重试
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : selectedTable && schema ? (
         <div className="flex h-full flex-col">
           <div className="min-h-0 flex-1">
             <DataTableView
@@ -331,6 +356,15 @@ function DataStoreModule() {
               filter={filter}
               onFilterChange={handleFilterChange}
             />
+          </div>
+        </div>
+      ) : isLoadingSelection ? (
+        <div className="flex h-full flex-col">
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <LoaderCircle className="size-10 animate-spin text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">正在加载</p>
+            </div>
           </div>
         </div>
       ) : (

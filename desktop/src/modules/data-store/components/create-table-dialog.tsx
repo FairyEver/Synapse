@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { Column, ColumnKind } from "@/types/data-store"
+import { formatCreateTableSubmitError } from "@/modules/data-store/utils"
 import {
   COLUMN_KINDS,
   getColumnKindLabel,
@@ -35,7 +36,7 @@ type ColumnRow = {
 type CreateTableDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (name: string, columns: Column[], description?: string) => void
+  onSubmit: (name: string, columns: Column[], description?: string) => Promise<void> | void
 }
 
 const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
@@ -49,12 +50,14 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
     { key: ++nextKey, name: "", kind: "text", description: "", choices: [] },
   ])
   const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const reset = useCallback(() => {
     setName("")
     setDescription("")
     setColumns([{ key: ++nextKey, name: "", kind: "text", description: "", choices: [] }])
     setError("")
+    setIsSubmitting(false)
   }, [])
 
   const handleOpenChange = useCallback(
@@ -79,7 +82,11 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
     )
   }, [])
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitting) {
+      return
+    }
+
     setError("")
 
     const trimmedName = name.trim()
@@ -113,29 +120,46 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       return
     }
 
+    const seenColumnNames = new Set<string>()
+    const repeatedColumn = validColumns.find((c) => {
+      const lower = c.name.trim().toLowerCase()
+      if (seenColumnNames.has(lower)) return true
+      seenColumnNames.add(lower)
+      return false
+    })
+    if (repeatedColumn) {
+      setError(`列名 "${repeatedColumn.name.trim()}" 重复`)
+      return
+    }
+
     const emptyChoices = validColumns.find((c) => (c.kind === "single_choice" || c.kind === "multi_choice") && c.choices.length === 0)
     if (emptyChoices) {
       setError(`列 "${emptyChoices.name.trim()}" 需要填写选项`)
       return
     }
 
-    onSubmit(
-      trimmedName,
-      validColumns.map((c) => {
-        const def: Column = {
-          name: c.name.trim(),
-          kind: c.kind,
-          description: c.description.trim() || undefined,
-        }
-        if ((c.kind === "single_choice" || c.kind === "multi_choice") && c.choices.length > 0) {
-          def.choices = c.choices
-        }
-        return def
-      }),
-      description.trim() || undefined,
-    )
-    handleOpenChange(false)
-  }, [name, description, columns, onSubmit, handleOpenChange])
+    const definitions = validColumns.map((c) => {
+      const def: Column = {
+        name: c.name.trim(),
+        kind: c.kind,
+        description: c.description.trim() || undefined,
+      }
+      if ((c.kind === "single_choice" || c.kind === "multi_choice") && c.choices.length > 0) {
+        def.choices = c.choices
+      }
+      return def
+    })
+
+    setIsSubmitting(true)
+    try {
+      await onSubmit(trimmedName, definitions, description.trim() || undefined)
+      handleOpenChange(false)
+    } catch (submitError) {
+      setError(formatCreateTableSubmitError(submitError))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [name, description, columns, onSubmit, handleOpenChange, isSubmitting])
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -222,7 +246,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                     className="text-xs"
                     value={col.description}
                     onChange={(e) => updateColumn(col.key, "description", e.target.value)}
-                    placeholder="用途说明，帮助 AI 理解此列"
+                    placeholder="可选说明"
                   />
                   {col.kind === "single_choice" || col.kind === "multi_choice" ? (
                     <TagInput
@@ -244,10 +268,12 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
+          <Button variant="outline" disabled={isSubmitting} onClick={() => handleOpenChange(false)}>
             取消
           </Button>
-          <Button onClick={handleSubmit}>创建</Button>
+          <Button disabled={isSubmitting} onClick={() => void handleSubmit()}>
+            {isSubmitting ? "创建中..." : "创建"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

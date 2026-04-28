@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "pnpm -r --parallel run dev",
+    "dev": "pnpm --filter @synapse/desktop run dev",
     "kill": "ps aux | grep -E 'scripts/dev\\.mjs|dev:renderer|dev:electron|dev-electron-app|vite\\.js.*(19731|strictPort)|vitepress.*dev|concurrently.*renderer.*electron|nodemon.*electron|Synapse.*Electron|electron \\.' | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null; echo 'Done.'",
     "desktop:dev": "pnpm --filter @synapse/desktop run dev",
     "desktop:dev:renderer": "pnpm --filter @synapse/desktop run dev:renderer",

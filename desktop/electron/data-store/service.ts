@@ -311,6 +311,36 @@ function toSqlValue(v: unknown): SQLInputValue {
   return String(v)
 }
 
+const INTEGER_WRITE_PATTERN = /^-?\d+$/
+const DECIMAL_WRITE_PATTERN = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i
+
+function toIntegerSqlValue(column: string, value: unknown): SQLInputValue {
+  if (typeof value === "bigint") return value
+  if (typeof value === "number" && Number.isFinite(value) && Number.isInteger(value)) return value
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (INTEGER_WRITE_PATTERN.test(trimmed)) {
+      const numeric = Number(trimmed)
+      return Number.isSafeInteger(numeric) ? numeric : BigInt(trimmed)
+    }
+  }
+
+  throw new Error(`Column "${column}" expects an integer value`)
+}
+
+function toDecimalSqlValue(column: string, value: unknown): SQLInputValue {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (DECIMAL_WRITE_PATTERN.test(trimmed)) {
+      const numeric = Number(trimmed)
+      if (Number.isFinite(numeric)) return numeric
+    }
+  }
+
+  throw new Error(`Column "${column}" expects a decimal value`)
+}
+
 function toNumber(v: number | bigint): number {
   return typeof v === "bigint" ? Number(v) : v
 }
@@ -586,6 +616,16 @@ class DataStoreService {
     return this.getColumnsForTable(table, isMultiChoiceKind)
   }
 
+  private getNumericColumnsForTable(table: string): Map<string, "integer" | "decimal"> {
+    const result = new Map<string, "integer" | "decimal">()
+    for (const [name, meta] of this.getColumnMetaForTable(table)) {
+      if (meta.kind === "integer" || meta.kind === "decimal") {
+        result.set(name, meta.kind)
+      }
+    }
+    return result
+  }
+
   private validateSingleChoiceValue(key: string, value: unknown, choiceCols: Map<string, string[]>): void {
     const allowed = choiceCols.get(key)
     if (!allowed) return
@@ -619,6 +659,7 @@ class DataStoreService {
     dateCols: Set<string>,
     timestampCols: Set<string>,
     multiChoiceCols?: Set<string>,
+    numericCols?: Map<string, "integer" | "decimal">,
   ): SQLInputValue {
     if (value === null || value === undefined) return null
     if (multiChoiceCols?.has(key)) return toSqlValue(JSON.stringify(value))
@@ -630,6 +671,9 @@ class DataStoreService {
     if (timestampCols.has(key) && value !== null && value !== undefined && value !== "") {
       return validateTimestampString(value)
     }
+    const numericKind = numericCols?.get(key)
+    if (numericKind === "integer") return toIntegerSqlValue(key, value)
+    if (numericKind === "decimal") return toDecimalSqlValue(key, value)
     return toSqlValue(value)
   }
 
@@ -1005,6 +1049,7 @@ class DataStoreService {
     const timestampCols = this.getTimestampColumnsForTable(table)
     const choiceCols = this.getChoiceColumnsForTable(table)
     const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
+    const numericCols = this.getNumericColumnsForTable(table)
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
     const now = new Date().toISOString()
     const withTimestamps: Record<string, unknown> = { created_at: now, updated_at: now, ...filtered }
@@ -1019,7 +1064,7 @@ class DataStoreService {
         }
       }
     }
-    const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
+    const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
     const placeholders = keys.map(() => "?").join(", ")
     const columnList = keys.map(q).join(", ")
 
@@ -1043,6 +1088,7 @@ class DataStoreService {
       const timestampCols = this.getTimestampColumnsForTable(table)
       const choiceCols = this.getChoiceColumnsForTable(table)
       const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
+      const numericCols = this.getNumericColumnsForTable(table)
       for (const row of rows) {
         const filtered = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "created_at" && k !== "updated_at"))
         const now = new Date().toISOString()
@@ -1058,7 +1104,7 @@ class DataStoreService {
             }
           }
         }
-        const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
+        const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
         const placeholders = keys.map(() => "?").join(", ")
         const columnList = keys.map(q).join(", ")
 
@@ -1125,6 +1171,7 @@ class DataStoreService {
     const timestampCols = this.getTimestampColumnsForTable(table)
     const choiceCols = this.getChoiceColumnsForTable(table)
     const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
+    const numericCols = this.getNumericColumnsForTable(table)
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
     const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
     const keys = Object.keys(withTimestamp)
@@ -1141,7 +1188,7 @@ class DataStoreService {
     }
 
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
-    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
+    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
 
     const result = db.prepare(`UPDATE ${q(table)} SET ${setClauses} WHERE "id" = ?`).run(...values, id)
     return { affected: toNumber(result.changes) }
@@ -1173,6 +1220,7 @@ class DataStoreService {
     const timestampCols = this.getTimestampColumnsForTable(table)
     const choiceCols = this.getChoiceColumnsForTable(table)
     const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
+    const numericCols = this.getNumericColumnsForTable(table)
 
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
     const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
@@ -1191,7 +1239,7 @@ class DataStoreService {
 
     const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
-    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols))
+    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
 
     db.exec("BEGIN")
     try {
