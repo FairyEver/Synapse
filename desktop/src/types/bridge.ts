@@ -282,6 +282,7 @@ export type SynapseBridge = {
     createTable: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
     dropTable: (name: string) => Promise<void>
     describeTable: (name: string) => Promise<DataStoreTableSchema>
+    updateTableDescription: (params: { table: string; description: string }) => Promise<void>
     addColumn: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
     updateColumnDescription: (params: { table: string; column: string; description: string }) => Promise<void>
     updateColumnChoices: (params: { table: string; column: string; choices: string[] }) => Promise<void>

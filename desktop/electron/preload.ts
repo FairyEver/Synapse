@@ -178,6 +178,7 @@ const DATA_STORE_CHANNELS = {
   createTable: "synapse:data-store:create-table",
   dropTable: "synapse:data-store:drop-table",
   describeTable: "synapse:data-store:describe-table",
+  updateTableDescription: "synapse:data-store:update-table-description",
   addColumn: "synapse:data-store:add-column",
   updateColumnDescription: "synapse:data-store:update-column-description",
   updateColumnChoices: "synapse:data-store:update-column-choices",
@@ -394,6 +395,8 @@ const synapseBridge: SynapseBridge = {
     createTable: (params) => invoke(DATA_STORE_CHANNELS.createTable)(params),
     dropTable: (name) => invoke(DATA_STORE_CHANNELS.dropTable)(name),
     describeTable: (name) => invoke(DATA_STORE_CHANNELS.describeTable)(name),
+    updateTableDescription: (params) =>
+      invoke(DATA_STORE_CHANNELS.updateTableDescription)(params),
     addColumn: (params) => invoke(DATA_STORE_CHANNELS.addColumn)(params),
     updateColumnDescription: (params) =>
       invoke(DATA_STORE_CHANNELS.updateColumnDescription)(params),

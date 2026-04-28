@@ -41,6 +41,13 @@ function registerDataStoreHandlers(): void {
     return dataStoreService.describeTable(name)
   })
 
+  handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateTableDescription, async (_event, params: {
+    table: string
+    description: string
+  }) => {
+    dataStoreService.updateTableDescription(params.table, params.description)
+  })
+
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.addColumn, async (_event, params: {
     table: string
     column: Column & { default?: unknown }

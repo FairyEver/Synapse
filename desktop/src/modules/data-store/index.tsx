@@ -29,6 +29,7 @@ import {
   importTable,
   inspectTableImport,
   insertRow,
+  updateTableDescription,
   updateColumnDescription,
   updateColumnChoices,
   updateRow,
@@ -168,6 +169,22 @@ function DataStoreModule() {
       { loading: "正在删除表...", success: `表 "${selectedTable}" 已删除` },
     )
   }, [selectedTable, promise, refreshTables])
+
+  const handleUpdateTableDescription = useCallback(
+    async (description: string) => {
+      if (!selectedTable) return
+
+      try {
+        await updateTableDescription(selectedTable, description)
+        await refreshSchema()
+        await refreshTables()
+      } catch (error) {
+        logger.error("Table description update failed.", { error })
+        showError(error instanceof Error ? error.message : "保存失败")
+      }
+    },
+    [refreshSchema, refreshTables, selectedTable, showError],
+  )
 
   const handleAddColumn = useCallback(
     async (name: string, kind: ColumnKind, description?: string, choices?: string[]) => {
@@ -348,6 +365,7 @@ function DataStoreModule() {
         onOpenChange={setIsSchemaSheetOpen}
         schema={schema}
         onAddColumn={handleAddColumn}
+        onUpdateTableDescription={handleUpdateTableDescription}
         onUpdateColumnDescription={handleUpdateColumnDescription}
         onUpdateColumnChoices={handleUpdateColumnChoices}
         onDropTable={handleDropTable}

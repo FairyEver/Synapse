@@ -128,6 +128,10 @@ async function dropTable(name: string): Promise<void> {
   await requireSynapseBridge().dataStore.dropTable(name)
 }
 
+async function updateTableDescription(table: string, description: string): Promise<void> {
+  await requireSynapseBridge().dataStore.updateTableDescription({ table, description })
+}
+
 async function addColumn(table: string, column: Column & { default?: unknown }): Promise<void> {
   await requireSynapseBridge().dataStore.addColumn({ table, column })
 }
@@ -231,6 +235,7 @@ export {
   installCLI,
   openMCPSettings,
   registerMCP,
+  updateTableDescription,
   updateColumnDescription,
   updateColumnChoices,
   updateRow,

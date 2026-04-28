@@ -101,6 +101,7 @@ type ModuleSidebarItemProps = {
   disabled?: boolean
   icon?: LucideIcon
   iconElement?: ReactNode
+  description?: ReactNode
   onClick?: () => void
   trailing?: ReactNode
   children: ReactNode
@@ -112,6 +113,7 @@ function ModuleSidebarItem({
   disabled,
   icon: Icon,
   iconElement,
+  description,
   onClick,
   trailing,
   children,
@@ -124,7 +126,8 @@ function ModuleSidebarItem({
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-8 w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "flex w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        description ? "min-h-11 py-1.5" : "h-8",
         "hover:bg-muted/60 hover:text-foreground",
         "focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
@@ -134,7 +137,14 @@ function ModuleSidebarItem({
     >
       <span className="flex min-w-0 items-center gap-2 text-left">
         {Icon ? <Icon className="size-4 shrink-0" /> : iconElement ?? null}
-        <span className="truncate">{children}</span>
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate">{children}</span>
+          {description ? (
+            <span className="truncate text-xs font-normal text-muted-foreground">
+              {description}
+            </span>
+          ) : null}
+        </span>
       </span>
       {trailing ? <span className="ml-2 shrink-0">{trailing}</span> : null}
     </button>

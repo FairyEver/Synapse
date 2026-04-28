@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,6 +52,7 @@ type TableSchemaSheetProps = {
   onOpenChange: (open: boolean) => void
   schema: DataStoreTableSchema | null
   onAddColumn: (name: string, kind: ColumnKind, description?: string, choices?: string[]) => void
+  onUpdateTableDescription: (description: string) => Promise<void> | void
   onUpdateColumnDescription: (column: string, description: string) => void
   onUpdateColumnChoices: (column: string, choices: string[]) => Promise<void>
   onDropTable: () => void
@@ -62,6 +63,7 @@ function TableSchemaSheet({
   onOpenChange,
   schema,
   onAddColumn,
+  onUpdateTableDescription,
   onUpdateColumnDescription,
   onUpdateColumnChoices,
   onDropTable,
@@ -70,15 +72,41 @@ function TableSchemaSheet({
   const [newColKind, setNewColKind] = useState<ColumnKind>("text")
   const [newColDesc, setNewColDesc] = useState("")
   const [newColChoices, setNewColChoices] = useState<string[]>([])
+  const [tableDescription, setTableDescription] = useState("")
+  const [isTableDescriptionSaving, setIsTableDescriptionSaving] = useState(false)
   const [editingCol, setEditingCol] = useState<string | null>(null)
   const [editingDesc, setEditingDesc] = useState("")
   const [editingChoicesCol, setEditingChoicesCol] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const skipTableDescriptionCommitRef = useRef(false)
 
   const editingChoicesColumn = useMemo(
     () => (schema && editingChoicesCol ? schema.columns.find((c) => c.name === editingChoicesCol) ?? null : null),
     [schema, editingChoicesCol],
   )
+
+  useEffect(() => {
+    setTableDescription(schema?.description ?? "")
+  }, [schema?.description, schema?.name])
+
+  const commitTableDescription = useCallback(async () => {
+    if (skipTableDescriptionCommitRef.current) {
+      skipTableDescriptionCommitRef.current = false
+      return
+    }
+
+    if (!schema) return
+
+    const nextDescription = tableDescription.trim()
+    if (nextDescription === schema.description) return
+
+    setIsTableDescriptionSaving(true)
+    try {
+      await onUpdateTableDescription(nextDescription)
+    } finally {
+      setIsTableDescriptionSaving(false)
+    }
+  }, [onUpdateTableDescription, schema, tableDescription])
 
   const handleAddColumn = useCallback(() => {
     const trimmed = newColName.trim()
@@ -112,12 +140,42 @@ function TableSchemaSheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[600px]">
+      <DialogContent
+        className="gap-0 overflow-hidden p-0 sm:max-w-[600px]"
+        onEscapeKeyDown={(event) => {
+          if (document.activeElement?.id === "table-description") {
+            event.preventDefault()
+          }
+        }}
+      >
         <DialogHeader className="px-5 pt-5">
           <DialogTitle>{schema.name} 表结构</DialogTitle>
         </DialogHeader>
 
         <div className="flex max-h-[calc(100vh-12rem)] min-h-0 flex-col gap-5 overflow-y-auto px-5 py-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="table-description">表备注</Label>
+            <Input
+              id="table-description"
+              value={tableDescription}
+              disabled={isTableDescriptionSaving}
+              onChange={(event) => setTableDescription(event.target.value)}
+              onBlur={() => {
+                void commitTableDescription()
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur()
+                }
+                if (event.key === "Escape") {
+                  skipTableDescriptionCommitRef.current = true
+                  setTableDescription(schema.description)
+                  event.currentTarget.blur()
+                }
+              }}
+            />
+          </div>
+
           <div className="min-h-0 overflow-auto rounded-md border">
             <Table>
               <TableHeader>
