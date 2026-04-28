@@ -17,6 +17,20 @@ type DataStoreSidebarProps = {
   onImportTable: () => void
 }
 
+function filterDataStoreTables(
+  tables: DataStoreTableInfo[],
+  searchQuery: string,
+): DataStoreTableInfo[] {
+  const query = searchQuery.trim().toLowerCase()
+  if (!query) return tables
+
+  return tables.filter((table) => {
+    const description = table.description.trim().toLowerCase()
+    return table.name.toLowerCase().includes(query)
+      || (description ? description.includes(query) : false)
+  })
+}
+
 function DataStoreSidebar({
   tables,
   activeTable,
@@ -26,18 +40,17 @@ function DataStoreSidebar({
 }: DataStoreSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
-  const filteredTables = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    if (!query) return tables
-    return tables.filter((table) => table.name.toLowerCase().includes(query))
-  }, [tables, searchQuery])
+  const filteredTables = useMemo(
+    () => filterDataStoreTables(tables, searchQuery),
+    [tables, searchQuery],
+  )
 
   return (
     <ModuleSidebar variant="bare">
       <ModuleSidebarHeader
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="搜索数据表"
+        searchPlaceholder="搜索数据表或备注"
         onAddClick={onCreateTable}
         addTitle="新建表"
         actions={(
@@ -64,6 +77,7 @@ function DataStoreSidebar({
               active={table.name === activeTable}
               icon={Table2}
               onClick={() => onTableSelect(table.name)}
+              description={table.description.trim() || undefined}
               trailing={
                 <span className="text-xs text-muted-foreground">
                   {table.rowCount}
@@ -79,4 +93,4 @@ function DataStoreSidebar({
   )
 }
 
-export { DataStoreSidebar }
+export { DataStoreSidebar, filterDataStoreTables }
