@@ -811,6 +811,15 @@ class DataStoreService {
     }
   }
 
+  updateTableDescription(table: string, description: string): void {
+    validateName(table, "table")
+    this.assertTableExists(table)
+
+    const db = this.getDb()
+    db.prepare(`UPDATE "_meta_tables" SET description = ?, updated_at = ? WHERE name = ?`)
+      .run(description, new Date().toISOString(), table)
+  }
+
   addColumn(table: string, column: Column & { default?: unknown }): void {
     validateName(table, "table")
     validateColumnName(column.name)
