@@ -38,10 +38,10 @@ import { detectPlaceholders } from "@/lib/variable-substitution"
 import { installFormDefinitionByEditorId } from "@/definitions/generated/renderer-registry"
 import { buildRepositoryVariablesPatch } from "@/modules/content/lib/repository-variables"
 import {
-  EditorInstallTargetSelector,
-  type EditorInstallTargetSelection,
+  EditorWriteTargetSelector,
+  type EditorWriteTargetSelection,
   type ResolveEditorTargetInput,
-} from "./editor-install-target-selector"
+} from "./editor-write-target-selector"
 
 type ContentInstallDialogProps = {
   editor: SynapseEditorAdapterSummary | null
@@ -71,7 +71,7 @@ function ContentInstallDialog({
   const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([])
   const pendingSubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
   const variableConfirmPassedRef = useRef(false)
-  const [selection, setSelection] = useState<EditorInstallTargetSelection | null>(null)
+  const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
   const [installError, setInstallError] = useState<string | null>(null)
   const [isInstalling, setIsInstalling] = useState(false)
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false)
@@ -413,7 +413,8 @@ function ContentInstallDialog({
 
           <div className="flex flex-col gap-5">
             {item.type === "rule" || item.type === "skill" ? (
-              <EditorInstallTargetSelector
+              <EditorWriteTargetSelector
+                actionKind="install"
                 contentType={item.type}
                 editor={editor}
                 loggerName={`content.install.${item.type}`}

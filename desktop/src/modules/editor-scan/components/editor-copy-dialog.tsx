@@ -24,10 +24,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  EditorInstallTargetSelector,
-  type EditorInstallTargetSelection,
+  EditorWriteTargetSelector,
+  type EditorWriteTargetSelection,
   type ResolveEditorTargetInput,
-} from "@/modules/content/components/editor-install-target-selector"
+} from "@/modules/content/components/editor-write-target-selector"
 import { useEditorAdaptersForContentType } from "@/modules/content/hooks/use-editor-adapters-for-content-type"
 import { installFormDefinitionByEditorId } from "@/definitions/generated/renderer-registry"
 import type { SynapseEditorAdapterSummary, SynapseEditorInstallFormValues } from "@/types/editor"
@@ -70,7 +70,7 @@ function EditorCopyDialog({
   const { config } = useAppConfig()
   const { promise } = useAppNotifications()
   const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
-  const [selection, setSelection] = useState<EditorInstallTargetSelection | null>(null)
+  const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
   const [isCopying, setIsCopying] = useState(false)
   const [overwriteConfirmed, setOverwriteConfirmed] = useState(false)
@@ -95,7 +95,7 @@ function EditorCopyDialog({
   const activeTarget = selection?.activeTarget ?? null
   const scope = selection?.scope ?? "global"
   const projectPath = selection?.projectPath ?? ""
-  const canInstall = Boolean(activeTarget?.status === "ready" && selectedEditor && source) && !isCopying
+  const canCopy = Boolean(activeTarget?.status === "ready" && selectedEditor && source) && !isCopying
   const installFormDefinition = selectedEditor ? installFormDefinitionByEditorId.get(selectedEditor.id) : undefined
   const RuleProjectInstallForm = installFormDefinition?.RuleProjectInstallForm
 
@@ -141,7 +141,7 @@ function EditorCopyDialog({
     }
 
     if (!activeTarget || activeTarget.status !== "ready") {
-      setCopyError("当前还没有可用的安装目标。")
+      setCopyError("当前还没有可用的复制目标。")
       return
     }
 
@@ -159,9 +159,9 @@ function EditorCopyDialog({
           targetScope: scope,
         }),
         {
-          loading: `正在安装到 ${selectedEditor.label}...`,
-          success: (value) => `已写入 ${value.targetPath}`,
-          error: (error) => error instanceof Error ? error.message : "安装失败。",
+          loading: `正在复制到 ${selectedEditor.label}...`,
+          success: () => `已复制到 ${selectedEditor.label}`,
+          error: (error) => error instanceof Error ? error.message : "复制失败。",
         },
       )
 
@@ -177,7 +177,7 @@ function EditorCopyDialog({
       onOpenChange(false)
       await onCopied?.()
     } catch (error) {
-      const message = error instanceof Error ? error.message : "安装失败。"
+      const message = error instanceof Error ? error.message : "复制失败。"
       logger.error("Failed to copy scan item to editor.", {
         error,
         sourcePath: source.itemPath,
@@ -189,9 +189,9 @@ function EditorCopyDialog({
     }
   }
 
-  const handleInstall = async () => {
+  const handleCopy = async () => {
     if (!item || !activeTarget || activeTarget.status !== "ready") {
-      setCopyError("当前还没有可用的安装目标。")
+      setCopyError("当前还没有可用的复制目标。")
       return
     }
 
@@ -243,7 +243,7 @@ function EditorCopyDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>覆盖目标？</AlertDialogTitle>
             <AlertDialogDescription>
-              目标位置已有内容，安装后会被替换。
+              目标位置已有内容，复制后会被替换。
             </AlertDialogDescription>
             {activeTarget?.status === "ready" ? (
               <div className="mt-1 rounded-md bg-muted/40 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
@@ -309,7 +309,7 @@ function EditorCopyDialog({
                 </Button>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">当前没有可用的安装目标。</p>
+              <p className="text-sm text-muted-foreground">当前没有可用的复制目标。</p>
             )}
           </div>
 
@@ -332,12 +332,13 @@ function EditorCopyDialog({
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>安装到 {selectedEditor?.label}</DialogTitle>
+            <DialogTitle>复制到 {selectedEditor?.label}</DialogTitle>
           </DialogHeader>
 
           {selectedEditor ? (
             <div className="flex flex-col gap-5">
-              <EditorInstallTargetSelector
+              <EditorWriteTargetSelector
+                actionKind="copy"
                 contentType={item.type}
                 editor={selectedEditor}
                 loggerName="editor-scan.copy"
@@ -358,13 +359,13 @@ function EditorCopyDialog({
             </Button>
             <Button
               type="button"
-              disabled={!canInstall}
+              disabled={!canCopy}
               onClick={() => {
-                void handleInstall()
+                void handleCopy()
               }}
             >
               {isCopying ? <LoaderCircle className="animate-spin" /> : null}
-              安装
+              复制
             </Button>
           </DialogFooter>
         </DialogContent>

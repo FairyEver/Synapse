@@ -35,19 +35,20 @@ type ResolveEditorTargetInput = {
   scope: SynapseEditorInstallScope
 }
 
-type EditorInstallTargetSelection = {
+type EditorWriteTargetSelection = {
   activeTarget: SynapseEditorResolvedTarget | null
   activeTargetState: InstallTargetState
   projectPath: string
   scope: SynapseEditorInstallScope
 }
 
-type EditorInstallTargetSelectorProps = {
+type EditorWriteTargetSelectorProps = {
+  actionKind: "install" | "copy"
   contentType: Extract<SynapseContentType, "rule" | "skill">
   editor: SynapseEditorAdapterSummary
   loggerName: string
   onError?: (message: string) => void
-  onSelectionChange: (selection: EditorInstallTargetSelection) => void
+  onSelectionChange: (selection: EditorWriteTargetSelection) => void
   open: boolean
   projects: SynapseProjectConfig[]
   resolveTarget: (input: ResolveEditorTargetInput) => Promise<SynapseEditorResolvedTarget>
@@ -61,7 +62,8 @@ function createIdleTargetState(): InstallTargetState {
   }
 }
 
-function EditorInstallTargetSelector({
+function EditorWriteTargetSelector({
+  actionKind,
   contentType,
   editor,
   loggerName,
@@ -70,7 +72,7 @@ function EditorInstallTargetSelector({
   open,
   projects,
   resolveTarget,
-}: EditorInstallTargetSelectorProps) {
+}: EditorWriteTargetSelectorProps) {
   const definition = getContentTypeDefinition(contentType)
   const logger = useMemo(() => createRendererLogger(loggerName), [loggerName])
   const [scope, setScope] = useState<SynapseEditorInstallScope>("global")
@@ -349,7 +351,7 @@ function EditorInstallTargetSelector({
           {activeTargetState.isLoading ? (
             <p className="flex items-center gap-2 text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />
-              正在解析安装路径
+              {actionKind === "install" ? "正在解析安装路径" : "正在解析复制路径"}
             </p>
           ) : activeTargetState.error ? (
             <p className="text-destructive">{activeTargetState.error}</p>
@@ -374,7 +376,9 @@ function EditorInstallTargetSelector({
               {activeTarget.message ?? "当前环境暂时不能安装到这个位置。"}
             </p>
           ) : (
-            <p className="text-muted-foreground">先选择一个可用的安装范围。</p>
+            <p className="text-muted-foreground">
+              {actionKind === "install" ? "先选择一个可用的安装范围。" : "先选择一个可用的复制范围。"}
+            </p>
           )}
         </div>
       </div>
@@ -382,5 +386,5 @@ function EditorInstallTargetSelector({
   )
 }
 
-export { EditorInstallTargetSelector }
-export type { EditorInstallTargetSelection, ResolveEditorTargetInput }
+export { EditorWriteTargetSelector }
+export type { EditorWriteTargetSelection, ResolveEditorTargetInput }
