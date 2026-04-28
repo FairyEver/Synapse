@@ -140,7 +140,14 @@ function TableSchemaSheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[600px]">
+      <DialogContent
+        className="gap-0 overflow-hidden p-0 sm:max-w-[600px]"
+        onEscapeKeyDown={(event) => {
+          if (document.activeElement?.id === "table-description") {
+            event.preventDefault()
+          }
+        }}
+      >
         <DialogHeader className="px-5 pt-5">
           <DialogTitle>{schema.name} 表结构</DialogTitle>
         </DialogHeader>
