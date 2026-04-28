@@ -62,6 +62,9 @@ export const IPC_CHANNELS = {
     "resolveTarget": "synapse:editor-copy:resolve-target",
     "copy": "synapse:editor-copy:copy",
   },
+  "editor-install-status": {
+    "resolveForContent": "synapse:editor-install-status:resolve-for-content",
+  },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
     "createDirectory": "synapse:editor:create-directory",

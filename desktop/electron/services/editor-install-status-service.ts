@@ -1,0 +1,183 @@
+import type {
+  SynapseEditorInstallStatusEntry,
+  SynapseEditorInstallStatusResult,
+  SynapseEditorInstallStatusValue,
+  SynapseResolveEditorInstallStatusPayload,
+} from "../../src/types/editor-install-status"
+import type {
+  SynapseEditorId,
+  SynapseEditorInstallScope,
+  SynapseEditorResolvedTarget,
+} from "../../src/types/editor"
+import type {
+  EditorScanGlobalResult,
+  EditorScanProjectEntry,
+  EditorScanResult,
+  EditorScanRuleItem,
+  EditorScanSkillItem,
+} from "../../src/types/editor-scan"
+import { editorAdapterService } from "./editor-adapter-service"
+import { editorAdapters } from "./editor-adapters"
+import { scanAll } from "./editor-scan-service"
+
+function normalizeRuleContent(content: string): string {
+  return content.replace(/\r\n/g, "\n").trim()
+}
+
+function findByContentIdOrName<T extends { synapseContentId: string | null; name: string }>(
+  items: T[],
+  payload: SynapseResolveEditorInstallStatusPayload,
+): T | null {
+  return (
+    items.find((item) => item.synapseContentId === payload.contentId)
+    ?? (payload.contentName ? items.find((item) => item.name === payload.contentName) : undefined)
+    ?? null
+  )
+}
+
+function statusFromRule(
+  item: EditorScanRuleItem | null,
+  payload: SynapseResolveEditorInstallStatusPayload,
+): SynapseEditorInstallStatusValue | null {
+  if (!item) return null
+  if (item.synapseContentId === null) return "external_same_name"
+
+  if (
+    payload.content
+    && item.content
+    && normalizeRuleContent(payload.content) !== normalizeRuleContent(item.content)
+  ) {
+    return "needs_update"
+  }
+
+  return "installed"
+}
+
+function statusFromSkill(
+  item: EditorScanSkillItem | null,
+  payload: SynapseResolveEditorInstallStatusPayload,
+): SynapseEditorInstallStatusValue | null {
+  if (!item) return null
+  return item.synapseContentId === payload.contentId ? "installed" : "external_same_name"
+}
+
+function statusFromTarget(target: SynapseEditorResolvedTarget): SynapseEditorInstallStatusValue | null {
+  return target.status === "ready" ? null : target.status
+}
+
+function targetPathFromTarget(target: SynapseEditorResolvedTarget): string | null {
+  return target.status === "unsupported" || target.status === "unavailable" ? null : target.targetPath
+}
+
+function findGlobalScan(
+  scan: EditorScanResult,
+  editorId: SynapseEditorId,
+): EditorScanGlobalResult | null {
+  return scan.global.find((entry) => entry.editorId === editorId) ?? null
+}
+
+function findProjectScan(
+  scan: EditorScanResult,
+  projectPath: string,
+  editorId: SynapseEditorId,
+): EditorScanProjectEntry | null {
+  const project = scan.projects.find((entry) => entry.projectPath === projectPath)
+  return project?.editors.find((entry) => entry.editorId === editorId) ?? null
+}
+
+function statusFromScanEntry(
+  entry: Pick<EditorScanProjectEntry, "rules" | "skills"> | null,
+  payload: SynapseResolveEditorInstallStatusPayload,
+): SynapseEditorInstallStatusValue | null {
+  if (!entry) return null
+
+  if (payload.contentType === "rule") {
+    return statusFromRule(findByContentIdOrName(entry.rules, payload), payload)
+  }
+
+  return statusFromSkill(findByContentIdOrName(entry.skills, payload), payload)
+}
+
+function createResolvePayload(
+  payload: SynapseResolveEditorInstallStatusPayload,
+  editorId: SynapseEditorId,
+  scope: SynapseEditorInstallScope,
+  projectPath?: string,
+) {
+  return {
+    editorId,
+    scope,
+    contentType: payload.contentType,
+    contentId: payload.contentId,
+    projectPath,
+    skillName: payload.contentType === "skill" ? payload.contentName : undefined,
+    skillTitle: payload.contentType === "skill" ? payload.title : undefined,
+    ruleName: payload.contentType === "rule" ? payload.contentName : undefined,
+  }
+}
+
+function createEntry(params: {
+  editorId: SynapseEditorId
+  editorLabel: string
+  scope: SynapseEditorInstallScope
+  target: SynapseEditorResolvedTarget
+  scanStatus: SynapseEditorInstallStatusValue | null
+  projectId?: string
+  projectName?: string
+}): SynapseEditorInstallStatusEntry {
+  return {
+    editorId: params.editorId,
+    editorLabel: params.editorLabel,
+    scope: params.scope,
+    projectId: params.projectId,
+    projectName: params.projectName,
+    status: statusFromTarget(params.target) ?? params.scanStatus ?? "not_installed",
+    targetPath: targetPathFromTarget(params.target),
+    message: params.target.message,
+  }
+}
+
+export class EditorInstallStatusService {
+  async resolveForContent(
+    payload: SynapseResolveEditorInstallStatusPayload,
+  ): Promise<SynapseEditorInstallStatusResult> {
+    const scan = await scanAll()
+    const entries: SynapseEditorInstallStatusEntry[] = []
+
+    for (const adapter of editorAdapters) {
+      const globalTarget = await editorAdapterService.resolveTarget(
+        createResolvePayload(payload, adapter.id, "global"),
+      )
+      const globalScan = findGlobalScan(scan, adapter.id)
+
+      entries.push(createEntry({
+        editorId: adapter.id,
+        editorLabel: adapter.label,
+        scope: "global",
+        target: globalTarget,
+        scanStatus: statusFromScanEntry(globalScan, payload),
+      }))
+
+      for (const project of payload.projects) {
+        const projectTarget = await editorAdapterService.resolveTarget(
+          createResolvePayload(payload, adapter.id, "project", project.path),
+        )
+        const projectScan = findProjectScan(scan, project.path, adapter.id)
+
+        entries.push(createEntry({
+          editorId: adapter.id,
+          editorLabel: adapter.label,
+          scope: "project",
+          projectId: project.id,
+          projectName: project.name,
+          target: projectTarget,
+          scanStatus: statusFromScanEntry(projectScan, payload),
+        }))
+      }
+    }
+
+    return { entries }
+  }
+}
+
+export const editorInstallStatusService = new EditorInstallStatusService()

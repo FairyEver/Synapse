@@ -14,6 +14,7 @@ import { logIpcModule } from "../modules/log/ipc"
 import { updateIpcModule } from "../modules/update/ipc"
 import { editorScanIpcModule } from "../modules/editor-scan/ipc"
 import { editorCopyIpcModule } from "../modules/editor-copy/ipc"
+import { editorInstallStatusIpcModule } from "../modules/editor-install-status/ipc"
 import { editorIpcModule } from "../modules/editor/ipc"
 import { configIpcModule } from "../modules/config/ipc"
 import { repositoryIpcModule } from "../modules/repository/ipc"
@@ -38,6 +39,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(updateIpcModule, ctx)
   registry.register(editorScanIpcModule, ctx)
   registry.register(editorCopyIpcModule, ctx)
+  registry.register(editorInstallStatusIpcModule, ctx)
   registry.register(editorIpcModule, ctx)
   registry.register(configIpcModule, ctx)
   registry.register(repositoryIpcModule, ctx)
@@ -60,6 +62,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   updateIpcModule,
   editorScanIpcModule,
   editorCopyIpcModule,
+  editorInstallStatusIpcModule,
   editorIpcModule,
   configIpcModule,
   repositoryIpcModule,
