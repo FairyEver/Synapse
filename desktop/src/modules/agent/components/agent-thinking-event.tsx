@@ -20,9 +20,12 @@ function AgentThinkingEvent({
   return (
     <Collapsible defaultOpen={!profile.thinkingDefaultCollapsed} className="py-1">
       <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="w-full justify-start px-1">
+        <Button type="button" variant="ghost" size="sm" className="group/agent-event-trigger w-full justify-start px-1">
           Thinking
-          <ChevronDown data-icon="inline-end" />
+          <ChevronDown
+            data-icon="inline-end"
+            className="transition-transform group-data-[state=closed]/agent-event-trigger:-rotate-90"
+          />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>

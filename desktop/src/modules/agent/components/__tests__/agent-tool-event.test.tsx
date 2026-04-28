@@ -45,6 +45,7 @@ describe("AgentToolEvent", () => {
     expect(html).not.toContain("lucide-terminal")
     expect(html).not.toContain("border-y border-border")
     expect(html.indexOf("Bash")).toBeLessThan(html.indexOf("lucide-chevron-down"))
+    expect(html).toContain("group-data-[state=closed]/agent-event-trigger:-rotate-90")
   })
 
   it("places result status next to the tool title", () => {
