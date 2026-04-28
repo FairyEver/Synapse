@@ -1,81 +1,11 @@
 import type {
-  SynapseAgentEvent,
   SynapseAgentMessageTimelineItem,
   SynapseAgentSessionSummary,
-  SynapseAgentTimelineEntry,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 
 const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
 const THINKING_DOT = "·"
-
-function agentEventToTimelineEntry(
-  event: SynapseAgentEvent,
-  timestamp: string,
-  index: number,
-): SynapseAgentTimelineEntry {
-  return {
-    id: `event:${timestamp}:${event.type}:${index}`,
-    kind: "message",
-    role: roleForEvent(event),
-    content: contentForEvent(event),
-    timestamp,
-  }
-}
-
-function localUserTimelineEntry(
-  content: string,
-  timestamp: string,
-  index: number,
-): SynapseAgentTimelineEntry {
-  return {
-    id: `local:${timestamp}:user:${index}`,
-    kind: "message",
-    role: "user",
-    content,
-    timestamp,
-  }
-}
-
-function contentForEvent(event: SynapseAgentEvent): string {
-  switch (event.type) {
-    case "text":
-    case "thinking":
-    case "result":
-      return event.content
-    case "toolUse":
-      return event.toolName
-    case "toolResult":
-      return event.content ?? event.toolName
-    case "permissionRequest":
-      return event.toolInput ? `${event.toolName}\n${event.toolInput}` : event.toolName
-    case "error":
-      return event.message
-    default: {
-      const exhaustive: never = event
-      return exhaustive
-    }
-  }
-}
-
-function roleForEvent(event: SynapseAgentEvent): SynapseAgentMessageTimelineItem["role"] {
-  switch (event.type) {
-    case "text":
-    case "result":
-      return "assistant"
-    case "toolUse":
-    case "toolResult":
-      return "tool"
-    case "thinking":
-    case "permissionRequest":
-    case "error":
-      return "system"
-    default: {
-      const exhaustive: never = event
-      return exhaustive
-    }
-  }
-}
 
 function sessionLabel(session: SynapseAgentSessionSummary): string {
   if (session.platform === "feishu" && session.sourceLabel) return session.sourceLabel
@@ -182,12 +112,10 @@ function agentCliLabel(agentType: string | undefined): string | undefined {
 export {
   DEFAULT_LOCAL_SESSION_KEY,
   agentCliLabel,
-  agentEventToTimelineEntry,
   defaultSessionId,
   defaultSessionKey,
   formatAgentTranscript,
   formatEntryTime,
-  localUserTimelineEntry,
   sessionLabel,
   thinkingIndicatorText,
 }

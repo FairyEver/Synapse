@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import {
+  appendAgentTimelineEvent,
+  localUserTimelineItem,
+} from "@/lib/agent-timeline"
 import type {
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
@@ -9,14 +13,10 @@ import type {
   SynapseAgentProviderState,
   SynapseAgentSessionSummary,
   SynapseAgentStatus,
-  SynapseAgentTimelineEntry,
+  SynapseAgentTimelineItem,
 } from "@/types/agent"
 import type { AgentProjectScope } from "../project-resolution"
-import {
-  DEFAULT_LOCAL_SESSION_KEY,
-  agentEventToTimelineEntry,
-  localUserTimelineEntry,
-} from "../utils"
+import { DEFAULT_LOCAL_SESSION_KEY } from "../utils"
 import {
   clearConversationUnread,
   incrementUnreadForConversation,
@@ -36,7 +36,7 @@ type TimelineTarget = {
 
 type UseAgentChatState = {
   sessions: SynapseAgentSessionSummary[]
-  timeline: SynapseAgentTimelineEntry[]
+  timeline: SynapseAgentTimelineItem[]
   pendingPermissions: SynapseAgentPendingPermission[]
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
@@ -64,7 +64,7 @@ function useAgentChat(
   options: { readonly inputDirty?: boolean } = {},
 ): UseAgentChatState {
   const [sessions, setSessions] = useState<SynapseAgentSessionSummary[]>([])
-  const [timeline, setTimeline] = useState<SynapseAgentTimelineEntry[]>([])
+  const [timeline, setTimeline] = useState<SynapseAgentTimelineItem[]>([])
   const [pendingPermissions, setPendingPermissions] = useState<SynapseAgentPendingPermission[]>([])
   const [status, setStatus] = useState<SynapseAgentStatus | null>(null)
   const [providers, setProviders] = useState<SynapseAgentProviderState | null>(null)
@@ -106,13 +106,13 @@ function useAgentChat(
     })
   }, [])
 
-  const replaceTimeline = useCallback((entries: SynapseAgentTimelineEntry[]) => {
+  const replaceTimeline = useCallback((entries: SynapseAgentTimelineItem[]) => {
     timelineVersionRef.current += 1
     setTimeline(entries)
   }, [])
 
   const updateTimeline = useCallback((
-    updater: (current: SynapseAgentTimelineEntry[]) => SynapseAgentTimelineEntry[],
+    updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[],
   ) => {
     timelineVersionRef.current += 1
     setTimeline(updater)
@@ -387,7 +387,7 @@ function useAgentChat(
     const now = new Date().toISOString()
     updateTimeline((current) => [
       ...current,
-      localUserTimelineEntry(trimmed, now, current.length),
+      localUserTimelineItem(trimmed, now, current.length),
     ])
     setActiveSendCount((count) => count + 1)
     setError(null)
@@ -606,7 +606,12 @@ function useAgentChat(
         selectedConversationId: selectedConversationIdRef.current,
         selectedSessionKey: selectedSessionKeyRef.current,
       })
-      updateTimeline((current) => appendAgentEvent(current, domainEvent.payload.event, domainEvent.timestamp))
+      const agentType = sessions.find((session) =>
+        session.projectId === selectedProjectIdRef.current
+        && session.id === selectedConversationIdRef.current)?.agentType
+        ?? status?.agentType
+      updateTimeline((current) =>
+        appendAgentTimelineEvent(current, domainEvent.payload.event, domainEvent.timestamp, agentType))
       void refreshPendingPermissions()
     })
   }, [
@@ -614,6 +619,8 @@ function useAgentChat(
     projectIdsKey,
     refreshConversationSnapshot,
     refreshPendingPermissions,
+    sessions,
+    status?.agentType,
     updateTimeline,
   ])
 
@@ -646,42 +653,6 @@ function useAgentChat(
 }
 
 export { useAgentChat }
-
-function appendAgentEvent(
-  current: readonly SynapseAgentTimelineEntry[],
-  event: Parameters<typeof agentEventToTimelineEntry>[0],
-  timestamp: string,
-): SynapseAgentTimelineEntry[] {
-  const entry = agentEventToTimelineEntry(event, timestamp, current.length)
-  if (!entry.content.trim()) return [...current]
-
-  const last = current.at(-1)
-  if (event.type === "text" && last?.role === "assistant") {
-    if (last.content === entry.content || last.content.endsWith(entry.content)) return [...current]
-    return [
-      ...current.slice(0, -1),
-      {
-        ...last,
-        content: `${last.content}${entry.content}`,
-        timestamp,
-      },
-    ]
-  }
-
-  if (event.type === "result" && last?.role === "assistant") {
-    if (last.content === entry.content) return [...current]
-    return [
-      ...current.slice(0, -1),
-      {
-        ...last,
-        content: entry.content,
-        timestamp,
-      },
-    ]
-  }
-
-  return [...current, entry]
-}
 
 function normalizeSessionProject(
   session: SynapseAgentSessionSummary,
