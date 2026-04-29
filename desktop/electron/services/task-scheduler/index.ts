@@ -1,8 +1,14 @@
 export {
+  TaskActionRegistry,
+} from "./action-registry"
+export {
   nextCronRun,
   parseCronExpression,
   validateCronExpression,
 } from "./cron-expression"
+export {
+  TaskSchedulerExecutionService,
+} from "./execution-service"
 export {
   computeNextRunAt,
   resolveStartupSchedule,
@@ -13,4 +19,7 @@ export {
 export {
   ScheduledTaskRunRepository,
 } from "./run-repository"
+export {
+  ShellTaskAction,
+} from "./shell-action"
 export * from "./types"
