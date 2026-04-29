@@ -1,7 +1,9 @@
-import { mkdtemp, rm, writeFile, mkdir, symlink } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile, mkdir, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+
+const trashItem = vi.hoisted(() => vi.fn())
 
 vi.mock("electron", () => ({
   app: {
@@ -10,6 +12,9 @@ vi.mock("electron", () => ({
     getVersion: () => "0.0.0-test",
     isPackaged: false,
   },
+  shell: {
+    trashItem,
+  },
 }))
 
 import { scanCodexRules, scanCursorRules } from "../../../src/definitions/editor/shared-rule-scanners"
@@ -17,7 +22,7 @@ import {
   buildRuleQuickPublishPayload,
   buildSkillQuickPublishPayload,
 } from "../../../src/modules/editor-scan/lib/quick-publish"
-import { prepareQuickPublishDraft, scanSkillDirectories } from "../editor-scan-service"
+import { prepareQuickPublishDraft, scanSkillDirectories, trashScanItem } from "../editor-scan-service"
 
 const tempDirs: string[] = []
 
@@ -27,7 +32,33 @@ async function createTempDir(): Promise<string> {
   return dir
 }
 
+function createAllowingSecurity() {
+  const auditEvents: Array<{
+    action: string
+    outcome: string
+    resource: string
+    metadata?: Record<string, unknown>
+  }> = []
+
+  return {
+    auditEvents,
+    security: {
+      actor: { kind: "user" as const },
+      auditSink: {
+        record: vi.fn((event) => auditEvents.push(event)),
+        list: vi.fn(() => auditEvents),
+        clearForTests: vi.fn(),
+      },
+      permissionGuard: {
+        registerPolicy: vi.fn(() => () => {}),
+        check: vi.fn(async () => ({ allowed: true as const })),
+      },
+    },
+  }
+}
+
 afterEach(async () => {
+  trashItem.mockReset()
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -445,6 +476,167 @@ describe("editor scan quick publish", () => {
     expect(items[0]).toMatchObject({
       path: rulePath,
       trash: { mode: "path" },
+    })
+  })
+})
+
+describe("editor scan trash", () => {
+  it("moves a skill directory to the system trash", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    trashItem.mockResolvedValue(undefined)
+    const { auditEvents, security } = createAllowingSecurity()
+
+    const result = await trashScanItem({
+      itemType: "skill",
+      itemName: "release-helper",
+      itemPath: skillDir,
+      editorId: "codex",
+      scope: "global",
+      source: "external",
+      trash: { mode: "path" },
+      synapseContentId: null,
+    }, security)
+
+    expect(trashItem).toHaveBeenCalledWith(skillDir)
+    expect(result).toEqual({ trashed: true, mode: "path", path: skillDir })
+    expect(auditEvents.at(-1)).toMatchObject({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: skillDir,
+      metadata: {
+        operation: "trash",
+        contentType: "skill",
+        editorId: "codex",
+        scope: "global",
+        source: "external",
+        trashMode: "path",
+      },
+    })
+  })
+
+  it("moves a standalone rule file to the system trash", async () => {
+    const root = await createTempDir()
+    const rulePath = path.join(root, "project.mdc")
+    await writeFile(rulePath, "# Rule\n")
+    trashItem.mockResolvedValue(undefined)
+    const { security } = createAllowingSecurity()
+
+    await expect(trashScanItem({
+      itemType: "rule",
+      itemName: "project.mdc",
+      itemPath: rulePath,
+      editorId: "cursor",
+      scope: "project",
+      source: "external",
+      trash: { mode: "path" },
+      synapseContentId: null,
+    }, security)).resolves.toMatchObject({
+      trashed: true,
+      mode: "path",
+      path: rulePath,
+    })
+
+    expect(trashItem).toHaveBeenCalledWith(rulePath)
+  })
+
+  it("removes only the target Synapse rule section from a shared file", async () => {
+    const root = await createTempDir()
+    const filePath = path.join(root, "AGENTS.md")
+    await writeFile(
+      filePath,
+      [
+        "# Handwritten",
+        "",
+        "Keep this.",
+        "",
+        "<!-- synapse-rule:first:begin -->",
+        "# First",
+        "<!-- synapse-rule:first:end -->",
+        "",
+        "<!-- synapse-rule:second:begin -->",
+        "# Second",
+        "<!-- synapse-rule:second:end -->",
+      ].join("\n"),
+    )
+    const { security } = createAllowingSecurity()
+
+    await trashScanItem({
+      itemType: "rule",
+      itemName: "first",
+      itemPath: filePath,
+      editorId: "codex",
+      scope: "global",
+      source: "synapse",
+      trash: { mode: "rule-section", ruleId: "first" },
+      synapseContentId: "first",
+    }, security)
+
+    const nextContent = await readFile(filePath, "utf8")
+    expect(nextContent).not.toContain("synapse-rule:first")
+    expect(nextContent).toContain("# Handwritten")
+    expect(nextContent).toContain("synapse-rule:second:begin")
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it("rejects unsupported shared-file handwritten rules", async () => {
+    const root = await createTempDir()
+    const filePath = path.join(root, "AGENTS.md")
+    await writeFile(filePath, "# Handwritten\n")
+    const { security } = createAllowingSecurity()
+
+    await expect(trashScanItem({
+      itemType: "rule",
+      itemName: "Handwritten",
+      itemPath: filePath,
+      editorId: "codex",
+      scope: "global",
+      source: "external",
+      trash: {
+        mode: "unsupported",
+        disabledReason: "当前 Rule 没有明确边界，请在 Finder 中处理。",
+      },
+      synapseContentId: null,
+    }, security)).rejects.toThrow("当前 Rule 没有明确边界，请在 Finder 中处理。")
+
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it("does not trash when permission is denied", async () => {
+    const root = await createTempDir()
+    const rulePath = path.join(root, "project.md")
+    await writeFile(rulePath, "# Rule\n")
+    const auditEvents: Array<{ outcome: string; resource: string }> = []
+    const security = {
+      actor: { kind: "user" as const },
+      auditSink: {
+        record: vi.fn((event) => auditEvents.push(event)),
+        list: vi.fn(() => auditEvents),
+        clearForTests: vi.fn(),
+      },
+      permissionGuard: {
+        registerPolicy: vi.fn(() => () => {}),
+        check: vi.fn(async () => ({ allowed: false as const, reason: "denied" })),
+      },
+    }
+
+    await expect(trashScanItem({
+      itemType: "rule",
+      itemName: "project.md",
+      itemPath: rulePath,
+      editorId: "claude-code",
+      scope: "project",
+      source: "external",
+      trash: { mode: "path" },
+      synapseContentId: null,
+    }, security)).rejects.toThrow("没有写入该位置的权限。")
+
+    expect(trashItem).not.toHaveBeenCalled()
+    expect(auditEvents.at(-1)).toMatchObject({
+      outcome: "denied",
+      resource: rulePath,
     })
   })
 })

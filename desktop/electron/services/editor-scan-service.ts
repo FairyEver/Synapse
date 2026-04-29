@@ -1,5 +1,6 @@
 import { lstat, readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
+import { shell } from "electron"
 import type {
   EditorScanGlobalResult,
   EditorScanItemSource,
@@ -11,14 +12,21 @@ import type {
   EditorScanResult,
   EditorScanRuleItem,
   EditorScanSkillItem,
+  EditorScanTrashRequest,
+  EditorScanTrashResult,
 } from "../../src/types/editor-scan"
 import type { SynapseEditorId } from "../../src/types/editor"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { editorAdapters } from "./editor-adapters"
 import { editorScanStrategyById } from "./definitions/generated/main-registry"
 import { pathExists } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
 import { decodeYamlScalar } from "../../src/definitions/editor/shared-yaml-scalar"
+import {
+  formatEditorWriteFailure,
+  replaceFileAtomically,
+} from "./editor-file-write-utils"
 
 const logger = createMainLogger("service.editor-scan")
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
@@ -37,8 +45,59 @@ const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
   ".pem",
   ".pfx",
 ])
+const RULE_TRASH_UNSUPPORTED_REASON = "当前 Rule 没有明确边界，请在 Finder 中处理。"
+const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
 
 // --- helpers ---
+
+type EditorScanTrashSecurityDeps = {
+  actor: ActorIdentity
+  auditSink: AuditSink
+  permissionGuard: PermissionGuard
+}
+
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+async function checkEditorTrashPermission(
+  deps: EditorScanTrashSecurityDeps | undefined,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+  const permission = await deps.permissionGuard.check({
+    action: "fs.write",
+    actor: deps.actor,
+    context: metadata,
+    resource,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
+      action: "fs.write",
+      actor: deps.actor,
+      metadata,
+      outcome: "denied",
+      resource,
+    })
+    throw new Error("没有写入该位置的权限。")
+  }
+}
+
+function recordEditorTrashAudit(
+  deps: EditorScanTrashSecurityDeps | undefined,
+  resource: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.write",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource,
+  })
+}
 
 function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
   const metadata: Record<string, string> = {}
@@ -506,5 +565,119 @@ async function prepareQuickPublishDraft(
   }
 }
 
-export { scanAll, readItemContent, listSkillFiles, prepareQuickPublishDraft, scanSkillDirectories }
+async function assertTrashableSkillDirectory(dirPath: string): Promise<void> {
+  let info
+  try {
+    info = await lstat(dirPath)
+  } catch {
+    throw new Error("目标不存在。")
+  }
+
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    throw new Error("目标类型不匹配。")
+  }
+
+  const mainFile = await resolveSkillMainFile(dirPath)
+  const meta = await readSynapseSkillMeta(dirPath)
+  if (!mainFile && !meta) {
+    throw new Error("目标类型不匹配。")
+  }
+}
+
+async function assertTrashableRuleFile(filePath: string): Promise<void> {
+  let info
+  try {
+    info = await lstat(filePath)
+  } catch {
+    throw new Error("目标不存在。")
+  }
+
+  if (info.isSymbolicLink() || !info.isFile()) {
+    throw new Error("目标类型不匹配。")
+  }
+
+  const extension = path.extname(filePath).toLowerCase()
+  if (extension !== ".md" && extension !== ".mdc") {
+    throw new Error("目标类型不匹配。")
+  }
+}
+
+function removeSynapseRuleSection(existingContent: string, ruleId: string): string {
+  if (!SAFE_RULE_ID_PATTERN.test(ruleId)) {
+    throw new Error(RULE_TRASH_UNSUPPORTED_REASON)
+  }
+
+  const escapedId = escapeForRegex(ruleId)
+  const sectionPattern = new RegExp(
+    `\\n?<!--\\s*synapse-rule:${escapedId}:begin\\s*-->[\\s\\S]*?<!--\\s*synapse-rule:${escapedId}:end\\s*-->\\n?`,
+    "u",
+  )
+
+  if (!sectionPattern.test(existingContent)) {
+    throw new Error("目标不存在。")
+  }
+
+  const nextContent = existingContent.replace(sectionPattern, "\n")
+  return nextContent.replace(/\n{3,}/gu, "\n\n").replace(/^\n+/u, "").replace(/\s+$/u, "")
+}
+
+async function trashScanItem(
+  request: EditorScanTrashRequest,
+  security?: EditorScanTrashSecurityDeps,
+): Promise<EditorScanTrashResult> {
+  const auditMetadata = {
+    contentType: request.itemType,
+    editorId: request.editorId,
+    operation: "trash",
+    scope: request.scope,
+    source: request.source,
+    trashMode: request.trash.mode,
+  }
+
+  await checkEditorTrashPermission(security, request.itemPath, auditMetadata)
+
+  try {
+    if (request.trash.mode === "unsupported") {
+      throw new Error(request.trash.disabledReason)
+    }
+
+    if (request.trash.mode === "rule-section") {
+      const existingContent = await readFile(request.itemPath, "utf8")
+      const nextContent = removeSynapseRuleSection(existingContent, request.trash.ruleId)
+      await replaceFileAtomically(request.itemPath, nextContent)
+      recordEditorTrashAudit(security, request.itemPath, "allowed", auditMetadata)
+      return {
+        trashed: true,
+        mode: request.trash.mode,
+        path: request.itemPath,
+      }
+    }
+
+    if (request.itemType === "skill") {
+      await assertTrashableSkillDirectory(request.itemPath)
+    } else {
+      await assertTrashableRuleFile(request.itemPath)
+    }
+
+    await shell.trashItem(request.itemPath)
+    recordEditorTrashAudit(security, request.itemPath, "allowed", auditMetadata)
+    return {
+      trashed: true,
+      mode: request.trash.mode,
+      path: request.itemPath,
+    }
+  } catch (error) {
+    recordEditorTrashAudit(security, request.itemPath, "failed", auditMetadata)
+    throw formatEditorWriteFailure(error, request.itemPath)
+  }
+}
+
+export {
+  scanAll,
+  readItemContent,
+  listSkillFiles,
+  prepareQuickPublishDraft,
+  scanSkillDirectories,
+  trashScanItem,
+}
 export type { SkillFileEntry }
