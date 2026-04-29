@@ -31,7 +31,10 @@ async function whichViaShell(bin: string): Promise<string | null> {
   if (process.platform === "win32") {
     try {
       const { stdout } = await execFileAsync("where", [bin], { timeout: 5000 })
-      return stdout.trim().split("\n")[0] || null
+      return stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find(Boolean) ?? null
     } catch {
       return null
     }

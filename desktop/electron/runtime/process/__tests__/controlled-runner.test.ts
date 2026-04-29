@@ -113,6 +113,89 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     })
   })
 
+  it("wraps Windows batch shims and preserves profile env", async () => {
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
+    const previousEnv = {
+      APPDATA: process.env.APPDATA,
+      ComSpec: process.env.ComSpec,
+      HOMEDRIVE: process.env.HOMEDRIVE,
+      HOMEPATH: process.env.HOMEPATH,
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      USERPROFILE: process.env.USERPROFILE,
+    }
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "win32",
+    })
+    process.env.APPDATA = "C:\\Users\\Ada\\AppData\\Roaming"
+    process.env.ComSpec = "C:\\Windows\\System32\\cmd.exe"
+    process.env.HOMEDRIVE = "C:"
+    process.env.HOMEPATH = "\\Users\\Ada"
+    process.env.LOCALAPPDATA = "C:\\Users\\Ada\\AppData\\Local"
+    process.env.USERPROFILE = "C:\\Users\\Ada"
+
+    try {
+      const guard = createPermissionGuard()
+      const auditSink = new InMemoryAuditSink()
+      const spawnImpl = vi.fn(() => {
+        const stdout = new PassThrough()
+        const stderr = new PassThrough()
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams
+        Object.assign(child, {
+          stdout,
+          stderr,
+          stdin: new PassThrough(),
+          kill: vi.fn(),
+        })
+        queueMicrotask(() => {
+          stdout.end()
+          stderr.end()
+          child.emit("close", 0, null)
+        })
+        return child
+      })
+      const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink, spawnImpl })
+
+      await runner.run({
+        actor: { kind: "user" },
+        action: "agent.spawn",
+        command: "C:\\Users\\Ada Lovelace\\AppData\\Roaming\\npm\\codex.cmd",
+        args: ["exec", "-"],
+      })
+
+      expect(spawnImpl).toHaveBeenCalledWith(
+        "C:\\Windows\\System32\\cmd.exe",
+        [
+          "/d",
+          "/s",
+          "/c",
+          "\"C:\\Users\\Ada Lovelace\\AppData\\Roaming\\npm\\codex.cmd\" exec -",
+        ],
+        expect.objectContaining({
+          env: expect.objectContaining({
+            APPDATA: "C:\\Users\\Ada\\AppData\\Roaming",
+            HOMEDRIVE: "C:",
+            HOMEPATH: "\\Users\\Ada",
+            LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local",
+            USERPROFILE: "C:\\Users\\Ada",
+          }),
+          shell: false,
+        }),
+      )
+    } finally {
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key]
+        } else {
+          process.env[key] = value
+        }
+      }
+      if (platformDescriptor) {
+        Object.defineProperty(process, "platform", platformDescriptor)
+      }
+    }
+  })
+
   it("wraps run_as_user launches with sudo and filters isolation env", async () => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()

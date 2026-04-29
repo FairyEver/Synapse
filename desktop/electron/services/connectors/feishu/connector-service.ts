@@ -1,5 +1,6 @@
 import path from "node:path"
 import { createHash } from "node:crypto"
+import { homedir } from "node:os"
 
 import type { DataRepository } from "../../../runtime/data-repo"
 import type { ConnectorWorkspaceConfigV1, WorkspaceBindingEntryV1 } from "../../../runtime/data-repo"
@@ -1577,16 +1578,22 @@ function extractRepoName(repoUrl: string): string {
 
 function resolveLocalPath(target: string, baseDir: string): string {
   const trimmed = target.trim()
-  if (trimmed.startsWith("~/")) {
-    return path.join(process.env.HOME ?? "", trimmed.slice(2))
-  }
-  if (path.isAbsolute(trimmed)) return trimmed
-  const resolved = path.resolve(baseDir, trimmed)
+  const expanded = expandHomePath(trimmed)
+  if (path.isAbsolute(expanded)) return expanded
+  const resolved = path.resolve(baseDir, expanded)
   const base = path.resolve(baseDir)
   if (resolved !== base && !resolved.startsWith(`${base}${path.sep}`)) {
     throw new Error("工作区路径不能离开 baseDir。")
   }
   return resolved
+}
+
+function expandHomePath(target: string): string {
+  if (target === "~") return homedir()
+  if (target.startsWith("~/") || target.startsWith("~\\")) {
+    return path.join(homedir(), target.slice(2))
+  }
+  return target
 }
 
 function positiveNumber(value: unknown): number | undefined {
