@@ -1,6 +1,6 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
 import { app } from "electron"
-import { copyFileSync, existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import type {
   Column,
@@ -44,6 +44,20 @@ const TABLE_EXPORT_FORMAT = "synapse-table-sql"
 const TABLE_EXPORT_VERSION = 1
 const TABLE_EXPORT_BEGIN_MARKER = "-- synapse-table-export-b64"
 const TABLE_EXPORT_END_MARKER = "-- synapse-table-export-end"
+const SYSTEM_COLUMN_NAMES = new Set(["id", "created_at", "updated_at"])
+const LEGACY_BACKUP_PATTERN = /^synapse-data\.db\.legacy\.(\d+)$/
+const LEGACY_TYPE_TO_KIND = new Map<string, ColumnKind>([
+  ["TEXT", "text"],
+  ["INTEGER", "integer"],
+  ["REAL", "decimal"],
+  ["BLOB", "binary"],
+  ["JSON", "json"],
+  ["DATE", "date"],
+  ["DATETIME", "timestamp"],
+  ["BOOLEAN", "boolean"],
+  ["ENUM", "single_choice"],
+  ["MULTI_ENUM", "multi_choice"],
+])
 
 type SerializedExportValue =
   | null
@@ -178,6 +192,36 @@ function sqlLiteral(value: unknown): string {
     return `X'${Buffer.from(value.buffer, value.byteOffset, value.byteLength).toString("hex")}'`
   }
   return sqlString(String(value))
+}
+
+function uniqueStrings(values: readonly unknown[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    if (typeof value !== "string" || value.length === 0 || seen.has(value)) {
+      continue
+    }
+    seen.add(value)
+    result.push(value)
+  }
+  return result
+}
+
+function parseLegacyChoices(raw: unknown): string[] {
+  if (typeof raw !== "string" || raw.length === 0) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? uniqueStrings(parsed) : []
+  } catch {
+    return []
+  }
+}
+
+function legacyTypeToKind(type: string, choices: readonly string[]): ColumnKind {
+  const upper = type.toUpperCase()
+  const kind = LEGACY_TYPE_TO_KIND.get(upper) ?? affinityToKind(upper)
+  if (choices.length > 0 && kind !== "multi_choice") return "single_choice"
+  return kind
 }
 
 function serializeExportValue(value: unknown): SerializedExportValue {
@@ -414,9 +458,11 @@ class DataStoreService {
       this.backupAndReopenDatabase("corrupt")
     }
 
-    if (this.needsSchemaRebuild()) {
-      logger.warn("Legacy data store schema detected. Backing up and creating a fresh database.")
-      this.backupAndReopenDatabase("legacy")
+    this.recoverLatestLegacyBackupIfCurrentIsEmpty()
+
+    if (this.needsLegacySchemaMigration()) {
+      logger.warn("Legacy data store schema detected. Migrating in place.")
+      this.migrateLegacySchema()
     }
 
     this.ensureSystemSchema()
@@ -443,17 +489,244 @@ class DataStoreService {
     return this.db
   }
 
-  private needsSchemaRebuild(): boolean {
+  private needsLegacySchemaMigration(): boolean {
     const db = this.getDb()
     const metaTable = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_meta_columns'`).get()
-    if (!metaTable) {
-      const existingTables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`).all() as { name: string }[]
-      return existingTables.length > 0
-    }
+    if (!metaTable) return false
 
     const cols = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
     const colNames = new Set(cols.map((col) => col.name))
     return !["table_name", "column_name", "kind", "choices", "description"].every((name) => colNames.has(name))
+  }
+
+  private recoverLatestLegacyBackupIfCurrentIsEmpty(): void {
+    if (!this.currentDatabaseCanRecoverFromLegacyBackup()) {
+      return
+    }
+
+    const backup = this.findLatestLegacyBackup()
+    if (!backup) {
+      return
+    }
+
+    logger.warn("Empty data store detected. Restoring latest legacy backup.", {
+      backupPath: backup.filePath,
+    })
+    this.restoreLegacyBackup(backup)
+  }
+
+  private currentDatabaseCanRecoverFromLegacyBackup(): boolean {
+    const db = this.getDb()
+    const userTables = this.getUserTableNames(db)
+    if (userTables.length > 0) return false
+
+    const operationLog = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_operation_log'`).get()
+    if (!operationLog) return true
+
+    const row = db.prepare(`SELECT COUNT(*) AS count FROM "_operation_log"`).get() as { count: number | bigint }
+    return toNumber(row.count) === 0
+  }
+
+  private findLatestLegacyBackup(): { filePath: string; timestamp: number } | null {
+    let entries: string[]
+    try {
+      entries = readdirSync(path.dirname(this.dbPath))
+    } catch (error) {
+      logger.warn("Failed to inspect data store directory for legacy backups.", { error })
+      return null
+    }
+
+    const backups = entries
+      .map((name) => {
+        const match = name.match(LEGACY_BACKUP_PATTERN)
+        if (!match) return null
+        const filePath = path.join(path.dirname(this.dbPath), name)
+        if (!existsSync(filePath)) return null
+        return { filePath, timestamp: Number(match[1]) }
+      })
+      .filter((item): item is { filePath: string; timestamp: number } => item !== null)
+      .sort((a, b) => b.timestamp - a.timestamp)
+
+    return backups[0] ?? null
+  }
+
+  private restoreLegacyBackup(backup: { filePath: string; timestamp: number }): void {
+    const recoverySuffix = `before-legacy-recovery.${Date.now()}`
+    const currentWalPath = `${this.dbPath}-wal`
+    const currentShmPath = `${this.dbPath}-shm`
+    const legacyWalPath = path.join(path.dirname(this.dbPath), `synapse-data.db-wal.legacy.${backup.timestamp}`)
+    const legacyShmPath = path.join(path.dirname(this.dbPath), `synapse-data.db-shm.legacy.${backup.timestamp}`)
+
+    try { this.db?.close() } catch (error) {
+      logger.warn("Failed to close data store before restoring legacy backup.", { error })
+    }
+    this.db = null
+
+    const moved: Array<{ from: string; to: string }> = []
+    try {
+      this.moveIfExists(this.dbPath, recoverySuffix, moved)
+      this.moveIfExists(currentWalPath, recoverySuffix, moved)
+      this.moveIfExists(currentShmPath, recoverySuffix, moved)
+
+      copyFileSync(backup.filePath, this.dbPath)
+      if (existsSync(legacyWalPath)) copyFileSync(legacyWalPath, currentWalPath)
+      if (existsSync(legacyShmPath)) copyFileSync(legacyShmPath, currentShmPath)
+
+      this.db = new DatabaseSync(this.dbPath)
+      this.db.exec("PRAGMA journal_mode=WAL")
+    } catch (error) {
+      logger.error("Failed to restore legacy data store backup.", { error })
+      this.restoreMovedFiles(moved)
+      this.db = new DatabaseSync(this.dbPath)
+      this.db.exec("PRAGMA journal_mode=WAL")
+      throw error
+    }
+  }
+
+  private moveIfExists(filePath: string, suffix: string, moved: Array<{ from: string; to: string }>): void {
+    if (!existsSync(filePath)) return
+    const nextPath = `${filePath}.${suffix}`
+    renameSync(filePath, nextPath)
+    moved.push({ from: filePath, to: nextPath })
+  }
+
+  private restoreMovedFiles(moved: readonly { from: string; to: string }[]): void {
+    for (const entry of [...moved].reverse()) {
+      try {
+        if (existsSync(entry.from)) unlinkSync(entry.from)
+        if (existsSync(entry.to)) renameSync(entry.to, entry.from)
+      } catch (error) {
+        logger.warn("Failed to restore data store file after legacy recovery failure.", {
+          error,
+          from: entry.to,
+          to: entry.from,
+        })
+      }
+    }
+  }
+
+  private migrateLegacySchema(): void {
+    const db = this.getDb()
+
+    db.exec("BEGIN")
+    try {
+      this.ensureLegacyMetaColumns()
+      for (const table of this.getUserTableNames(db)) {
+        this.migrateLegacyTableColumns(table)
+      }
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
+  }
+
+  private ensureLegacyMetaColumns(): void {
+    const db = this.getDb()
+    const columns = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
+    const names = new Set(columns.map((column) => column.name))
+
+    if (!names.has("description")) {
+      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN description TEXT NOT NULL DEFAULT ''`)
+    }
+    if (!names.has("enum_values")) {
+      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN enum_values TEXT NOT NULL DEFAULT ''`)
+    }
+    if (!names.has("kind")) {
+      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'`)
+    }
+    if (!names.has("choices")) {
+      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN choices TEXT`)
+    }
+  }
+
+  private migrateLegacyTableColumns(table: string): void {
+    const db = this.getDb()
+    const metaRows = db.prepare(`
+      SELECT column_name, description, enum_values
+      FROM "_meta_columns"
+      WHERE table_name = ?
+    `).all(table) as Array<{ column_name: string; description: string; enum_values: string }>
+
+    const legacyMeta = new Map(metaRows.map((row) => [row.column_name, row]))
+    const columns = db.prepare(`PRAGMA table_info(${q(table)})`).all() as Array<{ name: string; type: string }>
+
+    for (const column of columns) {
+      if (SYSTEM_COLUMN_NAMES.has(column.name)) {
+        continue
+      }
+
+      const meta = legacyMeta.get(column.name)
+      const parsedChoices = parseLegacyChoices(meta?.enum_values ?? "")
+      let kind = legacyTypeToKind(column.type, parsedChoices)
+      let choices = parsedChoices
+
+      if (isChoiceKind(kind) && choices.length === 0) {
+        choices = this.inferLegacyChoices(table, column.name, kind)
+        if (choices.length === 0) {
+          kind = "text"
+        }
+      }
+
+      db.prepare(`
+        INSERT OR REPLACE INTO "_meta_columns" (table_name, column_name, kind, choices, description)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        table,
+        column.name,
+        kind,
+        isChoiceKind(kind) ? JSON.stringify(choices) : null,
+        meta?.description ?? "",
+      )
+    }
+  }
+
+  private inferLegacyChoices(table: string, column: string, kind: ColumnKind): string[] {
+    const db = this.getDb()
+    if (kind === "single_choice") {
+      const rows = db.prepare(`
+        SELECT DISTINCT ${q(column)} AS value
+        FROM ${q(table)}
+        WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''
+        ORDER BY ${q(column)}
+      `).all() as { value: unknown }[]
+      return uniqueStrings(rows.map((row) => String(row.value)))
+    }
+
+    if (kind !== "multi_choice") return []
+
+    const rows = db.prepare(`
+      SELECT ${q(column)} AS value
+      FROM ${q(table)}
+      WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''
+    `).all() as { value: unknown }[]
+    const choices: string[] = []
+
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(String(row.value)) as unknown
+        if (Array.isArray(parsed)) choices.push(...uniqueStrings(parsed))
+      } catch (error) {
+        logger.warn("Failed to infer legacy multi-choice values.", {
+          error,
+          table,
+          column,
+        })
+      }
+    }
+
+    return uniqueStrings(choices).sort((a, b) => a.localeCompare(b))
+  }
+
+  private getUserTableNames(db: DatabaseSync): string[] {
+    return (db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type='table'
+        AND name NOT LIKE '\\_%' ESCAPE '\\'
+        AND name != 'sqlite_sequence'
+      ORDER BY name
+    `).all() as { name: string }[]).map((row) => row.name)
   }
 
   private backupAndReopenDatabase(reason: "legacy" | "corrupt"): void {
@@ -1597,7 +1870,15 @@ class DataStoreService {
       }
       const metaColumns = tempDb.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
       const metaColumnNames = new Set(metaColumns.map((c) => c.name))
-      for (const required of ["table_name", "column_name", "kind", "choices", "description"]) {
+      const hasCurrentMetaColumns = ["table_name", "column_name", "kind", "choices", "description"]
+        .every((required) => metaColumnNames.has(required))
+      const hasLegacyMetaColumns = ["table_name", "column_name", "enum_values"]
+        .every((required) => metaColumnNames.has(required))
+      if (!hasCurrentMetaColumns && !hasLegacyMetaColumns) {
+        const required = "table_name, column_name, kind/choices or enum_values"
+        throw new Error(`Invalid database: _meta_columns missing required columns (${required})`)
+      }
+      for (const required of ["table_name", "column_name"]) {
         if (!metaColumnNames.has(required)) {
           throw new Error(`Invalid database: _meta_columns missing column "${required}"`)
         }
@@ -1625,6 +1906,10 @@ class DataStoreService {
 
       this.db = new DatabaseSync(this.dbPath)
       this.db.exec("PRAGMA journal_mode=WAL")
+      if (this.needsLegacySchemaMigration()) {
+        logger.warn("Imported legacy data store schema detected. Migrating in place.")
+        this.migrateLegacySchema()
+      }
       this.ensureSystemSchema()
       this.syncMetaTables()
       this.syncMetaColumns()
