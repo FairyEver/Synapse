@@ -22,4 +22,7 @@ export {
 export {
   ShellTaskAction,
 } from "./shell-action"
+export {
+  TaskSchedulerService,
+} from "./task-scheduler-service"
 export * from "./types"
