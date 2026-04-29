@@ -1,5 +1,6 @@
 node_modules
 dist
+admin-dist
 dist-electron
 dist-data-store
 release
