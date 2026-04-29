@@ -386,6 +386,24 @@ async function writeBackupFile(filePath: string, backup: SynapseConfigBackup): P
   await writeFile(filePath, `${JSON.stringify(backup, null, 2)}\n`, "utf8")
 }
 
+async function createConfigBackupPayload(exportedAt = new Date()): Promise<SynapseConfigBackup> {
+  const config = await configStore.load()
+  return {
+    schemaVersion: BACKUP_SCHEMA_VERSION,
+    exportedAt: exportedAt.toISOString(),
+    config: {
+      ...config,
+      repositories: config.repositories.map((repository) => ({
+        uuid: repository.uuid,
+        name: repository.name,
+        localPath: repository.localPath,
+        contentDirs: repository.contentDirs,
+      })),
+    },
+    identity: await userIdentityService.exportIdentity(),
+  }
+}
+
 export interface ConfigBackupContext {
   /** Optional browser window for dialog parenting. If not provided, dialog may not be modal. */
   getParentWindow?: () => Electron.BrowserWindow | null
@@ -395,21 +413,7 @@ class ConfigBackupService {
   async exportBackup(
     ctx?: ConfigBackupContext,
   ): Promise<SynapseConfigBackupExportResult | null> {
-    const config = await configStore.load()
-    const backup: SynapseConfigBackup = {
-      schemaVersion: BACKUP_SCHEMA_VERSION,
-      exportedAt: new Date().toISOString(),
-      config: {
-        ...config,
-        repositories: config.repositories.map((repository) => ({
-          uuid: repository.uuid,
-          name: repository.name,
-          localPath: repository.localPath,
-          contentDirs: repository.contentDirs,
-        })),
-      },
-      identity: await userIdentityService.exportIdentity(),
-    }
+    const backup = await createConfigBackupPayload()
     const defaultPath = path.join(app.getPath("downloads"), createBackupFileName())
     const parentWindow = ctx?.getParentWindow?.()
     const result = parentWindow
@@ -484,3 +488,5 @@ class ConfigBackupService {
 }
 
 export const configBackupService = new ConfigBackupService()
+
+export { createConfigBackupPayload }

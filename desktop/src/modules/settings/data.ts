@@ -1,4 +1,5 @@
 import {
+  Activity,
   Blocks,
   Braces,
   Clock,
@@ -58,6 +59,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Database,
     label: "数据服务",
     description: "本地数据库。",
+  },
+  {
+    id: "diagnostics",
+    icon: Activity,
+    label: "诊断",
+    description: "报告与快照。",
   },
   {
     id: "logs",

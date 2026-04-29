@@ -1,4 +1,4 @@
-import { app, shell } from "electron"
+import { shell } from "electron"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
@@ -9,15 +9,64 @@ import {
   AGENT_RUNTIME_SERVICE_ID,
 } from "../../services/agent-runtime"
 import type { AutomationIngressService } from "../../services/automation-ingress"
-import type { FeishuConnectorService } from "../../services/connectors"
 import { configStore } from "../../services/config-store"
+import type { DiagnosticsService } from "../../services/diagnostics-service"
 import type { ExecutionIsolationService } from "../../services/execution-isolation"
 import { logStore } from "../../services/log-store"
 import type { AgentRelayService } from "../../services/relay"
-import type { SideChannelService } from "../../services/side-channel"
+import { collectOpsStatus } from "./status"
 
 const diagnosticsRequestSchema = z.object({
   projectId: z.string().optional(),
+})
+
+const diagnosticsStatusSchema = z.enum(["ok", "degraded", "failed", "skipped"])
+const diagnosticsSeveritySchema = z.enum(["info", "warning", "error"])
+
+const diagnosticsCheckSchema = z.object({
+  id: z.string(),
+  group: z.string(),
+  name: z.string(),
+  status: diagnosticsStatusSchema,
+  severity: diagnosticsSeveritySchema,
+  message: z.string(),
+  details: z.record(z.string(), z.unknown()).optional(),
+  durationMs: z.number().optional(),
+})
+
+const diagnosticsReportSchema = z.object({
+  schemaVersion: z.literal(1),
+  generatedAt: z.string(),
+  overallStatus: z.enum(["ok", "degraded", "failed"]),
+  summary: z.object({
+    ok: z.number(),
+    degraded: z.number(),
+    failed: z.number(),
+    skipped: z.number(),
+  }),
+  system: z.record(z.string(), z.unknown()),
+  app: z.record(z.string(), z.unknown()),
+  activeContext: z.object({
+    repositoryUuid: z.string().optional(),
+    repositoryName: z.string().optional(),
+    projectId: z.string().optional(),
+    projectName: z.string().optional(),
+  }),
+  checks: z.array(diagnosticsCheckSchema),
+  bundle: z.object({
+    lastExportedAt: z.string().optional(),
+    lastExportPath: z.string().optional(),
+  }).optional(),
+})
+
+const diagnosticsBundleExportRequestSchema = z.object({
+  report: diagnosticsReportSchema,
+})
+
+const diagnosticsBundleExportResultSchema = z.object({
+  success: z.boolean(),
+  filePath: z.string().optional(),
+  fileCount: z.number().optional(),
 })
 
 const projectRequestSchema = z.object({
@@ -95,6 +144,7 @@ const statusSchema = z.object({
 })
 
 type DiagnosticsRequest = z.infer<typeof diagnosticsRequestSchema>
+type DiagnosticsBundleExportRequest = z.infer<typeof diagnosticsBundleExportRequestSchema>
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type RunAsUpdateRequest = z.infer<typeof runAsUpdateSchema>
 type WebhookUpdateRequest = z.infer<typeof webhookUpdateSchema>
@@ -109,19 +159,8 @@ export const opsIpcModule: IpcModule = {
       channel: "synapse:ops:diagnostics",
       request: diagnosticsRequestSchema,
       response: statusSchema,
-      handler: async (ctx, request: DiagnosticsRequest) => {
-        const projectId = request.projectId ?? await firstProjectId()
-        return {
-          appVersion: app.getVersion(),
-          singleInstanceLocked: app.hasSingleInstanceLock(),
-          logPath: logStore.getLogDirectory(),
-          sideChannel: optional<SideChannelService>(ctx.resolve, "core.side-channel")?.getStatus(),
-          webhook: await optional<AutomationIngressService>(ctx.resolve, "core.automation-ingress")?.getStatus(),
-          relay: await relayStatus(optional<AgentRelayService>(ctx.resolve, "core.relay")),
-          agent: projectId ? await agentStatus(ctx.resolve, projectId) : undefined,
-          feishu: projectId ? await feishuStatus(ctx.resolve, projectId) : undefined,
-        }
-      },
+      handler: async (ctx, request: DiagnosticsRequest) =>
+        collectOpsStatus(ctx.resolve, request),
     },
     openLogDirectory: {
       kind: "invoke",
@@ -161,6 +200,22 @@ export const opsIpcModule: IpcModule = {
         await shell.openPath(logPath)
         return { ok: true }
       },
+    },
+    runDiagnostics: {
+      kind: "invoke",
+      channel: "synapse:ops:diagnostics:run",
+      request: diagnosticsRequestSchema,
+      response: diagnosticsReportSchema,
+      handler: (ctx, request: DiagnosticsRequest) =>
+        resolveDiagnostics(ctx.resolve).collect(request),
+    },
+    exportDiagnosticsBundle: {
+      kind: "invoke",
+      channel: "synapse:ops:diagnostics:export-bundle",
+      request: diagnosticsBundleExportRequestSchema,
+      response: diagnosticsBundleExportResultSchema,
+      handler: (ctx, request: DiagnosticsBundleExportRequest) =>
+        resolveDiagnostics(ctx.resolve).exportBundle({ report: request.report }),
     },
     runAsGet: {
       kind: "invoke",
@@ -270,11 +325,6 @@ export const opsIpcModule: IpcModule = {
   events: {},
 }
 
-async function firstProjectId(): Promise<string | undefined> {
-  const config = await configStore.load()
-  return config.global.projects[0]?.id
-}
-
 async function projectById(projectId: string) {
   const config = await configStore.load()
   return config.global.projects.find((item) => item.id === projectId)
@@ -292,45 +342,6 @@ async function resolveProjectAgent(
     workspacePath: project.path,
   })
   return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
-}
-
-async function agentStatus(
-  resolve: <T>(serviceId: string) => T,
-  projectId: string,
-) {
-  const containers = resolve<ProjectContainerRegistry>("core.project-containers")
-  const config = await configStore.load()
-  const project = config.global.projects.find((item) => item.id === projectId)
-  if (!project) return undefined
-  const container = await containers.open(project.id, {
-    name: project.name,
-    workspacePath: project.path,
-  })
-  return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID).getStatus()
-}
-
-async function feishuStatus(
-  resolve: <T>(serviceId: string) => T,
-  projectId: string,
-) {
-  const service = optional<FeishuConnectorService>(resolve, "core.feishu-connector")
-  if (!service) return undefined
-  const status = await service.getStatus(projectId)
-  return {
-    projectId: status.projectId,
-    configured: status.configured,
-    running: status.running,
-  }
-}
-
-async function relayStatus(service: AgentRelayService | undefined) {
-  if (!service) return undefined
-  const bindings = await service.listBindings()
-  const runs = await service.listRuns()
-  return {
-    bindingCount: bindings.length,
-    recentRunCount: runs.length,
-  }
 }
 
 function optional<T>(
@@ -354,4 +365,8 @@ function resolveWebhook(resolve: <T>(serviceId: string) => T): AutomationIngress
 
 function resolveRelay(resolve: <T>(serviceId: string) => T): AgentRelayService {
   return resolve<AgentRelayService>("core.relay")
+}
+
+function resolveDiagnostics(resolve: <T>(serviceId: string) => T): DiagnosticsService {
+  return resolve<DiagnosticsService>("core.diagnostics")
 }
