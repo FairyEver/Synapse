@@ -6,4 +6,9 @@ dist-data-store
 release
 .DS_Store
 *.log
+.env
+.env.local
+server/.env
+server/.env.local
+!*.env.example
 .superpowers/

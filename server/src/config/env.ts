@@ -36,10 +36,14 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     adminEmail: result.data.ADMIN_EMAIL,
     adminPassword: result.data.ADMIN_PASSWORD,
     adminJwtSecret: result.data.ADMIN_JWT_SECRET,
-    licensePrivateKey: result.data.LICENSE_PRIVATE_KEY,
-    licensePublicKey: result.data.LICENSE_PUBLIC_KEY,
+    licensePrivateKey: normalizePem(result.data.LICENSE_PRIVATE_KEY),
+    licensePublicKey: normalizePem(result.data.LICENSE_PUBLIC_KEY),
     licenseKeyId: result.data.LICENSE_KEY_ID,
     licenseLeaseDays: result.data.LICENSE_LEASE_DAYS,
     port: result.data.PORT,
   }
+}
+
+function normalizePem(value: string): string {
+  return value.replace(/\\n/g, "\n")
 }

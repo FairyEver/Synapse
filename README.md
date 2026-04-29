@@ -49,9 +49,12 @@ pnpm desktop:typecheck       # 类型检查
 pnpm desktop:build           # 构建渲染端 + 主进程 + data-store
 pnpm desktop:package:mac     # 打包 macOS（dmg + zip）
 pnpm desktop:package:win     # 打包 Windows（nsis）
+pnpm server:docker:up        # 启动授权服务 + PostgreSQL
+pnpm server:build            # 构建授权服务和管理后台
 ```
 
 更完整的开发、打包、发布、编辑器集成说明见 [`desktop/README.md`](./desktop/README.md)。
+授权服务说明见 [`server/README.md`](./server/README.md)。
 
 ## 下载
 

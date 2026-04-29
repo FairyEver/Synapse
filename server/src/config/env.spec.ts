@@ -18,6 +18,7 @@ describe("loadEnv", () => {
     expect(env.port).toBe(3000)
     expect(env.licenseLeaseDays).toBe(7)
     expect(env.adminEmail).toBe("admin@example.com")
+    expect(env.licensePrivateKey).toContain("\n")
   })
 
   it("rejects missing required settings", () => {
