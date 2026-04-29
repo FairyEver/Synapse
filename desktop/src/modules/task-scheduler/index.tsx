@@ -152,8 +152,8 @@ function TaskSchedulerModule() {
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col gap-4 bg-muted/30 p-4">
-        <Card className="min-h-0 flex-1">
-          <CardHeader className="border-b">
+        <Card className="min-h-0 flex-1 ring-0">
+          <CardHeader>
             <CardTitle>定时任务</CardTitle>
             <CardAction className="flex items-center gap-2">
               <IconButton
