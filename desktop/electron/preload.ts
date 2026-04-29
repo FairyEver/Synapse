@@ -166,6 +166,11 @@ const IPC_CHANNELS = {
     "compressGet": "synapse:ops:compress:get",
     "compressUpdate": "synapse:ops:compress:update",
   },
+  "license": {
+    "getStatus": "synapse:license:get-status",
+    "activate": "synapse:license:activate",
+    "renew": "synapse:license:renew",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -326,6 +331,11 @@ const synapseBridge: SynapseBridge = {
     write: (payload) => {
       void invoke(IPC_CHANNELS.log.write)(payload)
     },
+  },
+  license: {
+    activate: (payload) => invoke(IPC_CHANNELS.license.activate)(payload),
+    getStatus: invoke(IPC_CHANNELS.license.getStatus),
+    renew: invoke(IPC_CHANNELS.license.renew),
   },
   editor: {
     getGlobalDirectories: invoke(IPC_CHANNELS.editor.getGlobalDirectories),

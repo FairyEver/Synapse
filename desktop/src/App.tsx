@@ -2,6 +2,7 @@ import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState }
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { EmptyRepositoryState } from "@/app-shell/components/empty-repository-state"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
+import { LicenseGate } from "@/app-shell/components/license-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
@@ -450,13 +451,19 @@ function App() {
 
   if (standaloneContentWindowRequest) {
     return (
-      <IdentityGate>
-        <ContentDetailWindowPage request={standaloneContentWindowRequest} />
-      </IdentityGate>
+      <LicenseGate>
+        <IdentityGate>
+          <ContentDetailWindowPage request={standaloneContentWindowRequest} />
+        </IdentityGate>
+      </LicenseGate>
     )
   }
 
-  return <MainApp key={resetKey} />
+  return (
+    <LicenseGate>
+      <MainApp key={resetKey} />
+    </LicenseGate>
+  )
 }
 
 export default App

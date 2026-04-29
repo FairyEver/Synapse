@@ -4,6 +4,7 @@ import App from "@/App"
 import { ActiveRepositorySwitchProvider } from "@/app-shell/active-repository-switch"
 import { AppConfigProvider } from "@/app-shell/config"
 import { IdentityProvider } from "@/app-shell/identity-context"
+import { LicenseProvider } from "@/app-shell/license"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
 import { AppNotificationsProvider } from "@/app-shell/notifications"
 import { RepositoryManagerProvider } from "@/app-shell/repository"
@@ -18,13 +19,15 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppConfigProvider>
       <RepositoryManagerProvider>
-        <IdentityProvider>
-          <AppNotificationsProvider>
-            <ActiveRepositorySwitchProvider>
-              <App />
-            </ActiveRepositorySwitchProvider>
-          </AppNotificationsProvider>
-        </IdentityProvider>
+        <LicenseProvider>
+          <IdentityProvider>
+            <AppNotificationsProvider>
+              <ActiveRepositorySwitchProvider>
+                <App />
+              </ActiveRepositorySwitchProvider>
+            </AppNotificationsProvider>
+          </IdentityProvider>
+        </LicenseProvider>
       </RepositoryManagerProvider>
     </AppConfigProvider>
   </StrictMode>,

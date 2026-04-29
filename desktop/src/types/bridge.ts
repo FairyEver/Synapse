@@ -105,6 +105,10 @@ import type {
   SynapseRendererLogPayload,
 } from "./log"
 import type {
+  SynapseLicenseActivationRequest,
+  SynapseLicenseStatus,
+} from "./license"
+import type {
   SynapseDiagnosticsBundleExportResult,
   SynapseDiagnosticsReport,
 } from "./diagnostics"
@@ -248,6 +252,11 @@ export type SynapseBridge = {
     readAll: () => Promise<string>
     readFiles: (fileNames: string[]) => Promise<string>
     write: (payload: SynapseRendererLogPayload) => void
+  }
+  license: {
+    activate: (payload: SynapseLicenseActivationRequest) => Promise<SynapseLicenseStatus>
+    getStatus: () => Promise<SynapseLicenseStatus>
+    renew: () => Promise<SynapseLicenseStatus>
   }
   editor: {
     getGlobalDirectories: () => Promise<SynapseEditorGlobalDirectory[]>

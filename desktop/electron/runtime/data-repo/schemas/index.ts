@@ -16,6 +16,10 @@ export {
   type CoreIdentityV2,
 } from "./core-identity"
 export {
+  coreLicenseSchema,
+  type CoreLicenseV1,
+} from "./core-license"
+export {
   repoPendingPushesSchema,
   type RepoPendingPushV1,
 } from "./repo-pending-pushes"
@@ -89,6 +93,7 @@ export {
 
 import { coreConfigSchema } from "./core-config"
 import { coreIdentitySchema } from "./core-identity"
+import { coreLicenseSchema } from "./core-license"
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import {
@@ -119,6 +124,7 @@ import type { NamespaceSchema } from "../types"
 export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   coreConfigSchema,
   coreIdentitySchema,
+  coreLicenseSchema,
   repoRepositoriesSchema,
   repoPendingPushesSchema,
   secretsSchema,

@@ -9,6 +9,7 @@ import {
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
+  coreLicenseSchema,
   opsDiagnosticsSchema,
   outboxSchema,
   projectsSchema,
@@ -40,6 +41,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "conversations",
         "core.config",
         "core.identity",
+        "core.license",
         "ops.diagnostics",
         "outbox",
         "projects",
@@ -73,6 +75,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
   it("backend kind matches SPEC §5 namespace strategy", () => {
     expect(coreConfigSchema.backend).toBe("json")
     expect(coreIdentitySchema.backend).toBe("json")
+    expect(coreLicenseSchema.backend).toBe("encrypted-json")
     expect(secretsSchema.backend).toBe("encrypted-json")
     expect(providersSchema.backend).toBe("json")
     expect(projectsSchema.backend).toBe("json")
@@ -97,7 +100,9 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
 
   it("encrypted flag is set only on secret-bearing namespaces", () => {
     for (const schema of allSchemas) {
-      const expected = schema.name === "secrets" || schema.name === "webhook.config"
+      const expected = schema.name === "secrets"
+        || schema.name === "webhook.config"
+        || schema.name === "core.license"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }
   })
@@ -121,6 +126,22 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       coreIdentitySchema.validate({
         schemaVersion: 2,
         userId: "abc",
+      }),
+    ).toBe(true)
+    expect(
+      coreLicenseSchema.validate({
+        id: "license",
+        schemaVersion: 1,
+        deviceId: "device-1",
+        deviceIdHash: null,
+        serverUrl: null,
+        email: null,
+        publicKey: null,
+        keyId: null,
+        leaseToken: null,
+        leaseExpiresAt: null,
+        activatedAt: null,
+        lastRenewedAt: null,
       }),
     ).toBe(true)
     expect(

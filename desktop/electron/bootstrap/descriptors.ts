@@ -46,6 +46,7 @@ import { ExecutionIsolationService } from "../services/execution-isolation"
 import { AgentRelayService } from "../services/relay"
 import { AutomationIngressService } from "../services/automation-ingress"
 import { DiagnosticsService } from "../services/diagnostics-service"
+import { LicenseClient, LicenseService } from "../services/license"
 import { createConfigBackupPayload } from "../services/config-backup-service"
 import {
   CronExecutionService,
@@ -359,6 +360,32 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
       createZipArchive,
       createConfigBackupPayload,
     })
+  },
+}
+
+export const coreLicenseDescriptor: ServiceDescriptor<LicenseService> = {
+  id: "core.license",
+  criticality: "fatal",
+  dependsOn: [
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    return new LicenseService({
+      store: ctx.registry.get<DataRepository>("core.data-repository").namespace("core.license"),
+      client: new LicenseClient({ permissionGuard, auditSink }),
+      appVersion: app.getVersion(),
+      logger: ctx.logger.child("license"),
+    })
+  },
+  start(service) {
+    service.start()
+  },
+  stop(service) {
+    service.stop()
   },
 }
 

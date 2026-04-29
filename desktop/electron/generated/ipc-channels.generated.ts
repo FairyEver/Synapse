@@ -155,6 +155,11 @@ export const IPC_CHANNELS = {
     "compressGet": "synapse:ops:compress:get",
     "compressUpdate": "synapse:ops:compress:update",
   },
+  "license": {
+    "getStatus": "synapse:license:get-status",
+    "activate": "synapse:license:activate",
+    "renew": "synapse:license:renew",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS
