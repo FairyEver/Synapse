@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  active
+  disabled
+}
+
+enum ManagedStatus {
+  active
+  disabled
+  revoked
+  expired
+}
+
+enum DeviceStatus {
+  active
+  revoked
+}
+
+enum AdminStatus {
+  active
+  disabled
+}
+
+model Account {
+  id        String           @id @default(cuid())
+  email     String           @unique
+  status    AccountStatus    @default(active)
+  licenses  License[]
+  codes     ActivationCode[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model ActivationCode {
+  id             String        @id @default(cuid())
+  codeHash       String        @unique
+  status         ManagedStatus @default(active)
+  maxDevices     Int           @default(1)
+  expiresAt      DateTime?
+  boundAccountId String?
+  boundAccount   Account?      @relation(fields: [boundAccountId], references: [id])
+  redeemedAt     DateTime?
+  license        License?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([boundAccountId])
+}
+
+model License {
+  id               String         @id @default(cuid())
+  accountId        String
+  account          Account        @relation(fields: [accountId], references: [id])
+  activationCodeId String         @unique
+  activationCode   ActivationCode @relation(fields: [activationCodeId], references: [id])
+  status           ManagedStatus  @default(active)
+  maxDevices       Int            @default(1)
+  expiresAt        DateTime?
+  devices          Device[]
+  leases           Lease[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([accountId])
+}
+
+model Device {
+  id           String       @id @default(cuid())
+  licenseId    String
+  license      License      @relation(fields: [licenseId], references: [id])
+  deviceIdHash String
+  name         String
+  platform     String
+  appVersion   String
+  status       DeviceStatus @default(active)
+  firstSeenAt  DateTime     @default(now())
+  lastSeenAt   DateTime     @default(now())
+  leases       Lease[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([licenseId, deviceIdHash])
+  @@index([deviceIdHash])
+}
+
+model Lease {
+  id             String   @id @default(cuid())
+  licenseId      String
+  license        License  @relation(fields: [licenseId], references: [id])
+  deviceId       String
+  device         Device   @relation(fields: [deviceId], references: [id])
+  tokenId        String   @unique
+  issuedAt       DateTime
+  expiresAt      DateTime
+  statusSnapshot Json
+  createdAt      DateTime @default(now())
+
+  @@index([licenseId])
+  @@index([deviceId])
+}
+
+model AdminUser {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  status       AdminStatus @default(active)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}

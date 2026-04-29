@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: synapse
+      POSTGRES_DB: synapse
+    ports:
+      - "5432:5432"
+    volumes:
+      - synapse-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://synapse:synapse@postgres:5432/synapse
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: change-me-now
+      ADMIN_JWT_SECRET: local-dev-admin-secret
+      LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY}
+      LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY}
+      LICENSE_KEY_ID: local-dev-key
+      LICENSE_LEASE_DAYS: "7"
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "pnpm --filter @synapse/server prisma:migrate && pnpm --filter @synapse/server start"
+
+volumes:
+  synapse-postgres:
