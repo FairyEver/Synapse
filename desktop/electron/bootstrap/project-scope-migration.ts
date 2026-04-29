@@ -284,7 +284,8 @@ function rewriteFeishuSecretRef(
 }
 
 function normalizePathForMatch(value: string): string {
-  return path.resolve(value).replace(/[\\/]+$/, "")
+  const normalized = path.resolve(value).replace(/[\\/]+$/, "")
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized
 }
 
 function backupId(namespace: string, id: string): string {

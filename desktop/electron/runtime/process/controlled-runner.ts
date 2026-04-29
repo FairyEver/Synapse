@@ -23,6 +23,11 @@ const DEFAULT_ENV_ALLOWLIST = [
   "SystemRoot",
   "WINDIR",
   "ComSpec",
+  "USERPROFILE",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "HOMEDRIVE",
+  "HOMEPATH",
 ]
 
 const DEFAULT_RUN_AS_ENV_ALLOWLIST = [
@@ -700,7 +705,10 @@ function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLau
   const env = buildAllowedEnv(request.env, request.envAllowlist)
   const isolation = request.isolation
   if (!isolation) {
-    return { command: request.command, args, env }
+    return {
+      ...wrapWindowsBatchCommand(request.command, args, env),
+      env,
+    }
   }
   if (isolation.kind !== "run_as_user") {
     const exhaustive: never = isolation.kind
@@ -736,6 +744,35 @@ function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLau
       envKeys: Object.keys(isolatedEnv).sort(),
     },
   }
+}
+
+function wrapWindowsBatchCommand(
+  command: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): Pick<ControlledProcessLaunch, "command" | "args"> {
+  if (process.platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) {
+    return { command, args }
+  }
+
+  return {
+    command: env.ComSpec ?? "cmd.exe",
+    args: [
+      "/d",
+      "/s",
+      "/c",
+      [command, ...args].map(quoteWindowsCommandArg).join(" "),
+    ],
+  }
+}
+
+function quoteWindowsCommandArg(value: string): string {
+  if (value.length === 0) return "\"\""
+  const escaped = value
+    .replace(/"/g, "\\\"")
+    .replace(/%/g, "%%")
+
+  return /[\s&()^|<>"]/.test(value) ? `"${escaped}"` : escaped
 }
 
 function filterEnv(env: NodeJS.ProcessEnv, allowlist: readonly string[]): NodeJS.ProcessEnv {

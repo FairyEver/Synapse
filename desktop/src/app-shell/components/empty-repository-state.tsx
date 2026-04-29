@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
+import { getRepositoryNameFromPath } from "@/lib/path-utils"
 import { cn } from "@/lib/utils"
 
 type EmptyRepositoryStateProps = {
@@ -128,7 +129,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
         return
       }
 
-      const name = selectedPath.split("/").pop() || "新仓库"
+      const name = getRepositoryNameFromPath(selectedPath) || "新仓库"
       const newRepository = {
         uuid: crypto.randomUUID(),
         name,
@@ -233,7 +234,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     const selectedPath = initTargetPath
 
     try {
-      const name = selectedPath.split("/").pop() || "新仓库"
+      const name = getRepositoryNameFromPath(selectedPath) || "新仓库"
       const newRepository = {
         uuid: crypto.randomUUID(),
         name,

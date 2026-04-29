@@ -9,7 +9,12 @@ import { createNoopLogger } from "../../runtime/lib/test-helpers"
 import { migrateRepositoryScopedConnectorData } from "../project-scope-migration"
 
 describe("migrateRepositoryScopedConnectorData", () => {
-  it("moves repository-scoped agent conversations to the matching configured project id", async () => {
+  it("moves repository-scoped agent conversations to the matching configured project id on Windows case-only path differences", async () => {
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "win32",
+    })
     const dataRepository = new MemoryDataRepository()
     const conversations = dataRepository.namespace<ConversationEntryV1>("conversations")
     await conversations.upsert({
@@ -24,26 +29,32 @@ describe("migrateRepositoryScopedConnectorData", () => {
       updatedAt: "2026-04-27T00:00:00.000Z",
     })
 
-    await migrateRepositoryScopedConnectorData(dataRepository, {
-      activeRepoUuid: "repo-1",
-      repositories: [{
-        uuid: "repo-1",
-        name: "Desktop",
-        localPath: "/Users/liyang/Desktop",
-        contentDirs: {},
-      }],
-      global: {
-        themeMode: "system",
-        projects: [{
-          id: "project-1",
+    try {
+      await migrateRepositoryScopedConnectorData(dataRepository, {
+        activeRepoUuid: "repo-1",
+        repositories: [{
+          uuid: "repo-1",
           name: "Desktop",
-          path: "/Users/liyang/Desktop/",
+          localPath: "C:\\Users\\liyang\\Desktop",
+          contentDirs: {},
         }],
-        favorites: { rule: [], skill: [], prompt: [] },
-        recentlyViewed: { rule: [], skill: [], prompt: [] },
-        contentSortOrder: "modified-desc",
-      },
-    }, createNoopLogger())
+        global: {
+          themeMode: "system",
+          projects: [{
+            id: "project-1",
+            name: "Desktop",
+            path: "c:\\users\\LIYANG\\Desktop\\",
+          }],
+          favorites: { rule: [], skill: [], prompt: [] },
+          recentlyViewed: { rule: [], skill: [], prompt: [] },
+          contentSortOrder: "modified-desc",
+        },
+      }, createNoopLogger())
+    } finally {
+      if (platformDescriptor) {
+        Object.defineProperty(process, "platform", platformDescriptor)
+      }
+    }
 
     await expect(conversations.get("conv-1")).resolves.toEqual(expect.objectContaining({
       projectId: "project-1",
