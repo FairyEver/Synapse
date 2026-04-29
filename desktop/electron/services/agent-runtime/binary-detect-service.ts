@@ -3,10 +3,8 @@ import { access, constants } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { promisify } from "node:util"
-import { createMainLogger } from "../log-store"
 
 const execFileAsync = promisify(execFile)
-const logger = createMainLogger("service.agent-runtime.binary-detect")
 
 function getCommonBinDirs(): string[] {
   const home = homedir()
@@ -47,9 +45,8 @@ async function whichViaShell(bin: string): Promise<string | null> {
     if (firstLine && !firstLine.includes("not found") && firstLine.startsWith("/")) {
       return firstLine
     }
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string }
-    logger.debug("Shell which lookup missed.", { bin, stdout: e.stdout?.trim() })
+  } catch {
+    return null
   }
 
   return null
@@ -71,9 +68,6 @@ async function whichBin(bin: string): Promise<string | null> {
   if (fast) return fast
 
   const slow = await whichViaShell(bin)
-  if (slow) {
-    logger.info("Found via shell fallback.", { bin, path: slow })
-  }
   return slow
 }
 

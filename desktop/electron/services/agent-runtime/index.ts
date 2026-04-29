@@ -25,6 +25,7 @@ import type {
 import { ReplyOutboxService } from "../reply-target"
 import type { AgentAdapter } from "./types"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
+import { whichBin } from "./binary-detect-service"
 import { CustomCommandRegistry } from "./command-registry"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
@@ -168,7 +169,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           envAllowlist: [],
         }, runner),
         agentType: "codex",
-        adapterFactory: (view) => createAdapterFromRuntimeDefinition(view, runner),
+        adapterFactory: async (view) =>
+          createAdapterFromRuntimeDefinition(await resolveRuntimeCommand(view), runner),
         eventBus: ctx.eventBus,
         logger: ctx.logger,
         permissionGuard,
@@ -194,6 +196,14 @@ export function createAdapterFromRuntimeDefinition(
     throw new Error(`Unknown agent runtime: ${view.agentType}`)
   }
   return definition.createAdapter(view, runner)
+}
+
+async function resolveRuntimeCommand(view: ProviderRuntimeView): Promise<ProviderRuntimeView> {
+  const definition = agentRuntimeDefinitionsByStringId.get(view.agentType)
+  const binary = definition?.runtime.binaries[0]
+  if (!binary) return view
+  const runtimeCommand = await whichBin(binary)
+  return runtimeCommand ? { ...view, runtimeCommand } : view
 }
 
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {

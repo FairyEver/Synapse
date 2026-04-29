@@ -56,6 +56,7 @@ export interface ProjectProviderState {
 export interface ProviderRuntimeView extends ProjectProviderState {
   readonly model?: string
   readonly mode?: string
+  readonly runtimeCommand?: string
   readonly provider?: ProviderConfigView
   readonly baseUrl?: string
   readonly apiKey?: string
@@ -66,4 +67,3 @@ export interface ProviderRuntimeView extends ProjectProviderState {
 export interface ProviderRuntimeRequest {
   readonly actor?: ActorIdentity
 }
-

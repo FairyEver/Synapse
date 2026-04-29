@@ -6,6 +6,7 @@ export const agentRuntimeDefinition = {
   ...agentBaseDefinition,
   createAdapter(view, runner) {
     return new CodexExecAdapter(runner, {
+      command: view.runtimeCommand,
       model: view.model,
       provider: view.provider?.id,
       baseUrl: view.baseUrl,

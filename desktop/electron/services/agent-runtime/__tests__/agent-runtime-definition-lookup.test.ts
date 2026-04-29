@@ -10,6 +10,10 @@ vi.mock("electron", () => ({
 }))
 
 import { createAdapterFromRuntimeDefinition } from "../index"
+import type {
+  ControlledProcessResult,
+  ControlledProcessRunRequest,
+} from "../../../runtime/process"
 
 describe("Agent runtime definition lookup", () => {
   it("creates the requested adapter from runtime view", () => {
@@ -25,6 +29,46 @@ describe("Agent runtime definition lookup", () => {
       env: {},
       envAllowlist: [],
     }, runner).agentType).toBe("claude-code")
+  })
+
+  it("passes the resolved CLI path into Codex adapters", async () => {
+    const requests: ControlledProcessRunRequest[] = []
+    const runner = {
+      run: vi.fn(async (request: ControlledProcessRunRequest): Promise<ControlledProcessResult> => {
+        requests.push(request)
+        return {
+          exitCode: 0,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          durationMs: 1,
+        }
+      }),
+      start: vi.fn(),
+    }
+
+    const adapter = createAdapterFromRuntimeDefinition({
+      projectId: "project-1",
+      agentType: "codex",
+      runtimeCommand: "/opt/homebrew/bin/codex",
+      providers: [],
+      env: {},
+      envAllowlist: [],
+    }, runner)
+
+    await adapter.execute({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local",
+      content: "hello",
+    }, {
+      projectId: "project-1",
+      workDir: "/repo",
+      actor: { kind: "user" },
+    })
+
+    expect(requests[0]?.command).toBe("/opt/homebrew/bin/codex")
   })
 
   it("throws a readable error for unknown agent runtimes", () => {

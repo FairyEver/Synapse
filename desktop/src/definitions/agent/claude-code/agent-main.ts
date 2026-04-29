@@ -6,6 +6,7 @@ export const agentRuntimeDefinition = {
   ...agentBaseDefinition,
   createAdapter(view, runner) {
     return new ClaudeCodeAdapter(runner, {
+      command: view.runtimeCommand,
       model: view.model,
       effort: view.provider?.effort,
       mode: view.mode,

@@ -90,7 +90,7 @@ export interface AgentRuntimeServiceDeps {
   }
 }
 
-export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter
+export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter | Promise<AgentAdapter>
 
 interface QueuedTurn {
   readonly message: AgentMessage
@@ -601,7 +601,18 @@ export class AgentRuntimeService {
 
       const adapter = await this.resolveAdapter()
       if (adapter.startSession) {
-        return this.processLiveTurn(state, message, conversation, adapter, workDir)
+        try {
+          return await this.processLiveTurn(state, message, conversation, adapter, workDir)
+        } catch (error) {
+          if (adapter.agentType !== "codex" || !isLiveStartupFailure(error)) throw error
+          const messageText = error instanceof Error ? error.message : String(error)
+          this.deps.logger?.warn("Agent live session failed; falling back to exec.", {
+            error: messageText,
+            projectId: this.deps.projectId,
+            sessionKey: message.sessionKey,
+            agentType: adapter.agentType,
+          })
+        }
       }
       return this.processExecTurn(message, conversation, adapter, workDir)
     } finally {
@@ -1598,6 +1609,14 @@ function runtimeKey(
   sideSessionId?: string,
 ): string {
   return `${projectId}:${workspaceKey ?? "default"}:${sideSessionId ?? "active"}:${sessionKey}`
+}
+
+function isLiveStartupFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /\bEPIPE\b/.test(message)
+    || message.includes("Process session is not running")
+    || message.includes("app-server exited")
+    || message.includes("ENOENT")
 }
 
 function permissionActionForTool(toolName: string): PermissionAction {

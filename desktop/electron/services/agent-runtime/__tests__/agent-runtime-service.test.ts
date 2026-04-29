@@ -662,6 +662,26 @@ describe("AgentRuntimeService", () => {
     ])
   })
 
+  it("falls back to exec when a live Codex session breaks during startup", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const adapter = new BrokenLiveAdapter()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      now: fixedNow,
+    })
+
+    const result = await service.send(baseMessage("hello"))
+
+    expect(adapter.liveStarts).toBe(1)
+    expect(adapter.execStarted).toEqual(["hello"])
+    expect(result.resultText).toBe("fallback done")
+    expect((await conversations.get(result.conversationId))?.history.map((entry) => entry.content))
+      .toEqual(["hello", "fallback done"])
+  })
+
   it("serializes same-session turns and drains queued messages in order", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const adapter = new BlockingAdapter()
@@ -950,6 +970,30 @@ class BlockingAdapter implements AgentAdapter {
       agentSessionId,
       threadId: agentSessionId,
     })
+  }
+}
+
+class BrokenLiveAdapter implements AgentAdapter {
+  readonly agentType = "codex"
+  readonly execStarted: string[] = []
+  liveStarts = 0
+
+  async execute(message: AgentMessage): Promise<AgentExecutionResult> {
+    this.execStarted.push(message.content)
+    return {
+      events: [
+        { type: "text", content: "fallback done", agentSessionId: "thread-1", threadId: "thread-1" },
+        { type: "result", content: "fallback done", done: true, agentSessionId: "thread-1", threadId: "thread-1" },
+      ],
+      resultText: "fallback done",
+      agentSessionId: "thread-1",
+      threadId: "thread-1",
+    }
+  }
+
+  async startSession(): Promise<AgentLiveSession> {
+    this.liveStarts += 1
+    throw new Error("write EPIPE")
   }
 }
 
