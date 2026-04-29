@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { File, FolderOpen, LoaderCircle } from "lucide-react"
+import { File, FolderOpen, LoaderCircle, Trash2 } from "lucide-react"
 import { readDetail } from "@/app-shell/content"
 import {
   createContentOpenRequestId,
@@ -62,12 +62,12 @@ const logger = createRendererLogger("editor-scan")
 
 type ScanItemDetailDialogProps = {
   item: ScanItemForDetail | null
-  onCopied?: () => Promise<void> | void
+  onChanged?: () => Promise<void> | void
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDetailDialogProps) {
+function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemDetailDialogProps) {
   const { content: loadedContent, loading, error } = useScanItemContent(
     open && item?.content == null ? item?.path ?? null : null,
   )
@@ -84,6 +84,9 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
   const [isQuickPublishBusy, setIsQuickPublishBusy] = useState(false)
   const [fallbackReason, setFallbackReason] = useState<string | null>(null)
   const [isEditorCopyOpen, setIsEditorCopyOpen] = useState(false)
+  const [trashError, setTrashError] = useState<string | null>(null)
+  const [isTrashConfirmOpen, setIsTrashConfirmOpen] = useState(false)
+  const [isTrashBusy, setIsTrashBusy] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -92,6 +95,9 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
       setQuickPublishError(null)
       setFallbackReason(null)
       setIsEditorCopyOpen(false)
+      setTrashError(null)
+      setIsTrashConfirmOpen(false)
+      setIsTrashBusy(false)
       return
     }
     const timer = setTimeout(() => setContentReady(true), 200)
@@ -114,6 +120,51 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
     if (!item) return
     getSynapseBridge()?.shell.showItemInFolder(item.path)
   }, [item])
+
+  const trashDisabledReason = item?.trash.mode === "unsupported"
+    ? item.trash.disabledReason
+    : null
+
+  const handleTrashConfirm = useCallback(async () => {
+    if (!item || trashDisabledReason) return
+    setIsTrashBusy(true)
+    setTrashError(null)
+
+    try {
+      const bridge = getSynapseBridge()
+      if (!bridge) {
+        throw new Error("当前窗口无法处理本机内容。")
+      }
+
+      await bridge.editorScan.trashItem({
+        itemType: item.type,
+        itemName: item.name,
+        itemPath: item.path,
+        editorId: item.editorId,
+        scope: item.scope,
+        source: item.source,
+        trash: item.trash,
+        synapseContentId: item.synapseContentId ?? null,
+      })
+
+      success("已移到废纸篓")
+      logger.info("Scan item moved to trash.", {
+        editorId: item.editorId,
+        itemType: item.type,
+        path: item.path,
+        scope: item.scope,
+        trashMode: item.trash.mode,
+      })
+      setIsTrashConfirmOpen(false)
+      onOpenChange(false)
+      await onChanged?.()
+    } catch (error) {
+      logger.error("Scan item trash failed.", { path: item.path, error })
+      setTrashError(error instanceof Error ? error.message : "移到废纸篓失败。")
+    } finally {
+      setIsTrashBusy(false)
+    }
+  }, [item, onChanged, onOpenChange, success, trashDisabledReason])
 
   const disabledReason =
     !activeRepository
@@ -224,6 +275,39 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
   return (
     <>
       <AlertDialog
+        open={isTrashConfirmOpen}
+        onOpenChange={(nextOpen) => {
+          if (!isTrashBusy) setIsTrashConfirmOpen(nextOpen)
+        }}
+        data-track="editor-scan-trash-confirm"
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="block">{item.name}</span>
+              <span className="block break-all">{item.path}</span>
+              <span className="block">可从系统废纸篓恢复。</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isTrashBusy}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              data-track="editor-scan-trash-confirm-submit"
+              disabled={isTrashBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleTrashConfirm()
+              }}
+            >
+              {isTrashBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+              移到废纸篓
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
         open={fallbackReason !== null}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setFallbackReason(null)
@@ -314,6 +398,11 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
                 <AlertDescription>{quickPublishError}</AlertDescription>
               </Alert>
             ) : null}
+            {trashError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{trashError}</AlertDescription>
+              </Alert>
+            ) : null}
           </div>
           </DialogHeader>
 
@@ -381,6 +470,27 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
                   ) : null}
                 </Tooltip>
               </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isTrashBusy || trashDisabledReason !== null}
+                        onClick={() => setIsTrashConfirmOpen(true)}
+                      >
+                        <Trash2 data-icon="inline-start" />
+                        移到废纸篓
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {trashDisabledReason ? (
+                    <TooltipContent>{trashDisabledReason}</TooltipContent>
+                  ) : null}
+                </Tooltip>
+              </TooltipProvider>
               <Button
                 type="button"
                 size="sm"
@@ -398,7 +508,7 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
       <EditorCopyDialog
         content={content}
         item={item}
-        onCopied={onCopied}
+        onCopied={onChanged}
         open={isEditorCopyOpen}
         onOpenChange={setIsEditorCopyOpen}
       />

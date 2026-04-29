@@ -77,4 +77,32 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain("复制后会替换旧 Skill")
     expect(source).toContain("不能复制到这个位置")
   })
+
+  it("offers trash only from scan item details", async () => {
+    const detailSource = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+    const cardSource = await readFile(
+      new URL("../components/scan-item-card.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(detailSource).toContain("移到废纸篓")
+    expect(detailSource).toContain("editor-scan-trash-confirm")
+    expect(detailSource).toContain("已移到废纸篓")
+    expect(cardSource).not.toContain("移到废纸篓")
+    expect(cardSource).not.toContain("Trash2")
+  })
+
+  it("uses the scan trash bridge from the detail dialog", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("bridge.editorScan.trashItem")
+    expect(source).toContain("item?.trash.mode === \"unsupported\"")
+    expect(source).toContain("item.trash.disabledReason")
+  })
 })
