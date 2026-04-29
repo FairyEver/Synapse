@@ -122,6 +122,12 @@ import type {
   SynapseRepositoryValidationResult,
 } from "./repository"
 import type { SynapseAppUpdateState } from "./update"
+import type {
+  ScheduledTask,
+  ScheduledTaskCreateInput,
+  ScheduledTaskRun,
+  ScheduledTaskUpdateInput,
+} from "./task-scheduler"
 
 export type SynapseOpsDiagnostics = {
   appVersion: string
@@ -345,6 +351,17 @@ export type SynapseBridge = {
     openMCPSettings: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
     registerMCP: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
     onChanged: (listener: (event: DataStoreChangeEvent) => void) => () => void
+  }
+  taskScheduler: {
+    listTasks: () => Promise<ScheduledTask[]>
+    getTask: (id: string) => Promise<ScheduledTask | null>
+    createTask: (input: ScheduledTaskCreateInput) => Promise<ScheduledTask>
+    updateTask: (payload: { id: string; patch: ScheduledTaskUpdateInput }) => Promise<ScheduledTask>
+    deleteTask: (id: string) => Promise<{ deleted: boolean }>
+    setTaskEnabled: (payload: { id: string; enabled: boolean }) => Promise<ScheduledTask>
+    runTask: (id: string) => Promise<ScheduledTaskRun | null>
+    stopRun: (runId: string) => Promise<{ stopped: boolean }>
+    listRuns: (taskId: string, options?: { limit?: number }) => Promise<ScheduledTaskRun[]>
   }
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>

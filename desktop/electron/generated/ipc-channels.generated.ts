@@ -136,6 +136,17 @@ export const IPC_CHANNELS = {
     "feishuResumeHeartbeat": "synapse:connectors:feishu:heartbeats:resume",
     "feishuRunHeartbeat": "synapse:connectors:feishu:heartbeats:run",
   },
+  "task-scheduler": {
+    "listTasks": "synapse:task-scheduler:tasks:list",
+    "getTask": "synapse:task-scheduler:tasks:get",
+    "createTask": "synapse:task-scheduler:tasks:create",
+    "updateTask": "synapse:task-scheduler:tasks:update",
+    "deleteTask": "synapse:task-scheduler:tasks:delete",
+    "setTaskEnabled": "synapse:task-scheduler:tasks:set-enabled",
+    "runTask": "synapse:task-scheduler:tasks:run",
+    "stopRun": "synapse:task-scheduler:runs:stop",
+    "listRuns": "synapse:task-scheduler:runs:list",
+  },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",
     "openLogDirectory": "synapse:ops:open-log-directory",

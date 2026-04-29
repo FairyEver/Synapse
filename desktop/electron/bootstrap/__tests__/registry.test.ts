@@ -91,6 +91,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.relay",
         "core.scheduler",
         "core.side-channel",
+        "core.task-scheduler",
         "core.update",
         "core.window-manager",
         "repo.maintenance",
@@ -147,6 +148,11 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.execution-isolation",
+    ])
+    expect(byId.get("core.task-scheduler")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
     ])
     expect(byId.get("core.execution-isolation")?.dependsOn).toEqual([
       "core.data-repository",
@@ -217,6 +223,9 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
     expect(idx("core.feishu-connector")).toBeLessThan(idx("core.scheduler"))
     expect(idx("core.feishu-connector")).toBeLessThan(idx("core.heartbeat"))
+    expect(idx("core.data-repository")).toBeLessThan(idx("core.task-scheduler"))
+    expect(idx("core.permission-guard")).toBeLessThan(idx("core.task-scheduler"))
+    expect(idx("core.audit-sink")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.data-store")).toBeLessThan(idx("repo.pending-pushes"))
     expect(idx("core.data-store")).toBeLessThan(idx("core.diagnostics"))

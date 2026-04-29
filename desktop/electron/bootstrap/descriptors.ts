@@ -54,6 +54,14 @@ import {
   ScheduledJobRepository,
   SchedulerService,
 } from "../services/scheduler"
+import {
+  ScheduledTaskRepository,
+  ScheduledTaskRunRepository,
+  ShellTaskAction,
+  TaskActionRegistry,
+  TaskSchedulerExecutionService,
+  TaskSchedulerService,
+} from "../services/task-scheduler"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -702,6 +710,51 @@ export const coreSchedulerDescriptor: ServiceDescriptor<SchedulerService> = {
     })
     feishuConnector.registerSchedulerService(service)
     return service
+  },
+  start(service) {
+    return service.start()
+  },
+  stop(service) {
+    service.stop()
+  },
+}
+
+export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService> = {
+  id: "core.task-scheduler",
+  criticality: "degraded",
+  dependsOn: [
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const defaultCwd = app.getPath("userData")
+    const tasks = new ScheduledTaskRepository({
+      tasks: dataRepository.namespace("task-scheduler.tasks"),
+    })
+    const runs = new ScheduledTaskRunRepository({
+      runs: dataRepository.namespace("task-scheduler.runs"),
+    })
+    const actions = new TaskActionRegistry()
+    actions.register(new ShellTaskAction({
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+    }))
+    const execution = new TaskSchedulerExecutionService({
+      tasks,
+      runs,
+      actions,
+      defaultCwd,
+    })
+    return new TaskSchedulerService({
+      tasks,
+      runs,
+      execution,
+      permissionGuard,
+      defaultCwd,
+    })
   },
   start(service) {
     return service.start()

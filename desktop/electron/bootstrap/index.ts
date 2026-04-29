@@ -16,6 +16,7 @@ export {
   coreHeartbeatDescriptor,
   coreLoggingDescriptor,
   coreSchedulerDescriptor,
+  coreTaskSchedulerDescriptor,
   coreUpdateDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,

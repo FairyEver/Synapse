@@ -147,6 +147,17 @@ const IPC_CHANNELS = {
     "feishuResumeHeartbeat": "synapse:connectors:feishu:heartbeats:resume",
     "feishuRunHeartbeat": "synapse:connectors:feishu:heartbeats:run",
   },
+  "task-scheduler": {
+    "listTasks": "synapse:task-scheduler:tasks:list",
+    "getTask": "synapse:task-scheduler:tasks:get",
+    "createTask": "synapse:task-scheduler:tasks:create",
+    "updateTask": "synapse:task-scheduler:tasks:update",
+    "deleteTask": "synapse:task-scheduler:tasks:delete",
+    "setTaskEnabled": "synapse:task-scheduler:tasks:set-enabled",
+    "runTask": "synapse:task-scheduler:tasks:run",
+    "stopRun": "synapse:task-scheduler:runs:stop",
+    "listRuns": "synapse:task-scheduler:runs:list",
+  },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",
     "runDiagnostics": "synapse:ops:diagnostics:run",
@@ -448,6 +459,22 @@ const synapseBridge: SynapseBridge = {
       "data-store",
       "data-store.changed",
     ),
+  },
+  taskScheduler: {
+    listTasks: invoke(IPC_CHANNELS["task-scheduler"].listTasks),
+    getTask: (id) => invoke(IPC_CHANNELS["task-scheduler"].getTask)({ taskId: id }),
+    createTask: (input) => invoke(IPC_CHANNELS["task-scheduler"].createTask)(input),
+    updateTask: (payload) => invoke(IPC_CHANNELS["task-scheduler"].updateTask)(payload),
+    deleteTask: (id) => invoke(IPC_CHANNELS["task-scheduler"].deleteTask)({ taskId: id }),
+    setTaskEnabled: (payload) =>
+      invoke(IPC_CHANNELS["task-scheduler"].setTaskEnabled)({
+        taskId: payload.id,
+        enabled: payload.enabled,
+      }),
+    runTask: (id) => invoke(IPC_CHANNELS["task-scheduler"].runTask)({ taskId: id }),
+    stopRun: (runId) => invoke(IPC_CHANNELS["task-scheduler"].stopRun)({ runId }),
+    listRuns: (taskId, options) =>
+      invoke(IPC_CHANNELS["task-scheduler"].listRuns)({ taskId, limit: options?.limit }),
   },
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
