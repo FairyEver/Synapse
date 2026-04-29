@@ -30,6 +30,12 @@
     "desktop:generate:ipc": "pnpm --filter @synapse/desktop run generate:ipc",
     "desktop:check:ipc-codegen": "pnpm --filter @synapse/desktop run check:ipc-codegen",
     "desktop:check:hard-constraints": "pnpm --filter @synapse/desktop run check:hard-constraints",
+    "server:dev": "pnpm --filter @synapse/server run dev",
+    "server:build": "pnpm --filter @synapse/server run build",
+    "server:test": "pnpm --filter @synapse/server run test",
+    "server:typecheck": "pnpm --filter @synapse/server run typecheck",
+    "server:prisma:migrate": "pnpm --filter @synapse/server run prisma:migrate",
+    "server:docker:up": "docker compose -f server/compose.yml up",
     "website:dev": "pnpm --filter @synapse/website run dev",
     "website:build": "pnpm --filter @synapse/website run build",
     "website:preview": "pnpm --filter @synapse/website run preview"
