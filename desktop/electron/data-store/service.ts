@@ -462,6 +462,7 @@ class DataStoreService {
 
     if (this.needsLegacySchemaMigration()) {
       logger.warn("Legacy data store schema detected. Migrating in place.")
+      this.createLegacyMigrationBackup()
       this.migrateLegacySchema()
     }
 
@@ -603,6 +604,25 @@ class DataStoreService {
         })
       }
     }
+  }
+
+  private createLegacyMigrationBackup(): void {
+    const suffix = `legacy-migration.${Date.now()}`
+    const backupPath = `${this.dbPath}.${suffix}`
+    const walPath = `${this.dbPath}-wal`
+    const shmPath = `${this.dbPath}-shm`
+
+    try {
+      this.getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)")
+    } catch (error) {
+      logger.warn("Failed to checkpoint data store before legacy migration backup.", { error })
+    }
+
+    copyFileSync(this.dbPath, backupPath)
+    if (existsSync(walPath)) copyFileSync(walPath, `${walPath}.${suffix}`)
+    if (existsSync(shmPath)) copyFileSync(shmPath, `${shmPath}.${suffix}`)
+
+    logger.info("Legacy data store migration backup created.", { path: backupPath })
   }
 
   private migrateLegacySchema(): void {

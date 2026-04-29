@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs"
 import { mkdtemp, rm } from "node:fs/promises"
 import { DatabaseSync } from "node:sqlite"
 import os from "node:os"
@@ -171,6 +172,17 @@ describe("DataStoreService legacy database migration", () => {
       type: "收入",
       amount: 12.5,
     })
+
+    const backupName = readdirSync(tempDir).find((name) => /^synapse-data\.db\.legacy-migration\.\d+$/.test(name))
+    expect(backupName).toBeDefined()
+    const backupDb = new DatabaseSync(path.join(tempDir, backupName!))
+    try {
+      const legacyColumns = backupDb.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
+      expect(legacyColumns.map((column) => column.name)).not.toContain("kind")
+      expect((backupDb.prepare(`SELECT COUNT(*) AS count FROM "wdbc_money"`).get() as { count: number }).count).toBe(1)
+    } finally {
+      backupDb.close()
+    }
   })
 
   it("recovers the latest legacy backup when the current database is empty", async () => {
