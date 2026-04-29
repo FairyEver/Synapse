@@ -146,7 +146,14 @@ export type SynapseOpsDiagnostics = {
     bindingCount: number
     recentRunCount: number
   }
-  agent?: SynapseAgentStatus
+  agent?: {
+    projectId: string
+    agentType: string
+    liveSessions: number
+    busySessions: number
+    queuedTurns: number
+    pendingPermissions: number
+  }
   feishu?: {
     projectId: string
     configured: boolean
