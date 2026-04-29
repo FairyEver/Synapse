@@ -39,6 +39,16 @@ export class AdminController {
     return this.admin.getAccount(id)
   }
 
+  @Get("/devices")
+  listDevices() {
+    return this.admin.listDevices()
+  }
+
+  @Get("/system")
+  getSystemOverview() {
+    return this.admin.getSystemOverview()
+  }
+
   @Patch("/licenses/:id")
   updateLicense(@Param("id") id: string, @Body() body: unknown) {
     return this.admin.updateLicense(id, body)

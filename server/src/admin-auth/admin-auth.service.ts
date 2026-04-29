@@ -33,6 +33,10 @@ export class AdminAuthService {
     return AdminAuthService.createForTest(options)
   }
 
+  getEmail(): string {
+    return this.email
+  }
+
   async login(email: string, password: string): Promise<AdminSession> {
     const normalizedEmail = email.trim().toLowerCase()
     const passwordMatches = await bcrypt.compare(password, this.passwordHash)

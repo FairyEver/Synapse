@@ -21,11 +21,6 @@ import {
 } from "lucide-react"
 
 const data = {
-  user: {
-    name: "Admin",
-    email: "admin@example.com",
-    avatar: "",
-  },
   teams: [
     {
       name: "Synapse",
@@ -44,7 +39,6 @@ const data = {
         <KeyRoundIcon
         />
       ),
-      isActive: true,
     },
     {
       title: "账号",
@@ -73,17 +67,35 @@ const data = {
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  activeRoute,
+  user,
+  onLogout,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  readonly activeRoute: string
+  readonly user: {
+    name: string
+    email: string
+    avatar: string
+  }
+  readonly onLogout: () => void
+}) {
+  const items = data.navMain.map((item) => ({
+    ...item,
+    isActive: item.url === `#/${activeRoute}`,
+  }))
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={items} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} onLogout={onLogout} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

@@ -10,6 +10,7 @@
     "build:admin": "vite build --config admin/vite.config.ts",
     "start": "node dist/main.js",
     "test": "vitest run",
+    "test:admin": "vitest run --config admin/vitest.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",

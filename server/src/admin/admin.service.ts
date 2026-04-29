@@ -67,6 +67,58 @@ export class AdminService {
     })
   }
 
+  listDevices() {
+    return this.prisma.device.findMany({
+      orderBy: { lastSeenAt: "desc" },
+      include: {
+        license: {
+          include: {
+            account: true,
+          },
+        },
+      },
+    })
+  }
+
+  async getSystemOverview() {
+    const [
+      activationCodes,
+      activeActivationCodes,
+      accounts,
+      activeAccounts,
+      licenses,
+      activeLicenses,
+      devices,
+      activeDevices,
+      leases,
+    ] = await this.prisma.$transaction([
+      this.prisma.activationCode.count(),
+      this.prisma.activationCode.count({ where: { status: "active" } }),
+      this.prisma.account.count(),
+      this.prisma.account.count({ where: { status: "active" } }),
+      this.prisma.license.count(),
+      this.prisma.license.count({ where: { status: "active" } }),
+      this.prisma.device.count(),
+      this.prisma.device.count({ where: { status: "active" } }),
+      this.prisma.lease.count(),
+    ])
+
+    return {
+      serverTime: new Date().toISOString(),
+      counts: {
+        activationCodes,
+        activeActivationCodes,
+        accounts,
+        activeAccounts,
+        licenses,
+        activeLicenses,
+        devices,
+        activeDevices,
+        leases,
+      },
+    }
+  }
+
   async updateLicense(id: string, body: unknown) {
     const request = z.object({ status: managedStatusSchema }).parse(body)
     return this.prisma.license.update({ where: { id }, data: { status: request.status } })

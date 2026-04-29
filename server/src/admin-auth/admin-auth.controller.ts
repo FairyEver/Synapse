@@ -1,6 +1,7 @@
-import { Body, Controller, Post, Res } from "@nestjs/common"
+import { Body, Controller, Get, Post, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
+import { AdminAuthGuard } from "./admin-auth.guard"
 import { AdminAuthService } from "./admin-auth.service"
 
 const loginSchema = z.object({
@@ -28,5 +29,11 @@ export class AdminAuthController {
   logout(@Res({ passthrough: true }) response: Response) {
     response.clearCookie("synapse_admin")
     return { ok: true }
+  }
+
+  @UseGuards(AdminAuthGuard)
+  @Get("/session")
+  getSession() {
+    return { email: this.auth.getEmail() }
   }
 }
