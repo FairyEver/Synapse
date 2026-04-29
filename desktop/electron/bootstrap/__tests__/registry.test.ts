@@ -78,6 +78,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.config",
         "core.data-repository",
         "core.data-store",
+        "core.diagnostics",
         "core.event-bus",
         "core.execution-isolation",
         "core.feishu-connector",
@@ -178,6 +179,14 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.execution-isolation",
     ])
     expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
+    expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
+      "core.config",
+      "core.logging",
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+      "core.data-store",
+    ])
     expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config"])
     expect(byId.get("repo.maintenance")?.dependsOn).toEqual(["repo.watch"])
@@ -196,6 +205,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     // Each dependency precedes its dependent.
     const idx = (id: string) => order.indexOf(id)
     expect(idx("core.config")).toBeLessThan(idx("core.data-store"))
+    expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.audit-sink"))
@@ -209,6 +219,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.feishu-connector")).toBeLessThan(idx("core.heartbeat"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.data-store")).toBeLessThan(idx("repo.pending-pushes"))
+    expect(idx("core.data-store")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.app-icon")).toBeLessThan(idx("ui.tray"))
   })
 

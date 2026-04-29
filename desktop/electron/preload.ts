@@ -149,6 +149,8 @@ const IPC_CHANNELS = {
   },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",
+    "runDiagnostics": "synapse:ops:diagnostics:run",
+    "exportDiagnosticsBundle": "synapse:ops:diagnostics:export-bundle",
     "openLogDirectory": "synapse:ops:open-log-directory",
     "runAsGet": "synapse:ops:run-as:get",
     "runAsUpdate": "synapse:ops:run-as:update",
@@ -526,6 +528,8 @@ const synapseBridge: SynapseBridge = {
   },
   ops: {
     diagnostics: (payload) => invoke(IPC_CHANNELS.ops.diagnostics)(payload ?? {}),
+    runDiagnostics: (payload) => invoke(IPC_CHANNELS.ops.runDiagnostics)(payload ?? {}),
+    exportDiagnosticsBundle: (payload) => invoke(IPC_CHANNELS.ops.exportDiagnosticsBundle)(payload),
     openLogDirectory: invoke(IPC_CHANNELS.ops.openLogDirectory),
     runAsGet: (projectId) => invoke(IPC_CHANNELS.ops.runAsGet)({ projectId }),
     runAsUpdate: (payload) => invoke(IPC_CHANNELS.ops.runAsUpdate)(payload),

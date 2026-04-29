@@ -105,6 +105,10 @@ import type {
   SynapseRendererLogPayload,
 } from "./log"
 import type {
+  SynapseDiagnosticsBundleExportResult,
+  SynapseDiagnosticsReport,
+} from "./diagnostics"
+import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
   SynapseRepositoryInitializationPreview,
@@ -430,6 +434,10 @@ export type SynapseBridge = {
   }
   ops: {
     diagnostics: (payload?: { projectId?: string }) => Promise<SynapseOpsDiagnostics>
+    runDiagnostics: (payload?: { projectId?: string }) => Promise<SynapseDiagnosticsReport>
+    exportDiagnosticsBundle: (
+      payload: { report: SynapseDiagnosticsReport },
+    ) => Promise<SynapseDiagnosticsBundleExportResult>
     openLogDirectory: () => Promise<{ ok: true }>
     runAsGet: (projectId: string) => Promise<SynapseRunAsConfig>
     runAsUpdate: (payload: {

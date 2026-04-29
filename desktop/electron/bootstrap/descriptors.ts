@@ -24,8 +24,10 @@
  */
 
 import { app, safeStorage } from "electron"
+import path from "node:path"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
+import { createZipArchive } from "../runtime/archive"
 import { configStore } from "../services/config-store"
 import { logStore } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
@@ -43,6 +45,8 @@ import { SideChannelService } from "../services/side-channel"
 import { ExecutionIsolationService } from "../services/execution-isolation"
 import { AgentRelayService } from "../services/relay"
 import { AutomationIngressService } from "../services/automation-ingress"
+import { DiagnosticsService } from "../services/diagnostics-service"
+import { createConfigBackupPayload } from "../services/config-backup-service"
 import {
   CronExecutionService,
   HeartbeatRepository,
@@ -66,6 +70,12 @@ import { createNetworkServiceRegistry } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
 import { createProjectContainerRegistry } from "../runtime/project-container"
 import { migrateRepositoryScopedConnectorData } from "./project-scope-migration"
+import { dataStoreService } from "../data-store/service"
+import { getHttpPort } from "../data-store/http-server"
+import { getCliDebugInfo } from "../data-store/cli-installer"
+import { getMcpServers } from "../data-store/mcp-installer"
+import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../data-store/mcp-server"
+import { collectOpsStatus } from "../modules/ops/status"
 
 /**
  * core.logging — wraps the existing `logStore` singleton.
@@ -301,6 +311,52 @@ export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
     return createFileBackedDataRepository({
       rootDir: `${app.getPath("userData")}/data-v1`,
       safeStorage,
+    })
+  },
+}
+
+export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = {
+  id: "core.diagnostics",
+  criticality: "degraded",
+  dependsOn: [
+    "core.config",
+    "core.logging",
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+    "core.data-store",
+  ],
+  create(ctx) {
+    return new DiagnosticsService({
+      appInfo: app,
+      configStore,
+      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      serviceRegistry: ctx.registry,
+      logStore,
+      dataStore: dataStoreService,
+      getDataStoreRuntimeStatus: () => {
+        const dbPath = dataStoreService.getDbPath()
+        return {
+          port: getHttpPort(),
+          running: getHttpPort() > 0,
+          dbSize: dataStoreService.getDbSize(),
+          tableCount: dataStoreService.getTableCount(),
+          dbDirectoryPath: path.dirname(dbPath),
+        }
+      },
+      collectOpsStatus,
+      getCliDebugInfo,
+      getMcpHttpStatus: () => ({
+        running: isMcpServerRunning(),
+        port: getMcpServerPort(),
+        url: getMcpServerUrl(),
+      }),
+      getMcpServers,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("diagnostics"),
+      createZipArchive,
+      createConfigBackupPayload,
     })
   },
 }
