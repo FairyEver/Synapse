@@ -9,6 +9,8 @@
 // schema valid on strict MCP clients (e.g. Codex) that enforce inputSchema
 // allowed values client-side, even after DDL operations.
 
+import { buildMcpToolActions } from "./capability-registry"
+
 type McpTool = {
   name: string
   description: string
@@ -21,7 +23,7 @@ type McpTool = {
 
 const tableNameProp: Record<string, unknown> = {
   type: "string",
-  description: "Existing table name. If you do not know which tables exist, call list_tables first.",
+  description: "Existing table name. If the user did not provide an exact table name, call list_tables first and use table.description to choose the relevant table. Call describe_table before writes or when you need columns, choices, or field meanings.",
 }
 
 const columnKindEnum = ["text", "integer", "decimal", "boolean", "date", "timestamp", "single_choice", "multi_choice", "json", "binary"] as const
@@ -39,28 +41,39 @@ const kindDescription = [
   "binary         Raw bytes",
 ].join("\n")
 
+const whereConditionSchema = {
+  type: "object",
+  properties: {
+    field: { type: "string", description: "Column name" },
+    op: {
+      type: "string",
+      enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"],
+      description: "Comparison operator. CONTAINS is only valid on multi_choice columns.",
+    },
+    value: { description: "Comparison value. For CONTAINS, pass one scalar item, not an array or object." },
+  },
+  required: ["field", "op", "value"],
+}
+
 const whereClauseSchema = {
-  oneOf: [
+  anyOf: [
     {
       type: "object",
       description: "Equality filter object. Each key becomes `column = value`, and multiple keys are combined with AND.",
     },
     {
       type: "array",
-      items: {
-        type: "object",
-        properties: {
-          field: { type: "string", description: "Column name" },
-          op: {
-            type: "string",
-            enum: ["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"],
-            description: "Comparison operator. CONTAINS is only valid on multi_choice columns.",
-          },
-          value: { description: "Comparison value. For CONTAINS, pass one scalar item, not an array or object." },
-        },
-        required: ["field", "op", "value"],
-      },
+      items: whereConditionSchema,
       description: "Explicit filter expressions combined with AND: [{ field, op, value }].",
+    },
+    {
+      type: "object",
+      properties: {
+        combinator: { type: "string", enum: ["all", "any"], description: "all combines conditions with AND; any combines them with OR." },
+        conditions: { type: "array", items: whereConditionSchema, description: "Filter expressions in this group." },
+      },
+      required: ["combinator", "conditions"],
+      description: "Grouped filter object: { combinator: 'all'|'any', conditions: [...] }.",
     },
   ],
 }
@@ -69,7 +82,7 @@ function buildTools(): McpTool[] {
   return [
     {
       name: "list_tables",
-      description: "List all user tables in the data store. Returns an array of { name, description, rowCount, createdAt, updatedAt }.",
+      description: "List all user tables in the data store. Use description to choose the relevant table when the user describes a purpose rather than an exact table name. Returns an array of { name, description, rowCount, createdAt, updatedAt }.",
       inputSchema: { type: "object", properties: {} },
     },
     {
@@ -125,8 +138,28 @@ function buildTools(): McpTool[] {
     },
     {
       name: "describe_table",
-      description: "Return table schema and metadata as { name, description, columns, rowCount, createdAt, updatedAt }. Each column includes { name, kind, choices?, description?, primaryKey?, system? }.",
+      description: "Return table schema and metadata as { name, description, columns, rowCount, createdAt, updatedAt }. Call this before inserts, updates, filters, or schema-sensitive operations. Each column includes { name, kind, choices?, description?, primaryKey?, system? }.",
       inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
+    },
+    {
+      name: "database_overview",
+      description: "Return an overview of all user tables, table descriptions, row counts, and column summaries. Use this first when the user asks broadly about available data.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "update_table_description",
+      description: "Update the stored table description metadata. This keeps list_tables and describe_table useful for agents without changing rows or columns.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          description: {
+            type: "string",
+            description: "New table description stored in metadata and returned by list_tables and describe_table.",
+          },
+        },
+        required: ["table", "description"],
+      },
     },
     {
       name: "add_column",
@@ -197,6 +230,18 @@ function buildTools(): McpTool[] {
       },
     },
     {
+      name: "get_column_choices_usage",
+      description: "Return usage counts for every configured choice in a single_choice or multi_choice column. Use before update_column_choices when you need to know which choices are currently used by rows.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          table: tableNameProp,
+          column: { type: "string", description: "single_choice or multi_choice column name" },
+        },
+        required: ["table", "column"],
+      },
+    },
+    {
       name: "insert",
       description: "Insert one row and return { id }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call describe_table first if you do not know the column set or choices.",
       inputSchema: {
@@ -229,7 +274,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "query",
-      description: "Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts either an equality object { column: value } or an array of ANDed expressions [{ field, op, value }] where op is =, !=, >, <, >=, <=, LIKE, or CONTAINS; CONTAINS only works on multi_choice columns and its value must be a single scalar. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to 100, offset defaults to 0, json and multi_choice values are parsed on read, and boolean values are returned as true or false.",
+      description: "Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts an equality object { column: value }, an ANDed expression array [{ field, op, value }], or a group { combinator: 'all'|'any', conditions }; op is =, !=, >, <, >=, <=, LIKE, or CONTAINS, and CONTAINS only works on multi_choice columns with one scalar item. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to 100, offset defaults to 0, json and multi_choice values are parsed on read, and boolean values are returned as true or false.",
       inputSchema: {
         type: "object",
         properties: {
@@ -301,6 +346,10 @@ function buildTools(): McpTool[] {
             type: "object",
             description: "Partial update object keyed by column name. Omit updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
           },
+          dryRun: {
+            type: "boolean",
+            description: "When true, return affected ids without modifying rows.",
+          },
         },
         required: ["table", "where", "data"],
       },
@@ -315,6 +364,10 @@ function buildTools(): McpTool[] {
           where: {
             description: "Required non-empty filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
             ...whereClauseSchema,
+          },
+          dryRun: {
+            type: "boolean",
+            description: "When true, return affected ids without modifying rows.",
           },
         },
         required: ["table", "where"],
@@ -333,6 +386,16 @@ function buildTools(): McpTool[] {
           },
         },
         required: ["table"],
+      },
+    },
+    {
+      name: "operation_log",
+      description: "Return recent Data Store mutation operations. Use this when the user asks what an Agent or CLI recently changed.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Maximum log entries to return. Defaults to 50." },
+        },
       },
     },
     {
@@ -379,8 +442,31 @@ function buildTools(): McpTool[] {
       },
     },
     {
+      name: "read_sql",
+      description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, PRAGMA, and EXPLAIN. Prefer this over raw_sql for inspection and reporting.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          sql: { type: "string", description: "Read-only SQL statement" },
+          params: {
+            type: "array",
+            items: {
+              anyOf: [
+                { type: "string" },
+                { type: "number" },
+                { type: "boolean" },
+                { type: "null" },
+              ],
+            },
+            description: "Optional positional bind parameters",
+          },
+        },
+        required: ["sql"],
+      },
+    },
+    {
       name: "raw_sql",
-      description: "Execute raw SQL with optional positional bind params. System tables prefixed with _ and ATTACH or DETACH are blocked; SELECT, PRAGMA, and EXPLAIN return { rows }, INSERT, UPDATE, and DELETE return { changes, lastInsertRowid }, and CREATE, DROP, or ALTER TABLE resync table and column metadata automatically. Prefer structured tools when possible.",
+      description: "Execute raw SQL with optional positional bind params. Prefer read_sql for inspection and structured tools for normal writes. Use raw_sql only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables prefixed with _ and ATTACH or DETACH are blocked.",
       inputSchema: {
         type: "object",
         properties: {
@@ -407,27 +493,7 @@ function buildTools(): McpTool[] {
 // Maps MCP tool names (snake_case) to canonical service action names (camelCase)
 // used by the in-process service, the HTTP JSON API (http-server.ts), and the
 // stdio MCP bridge (which forwards to HTTP).
-const MCP_TOOL_ACTIONS: Record<string, string> = {
-  list_tables: "listTables",
-  create_table: "createTable",
-  drop_table: "dropTable",
-  describe_table: "describeTable",
-  add_column: "addColumn",
-  update_column_description: "updateColumnDescription",
-  update_column_choices: "updateColumnChoices",
-  insert: "insert",
-  batch_insert: "batchInsert",
-  query: "query",
-  update: "update",
-  delete: "delete",
-  update_where: "updateWhere",
-  delete_where: "deleteWhere",
-  count: "count",
-  rename_table: "renameTable",
-  rename_column: "renameColumn",
-  drop_column: "dropColumn",
-  raw_sql: "rawSQL",
-}
+const MCP_TOOL_ACTIONS: Record<string, string> = buildMcpToolActions()
 
 export { buildTools, MCP_TOOL_ACTIONS }
 export type { McpTool }

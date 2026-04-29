@@ -9,6 +9,8 @@ type ServerInfo = {
   startedAt: string
 }
 
+type DataStoreApiClientSource = "cli" | "mcp-stdio"
+
 function getUserDataPath(): string {
   switch (process.platform) {
     case "darwin":
@@ -40,7 +42,12 @@ function isAppRunning(pid: number): boolean {
   }
 }
 
-async function apiCall(info: ServerInfo, action: string, params: Record<string, unknown> = {}): Promise<unknown> {
+async function apiCall(
+  info: ServerInfo,
+  action: string,
+  params: Record<string, unknown> = {},
+  source: DataStoreApiClientSource = "cli",
+): Promise<unknown> {
   const url = `http://127.0.0.1:${info.port}/api`
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10_000)
@@ -52,6 +59,7 @@ async function apiCall(info: ServerInfo, action: string, params: Record<string, 
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${info.token}`,
+        "X-Synapse-Client": source,
       },
       body: JSON.stringify({ action, ...params }),
       signal: controller.signal,
@@ -82,4 +90,4 @@ async function apiCall(info: ServerInfo, action: string, params: Record<string, 
 }
 
 export { apiCall, getUserDataPath, isAppRunning, readServerInfo }
-export type { ServerInfo }
+export type { DataStoreApiClientSource, ServerInfo }

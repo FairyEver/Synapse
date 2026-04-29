@@ -5,7 +5,11 @@ import path from "node:path"
 import type {
   Column,
   ColumnKind,
+  DataStoreBulkMutationResult,
   DataStoreOrderBy,
+  DataStoreOperationLogEntry,
+  DataStoreOperationSource,
+  DataStoreOverview,
   DataStoreQueryParams,
   DataStoreQueryResult,
   DataStoreTableInfo,
@@ -64,6 +68,8 @@ type TableExportPayload = {
   }
   rows: SerializedTableRow[]
 }
+
+type BulkMutationOptions = { dryRun?: boolean }
 
 function isWhereGroup(where: DataStoreWhereClause): where is { combinator: "all" | "any"; conditions: DataStoreWhereCondition[] } {
   return typeof where === "object"
@@ -489,6 +495,17 @@ class DataStoreService {
         PRIMARY KEY (table_name, column_name)
       )
     `)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS "_operation_log" (
+        "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+        "source" TEXT NOT NULL,
+        "action" TEXT NOT NULL,
+        "table_name" TEXT,
+        "affected" INTEGER,
+        "dry_run" INTEGER NOT NULL DEFAULT 0,
+        "created_at" TEXT NOT NULL
+      )
+    `)
   }
 
   private syncMetaTables(): void {
@@ -709,6 +726,26 @@ class DataStoreService {
         updatedAt: t.updated_at,
       }
     })
+  }
+
+  getDatabaseOverview(): DataStoreOverview {
+    const tables = this.listTables().map((table) => {
+      const schema = this.describeTable(table.name)
+      return {
+        name: schema.name,
+        description: schema.description,
+        rowCount: schema.rowCount,
+        columns: schema.columns.map((column) => ({
+          name: column.name,
+          kind: column.kind,
+          description: column.description ?? "",
+          ...(column.choices ? { choices: column.choices } : {}),
+          ...(column.system ? { system: true as const } : {}),
+        })),
+      }
+    })
+
+    return { tableCount: tables.length, tables }
   }
 
   createTable(name: string, columns: Column[], description?: string): void {
@@ -1203,7 +1240,7 @@ class DataStoreService {
     return { affected: toNumber(result.changes) }
   }
 
-  updateWhere(table: string, where: DataStoreWhereClause, data: Record<string, unknown>): { affected: number; ids: number[] } {
+  updateWhere(table: string, where: DataStoreWhereClause, data: Record<string, unknown>, options: BulkMutationOptions = {}): DataStoreBulkMutationResult {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1249,6 +1286,10 @@ class DataStoreService {
         db.exec("COMMIT")
         return { affected: 0, ids: [] }
       }
+      if (options.dryRun) {
+        db.exec("COMMIT")
+        return { affected: ids.length, ids, dryRun: true }
+      }
       const inPlaceholders = ids.map(() => "?").join(", ")
       db.prepare(`UPDATE ${q(table)} SET ${setClauses} WHERE "id" IN (${inPlaceholders})`).run(...values, ...ids)
       db.exec("COMMIT")
@@ -1259,7 +1300,7 @@ class DataStoreService {
     }
   }
 
-  deleteWhere(table: string, where: DataStoreWhereClause): { affected: number; ids: number[] } {
+  deleteWhere(table: string, where: DataStoreWhereClause, options: BulkMutationOptions = {}): DataStoreBulkMutationResult {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1282,6 +1323,10 @@ class DataStoreService {
       if (ids.length === 0) {
         db.exec("COMMIT")
         return { affected: 0, ids: [] }
+      }
+      if (options.dryRun) {
+        db.exec("COMMIT")
+        return { affected: ids.length, ids, dryRun: true }
       }
       const inPlaceholders = ids.map(() => "?").join(", ")
       db.prepare(`DELETE FROM ${q(table)} WHERE "id" IN (${inPlaceholders})`).run(...ids)
@@ -1322,6 +1367,70 @@ class DataStoreService {
     }
 
     return { changes: toNumber(result.changes), lastInsertRowid: toNumber(result.lastInsertRowid) }
+  }
+
+  readSQL(sql: string, params?: unknown[]): { rows: Record<string, unknown>[] } {
+    const normalized = sql.trim().toLowerCase()
+    if (!/^(select|pragma|explain)\b/.test(normalized)) {
+      throw new Error("readSQL is read-only. Use rawSQL when you explicitly need to write.")
+    }
+    if (/\b(attach|detach)\b/i.test(normalized)) {
+      throw new Error("ATTACH and DETACH statements are not allowed")
+    }
+
+    const db = this.getDb()
+    const sqlParams = (params ?? []).map(toSqlValue)
+    const rows = db.prepare(sql).all(...sqlParams) as Record<string, unknown>[]
+    return { rows }
+  }
+
+  recordOperation(entry: {
+    source: DataStoreOperationSource
+    action: string
+    table?: string
+    affected?: number
+    dryRun?: boolean
+  }): void {
+    const db = this.getDb()
+    db.prepare(`
+      INSERT INTO "_operation_log" ("source", "action", "table_name", "affected", "dry_run", "created_at")
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      entry.source,
+      entry.action,
+      entry.table ?? null,
+      entry.affected ?? null,
+      entry.dryRun ? 1 : 0,
+      new Date().toISOString(),
+    )
+  }
+
+  listOperationLog(limit = 50): DataStoreOperationLogEntry[] {
+    const db = this.getDb()
+    const rows = db.prepare(`
+      SELECT "id", "source", "action", "table_name", "affected", "dry_run", "created_at"
+      FROM "_operation_log"
+      ORDER BY "id" DESC
+      LIMIT ?
+    `).all(limit) as Array<{
+      id: number | bigint
+      source: DataStoreOperationSource
+      action: string
+      table_name: string | null
+      affected: number | bigint | null
+      dry_run: number
+      created_at: string
+    }>
+
+    return rows.map((row) => ({
+      id: toNumber(row.id),
+      source: row.source,
+      action: row.action,
+      table: row.table_name,
+      affected: row.affected === null ? null : toNumber(row.affected),
+      dryRun: row.dry_run === 1,
+      createdAt: row.created_at,
+    }))
   }
 
   count(table: string, where?: DataStoreWhereClause): { count: number } {

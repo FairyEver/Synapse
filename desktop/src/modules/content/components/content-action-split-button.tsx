@@ -4,6 +4,7 @@ import {
   Copy,
   Download,
   LoaderCircle,
+  PackagePlus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -29,14 +30,17 @@ function ContentActionSplitButton({
   item,
   onInstallDialogOpenChange,
 }: ContentActionSplitButtonProps) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
+  const [isInstallMenuOpen, setIsInstallMenuOpen] = useState(false)
   const {
     auxiliaryMenuSections,
     canCopy,
     canDownload,
+    canInstall,
     downloadAction,
     handleCopy,
     installDialog,
+    installMenuItems,
     isBusy,
     isCopying,
     isDownloading,
@@ -49,14 +53,20 @@ function ContentActionSplitButton({
   const definition = getContentTypeDefinition(item.type)
   const primaryAction = definition.listPrimaryAction ?? "download"
 
-  const dropdownSections = useMemo(() => {
+  const actionMenuSections = useMemo(() => {
     if (primaryAction === "copy") {
       return downloadAction ? [{ key: "download", items: [downloadAction] }] : []
     }
+    if (canInstall) {
+      const nonInstallSections = auxiliaryMenuSections.filter((section) => section.key !== "install")
+      return downloadAction
+        ? [{ key: "download", items: [downloadAction] }, ...nonInstallSections]
+        : nonInstallSections
+    }
     return auxiliaryMenuSections
-  }, [primaryAction, downloadAction, auxiliaryMenuSections])
+  }, [primaryAction, canInstall, downloadAction, auxiliaryMenuSections])
 
-  const hasDropdown = dropdownSections.length > 0
+  const hasActionDropdown = actionMenuSections.length > 0
 
   return (
     <>
@@ -77,6 +87,44 @@ function ContentActionSplitButton({
             )}
             复制
           </Button>
+        ) : canInstall ? (
+          <DropdownMenu
+            data-track="content-install-menu"
+            open={isInstallMenuOpen}
+            onOpenChange={(open) => {
+              setIsInstallMenuOpen(open)
+
+              if (open) {
+                loadInstallTargets()
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isBusy}
+              >
+                <PackagePlus data-icon="inline-start" />
+                安装
+              </Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="end" className="w-max">
+              <DropdownMenuGroup>
+                {installMenuItems.map((action) => (
+                  <DropdownMenuItem
+                    key={action.key}
+                    disabled={action.disabled}
+                    onSelect={action.onSelect}
+                  >
+                    {action.icon}
+                    {action.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : canDownload ? (
           <Button
             variant="outline"
@@ -95,16 +143,12 @@ function ContentActionSplitButton({
           </Button>
         ) : null}
 
-        {hasDropdown ? (
+        {hasActionDropdown ? (
           <DropdownMenu
             data-track="content-actions-menu"
-            open={isMenuOpen}
+            open={isActionMenuOpen}
             onOpenChange={(open) => {
-              setIsMenuOpen(open)
-
-              if (open) {
-                loadInstallTargets()
-              }
+              setIsActionMenuOpen(open)
             }}
           >
             <DropdownMenuTrigger asChild>
@@ -120,7 +164,7 @@ function ContentActionSplitButton({
             </DropdownMenuTrigger>
 
             <DropdownMenuContent align="end" className="w-max">
-              {dropdownSections.map((section, index) => (
+              {actionMenuSections.map((section, index) => (
                 <Fragment key={section.key}>
                   {section.label ? <DropdownMenuLabel>{section.label}</DropdownMenuLabel> : null}
                   <DropdownMenuGroup>
@@ -135,7 +179,7 @@ function ContentActionSplitButton({
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuGroup>
-                  {index < dropdownSections.length - 1 ? <DropdownMenuSeparator /> : null}
+                  {index < actionMenuSections.length - 1 ? <DropdownMenuSeparator /> : null}
                 </Fragment>
               ))}
             </DropdownMenuContent>

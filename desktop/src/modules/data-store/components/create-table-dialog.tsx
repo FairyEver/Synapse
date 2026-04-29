@@ -162,7 +162,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
   }, [name, description, columns, onSubmit, handleOpenChange, isSubmitting])
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} data-track="data-store-create-table-dialog">
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>新建表</DialogTitle>
@@ -173,6 +173,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
             <Label htmlFor="table-name">表名</Label>
             <Input
               id="table-name"
+              data-track="data-store-create-table-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="my_table"
@@ -184,6 +185,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
             <Label htmlFor="table-desc">描述</Label>
             <Input
               id="table-desc"
+              data-track="data-store-create-table-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="可选"
@@ -214,11 +216,13 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                   <div className="flex items-center gap-2">
                     <Input
                       className="flex-1"
+                      data-track="data-store-create-column-name"
                       value={col.name}
                       onChange={(e) => updateColumn(col.key, "name", e.target.value)}
                       placeholder="列名"
                     />
                     <Select
+                      data-track="data-store-create-column-kind"
                       value={col.kind}
                       onValueChange={(v) => updateColumn(col.key, "kind", v)}
                     >
@@ -236,6 +240,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                     <Button
                       variant="ghost"
                       size="icon"
+                      data-track="data-store-create-column-remove"
                       onClick={() => removeColumn(col.key)}
                       disabled={columns.length <= 1}
                     >
@@ -244,6 +249,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                   </div>
                   <Input
                     className="text-xs"
+                    data-track="data-store-create-column-description"
                     value={col.description}
                     onChange={(e) => updateColumn(col.key, "description", e.target.value)}
                     placeholder="可选说明"
@@ -251,6 +257,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                   {col.kind === "single_choice" || col.kind === "multi_choice" ? (
                     <TagInput
                       className="text-xs"
+                      data-track="data-store-create-column-choices"
                       value={col.choices}
                       onChange={(v) => updateColumn(col.key, "choices", v)}
                       placeholder="输入后按回车添加"
@@ -259,7 +266,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                 </div>
               ))}
             </div>
-            <Button variant="outline" size="sm" onClick={addColumn}>
+            <Button variant="outline" size="sm" data-track="data-store-create-column-add" onClick={addColumn}>
               + 添加列
             </Button>
           </div>
@@ -268,10 +275,10 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
         </div>
 
         <DialogFooter>
-          <Button variant="outline" disabled={isSubmitting} onClick={() => handleOpenChange(false)}>
+          <Button variant="outline" disabled={isSubmitting} data-track="data-store-create-table-cancel" onClick={() => handleOpenChange(false)}>
             取消
           </Button>
-          <Button disabled={isSubmitting} onClick={() => void handleSubmit()}>
+          <Button disabled={isSubmitting} data-track="data-store-create-table-submit" onClick={() => void handleSubmit()}>
             {isSubmitting ? "创建中..." : "创建"}
           </Button>
         </DialogFooter>

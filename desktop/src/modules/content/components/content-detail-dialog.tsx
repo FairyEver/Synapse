@@ -40,7 +40,6 @@ import {
   type ContentInstallTargetRequest,
 } from "@/modules/content/components/content-detail-menubar"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
-import { EditorInstallStatusPanel } from "@/modules/content/components/editor-install-status-panel"
 import {
   ContentItemIcon,
   invalidateIconImageCache,
@@ -521,6 +520,13 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
                     canDelete={!isReadonly}
                     canEdit={Boolean(detail) && !isReadonly && !isRepositoryInitializing && !isSyncing}
                     canOpenInNewWindow={Boolean(displayedVersion)}
+                    installStatus={detail?.type === "rule" || detail?.type === "skill" ? {
+                      entries: editorInstallStatus.entries,
+                      error: editorInstallStatus.error,
+                      isLoading: editorInstallStatus.isLoading,
+                      onOpenInstallTarget: handleOpenInstallTarget,
+                      onRefresh: editorInstallStatus.refresh,
+                    } : null}
                     installTargetRequest={installTargetRequest}
                     isFavorite={isItemFavorite}
                     isRepositoryInitializing={Boolean(isRepositoryInitializing)}
@@ -560,35 +566,22 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             contentReady ? "opacity-100" : "opacity-0",
           )}>
             {contentReady ? (
-              <>
-                {detail?.type === "rule" || detail?.type === "skill" ? (
-                  <div className="mb-4">
-                    <EditorInstallStatusPanel
-                      entries={editorInstallStatus.entries}
-                      error={editorInstallStatus.error}
-                      isLoading={editorInstallStatus.isLoading}
-                      onOpenInstallTarget={handleOpenInstallTarget}
-                      onRefresh={editorInstallStatus.refresh}
-                    />
-                  </div>
-                ) : null}
-                <ContentDetailPanel
-                  detail={detail}
-                  displayedVersion={displayedVersion}
-                  emptyDescription={labels.emptyDescription}
-                  emptyTitle={labels.emptyTitle}
-                  errorTitle={labels.errorTitle}
-                  history={historyEntries}
-                  isLoading={isLoading}
-                  loadingTitle={labels.loadingTitle}
-                  onSelectedHistoryDirnameChange={handleHistorySelectionChange}
-                  onViewModeChange={handleViewModeChange}
-                  previewError={previewError}
-                  renderVersion={renderVersionView}
-                  selectedHistoryDirname={selectedHistoryDirname}
-                  viewMode={viewMode}
-                />
-              </>
+              <ContentDetailPanel
+                detail={detail}
+                displayedVersion={displayedVersion}
+                emptyDescription={labels.emptyDescription}
+                emptyTitle={labels.emptyTitle}
+                errorTitle={labels.errorTitle}
+                history={historyEntries}
+                isLoading={isLoading}
+                loadingTitle={labels.loadingTitle}
+                onSelectedHistoryDirnameChange={handleHistorySelectionChange}
+                onViewModeChange={handleViewModeChange}
+                previewError={previewError}
+                renderVersion={renderVersionView}
+                selectedHistoryDirname={selectedHistoryDirname}
+                viewMode={viewMode}
+              />
             ) : null}
           </div>
         </DialogContent>

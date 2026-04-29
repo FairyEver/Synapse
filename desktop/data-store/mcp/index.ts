@@ -41,7 +41,7 @@ async function executeTool(toolName: string, args: Record<string, unknown>): Pro
   const action = MCP_TOOL_ACTIONS[toolName]
   if (!action) throw new Error(`Unknown tool: ${toolName}`)
   try {
-    return await apiCall(getServerInfo(), action, args)
+    return await apiCall(getServerInfo(), action, args, "mcp-stdio")
   } catch (error) {
     clearServerInfoCache()
     throw error

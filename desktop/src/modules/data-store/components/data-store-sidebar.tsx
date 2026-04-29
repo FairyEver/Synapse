@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { FileInput, Table2 } from "lucide-react"
+import { FileInput } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModuleSidebar,
@@ -51,12 +51,15 @@ function DataStoreSidebar({
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="搜索数据表或备注"
+        searchTrackName="data-store-table-search"
         onAddClick={onCreateTable}
+        addTrackName="data-store-create-table-open"
         addTitle="新建表"
         actions={(
           <Button
             variant="outline"
             size="icon"
+            data-track="data-store-import-table-open"
             onClick={onImportTable}
             title="导入表"
           >
@@ -65,7 +68,7 @@ function DataStoreSidebar({
           </Button>
         )}
       />
-      <ModuleSidebarList>
+      <ModuleSidebarList data-track="data-store-table-list">
         {filteredTables.length === 0 ? (
           <div className="px-3 py-2 text-sm text-muted-foreground">
             {tables.length === 0 ? "(无表)" : "未找到匹配的数据表"}
@@ -75,7 +78,8 @@ function DataStoreSidebar({
             <ModuleSidebarItem
               key={table.name}
               active={table.name === activeTable}
-              icon={Table2}
+              data-track="data-store-table-select"
+              trackValue={table.name}
               onClick={() => onTableSelect(table.name)}
               description={table.description.trim() || undefined}
               trailing={

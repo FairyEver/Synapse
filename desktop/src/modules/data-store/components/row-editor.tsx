@@ -180,6 +180,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
               <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
                 <DataTableCellChoice
                   multiple
+                  data-track="data-store-row-cell-choice"
                   value={selected}
                   options={col.choices!}
                   disabled={isSaving}
@@ -199,6 +200,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
             return (
               <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>
                 <DataTableCellChoice
+                  data-track="data-store-row-cell-choice"
                   value={values[col.name] ?? ""}
                   options={options}
                   disabled={isSaving}
@@ -218,6 +220,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
                   inputRefs.current[col.name] = node
                 }}
                 aria-invalid={invalidColumnName === col.name}
+                data-track="data-store-row-cell-input"
                 disabled={isSaving}
                 value={values[col.name] ?? ""}
                 onChange={(e) => handleChange(col.name, e.target.value)}
@@ -244,6 +247,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
               size="icon-xs"
               className="rounded-sm"
               disabled={isSaving}
+              data-track="data-store-row-save"
               onClick={() => {
                 void handleSave().catch(() => {})
               }}
@@ -255,6 +259,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
               size="icon-xs"
               className="rounded-sm"
               disabled={isSaving}
+              data-track="data-store-row-cancel"
               onClick={handleCancel}
             >
               <X className="size-3.5" />

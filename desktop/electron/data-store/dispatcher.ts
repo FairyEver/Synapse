@@ -8,7 +8,7 @@
 // Transport layers wrap errors in their own protocol format.
 
 import { dataStoreService } from "./service"
-import type { Column, DataStoreQueryParams, DataStoreWhereClause } from "./types"
+import type { Column, DataStoreOperationSource, DataStoreQueryParams, DataStoreWhereClause } from "./types"
 
 type DispatchResult = {
   ok: true
@@ -18,12 +18,19 @@ type DispatchResult = {
 }
 
 type ActionHandler = (params: Record<string, unknown>) => DispatchResult
+type DispatchContext = { source?: DataStoreOperationSource }
 
 // --- parameter validation helpers ---
 
 function requireString(params: Record<string, unknown>, key: string): string {
   const v = params[key]
   if (typeof v !== "string" || !v) throw new Error(`Missing or invalid '${key}': expected non-empty string`)
+  return v
+}
+
+function requireText(params: Record<string, unknown>, key: string): string {
+  const v = params[key]
+  if (typeof v !== "string") throw new Error(`Missing or invalid '${key}': expected string`)
   return v
 }
 
@@ -77,6 +84,19 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     data: dataStoreService.describeTable(requireString(params, "name")),
   }),
 
+  databaseOverview: () => ({
+    ok: true,
+    data: dataStoreService.getDatabaseOverview(),
+  }),
+
+  updateTableDescription: (params) => {
+    dataStoreService.updateTableDescription(
+      requireString(params, "table"),
+      requireText(params, "description"),
+    )
+    return { ok: true }
+  },
+
   addColumn: (params) => {
     // Legacy callers pass 'name' instead of 'table'; keep both shapes working.
     const tableRaw = params.table ?? params.name
@@ -94,7 +114,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     dataStoreService.updateColumnDescription(
       requireString(params, "table"),
       requireString(params, "column"),
-      requireString(params, "description"),
+      requireText(params, "description"),
     )
     return { ok: true }
   },
@@ -160,16 +180,18 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       requireString(params, "table"),
       requireWhereClause(params, "where"),
       requireObject(params, "data"),
+      { dryRun: params.dryRun === true },
     )
-    return { ok: true, data: { ids: result.ids }, affected: result.affected }
+    return { ok: true, data: { ids: result.ids, dryRun: result.dryRun }, affected: result.affected }
   },
 
   deleteWhere: (params) => {
     const result = dataStoreService.deleteWhere(
       requireString(params, "table"),
       requireWhereClause(params, "where"),
+      { dryRun: params.dryRun === true },
     )
-    return { ok: true, data: { ids: result.ids }, affected: result.affected }
+    return { ok: true, data: { ids: result.ids, dryRun: result.dryRun }, affected: result.affected }
   },
 
   count: (params) => {
@@ -177,6 +199,13 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const result = dataStoreService.count(requireString(params, "table"), where)
     return { ok: true, data: result }
   },
+
+  operationLog: (params) => ({
+    ok: true,
+    data: dataStoreService.listOperationLog(
+      typeof params.limit === "number" && Number.isFinite(params.limit) && params.limit >= 0 ? params.limit : 50,
+    ),
+  }),
 
   renameTable: (params) => {
     dataStoreService.renameTable(
@@ -203,6 +232,14 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
+  readSQL: (params) => ({
+    ok: true,
+    data: dataStoreService.readSQL(
+      requireString(params, "sql"),
+      params.params as unknown[] | undefined,
+    ),
+  }),
+
   rawSQL: (params) => {
     const result = dataStoreService.rawSQL(
       requireString(params, "sql"),
@@ -216,6 +253,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 const MUTATING_ACTIONS = new Set<string>([
   "createTable",
   "dropTable",
+  "updateTableDescription",
   "addColumn",
   "updateColumnDescription",
   "updateColumnChoices",
@@ -249,11 +287,20 @@ function extractTableName(action: string, params: Record<string, unknown>): stri
   return undefined
 }
 
-function dispatchDataStoreAction(action: string, params: Record<string, unknown>): DispatchResult {
+function dispatchDataStoreAction(action: string, params: Record<string, unknown>, context: DispatchContext = {}): DispatchResult {
   const handler = ACTION_HANDLERS[action]
   if (!handler) throw new Error(`Unknown action: ${action}`)
   const result = handler(params)
-  if (MUTATING_ACTIONS.has(action) && changeListener) {
+  if (MUTATING_ACTIONS.has(action)) {
+    dataStoreService.recordOperation({
+      source: context.source ?? "api",
+      action,
+      table: extractTableName(action, params),
+      affected: result.affected,
+      dryRun: params.dryRun === true,
+    })
+  }
+  if (MUTATING_ACTIONS.has(action) && params.dryRun !== true && changeListener) {
     try {
       changeListener({ action, table: extractTableName(action, params) })
     } catch {
@@ -268,4 +315,4 @@ function hasDataStoreAction(action: string): boolean {
 }
 
 export { dispatchDataStoreAction, hasDataStoreAction, setDataStoreChangeListener }
-export type { DispatchResult, DataStoreChangeEvent, DataStoreChangeListener }
+export type { DispatchContext, DispatchResult, DataStoreChangeEvent, DataStoreChangeListener }

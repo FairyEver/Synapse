@@ -24,7 +24,7 @@ let activePort = 0
 function executeTool(toolName: string, args: Record<string, unknown>): unknown {
   const action = MCP_TOOL_ACTIONS[toolName]
   if (!action) throw new Error(`Unknown tool: ${toolName}`)
-  return dispatchDataStoreAction(action, args)
+  return dispatchDataStoreAction(action, args, { source: "mcp-http" })
 }
 
 // --- HTTP transport ---

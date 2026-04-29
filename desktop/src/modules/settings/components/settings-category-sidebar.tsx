@@ -18,12 +18,14 @@ function SettingsCategorySidebar({
 }: SettingsCategorySidebarProps) {
   return (
     <ModuleSidebar variant="bare">
-      <ModuleSidebarList>
+      <ModuleSidebarList data-track="settings-category-list">
         {categories.map((category) => (
           <ModuleSidebarItem
             key={category.id}
             active={category.id === activeCategory}
             icon={category.icon}
+            data-track="settings-category-select"
+            trackValue={category.id}
             onClick={() => onCategoryChange(category.id)}
             className="h-8 px-4"
           >

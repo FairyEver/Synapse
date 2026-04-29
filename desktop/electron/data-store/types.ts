@@ -26,6 +26,44 @@ type DataStoreTableSchema = {
   updatedAt: string
 }
 
+type DataStoreOverviewColumn = {
+  name: string
+  kind: ColumnKind
+  description: string
+  choices?: string[]
+  system?: true
+}
+
+type DataStoreOverviewTable = {
+  name: string
+  description: string
+  rowCount: number
+  columns: DataStoreOverviewColumn[]
+}
+
+type DataStoreOverview = {
+  tableCount: number
+  tables: DataStoreOverviewTable[]
+}
+
+type DataStoreBulkMutationResult = {
+  affected: number
+  ids: number[]
+  dryRun?: true
+}
+
+type DataStoreOperationSource = "api" | "cli" | "mcp-stdio" | "mcp-http"
+
+type DataStoreOperationLogEntry = {
+  id: number
+  source: DataStoreOperationSource
+  action: string
+  table: string | null
+  affected: number | null
+  dryRun: boolean
+  createdAt: string
+}
+
 type DataStoreWhereCondition = {
   field: string
   op: "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE" | "CONTAINS"
@@ -78,7 +116,13 @@ type DataStoreServerInfo = {
 export type {
   Column,
   ColumnKind,
+  DataStoreBulkMutationResult,
   DataStoreOrderBy,
+  DataStoreOperationLogEntry,
+  DataStoreOperationSource,
+  DataStoreOverview,
+  DataStoreOverviewColumn,
+  DataStoreOverviewTable,
   DataStoreQueryParams,
   DataStoreQueryResult,
   DataStoreServerInfo,

@@ -219,7 +219,7 @@ function DataTableFilterDialog({
   }, [combinator, conditions, filterableColumns, onApply, onOpenChange])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} data-track="data-store-filter-dialog">
       <DialogContent className="overflow-hidden gap-3 p-3 sm:max-w-md">
         <DialogHeader className="pr-8">
           <DialogTitle>设置筛选条件</DialogTitle>
@@ -229,6 +229,7 @@ function DataTableFilterDialog({
           <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
             <span>符合以下</span>
               <Select
+                data-track="data-store-filter-combinator"
                 value={combinator}
                 onValueChange={(nextValue) => setCombinator(nextValue as DataStoreWhereGroup["combinator"])}
               >
@@ -255,6 +256,7 @@ function DataTableFilterDialog({
               return (
                 <div key={condition.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)_1.75rem] items-center gap-1.5">
                   <Select
+                    data-track="data-store-filter-field"
                     value={condition.field}
                     onValueChange={(field) => handleFieldChange(condition.id, field)}
                   >
@@ -271,6 +273,7 @@ function DataTableFilterDialog({
                   </Select>
 
                   <Select
+                    data-track="data-store-filter-operator"
                     value={condition.op}
                     onValueChange={(op) => {
                       setConditions((current) => current.map((item) => (
@@ -295,6 +298,7 @@ function DataTableFilterDialog({
                   {column.kind === "boolean" ? (
                     <label className="flex h-7 items-center gap-2 rounded-lg border border-input px-2.5 text-sm">
                       <Checkbox
+                        data-track="data-store-filter-boolean-value"
                         checked={Boolean(condition.value)}
                         onCheckedChange={(checked) => {
                           setConditions((current) => current.map((item) => (
@@ -306,6 +310,7 @@ function DataTableFilterDialog({
                     </label>
                   ) : column.choices && column.choices.length > 0 ? (
                     <Select
+                      data-track="data-store-filter-choice-value"
                       value={String(condition.value)}
                       onValueChange={(nextValue) => {
                         setConditions((current) => current.map((item) => (
@@ -327,6 +332,7 @@ function DataTableFilterDialog({
                   ) : (
                     <Input
                       className="h-7"
+                      data-track="data-store-filter-text-value"
                       value={String(condition.value)}
                       type={column.kind === "integer" || column.kind === "decimal" ? "number" : "text"}
                       placeholder="输入值"
@@ -342,6 +348,7 @@ function DataTableFilterDialog({
                     variant="ghost"
                     size="icon-sm"
                     disabled={conditions.length <= 1}
+                    data-track="data-store-filter-condition-remove"
                     onClick={() => {
                       setConditions((current) => current.filter((item) => item.id !== condition.id))
                     }}
@@ -354,15 +361,15 @@ function DataTableFilterDialog({
             })}
           </div>
 
-          <Button variant="ghost" size="sm" className="w-fit px-2" onClick={handleAddCondition} disabled={!firstColumn}>
+          <Button variant="ghost" size="sm" className="w-fit px-2" data-track="data-store-filter-condition-add" onClick={handleAddCondition} disabled={!firstColumn}>
             <Plus />
             添加条件
           </Button>
         </div>
 
         <DialogFooter className="-mx-3 -mb-3 px-3 py-2">
-          <Button variant="outline" onClick={() => onApply(null)}>清除</Button>
-          <Button onClick={handleApply}>应用</Button>
+          <Button variant="outline" data-track="data-store-filter-clear" onClick={() => onApply(null)}>清除</Button>
+          <Button data-track="data-store-filter-apply" onClick={handleApply}>应用</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

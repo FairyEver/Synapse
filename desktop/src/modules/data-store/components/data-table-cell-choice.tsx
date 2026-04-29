@@ -16,6 +16,7 @@ type DataTableCellChoiceCommonProps = {
   disabled?: boolean
   onFocus?: () => void
   className?: string
+  "data-track"?: string
 }
 
 type DataTableCellChoiceSingleProps = DataTableCellChoiceCommonProps & {
@@ -43,7 +44,7 @@ const DATA_TABLE_CELL_CHOICE_CONTENT_MAX_HEIGHT =
 
 const DataTableCellChoice = forwardRef<HTMLButtonElement, DataTableCellChoiceProps>(
   function DataTableCellChoice(props, ref) {
-    const { options, placeholder = "选择...", disabled, onFocus, className } = props
+    const { options, placeholder = "选择...", disabled, onFocus, className, "data-track": dataTrack } = props
     const normalizedOptions = options.map(normalizeOption)
 
     let display = placeholder
@@ -56,12 +57,13 @@ const DataTableCellChoice = forwardRef<HTMLButtonElement, DataTableCellChoicePro
     }
 
     return (
-      <DropdownMenu>
+      <DropdownMenu data-track={dataTrack}>
         <DropdownMenuTrigger asChild disabled={disabled}>
           <button
             ref={ref}
             type="button"
             data-slot="data-table-cell-choice"
+            data-track={dataTrack}
             onFocus={onFocus}
             className={cn(
               "block w-full appearance-none border-0 bg-transparent p-0 text-left disabled:cursor-not-allowed disabled:opacity-50",
@@ -83,6 +85,7 @@ const DataTableCellChoice = forwardRef<HTMLButtonElement, DataTableCellChoicePro
                 return (
                   <DropdownMenuCheckboxItem
                     key={opt.value}
+                    data-track={dataTrack}
                     checked={checked}
                     onSelect={(event) => event.preventDefault()}
                     onCheckedChange={() => {
@@ -99,6 +102,7 @@ const DataTableCellChoice = forwardRef<HTMLButtonElement, DataTableCellChoicePro
             : normalizedOptions.map((opt) => (
                 <DropdownMenuItem
                   key={opt.value}
+                  data-track={dataTrack}
                   onSelect={() => props.onChange(opt.value)}
                 >
                   {opt.label}

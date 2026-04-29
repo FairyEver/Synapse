@@ -64,11 +64,13 @@ function EditorScanSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <ModuleSidebarList>
+      <ModuleSidebarList data-track="editor-scan-sidebar-list">
         {summaries.map((s) => (
           <ModuleSidebarItem
             key={s.editorId}
             active={s.editorId === selectedEditorId}
+            data-track="editor-scan-editor-select"
+            trackValue={s.editorId}
             onClick={() => onSelect(s.editorId)}
             iconElement={<EditorIcon editorId={s.editorId} className="size-4" />}
             trailing={

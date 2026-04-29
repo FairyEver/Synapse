@@ -7,6 +7,7 @@ if (major < 18) {
 }
 
 import { apiCall, isAppRunning, readServerInfo, type ServerInfo } from "../shared/resolve-user-data"
+import { getCliDataCommands } from "../shared/capability-registry"
 
 function printTable(rows: Record<string, unknown>[]): void {
   if (rows.length === 0) {
@@ -93,6 +94,114 @@ function parseColDef(s: string): { name: string; kind: string; choices?: string[
   return choices ? { name, kind, choices } : { name, kind }
 }
 
+function getFlagValue(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag)
+  if (idx === -1) return undefined
+  const value = args[idx + 1]
+  if (value === undefined || value.startsWith("--")) {
+    console.error(`Missing value for ${flag}`)
+    process.exit(1)
+  }
+  return value
+}
+
+function parseJsonValue(value: string, label: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch {
+    console.error(`Invalid JSON for ${label}.`)
+    process.exit(1)
+  }
+}
+
+function parseJsonFlag(args: string[], flag: string): unknown | undefined {
+  const value = getFlagValue(args, flag)
+  return value === undefined ? undefined : parseJsonValue(value, flag)
+}
+
+function parseWherePairs(args: string[]): Record<string, string> | undefined {
+  const whereIdx = args.indexOf("--where")
+  if (whereIdx === -1) return undefined
+
+  const where: Record<string, string> = {}
+  for (let i = whereIdx + 1; i < args.length; i++) {
+    if (args[i].startsWith("--")) break
+    const eqIdx = args[i].indexOf("=")
+    if (eqIdx === -1) {
+      console.error(`Invalid --where value: "${args[i]}". Expected format: key=value`)
+      process.exit(1)
+    }
+    const key = args[i].slice(0, eqIdx)
+    const value = args[i].slice(eqIdx + 1)
+    if (key) where[key] = value
+  }
+
+  return where
+}
+
+function parseWhere(args: string[]): unknown | undefined {
+  const whereJson = parseJsonFlag(args, "--where-json")
+  return whereJson === undefined ? parseWherePairs(args) : whereJson
+}
+
+function parseNonNegativeIntegerFlag(args: string[], flag: string): number | undefined {
+  const value = getFlagValue(args, flag)
+  if (value === undefined) return undefined
+
+  const parsed = Number.parseInt(value, 10)
+  if (Number.isNaN(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+    console.error(`Invalid ${flag} value: expected a non-negative integer`)
+    process.exit(1)
+  }
+  return parsed
+}
+
+function parseOrderBy(args: string[]): string | { field: string; dir: "asc" | "desc" } | undefined {
+  const field = getFlagValue(args, "--order-by")
+  if (field === undefined) return undefined
+
+  const dir = getFlagValue(args, "--order-dir")
+  if (dir === undefined) return field
+  if (dir !== "asc" && dir !== "desc") {
+    console.error("Invalid --order-dir value: expected asc or desc")
+    process.exit(1)
+  }
+  return { field, dir }
+}
+
+function parseChoicesValue(value: string): string[] {
+  const trimmed = value.trim()
+  if (trimmed.startsWith("[")) {
+    const parsed = parseJsonValue(trimmed, "choices")
+    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === "string")) {
+      console.error("Invalid choices value: expected a JSON array of strings")
+      process.exit(1)
+    }
+    return parsed
+  }
+
+  const choices = value.split(",").map((item) => item.trim()).filter(Boolean)
+  if (choices.length === 0) {
+    console.error("Invalid choices value: expected at least one choice")
+    process.exit(1)
+  }
+  return choices
+}
+
+function parseDataFlag(args: string[], flag = "--data"): unknown {
+  const value = getFlagValue(args, flag)
+  if (value === undefined) {
+    console.error(`Missing ${flag}`)
+    process.exit(1)
+  }
+  return parseJsonValue(value, flag)
+}
+
+function columnArgsForCreate(args: string[]): string[] {
+  const flagIdx = args.findIndex((item, index) => index >= 2 && item.startsWith("--"))
+  return flagIdx === -1 ? args.slice(2) : args.slice(2, flagIdx)
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const command = args[0]
@@ -102,21 +211,29 @@ async function main(): Promise<void> {
 
 Usage:
   synapse tables                                     List all tables
-  synapse create <name> <col:kind> [col:kind...]     Create a table
+  synapse overview                                   Show all tables and column summaries
+  synapse create <name> <col:kind> [...] [--description "..."]  Create a table
   synapse drop <name>                                Drop a table
   synapse describe <name>                            Describe table schema
-  synapse add-column <table> <col:kind>              Add a column
+  synapse update-table-description <table> <desc>    Update table description
+  synapse add-column <table> <col:kind> [--description "..."]  Add a column
   synapse drop-column <table> <column>               Drop a column
   synapse rename-table <from> <to>                   Rename a table
   synapse rename-column <table> <from> <to>          Rename a column
   synapse update-column-description <table> <col> <desc>  Update column description
+  synapse update-column-choices <table> <col> <choices>  Replace choice metadata
+  synapse choice-usage <table> <col>                 Show choice usage counts
   synapse insert <table> --data '{"k":"v"}'          Insert a row
   synapse insert <table> --batch '[{...}]'           Batch insert
-  synapse query <table> [--where k=v] [--limit N]    Query rows
-  synapse count <table> [--where k=v]                Count rows
+  synapse query <table> [--where k=v] [--where-json '{...}'] [--limit N]  Query rows
+  synapse count <table> [--where k=v] [--where-json '{...}']  Count rows
+  synapse operation-log [--limit N]                  Show recent Data Store mutations
   synapse update <table> <id> --data '{"k":"v"}'     Update a row
+  synapse update-where <table> --where-json '{...}' --data '{"k":"v"}' [--dry-run]  Update rows
   synapse delete <table> <id>                        Delete a row
-  synapse sql '<SQL>'                                Execute raw SQL
+  synapse delete-where <table> --where-json '{...}' [--dry-run]  Delete rows
+  synapse read-sql '<SQL>' [--params '[...]']        Execute read-only SQL
+  synapse sql '<SQL>' [--params '[...]']             Execute raw SQL
   synapse status                                     Show service status
 
 Column kinds:
@@ -128,7 +245,7 @@ Choice columns:
     return
   }
 
-  const KNOWN_COMMANDS = new Set(["tables", "create", "drop", "describe", "add-column", "drop-column", "rename-table", "rename-column", "update-column-description", "insert", "query", "count", "update", "delete", "sql", "status"])
+  const KNOWN_COMMANDS = new Set([...getCliDataCommands(), "status"])
   if (!KNOWN_COMMANDS.has(command)) {
     console.error(`Unknown command: ${command}\nRun "synapse help" for usage.`)
     process.exit(1)
@@ -177,14 +294,29 @@ Choice columns:
         break
       }
 
+      case "overview": {
+        const result = await apiCall(info, "databaseOverview") as {
+          data: { tables: Array<{ name: string; description: string; rowCount: number; columns: Array<{ name: string; kind: string }> }> }
+        }
+        const rows = result.data.tables.map((table) => ({
+          name: table.name,
+          description: table.description,
+          rowCount: table.rowCount,
+          columns: table.columns.map((column) => `${column.name}:${column.kind}`).join(", "),
+        }))
+        printTable(rows)
+        break
+      }
+
       case "create": {
         const name = args[1]
-        const colDefs = args.slice(2).map(parseColDef)
+        const colDefs = columnArgsForCreate(args).map(parseColDef)
         if (!name || colDefs.length === 0) {
-          console.error("Usage: synapse create <name> <col:kind> [col:kind...]")
+          console.error("Usage: synapse create <name> <col:kind> [col:kind...] [--description \"...\"]")
           process.exit(1)
         }
-        await apiCall(info, "createTable", { name, columns: colDefs })
+        const description = getFlagValue(args, "--description")
+        await apiCall(info, "createTable", { name, columns: colDefs, description })
         console.log(`Table "${name}" created.`)
         break
       }
@@ -205,11 +337,24 @@ Choice columns:
         break
       }
 
+      case "update-table-description": {
+        const table = args[1]
+        const description = args.length >= 3 ? args.slice(2).join(" ") : undefined
+        if (!table || description === undefined) {
+          console.error("Usage: synapse update-table-description <table> <description>")
+          process.exit(1)
+        }
+        await apiCall(info, "updateTableDescription", { table, description })
+        console.log(`Table "${table}" description updated.`)
+        break
+      }
+
       case "add-column": {
         const table = args[1]
         const colDef = args[2]
-        if (!table || !colDef) { console.error("Usage: synapse add-column <table> <col:kind>"); process.exit(1) }
-        const col = parseColDef(colDef)
+        if (!table || !colDef) { console.error("Usage: synapse add-column <table> <col:kind> [--description \"...\"]"); process.exit(1) }
+        const description = getFlagValue(args, "--description")
+        const col = { ...parseColDef(colDef), description }
         await apiCall(info, "addColumn", { table, column: col })
         console.log(`Column "${col.name}" added to "${table}".`)
         break
@@ -218,13 +363,40 @@ Choice columns:
       case "update-column-description": {
         const table = args[1]
         const column = args[2]
-        const description = args[3]
-        if (!table || !column || !description) {
+        const description = args.length >= 4 ? args.slice(3).join(" ") : undefined
+        if (!table || !column || description === undefined) {
           console.error("Usage: synapse update-column-description <table> <column> <description>")
           process.exit(1)
         }
         await apiCall(info, "updateColumnDescription", { table, column, description })
         console.log(`Column "${column}" description updated.`)
+        break
+      }
+
+      case "update-column-choices": {
+        const table = args[1]
+        const column = args[2]
+        const choicesRaw = args[3]
+        if (!table || !column || !choicesRaw) {
+          console.error("Usage: synapse update-column-choices <table> <column> <choice1,choice2> or '[\"choice1\",\"choice2\"]'")
+          process.exit(1)
+        }
+        const choices = parseChoicesValue(choicesRaw)
+        await apiCall(info, "updateColumnChoices", { table, column, choices })
+        console.log(`Column "${column}" choices updated.`)
+        break
+      }
+
+      case "choice-usage": {
+        const table = args[1]
+        const column = args[2]
+        if (!table || !column) {
+          console.error("Usage: synapse choice-usage <table> <column>")
+          process.exit(1)
+        }
+        const result = await apiCall(info, "getColumnChoicesUsage", { table, column }) as { data: Record<string, number> }
+        const rows = Object.entries(result.data).map(([choice, count]) => ({ choice, count }))
+        printTable(rows)
         break
       }
 
@@ -234,23 +406,14 @@ Choice columns:
 
         const batchIdx = args.indexOf("--batch")
         if (batchIdx !== -1) {
-          let rows: unknown
-          try { rows = JSON.parse(args[batchIdx + 1]) } catch {
-            console.error("Invalid JSON for --batch. Expected a JSON array of objects.")
-            process.exit(1)
-          }
+          const rows = parseDataFlag(args, "--batch")
           const result = await apiCall(info, "batchInsert", { table, rows }) as { affected: number }
           console.log(`${result.affected} rows inserted.`)
           break
         }
 
-        const dataIdx = args.indexOf("--data")
-        if (dataIdx === -1) { console.error("Missing --data or --batch flag"); process.exit(1) }
-        let data: unknown
-        try { data = JSON.parse(args[dataIdx + 1]) } catch {
-          console.error("Invalid JSON for --data. Expected a JSON object.")
-          process.exit(1)
-        }
+        if (args.indexOf("--data") === -1) { console.error("Missing --data or --batch flag"); process.exit(1) }
+        const data = parseDataFlag(args)
         const result = await apiCall(info, "insert", { table, data }) as { data: { id: number } }
         console.log(`Row inserted with id=${result.data.id}.`)
         break
@@ -261,31 +424,14 @@ Choice columns:
         if (!table) { console.error("Usage: synapse query <table>"); process.exit(1) }
 
         const params: Record<string, unknown> = { table }
-        const whereIdx = args.indexOf("--where")
-        if (whereIdx !== -1) {
-          const where: Record<string, string> = {}
-          for (let i = whereIdx + 1; i < args.length; i++) {
-            if (args[i].startsWith("--")) break
-            const eqIdx = args[i].indexOf("=")
-            if (eqIdx === -1) {
-              console.error(`Invalid --where value: "${args[i]}". Expected format: key=value`)
-              process.exit(1)
-            }
-            const k = args[i].slice(0, eqIdx)
-            const v = args[i].slice(eqIdx + 1)
-            if (k) where[k] = v
-          }
-          params.where = where
-        }
-        const limitIdx = args.indexOf("--limit")
-        if (limitIdx !== -1) {
-          const limitVal = parseInt(args[limitIdx + 1])
-          if (isNaN(limitVal) || limitVal < 0 || !Number.isInteger(limitVal)) {
-            console.error("Invalid --limit value: expected a non-negative integer")
-            process.exit(1)
-          }
-          params.limit = limitVal
-        }
+        const where = parseWhere(args)
+        const limit = parseNonNegativeIntegerFlag(args, "--limit")
+        const offset = parseNonNegativeIntegerFlag(args, "--offset")
+        const orderBy = parseOrderBy(args)
+        if (where !== undefined) params.where = where
+        if (limit !== undefined) params.limit = limit
+        if (offset !== undefined) params.offset = offset
+        if (orderBy !== undefined) params.orderBy = orderBy
 
         const result = await apiCall(info, "query", params) as { data: unknown[]; total: number }
         printTable(result.data as Record<string, unknown>[])
@@ -298,25 +444,18 @@ Choice columns:
         if (!table) { console.error("Usage: synapse count <table> [--where k=v]"); process.exit(1) }
 
         const params: Record<string, unknown> = { table }
-        const whereIdx = args.indexOf("--where")
-        if (whereIdx !== -1) {
-          const where: Record<string, string> = {}
-          for (let i = whereIdx + 1; i < args.length; i++) {
-            if (args[i].startsWith("--")) break
-            const eqIdx = args[i].indexOf("=")
-            if (eqIdx === -1) {
-              console.error(`Invalid --where value: "${args[i]}". Expected format: key=value`)
-              process.exit(1)
-            }
-            const k = args[i].slice(0, eqIdx)
-            const v = args[i].slice(eqIdx + 1)
-            if (k) where[k] = v
-          }
-          params.where = where
-        }
+        const where = parseWhere(args)
+        if (where !== undefined) params.where = where
 
         const result = await apiCall(info, "count", params) as { data: { count: number } }
         console.log(result.data.count)
+        break
+      }
+
+      case "operation-log": {
+        const limit = parseNonNegativeIntegerFlag(args, "--limit")
+        const result = await apiCall(info, "operationLog", { limit }) as { data: Record<string, unknown>[] }
+        printTable(result.data)
         break
       }
 
@@ -350,35 +489,75 @@ Choice columns:
 
       case "update": {
         const table = args[1]
-        const id = parseInt(args[2])
-        const dataIdx = args.indexOf("--data")
-        if (!table || isNaN(id) || dataIdx === -1) {
+        const id = Number.parseInt(args[2] ?? "", 10)
+        if (!table || Number.isNaN(id) || args.indexOf("--data") === -1) {
           console.error("Usage: synapse update <table> <id> --data '{...}'")
           process.exit(1)
         }
-        let data: unknown
-        try { data = JSON.parse(args[dataIdx + 1]) } catch {
-          console.error("Invalid JSON for --data. Expected a JSON object.")
-          process.exit(1)
-        }
+        const data = parseDataFlag(args)
         await apiCall(info, "update", { table, id, data })
         console.log(`Row ${id} updated.`)
         break
       }
 
+      case "update-where": {
+        const table = args[1]
+        const where = parseWhere(args)
+        const data = args.indexOf("--data") === -1 ? undefined : parseDataFlag(args)
+        const dryRun = args.includes("--dry-run")
+        if (!table || where === undefined || data === undefined) {
+          console.error("Usage: synapse update-where <table> --where-json '{...}' --data '{...}'")
+          process.exit(1)
+        }
+        const result = await apiCall(info, "updateWhere", { table, where, data, dryRun }) as { affected: number }
+        console.log(`${result.affected} rows ${dryRun ? "matched" : "updated"}.`)
+        break
+      }
+
       case "delete": {
         const table = args[1]
-        const id = parseInt(args[2])
-        if (!table || isNaN(id)) { console.error("Usage: synapse delete <table> <id>"); process.exit(1) }
+        const id = Number.parseInt(args[2] ?? "", 10)
+        if (!table || Number.isNaN(id)) { console.error("Usage: synapse delete <table> <id>"); process.exit(1) }
         await apiCall(info, "delete", { table, id })
         console.log(`Row ${id} deleted.`)
+        break
+      }
+
+      case "delete-where": {
+        const table = args[1]
+        const where = parseWhere(args)
+        const dryRun = args.includes("--dry-run")
+        if (!table || where === undefined) {
+          console.error("Usage: synapse delete-where <table> --where-json '{...}'")
+          process.exit(1)
+        }
+        const result = await apiCall(info, "deleteWhere", { table, where, dryRun }) as { affected: number }
+        console.log(`${result.affected} rows ${dryRun ? "matched" : "deleted"}.`)
+        break
+      }
+
+      case "read-sql": {
+        const sql = args[1]
+        if (!sql) { console.error("Usage: synapse read-sql '<SQL>' [--params '[...]']"); process.exit(1) }
+        const params = parseJsonFlag(args, "--params")
+        if (params !== undefined && !Array.isArray(params)) {
+          console.error("Invalid --params value: expected a JSON array")
+          process.exit(1)
+        }
+        const result = await apiCall(info, "readSQL", { sql, params }) as { data: { rows: unknown[] } }
+        printTable(result.data.rows as Record<string, unknown>[])
         break
       }
 
       case "sql": {
         const sql = args[1]
         if (!sql) { console.error("Usage: synapse sql '<SQL>'"); process.exit(1) }
-        const result = await apiCall(info, "rawSQL", { sql }) as { data: { rows?: unknown[]; changes?: number } }
+        const params = parseJsonFlag(args, "--params")
+        if (params !== undefined && !Array.isArray(params)) {
+          console.error("Invalid --params value: expected a JSON array")
+          process.exit(1)
+        }
+        const result = await apiCall(info, "rawSQL", { sql, params }) as { data: { rows?: unknown[]; changes?: number } }
         if (result.data.rows) {
           printTable(result.data.rows as Record<string, unknown>[])
         } else {

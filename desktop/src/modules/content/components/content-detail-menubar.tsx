@@ -20,6 +20,10 @@ import {
 } from "@/components/ui/menubar"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { getContentTypeDefinition } from "@/config/content-types"
+import {
+  EditorInstallStatusPanel,
+  type EditorInstallStatusPanelProps,
+} from "@/modules/content/components/editor-install-status-panel"
 import { useContentDownloadActions } from "@/modules/content/hooks/use-content-download-actions"
 import type { SynapseContentMeta } from "@/types/content"
 import type { SynapseEditorId, SynapseEditorInstallScope } from "@/types/editor"
@@ -35,6 +39,7 @@ type ContentDetailMenubarProps = {
   canDelete: boolean
   canEdit: boolean
   canOpenInNewWindow: boolean
+  installStatus?: EditorInstallStatusPanelProps | null
   installTargetRequest?: ContentInstallTargetRequest | null
   isFavorite: boolean
   isRepositoryInitializing: boolean
@@ -52,6 +57,7 @@ function ContentDetailMenubar({
   canDelete,
   canEdit,
   canOpenInNewWindow,
+  installStatus,
   installTargetRequest,
   isFavorite,
   isRepositoryInitializing,
@@ -220,6 +226,10 @@ function ContentDetailMenubar({
             ) : null}
           </>
         )}
+
+        {installStatus ? (
+          <EditorInstallStatusPanel {...installStatus} />
+        ) : null}
 
         {canDelete ? (
           <Button

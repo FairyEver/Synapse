@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type KeyboardEvent } from "react"
 import { X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { sanitizeTrackValue, track } from "@/lib/ui-tracking"
 
 type TagInputProps = {
   value: string[]
@@ -9,26 +10,53 @@ type TagInputProps = {
   placeholder?: string
   disabled?: boolean
   className?: string
+  "data-track"?: string
 }
 
-function TagInput({ value, onChange, placeholder, disabled, className }: TagInputProps) {
+function TagInput({
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  className,
+  "data-track": dataTrack,
+}: TagInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [composing, setComposing] = useState(false)
+  const trackName = dataTrack ?? placeholder ?? "tag-input"
 
   const addTag = useCallback(
     (raw: string) => {
       const tag = raw.trim()
       if (!tag || value.includes(tag)) return
-      onChange([...value, tag])
+      const nextValues = [...value, tag]
+      const sanitizedValue = sanitizeTrackValue(trackName, tag)
+      track({
+        component: "tag-input",
+        name: trackName,
+        action: "add",
+        value: typeof sanitizedValue === "string" ? sanitizedValue : undefined,
+        metadata: { count: nextValues.length },
+      })
+      onChange(nextValues)
     },
-    [value, onChange],
+    [onChange, trackName, value],
   )
 
   const removeTag = useCallback(
     (tag: string) => {
-      onChange(value.filter((v) => v !== tag))
+      const nextValues = value.filter((v) => v !== tag)
+      const sanitizedValue = sanitizeTrackValue(trackName, tag)
+      track({
+        component: "tag-input",
+        name: trackName,
+        action: "remove",
+        value: typeof sanitizedValue === "string" ? sanitizedValue : undefined,
+        metadata: { count: nextValues.length },
+      })
+      onChange(nextValues)
     },
-    [value, onChange],
+    [onChange, trackName, value],
   )
 
   const handleKeyDown = useCallback(
@@ -46,10 +74,10 @@ function TagInput({ value, onChange, placeholder, disabled, className }: TagInpu
       }
 
       if (e.key === "Backspace" && input.value === "" && value.length > 0) {
-        onChange(value.slice(0, -1))
+        removeTag(value[value.length - 1])
       }
     },
-    [addTag, composing, onChange, value],
+    [addTag, composing, removeTag, value],
   )
 
   const handleBlur = useCallback(() => {
@@ -61,6 +89,7 @@ function TagInput({ value, onChange, placeholder, disabled, className }: TagInpu
 
   return (
     <div
+      data-track={dataTrack}
       className={cn(
         "flex min-h-8 flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent px-2 py-1 text-sm transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
         disabled && "pointer-events-none opacity-50",
@@ -89,7 +118,13 @@ function TagInput({ value, onChange, placeholder, disabled, className }: TagInpu
         placeholder={value.length === 0 ? placeholder : undefined}
         className="min-w-16 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         onKeyDown={handleKeyDown}
-        onBlur={handleBlur}
+        onFocus={() => {
+          track({ component: "tag-input", name: trackName, action: "focus" })
+        }}
+        onBlur={() => {
+          track({ component: "tag-input", name: trackName, action: "blur" })
+          handleBlur()
+        }}
         onCompositionStart={() => setComposing(true)}
         onCompositionEnd={() => setComposing(false)}
       />

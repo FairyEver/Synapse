@@ -79,7 +79,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 
   try {
-    const result = dispatchDataStoreAction(action, params)
+    const sourceHeader = req.headers["x-synapse-client"]
+    const source = sourceHeader === "cli" || sourceHeader === "mcp-stdio" ? sourceHeader : "api"
+    const result = dispatchDataStoreAction(action, params, { source })
     sendJson(res, 200, result)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useMemo, useRef, type ReactNode, type UIEventHandler } from "react"
 import { Plus, Search, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -7,6 +7,12 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { cn } from "@/lib/utils"
+import {
+  debounce,
+  extractLabel,
+  sanitizeTrackValue,
+  track,
+} from "@/lib/ui-tracking"
 
 type ModuleSidebarProps = {
   children: ReactNode
@@ -33,9 +39,11 @@ type ModuleSidebarHeaderProps = {
   onSearchChange?: (value: string) => void
   searchPlaceholder?: string
   searchDisabled?: boolean
+  searchTrackName?: string
   onAddClick?: () => void
   addDisabled?: boolean
   addTitle?: string
+  addTrackName?: string
   actions?: ReactNode
 }
 
@@ -44,12 +52,28 @@ function ModuleSidebarHeader({
   onSearchChange,
   searchPlaceholder,
   searchDisabled,
+  searchTrackName,
   onAddClick,
   addDisabled,
   addTitle,
+  addTrackName,
   actions,
 }: ModuleSidebarHeaderProps) {
   const showSearch = onSearchChange !== undefined
+  const logSearchChange = useMemo(
+    () => searchTrackName
+      ? debounce((value: string) => {
+        const sanitizedValue = sanitizeTrackValue(searchTrackName, value)
+        track({
+          component: "module-sidebar-search",
+          name: searchTrackName,
+          action: "change",
+          value: typeof sanitizedValue === "string" ? sanitizedValue : undefined,
+        })
+      }, 400)
+      : null,
+    [searchTrackName],
+  )
 
   return (
     <div className="flex items-center gap-2">
@@ -58,7 +82,12 @@ function ModuleSidebarHeader({
           <InputGroupInput
             value={searchValue ?? ""}
             disabled={searchDisabled}
-            onChange={(event) => onSearchChange?.(event.target.value)}
+            data-track={searchTrackName}
+            onChange={(event) => {
+              const nextValue = event.target.value
+              onSearchChange?.(nextValue)
+              logSearchChange?.(nextValue)
+            }}
             placeholder={searchPlaceholder}
           />
           <InputGroupAddon>
@@ -71,6 +100,7 @@ function ModuleSidebarHeader({
           variant="outline"
           size="icon"
           disabled={addDisabled}
+          data-track={addTrackName}
           onClick={onAddClick}
           title={addTitle}
         >
@@ -86,11 +116,60 @@ function ModuleSidebarHeader({
 type ModuleSidebarListProps = {
   children: ReactNode
   className?: string
+  "data-track"?: string
+  onScroll?: UIEventHandler<HTMLDivElement>
 }
 
-function ModuleSidebarList({ children, className }: ModuleSidebarListProps) {
+function ModuleSidebarList({
+  children,
+  className,
+  "data-track": dataTrack,
+  onScroll,
+}: ModuleSidebarListProps) {
+  const lastScrollTopRef = useRef(0)
+  const logScroll = useMemo(
+    () => dataTrack
+      ? debounce((snapshot: {
+        clientHeight: number
+        direction: "down" | "up"
+        percent: number
+        scrollHeight: number
+        scrollTop: number
+      }) => {
+        track({
+          component: "module-sidebar-list",
+          name: dataTrack,
+          action: "scroll",
+          value: snapshot.percent,
+          metadata: snapshot,
+        })
+      }, 500)
+      : null,
+    [dataTrack],
+  )
+
   return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
+    <div
+      className={cn("min-h-0 flex-1 overflow-y-auto", className)}
+      data-track={dataTrack}
+      onScroll={(event) => {
+        if (dataTrack) {
+          const target = event.currentTarget
+          const scrollTop = target.scrollTop
+          const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
+          const direction = scrollTop >= lastScrollTopRef.current ? "down" : "up"
+          lastScrollTopRef.current = scrollTop
+          logScroll?.({
+            clientHeight: target.clientHeight,
+            direction,
+            percent: Math.round((scrollTop / scrollable) * 100),
+            scrollHeight: target.scrollHeight,
+            scrollTop,
+          })
+        }
+        onScroll?.(event)
+      }}
+    >
       <div className="flex flex-col">{children}</div>
     </div>
   )
@@ -106,6 +185,8 @@ type ModuleSidebarItemProps = {
   trailing?: ReactNode
   children: ReactNode
   className?: string
+  "data-track"?: string
+  trackValue?: string | number | boolean
 }
 
 function ModuleSidebarItem({
@@ -118,12 +199,23 @@ function ModuleSidebarItem({
   trailing,
   children,
   className,
+  "data-track": dataTrack,
+  trackValue,
 }: ModuleSidebarItemProps) {
   return (
     <button
       type="button"
       disabled={disabled}
-      onClick={onClick}
+      data-track={dataTrack}
+      onClick={(event) => {
+        track({
+          component: "module-sidebar-item",
+          name: dataTrack ?? extractLabel(event.currentTarget) ?? "module-sidebar-item",
+          action: "select",
+          value: trackValue,
+        })
+        onClick?.()
+      }}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",

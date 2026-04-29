@@ -46,7 +46,7 @@ describe("scan item detail dialog layout", () => {
       "utf8",
     )
 
-    expect(source).toContain("复制到编辑器")
+    expect(source).toContain("复制到其它编辑器")
     expect(source).toContain("<EditorCopyDialog")
   })
 

@@ -4,7 +4,12 @@ import { isValidElement, type ReactElement, type ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 
 import { Button } from "@/components/ui/button"
-import { EditorInstallStatusPanel } from "@/modules/content/components/editor-install-status-panel"
+import { DialogContent } from "@/components/ui/dialog"
+import { TooltipContent } from "@/components/ui/tooltip"
+import {
+  EditorInstallStatusDetailList,
+  EditorInstallStatusPanel,
+} from "@/modules/content/components/editor-install-status-panel"
 import type { SynapseEditorInstallStatusEntry } from "@/types/editor-install-status"
 
 const showItemInFolder = vi.hoisted(() => vi.fn())
@@ -65,6 +70,28 @@ function createPanelElement(
   })
 }
 
+function createDetailElement(
+  props: Partial<ComponentProps<typeof EditorInstallStatusDetailList>> = {},
+) {
+  return EditorInstallStatusDetailList({
+    entries: [],
+    onOpenInstallTarget: vi.fn(),
+    ...props,
+  })
+}
+
+function renderDetail(
+  props: Partial<ComponentProps<typeof EditorInstallStatusDetailList>> = {},
+) {
+  return renderToStaticMarkup(
+    <EditorInstallStatusDetailList
+      entries={[]}
+      onOpenInstallTarget={vi.fn()}
+      {...props}
+    />,
+  )
+}
+
 function textFromNode(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
     return String(node)
@@ -101,6 +128,35 @@ function findButtons(node: ReactNode): ReactElement<ComponentProps<typeof Button
   ]
 }
 
+function findElementsByType<TProps>(
+  node: ReactNode,
+  type: ReactElement<TProps>["type"],
+): ReactElement<TProps>[] {
+  const matches: ReactElement<TProps>[] = []
+
+  function visit(current: ReactNode) {
+    if (Array.isArray(current)) {
+      current.forEach(visit)
+      return
+    }
+
+    if (!isValidElement(current)) {
+      return
+    }
+
+    const element = current as ReactElement<{ children?: ReactNode }>
+
+    if (element.type === type) {
+      matches.push(element as ReactElement<TProps>)
+    }
+
+    visit(element.props.children)
+  }
+
+  visit(node)
+  return matches
+}
+
 function findButtonByText(
   node: ReactNode,
   text: string,
@@ -115,7 +171,7 @@ function findButtonByText(
 }
 
 describe("EditorInstallStatusPanel", () => {
-  it("renders editor install status entries without filler copy", () => {
+  it("renders a toolbar trigger without inline status details", () => {
     const html = renderPanel({
       entries: [
         createEntry({
@@ -131,11 +187,26 @@ describe("EditorInstallStatusPanel", () => {
     })
 
     expect(html).toContain("安装状态")
-    expect(html).toContain("Codex")
-    expect(html).toContain("已安装")
-    expect(html).toContain("Cursor")
-    expect(html).toContain("不支持")
+    expect(html).not.toContain("已安装")
+    expect(html).not.toContain("不支持")
+    expect(html).not.toContain("Codex")
+    expect(html).not.toContain("/Users/liyang/.codex/AGENTS.md")
     expect(html).not.toContain("此页面用于")
+  })
+
+  it("keeps the toolbar trigger text weight aligned with menubar actions", () => {
+    const element = createPanelElement()
+    const trigger = findButtonByText(element, "安装状态")
+
+    expect(trigger.props.className).toContain("font-normal!")
+  })
+
+  it("keeps the install status dialog compact", () => {
+    const element = createPanelElement()
+    const [content] = findElementsByType<ComponentProps<typeof DialogContent>>(element, DialogContent)
+
+    expect(content?.props.className).toContain("sm:max-w-[420px]")
+    expect(content?.props.className).not.toContain("sm:max-w-xl")
   })
 
   it("calls onRefresh when retry is clicked in error state", () => {
@@ -149,8 +220,10 @@ describe("EditorInstallStatusPanel", () => {
       onRefresh,
     })
 
-    expect(html).toContain("读取失败")
-    expect(html).toContain("重试")
+    expect(html).toContain("安装状态")
+    expect(html).not.toContain("刷新失败")
+    expect(html).not.toContain("读取失败")
+    expect(html).not.toContain("重试")
     findButtonByText(element, "重试").props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })
@@ -160,7 +233,7 @@ describe("EditorInstallStatusPanel", () => {
     const entry = createEntry({
       status: "not_installed",
     })
-    const element = createPanelElement({
+    const element = createDetailElement({
       entries: [entry],
       onOpenInstallTarget,
     })
@@ -169,12 +242,116 @@ describe("EditorInstallStatusPanel", () => {
     expect(onOpenInstallTarget).toHaveBeenCalledWith(entry)
   })
 
+  it("does not offer location action for uninstalled targets", () => {
+    const entry = createEntry({
+      status: "not_installed",
+      targetPath: "/Users/liyang/.codex/AGENTS.md",
+    })
+    const element = createDetailElement({
+      entries: [entry],
+    })
+
+    expect(findButtons(element).map((button) => textFromNode(button.props.children))).not.toContain("打开")
+    expect(textFromNode(element)).not.toContain("/Users/liyang/.codex/AGENTS.md")
+  })
+
+  it("renders editor icon tabs before install target details", () => {
+    const element = createDetailElement({
+      entries: [
+        createEntry({
+          editorId: "codex",
+          editorLabel: "Codex",
+          status: "installed",
+        }),
+        createEntry({
+          editorId: "cursor",
+          editorLabel: "Cursor",
+          status: "installed",
+        }),
+      ],
+    })
+    const html = renderDetail({
+      entries: [
+        createEntry({
+          editorId: "codex",
+          editorLabel: "Codex",
+          status: "installed",
+        }),
+        createEntry({
+          editorId: "cursor",
+          editorLabel: "Cursor",
+          status: "installed",
+        }),
+      ],
+    })
+
+    expect(html).toContain('aria-label="Codex"')
+    expect(html).toContain('aria-label="Cursor"')
+    expect(html).toContain("mx-auto")
+    expect(html).toContain("justify-center")
+    expect(html).toContain("gap-0")
+    expect(html).toContain("size-10")
+    expect(html).toContain("size-9")
+    expect(html).toContain("h-auto!")
+    expect(html).toContain("overflow-visible")
+    expect(html).not.toContain("overflow-x-auto")
+    expect(html).toContain("data-active:bg-muted")
+    expect(html.indexOf('aria-label="Codex"')).toBeLessThan(html.indexOf("全局"))
+    expect(findElementsByType<ComponentProps<typeof TooltipContent>>(element, TooltipContent)
+      .map((tooltip) => textFromNode(tooltip.props.children))).toEqual(["Codex", "Cursor"])
+  })
+
+  it("orders global install status before project status for the selected editor", () => {
+    const html = renderDetail({
+      entries: [
+        createEntry({
+          projectId: "project-1",
+          projectName: "Work",
+          scope: "project",
+          status: "installed",
+          targetPath: "/Users/liyang/work/.codex/AGENTS.md",
+        }),
+        createEntry({
+          scope: "global",
+          status: "installed",
+          targetPath: "/Users/liyang/.codex/AGENTS.md",
+        }),
+      ],
+    })
+
+    expect(html.indexOf("全局")).toBeLessThan(html.indexOf("Work"))
+  })
+
+  it("uses the selected editor as the group heading and scope names as row titles", () => {
+    const html = renderDetail({
+      entries: [
+        createEntry({
+          scope: "global",
+          status: "installed",
+          targetPath: "/Users/liyang/.codex/AGENTS.md",
+        }),
+        createEntry({
+          projectId: "project-1",
+          projectName: "Work",
+          scope: "project",
+          status: "installed",
+          targetPath: "/Users/liyang/work/.codex/AGENTS.md",
+        }),
+      ],
+    })
+
+    expect(html).toMatch(/data-install-status-editor-heading=""[^>]*>Codex<\/p>/)
+    expect(html).toMatch(/data-install-status-row-title=""[^>]*>全局<\/p>/)
+    expect(html).toMatch(/data-install-status-row-title=""[^>]*>Work<\/p>/)
+    expect(html).not.toMatch(/data-install-status-row-title=""[^>]*>Codex<\/p>/)
+  })
+
   it("calls onOpenInstallTarget when update is clicked", () => {
     const onOpenInstallTarget = vi.fn()
     const entry = createEntry({
       status: "needs_update",
     })
-    const element = createPanelElement({
+    const element = createDetailElement({
       entries: [entry],
       onOpenInstallTarget,
     })
@@ -183,15 +360,20 @@ describe("EditorInstallStatusPanel", () => {
     expect(onOpenInstallTarget).toHaveBeenCalledWith(entry)
   })
 
-  it("opens the target path from the location action", () => {
+  it("opens the target path from the clickable install path", () => {
     const entry = createEntry({
       targetPath: "/Users/liyang/.codex/AGENTS.md",
     })
-    const element = createPanelElement({
+    const element = createDetailElement({
+      entries: [entry],
+    })
+    const html = renderDetail({
       entries: [entry],
     })
 
-    findButtonByText(element, "打开").props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
+    expect(html).toContain("/Users/liyang/.codex/AGENTS.md")
+    expect(html).not.toContain(">打开<")
+    findButtonByText(element, "/Users/liyang/.codex/AGENTS.md").props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
     expect(showItemInFolder).toHaveBeenCalledWith("/Users/liyang/.codex/AGENTS.md")
   })
 })

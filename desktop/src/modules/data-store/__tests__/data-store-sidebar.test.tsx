@@ -32,7 +32,7 @@ const tables: DataStoreTableInfo[] = [
 ]
 
 describe("DataStoreSidebar", () => {
-  it("renders table descriptions under table names", () => {
+  it("renders table descriptions under table names without row icons", () => {
     const html = renderToStaticMarkup(
       <DataStoreSidebar
         tables={tables}
@@ -49,6 +49,7 @@ describe("DataStoreSidebar", () => {
     expect(html).toContain("product_sku")
     expect(html).toContain("商品编码")
     expect(html).not.toContain("暂无备注")
+    expect(html).not.toContain("lucide-table-2")
   })
 
   it("filters tables by name or description", () => {

@@ -48,6 +48,12 @@ import {
 import { RowEditor } from "./row-editor"
 import type { RowEditorHandle } from "./row-editor"
 import { DataTableFilterDialog } from "./data-table-filter-dialog"
+import { createRendererLogger } from "@/app-shell/logging"
+import {
+  debounce,
+  sanitizeTrackRecord,
+  sanitizeTrackValue,
+} from "@/lib/ui-tracking"
 import {
   DATA_TABLE_ACTION_COLUMN_WIDTH,
   DATA_TABLE_COLUMN_CLASS,
@@ -63,6 +69,8 @@ import type { Column, DataStoreTableSchema, DataStoreWhereGroup } from "@/types/
 import { SCHEMA_COPY_FORMATS, SCHEMA_COPY_GROUPS } from "./schema-copy-formats"
 import { downloadTableContent, formatTableContent } from "./table-content-formats"
 import type { TableContentFormat, TableDownloadFormat } from "./table-content-formats"
+
+const logger = createRendererLogger("data-store.table")
 
 type DataTableViewProps = {
   tableName: string
@@ -113,6 +121,22 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [resizedColumnWidths, setResizedColumnWidths] = useState<Record<string, number>>({})
   const rowEditorRef = useRef<RowEditorHandle | null>(null)
+  const logTableScroll = useMemo(
+    () => debounce((snapshot: {
+      clientHeight: number
+      direction: "down" | "up"
+      percent: number
+      scrollHeight: number
+      scrollTop: number
+    }) => {
+      logger.info("Table scrolled.", {
+        table: tableName,
+        ...snapshot,
+      })
+    }, 500),
+    [tableName],
+  )
+  const lastTableScrollTopRef = useRef(0)
 
   const editableColumns = useMemo(() => columns.filter((c) => !c.primaryKey && !c.system), [columns])
   const systemTimeColumns = useMemo(() => columns.filter((c) => c.system && !c.primaryKey), [columns])
@@ -160,27 +184,42 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     async (data: Record<string, unknown>) => {
       if (editingId != null) {
         await onUpdate(editingId, data)
+        logger.info("Row edit saved.", {
+          table: tableName,
+          rowId: editingId,
+          changedColumns: Object.keys(data),
+          values: sanitizeTrackRecord(data),
+        })
         setEditingId(null)
         setEditingColumnName(null)
       }
     },
-    [editingId, onUpdate],
+    [editingId, onUpdate, tableName],
   )
 
   const handleSaveNew = useCallback(
     async (data: Record<string, unknown>) => {
       await onInsert(data)
+      logger.info("Row insert saved.", {
+        table: tableName,
+        columns: Object.keys(data),
+        values: sanitizeTrackRecord(data),
+      })
       setIsAdding(false)
     },
-    [onInsert],
+    [onInsert, tableName],
   )
 
   const handleConfirmDelete = useCallback(() => {
     if (deleteId != null) {
+      logger.info("Row delete confirmed.", {
+        table: tableName,
+        rowId: deleteId,
+      })
       onDelete(deleteId)
       setDeleteId(null)
     }
-  }, [deleteId, onDelete])
+  }, [deleteId, onDelete, tableName])
 
   const commitPendingChanges = useCallback(async () => {
     if (editingId != null || isAdding) {
@@ -191,15 +230,21 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   useImperativeHandle(ref, () => ({ commitPendingChanges }), [commitPendingChanges])
 
   const beginRowEdit = useCallback(
-    async (rowId: number, columnName: string | null) => {
+    async (rowId: number, columnName: string | null, source: "button" | "cell") => {
       if ((editingId != null && editingId !== rowId) || isAdding) {
         await commitPendingChanges()
       }
 
+      logger.info("Row edit started.", {
+        table: tableName,
+        rowId,
+        column: columnName,
+        source,
+      })
       setEditingId(rowId)
       setEditingColumnName(columnName)
     },
-    [commitPendingChanges, editingId, isAdding],
+    [commitPendingChanges, editingId, isAdding, tableName],
   )
 
   const handlePageChange = useCallback(
@@ -209,20 +254,41 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       }
 
       await commitPendingChanges()
+      logger.info("Page changed.", {
+        table: tableName,
+        from: page,
+        to: nextPage,
+        totalPages,
+      })
       onPageChange(nextPage)
     },
-    [commitPendingChanges, onPageChange, page],
+    [commitPendingChanges, onPageChange, page, tableName, totalPages],
   )
 
   const handleShowSchema = useCallback(async () => {
     await commitPendingChanges()
+    logger.info("Schema dialog opened from table view.", {
+      table: tableName,
+    })
     onShowSchema()
-  }, [commitPendingChanges, onShowSchema])
+  }, [commitPendingChanges, onShowSchema, tableName])
 
   const handleExportTable = useCallback(async () => {
     await commitPendingChanges()
+    logger.info("Table export requested from table view.", {
+      table: tableName,
+    })
     await onExportTable()
-  }, [commitPendingChanges, onExportTable])
+  }, [commitPendingChanges, onExportTable, tableName])
+
+  const handleOpenFilterDialog = useCallback(async () => {
+    await commitPendingChanges()
+    logger.info("Filter dialog opened from table view.", {
+      table: tableName,
+      active: filter !== null,
+    })
+    setIsFilterDialogOpen(true)
+  }, [commitPendingChanges, filter, tableName])
 
   const handleStartAdding = useCallback(async () => {
     if (isAdding) {
@@ -230,8 +296,11 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     }
 
     await commitPendingChanges()
+    logger.info("Row insert started.", {
+      table: tableName,
+    })
     setIsAdding(true)
-  }, [commitPendingChanges, isAdding])
+  }, [commitPendingChanges, isAdding, tableName])
 
   const handleCopySchema = useCallback(
     async (formatKey: string) => {
@@ -240,35 +309,70 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       if (!format) return
       const text = format.generate(schema)
       await navigator.clipboard.writeText(text)
+      logger.info("Schema copied.", {
+        table: tableName,
+        format: formatKey,
+        columnCount: schema.columns.length,
+      })
       toast(`已复制 ${format.label}`)
     },
-    [schema],
+    [schema, tableName],
   )
 
   const handleCopyContent = useCallback(
     async (format: TableContentFormat) => {
       await commitPendingChanges()
       await navigator.clipboard.writeText(formatTableContent(tableContentData, format))
+      logger.info("Table content copied.", {
+        table: tableName,
+        format,
+        rowCount: rows.length,
+        columnCount: contentColumns.length,
+      })
       toast(format === "csv" ? "已复制 CSV" : "已复制 Markdown 表格")
     },
-    [commitPendingChanges, tableContentData],
+    [commitPendingChanges, contentColumns.length, rows.length, tableContentData, tableName],
   )
 
   const handleDownloadContent = useCallback(
     async (format: TableDownloadFormat) => {
       await commitPendingChanges()
       downloadTableContent(tableContentData, format)
+      logger.info("Table content downloaded.", {
+        table: tableName,
+        format,
+        rowCount: rows.length,
+        columnCount: contentColumns.length,
+      })
       toast(format === "csv" ? "已下载 CSV" : "已下载 Excel")
     },
-    [commitPendingChanges, tableContentData],
+    [commitPendingChanges, contentColumns.length, rows.length, tableContentData, tableName],
+  )
+
+  const handleFilterChange = useCallback(
+    (nextFilter: DataStoreWhereGroup | null) => {
+      logger.info("Filter changed.", {
+        table: tableName,
+        active: nextFilter !== null,
+        combinator: nextFilter?.combinator ?? null,
+        conditions: nextFilter?.conditions.map((condition) => ({
+          field: condition.field,
+          op: condition.op,
+          value: sanitizeTrackValue(condition.field, condition.value),
+        })) ?? [],
+      })
+      onFilterChange(nextFilter)
+    },
+    [onFilterChange, tableName],
   )
 
   const handleResizeColumn = useCallback(
     (columnName: string, startClientX: number) => {
       const startWidth = columnWidths[columnName]
+      let nextWidth = startWidth
 
       const handlePointerMove = (event: PointerEvent) => {
-        const nextWidth = Math.max(
+        nextWidth = Math.max(
           DATA_TABLE_MIN_VALUE_COLUMN_WIDTH,
           startWidth + event.clientX - startClientX,
         )
@@ -278,12 +382,18 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       const handlePointerUp = () => {
         document.removeEventListener("pointermove", handlePointerMove)
         document.removeEventListener("pointerup", handlePointerUp)
+        logger.info("Column resized.", {
+          table: tableName,
+          column: columnName,
+          from: startWidth,
+          to: nextWidth,
+        })
       }
 
       document.addEventListener("pointermove", handlePointerMove)
       document.addEventListener("pointerup", handlePointerUp)
     },
-    [columnWidths],
+    [columnWidths, tableName],
   )
 
   return (
@@ -295,6 +405,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             variant="ghost"
             size="icon"
             className="size-7"
+            data-track="data-store-schema-open"
             onClick={() => {
               void handleShowSchema().catch(() => {})
             }}
@@ -305,8 +416,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             variant={filter ? "secondary" : "ghost"}
             size="icon"
             className="size-7"
+            data-track="data-store-filter-open"
             onClick={() => {
-              void commitPendingChanges().finally(() => setIsFilterDialogOpen(true))
+              void handleOpenFilterDialog().catch(() => {})
             }}
           >
             <Funnel className="size-4" />
@@ -320,6 +432,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   variant="ghost"
                   size="icon-sm"
                   aria-label="导出表"
+                  data-track="data-store-table-export"
                   onClick={() => {
                     void handleExportTable().catch((error) => {
                       toast(error instanceof Error ? error.message : "导出失败")
@@ -334,9 +447,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           </TooltipProvider>
         </div>
         <Menubar className="w-fit">
-          <DropdownMenu>
+          <DropdownMenu data-track="data-store-copy-schema-menu">
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal">
+              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal" data-track="data-store-copy-schema-menu">
                 复制结构
               </Button>
             </DropdownMenuTrigger>
@@ -349,6 +462,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                     {group.formats.map((format) => (
                       <DropdownMenuItem
                         key={format.key}
+                        data-track="data-store-copy-schema-format"
                         onSelect={() => {
                           void handleCopySchema(format.key)
                         }}
@@ -364,14 +478,15 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <DropdownMenu>
+          <DropdownMenu data-track="data-store-copy-content-menu">
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal">
+              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal" data-track="data-store-copy-content-menu">
                 复制内容
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem
+                data-track="data-store-copy-content-csv"
                 onSelect={() => {
                   void handleCopyContent("csv")
                 }}
@@ -379,6 +494,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                 复制为 CSV
               </DropdownMenuItem>
               <DropdownMenuItem
+                data-track="data-store-copy-content-markdown"
                 onSelect={() => {
                   void handleCopyContent("markdown")
                 }}
@@ -387,14 +503,15 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <DropdownMenu>
+          <DropdownMenu data-track="data-store-download-menu">
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal">
+              <Button type="button" variant="ghost" size="sm" className="rounded-sm px-1.5 font-normal" data-track="data-store-download-menu">
                 下载
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuItem
+                data-track="data-store-download-csv"
                 onSelect={() => {
                   void handleDownloadContent("csv")
                 }}
@@ -402,6 +519,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                 下载为 CSV
               </DropdownMenuItem>
               <DropdownMenuItem
+                data-track="data-store-download-xlsx"
                 onSelect={() => {
                   void handleDownloadContent("xlsx")
                 }}
@@ -415,6 +533,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             variant="ghost"
             size="sm"
             className="rounded-sm px-1.5"
+            data-track="data-store-row-add-start"
             onClick={() => {
               void handleStartAdding().catch(() => {})
             }}
@@ -425,7 +544,24 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         </Menubar>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+      <div
+        className="min-h-0 flex-1 overflow-auto rounded-md border"
+        data-track="data-store-table-scroll"
+        onScroll={(event) => {
+          const target = event.currentTarget
+          const scrollTop = target.scrollTop
+          const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
+          const direction = scrollTop >= lastTableScrollTopRef.current ? "down" : "up"
+          lastTableScrollTopRef.current = scrollTop
+          logTableScroll({
+            clientHeight: target.clientHeight,
+            direction,
+            percent: Math.round((scrollTop / scrollable) * 100),
+            scrollHeight: target.scrollHeight,
+            scrollTop,
+          })
+        }}
+      >
         <Table
           className="table-fixed text-xs [&_td]:px-3 [&_td]:py-1 [&_th]:h-7 [&_th]:px-3"
           style={{ width: tableWidth }}
@@ -453,6 +589,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   <button
                     type="button"
                     aria-label={`调整 ${col.name} 列宽`}
+                    data-track="data-store-column-resize"
                     className="absolute inset-y-1 right-0 w-2 cursor-col-resize border-r border-border"
                     onPointerDown={(event) => {
                       event.preventDefault()
@@ -470,6 +607,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   <button
                     type="button"
                     aria-label={`调整 ${col.name} 列宽`}
+                    data-track="data-store-column-resize"
                     className="absolute inset-y-1 right-0 w-2 cursor-col-resize border-r border-border"
                     onPointerDown={(event) => {
                       event.preventDefault()
@@ -514,7 +652,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                       key={col.name}
                       className={`${DATA_TABLE_COLUMN_CLASS} truncate`}
                       onDoubleClick={() => {
-                        void beginRowEdit(rowId, col.name).catch(() => {})
+                        void beginRowEdit(rowId, col.name, "cell").catch(() => {})
                       }}
                     >
                       {formatCellValue(row[col.name], col.kind, col.name)}
@@ -534,8 +672,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         variant="ghost"
                         size="icon-xs"
                         className="rounded-sm"
+                        data-track="data-store-row-edit-start"
                         onClick={() => {
-                          void beginRowEdit(rowId, editableColumns[0]?.name ?? null).catch(() => {})
+                          void beginRowEdit(rowId, editableColumns[0]?.name ?? null, "button").catch(() => {})
                         }}
                       >
                         <Pencil className="size-3" />
@@ -544,6 +683,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         variant="ghost"
                         size="icon-xs"
                         className="rounded-sm"
+                        data-track="data-store-row-delete-open"
                         onClick={() => setDeleteId(rowId)}
                       >
                         <Trash2 className="size-3" />
@@ -579,6 +719,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           variant="outline"
           size="sm"
           disabled={page <= 1}
+          data-track="data-store-page-prev"
           onClick={() => {
             void handlePageChange(page - 1).catch(() => {})
           }}
@@ -590,6 +731,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           variant="outline"
           size="sm"
           disabled={page >= totalPages}
+          data-track="data-store-page-next"
           onClick={() => {
             void handlePageChange(page + 1).catch(() => {})
           }}
@@ -599,7 +741,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         <span className="ml-2">共 {total} 条</span>
       </div>
 
-      <AlertDialog open={deleteId != null} onOpenChange={(open) => { if (!open) setDeleteId(null) }}>
+      <AlertDialog open={deleteId != null} onOpenChange={(open) => { if (!open) setDeleteId(null) }} data-track="data-store-row-delete-dialog">
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
@@ -609,7 +751,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>删除</AlertDialogAction>
+            <AlertDialogAction data-track="data-store-row-delete-confirm" onClick={handleConfirmDelete}>删除</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -619,7 +761,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         onOpenChange={setIsFilterDialogOpen}
         columns={columns}
         value={filter}
-        onApply={onFilterChange}
+        onApply={handleFilterChange}
       />
     </div>
   )

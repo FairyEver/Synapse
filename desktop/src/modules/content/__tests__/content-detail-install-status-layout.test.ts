@@ -29,7 +29,9 @@ describe("content detail install status hook source", () => {
     const adaptersHookSource = readFileSync(adaptersHookSourcePath, "utf8")
 
     expect(detailDialogSource).toContain("useEditorInstallStatus")
-    expect(detailDialogSource).toContain("EditorInstallStatusPanel")
+    expect(detailDialogSource).toContain("installStatus={detail?.type")
+    expect(detailDialogSource).not.toContain("<EditorInstallStatusPanel")
+    expect(detailMenubarSource).toContain("EditorInstallStatusPanel")
     expect(detailDialogSource).toContain("installTargetRequest")
     expect(detailDialogSource).toContain("onInstalled={handleInstallStatusRefresh}")
     expect(detailDialogSource).toContain("onOpenInstallTarget")

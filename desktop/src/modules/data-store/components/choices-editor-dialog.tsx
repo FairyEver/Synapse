@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { createRendererLogger } from "@/app-shell/logging"
+import { sanitizeTrackValue } from "@/lib/ui-tracking"
 import { getColumnChoicesUsage } from "../hooks/use-data-store"
 
 type ChoiceRowStatus = "existing" | "new" | "deleted"
@@ -94,6 +95,11 @@ function ChoicesEditorDialog({
     if (existing) {
       if (existing.status === "deleted") {
         setRows((prev) => prev.map((r) => (r.value === v ? { ...r, status: "existing" } : r)))
+        logger.info("Choice restored before save.", {
+          table,
+          column,
+          choice: sanitizeTrackValue(column, v),
+        })
         setInputValue("")
         return
       }
@@ -102,11 +108,21 @@ function ChoicesEditorDialog({
     }
 
     setRows((prev) => [...prev, { value: v, status: "new" }])
+    logger.info("Choice added before save.", {
+      table,
+      column,
+      choice: sanitizeTrackValue(column, v),
+    })
     setInputValue("")
-  }, [inputValue, rows])
+  }, [column, inputValue, rows, table])
 
   const handleDelete = useCallback((value: string) => {
     setError("")
+    logger.info("Choice marked for deletion.", {
+      table,
+      column,
+      choice: sanitizeTrackValue(column, value),
+    })
     setRows((prev) =>
       prev.flatMap((r) => {
         if (r.value !== value) return [r]
@@ -114,12 +130,17 @@ function ChoicesEditorDialog({
         return [{ ...r, status: "deleted" }]
       }),
     )
-  }, [])
+  }, [column, table])
 
   const handleUndoDelete = useCallback((value: string) => {
     setError("")
+    logger.info("Choice deletion undone.", {
+      table,
+      column,
+      choice: sanitizeTrackValue(column, value),
+    })
     setRows((prev) => prev.map((r) => (r.value === value ? { ...r, status: "existing" } : r)))
-  }, [])
+  }, [column, table])
 
   const handleSave = useCallback(async () => {
     if (finalValues.length === 0) {
@@ -130,6 +151,11 @@ function ChoicesEditorDialog({
     setError("")
     try {
       await onSave(finalValues)
+      logger.info("Choices saved.", {
+        table,
+        column,
+        choiceCount: finalValues.length,
+      })
       onOpenChange(false)
     } catch {
       // Parent already shows an error toast via useAppNotifications.promise.
@@ -137,7 +163,7 @@ function ChoicesEditorDialog({
     } finally {
       setSaving(false)
     }
-  }, [finalValues, onSave, onOpenChange])
+  }, [column, finalValues, onSave, onOpenChange, table])
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -148,7 +174,7 @@ function ChoicesEditorDialog({
   )
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} data-track="data-store-column-choices-dialog">
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>编辑选项 · {column}</DialogTitle>
@@ -206,6 +232,7 @@ function ChoicesEditorDialog({
                         size="icon"
                         variant="ghost"
                         className="size-7 shrink-0"
+                        data-track="data-store-column-choice-undo-delete"
                         onClick={() => handleUndoDelete(row.value)}
                         title="撤销删除"
                       >
@@ -216,6 +243,7 @@ function ChoicesEditorDialog({
                         size="icon"
                         variant="ghost"
                         className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                        data-track="data-store-column-choice-delete"
                         onClick={() => handleDelete(row.value)}
                         title={
                           used > 0
@@ -234,6 +262,7 @@ function ChoicesEditorDialog({
 
           <div className="flex items-center gap-2">
             <Input
+              data-track="data-store-column-choice-input"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => {
@@ -249,6 +278,7 @@ function ChoicesEditorDialog({
               type="button"
               variant="outline"
               size="sm"
+              data-track="data-store-column-choice-add"
               onClick={handleAdd}
               disabled={!inputValue.trim() || saving}
             >
@@ -267,12 +297,13 @@ function ChoicesEditorDialog({
         <DialogFooter>
           <Button
             variant="outline"
+            data-track="data-store-column-choices-cancel"
             onClick={() => handleOpenChange(false)}
             disabled={saving}
           >
             取消
           </Button>
-          <Button onClick={handleSave} disabled={saving || finalValues.length === 0}>
+          <Button data-track="data-store-column-choices-save" onClick={handleSave} disabled={saving || finalValues.length === 0}>
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
             保存
           </Button>

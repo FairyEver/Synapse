@@ -39,6 +39,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { ColumnKind, DataStoreTableSchema } from "@/types/data-store"
+import { createRendererLogger } from "@/app-shell/logging"
+import { sanitizeTrackValue } from "@/lib/ui-tracking"
 import {
   COLUMN_KINDS,
   formatChoicesSummary,
@@ -46,6 +48,8 @@ import {
   getColumnKindLabel,
 } from "./data-store-column-types"
 import { ChoicesEditorDialog } from "./choices-editor-dialog"
+
+const logger = createRendererLogger("data-store.schema")
 
 type TableSchemaSheetProps = {
   open: boolean
@@ -116,30 +120,46 @@ function TableSchemaSheet({
       ? newColChoices
       : undefined
     if (isChoiceKind && (!choices || choices.length === 0)) return
+    logger.info("Column add submitted from schema dialog.", {
+      table: schema?.name ?? null,
+      column: trimmed,
+      kind: newColKind,
+      description: sanitizeTrackValue("description", newColDesc),
+      choiceCount: choices?.length ?? 0,
+    })
     onAddColumn(trimmed, newColKind, newColDesc.trim() || undefined, choices)
     setNewColName("")
     setNewColKind("text")
     setNewColDesc("")
     setNewColChoices([])
-  }, [newColName, newColKind, newColDesc, newColChoices, onAddColumn])
+  }, [newColName, newColKind, newColDesc, newColChoices, onAddColumn, schema?.name])
 
   const startEditDescription = useCallback((colName: string, currentDesc: string) => {
+    logger.info("Column description edit started.", {
+      table: schema?.name ?? null,
+      column: colName,
+    })
     setEditingCol(colName)
     setEditingDesc(currentDesc)
     setTimeout(() => editInputRef.current?.focus(), 0)
-  }, [])
+  }, [schema?.name])
 
   const commitEditDescription = useCallback(() => {
     if (editingCol) {
+      logger.info("Column description edit submitted.", {
+        table: schema?.name ?? null,
+        column: editingCol,
+        description: sanitizeTrackValue(editingCol, editingDesc),
+      })
       onUpdateColumnDescription(editingCol, editingDesc.trim())
       setEditingCol(null)
     }
-  }, [editingCol, editingDesc, onUpdateColumnDescription])
+  }, [editingCol, editingDesc, onUpdateColumnDescription, schema?.name])
 
   if (!schema) return null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} data-track="data-store-schema-dialog">
       <DialogContent
         className="gap-0 overflow-hidden p-0 sm:max-w-[600px]"
         onEscapeKeyDown={(event) => {
@@ -157,6 +177,7 @@ function TableSchemaSheet({
             <Label htmlFor="table-description">表备注</Label>
             <Input
               id="table-description"
+              data-track="data-store-table-description"
               value={tableDescription}
               disabled={isTableDescriptionSaving}
               onChange={(event) => setTableDescription(event.target.value)}
@@ -199,7 +220,14 @@ function TableSchemaSheet({
                               size="icon"
                               variant="ghost"
                               className="size-6 text-muted-foreground hover:text-foreground"
-                              onClick={() => setEditingChoicesCol(col.name)}
+                              data-track="data-store-column-choices-open"
+                              onClick={() => {
+                                logger.info("Column choices editor opened.", {
+                                  table: schema.name,
+                                  column: col.name,
+                                })
+                                setEditingChoicesCol(col.name)
+                              }}
                               title="编辑选项"
                             >
                               <Pencil className="size-3" />
@@ -215,6 +243,7 @@ function TableSchemaSheet({
                         <Input
                           ref={editInputRef}
                           className="h-7 text-xs"
+                          data-track="data-store-column-description"
                           value={editingDesc}
                           onChange={(e) => setEditingDesc(e.target.value)}
                           onBlur={commitEditDescription}
@@ -243,11 +272,12 @@ function TableSchemaSheet({
             <Label>添加列</Label>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1.25fr)_auto]">
               <Input
+                data-track="data-store-add-column-name"
                 value={newColName}
                 onChange={(e) => setNewColName(e.target.value)}
                 placeholder="列名"
               />
-              <Select value={newColKind} onValueChange={(v) => setNewColKind(v as ColumnKind)}>
+              <Select data-track="data-store-add-column-kind" value={newColKind} onValueChange={(v) => setNewColKind(v as ColumnKind)}>
                 <SelectTrigger className="w-full">
                   <SelectValue>{getColumnKindLabel(newColKind)}</SelectValue>
                 </SelectTrigger>
@@ -260,6 +290,7 @@ function TableSchemaSheet({
                 </SelectContent>
               </Select>
               <Input
+                data-track="data-store-add-column-description"
                 value={newColDesc}
                 onChange={(e) => setNewColDesc(e.target.value)}
                 placeholder="用途说明，帮助 AI 理解此列"
@@ -267,6 +298,7 @@ function TableSchemaSheet({
               />
               <Button
                 className="w-full sm:w-auto"
+                data-track="data-store-add-column-submit"
                 onClick={handleAddColumn}
                 disabled={!newColName.trim()}
               >
@@ -276,6 +308,7 @@ function TableSchemaSheet({
             {newColKind === "single_choice" || newColKind === "multi_choice" ? (
               <TagInput
                 value={newColChoices}
+                data-track="data-store-add-column-choices"
                 onChange={setNewColChoices}
                 placeholder="输入后按回车添加"
                 className="text-xs"
@@ -299,7 +332,7 @@ function TableSchemaSheet({
         <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none rounded-b-xl px-5 py-4 sm:items-center sm:justify-between">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive">删除此表</Button>
+              <Button variant="destructive" data-track="data-store-drop-table-open">删除此表</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -310,12 +343,12 @@ function TableSchemaSheet({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction onClick={onDropTable}>删除</AlertDialogAction>
+                <AlertDialogAction data-track="data-store-drop-table-confirm" onClick={onDropTable}>删除</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
           <DialogClose asChild>
-            <Button variant="outline">关闭</Button>
+            <Button variant="outline" data-track="data-store-schema-close">关闭</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

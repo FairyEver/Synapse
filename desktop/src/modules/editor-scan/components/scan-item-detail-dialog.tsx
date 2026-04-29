@@ -388,7 +388,7 @@ function ScanItemDetailDialog({ item, onCopied, open, onOpenChange }: ScanItemDe
                 disabled={!content}
                 onClick={() => setIsEditorCopyOpen(true)}
               >
-                复制到编辑器
+                复制到其它编辑器
               </Button>
             </div>
           </div>

@@ -76,6 +76,7 @@ function AgentSessionSidebar({
             variant="ghost"
             size="icon"
             disabled={loading}
+            data-track="agent-session-create"
             onClick={onCreate}
             title="新建会话"
           >
@@ -86,6 +87,7 @@ function AgentSessionSidebar({
             variant="ghost"
             size="icon"
             disabled={loading}
+            data-track="agent-session-refresh"
             onClick={onRefresh}
             title="刷新"
           >
@@ -101,11 +103,12 @@ function AgentSessionSidebar({
         <Switch
           id="agent-follow-feishu"
           size="sm"
+          data-track="agent-follow-feishu"
           checked={followFeishu}
           onCheckedChange={onFollowFeishuChange}
         />
       </div>
-      <ModuleSidebarList>
+      <ModuleSidebarList data-track="agent-session-list">
         {items.map((session) => {
           const canDelete = sessions.length > 0
           const unread = session.projectId
@@ -121,6 +124,8 @@ function AgentSessionSidebar({
                   || (!selectedConversationId && session.active)}
                 className="min-w-0 flex-1"
                 trailing={trailing}
+                data-track="agent-session-select"
+                trackValue={sessionItemKey(session)}
                 onClick={() => {
                   if (sessions.length > 0) onSelect(session)
                 }}
@@ -135,6 +140,7 @@ function AgentSessionSidebar({
                       variant="ghost"
                       size="icon-xs"
                       disabled={loading}
+                      data-track="agent-session-delete-open"
                       title="删除会话"
                     >
                       <Trash2 />
@@ -148,7 +154,10 @@ function AgentSessionSidebar({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>取消</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onDelete(session)}>
+                      <AlertDialogAction
+                        data-track="agent-session-delete-confirm"
+                        onClick={() => onDelete(session)}
+                      >
                         删除
                       </AlertDialogAction>
                     </AlertDialogFooter>

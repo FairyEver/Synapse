@@ -3,10 +3,16 @@ import { createRendererLogger } from "@/app-shell/logging"
 const logger = createRendererLogger("ui.tracking")
 
 export type TrackAction =
+  | "add"
+  | "cancel"
   | "click"
   | "open"
   | "close"
+  | "remove"
+  | "resize"
+  | "scroll"
   | "select"
+  | "submit"
   | "toggle"
   | "check"
   | "uncheck"
@@ -24,10 +30,66 @@ export type TrackDetails = {
   name: string
   action: TrackAction
   value?: string | number | boolean | string[] | number[]
+  metadata?: Record<string, unknown>
 }
+
+export type SanitizedTrackValue =
+  | string
+  | number
+  | boolean
+  | null
+  | SanitizedTrackValue[]
+  | { [key: string]: SanitizedTrackValue }
+
+const LONG_TRACK_VALUE_LIMIT = 300
+const LONG_TRACK_VALUE_PREFIX_LENGTH = 120
+const SENSITIVE_TRACK_FIELD_PATTERN =
+  /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization|owner[-_ ]?id|user[-_ ]?id)/i
+const PATH_TRACK_FIELD_PATTERN =
+  /(path|dir|directory|folder|file|base[-_ ]?dir|source[-_ ]?path|target[-_ ]?path|export[-_ ]?path)/i
 
 export function track(details: TrackDetails): void {
   logger.info(`${details.name}:${details.action}`, details)
+}
+
+export function sanitizeTrackValue(fieldName: string, value: unknown): SanitizedTrackValue {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeTrackValue(fieldName, item))
+  }
+
+  if (typeof value === "object") {
+    return sanitizeTrackRecord(value as Record<string, unknown>)
+  }
+
+  const text = String(value)
+
+  if (SENSITIVE_TRACK_FIELD_PATTERN.test(fieldName)) {
+    return "[redacted]"
+  }
+
+  if (PATH_TRACK_FIELD_PATTERN.test(fieldName)) {
+    return redactPathValue(text)
+  }
+
+  if (text.length > LONG_TRACK_VALUE_LIMIT) {
+    return `${text.slice(0, LONG_TRACK_VALUE_PREFIX_LENGTH)}...（日志自动优化：原始 ${text.length} 字，仅记录前 ${LONG_TRACK_VALUE_PREFIX_LENGTH} 字）`
+  }
+
+  return text
+}
+
+export function sanitizeTrackRecord(record: Record<string, unknown>): Record<string, SanitizedTrackValue> {
+  return Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [key, sanitizeTrackValue(key, value)]),
+  )
 }
 
 export function extractLabel(el: EventTarget | null, maxLen = 40): string | undefined {
@@ -55,15 +117,15 @@ export function extractLabel(el: EventTarget | null, maxLen = 40): string | unde
   return undefined
 }
 
-export function debounce<T extends (...args: never[]) => void>(
-  fn: T,
+export function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void,
   ms: number,
-): T {
+): (...args: Args) => void {
   let timer: ReturnType<typeof setTimeout>
-  return ((...args: Parameters<T>) => {
+  return (...args: Args) => {
     clearTimeout(timer)
     timer = setTimeout(() => fn(...args), ms)
-  }) as T
+  }
 }
 
 export function mergeRefs<T>(...refs: (React.Ref<T> | undefined)[]): React.RefCallback<T> {
@@ -73,4 +135,15 @@ export function mergeRefs<T>(...refs: (React.Ref<T> | undefined)[]): React.RefCa
       else if (ref) (ref as React.MutableRefObject<T | null>).current = node
     }
   }
+}
+
+function redactPathValue(value: string): string {
+  if (!value.trim()) {
+    return ""
+  }
+
+  const normalized = value.replace(/\\/g, "/")
+  const basename = normalized.split("/").filter(Boolean).at(-1)
+
+  return basename ? `[path redacted]/${basename}` : "[path redacted]"
 }

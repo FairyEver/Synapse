@@ -15,6 +15,7 @@ import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { sanitizeTrackRecord, sanitizeTrackValue } from "@/lib/ui-tracking"
 import { DataStoreSidebar } from "./components/data-store-sidebar"
 import { DataTableView } from "./components/data-table-view"
 import type { DataTableViewHandle } from "./components/data-table-view"
@@ -67,6 +68,10 @@ function DataStoreModule() {
       }
 
       await dataTableViewRef.current?.commitPendingChanges()
+      logger.info("Table selected.", {
+        from: selectedTable,
+        to: name,
+      })
       setActiveTable(name)
       setPage(1)
       setFilter(null)
@@ -75,12 +80,18 @@ function DataStoreModule() {
   )
 
   const handleFilterChange = useCallback((nextFilter: DataStoreWhereGroup | null) => {
+    logger.info("Table filter state applied.", {
+      table: selectedTable,
+      active: nextFilter !== null,
+      conditionCount: nextFilter?.conditions.length ?? 0,
+    })
     setFilter(nextFilter)
     setPage(1)
-  }, [])
+  }, [selectedTable])
 
   const handleOpenCreateDialog = useCallback(async () => {
     await dataTableViewRef.current?.commitPendingChanges()
+    logger.info("Create table dialog opened.")
     setIsCreateDialogOpen(true)
   }, [])
 
@@ -91,7 +102,10 @@ function DataStoreModule() {
         async () => {
           const result = await exportTable(selectedTable)
           if (!result.success) return
-          logger.info("Table exported.", { table: selectedTable, path: result.path })
+          logger.info("Table exported.", {
+            table: selectedTable,
+            path: sanitizeTrackValue("exportPath", result.path),
+          })
           return result
         },
         { loading: "正在导出...", success: (result) => result?.success ? "已导出" : null },
@@ -103,9 +117,15 @@ function DataStoreModule() {
 
   const handleChooseImportTable = useCallback(async () => {
     await dataTableViewRef.current?.commitPendingChanges()
+    logger.info("Table import picker opened.")
     try {
       const result = await inspectTableImport()
       if (!result.success) return
+      logger.info("Table import inspected.", {
+        table: result.tableName,
+        exists: result.exists,
+        sourcePath: sanitizeTrackValue("sourcePath", result.sourcePath),
+      })
       setPendingImport({
         tableName: result.tableName,
         exists: result.exists,
@@ -131,7 +151,10 @@ function DataStoreModule() {
           setActiveTable(result.tableName)
           setPage(1)
           setFilter(null)
-          logger.info("Table imported.", { table: result.tableName })
+          logger.info("Table imported.", {
+            table: result.tableName,
+            sourcePath: sanitizeTrackValue("sourcePath", sourcePath),
+          })
         },
         { loading: "正在导入...", success: "已导入" },
       )
@@ -146,7 +169,12 @@ function DataStoreModule() {
       await promise(
         async () => {
           await createTable(name, columns, description)
-          logger.info("Table created.", { name })
+          logger.info("Table created.", {
+            name,
+            columnCount: columns.length,
+            columnNames: columns.map((column) => column.name),
+            description: sanitizeTrackValue("description", description ?? ""),
+          })
           await refreshTables()
           setActiveTable(name)
           setPage(1)
@@ -178,6 +206,10 @@ function DataStoreModule() {
 
       try {
         await updateTableDescription(selectedTable, description)
+        logger.info("Table description updated.", {
+          table: selectedTable,
+          description: sanitizeTrackValue("description", description),
+        })
         await refreshSchema()
         await refreshTables()
       } catch (error) {
@@ -194,7 +226,13 @@ function DataStoreModule() {
       await promise(
         async () => {
           await addColumn(selectedTable, { name, kind, description, choices })
-          logger.info("Column added.", { table: selectedTable, column: name })
+          logger.info("Column added.", {
+            table: selectedTable,
+            column: name,
+            kind,
+            description: sanitizeTrackValue("description", description ?? ""),
+            choiceCount: choices?.length ?? 0,
+          })
           await refreshSchema()
           await refreshQuery()
         },
@@ -208,6 +246,11 @@ function DataStoreModule() {
     async (column: string, description: string) => {
       if (!selectedTable) return
       await updateColumnDescription(selectedTable, column, description)
+      logger.info("Column description updated.", {
+        table: selectedTable,
+        column,
+        description: sanitizeTrackValue(column, description),
+      })
       await refreshSchema()
     },
     [selectedTable, refreshSchema],
@@ -219,6 +262,12 @@ function DataStoreModule() {
       await promise(
         async () => {
           await updateColumnChoices(selectedTable, column, choices)
+          logger.info("Column choices updated.", {
+            table: selectedTable,
+            column,
+            choiceCount: choices.length,
+            choices: choices.map((choice) => sanitizeTrackValue(column, choice)),
+          })
           await refreshSchema()
         },
         { loading: "正在更新选项...", success: "选项已更新" },
@@ -232,6 +281,11 @@ function DataStoreModule() {
       if (!selectedTable) return
       try {
         await insertRow(selectedTable, data)
+        logger.info("Row inserted.", {
+          table: selectedTable,
+          columns: Object.keys(data),
+          values: sanitizeTrackRecord(data),
+        })
         await refreshQuery()
         await refreshTables()
         showSuccess("已添加一行")
@@ -249,6 +303,12 @@ function DataStoreModule() {
       if (!selectedTable) return
       try {
         await updateRow(selectedTable, id, data)
+        logger.info("Row updated.", {
+          table: selectedTable,
+          rowId: id,
+          columns: Object.keys(data),
+          values: sanitizeTrackRecord(data),
+        })
         await refreshQuery()
       } catch (error) {
         logger.error("Update failed.", { error })
@@ -264,6 +324,10 @@ function DataStoreModule() {
       if (!selectedTable) return
       try {
         await deleteRow(selectedTable, id)
+        logger.info("Row deleted.", {
+          table: selectedTable,
+          rowId: id,
+        })
         await refreshQuery()
         await refreshTables()
         showSuccess("已删除一行")
