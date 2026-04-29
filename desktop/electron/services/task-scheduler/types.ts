@@ -44,6 +44,28 @@ export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
   readonly runCount: number
 }
 
+export interface ScheduledTaskCreateInput {
+  readonly name: string
+  readonly description?: string
+  readonly scope: TaskScope
+  readonly cwd?: string
+  readonly trigger: TaskTrigger
+  readonly action: TaskAction
+  readonly enabled?: boolean
+  readonly missedRunPolicy?: "skip" | "run_once"
+}
+
+export interface ScheduledTaskUpdateInput {
+  readonly name?: string
+  readonly description?: string
+  readonly scope?: TaskScope
+  readonly cwd?: string
+  readonly trigger?: TaskTrigger
+  readonly action?: TaskAction
+  readonly enabled?: boolean
+  readonly missedRunPolicy?: "skip" | "run_once"
+}
+
 export interface ScheduledTaskRunEntryV1 extends Record<string, unknown> {
   readonly id: string
   readonly schemaVersion: 1
@@ -56,6 +78,14 @@ export interface ScheduledTaskRunEntryV1 extends Record<string, unknown> {
   readonly stderr?: string
   readonly error?: string
   readonly triggeredBy: ScheduledTaskRunTrigger
+}
+
+export interface ScheduledTaskRunFinishInput {
+  readonly status: Exclude<ScheduledTaskRunStatus, "running">
+  readonly exitCode?: number | null
+  readonly stdout?: string
+  readonly stderr?: string
+  readonly error?: string
 }
 
 export interface TaskActionExecutionInput {
