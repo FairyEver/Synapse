@@ -26,7 +26,7 @@ export function SystemPage() {
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-5">
         {items.map((item) => (
           <Card key={item.label} size="sm">
             <CardHeader>

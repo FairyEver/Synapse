@@ -37,11 +37,11 @@ jobs:
           - label: macOS
             os: macos-latest
             artifact_name: release-macos
-            package_script: desktop:package:mac
+            package_script: package:mac
           - label: Windows
             os: windows-latest
             artifact_name: release-windows
-            package_script: desktop:package:win
+            package_script: package:win
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -68,16 +68,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build renderer
-        run: pnpm desktop:build:renderer
+        run: pnpm --filter @synapse/desktop run build:renderer
 
       - name: Build Electron process
-        run: pnpm desktop:build:electron
+        run: pnpm --filter @synapse/desktop run build:electron
 
       - name: Build data-store bundles
-        run: pnpm desktop:build:data-store
+        run: pnpm --filter @synapse/desktop run build:data-store
 
       - name: Package installer
-        run: pnpm ${{ matrix.package_script }}
+        run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
 
       - name: Collect release artifacts
         run: |

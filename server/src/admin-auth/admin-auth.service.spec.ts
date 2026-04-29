@@ -24,6 +24,6 @@ describe("AdminAuthService", () => {
 
     await expect(service.login("admin@example.com", "wrong-password"))
       .rejects
-      .toThrow("Invalid admin credentials")
+      .toThrow("管理员账号或密码错误。")
   })
 })

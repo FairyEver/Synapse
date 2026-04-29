@@ -41,6 +41,7 @@ model Account {
 
 model ActivationCode {
   id             String        @id @default(cuid())
+  codeHint       String?
   codeHash       String        @unique
   status         ManagedStatus @default(active)
   maxDevices     Int           @default(1)
@@ -48,6 +49,7 @@ model ActivationCode {
   boundAccountId String?
   boundAccount   Account?      @relation(fields: [boundAccountId], references: [id])
   redeemedAt     DateTime?
+  archivedAt     DateTime?
   license        License?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

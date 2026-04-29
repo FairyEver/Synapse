@@ -6,7 +6,7 @@
 
 - Electron 41 + Vite 8 + React 19 + TypeScript 6
 - shadcn/ui (radix-nova preset) + Tailwind CSS 4
-- pnpm monorepo（`desktop/` + `website/`）
+- pnpm monorepo（`desktop/` + `website/` + `server/`）
 - Git-based 内容存储 + SQLite Data Store
 
 ## 架构速览
@@ -33,14 +33,8 @@ website/                # VitePress 文档站
 ## 常用命令
 
 ```bash
-pnpm dev                    # 并行启动所有子包 dev server
-pnpm desktop:dev            # 仅启动桌面应用开发环境
-pnpm desktop:build          # 完整构建（renderer + electron + data-store）
-pnpm desktop:typecheck      # 类型检查
-pnpm desktop:package:mac    # 打包 macOS（dmg + zip）
-pnpm desktop:package:win    # 打包 Windows（nsis）
-pnpm desktop:bump:commit:push  # 版本号 bump 并推送
-pnpm website:dev            # 文档站开发（端口 5174）
+pnpm dev                    # 启动 website、desktop、Postgres、Prisma migrate、server
+pnpm quit                   # 停止本地开发进程并关闭 server compose 服务
 ```
 
 dev 端口：desktop 5173 / website 5174，详见 `.claude/rules/workspace-dev-ports.md`。
@@ -68,5 +62,4 @@ dev 端口：desktop 5173 / website 5174，详见 `.claude/rules/workspace-dev-p
 | `api.md` | 主进程 service / IPC handler 设计约定 |
 | `testing.md` | 测试策略与规则 |
 | `workspace-dev-ports.md` | 子包 dev 端口分配 |
-| `package-scripts-sync.md` | 根与子包 scripts 同步规则 |
 | `website-copy.md` | 文档站文案规范：调性、禁止清单、术语一致性、结构要求 |

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, UnauthorizedException } from "@nestjs/common"
 import bcrypt from "bcryptjs"
 import { createHmac, timingSafeEqual } from "node:crypto"
 
@@ -41,7 +41,7 @@ export class AdminAuthService {
     const normalizedEmail = email.trim().toLowerCase()
     const passwordMatches = await bcrypt.compare(password, this.passwordHash)
     if (normalizedEmail !== this.email || !passwordMatches) {
-      throw new Error("Invalid admin credentials")
+      throw new UnauthorizedException("管理员账号或密码错误。")
     }
 
     return {

@@ -1,6 +1,6 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react"
 import { KeyRound, LoaderCircle } from "lucide-react"
-import { useLicense } from "@/app-shell/license"
+import { formatLicenseErrorMessage, useLicense } from "@/app-shell/license"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -57,7 +57,7 @@ export function LicenseGate({ children }: { readonly children: ReactNode }) {
         setFormError(result.message ?? "授权未生效。")
       }
     } catch (caught) {
-      setFormError(caught instanceof Error ? caught.message : "激活失败。")
+      setFormError(formatLicenseErrorMessage(caught, "激活失败。"))
     } finally {
       setIsSubmitting(false)
     }
@@ -72,7 +72,7 @@ export function LicenseGate({ children }: { readonly children: ReactNode }) {
         setFormError(result.message ?? "续租失败。")
       }
     } catch (caught) {
-      setFormError(caught instanceof Error ? caught.message : "续租失败。")
+      setFormError(formatLicenseErrorMessage(caught, "续租失败。"))
     } finally {
       setIsRenewing(false)
     }

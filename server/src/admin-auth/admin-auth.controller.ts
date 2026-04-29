@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Get, Post, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard } from "./admin-auth.guard"
@@ -15,7 +15,11 @@ export class AdminAuthController {
 
   @Post("/login")
   async login(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
-    const request = loginSchema.parse(body)
+    const result = loginSchema.safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("登录请求无效。")
+    }
+    const request = result.data
     const session = await this.auth.login(request.email, request.password)
     response.cookie("synapse_admin", session.token, {
       httpOnly: true,

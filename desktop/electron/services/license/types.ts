@@ -49,3 +49,7 @@ export interface LicenseServerResponse {
   readonly deviceIdHash: string
   readonly leaseToken: string
 }
+
+export interface LicenseServerValidationResponse {
+  readonly ok: true
+}

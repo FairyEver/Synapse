@@ -3,6 +3,7 @@ import type {
   DeviceMetadata,
   LicenseServerConfig,
   LicenseServerResponse,
+  LicenseServerValidationResponse,
 } from "./types"
 
 type FetchLike = typeof fetch
@@ -51,6 +52,19 @@ export class LicenseClient {
     })
   }
 
+  validate(
+    serverUrl: string,
+    input: {
+      readonly leaseToken: string
+      readonly device: DeviceMetadata
+    },
+  ): Promise<LicenseServerValidationResponse> {
+    return this.request<LicenseServerValidationResponse>(serverUrl, "/v1/licenses/validate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    })
+  }
+
   private async request<T>(
     serverUrl: string,
     path: string,
@@ -90,7 +104,7 @@ export class LicenseClient {
       if (!response.ok) {
         this.recordAudit(url.origin, path, "failed", response.status)
         audited = true
-        throw new Error(readErrorMessage(body))
+        throw new LicenseClientRequestError(readErrorMessage(body), response.status)
       }
       this.recordAudit(url.origin, path, "allowed", response.status)
       audited = true
@@ -99,7 +113,7 @@ export class LicenseClient {
       if (!audited) {
         this.recordAudit(url.origin, path, "failed")
       }
-      if (error instanceof Error) {
+      if (error instanceof LicenseClientRequestError) {
         throw error
       }
       throw new Error("授权服务器请求失败。")
@@ -121,6 +135,15 @@ export class LicenseClient {
       outcome,
       resource,
     })
+  }
+}
+
+export class LicenseClientRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
   }
 }
 

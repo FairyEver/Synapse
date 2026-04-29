@@ -10,7 +10,7 @@ import type {
 } from "./types"
 
 const RENEW_BEFORE_EXPIRY_MS = 2 * 24 * 60 * 60 * 1000
-const AUTO_RENEW_INTERVAL_MS = 6 * 60 * 60 * 1000
+const LICENSE_STATUS_CHECK_INTERVAL_MS = 60 * 1000
 
 export interface LicenseServiceDeps {
   readonly store: DataNamespace<CoreLicenseV1>
@@ -33,14 +33,15 @@ export class LicenseService {
 
   start(): void {
     if (this.renewTimer) return
-    void this.renewIfNeeded().catch((error) => {
-      this.deps.logger?.warn("License auto-renew failed during startup.", { error })
+    void this.syncWithServer().catch((error) => {
+      this.deps.logger?.warn("授权状态检查失败。", { error })
     })
     this.renewTimer = setInterval(() => {
-      void this.renewIfNeeded().catch((error) => {
-        this.deps.logger?.warn("License auto-renew failed.", { error })
+      void this.syncWithServer().catch((error) => {
+        this.deps.logger?.warn("授权状态检查失败。", { error })
       })
-    }, AUTO_RENEW_INTERVAL_MS)
+    }, LICENSE_STATUS_CHECK_INTERVAL_MS)
+    this.renewTimer.unref?.()
   }
 
   stop(): void {
@@ -87,6 +88,37 @@ export class LicenseService {
       return this.statusFromState(state)
     }
 
+    try {
+      const nextState = await this.renewState(state)
+      return this.statusFromState(nextState)
+    } catch (error) {
+      if (isTerminalLicenseServerError(error)) {
+        return this.statusFromState(await this.clearLease(state))
+      }
+      throw error
+    }
+  }
+
+  async resetActivation(): Promise<DesktopLicenseStatus> {
+    const state = await this.ensureState()
+    const nextState: CoreLicenseV1 = {
+      ...state,
+      deviceIdHash: null,
+      serverUrl: null,
+      email: null,
+      publicKey: null,
+      keyId: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      activatedAt: null,
+      lastRenewedAt: null,
+    }
+    await this.deps.store.setSingleton(nextState)
+    return this.statusFromState(nextState)
+  }
+
+  private async renewState(state: CoreLicenseV1): Promise<CoreLicenseV1> {
+    if (!state.serverUrl || !state.leaseToken) return state
     const config = await this.deps.client.getConfig(state.serverUrl)
     const response = await this.deps.client.renew(state.serverUrl, {
       leaseToken: state.leaseToken,
@@ -104,16 +136,42 @@ export class LicenseService {
       lastRenewedAt: this.now().toISOString(),
     }
     await this.deps.store.setSingleton(nextState)
-    return this.statusFromState(nextState)
+    return nextState
   }
 
-  private async renewIfNeeded(): Promise<void> {
-    const status = await this.getStatus()
+  private async syncWithServer(): Promise<void> {
+    const state = await this.ensureState()
+    const status = this.statusFromState(state)
     if (status.status !== "active" || !status.expiresAt) return
-    if (new Date(status.expiresAt).getTime() - this.now().getTime() > RENEW_BEFORE_EXPIRY_MS) {
-      return
+    if (!state.serverUrl || !state.leaseToken) return
+
+    try {
+      if (new Date(status.expiresAt).getTime() - this.now().getTime() <= RENEW_BEFORE_EXPIRY_MS) {
+        await this.renewState(state)
+        return
+      }
+
+      await this.deps.client.validate(state.serverUrl, {
+        leaseToken: state.leaseToken,
+        device: createDeviceMetadata(state.deviceId, this.deps.appVersion),
+      })
+    } catch (error) {
+      if (isTerminalLicenseServerError(error)) {
+        await this.clearLease(state)
+        return
+      }
+      this.deps.logger?.warn("授权状态检查失败。", { error })
     }
-    await this.renew()
+  }
+
+  private async clearLease(state: CoreLicenseV1): Promise<CoreLicenseV1> {
+    const nextState: CoreLicenseV1 = {
+      ...state,
+      leaseToken: null,
+      leaseExpiresAt: null,
+    }
+    await this.deps.store.setSingleton(nextState)
+    return nextState
   }
 
   private async ensureState(): Promise<CoreLicenseV1> {
@@ -141,7 +199,7 @@ export class LicenseService {
     if (!state.leaseToken || !state.publicKey) {
       return {
         status: "not_activated",
-        email: null,
+        email: state.email,
         serverUrl: state.serverUrl,
         deviceIdHash: state.deviceIdHash,
         expiresAt: null,
@@ -202,7 +260,15 @@ function verifyLeaseForDevice(
 ): LicenseLeasePayload {
   const payload = verifyLicenseLease(leaseToken, publicKey)
   if (payload.deviceIdHash !== hashDeviceId(deviceId)) {
-    throw new Error("License device mismatch")
+    throw new Error("授权设备不匹配。")
   }
   return payload
+}
+
+function isTerminalLicenseServerError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("status" in error)) {
+    return false
+  }
+  const status = (error as { status: unknown }).status
+  return typeof status === "number" && [400, 401, 403, 404, 409].includes(status)
 }

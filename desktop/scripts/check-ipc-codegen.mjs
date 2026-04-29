@@ -30,7 +30,7 @@ async function run() {
     console.error(
       `IPC codegen output (${GENERATED_FILE}) differs from the committed file.`,
     )
-    console.error(`Run \`pnpm desktop:generate:ipc\` and commit the result.`)
+    console.error(`Run \`pnpm --filter @synapse/desktop run generate:ipc\` and commit the result.`)
     if (detail) {
       console.error(detail)
     }

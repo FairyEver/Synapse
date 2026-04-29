@@ -9,10 +9,10 @@ Synapse 产品介绍站，基于 [VitePress](https://vitepress.dev) 构建，面
 推荐在仓库根目录执行：
 
 ```bash
-pnpm install          # 安装工作区依赖
-pnpm website:dev      # 启动文档开发服务器
-pnpm website:build    # 构建静态站点到 website/.vitepress/dist/
-pnpm website:preview  # 本地预览构建产物
+pnpm install                                 # 安装工作区依赖
+pnpm --filter @synapse/website run dev      # 启动文档开发服务器
+pnpm --filter @synapse/website run build    # 构建静态站点到 website/.vitepress/dist/
+pnpm --filter @synapse/website run preview  # 本地预览构建产物
 ```
 
 也可以直接在 `website/` 下运行：

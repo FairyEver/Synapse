@@ -1,6 +1,11 @@
 import { PageState } from "@/components/page-state"
-import { DeviceStatusSelect, ManagedStatusSelect } from "@/components/status-select"
 import { StatusBadge } from "@/components/status-badge"
+import {
+  DeviceStatusActionButtons,
+  ManagedStatusActionButtons,
+  TableActionCell,
+  TableActionHead,
+} from "@/components/table-actions"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -57,7 +62,7 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
                 <TableHead className="text-right">设备数</TableHead>
                 <TableHead>到期</TableHead>
                 <TableHead>创建</TableHead>
-                <TableHead>操作</TableHead>
+                <TableActionHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -69,12 +74,12 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
                   <TableCell className="text-right">{license.maxDevices}</TableCell>
                   <TableCell>{formatDate(license.expiresAt)}</TableCell>
                   <TableCell>{formatDate(license.createdAt)}</TableCell>
-                  <TableCell>
-                    <ManagedStatusSelect
+                  <TableActionCell>
+                    <ManagedStatusActionButtons
                       value={license.status}
                       onChange={(next) => updateLicense(license.id, next)}
                     />
-                  </TableCell>
+                  </TableActionCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -97,7 +102,7 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
                   <TableHead>平台</TableHead>
                   <TableHead>版本</TableHead>
                   <TableHead>最近</TableHead>
-                  <TableHead>操作</TableHead>
+                  <TableActionHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -110,12 +115,12 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
                     <TableCell>{device.platform}</TableCell>
                     <TableCell>{device.appVersion}</TableCell>
                     <TableCell>{formatDate(device.lastSeenAt)}</TableCell>
-                    <TableCell>
-                      <DeviceStatusSelect
+                    <TableActionCell>
+                      <DeviceStatusActionButtons
                         value={device.status}
                         onChange={(next) => updateDevice(device.id, next)}
                       />
-                    </TableCell>
+                    </TableActionCell>
                   </TableRow>
                 ))}
               </TableBody>

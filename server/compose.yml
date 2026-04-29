@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: synapse
       POSTGRES_DB: synapse
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - synapse-postgres:/var/lib/postgresql/data
     healthcheck:

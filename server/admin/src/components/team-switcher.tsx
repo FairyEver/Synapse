@@ -11,7 +11,7 @@ export function TeamSwitcher({
 }: {
   teams: {
     name: string
-    logo: React.ReactNode
+    logo: string
     plan: string
   }[]
 }) {
@@ -25,9 +25,12 @@ export function TeamSwitcher({
     <SidebarMenu>
       <SidebarMenuItem>
         <SidebarMenuButton size="lg">
-          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            {activeTeam.logo}
-          </div>
+          <img
+            src={activeTeam.logo}
+            alt={activeTeam.name}
+            className="size-8 shrink-0 object-contain select-none"
+            draggable={false}
+          />
           <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="truncate font-medium">{activeTeam.name}</span>
             <span className="truncate text-xs">{activeTeam.plan}</span>

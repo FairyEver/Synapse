@@ -1,5 +1,5 @@
 [build]
-  command = "pnpm website:build"
+  command = "pnpm --filter @synapse/website run build"
   publish = "website/.vitepress/dist"
   ignore = "git diff --quiet HEAD^ HEAD -- website/ netlify.toml package.json pnpm-lock.yaml pnpm-workspace.yaml"
 

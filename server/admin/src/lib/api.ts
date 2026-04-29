@@ -8,12 +8,21 @@ export interface AdminSession {
 
 export interface ActivationCode {
   readonly id: string
+  readonly codeHint: string | null
   readonly status: ManagedStatus
   readonly maxDevices: number
   readonly expiresAt: string | null
   readonly boundAccountId: string | null
+  readonly boundAccount: { readonly email: string } | null
   readonly redeemedAt: string | null
+  readonly archivedAt: string | null
   readonly createdAt: string
+}
+
+export interface CreatedActivationCode {
+  readonly id: string
+  readonly code: string
+  readonly maxDevices: number
 }
 
 export interface LicenseDevice {
@@ -26,6 +35,11 @@ export interface LicenseDevice {
   readonly lastSeenAt: string
 }
 
+export interface LicenseActivationCode {
+  readonly id: string
+  readonly codeHint: string | null
+}
+
 export interface License {
   readonly id: string
   readonly status: ManagedStatus
@@ -34,6 +48,7 @@ export interface License {
   readonly createdAt: string
   readonly devices: LicenseDevice[]
   readonly leases?: Lease[]
+  readonly activationCode?: LicenseActivationCode
 }
 
 export interface Account {
@@ -54,6 +69,7 @@ export interface Device {
   readonly lastSeenAt: string
   readonly license: License & {
     readonly account: Pick<Account, "id" | "email" | "status">
+    readonly activationCode: LicenseActivationCode
   }
 }
 
@@ -126,13 +142,20 @@ export const adminApi = {
     request<{ ok: true }>("/admin/logout", {
       method: "POST",
     }),
-  listActivationCodes: () => request<ActivationCode[]>("/admin/api/activation-codes"),
+  listActivationCodes: (options: { readonly includeArchived?: boolean } = {}) => {
+    const query = new URLSearchParams()
+    if (options.includeArchived) {
+      query.set("includeArchived", "true")
+    }
+    const suffix = query.size > 0 ? `?${query.toString()}` : ""
+    return request<ActivationCode[]>(`/admin/api/activation-codes${suffix}`)
+  },
   createActivationCode: (input: {
-    code: string
     maxDevices: number
     expiresAt: string | null
+    quantity: number
   }) =>
-    request<{ id: string; code: string; maxDevices: number }>("/admin/api/activation-codes", {
+    request<CreatedActivationCode[]>("/admin/api/activation-codes", {
       method: "POST",
       body: JSON.stringify(input),
     }),
@@ -140,6 +163,10 @@ export const adminApi = {
     request<ActivationCode>(`/admin/api/activation-codes/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
+    }),
+  archiveActivationCode: (id: string) =>
+    request<ActivationCode>(`/admin/api/activation-codes/${id}/archive`, {
+      method: "PATCH",
     }),
   listAccounts: () => request<Account[]>("/admin/api/accounts"),
   getAccount: (id: string) => request<Account>(`/admin/api/accounts/${id}`),

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import synapseLogo from "@/assets/icon.png"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { TeamSwitcher } from "@/components/team-switcher"
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/sidebar"
 import {
   ActivityIcon,
-  GalleryVerticalEndIcon,
   KeyRoundIcon,
   MonitorIcon,
   UsersIcon,
@@ -24,10 +24,7 @@ const data = {
   teams: [
     {
       name: "Synapse",
-      logo: (
-        <GalleryVerticalEndIcon
-        />
-      ),
+      logo: synapseLogo,
       plan: "License",
     },
   ],

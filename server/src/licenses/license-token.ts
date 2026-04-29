@@ -36,14 +36,14 @@ export function verifyLicenseLease(token: string, publicKeyPem: string): License
     )
 
     if (!valid) {
-      throw new Error("Invalid license signature")
+      throw new Error("授权签名无效。")
     }
 
     return envelope.payload
   } catch (error) {
-    if (error instanceof Error && error.message === "Invalid license signature") {
+    if (error instanceof Error && error.message === "授权签名无效。") {
       throw error
     }
-    throw new Error("Invalid license signature")
+    throw new Error("授权签名无效。")
   }
 }

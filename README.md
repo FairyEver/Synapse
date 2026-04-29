@@ -31,26 +31,21 @@ pnpm install
 
 该命令会按 `pnpm-workspace.yaml` 安装整个 workspace 的依赖，包括 `desktop/` 子包。
 
-### 4. 启动桌面端开发环境
+### 4. 启动本地开发环境
 
 ```bash
-pnpm desktop:dev
+pnpm dev
 ```
 
-该命令会转发到 `@synapse/desktop`，并行启动渲染端 Vite dev server、编译 Electron 主进程，并打开 Electron 窗口。
+该命令会启动文档站、桌面端、PostgreSQL、Prisma migration 和后端服务。
 
 ### 常用脚本
 
 所有脚本都在仓库根目录执行：
 
 ```bash
-pnpm desktop:dev             # 启动本地开发环境
-pnpm desktop:typecheck       # 类型检查
-pnpm desktop:build           # 构建渲染端 + 主进程 + data-store
-pnpm desktop:package:mac     # 打包 macOS（dmg + zip）
-pnpm desktop:package:win     # 打包 Windows（nsis）
-pnpm server:docker:up        # 启动授权服务 + PostgreSQL
-pnpm server:build            # 构建授权服务和管理后台
+pnpm dev                     # 启动本地开发环境
+pnpm quit                    # 停止本地开发环境
 ```
 
 更完整的开发、打包、发布、编辑器集成说明见 [`desktop/README.md`](./desktop/README.md)。

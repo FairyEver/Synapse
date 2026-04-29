@@ -60,7 +60,7 @@ describe("license token", () => {
       },
     }), "utf8").toString("base64url")
 
-    expect(() => verifyLicenseLease(tampered, keys.publicKey)).toThrow("Invalid license signature")
+    expect(() => verifyLicenseLease(tampered, keys.publicKey)).toThrow("授权签名无效。")
   })
 
   it("normalizes activation code hashes", () => {

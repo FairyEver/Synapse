@@ -41,7 +41,7 @@ function usage() {
 Usage:
   ./migrate-legacy-data-store-macos.sh [--dry-run] [--force]
   node import-legacy-data-store.mjs [--source <path>] [--target <path>] [--dry-run] [--force]
-  pnpm desktop:data-store:import-legacy [--source <path>] [--target <path>] [--dry-run] [--force]
+  pnpm --filter @synapse/desktop run data-store:import-legacy -- [--source <path>] [--target <path>] [--dry-run] [--force]
 
 Options:
   --source <path>  Legacy database. Defaults to the newest synapse-data.db.legacy.* file.

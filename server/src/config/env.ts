@@ -28,7 +28,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
   const result = envSchema.safeParse(source)
   if (!result.success) {
     const first = result.error.issues[0]
-    throw new Error(`Invalid server environment: ${first?.path.join(".")}`)
+    throw new Error(`服务端环境变量无效：${first?.path.join(".")}`)
   }
 
   return {

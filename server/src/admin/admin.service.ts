@@ -1,49 +1,108 @@
-import { Injectable } from "@nestjs/common"
+import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
+import { randomBytes } from "node:crypto"
 import { z } from "zod"
 import { hashActivationCode, normalizeActivationCode } from "../licenses/hash"
 import { PrismaService } from "../prisma/prisma.service"
 
 const managedStatusSchema = z.enum(["active", "disabled", "revoked", "expired"])
 const deviceStatusSchema = z.enum(["active", "revoked"])
+const activationCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+const activationCodeCreateAttempts = 5
+
+export function generateActivationCode(): string {
+  return `SYN-${randomCodeSegment(4)}-${randomCodeSegment(4)}-${randomCodeSegment(4)}`
+}
 
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createActivationCode(input: {
-    code: string
+    maxDevices: number
+    expiresAt?: string | null
+    quantity?: number
+  }) {
+    const results: Array<{ id: string; code: string; maxDevices: number }> = []
+    const quantity = input.quantity ?? 1
+
+    for (let index = 0; index < quantity; index += 1) {
+      results.push(await this.createSingleActivationCode(input))
+    }
+
+    return results
+  }
+
+  private async createSingleActivationCode(input: {
     maxDevices: number
     expiresAt?: string | null
   }) {
-    const normalizedCode = normalizeActivationCode(input.code)
-    const activationCode = await this.prisma.activationCode.create({
-      data: {
-        codeHash: hashActivationCode(normalizedCode),
-        maxDevices: input.maxDevices,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-      },
-    })
-    return { id: activationCode.id, code: normalizedCode, maxDevices: activationCode.maxDevices }
+    for (let attempt = 0; attempt < activationCodeCreateAttempts; attempt += 1) {
+      const code = normalizeActivationCode(this.createActivationCodeValue())
+      try {
+        const activationCode = await this.prisma.activationCode.create({
+          data: {
+            codeHint: createActivationCodeHint(code),
+            codeHash: hashActivationCode(code),
+            maxDevices: input.maxDevices,
+            expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+          },
+        })
+        return { id: activationCode.id, code, maxDevices: activationCode.maxDevices }
+      } catch (error) {
+        if (isActivationCodeCollision(error)) {
+          continue
+        }
+        throw error
+      }
+    }
+
+    throw new InternalServerErrorException("生成唯一激活码失败。")
   }
 
-  listActivationCodes() {
+  protected createActivationCodeValue(): string {
+    return generateActivationCode()
+  }
+
+  listActivationCodes(options: { readonly includeArchived?: boolean } = {}) {
+    const where = options.includeArchived ? undefined : { archivedAt: null }
+
     return this.prisma.activationCode.findMany({
       orderBy: { createdAt: "desc" },
+      ...(where ? { where } : {}),
       select: {
         id: true,
+        codeHint: true,
         status: true,
         maxDevices: true,
         expiresAt: true,
         boundAccountId: true,
+        boundAccount: {
+          select: {
+            email: true,
+          },
+        },
         redeemedAt: true,
+        archivedAt: true,
         createdAt: true,
       },
     })
   }
 
   async updateActivationCode(id: string, body: unknown) {
-    const request = z.object({ status: managedStatusSchema }).parse(body)
+    const result = z.object({ status: managedStatusSchema }).safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("激活码状态无效。")
+    }
+    const request = result.data
     return this.prisma.activationCode.update({ where: { id }, data: { status: request.status } })
+  }
+
+  archiveActivationCode(id: string) {
+    return this.prisma.activationCode.update({
+      where: { id },
+      data: { archivedAt: new Date() },
+    })
   }
 
   listAccounts() {
@@ -74,6 +133,12 @@ export class AdminService {
         license: {
           include: {
             account: true,
+            activationCode: {
+              select: {
+                id: true,
+                codeHint: true,
+              },
+            },
           },
         },
       },
@@ -120,12 +185,45 @@ export class AdminService {
   }
 
   async updateLicense(id: string, body: unknown) {
-    const request = z.object({ status: managedStatusSchema }).parse(body)
+    const result = z.object({ status: managedStatusSchema }).safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("授权状态无效。")
+    }
+    const request = result.data
     return this.prisma.license.update({ where: { id }, data: { status: request.status } })
   }
 
   async updateDevice(id: string, body: unknown) {
-    const request = z.object({ status: deviceStatusSchema }).parse(body)
+    const result = z.object({ status: deviceStatusSchema }).safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("设备状态无效。")
+    }
+    const request = result.data
     return this.prisma.device.update({ where: { id }, data: { status: request.status } })
   }
+}
+
+function randomCodeSegment(length: number): string {
+  const bytes = randomBytes(length)
+  return Array.from(bytes, (byte) => activationCodeAlphabet[byte % activationCodeAlphabet.length]).join("")
+}
+
+function createActivationCodeHint(code: string): string {
+  const normalizedCode = normalizeActivationCode(code)
+  const parts = normalizedCode.split("-")
+  if (parts.length >= 3) {
+    return [
+      parts[0],
+      ...parts.slice(1, -1).map((part) => "*".repeat(part.length)),
+      parts[parts.length - 1],
+    ].join("-")
+  }
+  if (normalizedCode.length <= 4) {
+    return "*".repeat(normalizedCode.length)
+  }
+  return `${"*".repeat(Math.max(0, normalizedCode.length - 4))}${normalizedCode.slice(-4)}`
+}
+
+function isActivationCodeCollision(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }

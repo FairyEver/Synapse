@@ -28,7 +28,7 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 ## Current repository structure
 
 - This repo is a pnpm monorepo. The workspace root hosts shared docs (`AGENTS.md`, `CLAUDE.md`, `README.md`), project-scoped Claude rules under `.claude/rules/`, `.github/` CI, and the monorepo `package.json` / `pnpm-workspace.yaml`. Source code lives in the `desktop/` subpackage published as `@synapse/desktop`.
-- Run scripts from the repo root (e.g. `pnpm desktop:dev`, `pnpm desktop:build`, `pnpm desktop:typecheck`); they delegate into `desktop/` via `pnpm --filter @synapse/desktop`.
+- Root public entry points are `pnpm dev` and `pnpm quit`; root `dev:*` / `quit:*` scripts are local helpers for those entry points. Run other package-specific scripts directly with `pnpm --filter @synapse/<package> run <script>`.
 - Privileged Electron code lives in `desktop/electron/`.
 - Renderer code lives in `desktop/src/`.
 - Shared shell state and orchestration live in `desktop/src/app-shell/`.
@@ -51,7 +51,7 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 
 ## Phase 0 architecture hard constraints (SPEC §1)
 
-These must hold for every PR. The `desktop:check:hard-constraints` script
+These must hold for every PR. The `@synapse/desktop` `check:hard-constraints` script
 enforces them; CI runs it on push.
 
 1. **No global singletons in new code**: never write `export default new XxxService()` in `desktop/electron/runtime/` or `desktop/electron/bootstrap/`. Wire services through `ServiceRegistry` (see `desktop/electron/runtime/service-registry`).
@@ -66,7 +66,7 @@ enforces them; CI runs it on push.
 10. **Sensitive operations** (shell, file write outside userData, network connect, extension load, agent spawn, secret access): go through `PermissionGuard.check()` and record on `AuditSink`.
 11. **Extensible enums** (content types, editor adapters, connectors, providers, hook types, UI panels): register via `ExtensionPoint`. New hardcoded enums need explicit approval.
 
-When in doubt run `pnpm desktop:check:hard-constraints` and `pnpm desktop:test`.
+When in doubt run `pnpm --filter @synapse/desktop run check:hard-constraints` and `pnpm --filter @synapse/desktop run test`.
 - Keep renderer, preload, and main-process boundaries strict.
 - Filesystem, git, installation, download, dialog, updater, and OS logic belong in Electron main-process code, never in React components.
 - Renderer code may only access privileged capabilities through narrow, typed preload APIs.

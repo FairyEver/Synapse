@@ -136,9 +136,9 @@ description: 根据当前代码更新 MCP 工具描述，让 AI 编辑器更好�
 4. 确认 where schema 与 `DataStoreWhereClause` / `buildWhere()` 支持的 object、array、group 三种形状一致
 5. 确认没有引入多余的改动（不改协议逻辑、不改 `MCP_TOOL_ACTIONS`、不改 service/types/CLI/IPC）
 6. 推荐验证命令：
-   - `pnpm desktop:typecheck`
+   - `pnpm --filter @synapse/desktop run typecheck`
    - 如只改 data-store MCP bundle，可跑 `pnpm --filter @synapse/desktop run build:data-store`
-   - 如改动较大，可跑 `pnpm desktop:build`
+   - 如改动较大，可跑 `pnpm --filter @synapse/desktop run build`
 
 ## 范围控制
 

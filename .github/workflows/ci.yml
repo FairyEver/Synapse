@@ -22,10 +22,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck
-        run: pnpm desktop:typecheck
+        run: pnpm --filter @synapse/desktop run typecheck
       - name: Run tests
-        run: pnpm desktop:test
+        run: pnpm --filter @synapse/desktop run test
       - name: Verify IPC codegen drift
-        run: pnpm desktop:check:ipc-codegen
+        run: pnpm --filter @synapse/desktop run check:ipc-codegen
       - name: Verify Phase 0 hard constraints
-        run: pnpm desktop:check:hard-constraints
+        run: pnpm --filter @synapse/desktop run check:hard-constraints

@@ -65,6 +65,7 @@ function AppResetPanel() {
                 <li>应用配置与偏好设置</li>
                 <li>已导入的仓库目录列表</li>
                 <li>用户身份信息</li>
+                <li>授权激活状态</li>
                 <li>仓库内容索引缓存</li>
                 <li>应用日志与浏览器缓存</li>
               </ol>

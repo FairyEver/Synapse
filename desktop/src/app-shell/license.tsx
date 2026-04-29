@@ -23,6 +23,7 @@ interface LicenseContextValue {
 }
 
 const LicenseContext = createContext<LicenseContextValue | null>(null)
+const LICENSE_STATUS_REFRESH_INTERVAL_MS = 60 * 1000
 
 export function LicenseProvider({ children }: { readonly children: ReactNode }) {
   const [status, setStatus] = useState<SynapseLicenseStatus | null>(null)
@@ -35,7 +36,7 @@ export function LicenseProvider({ children }: { readonly children: ReactNode }) 
       setStatus(nextStatus)
       setError(null)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "无法读取授权状态。")
+      setError(formatLicenseErrorMessage(caught, "无法读取授权状态。"))
     } finally {
       setIsReady(true)
     }
@@ -43,6 +44,10 @@ export function LicenseProvider({ children }: { readonly children: ReactNode }) 
 
   useEffect(() => {
     void refresh()
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, LICENSE_STATUS_REFRESH_INTERVAL_MS)
+    return () => window.clearInterval(timer)
   }, [refresh])
 
   const activate = useCallback(async (payload: SynapseLicenseActivationRequest) => {
@@ -81,4 +86,16 @@ export function useLicense() {
     throw new Error("LicenseProvider is required")
   }
   return value
+}
+
+export function formatLicenseErrorMessage(caught: unknown, fallback: string): string {
+  if (!(caught instanceof Error)) return fallback
+  return stripElectronInvokePrefix(caught.message) || fallback
+}
+
+function stripElectronInvokePrefix(message: string): string {
+  return message
+    .replace(/^Error invoking remote method '[^']+': Error: /, "")
+    .replace(/^Error: /, "")
+    .trim()
 }

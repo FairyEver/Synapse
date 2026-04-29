@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common"
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common"
 import type { Request } from "express"
 import { AdminAuthService } from "./admin-auth.service"
 
@@ -11,6 +11,10 @@ export class AdminAuthGuard implements CanActivate {
       cookies?: Record<string, string>
     }>()
     const token = request.cookies?.synapse_admin
-    return typeof token === "string" && this.auth.verify(token)
+    const allowed = typeof token === "string" && this.auth.verify(token)
+    if (!allowed) {
+      throw new ForbiddenException("未登录或登录已过期。")
+    }
+    return true
   }
 }

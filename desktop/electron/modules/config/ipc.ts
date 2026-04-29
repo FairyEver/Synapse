@@ -16,6 +16,7 @@ import { configStore } from "../../services/config-store"
 import { createMainLogger, logStore } from "../../services/log-store"
 import { repositoryStore } from "../../services/repository-store"
 import { shutdownDataStore } from "../../data-store"
+import type { LicenseService } from "../../services/license"
 
 const logger = createMainLogger("ipc.config")
 
@@ -118,6 +119,13 @@ export const configIpcModule: IpcModule = {
         logger.info("Handling config.resetApp request. Wiping all user data except data-store files.")
 
         repositoryStore.unwatchAll()
+        const licenseService = _ctx.resolve<LicenseService>("core.license")
+        licenseService.stop()
+        try {
+          await licenseService.resetActivation()
+        } catch (error) {
+          logger.warn("Failed to reset license activation before app reset.", { error })
+        }
         await shutdownDataStore()
         await logStore.dispose()
 

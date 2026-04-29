@@ -64,6 +64,16 @@ interface LicenseResponse {
   readonly leaseToken: string
 }
 
+interface LicenseValidationResponse {
+  readonly ok: true
+}
+
+interface RenewalContext {
+  readonly account: AccountRecord
+  readonly license: LicenseRecord
+  readonly device: DeviceRecord
+}
+
 interface LicenseRepository {
   findActivationByHash(codeHash: string): Promise<ActivationRecord | null>
   findOrCreateAccount(email: string): Promise<AccountRecord>
@@ -83,7 +93,12 @@ interface LicenseRepository {
   findRenewalState(
     licenseId: string,
     deviceIdHash: string,
-  ): Promise<{ account: AccountRecord | null; license: LicenseRecord | null; device: DeviceRecord | null }>
+  ): Promise<{
+    account: AccountRecord | null
+    activation: ActivationRecord | null
+    license: LicenseRecord | null
+    device: DeviceRecord | null
+  }>
 }
 
 @Injectable()
@@ -103,7 +118,7 @@ export class LicensesService {
 
   seedActivationCode(input: { codeHash: string; maxDevices: number }): void {
     if (!(this.repository instanceof InMemoryLicenseRepository)) {
-      throw new Error("seedActivationCode is only available for in-memory tests")
+      throw new Error("seedActivationCode 仅可用于内存测试。")
     }
     this.repository.seedActivationCode(input)
   }
@@ -123,16 +138,16 @@ export class LicensesService {
     const activation = await this.repository.findActivationByHash(codeHash)
 
     if (!activation || activation.status !== "active" || isPast(activation.expiresAt)) {
-      throw new Error("Activation code is invalid")
+      throw new Error("激活码无效。")
     }
 
     const account = await this.repository.findOrCreateAccount(email)
     if (account.status !== "active") {
-      throw new Error("Account is disabled")
+      throw new Error("账号已停用。")
     }
 
     if (activation.boundAccountId && activation.boundAccountId !== account.id) {
-      throw new Error("Activation code is already bound")
+      throw new Error("激活码已绑定其他账号。")
     }
     if (!activation.boundAccountId) {
       await this.repository.bindActivationToAccount(activation.id, account.id)
@@ -141,7 +156,7 @@ export class LicensesService {
 
     const license = await this.repository.findOrCreateLicense(account.id, activation)
     if (license.status !== "active" || isPast(license.expiresAt)) {
-      throw new Error("License is not active")
+      throw new Error("授权不可用。")
     }
 
     const device = await this.findOrCreateDevice(license, request.device)
@@ -151,26 +166,7 @@ export class LicensesService {
   }
 
   async renew(request: RenewRequest): Promise<LicenseResponse> {
-    const payload = verifyLicenseLease(request.leaseToken, this.settings.publicKey)
-    const deviceHash = hashDeviceId(request.device.deviceId)
-    if (payload.deviceIdHash !== deviceHash) {
-      throw new Error("Device mismatch")
-    }
-
-    const { account, license, device } = await this.repository.findRenewalState(
-      payload.licenseId,
-      deviceHash,
-    )
-
-    if (!account || account.status !== "active") {
-      throw new Error("Account is disabled")
-    }
-    if (!license || license.status !== "active" || isPast(license.expiresAt)) {
-      throw new Error("License is not active")
-    }
-    if (!device || device.status !== "active") {
-      throw new Error("Device is not active")
-    }
+    const { account, license, device } = await this.getRenewalContext(request)
 
     await this.repository.updateDeviceMetadata(device.id, request.device)
     const updatedDevice = {
@@ -187,6 +183,39 @@ export class LicensesService {
     }
   }
 
+  async validate(request: RenewRequest): Promise<LicenseValidationResponse> {
+    await this.getRenewalContext(request)
+    return { ok: true }
+  }
+
+  private async getRenewalContext(request: RenewRequest): Promise<RenewalContext> {
+    const payload = verifyLicenseLease(request.leaseToken, this.settings.publicKey)
+    const deviceHash = hashDeviceId(request.device.deviceId)
+    if (payload.deviceIdHash !== deviceHash) {
+      throw new Error("当前设备与授权不匹配。")
+    }
+
+    const { account, activation, license, device } = await this.repository.findRenewalState(
+      payload.licenseId,
+      deviceHash,
+    )
+
+    if (!account || account.status !== "active") {
+      throw new Error("账号已停用。")
+    }
+    if (!activation || activation.status !== "active" || isPast(activation.expiresAt)) {
+      throw new Error("授权不可用。")
+    }
+    if (!license || license.status !== "active" || isPast(license.expiresAt)) {
+      throw new Error("授权不可用。")
+    }
+    if (!device || device.status !== "active") {
+      throw new Error("设备已停用。")
+    }
+
+    return { account, license, device }
+  }
+
   private async findOrCreateDevice(
     license: LicenseRecord,
     metadata: DeviceMetadata,
@@ -195,12 +224,15 @@ export class LicensesService {
     const devices = await this.repository.findDevicesByLicense(license.id)
     const existing = devices.find((device) => device.deviceIdHash === deviceIdHash)
     if (existing) {
+      if (existing.status !== "active") {
+        throw new Error("设备已停用。")
+      }
       return existing
     }
 
     const activeCount = devices.filter((device) => device.status === "active").length
     if (activeCount >= license.maxDevices) {
-      throw new Error("Device limit reached")
+      throw new Error("设备数量已达上限。")
     }
 
     return this.repository.createDevice(license, metadata, deviceIdHash)
@@ -338,14 +370,22 @@ class InMemoryLicenseRepository implements LicenseRepository {
   async findRenewalState(
     licenseId: string,
     deviceIdHash: string,
-  ): Promise<{ account: AccountRecord | null; license: LicenseRecord | null; device: DeviceRecord | null }> {
+  ): Promise<{
+    account: AccountRecord | null
+    activation: ActivationRecord | null
+    license: LicenseRecord | null
+    device: DeviceRecord | null
+  }> {
     const license = this.licenses.get(licenseId) ?? null
     const account = license ? this.accounts.get(license.accountId) ?? null : null
+    const activation = license
+      ? [...this.activations.values()].find((item) => item.id === license.activationCodeId) ?? null
+      : null
     const device = [...this.devices.values()].find((item) =>
       item.licenseId === licenseId && item.deviceIdHash === deviceIdHash,
     ) ?? null
 
-    return { account, license, device }
+    return { account, activation, license, device }
   }
 }
 
@@ -441,15 +481,23 @@ class PrismaLicenseRepository implements LicenseRepository {
   async findRenewalState(
     licenseId: string,
     deviceIdHash: string,
-  ): Promise<{ account: AccountRecord | null; license: LicenseRecord | null; device: DeviceRecord | null }> {
+  ): Promise<{
+    account: AccountRecord | null
+    activation: ActivationRecord | null
+    license: LicenseRecord | null
+    device: DeviceRecord | null
+  }> {
     const license = await this.prisma.license.findUnique({ where: { id: licenseId } })
     const account = license
       ? await this.prisma.account.findUnique({ where: { id: license.accountId } })
+      : null
+    const activation = license
+      ? await this.prisma.activationCode.findUnique({ where: { id: license.activationCodeId } })
       : null
     const device = await this.prisma.device.findUnique({
       where: { licenseId_deviceIdHash: { licenseId, deviceIdHash } },
     })
 
-    return { account, license, device }
+    return { account, activation, license, device }
   }
 }
