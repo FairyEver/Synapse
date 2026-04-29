@@ -6,14 +6,6 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseDiagnosticsCheck,
@@ -24,13 +16,10 @@ import type {
 const logger = createRendererLogger("settings.diagnostics")
 
 function DiagnosticsPanel() {
-  const { error: showError, promise } = useAppNotifications()
+  const { promise } = useAppNotifications()
   const [report, setReport] = useState<SynapseDiagnosticsReport | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [isJsonOpen, setIsJsonOpen] = useState(false)
-
-  const rawJson = useMemo(() => report ? JSON.stringify(report, null, 2) : "", [report])
 
   const handleRun = useCallback(async () => {
     setIsRunning(true)
@@ -66,27 +55,12 @@ function DiagnosticsPanel() {
         },
       )
       if (result.success && result.filePath) {
-        setReport({
-          ...report,
-          bundle: {
-            lastExportedAt: new Date().toISOString(),
-            lastExportPath: result.filePath,
-          },
-        })
+        requireSynapseBridge().shell.showItemInFolder(result.filePath)
       }
     } finally {
       setIsExporting(false)
     }
   }, [promise, report])
-
-  const handleCopyJson = useCallback(async () => {
-    if (!rawJson) return
-    try {
-      await navigator.clipboard.writeText(rawJson)
-    } catch (error) {
-      showError(error instanceof Error ? error.message : "复制失败")
-    }
-  }, [rawJson, showError])
 
   return (
     <>
@@ -131,47 +105,13 @@ function DiagnosticsPanel() {
                   )}
                   导出诊断包
                 </Button>
-                <Button
-                  variant="outline"
-                  disabled={!report}
-                  onClick={() => setIsJsonOpen(true)}
-                >
-                  原始 JSON
-                </Button>
               </div>
             </div>
           </CardHeader>
-          {report?.bundle?.lastExportPath ? (
-            <CardContent>
-              <LongValueRow label="导出位置" value={report.bundle.lastExportPath} />
-            </CardContent>
-          ) : null}
         </Card>
 
         {report ? <DiagnosticsReportDetails report={report} /> : null}
       </div>
-
-      <Dialog open={isJsonOpen} onOpenChange={setIsJsonOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>原始 JSON</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-96 rounded-md border">
-            <pre className="min-w-0 overflow-x-auto whitespace-pre p-4 text-sm">
-              {rawJson}
-            </pre>
-          </ScrollArea>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsJsonOpen(false)}>
-              关闭
-            </Button>
-            <Button onClick={() => void handleCopyJson()}>
-              <ClipboardCopy data-icon="inline-start" />
-              复制 JSON
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

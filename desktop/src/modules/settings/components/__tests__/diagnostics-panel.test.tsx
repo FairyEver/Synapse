@@ -14,6 +14,9 @@ vi.mock("@/lib/electron-bridge", () => ({
       runDiagnostics: vi.fn(),
       exportDiagnosticsBundle: vi.fn(),
     },
+    shell: {
+      showItemInFolder: vi.fn(),
+    },
   }),
 }))
 
@@ -25,12 +28,13 @@ vi.mock("@/app-shell/notifications", () => ({
 }))
 
 describe("DiagnosticsPanel", () => {
-  it("starts with export and raw JSON disabled", () => {
+  it("starts with export disabled and no raw JSON action", () => {
     const html = renderToStaticMarkup(<DiagnosticsPanel />)
 
     expect(html).toContain("运行诊断后显示结果。")
     expect(html).toContain("导出诊断包")
-    expect(html).toContain("原始 JSON")
+    expect(html).not.toContain("原始 JSON")
+    expect(html).not.toContain("导出位置")
     expect(html).toContain("disabled")
   })
 
