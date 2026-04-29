@@ -142,6 +142,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem
         synapseContentId: meta?.id ?? null,
         preview,
         fileCount: children.length,
+        trash: { mode: "path" },
       })
     } catch (error) {
       logger.warn("Failed to scan skill directory.", { path: skillDir, error })

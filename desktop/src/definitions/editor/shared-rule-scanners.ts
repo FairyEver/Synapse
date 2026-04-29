@@ -6,6 +6,19 @@ import { decodeYamlScalar } from "./shared-yaml-scalar"
 
 const SYNAPSE_RULE_BEGIN_RE = /<!--\s*synapse-rule:([A-Za-z0-9_.-]+):begin\s*-->/
 const SYNAPSE_RULE_END_RE = /<!--\s*synapse-rule:[A-Za-z0-9_.-]+:end\s*-->/
+const RULE_TRASH_UNSUPPORTED_REASON = "当前 Rule 没有明确边界，请在 Finder 中处理。"
+const PATH_TRASH = { mode: "path" } as const
+
+function createRuleSectionTrash(ruleId: string) {
+  return { mode: "rule-section", ruleId } as const
+}
+
+function createUnsupportedRuleTrash() {
+  return {
+    mode: "unsupported",
+    disabledReason: RULE_TRASH_UNSUPPORTED_REASON,
+  } as const
+}
 
 async function warnScanFailure(message: string, details: { path: string; error: unknown }): Promise<void> {
   const { createMainLogger } = await import("../../../electron/services/log-store.js")
@@ -77,6 +90,7 @@ export async function scanClaudeCodeRules(dirPath: string): Promise<EditorScanRu
         preview: previewLines(body, metadata),
         metadata,
         content: text,
+        trash: PATH_TRASH,
       })
     } catch (error) {
       await warnScanFailure("Failed to scan Claude Code rule.", { path: filePath, error })
@@ -115,6 +129,7 @@ export async function scanCursorRules(dirPath: string): Promise<EditorScanRuleIt
         preview: previewLines(body, metadata),
         metadata,
         content: text,
+        trash: PATH_TRASH,
       })
     } catch (error) {
       await warnScanFailure("Failed to scan Cursor rule.", { path: filePath, error })
@@ -159,6 +174,7 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
         preview: previewLines(ruleLines.join("\n")),
         metadata: {},
         content: ruleLines.join("\n").trim(),
+        trash: createRuleSectionTrash(ruleId),
       })
       continue
     }
@@ -184,6 +200,7 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
         preview: previewLines(section),
         metadata: {},
         content: section.trim(),
+        trash: createUnsupportedRuleTrash(),
       })
     }
   } else {
@@ -195,6 +212,7 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
       preview: previewLines(unmarkedText),
       metadata: {},
       content: unmarkedText,
+      trash: createUnsupportedRuleTrash(),
     })
   }
 

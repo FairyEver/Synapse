@@ -47,6 +47,9 @@ describe("editor scan quick publish", () => {
 
     expect(result.skills.map((skill) => skill.name)).toEqual(["reviewer", "legacy"])
     expect(result.skills.find((skill) => skill.name === "reviewer")?.path).toBe(path.join(primaryDir, "reviewer"))
+    expect(result.skills.find((skill) => skill.name === "reviewer")?.trash).toEqual({
+      mode: "path",
+    })
     expect(result.duplicateSkillNames).toEqual(["reviewer"])
   })
 
@@ -345,6 +348,38 @@ describe("editor scan quick publish", () => {
 
     expect(items.find((item) => item.name === "first")?.content).toBe("# First\n\nOnly first.")
     expect(items.find((item) => item.name === "second")?.content).toBe("# Second\n\nOnly second.")
+    expect(items.find((item) => item.name === "first")?.trash).toEqual({
+      mode: "rule-section",
+      ruleId: "first",
+    })
+    expect(items.find((item) => item.name === "second")?.trash).toEqual({
+      mode: "rule-section",
+      ruleId: "second",
+    })
+  })
+
+  it("marks shared-file handwritten Codex rules as unsupported for trash", async () => {
+    const root = await createTempDir()
+    const filePath = path.join(root, "AGENTS.md")
+    await writeFile(
+      filePath,
+      [
+        "# Handwritten Rule",
+        "",
+        "Keep this section because it has no Synapse marker boundary.",
+      ].join("\n"),
+    )
+
+    const items = await scanCodexRules(filePath)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      name: "Handwritten Rule",
+      trash: {
+        mode: "unsupported",
+        disabledReason: "当前 Rule 没有明确边界，请在 Finder 中处理。",
+      },
+    })
   })
 
   it("scans Codex rule segments for builtin rules with file-name-safe IDs", async () => {
@@ -397,5 +432,19 @@ describe("editor scan quick publish", () => {
     const items = await scanCursorRules(root)
 
     expect(items[0]?.preview).toBe("Project rule summary")
+  })
+
+  it("marks standalone Cursor rule files as path-trashable", async () => {
+    const root = await createTempDir()
+    const rulePath = path.join(root, "project.mdc")
+    await writeFile(rulePath, "---\ndescription: Project rule\n---\n# Rule\n")
+
+    const items = await scanCursorRules(root)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      path: rulePath,
+      trash: { mode: "path" },
+    })
   })
 })

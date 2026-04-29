@@ -3,6 +3,13 @@ import type { SynapseEditorId } from "./editor"
 export type EditorScanItemSource = "synapse" | "external"
 export type EditorScanScope = "global" | "project"
 
+export type EditorScanTrashInfo =
+  | { mode: "path" }
+  | { mode: "rule-section"; ruleId: string }
+  | { mode: "unsupported"; disabledReason: string }
+
+export type EditorScanTrashMode = EditorScanTrashInfo["mode"]
+
 export type EditorScanSkillItem = {
   name: string
   path: string
@@ -10,6 +17,7 @@ export type EditorScanSkillItem = {
   synapseContentId: string | null
   preview: string
   fileCount: number
+  trash: EditorScanTrashInfo
 }
 
 export type EditorScanRuleItem = {
@@ -20,6 +28,7 @@ export type EditorScanRuleItem = {
   preview: string
   metadata: Record<string, string>
   content?: string
+  trash: EditorScanTrashInfo
 }
 
 export type EditorScanEditorStatus = "detected" | "not-detected"
@@ -72,6 +81,7 @@ export type ScanItemForDetail = {
   scope: EditorScanScope
   projectName?: string
   content?: string
+  trash: EditorScanTrashInfo
 }
 
 export type EditorScanQuickPublishRequest = {
@@ -104,3 +114,20 @@ export type EditorScanQuickPublishDraft =
       files: EditorScanQuickPublishSkillFile[]
       metadata: Record<string, string>
     }
+
+export type EditorScanTrashRequest = {
+  itemType: "skill" | "rule"
+  itemName: string
+  itemPath: string
+  editorId: SynapseEditorId
+  scope: EditorScanScope
+  source: EditorScanItemSource
+  trash: EditorScanTrashInfo
+  synapseContentId?: string | null
+}
+
+export type EditorScanTrashResult = {
+  trashed: true
+  mode: EditorScanTrashMode
+  path: string
+}
