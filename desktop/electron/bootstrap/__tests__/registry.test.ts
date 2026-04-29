@@ -82,14 +82,12 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.event-bus",
         "core.execution-isolation",
         "core.feishu-connector",
-        "core.heartbeat",
         "core.logging",
         "core.network-registry",
         "core.permission-guard",
         "core.process-runtime",
         "core.project-containers",
         "core.relay",
-        "core.scheduler",
         "core.side-channel",
         "core.task-scheduler",
         "core.update",
@@ -140,15 +138,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
     ])
-    expect(byId.get("core.scheduler")?.dependsOn).toEqual([
-      "core.project-containers",
-      "core.side-channel",
-      "core.feishu-connector",
-      "core.data-repository",
-      "core.permission-guard",
-      "core.audit-sink",
-      "core.execution-isolation",
-    ])
     expect(byId.get("core.task-scheduler")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
@@ -174,15 +163,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.execution-isolation",
       "core.feishu-connector",
-    ])
-    expect(byId.get("core.heartbeat")?.dependsOn).toEqual([
-      "core.project-containers",
-      "core.side-channel",
-      "core.feishu-connector",
-      "core.data-repository",
-      "core.permission-guard",
-      "core.audit-sink",
-      "core.execution-isolation",
     ])
     expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
@@ -221,8 +201,6 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.project-containers")).toBeLessThan(idx("core.side-channel"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.feishu-connector"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
-    expect(idx("core.feishu-connector")).toBeLessThan(idx("core.scheduler"))
-    expect(idx("core.feishu-connector")).toBeLessThan(idx("core.heartbeat"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.task-scheduler"))

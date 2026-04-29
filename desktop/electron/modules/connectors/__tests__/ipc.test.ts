@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
+import { IPC_CHANNELS } from "../../../generated/ipc-channels.generated"
 import { connectorsIpcModule } from "../ipc"
 
 describe("connectorsIpcModule", () => {
@@ -64,5 +65,10 @@ describe("connectorsIpcModule", () => {
       enabled: true,
       baseDir: "/repo/workspaces",
     }))
+  })
+
+  it("does not expose legacy Feishu scheduled task channels", () => {
+    expect("feishuListScheduledJobs" in IPC_CHANNELS.connectors).toBe(false)
+    expect("feishuListHeartbeats" in IPC_CHANNELS.connectors).toBe(false)
   })
 })

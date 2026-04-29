@@ -132,20 +132,6 @@ const IPC_CHANNELS = {
     "feishuListWorkspaceBindings": "synapse:connectors:feishu:workspace-bindings:list",
     "feishuRouteWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:route",
     "feishuUnbindWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:unbind",
-    "feishuListScheduledJobs": "synapse:connectors:feishu:scheduled-jobs:list",
-    "feishuListAllScheduledJobs": "synapse:connectors:feishu:scheduled-jobs:list-all",
-    "feishuCreateScheduledJob": "synapse:connectors:feishu:scheduled-jobs:create",
-    "feishuDeleteScheduledJob": "synapse:connectors:feishu:scheduled-jobs:delete",
-    "feishuSetScheduledJobEnabled": "synapse:connectors:feishu:scheduled-jobs:set-enabled",
-    "feishuSetScheduledJobMuted": "synapse:connectors:feishu:scheduled-jobs:set-muted",
-    "feishuRunScheduledJob": "synapse:connectors:feishu:scheduled-jobs:run",
-    "feishuListHeartbeats": "synapse:connectors:feishu:heartbeats:list",
-    "feishuListAllHeartbeats": "synapse:connectors:feishu:heartbeats:list-all",
-    "feishuUpsertHeartbeat": "synapse:connectors:feishu:heartbeats:upsert",
-    "feishuPauseHeartbeat": "synapse:connectors:feishu:heartbeats:pause",
-    "feishuDeleteHeartbeat": "synapse:connectors:feishu:heartbeats:delete",
-    "feishuResumeHeartbeat": "synapse:connectors:feishu:heartbeats:resume",
-    "feishuRunHeartbeat": "synapse:connectors:feishu:heartbeats:run",
   },
   "task-scheduler": {
     "listTasks": "synapse:task-scheduler:tasks:list",
@@ -524,34 +510,6 @@ const synapseBridge: SynapseBridge = {
         invoke(IPC_CHANNELS.connectors.feishuRouteWorkspaceBinding)(payload),
       unbindWorkspaceBinding: (payload) =>
         invoke(IPC_CHANNELS.connectors.feishuUnbindWorkspaceBinding)(payload),
-      listScheduledJobs: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuListScheduledJobs)({ projectId }),
-      listAllScheduledJobs: () =>
-        invoke(IPC_CHANNELS.connectors.feishuListAllScheduledJobs)(),
-      createScheduledJob: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuCreateScheduledJob)(payload),
-      deleteScheduledJob: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuDeleteScheduledJob)(payload),
-      setScheduledJobEnabled: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuSetScheduledJobEnabled)(payload),
-      setScheduledJobMuted: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuSetScheduledJobMuted)(payload),
-      runScheduledJob: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuRunScheduledJob)(payload),
-      listHeartbeats: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuListHeartbeats)({ projectId }),
-      listAllHeartbeats: () =>
-        invoke(IPC_CHANNELS.connectors.feishuListAllHeartbeats)(),
-      upsertHeartbeat: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuUpsertHeartbeat)(payload),
-      pauseHeartbeat: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuPauseHeartbeat)(payload),
-      deleteHeartbeat: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuDeleteHeartbeat)(payload),
-      resumeHeartbeat: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuResumeHeartbeat)(payload),
-      runHeartbeat: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuRunHeartbeat)(payload),
     },
   },
   ops: {

@@ -27,7 +27,6 @@ import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
 import { DataStoreSettingsPanel } from "@/modules/settings/components/data-store-settings-panel"
 import { DiagnosticsPanel } from "@/modules/settings/components/diagnostics-panel"
-import { ScheduledTasksPanel } from "@/modules/settings/components/scheduled-tasks-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
@@ -237,9 +236,6 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
         {isReady && activeCategory === "tools" ? (
           <ToolsPanel />
-        ) : null}
-        {isReady && activeCategory === "scheduled-tasks" ? (
-          <ScheduledTasksPanel projects={config.global.projects} />
         ) : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
         {isReady && activeCategory === "data-store" ? <DataStoreSettingsPanel /> : null}

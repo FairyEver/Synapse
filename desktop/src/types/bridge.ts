@@ -34,13 +34,7 @@ import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseFeishuConnectorRuntimeStatus,
   SynapseFeishuConnectorSummary,
-  SynapseFeishuHeartbeat,
-  SynapseFeishuHeartbeatPayload,
-  SynapseFeishuHeartbeatWithProject,
   SynapseFeishuManualCredentialsPayload,
-  SynapseFeishuScheduledJob,
-  SynapseFeishuScheduledJobPayload,
-  SynapseFeishuScheduledJobWithProject,
   SynapseFeishuSetupBeginResult,
   SynapseFeishuSetupPollResult,
   SynapseFeishuWorkspaceBinding,
@@ -138,7 +132,6 @@ export type SynapseOpsDiagnostics = {
     bindAddress?: string
     port?: number
     sendPath: string
-    cronAddPath: string
     relaySendPath: string
   }
   webhook?: {
@@ -418,40 +411,6 @@ export type SynapseBridge = {
       unbindWorkspaceBinding: (
         payload: SynapseFeishuWorkspaceUnbindPayload,
       ) => Promise<{ ok: true }>
-      listScheduledJobs: (projectId: string) => Promise<SynapseFeishuScheduledJob[]>
-      listAllScheduledJobs: () => Promise<SynapseFeishuScheduledJobWithProject[]>
-      createScheduledJob: (
-        payload: SynapseFeishuScheduledJobPayload,
-      ) => Promise<SynapseFeishuScheduledJob>
-      deleteScheduledJob: (
-        payload: { projectId: string; id: string },
-      ) => Promise<{ ok: true }>
-      setScheduledJobEnabled: (
-        payload: { projectId: string; id: string; enabled: boolean },
-      ) => Promise<SynapseFeishuScheduledJob>
-      setScheduledJobMuted: (
-        payload: { projectId: string; id: string; mute: boolean },
-      ) => Promise<SynapseFeishuScheduledJob>
-      runScheduledJob: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuScheduledJob | null>
-      listHeartbeats: (projectId: string) => Promise<SynapseFeishuHeartbeat[]>
-      listAllHeartbeats: () => Promise<SynapseFeishuHeartbeatWithProject[]>
-      upsertHeartbeat: (
-        payload: SynapseFeishuHeartbeatPayload,
-      ) => Promise<SynapseFeishuHeartbeat>
-      pauseHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuHeartbeat>
-      deleteHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<{ ok: true }>
-      resumeHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuHeartbeat>
-      runHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuHeartbeat | null>
     }
   }
   ops: {

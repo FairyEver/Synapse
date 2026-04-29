@@ -2,7 +2,6 @@ import {
   Activity,
   Blocks,
   Braces,
-  Clock,
   Database,
   FolderGit2,
   FolderKanban,
@@ -35,12 +34,6 @@ const settingsCategories: SettingsCategory[] = [
     icon: FolderKanban,
     label: "项目",
     description: "项目路径。",
-  },
-  {
-    id: "scheduled-tasks",
-    icon: Clock,
-    label: "定时任务",
-    description: "定时执行与保活。",
   },
   {
     id: "tools",
