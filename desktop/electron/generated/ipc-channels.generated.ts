@@ -141,6 +141,7 @@ export const IPC_CHANNELS = {
     "openLogDirectory": "synapse:ops:open-log-directory",
     "runDiagnostics": "synapse:ops:diagnostics:run",
     "exportDiagnosticsBundle": "synapse:ops:diagnostics:export-bundle",
+    "ping": "synapse:ops:ping",
     "runAsGet": "synapse:ops:run-as:get",
     "runAsUpdate": "synapse:ops:run-as:update",
     "runAsPreflight": "synapse:ops:run-as:preflight",

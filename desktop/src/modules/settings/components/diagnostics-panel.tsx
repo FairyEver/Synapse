@@ -5,8 +5,16 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import {
+  appendDiagnosticsCheck,
+  buildDiagnosticsSummary,
+  createRendererMainRoundtripCheck,
+  formatDiagnosticsDate,
+  formatDiagnosticsValue,
+  getDiagnosticsStatusLabel,
+} from "@/lib/diagnostics-summary"
+import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type {
   SynapseDiagnosticsCheck,
   SynapseDiagnosticsReport,
@@ -15,8 +23,44 @@ import type {
 
 const logger = createRendererLogger("settings.diagnostics")
 
+async function runDiagnosticsWithIpcCheck(): Promise<SynapseDiagnosticsReport> {
+  const bridge = requireSynapseBridge()
+  const report = await bridge.ops.runDiagnostics()
+  const requestedAt = new Date().toISOString()
+  const startedAt = getMonotonicNow()
+
+  try {
+    const result = await bridge.ops.ping()
+    const durationMs = Math.max(0, Math.round(getMonotonicNow() - startedAt))
+    return appendDiagnosticsCheck(
+      report,
+      createRendererMainRoundtripCheck({
+        durationMs,
+        requestedAt,
+        completedAt: new Date().toISOString(),
+        mainReceivedAt: result.receivedAt,
+      }),
+    )
+  } catch (error) {
+    const durationMs = Math.max(0, Math.round(getMonotonicNow() - startedAt))
+    return appendDiagnosticsCheck(
+      report,
+      createRendererMainRoundtripCheck({
+        durationMs,
+        requestedAt,
+        completedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+}
+
+function getMonotonicNow(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now()
+}
+
 function DiagnosticsPanel() {
-  const { promise } = useAppNotifications()
+  const { error: showError, promise, success } = useAppNotifications()
   const [report, setReport] = useState<SynapseDiagnosticsReport | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
@@ -26,7 +70,7 @@ function DiagnosticsPanel() {
     logger.info("Diagnostics run initiated.")
     try {
       const nextReport = await promise(
-        () => requireSynapseBridge().ops.runDiagnostics(),
+        () => runDiagnosticsWithIpcCheck(),
         {
           loading: "正在运行诊断...",
           success: () => "诊断完成",
@@ -62,79 +106,103 @@ function DiagnosticsPanel() {
     }
   }, [promise, report])
 
-  return (
-    <>
-      <div className="flex flex-col gap-4">
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 flex-col gap-2">
-                <CardTitle>结论</CardTitle>
-                {report ? (
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <StatusBadge status={report.overallStatus} />
-                    <span>{formatDate(report.generatedAt)}</span>
-                    <span>通过 {report.summary.ok}</span>
-                    <span>异常 {report.summary.degraded}</span>
-                    <span>失败 {report.summary.failed}</span>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">运行诊断后显示结果。</p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button disabled={isRunning} onClick={() => void handleRun()}>
-                  {isRunning ? (
-                    <LoaderCircle className="animate-spin" data-icon="inline-start" />
-                  ) : report ? (
-                    <RefreshCw data-icon="inline-start" />
-                  ) : (
-                    <Play data-icon="inline-start" />
-                  )}
-                  运行诊断
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!report || isExporting}
-                  onClick={() => void handleExport()}
-                >
-                  {isExporting ? (
-                    <LoaderCircle className="animate-spin" data-icon="inline-start" />
-                  ) : (
-                    <Download data-icon="inline-start" />
-                  )}
-                  导出诊断包
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
+  const handleCopySummary = useCallback(async () => {
+    if (!report) return
 
-        {report ? <DiagnosticsReportDetails report={report} /> : null}
-      </div>
-    </>
+    try {
+      await navigator.clipboard.writeText(buildDiagnosticsSummary(report))
+      success("诊断摘要已复制")
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "复制失败")
+    }
+  }, [report, showError, success])
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SettingsGroup>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-2">
+            <p className="text-sm font-medium text-foreground">结论</p>
+            {report ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <StatusBadge status={report.overallStatus} />
+                <span>{formatDiagnosticsDate(report.generatedAt)}</span>
+                <span>通过 {report.summary.ok}</span>
+                <span>异常 {report.summary.degraded}</span>
+                <span>失败 {report.summary.failed}</span>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">运行诊断后显示结果。</p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={isRunning} onClick={() => void handleRun()}>
+              {isRunning ? (
+                <LoaderCircle className="animate-spin" data-icon="inline-start" />
+              ) : report ? (
+                <RefreshCw data-icon="inline-start" />
+              ) : (
+                <Play data-icon="inline-start" />
+              )}
+              运行诊断
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!report || isExporting}
+              onClick={() => void handleExport()}
+            >
+              {isExporting ? (
+                <LoaderCircle className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Download data-icon="inline-start" />
+              )}
+              导出诊断包
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!report}
+              onClick={() => void handleCopySummary()}
+            >
+              <ClipboardCopy data-icon="inline-start" />
+              复制摘要
+            </Button>
+          </div>
+        </div>
+      </SettingsGroup>
+
+      {report ? <DiagnosticsReportDetails report={report} /> : null}
+    </div>
   )
 }
 
 function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport }) {
   const groups = useMemo(() => groupChecks(report.checks), [report])
+  const infoSections = [
+    { title: "本机信息", entries: getInfoEntries(report.system) },
+    { title: "应用信息", entries: getInfoEntries(report.app) },
+    { title: "当前上下文", entries: getInfoEntries(report.activeContext) },
+  ].filter((section) => section.entries.length > 0)
 
   return (
     <>
-      <InfoSection title="本机信息" values={report.system} />
-      <InfoSection title="应用信息" values={report.app} />
-      <InfoSection title="当前上下文" values={report.activeContext} />
+      {infoSections.length > 0 ? (
+        <SettingsGroup>
+          {infoSections.map((section) => (
+            <InfoSection
+              key={section.title}
+              title={section.title}
+              entries={section.entries}
+            />
+          ))}
+        </SettingsGroup>
+      ) : null}
       {Array.from(groups.entries()).map(([group, checks]) => (
-        <Card key={group}>
-          <CardHeader>
-            <CardTitle className="text-base">{group}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {checks.map((check) => (
-              <CheckRow key={check.id} check={check} />
-            ))}
-          </CardContent>
-        </Card>
+        <SettingsGroup key={group} sectionClassName="py-3">
+          <p className="text-sm font-medium text-foreground">{group}</p>
+          {checks.map((check) => (
+            <CheckRow key={check.id} check={check} />
+          ))}
+        </SettingsGroup>
       ))}
     </>
   )
@@ -142,34 +210,26 @@ function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport
 
 function InfoSection({
   title,
-  values,
+  entries,
 }: {
   title: string
-  values: Record<string, unknown>
+  entries: [string, unknown][]
 }) {
-  const entries = Object.entries(values).filter(([, value]) => value !== undefined)
-
-  if (entries.length === 0) {
-    return null
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-3">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <div className="flex flex-col gap-2">
         {entries.map(([key, value]) => (
-          <LongValueRow key={key} label={key} value={formatValue(value)} />
+          <LongValueRow key={key} label={key} value={formatDiagnosticsValue(value)} />
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
 function CheckRow({ check }: { check: SynapseDiagnosticsCheck }) {
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-md border p-3">
+    <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium">{check.name}</div>
@@ -180,7 +240,7 @@ function CheckRow({ check }: { check: SynapseDiagnosticsCheck }) {
       {check.details ? (
         <div className="flex flex-col gap-2">
           {Object.entries(check.details).map(([key, value]) => (
-            <LongValueRow key={key} label={key} value={formatValue(value)} />
+            <LongValueRow key={key} label={key} value={formatDiagnosticsValue(value)} />
           ))}
         </div>
       ) : null}
@@ -201,18 +261,26 @@ function LongValueRow({ label, value }: { label: string; value: string }) {
     <div className="grid min-w-0 gap-2 text-sm md:grid-cols-[10rem_minmax(0,1fr)_auto]">
       <span className="break-words text-muted-foreground">{label}</span>
       <span className="min-w-0 whitespace-pre-wrap break-all text-foreground">{value}</span>
-      <Button variant="ghost" size="sm" onClick={() => void handleCopy()}>
-        <ClipboardCopy data-icon="inline-start" />
-        复制
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`复制 ${label}`}
+        onClick={() => void handleCopy()}
+      >
+        <ClipboardCopy />
       </Button>
     </div>
   )
 }
 
+function getInfoEntries(values: Record<string, unknown>): [string, unknown][] {
+  return Object.entries(values).filter(([, value]) => value !== undefined)
+}
+
 function StatusBadge({ status }: { status: SynapseDiagnosticsStatus }) {
   return (
     <Badge variant={status === "failed" ? "destructive" : "secondary"}>
-      {getStatusLabel(status)}
+      {getDiagnosticsStatusLabel(status)}
     </Badge>
   )
 }
@@ -229,34 +297,6 @@ function groupChecks(
   }
 
   return groups
-}
-
-function getStatusLabel(status: SynapseDiagnosticsStatus): string {
-  if (status === "ok") return "通过"
-  if (status === "degraded") return "异常"
-  if (status === "failed") return "失败"
-  return "跳过"
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
-}
-
-function formatValue(value: unknown): string {
-  if (value === null) return "null"
-  if (value === undefined) return ""
-  if (typeof value === "string") return value
-  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
-    return String(value)
-  }
-
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
 }
 
 export {

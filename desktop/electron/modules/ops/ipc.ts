@@ -69,6 +69,11 @@ const diagnosticsBundleExportResultSchema = z.object({
   fileCount: z.number().optional(),
 })
 
+const opsPingResultSchema = z.object({
+  ok: z.literal(true),
+  receivedAt: z.string(),
+})
+
 const projectRequestSchema = z.object({
   projectId: z.string().min(1),
 })
@@ -216,6 +221,16 @@ export const opsIpcModule: IpcModule = {
       response: diagnosticsBundleExportResultSchema,
       handler: (ctx, request: DiagnosticsBundleExportRequest) =>
         resolveDiagnostics(ctx.resolve).exportBundle({ report: request.report }),
+    },
+    ping: {
+      kind: "invoke",
+      channel: "synapse:ops:ping",
+      request: z.void(),
+      response: opsPingResultSchema,
+      handler: () => ({
+        ok: true as const,
+        receivedAt: new Date().toISOString(),
+      }),
     },
     runAsGet: {
       kind: "invoke",

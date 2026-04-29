@@ -3,6 +3,10 @@ import os from "node:os"
 import path from "node:path"
 
 import type { SynapseConfig } from "../../src/types/config"
+import {
+  buildDiagnosticsSummary,
+  summarizeDiagnosticsChecks,
+} from "../../src/lib/diagnostics-summary"
 import type {
   SynapseDiagnosticsBundleExportResult,
   SynapseDiagnosticsCheck,
@@ -52,21 +56,38 @@ type LogStoreLike = {
   flush(): Promise<void>
   getLogDirectory(): string
   listLogFilesInfo(): Promise<Array<{ name: string; sizeBytes: number }>>
+  readLogsByNames(fileNames: string[]): Promise<string>
 }
 
 type DataStoreLike = {
   exportDatabase(targetPath: string): void
   getDbPath(): string
   getDbSize(): number
+  getDiagnosticsHealth(): {
+    quickCheck: string
+    metaTableCount: number
+    metaColumnCount: number
+    operationLogCount: number
+  }
   getTableCount(): number
 }
 
 type MaybePromise<T> = T | Promise<T>
 
 type CliDebugInfo = Record<string, unknown> & {
+  installPathCandidates?: unknown
+  installedPath?: unknown
+  preferredInstallPath?: unknown
   status?: {
     available?: boolean
   }
+}
+
+type McpHttpProbeResult = {
+  ok: boolean
+  method: string
+  status?: number
+  error?: string
 }
 
 type DiagnosticsServiceDeps = {
@@ -84,6 +105,7 @@ type DiagnosticsServiceDeps = {
   getCliDebugInfo: () => Promise<CliDebugInfo>
   getMcpHttpStatus: () => DataStoreMcpHttpStatus
   getMcpServers: () => MaybePromise<DataStoreMcpServerInfo[]>
+  probeMcpHttp: (url: string) => Promise<McpHttpProbeResult>
   permissionGuard: PermissionGuard
   auditSink: AuditSink
   logger: StructuredLogger
@@ -100,24 +122,33 @@ type DiagnosticsServiceDeps = {
   createConfigBackupPayload?: () => Promise<unknown>
 }
 
-type DiagnosticsSummary = Pick<SynapseDiagnosticsReport, "overallStatus" | "summary">
+const RECENT_LOG_FILE_LIMIT = 3
+const RECENT_LOG_SAMPLE_LIMIT = 5
+const LIFECYCLE_LOG_SAMPLE_LIMIT = 5
 
-function summarizeDiagnosticsChecks(checks: SynapseDiagnosticsCheck[]): DiagnosticsSummary {
-  const summary = {
-    ok: 0,
-    degraded: 0,
-    failed: 0,
-    skipped: 0,
-  }
+type RecentLogSnapshot = {
+  scannedFiles: string[]
+  content: string
+}
 
-  for (const check of checks) {
-    summary[check.status] += 1
-  }
+type LogTimestamp = {
+  iso: string
+  ms: number
+}
 
-  return {
-    overallStatus: summary.failed > 0 ? "failed" : summary.degraded > 0 ? "degraded" : "ok",
-    summary,
-  }
+type ServiceLifecycleSummary = {
+  hasSignals: boolean
+  runCount: number
+  shutdownCount: number
+  rendererBootstrapCount: number
+  appMountedCount: number
+  latestStartedAt?: string
+  latestStartupDurationsMs: Record<string, number>
+  latestRunRendererBootstrapCount: number
+  latestRunAppMountedCount: number
+  restartTrace: boolean
+  rendererRestartTrace: boolean
+  samples: string[]
 }
 
 class DiagnosticsService {
@@ -236,6 +267,12 @@ class DiagnosticsService {
         `${JSON.stringify(report, null, 2)}\n`,
       )
       included.push("diagnostics.json")
+
+      await this.writeTextFile(
+        path.join(packageRoot, "summary.md"),
+        `${buildDiagnosticsSummary(report)}\n`,
+      )
+      included.push("summary.md")
 
       await this.writeOptionalJsonFile(
         path.join(packageRoot, "config", "config-backup.json"),
@@ -356,6 +393,12 @@ class DiagnosticsService {
   }
 
   private async addLogChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
+    let recentLogSnapshot: RecentLogSnapshot | null = null
+    const readRecentLogSnapshot = async () => {
+      recentLogSnapshot ??= await this.readRecentLogSnapshot()
+      return recentLogSnapshot
+    }
+
     await this.capture(checks, "logs.files", "日志与配置", "日志文件", async () => {
       const files = await this.deps.logStore.listLogFilesInfo()
       return this.ok("logs.files", "日志与配置", "日志文件", "日志信息已读取", {
@@ -364,6 +407,58 @@ class DiagnosticsService {
         logPath: this.deps.logStore.getLogDirectory(),
       })
     })
+
+    await this.capture(checks, "logs.recent-signals", "日志与配置", "近期日志", async () => {
+      const { scannedFiles, content } = await readRecentLogSnapshot()
+      const signals = summarizeLogSignals(content)
+      const details = {
+        logPath: this.deps.logStore.getLogDirectory(),
+        scannedFiles,
+        warningCount: signals.warningCount,
+        errorCount: signals.errorCount,
+        samples: signals.samples,
+      }
+
+      return signals.warningCount + signals.errorCount > 0
+        ? this.degraded("logs.recent-signals", "日志与配置", "近期日志", "近期日志包含警告或错误", details)
+        : this.ok("logs.recent-signals", "日志与配置", "近期日志", "未发现近期警告", details)
+    })
+
+    await this.capture(checks, "logs.lifecycle", "日志与配置", "启动与重启", async () => {
+      const { scannedFiles, content } = await readRecentLogSnapshot()
+      const lifecycle = summarizeServiceLifecycle(content)
+      const details = {
+        logPath: this.deps.logStore.getLogDirectory(),
+        scannedFiles,
+        ...lifecycle,
+      }
+
+      if (!lifecycle.hasSignals) {
+        return this.skipped("logs.lifecycle", "日志与配置", "启动与重启", "未找到启动日志", details)
+      }
+
+      if (lifecycle.rendererRestartTrace) {
+        return this.degraded("logs.lifecycle", "日志与配置", "启动与重启", "发现 renderer 重启痕迹", details)
+      }
+
+      return this.ok(
+        "logs.lifecycle",
+        "日志与配置",
+        "启动与重启",
+        lifecycle.restartTrace ? "启动耗时已读取，近期有退出或重启痕迹" : "启动耗时已读取",
+        details,
+      )
+    })
+  }
+
+  private async readRecentLogSnapshot(): Promise<RecentLogSnapshot> {
+    const files = await this.deps.logStore.listLogFilesInfo()
+    const scannedFiles = files.slice(0, RECENT_LOG_FILE_LIMIT).map((file) => file.name)
+    const content = scannedFiles.length > 0
+      ? await this.deps.logStore.readLogsByNames(scannedFiles)
+      : ""
+
+    return { scannedFiles, content }
   }
 
   private async addDataStoreChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
@@ -380,21 +475,64 @@ class DiagnosticsService {
         : this.degraded("data-store.status", "Data Store", "数据库", "数据库未运行", details)
     })
 
+    await this.capture(checks, "data-store.integrity", "Data Store", "完整性", async () => {
+      const runtimeStatus = this.deps.getDataStoreRuntimeStatus()
+      if (!runtimeStatus.running) {
+        return this.degraded("data-store.integrity", "Data Store", "完整性", "数据库未运行，未执行完整性检查", runtimeStatus)
+      }
+
+      const health = this.deps.dataStore.getDiagnosticsHealth()
+      const details = {
+        ...health,
+        tableCount: this.deps.dataStore.getTableCount(),
+        dbPath: this.deps.dataStore.getDbPath(),
+        dbSize: this.deps.dataStore.getDbSize(),
+      }
+
+      return health.quickCheck === "ok"
+        ? this.ok("data-store.integrity", "Data Store", "完整性", "数据库完整", details)
+        : this.failed("data-store.integrity", "Data Store", "完整性", "数据库完整性检查失败", details)
+    })
+
     await this.capture(checks, "data-store.cli", "Data Store", "CLI", async () => {
       const debugInfo = await this.deps.getCliDebugInfo()
       const available = debugInfo.status?.available === true
-      return available
-        ? this.ok("data-store.cli", "Data Store", "CLI", "CLI 可用", debugInfo)
-        : this.degraded("data-store.cli", "Data Store", "CLI", "CLI 不可用", debugInfo)
+      const pathAnalysis = analyzeCliPaths(debugInfo)
+      const details = { ...debugInfo, pathAnalysis }
+
+      if (!available) {
+        return this.degraded("data-store.cli", "Data Store", "CLI", "CLI 不可用", details)
+      }
+
+      return pathAnalysis.installedPath
+        && pathAnalysis.preferredInstallPath
+        && pathAnalysis.installedPath !== pathAnalysis.preferredInstallPath
+        ? this.degraded("data-store.cli", "Data Store", "CLI", "CLI 可用，命中路径不是推荐位置", details)
+        : this.ok("data-store.cli", "Data Store", "CLI", "CLI 可用", details)
     })
 
     await this.capture(checks, "data-store.mcp", "Data Store", "MCP", async () => {
       const http = this.deps.getMcpHttpStatus()
       const registrations = await Promise.resolve(this.deps.getMcpServers())
-      return this.ok("data-store.mcp", "Data Store", "MCP", "MCP 状态已读取", {
+      const probe = http.running && http.url
+        ? await this.probeMcpHttp(http.url)
+        : { ok: false, method: "ping", error: "MCP HTTP 未运行" }
+      const unregistered = registrations.filter((server) => !server.registered)
+      const details = {
         http,
+        probe,
         registrations,
-      })
+        unregisteredTargets: unregistered.map((server) => server.target),
+      }
+
+      if (!http.running) {
+        return this.degraded("data-store.mcp", "Data Store", "MCP", "MCP HTTP 未运行", details)
+      }
+      if (!probe.ok) {
+        return this.degraded("data-store.mcp", "Data Store", "MCP", "MCP ping 失败", details)
+      }
+
+      return this.ok("data-store.mcp", "Data Store", "MCP", "MCP 可用", details)
     })
   }
 
@@ -448,6 +586,53 @@ class DiagnosticsService {
         message: error instanceof Error ? error.message : String(error),
         durationMs: Date.now() - startedAt,
       })
+    }
+  }
+
+  private async probeMcpHttp(url: string): Promise<McpHttpProbeResult> {
+    const permission = await this.deps.permissionGuard.check({
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: url,
+      context: { source: "ops.runDiagnostics", target: "data-store.mcp" },
+    })
+
+    if (!permission.allowed) {
+      this.deps.auditSink.record({
+        action: "network.connect",
+        actor: { kind: "user" },
+        resource: url,
+        outcome: "denied",
+        metadata: {
+          source: "ops.runDiagnostics",
+          target: "data-store.mcp",
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      return { ok: false, method: "ping", error: permission.reason }
+    }
+
+    try {
+      const result = await this.deps.probeMcpHttp(url)
+      this.deps.auditSink.record({
+        action: "network.connect",
+        actor: { kind: "user" },
+        resource: url,
+        outcome: "allowed",
+        metadata: { source: "ops.runDiagnostics", target: "data-store.mcp" },
+      })
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.deps.auditSink.record({
+        action: "network.connect",
+        actor: { kind: "user" },
+        resource: url,
+        outcome: "failed",
+        metadata: { source: "ops.runDiagnostics", target: "data-store.mcp", error: message },
+      })
+      return { ok: false, method: "ping", error: message }
     }
   }
 
@@ -533,6 +718,16 @@ class DiagnosticsService {
     details?: Record<string, unknown>,
   ): SynapseDiagnosticsCheck {
     return { id, group, name, status: "failed", severity: "error", message, details }
+  }
+
+  private skipped(
+    id: string,
+    group: string,
+    name: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ): SynapseDiagnosticsCheck {
+    return { id, group, name, status: "skipped", severity: "info", message, details }
   }
 
   private statPath(targetPath: string): Promise<PathStats> {
@@ -642,9 +837,193 @@ function createEmptyConfig(): SynapseConfig {
   }
 }
 
+function summarizeLogSignals(content: string): {
+  warningCount: number
+  errorCount: number
+  samples: string[]
+} {
+  const samples: string[] = []
+  let warningCount = 0
+  let errorCount = 0
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+
+    const isError = /\[ERROR\s*\]/.test(line)
+      || /\b(error|exception|uncaught|unhandled|ERR_[A-Z_]+)\b/i.test(line)
+    const isWarning = /\[WARN\s*\]/.test(line)
+      || /\b(warn|warning|EPIPE|timeout|failed|denied|EACCES|ENOENT)\b/i.test(line)
+
+    if (!isError && !isWarning) continue
+
+    if (isError) {
+      errorCount += 1
+    } else {
+      warningCount += 1
+    }
+
+    if (samples.length < RECENT_LOG_SAMPLE_LIMIT) {
+      samples.push(line.length > 300 ? `${line.slice(0, 300)}...` : line)
+    }
+  }
+
+  return { warningCount, errorCount, samples }
+}
+
+function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {
+  const samples: string[] = []
+  let latestStartupDurationsMs: Record<string, number> = {}
+  let runCount = 0
+  let shutdownCount = 0
+  let rendererBootstrapCount = 0
+  let appMountedCount = 0
+  let latestStartedAt: string | undefined
+  let latestStartedMs: number | undefined
+  let latestRunRendererBootstrapCount = 0
+  let latestRunAppMountedCount = 0
+
+  const recordSample = (line: string) => {
+    if (samples.length >= LIFECYCLE_LOG_SAMPLE_LIMIT) return
+    samples.push(line.length > 300 ? `${line.slice(0, 300)}...` : line)
+  }
+
+  const recordDuration = (key: string, timestamp: LogTimestamp | null) => {
+    if (!timestamp || latestStartedMs === undefined || timestamp.ms < latestStartedMs) return
+    latestStartupDurationsMs[key] = timestamp.ms - latestStartedMs
+  }
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+
+    const timestamp = parseLogTimestamp(line)
+
+    if (line.includes("Electron app is ready. Initializing IPC registry.")) {
+      runCount += 1
+      latestStartedAt = timestamp?.iso
+      latestStartedMs = timestamp?.ms
+      latestStartupDurationsMs = {}
+      latestRunRendererBootstrapCount = 0
+      latestRunAppMountedCount = 0
+      recordDuration("electronReady", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("Data store HTTP server ready.")) {
+      recordDuration("dataStoreHttpReady", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("MCP HTTP server ready.")) {
+      recordDuration("mcpHttpReady", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("Data store initialized.")) {
+      recordDuration("dataStoreInitialized", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("Service registry started. Creating main window.")) {
+      recordDuration("serviceRegistryStarted", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("Main window is ready to show.")) {
+      recordDuration("mainWindowReady", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("Renderer bootstrap started.")) {
+      rendererBootstrapCount += 1
+      latestRunRendererBootstrapCount += 1
+      recordDuration("rendererBootstrapStarted", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("App mounted.")) {
+      appMountedCount += 1
+      latestRunAppMountedCount += 1
+      recordDuration("appMounted", timestamp)
+      recordSample(line)
+      continue
+    }
+
+    if (line.includes("Shutting down data store.") || line.includes("Data store shut down.")) {
+      shutdownCount += 1
+      recordSample(line)
+    }
+  }
+
+  const hasSignals = runCount > 0
+    || shutdownCount > 0
+    || rendererBootstrapCount > 0
+    || appMountedCount > 0
+  const rendererRestartTrace = latestRunRendererBootstrapCount > 1 || latestRunAppMountedCount > 1
+
+  return {
+    hasSignals,
+    runCount,
+    shutdownCount,
+    rendererBootstrapCount,
+    appMountedCount,
+    latestStartedAt,
+    latestStartupDurationsMs,
+    latestRunRendererBootstrapCount,
+    latestRunAppMountedCount,
+    restartTrace: runCount > 1 || shutdownCount > 0,
+    rendererRestartTrace,
+    samples,
+  }
+}
+
+function parseLogTimestamp(line: string): LogTimestamp | null {
+  const match = /^\[(?<timestamp>[^\]]+)\]/.exec(line)
+  const timestamp = match?.groups?.timestamp
+  if (!timestamp) return null
+
+  const ms = Date.parse(timestamp)
+  if (Number.isNaN(ms)) return null
+
+  return { iso: new Date(ms).toISOString(), ms }
+}
+
+function analyzeCliPaths(debugInfo: CliDebugInfo): {
+  installedPath: string | null
+  preferredInstallPath: string | null
+  candidateCount: number
+} {
+  const installedPath = typeof debugInfo.installedPath === "string" && debugInfo.installedPath
+    ? debugInfo.installedPath
+    : null
+  const preferredInstallPath =
+    typeof debugInfo.preferredInstallPath === "string" && debugInfo.preferredInstallPath
+      ? debugInfo.preferredInstallPath
+      : null
+  const candidates = Array.isArray(debugInfo.installPathCandidates)
+    ? new Set(debugInfo.installPathCandidates.filter((item): item is string => typeof item === "string"))
+    : new Set<string>()
+
+  return {
+    installedPath,
+    preferredInstallPath,
+    candidateCount: candidates.size,
+  }
+}
+
 export {
   DiagnosticsService,
   createDiagnosticsFolderName,
   summarizeDiagnosticsChecks,
+  summarizeLogSignals,
+  summarizeServiceLifecycle,
 }
 export type { DiagnosticsServiceDeps }

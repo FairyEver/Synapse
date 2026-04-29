@@ -5,6 +5,8 @@ import type { SynapseDiagnosticsCheck } from "../../../src/types/diagnostics"
 import {
   DiagnosticsService,
   summarizeDiagnosticsChecks,
+  summarizeLogSignals,
+  summarizeServiceLifecycle,
 } from "../diagnostics-service"
 
 describe("summarizeDiagnosticsChecks", () => {
@@ -53,6 +55,55 @@ describe("summarizeDiagnosticsChecks", () => {
   })
 })
 
+describe("summarizeLogSignals", () => {
+  it("counts recent warning and error log lines", () => {
+    expect(summarizeLogSignals([
+      "[2026-04-29T03:11:18.063Z] [WARN ] AgentRuntime queued turn failed.",
+      "{ error: 'write EPIPE' }",
+      "[2026-04-29T03:11:20.000Z] [INFO ] ok",
+    ].join("\n"))).toEqual({
+      warningCount: 1,
+      errorCount: 1,
+      samples: [
+        "[2026-04-29T03:11:18.063Z] [WARN ] AgentRuntime queued turn failed.",
+        "{ error: 'write EPIPE' }",
+      ],
+    })
+  })
+})
+
+describe("summarizeServiceLifecycle", () => {
+  it("extracts startup timing and restart traces from lifecycle logs", () => {
+    const summary = summarizeServiceLifecycle([
+      "[2026-04-29T03:31:20.000Z] [INFO ] [main:main] Electron app is ready. Initializing IPC registry.",
+      "[2026-04-29T03:31:20.100Z] [INFO ] [main:data-store] Data store HTTP server ready.",
+      "[2026-04-29T03:31:20.200Z] [INFO ] [main:data-store] MCP HTTP server ready.",
+      "[2026-04-29T03:31:20.300Z] [INFO ] [main:data-store] Data store initialized.",
+      "[2026-04-29T03:31:20.500Z] [INFO ] [main:main] Service registry started. Creating main window.",
+      "[2026-04-29T03:31:20.800Z] [INFO ] [main:bootstrap.main-window] Main window is ready to show.",
+      "[2026-04-29T03:31:21.000Z] [INFO ] [renderer:renderer.bootstrap] Renderer bootstrap started.",
+      "[2026-04-29T03:31:21.200Z] [INFO ] [renderer:app] App mounted.",
+      "[2026-04-29T03:32:00.000Z] [INFO ] [main:data-store] Data store shut down.",
+    ].join("\n"))
+
+    expect(summary.runCount).toBe(1)
+    expect(summary.shutdownCount).toBe(1)
+    expect(summary.latestStartedAt).toBe("2026-04-29T03:31:20.000Z")
+    expect(summary.latestStartupDurationsMs).toMatchObject({
+      electronReady: 0,
+      dataStoreHttpReady: 100,
+      mcpHttpReady: 200,
+      dataStoreInitialized: 300,
+      serviceRegistryStarted: 500,
+      mainWindowReady: 800,
+      rendererBootstrapStarted: 1000,
+      appMounted: 1200,
+    })
+    expect(summary.restartTrace).toBe(true)
+    expect(summary.rendererRestartTrace).toBe(false)
+  })
+})
+
 describe("DiagnosticsService.collect", () => {
   it("returns a report even when a probe throws", async () => {
     const service = createService({
@@ -77,6 +128,59 @@ describe("DiagnosticsService.collect", () => {
         }),
       ]),
     )
+  })
+
+  it("surfaces recent log warnings, cli path mismatch, datastore health, and mcp probe", async () => {
+    const service = createService({
+      logStore: {
+        getLogDirectory: () => "/logs",
+        listLogFilesInfo: vi.fn(async () => [{ name: "synapse.log", sizeBytes: 100 }]),
+        readLogsByNames: vi.fn(async () => "[2026-04-29T03:11:18.063Z] [WARN ] AgentRuntime queued turn failed."),
+        flush: vi.fn(async () => undefined),
+      },
+      getCliDebugInfo: vi.fn(async () => ({
+        installedPath: "/other/bin/synapse",
+        preferredInstallPath: "/preferred/bin/synapse",
+        installPathCandidates: ["/other/bin/synapse", "/preferred/bin/synapse"],
+        status: { available: true },
+      })),
+      getMcpHttpStatus: vi.fn(() => ({
+        running: true,
+        port: 23578,
+        url: "http://127.0.0.1:23578/mcp",
+      })),
+      getMcpServers: vi.fn(() => [{
+        target: "codex",
+        settingsPath: "/config",
+        settingsFileExists: true,
+        registered: true,
+        mode: "http" as const,
+        url: "http://127.0.0.1:23578/mcp",
+      }]),
+      probeMcpHttp: vi.fn(async () => ({ ok: true, method: "ping", status: 200 })),
+    })
+
+    const report = await service.collect()
+
+    expect(report.overallStatus).toBe("degraded")
+    expect(report.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "logs.recent-signals",
+        status: "degraded",
+      }),
+      expect.objectContaining({
+        id: "data-store.integrity",
+        status: "ok",
+      }),
+      expect.objectContaining({
+        id: "data-store.cli",
+        status: "degraded",
+      }),
+      expect.objectContaining({
+        id: "data-store.mcp",
+        status: "ok",
+      }),
+    ]))
   })
 })
 
@@ -104,6 +208,7 @@ describe("DiagnosticsService.exportBundle", () => {
       fileCount: expect.any(Number),
     })
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/diagnostics.json")).toBe(true)
+    expect(writtenFiles.get("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/summary.md")).toContain("# Synapse Diagnostics Summary")
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/manifest.json")).toBe(true)
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/config/config-backup.json")).toBe(true)
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
@@ -151,11 +256,18 @@ function createService(
     logStore: {
       getLogDirectory: () => "/logs",
       listLogFilesInfo: vi.fn(async () => []),
+      readLogsByNames: vi.fn(async () => ""),
       flush: vi.fn(async () => undefined),
     },
     dataStore: {
       getDbPath: () => "/data/synapse-data.db",
       getDbSize: () => 0,
+      getDiagnosticsHealth: () => ({
+        quickCheck: "ok",
+        metaTableCount: 0,
+        metaColumnCount: 0,
+        operationLogCount: 0,
+      }),
       getTableCount: () => 0,
       exportDatabase: vi.fn(),
     },
@@ -180,6 +292,7 @@ function createService(
       url: "",
     })),
     getMcpServers: vi.fn(() => []),
+    probeMcpHttp: vi.fn(async () => ({ ok: false, method: "ping", error: "MCP HTTP 未运行" })),
     permissionGuard: {
       check: vi.fn(async () => ({ allowed: true as const })),
       registerPolicy: vi.fn(),

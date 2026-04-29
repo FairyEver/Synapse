@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
+import { buildDiagnosticsSummary } from "@/lib/diagnostics-summary"
 import {
   DiagnosticsPanel,
   DiagnosticsReportDetails,
@@ -13,6 +14,7 @@ vi.mock("@/lib/electron-bridge", () => ({
     ops: {
       runDiagnostics: vi.fn(),
       exportDiagnosticsBundle: vi.fn(),
+      ping: vi.fn(),
     },
     shell: {
       showItemInFolder: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
     error: vi.fn(),
     promise: async <T,>(task: () => Promise<T>) => task(),
+    success: vi.fn(),
   }),
 }))
 
@@ -33,6 +36,7 @@ describe("DiagnosticsPanel", () => {
 
     expect(html).toContain("运行诊断后显示结果。")
     expect(html).toContain("导出诊断包")
+    expect(html).toContain("复制摘要")
     expect(html).not.toContain("原始 JSON")
     expect(html).not.toContain("导出位置")
     expect(html).toContain("disabled")
@@ -44,13 +48,19 @@ describe("DiagnosticsPanel", () => {
     expect(html).toContain("系统")
     expect(html).toContain("进程")
     expect(html).toContain("/Users/liyang/Documents/very-long-project-path-that-should-wrap")
-    expect(html).toContain("复制")
+    expect(html).toContain("aria-label=\"复制 path\"")
   })
 
   it("groups checks by group name", () => {
     const groups = groupChecks(createReport().checks)
 
     expect(groups.get("系统")?.map((check) => check.id)).toEqual(["system.process"])
+  })
+
+  it("builds a concise diagnostic summary", () => {
+    expect(buildDiagnosticsSummary(createReport())).toContain("# Synapse Diagnostics Summary")
+    expect(buildDiagnosticsSummary(createReport())).toContain("Synapse 0.2.49")
+    expect(buildDiagnosticsSummary(createReport())).toContain("## 异常项\n无")
   })
 })
 

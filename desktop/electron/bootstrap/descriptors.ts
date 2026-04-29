@@ -352,6 +352,7 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
         url: getMcpServerUrl(),
       }),
       getMcpServers,
+      probeMcpHttp,
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("diagnostics"),
@@ -359,6 +360,36 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
       createConfigBackupPayload,
     })
   },
+}
+
+async function probeMcpHttp(url: string) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+  })
+  const text = await response.text()
+  let payload: unknown
+  try {
+    payload = text ? JSON.parse(text) : null
+  } catch (error) {
+    return {
+      ok: false,
+      method: "ping",
+      status: response.status,
+      error: error instanceof Error ? error.message : "MCP 响应不是 JSON",
+    }
+  }
+
+  const ok = response.ok
+    && typeof payload === "object"
+    && payload !== null
+    && "result" in payload
+    && !("error" in payload)
+
+  return ok
+    ? { ok: true, method: "ping", status: response.status }
+    : { ok: false, method: "ping", status: response.status, error: "MCP ping 响应异常" }
 }
 
 export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> = {

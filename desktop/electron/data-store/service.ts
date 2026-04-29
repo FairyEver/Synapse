@@ -1553,6 +1553,27 @@ class DataStoreService {
     return row.count
   }
 
+  getDiagnosticsHealth(): {
+    quickCheck: string
+    metaTableCount: number
+    metaColumnCount: number
+    operationLogCount: number
+  } {
+    const db = this.getDb()
+    const quickCheckRows = db.prepare("PRAGMA quick_check").all() as { quick_check: string }[]
+    const quickCheck = quickCheckRows.map((row) => row.quick_check).join("\n") || "unknown"
+    const metaTableCount = db.prepare(`SELECT COUNT(*) as count FROM "_meta_tables"`).get() as { count: number }
+    const metaColumnCount = db.prepare(`SELECT COUNT(*) as count FROM "_meta_columns"`).get() as { count: number }
+    const operationLogCount = db.prepare(`SELECT COUNT(*) as count FROM "_operation_log"`).get() as { count: number }
+
+    return {
+      quickCheck,
+      metaTableCount: metaTableCount.count,
+      metaColumnCount: metaColumnCount.count,
+      operationLogCount: operationLogCount.count,
+    }
+  }
+
   exportDatabase(targetPath: string): void {
     const db = this.getDb()
     db.exec("PRAGMA wal_checkpoint(TRUNCATE)")

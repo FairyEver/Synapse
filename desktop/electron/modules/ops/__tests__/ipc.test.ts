@@ -72,6 +72,20 @@ describe("opsIpcModule diagnostics", () => {
       fileCount: 3,
     })
   })
+
+  it("responds to lightweight ping requests", async () => {
+    const harness = createHarness({
+      collect: vi.fn(),
+      exportBundle: vi.fn(),
+    })
+
+    const result = await harness.invoke("synapse:ops:ping", undefined)
+
+    expect(result).toEqual({
+      ok: true,
+      receivedAt: expect.any(String),
+    })
+  })
 })
 
 function createHarness(diagnostics: {

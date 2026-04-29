@@ -165,6 +165,11 @@ export type SynapseOpsDiagnostics = {
   }
 }
 
+export type SynapseOpsPingResult = {
+  ok: true
+  receivedAt: string
+}
+
 export type SynapseRunAsConfig = Record<string, unknown>
 export type SynapseRunAsCheckResult = Record<string, unknown>
 export type SynapseWebhookStatus = NonNullable<SynapseOpsDiagnostics["webhook"]>
@@ -438,6 +443,7 @@ export type SynapseBridge = {
     exportDiagnosticsBundle: (
       payload: { report: SynapseDiagnosticsReport },
     ) => Promise<SynapseDiagnosticsBundleExportResult>
+    ping: () => Promise<SynapseOpsPingResult>
     openLogDirectory: () => Promise<{ ok: true }>
     runAsGet: (projectId: string) => Promise<SynapseRunAsConfig>
     runAsUpdate: (payload: {
