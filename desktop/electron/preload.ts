@@ -68,6 +68,7 @@ const IPC_CHANNELS = {
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
+    "trashItem": "synapse:editor-scan:trash-item",
   },
   "editor-copy": {
     "resolveTarget": "synapse:editor-copy:resolve-target",
@@ -335,6 +336,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["editor-scan"].listSkillFiles)({ dirPath }),
     prepareQuickPublishDraft: (request) =>
       invoke(IPC_CHANNELS["editor-scan"].prepareQuickPublishDraft)(request),
+    trashItem: (request) =>
+      invoke(IPC_CHANNELS["editor-scan"].trashItem)(request),
   },
   editorCopy: {
     resolveTarget: invoke(IPC_CHANNELS["editor-copy"].resolveTarget),

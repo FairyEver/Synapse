@@ -7,16 +7,27 @@
 
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
-import type { EditorScanQuickPublishRequest } from "../../../src/types/editor-scan"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import type {
+  EditorScanQuickPublishRequest,
+  EditorScanTrashRequest,
+} from "../../../src/types/editor-scan"
 import {
   scanAll,
   readItemContent,
   listSkillFiles,
   prepareQuickPublishDraft,
+  trashScanItem,
 } from "../../services/editor-scan-service"
 
 // Schemas
 const editorScanItemSourceSchema = z.enum(["synapse", "external"])
+
+const editorScanTrashInfoSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("path") }),
+  z.object({ mode: z.literal("rule-section"), ruleId: z.string() }),
+  z.object({ mode: z.literal("unsupported"), disabledReason: z.string() }),
+])
 
 const editorScanSkillItemSchema = z.object({
   name: z.string(),
@@ -25,6 +36,7 @@ const editorScanSkillItemSchema = z.object({
   synapseContentId: z.string().nullable(),
   preview: z.string(),
   fileCount: z.number(),
+  trash: editorScanTrashInfoSchema,
 })
 
 const editorScanRuleItemSchema = z.object({
@@ -35,6 +47,7 @@ const editorScanRuleItemSchema = z.object({
   preview: z.string(),
   metadata: z.record(z.string(), z.string()),
   content: z.string().optional(),
+  trash: editorScanTrashInfoSchema,
 })
 
 const editorScanEditorResultSchema = z.object({
@@ -99,6 +112,23 @@ const quickPublishDraftSchema = z.discriminatedUnion("itemType", [
   }),
 ])
 
+const trashRequestSchema = z.object({
+  itemType: z.enum(["skill", "rule"]),
+  itemName: z.string(),
+  itemPath: z.string(),
+  editorId: z.string(),
+  scope: z.enum(["global", "project"]),
+  source: editorScanItemSourceSchema,
+  trash: editorScanTrashInfoSchema,
+  synapseContentId: z.string().nullable().optional(),
+})
+
+const trashResultSchema = z.object({
+  trashed: z.literal(true),
+  mode: z.enum(["path", "rule-section", "unsupported"]),
+  path: z.string(),
+})
+
 export const editorScanIpcModule: IpcModule = {
   id: "editor-scan",
   methods: {
@@ -136,6 +166,19 @@ export const editorScanIpcModule: IpcModule = {
       response: quickPublishDraftSchema,
       handler: async (_ctx, request: EditorScanQuickPublishRequest) => {
         return prepareQuickPublishDraft(request)
+      },
+    },
+    trashItem: {
+      kind: "invoke",
+      channel: "synapse:editor-scan:trash-item",
+      request: trashRequestSchema,
+      response: trashResultSchema,
+      handler: async (ctx, request: EditorScanTrashRequest) => {
+        return trashScanItem(request, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
       },
     },
   },

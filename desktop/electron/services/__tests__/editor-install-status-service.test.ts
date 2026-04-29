@@ -83,6 +83,7 @@ describe("EditorInstallStatusService", () => {
         preview: "Keep it tight.",
         metadata: {},
         content: "Keep it tight.\n",
+        trash: { mode: "rule-section", ruleId: "rule-1" },
       }],
     }))
 
@@ -116,6 +117,7 @@ describe("EditorInstallStatusService", () => {
         preview: "Old text.",
         metadata: {},
         content: "Old text.",
+        trash: { mode: "rule-section", ruleId: "rule-1" },
       }],
     }))
 
@@ -147,6 +149,7 @@ describe("EditorInstallStatusService", () => {
         synapseContentId: "skill-1",
         preview: "Review carefully.",
         fileCount: 2,
+        trash: { mode: "path" },
       }],
     }))
 
@@ -178,6 +181,7 @@ describe("EditorInstallStatusService", () => {
         synapseContentId: null,
         preview: "External review skill.",
         fileCount: 1,
+        trash: { mode: "path" },
       }],
     }))
 

@@ -95,6 +95,8 @@ import type {
   EditorScanQuickPublishRequest,
   EditorScanResult,
   EditorScanSkillFileEntry,
+  EditorScanTrashRequest,
+  EditorScanTrashResult,
 } from "./editor-scan"
 import type {
   SynapseLogClearResult,
@@ -242,6 +244,7 @@ export type SynapseBridge = {
     prepareQuickPublishDraft: (
       request: EditorScanQuickPublishRequest,
     ) => Promise<EditorScanQuickPublishDraft>
+    trashItem: (request: EditorScanTrashRequest) => Promise<EditorScanTrashResult>
   }
   editorCopy: {
     copy: (payload: SynapseCopyToEditorPayload) => Promise<SynapseEditorCopyResult>

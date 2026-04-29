@@ -68,6 +68,7 @@ function EditorScanModule() {
         scope: context.scope,
         projectName: context.projectName,
         content: "content" in item ? item.content : undefined,
+        trash: item.trash,
       })
       setDetailOpen(true)
     },

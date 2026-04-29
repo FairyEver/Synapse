@@ -57,6 +57,7 @@ export const IPC_CHANNELS = {
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
+    "trashItem": "synapse:editor-scan:trash-item",
   },
   "editor-copy": {
     "resolveTarget": "synapse:editor-copy:resolve-target",

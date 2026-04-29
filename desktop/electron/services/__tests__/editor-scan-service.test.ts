@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir, symlink } from "node:fs/promis
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 
 const trashItem = vi.hoisted(() => vi.fn())
 
@@ -39,20 +40,22 @@ function createAllowingSecurity() {
     resource: string
     metadata?: Record<string, unknown>
   }> = []
+  const auditSink: AuditSink = {
+    record: vi.fn((event) => { auditEvents.push(event) }),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
+  const permissionGuard: PermissionGuard = {
+    registerPolicy: vi.fn(() => () => {}),
+    check: vi.fn(async () => ({ allowed: true as const })),
+  }
 
   return {
     auditEvents,
     security: {
       actor: { kind: "user" as const },
-      auditSink: {
-        record: vi.fn((event) => auditEvents.push(event)),
-        list: vi.fn(() => auditEvents),
-        clearForTests: vi.fn(),
-      },
-      permissionGuard: {
-        registerPolicy: vi.fn(() => () => {}),
-        check: vi.fn(async () => ({ allowed: true as const })),
-      },
+      auditSink,
+      permissionGuard,
     },
   }
 }
@@ -609,17 +612,19 @@ describe("editor scan trash", () => {
     const rulePath = path.join(root, "project.md")
     await writeFile(rulePath, "# Rule\n")
     const auditEvents: Array<{ outcome: string; resource: string }> = []
+    const auditSink: AuditSink = {
+      record: vi.fn((event) => { auditEvents.push(event) }),
+      list: vi.fn(() => []),
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(() => () => {}),
+      check: vi.fn(async () => ({ allowed: false as const, reason: "denied" })),
+    }
     const security = {
       actor: { kind: "user" as const },
-      auditSink: {
-        record: vi.fn((event) => auditEvents.push(event)),
-        list: vi.fn(() => auditEvents),
-        clearForTests: vi.fn(),
-      },
-      permissionGuard: {
-        registerPolicy: vi.fn(() => () => {}),
-        check: vi.fn(async () => ({ allowed: false as const, reason: "denied" })),
-      },
+      auditSink,
+      permissionGuard,
     }
 
     await expect(trashScanItem({
