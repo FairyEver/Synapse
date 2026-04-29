@@ -20,7 +20,6 @@ import {
 } from "../../agent-runtime"
 import type { ReplyTarget } from "../../reply-target"
 import type { AgentRelayService } from "../../relay"
-import type { HeartbeatService, SchedulerService } from "../../scheduler"
 import type { SideChannelService } from "../../side-channel"
 import { ConnectorRepository } from "../connector-repository"
 import type { ConnectorRecord, FeishuConnectorSummary } from "../types"
@@ -154,8 +153,6 @@ export class FeishuConnectorService {
   private readonly initFlows = new Map<string, WorkspaceInitFlow>()
   private readonly workspaceReapers = new Map<string, ReturnType<typeof setInterval>>()
   private replyService: FeishuReplyService | undefined
-  private schedulerService: Pick<SchedulerService, "handleFeishuCommand"> | undefined
-  private heartbeatService: Pick<HeartbeatService, "handleFeishuCommand"> | undefined
   private relayService: Pick<AgentRelayService, "bind" | "listBindings" | "send" | "unbind"> | undefined
   private unregisterDispatcher: (() => void) | undefined
 
@@ -181,14 +178,6 @@ export class FeishuConnectorService {
     if (this.unregisterDispatcher) return
     const replyService = this.getReplyService()
     this.unregisterDispatcher = this.deps.sideChannel.registerDispatcher("feishu", replyService)
-  }
-
-  registerSchedulerService(service: Pick<SchedulerService, "handleFeishuCommand">): void {
-    this.schedulerService = service
-  }
-
-  registerHeartbeatService(service: Pick<HeartbeatService, "handleFeishuCommand">): void {
-    this.heartbeatService = service
   }
 
   registerRelayService(service: Pick<AgentRelayService, "bind" | "listBindings" | "send" | "unbind">): void {
@@ -817,20 +806,6 @@ export class FeishuConnectorService {
     const reply = (content: string) =>
       running?.client.replyText(message.replyCtx as FeishuReplyContext, content)
     const isAdmin = isFeishuAdmin(connector, message.userId ?? "")
-    if (isCronAddExec(message.content) && !isAdmin) {
-      this.recordAudit("denied", connector.projectId, connector.id, "cron_addexec", undefined, {
-        sessionKey: message.sessionKey,
-        userId: message.userId,
-        reason: "operator_not_allowed",
-      })
-    }
-    const context = {
-      projectId: connector.projectId,
-      connectorId: connector.id,
-      message,
-      isAdmin,
-      reply,
-    }
     if (this.relayService && await this.handleRelayCommand(connector, message, isAdmin, reply)) {
       this.recordAudit("allowed", connector.projectId, connector.id, "relay_command", undefined, {
         sessionKey: message.sessionKey,
@@ -838,21 +813,7 @@ export class FeishuConnectorService {
       })
       return true
     }
-    if (this.schedulerService && await this.schedulerService.handleFeishuCommand(context)) {
-      this.recordAudit("allowed", connector.projectId, connector.id, "cron_command", undefined, {
-        sessionKey: message.sessionKey,
-        userId: message.userId,
-      })
-      return true
-    }
-    if (this.heartbeatService && await this.heartbeatService.handleFeishuCommand(context)) {
-      this.recordAudit("allowed", connector.projectId, connector.id, "heartbeat_command", undefined, {
-        sessionKey: message.sessionKey,
-        userId: message.userId,
-      })
-      return true
-    }
-    await reply("自动化服务未启动。")
+    await reply("Relay 不可用。")
     return true
   }
 
@@ -1540,11 +1501,7 @@ function parseRelayCommand(content: string): { readonly args: readonly string[] 
 }
 
 function isAutomationCommand(content: string): boolean {
-  return /^(\/cron|\/heartbeat|\/relay)(?:\s|$)/i.test(content.trim())
-}
-
-function isCronAddExec(content: string): boolean {
-  return /^\/cron\s+addexec(?:\s|$)/i.test(content.trim())
+  return /^\/relay(?:\s|$)/i.test(content.trim())
 }
 
 function formatBindingList(

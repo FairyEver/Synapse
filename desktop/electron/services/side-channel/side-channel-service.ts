@@ -17,9 +17,7 @@ import { ReplyOutboxService, type ReplyTarget } from "../reply-target"
 import { AttachmentPolicyError, prepareSideChannelAttachments } from "./attachment-policy"
 import type {
   ReplyTargetRuntime,
-  SideChannelCronAddHandler,
   ReplyTransportDispatcher,
-  SideChannelCronAddRequest,
   SideChannelRelaySendHandler,
   SideChannelRelaySendRequest,
   SideChannelSendRequest,
@@ -46,14 +44,12 @@ export interface SideChannelServiceDeps {
   readonly preferredPort?: number
   readonly bindAddress?: string
   readonly sendPath?: string
-  readonly cronAddPath?: string
   readonly relaySendPath?: string
   readonly maxBodyBytes?: number
   readonly rateLimitPerMinute?: number
 }
 
 const DEFAULT_SEND_PATH = "/send"
-const DEFAULT_CRON_ADD_PATH = "/cron/add"
 const DEFAULT_RELAY_SEND_PATH = "/relay/send"
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 120
 const NETWORK_SERVICE_ID = "side-channel.send"
@@ -62,12 +58,10 @@ export class SideChannelService implements ReplyTargetRuntime {
   private readonly deps: SideChannelServiceDeps
   private readonly token: string
   private readonly sendPath: string
-  private readonly cronAddPath: string
   private readonly relaySendPath: string
   private readonly targets = new Map<string, ReplyTarget>()
   private readonly dispatchers = new Map<string, ReplyTransportDispatcher>()
   private readonly rateLimiter = new Map<string, number[]>()
-  private cronAddHandler: SideChannelCronAddHandler | undefined
   private relaySendHandler: SideChannelRelaySendHandler | undefined
   private binding: ResolvedNetworkBinding | undefined
 
@@ -75,7 +69,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     this.deps = deps
     this.token = deps.token ?? randomUUID()
     this.sendPath = deps.sendPath ?? DEFAULT_SEND_PATH
-    this.cronAddPath = deps.cronAddPath ?? DEFAULT_CRON_ADD_PATH
     this.relaySendPath = deps.relaySendPath ?? DEFAULT_RELAY_SEND_PATH
   }
 
@@ -129,7 +122,6 @@ export class SideChannelService implements ReplyTargetRuntime {
       bindAddress: this.binding?.bindAddress,
       port: this.binding?.port,
       sendPath: this.sendPath,
-      cronAddPath: this.cronAddPath,
       relaySendPath: this.relaySendPath,
     }
   }
@@ -145,7 +137,6 @@ export class SideChannelService implements ReplyTargetRuntime {
       SYNAPSE_SESSION_KEY: sessionKey,
       SYNAPSE_SIDE_CHANNEL_BASE_URL: baseUrl,
       SYNAPSE_SIDE_CHANNEL_URL: url,
-      SYNAPSE_CRON_ADD_URL: `${baseUrl}${this.cronAddPath}`,
       SYNAPSE_RELAY_SEND_URL: `${baseUrl}${this.relaySendPath}`,
       SYNAPSE_SIDE_CHANNEL_TOKEN: this.token,
     }
@@ -164,15 +155,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     return () => {
       if (this.dispatchers.get(kind) === dispatcher) {
         this.dispatchers.delete(kind)
-      }
-    }
-  }
-
-  registerCronAddHandler(handler: SideChannelCronAddHandler): () => void {
-    this.cronAddHandler = handler
-    return () => {
-      if (this.cronAddHandler === handler) {
-        this.cronAddHandler = undefined
       }
     }
   }
@@ -256,7 +238,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     const url = new URL(request.url, "http://127.0.0.1")
     if (
       url.pathname !== this.sendPath
-      && url.pathname !== this.cronAddPath
       && url.pathname !== this.relaySendPath
     ) {
       return jsonResponse(404, false, undefined, {
@@ -288,10 +269,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     this.recordIngressAudit("allowed", url.pathname, { method: request.method })
     try {
       const body = parseJsonBody(request.body)
-      if (url.pathname === this.cronAddPath) {
-        const result = await this.handleCronAdd(body)
-        return jsonResponse(200, true, result)
-      }
       if (url.pathname === this.relaySendPath) {
         const result = await this.handleRelaySend(body)
         return jsonResponse(200, true, result)
@@ -345,27 +322,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     throw new SideChannelError("project_required", "project is required", 400)
   }
 
-  private async handleCronAdd(request: SideChannelCronAddRequest): Promise<unknown> {
-    const project = await this.resolveProject(request.projectId ?? request.project)
-    const sessionKey = this.resolveSessionKey(project.projectId, request.sessionKey ?? request.session_key)
-    const target = this.targets.get(targetKey(project.projectId, sessionKey))
-    if (!target) {
-      throw new SideChannelError("session_not_found", "session reply target was not found", 404)
-    }
-    if (!this.cronAddHandler) {
-      throw new SideChannelError("cron_add_unavailable", "cron add handler is unavailable", 503)
-    }
-    if (request.exec?.trim()) {
-      await this.checkCronExecPermission(project.projectId, sessionKey, request.exec)
-    }
-    return this.cronAddHandler({
-      request,
-      projectId: project.projectId,
-      sessionKey,
-      target,
-    })
-  }
-
   private async handleRelaySend(request: SideChannelRelaySendRequest): Promise<unknown> {
     if (!this.relaySendHandler) {
       throw new SideChannelError("relay_unavailable", "relay send handler is unavailable", 503)
@@ -396,49 +352,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     const matches = [...this.targets.values()].filter((target) => target.projectId === projectId)
     if (matches.length === 1 && matches[0]) return matches[0].sessionKey
     throw new SideChannelError("session_key_required", "sessionKey is required", 400)
-  }
-
-  private async checkCronExecPermission(
-    projectId: string,
-    sessionKey: string,
-    command: string,
-  ): Promise<void> {
-    const permission = await this.deps.permissionGuard?.check({
-      action: "shell.exec",
-      actor: { kind: "agent", id: "side-channel" },
-      resource: command,
-      context: {
-        projectId,
-        sessionKey,
-        source: "side-channel:/cron/add",
-      },
-    })
-    if (permission && !permission.allowed) {
-      this.deps.auditSink?.record({
-        action: "shell.exec",
-        actor: { kind: "agent", id: "side-channel" },
-        resource: command,
-        outcome: "denied",
-        metadata: {
-          projectId,
-          sessionKey,
-          reason: permission.reason,
-          policyId: permission.policyId,
-        },
-      })
-      throw new SideChannelError("permission_denied", permission.reason, 403)
-    }
-    this.deps.auditSink?.record({
-      action: "shell.exec",
-      actor: { kind: "agent", id: "side-channel" },
-      resource: command,
-      outcome: "allowed",
-      metadata: {
-        projectId,
-        sessionKey,
-        source: "side-channel:/cron/add",
-      },
-    })
   }
 
   private outbox(projectId: string): ReplyOutboxService {
@@ -510,13 +423,13 @@ function outboxPayload(
 
 function parseJsonBody(
   body: Buffer,
-): SideChannelSendRequest & SideChannelCronAddRequest & SideChannelRelaySendRequest {
+): SideChannelSendRequest & SideChannelRelaySendRequest {
   try {
     const value = JSON.parse(body.toString("utf8")) as unknown
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new Error("JSON body must be an object")
     }
-    return value as SideChannelSendRequest & SideChannelCronAddRequest & SideChannelRelaySendRequest
+    return value as SideChannelSendRequest & SideChannelRelaySendRequest
   } catch (error) {
     throw new SideChannelError(
       "invalid_json",

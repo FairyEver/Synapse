@@ -5,8 +5,6 @@ import type {
   ConnectorEntryV1,
   DataNamespace,
   DataRepository,
-  HeartbeatEntryV1,
-  ScheduledJobEntryV1,
   SecretEntryV1,
   WorkspaceBindingEntryV1,
 } from "../runtime/data-repo"
@@ -40,14 +38,10 @@ async function runMigration(
   const connectors = dataRepository.namespace<ConnectorEntryV1>("connectors")
   const workspaceBindings = dataRepository.namespace<WorkspaceBindingEntryV1>("workspace.bindings")
   const conversations = dataRepository.namespace<ConversationEntryV1>("conversations")
-  const scheduledJobs = dataRepository.namespace<ScheduledJobEntryV1>("scheduled.jobs")
-  const heartbeats = dataRepository.namespace<HeartbeatEntryV1>("scheduled.heartbeat")
 
   await migrateConnectors(dataRepository, connectors, projectIdByRepositoryId, logger)
   await migrateConversations(conversations, projectIdByRepositoryId)
   await migrateWorkspaceBindings(workspaceBindings, projectIdByRepositoryId)
-  await migrateScheduledJobs(scheduledJobs, projectIdByRepositoryId)
-  await migrateHeartbeats(heartbeats, projectIdByRepositoryId)
 
   logger.info("Project-scoped connector data migration checked.", {
     mappedRepositoryCount: projectIdByRepositoryId.size,
@@ -198,81 +192,6 @@ async function migrateWorkspaceBindings(
       })
     }
   }
-}
-
-async function migrateScheduledJobs(
-  scheduledJobs: DataNamespace<ScheduledJobEntryV1>,
-  projectIdByRepositoryId: ReadonlyMap<string, string>,
-): Promise<void> {
-  const entries = await scheduledJobs.list()
-
-  for (const job of entries) {
-    const nextProjectId = projectIdByRepositoryId.get(job.projectId)
-    if (!nextProjectId) {
-      continue
-    }
-    const backupJobId = backupId("scheduled.jobs", job.id)
-    if (!await scheduledJobs.get(backupJobId)) {
-      await scheduledJobs.upsert({
-        ...job,
-        id: backupJobId,
-        enabled: false,
-        metadata: {
-          ...recordValue(job.metadata),
-          migrationBackupOf: job.id,
-          migratedToProjectId: nextProjectId,
-        },
-      })
-    }
-    await scheduledJobs.upsert({
-      ...job,
-      projectId: nextProjectId,
-      connectorId: rewriteFeishuConnectorId(job.connectorId, job.projectId, nextProjectId),
-      updatedAt: new Date().toISOString(),
-    })
-  }
-}
-
-async function migrateHeartbeats(
-  heartbeats: DataNamespace<HeartbeatEntryV1>,
-  projectIdByRepositoryId: ReadonlyMap<string, string>,
-): Promise<void> {
-  const entries = await heartbeats.list()
-
-  for (const heartbeat of entries) {
-    const nextProjectId = projectIdByRepositoryId.get(heartbeat.projectId)
-    if (!nextProjectId) {
-      continue
-    }
-    const backupHeartbeatId = backupId("scheduled.heartbeat", heartbeat.id)
-    if (!await heartbeats.get(backupHeartbeatId)) {
-      await heartbeats.upsert({
-        ...heartbeat,
-        id: backupHeartbeatId,
-        enabled: false,
-        paused: true,
-        metadata: {
-          ...recordValue(heartbeat.metadata),
-          migrationBackupOf: heartbeat.id,
-          migratedToProjectId: nextProjectId,
-        },
-      })
-    }
-    await heartbeats.upsert({
-      ...heartbeat,
-      projectId: nextProjectId,
-      connectorId: rewriteFeishuConnectorId(heartbeat.connectorId, heartbeat.projectId, nextProjectId),
-      updatedAt: new Date().toISOString(),
-    })
-  }
-}
-
-function rewriteFeishuConnectorId(
-  connectorId: string,
-  previousProjectId: string,
-  nextProjectId: string,
-): string {
-  return connectorId === `feishu:${previousProjectId}` ? `feishu:${nextProjectId}` : connectorId
 }
 
 function rewriteFeishuSecretRef(

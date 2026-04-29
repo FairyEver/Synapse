@@ -33,7 +33,6 @@ const SIDE_CHANNEL_ENV_ALLOWLIST = [
   "SYNAPSE_SESSION_KEY",
   "SYNAPSE_SIDE_CHANNEL_BASE_URL",
   "SYNAPSE_SIDE_CHANNEL_URL",
-  "SYNAPSE_CRON_ADD_URL",
   "SYNAPSE_RELAY_SEND_URL",
   "SYNAPSE_SIDE_CHANNEL_TOKEN",
 ]
@@ -393,4 +392,3 @@ function parseProbeOutput(output: string): Record<string, unknown> {
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
-

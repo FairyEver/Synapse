@@ -49,12 +49,13 @@ import { DiagnosticsService } from "../services/diagnostics-service"
 import { LicenseClient, LicenseService } from "../services/license"
 import { createConfigBackupPayload } from "../services/config-backup-service"
 import {
-  CronExecutionService,
-  HeartbeatRepository,
-  HeartbeatService,
-  ScheduledJobRepository,
-  SchedulerService,
-} from "../services/scheduler"
+  ScheduledTaskRepository,
+  ScheduledTaskRunRepository,
+  ShellTaskAction,
+  TaskActionRegistry,
+  TaskSchedulerExecutionService,
+  TaskSchedulerService,
+} from "../services/task-scheduler"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -691,90 +692,42 @@ export const coreFeishuConnectorDescriptor: ServiceDescriptor<FeishuConnectorSer
   },
 }
 
-export const coreSchedulerDescriptor: ServiceDescriptor<SchedulerService> = {
-  id: "core.scheduler",
+export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService> = {
+  id: "core.task-scheduler",
   criticality: "degraded",
   dependsOn: [
-    "core.project-containers",
-    "core.side-channel",
-    "core.feishu-connector",
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
-    "core.execution-isolation",
   ],
   create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    const sideChannel = ctx.registry.get<SideChannelService>("core.side-channel")
-    const feishuConnector = ctx.registry.get<FeishuConnectorService>("core.feishu-connector")
-    const execution = new CronExecutionService({
-      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
-      dataRepository,
+    const defaultCwd = app.getPath("userData")
+    const tasks = new ScheduledTaskRepository({
+      tasks: dataRepository.namespace("task-scheduler.tasks"),
+    })
+    const runs = new ScheduledTaskRunRepository({
+      runs: dataRepository.namespace("task-scheduler.runs"),
+    })
+    const actions = new TaskActionRegistry()
+    actions.register(new ShellTaskAction({
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-      executionIsolation: ctx.registry.get<ExecutionIsolationService>("core.execution-isolation"),
-      sideChannel,
-      feishuConnector,
-      listProjects: listConfiguredProjects,
-      logger: ctx.logger.child("scheduler.execution"),
+    }))
+    const execution = new TaskSchedulerExecutionService({
+      tasks,
+      runs,
+      actions,
+      defaultCwd,
     })
-    const service = new SchedulerService({
-      repository: new ScheduledJobRepository({
-        jobs: dataRepository.namespace("scheduled.jobs"),
-      }),
+    return new TaskSchedulerService({
+      tasks,
+      runs,
       execution,
-      sideChannel,
-      logger: ctx.logger.child("scheduler"),
+      permissionGuard,
+      defaultCwd,
     })
-    feishuConnector.registerSchedulerService(service)
-    return service
-  },
-  start(service) {
-    return service.start()
-  },
-  stop(service) {
-    service.stop()
-  },
-}
-
-export const coreHeartbeatDescriptor: ServiceDescriptor<HeartbeatService> = {
-  id: "core.heartbeat",
-  criticality: "degraded",
-  dependsOn: [
-    "core.project-containers",
-    "core.side-channel",
-    "core.feishu-connector",
-    "core.data-repository",
-    "core.permission-guard",
-    "core.audit-sink",
-    "core.execution-isolation",
-  ],
-  create(ctx) {
-    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
-    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    const sideChannel = ctx.registry.get<SideChannelService>("core.side-channel")
-    const feishuConnector = ctx.registry.get<FeishuConnectorService>("core.feishu-connector")
-    const execution = new CronExecutionService({
-      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
-      dataRepository,
-      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-      executionIsolation: ctx.registry.get<ExecutionIsolationService>("core.execution-isolation"),
-      sideChannel,
-      feishuConnector,
-      listProjects: listConfiguredProjects,
-      logger: ctx.logger.child("heartbeat.execution"),
-    })
-    const service = new HeartbeatService({
-      repository: new HeartbeatRepository({
-        heartbeats: dataRepository.namespace("scheduled.heartbeat"),
-      }),
-      execution,
-      logger: ctx.logger.child("heartbeat"),
-    })
-    feishuConnector.registerHeartbeatService(service)
-    return service
   },
   start(service) {
     return service.start()

@@ -115,7 +115,6 @@ const statusSchema = z.object({
     bindAddress: z.string().optional(),
     port: z.number().optional(),
     sendPath: z.string(),
-    cronAddPath: z.string(),
     relaySendPath: z.string(),
   }).optional(),
   webhook: z.object({

@@ -492,145 +492,108 @@ export const agentCommandSettingsSchema: NamespaceSchema<AgentCommandSettingsEnt
     && typeof (v as AgentCommandSettingsEntryV1).updatedAt === "string",
 }
 
-export type ScheduledJobKindV1 = "prompt" | "exec"
-export type ScheduledJobPlatformV1 = "feishu"
-export type ScheduledJobSessionModeV1 = "reuse" | "new_per_run"
-export type ScheduledJobStatusV1 = "success" | "failed" | "timeout" | "skipped"
+export type ScheduledTaskTriggerV1 =
+  | { type: "cron"; expr: string; timezone?: string }
+  | { type: "interval"; everyMinutes: number; anchor?: "created_at" | "last_completed_at" }
 
-export interface ScheduledJobEntryV1 extends Record<string, unknown> {
+export type ScheduledTaskScopeV1 =
+  | { type: "global" }
+  | { type: "project"; projectId: string }
+
+export type ScheduledTaskActionV1 = {
+  type: "shell_command"
+  mode: "command" | "script"
+  content: string
+  env?: Record<string, string>
+  timeoutMins?: number | null
+}
+
+export type ScheduledTaskStatusV1 = "success" | "failed" | "timeout" | "cancelled" | "skipped"
+export type ScheduledTaskRunStatusV1 = "running" | ScheduledTaskStatusV1
+export type ScheduledTaskRunTriggerV1 = "schedule" | "manual" | "missed_run"
+
+export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
-  projectId: string
-  platform: ScheduledJobPlatformV1
-  connectorId: string
-  sessionKey: string
-  channelKey?: string
-  channelName?: string
-  workspaceKey?: string
-  workspacePath?: string
-  replyCtx?: Record<string, unknown>
-  kind: ScheduledJobKindV1
-  cronExpr: string
-  prompt?: string
-  exec?: string
-  workDir?: string
+  name: string
   description?: string
+  scope: ScheduledTaskScopeV1
+  cwd?: string
+  trigger: ScheduledTaskTriggerV1
+  action: ScheduledTaskActionV1
   enabled: boolean
-  silent: boolean
-  mute: boolean
-  sessionMode: ScheduledJobSessionModeV1
-  modeOverride?: string
-  timeoutMins?: number
+  missedRunPolicy: "skip" | "run_once"
+  overlapPolicy: "skip"
   createdAt: string
   updatedAt: string
-  createdBy?: string
-  lastRunAt?: string
-  lastError?: string
-  lastStatus?: ScheduledJobStatusV1
   nextRunAt?: string
+  lastRunAt?: string
+  lastStatus?: ScheduledTaskStatusV1
   runCount: number
 }
 
-export const scheduledJobsSchema: NamespaceSchema<ScheduledJobEntryV1> = {
-  name: "scheduled.jobs",
-  backend: "json",
-  currentVersion: 1,
-  migrations: noMigrations,
-  validate: (v): v is ScheduledJobEntryV1 =>
-    isAnyRecord<ScheduledJobEntryV1>(v)
-    && (v as ScheduledJobEntryV1).schemaVersion === 1
-    && typeof (v as ScheduledJobEntryV1).id === "string"
-    && typeof (v as ScheduledJobEntryV1).projectId === "string"
-    && (v as ScheduledJobEntryV1).platform === "feishu"
-    && typeof (v as ScheduledJobEntryV1).connectorId === "string"
-    && typeof (v as ScheduledJobEntryV1).sessionKey === "string"
-    && isOptionalString((v as ScheduledJobEntryV1).channelKey)
-    && isOptionalString((v as ScheduledJobEntryV1).channelName)
-    && isOptionalString((v as ScheduledJobEntryV1).workspaceKey)
-    && isOptionalString((v as ScheduledJobEntryV1).workspacePath)
-    && isOptionalRecord((v as ScheduledJobEntryV1).replyCtx)
-    && ((v as ScheduledJobEntryV1).kind === "prompt" || (v as ScheduledJobEntryV1).kind === "exec")
-    && typeof (v as ScheduledJobEntryV1).cronExpr === "string"
-    && isOptionalString((v as ScheduledJobEntryV1).prompt)
-    && isOptionalString((v as ScheduledJobEntryV1).exec)
-    && isOptionalString((v as ScheduledJobEntryV1).workDir)
-    && isOptionalString((v as ScheduledJobEntryV1).description)
-    && typeof (v as ScheduledJobEntryV1).enabled === "boolean"
-    && typeof (v as ScheduledJobEntryV1).silent === "boolean"
-    && typeof (v as ScheduledJobEntryV1).mute === "boolean"
-    && ((v as ScheduledJobEntryV1).sessionMode === "reuse" || (v as ScheduledJobEntryV1).sessionMode === "new_per_run")
-    && isOptionalString((v as ScheduledJobEntryV1).modeOverride)
-    && isOptionalNumber((v as ScheduledJobEntryV1).timeoutMins)
-    && typeof (v as ScheduledJobEntryV1).createdAt === "string"
-    && typeof (v as ScheduledJobEntryV1).updatedAt === "string"
-    && isOptionalString((v as ScheduledJobEntryV1).createdBy)
-    && isOptionalString((v as ScheduledJobEntryV1).lastRunAt)
-    && isOptionalString((v as ScheduledJobEntryV1).lastError)
-    && ((v as ScheduledJobEntryV1).lastStatus === undefined || isScheduledJobStatus((v as ScheduledJobEntryV1).lastStatus))
-    && isOptionalString((v as ScheduledJobEntryV1).nextRunAt)
-    && typeof (v as ScheduledJobEntryV1).runCount === "number",
-}
-
-export type HeartbeatStatusV1 = "success" | "failed" | "timeout" | "skipped"
-
-export interface HeartbeatEntryV1 extends Record<string, unknown> {
+export interface ScheduledTaskRunEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
-  projectId: string
-  platform: "feishu"
-  connectorId: string
-  sessionKey: string
-  channelKey?: string
-  workspaceKey?: string
-  workspacePath?: string
-  replyCtx?: Record<string, unknown>
-  enabled: boolean
-  paused: boolean
-  intervalMins: number
-  prompt: string
-  silent: boolean
-  mute: boolean
-  timeoutMins?: number
-  createdAt: string
-  updatedAt: string
-  lastRunAt?: string
-  lastError?: string
-  lastStatus?: HeartbeatStatusV1
-  nextRunAt?: string
-  runCount: number
+  taskId: string
+  startedAt: string
+  finishedAt?: string
+  status: ScheduledTaskRunStatusV1
+  exitCode?: number | null
+  stdout?: string
+  stderr?: string
+  error?: string
+  triggeredBy: ScheduledTaskRunTriggerV1
 }
 
-export const scheduledHeartbeatSchema: NamespaceSchema<HeartbeatEntryV1> = {
-  name: "scheduled.heartbeat",
+export const taskSchedulerTasksSchema: NamespaceSchema<ScheduledTaskEntryV1> = {
+  name: "task-scheduler.tasks",
   backend: "json",
   currentVersion: 1,
   migrations: noMigrations,
-  validate: (v): v is HeartbeatEntryV1 =>
-    isAnyRecord<HeartbeatEntryV1>(v)
-    && (v as HeartbeatEntryV1).schemaVersion === 1
-    && typeof (v as HeartbeatEntryV1).id === "string"
-    && typeof (v as HeartbeatEntryV1).projectId === "string"
-    && (v as HeartbeatEntryV1).platform === "feishu"
-    && typeof (v as HeartbeatEntryV1).connectorId === "string"
-    && typeof (v as HeartbeatEntryV1).sessionKey === "string"
-    && isOptionalString((v as HeartbeatEntryV1).channelKey)
-    && isOptionalString((v as HeartbeatEntryV1).workspaceKey)
-    && isOptionalString((v as HeartbeatEntryV1).workspacePath)
-    && isOptionalRecord((v as HeartbeatEntryV1).replyCtx)
-    && typeof (v as HeartbeatEntryV1).enabled === "boolean"
-    && typeof (v as HeartbeatEntryV1).paused === "boolean"
-    && typeof (v as HeartbeatEntryV1).intervalMins === "number"
-    && typeof (v as HeartbeatEntryV1).prompt === "string"
-    && typeof (v as HeartbeatEntryV1).silent === "boolean"
-    && typeof (v as HeartbeatEntryV1).mute === "boolean"
-    && isOptionalNumber((v as HeartbeatEntryV1).timeoutMins)
-    && typeof (v as HeartbeatEntryV1).createdAt === "string"
-    && typeof (v as HeartbeatEntryV1).updatedAt === "string"
-    && isOptionalString((v as HeartbeatEntryV1).lastRunAt)
-    && isOptionalString((v as HeartbeatEntryV1).lastError)
-    && ((v as HeartbeatEntryV1).lastStatus === undefined || isScheduledJobStatus((v as HeartbeatEntryV1).lastStatus))
-    && isOptionalString((v as HeartbeatEntryV1).nextRunAt)
-    && typeof (v as HeartbeatEntryV1).runCount === "number",
+  validate: (v): v is ScheduledTaskEntryV1 =>
+    isAnyRecord<ScheduledTaskEntryV1>(v)
+    && (v as ScheduledTaskEntryV1).schemaVersion === 1
+    && typeof (v as ScheduledTaskEntryV1).id === "string"
+    && typeof (v as ScheduledTaskEntryV1).name === "string"
+    && isOptionalString((v as ScheduledTaskEntryV1).description)
+    && isTaskScope((v as ScheduledTaskEntryV1).scope)
+    && isOptionalString((v as ScheduledTaskEntryV1).cwd)
+    && isTaskTrigger((v as ScheduledTaskEntryV1).trigger)
+    && isTaskAction((v as ScheduledTaskEntryV1).action)
+    && typeof (v as ScheduledTaskEntryV1).enabled === "boolean"
+    && ((v as ScheduledTaskEntryV1).missedRunPolicy === "skip" || (v as ScheduledTaskEntryV1).missedRunPolicy === "run_once")
+    && (v as ScheduledTaskEntryV1).overlapPolicy === "skip"
+    && typeof (v as ScheduledTaskEntryV1).createdAt === "string"
+    && typeof (v as ScheduledTaskEntryV1).updatedAt === "string"
+    && isOptionalString((v as ScheduledTaskEntryV1).nextRunAt)
+    && isOptionalString((v as ScheduledTaskEntryV1).lastRunAt)
+    && isOptionalTaskStatus((v as ScheduledTaskEntryV1).lastStatus)
+    && typeof (v as ScheduledTaskEntryV1).runCount === "number",
+}
+
+export const taskSchedulerRunsSchema: NamespaceSchema<ScheduledTaskRunEntryV1> = {
+  name: "task-scheduler.runs",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is ScheduledTaskRunEntryV1 =>
+    isAnyRecord<ScheduledTaskRunEntryV1>(v)
+    && (v as ScheduledTaskRunEntryV1).schemaVersion === 1
+    && typeof (v as ScheduledTaskRunEntryV1).id === "string"
+    && typeof (v as ScheduledTaskRunEntryV1).taskId === "string"
+    && typeof (v as ScheduledTaskRunEntryV1).startedAt === "string"
+    && isOptionalString((v as ScheduledTaskRunEntryV1).finishedAt)
+    && isTaskRunStatus((v as ScheduledTaskRunEntryV1).status)
+    && (
+      (v as ScheduledTaskRunEntryV1).exitCode === undefined
+      || (v as ScheduledTaskRunEntryV1).exitCode === null
+      || typeof (v as ScheduledTaskRunEntryV1).exitCode === "number"
+    )
+    && isOptionalString((v as ScheduledTaskRunEntryV1).stdout)
+    && isOptionalString((v as ScheduledTaskRunEntryV1).stderr)
+    && isOptionalString((v as ScheduledTaskRunEntryV1).error)
+    && isTaskRunTrigger((v as ScheduledTaskRunEntryV1).triggeredBy),
 }
 
 export type RunAsCheckStatusV1 = "pass" | "fail" | "unsupported"
@@ -1097,6 +1060,55 @@ function isOutboxPayload(value: unknown): value is OutboxPayloadV1 {
     && isOptionalRecord(value.metadata)
 }
 
-function isScheduledJobStatus(value: unknown): value is ScheduledJobStatusV1 {
-  return ["success", "failed", "timeout", "skipped"].includes(String(value))
+function isTaskScope(value: unknown): value is ScheduledTaskScopeV1 {
+  return isAnyRecord<ScheduledTaskScopeV1>(value)
+    && (
+      value.type === "global"
+      || (value.type === "project" && typeof value.projectId === "string")
+    )
+}
+
+function isTaskTrigger(value: unknown): value is ScheduledTaskTriggerV1 {
+  return isAnyRecord<ScheduledTaskTriggerV1>(value)
+    && (
+      (
+        value.type === "cron"
+        && typeof value.expr === "string"
+        && isOptionalString(value.timezone)
+      )
+      || (
+        value.type === "interval"
+        && typeof value.everyMinutes === "number"
+        && (value.anchor === undefined || value.anchor === "created_at" || value.anchor === "last_completed_at")
+      )
+    )
+}
+
+function isTaskAction(value: unknown): value is ScheduledTaskActionV1 {
+  return isAnyRecord<ScheduledTaskActionV1>(value)
+    && value.type === "shell_command"
+    && (value.mode === "command" || value.mode === "script")
+    && typeof value.content === "string"
+    && (value.env === undefined || isStringRecord(value.env))
+    && (
+      value.timeoutMins === undefined
+      || value.timeoutMins === null
+      || typeof value.timeoutMins === "number"
+    )
+}
+
+function isOptionalTaskStatus(value: unknown): boolean {
+  return value === undefined || isTaskStatus(value)
+}
+
+function isTaskStatus(value: unknown): value is ScheduledTaskStatusV1 {
+  return ["success", "failed", "timeout", "cancelled", "skipped"].includes(String(value))
+}
+
+function isTaskRunStatus(value: unknown): value is ScheduledTaskRunStatusV1 {
+  return value === "running" || isTaskStatus(value)
+}
+
+function isTaskRunTrigger(value: unknown): value is ScheduledTaskRunTriggerV1 {
+  return ["schedule", "manual", "missed_run"].includes(String(value))
 }

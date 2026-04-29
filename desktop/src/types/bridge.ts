@@ -34,13 +34,7 @@ import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
   SynapseFeishuConnectorRuntimeStatus,
   SynapseFeishuConnectorSummary,
-  SynapseFeishuHeartbeat,
-  SynapseFeishuHeartbeatPayload,
-  SynapseFeishuHeartbeatWithProject,
   SynapseFeishuManualCredentialsPayload,
-  SynapseFeishuScheduledJob,
-  SynapseFeishuScheduledJobPayload,
-  SynapseFeishuScheduledJobWithProject,
   SynapseFeishuSetupBeginResult,
   SynapseFeishuSetupPollResult,
   SynapseFeishuWorkspaceBinding,
@@ -126,6 +120,12 @@ import type {
   SynapseRepositoryValidationResult,
 } from "./repository"
 import type { SynapseAppUpdateState } from "./update"
+import type {
+  ScheduledTask,
+  ScheduledTaskCreateInput,
+  ScheduledTaskRun,
+  ScheduledTaskUpdateInput,
+} from "./task-scheduler"
 
 export type SynapseOpsDiagnostics = {
   appVersion: string
@@ -136,7 +136,6 @@ export type SynapseOpsDiagnostics = {
     bindAddress?: string
     port?: number
     sendPath: string
-    cronAddPath: string
     relaySendPath: string
   }
   webhook?: {
@@ -355,6 +354,17 @@ export type SynapseBridge = {
     registerMCP: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
     onChanged: (listener: (event: DataStoreChangeEvent) => void) => () => void
   }
+  taskScheduler: {
+    listTasks: () => Promise<ScheduledTask[]>
+    getTask: (id: string) => Promise<ScheduledTask | null>
+    createTask: (input: ScheduledTaskCreateInput) => Promise<ScheduledTask>
+    updateTask: (payload: { id: string; patch: ScheduledTaskUpdateInput }) => Promise<ScheduledTask>
+    deleteTask: (id: string) => Promise<{ deleted: boolean }>
+    setTaskEnabled: (payload: { id: string; enabled: boolean }) => Promise<ScheduledTask>
+    runTask: (id: string) => Promise<ScheduledTaskRun | null>
+    stopRun: (runId: string) => Promise<{ stopped: boolean }>
+    listRuns: (taskId: string, options?: { limit?: number }) => Promise<ScheduledTaskRun[]>
+  }
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
@@ -410,40 +420,6 @@ export type SynapseBridge = {
       unbindWorkspaceBinding: (
         payload: SynapseFeishuWorkspaceUnbindPayload,
       ) => Promise<{ ok: true }>
-      listScheduledJobs: (projectId: string) => Promise<SynapseFeishuScheduledJob[]>
-      listAllScheduledJobs: () => Promise<SynapseFeishuScheduledJobWithProject[]>
-      createScheduledJob: (
-        payload: SynapseFeishuScheduledJobPayload,
-      ) => Promise<SynapseFeishuScheduledJob>
-      deleteScheduledJob: (
-        payload: { projectId: string; id: string },
-      ) => Promise<{ ok: true }>
-      setScheduledJobEnabled: (
-        payload: { projectId: string; id: string; enabled: boolean },
-      ) => Promise<SynapseFeishuScheduledJob>
-      setScheduledJobMuted: (
-        payload: { projectId: string; id: string; mute: boolean },
-      ) => Promise<SynapseFeishuScheduledJob>
-      runScheduledJob: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuScheduledJob | null>
-      listHeartbeats: (projectId: string) => Promise<SynapseFeishuHeartbeat[]>
-      listAllHeartbeats: () => Promise<SynapseFeishuHeartbeatWithProject[]>
-      upsertHeartbeat: (
-        payload: SynapseFeishuHeartbeatPayload,
-      ) => Promise<SynapseFeishuHeartbeat>
-      pauseHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuHeartbeat>
-      deleteHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<{ ok: true }>
-      resumeHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuHeartbeat>
-      runHeartbeat: (
-        payload: { projectId: string; id: string },
-      ) => Promise<SynapseFeishuHeartbeat | null>
     }
   }
   ops: {

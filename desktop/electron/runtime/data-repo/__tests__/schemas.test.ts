@@ -21,8 +21,8 @@ import {
   runAsConfigSchema,
   runAsPreflightSchema,
   secretsSchema,
-  scheduledHeartbeatSchema,
-  scheduledJobsSchema,
+  taskSchedulerRunsSchema,
+  taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
   workspaceBindingsSchema,
@@ -53,8 +53,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "run_as.config",
         "run_as.preflight",
         "secrets",
-        "scheduled.heartbeat",
-        "scheduled.jobs",
+        "task-scheduler.runs",
+        "task-scheduler.tasks",
         "webhook.config",
         "webhook.runs",
         "workspace.bindings",
@@ -86,8 +86,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(outboxSchema.backend).toBe("sqlite")
     expect(repoPendingPushesSchema.backend).toBe("sqlite")
     expect(repoRepositoriesSchema.backend).toBe("json")
-    expect(scheduledJobsSchema.backend).toBe("json")
-    expect(scheduledHeartbeatSchema.backend).toBe("json")
+    expect(taskSchedulerTasksSchema.backend).toBe("json")
+    expect(taskSchedulerRunsSchema.backend).toBe("json")
     expect(runAsConfigSchema.backend).toBe("json")
     expect(runAsPreflightSchema.backend).toBe("jsonl")
     expect(webhookConfigSchema.backend).toBe("encrypted-json")
@@ -267,42 +267,38 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       }),
     ).toBe(true)
     expect(
-      scheduledJobsSchema.validate({
-        id: "scheduled:1",
+      taskSchedulerTasksSchema.validate({
+        id: "task:1",
         schemaVersion: 1,
-        projectId: "proj-1",
-        platform: "feishu",
-        connectorId: "feishu:proj-1",
-        sessionKey: "feishu:oc_group:ou_user",
-        kind: "prompt",
-        cronExpr: "*/30 * * * *",
-        prompt: "check",
+        name: "Nightly backup",
+        scope: { type: "global" },
+        trigger: { type: "cron", expr: "0 2 * * *" },
+        action: {
+          type: "shell_command",
+          mode: "command",
+          content: "echo backup",
+          timeoutMins: 30,
+        },
         enabled: true,
-        silent: false,
-        mute: false,
-        sessionMode: "reuse",
-        createdAt: "2026-04-25T00:00:00Z",
-        updatedAt: "2026-04-25T00:00:00Z",
+        missedRunPolicy: "skip",
+        overlapPolicy: "skip",
+        createdAt: "2026-04-29T00:00:00.000Z",
+        updatedAt: "2026-04-29T00:00:00.000Z",
         runCount: 0,
       }),
     ).toBe(true)
     expect(
-      scheduledHeartbeatSchema.validate({
-        id: "heartbeat:1",
+      taskSchedulerRunsSchema.validate({
+        id: "run:1",
         schemaVersion: 1,
-        projectId: "proj-1",
-        platform: "feishu",
-        connectorId: "feishu:proj-1",
-        sessionKey: "feishu:oc_group:ou_user",
-        enabled: true,
-        paused: false,
-        intervalMins: 60,
-        prompt: "check",
-        silent: false,
-        mute: false,
-        createdAt: "2026-04-25T00:00:00Z",
-        updatedAt: "2026-04-25T00:00:00Z",
-        runCount: 0,
+        taskId: "task:1",
+        startedAt: "2026-04-29T00:00:00.000Z",
+        finishedAt: "2026-04-29T00:00:01.000Z",
+        status: "success",
+        exitCode: 0,
+        stdout: "ok",
+        stderr: "",
+        triggeredBy: "manual",
       }),
     ).toBe(true)
     expect(

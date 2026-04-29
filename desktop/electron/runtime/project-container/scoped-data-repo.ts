@@ -22,8 +22,6 @@ const PROJECT_SCOPED_NAMES = new Set([
   "audit",
   "agent.commands",
   "agent.command-settings",
-  "scheduled.jobs",
-  "scheduled.heartbeat",
 ])
 
 export class ProjectScopedDataRepoImpl implements ProjectScopedDataRepo {
