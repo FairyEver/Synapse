@@ -4,7 +4,6 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
 import { FormDialog } from "@/components/form-dialog"
 import type { SynapseVariable } from "@/types/config"
 
@@ -13,8 +12,7 @@ type VariableSubstitutionDialogProps = {
   onOpenChange: (open: boolean) => void
   placeholders: string[]
   repositoryVariables: SynapseVariable[]
-  repositoryUuid: string | null
-  onConfirm: (substitutions: Record<string, string>, saveToRepo: boolean) => Promise<void> | void
+  onConfirm: (substitutions: Record<string, string>) => Promise<void> | void
 }
 
 function matchVariable(
@@ -31,11 +29,9 @@ function VariableSubstitutionDialog({
   onOpenChange,
   placeholders,
   repositoryVariables,
-  repositoryUuid,
   onConfirm,
 }: VariableSubstitutionDialogProps) {
   const [values, setValues] = useState<Record<string, string>>({})
-  const [saveToRepo, setSaveToRepo] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const initialValues = useMemo(() => {
@@ -50,7 +46,6 @@ function VariableSubstitutionDialog({
   useEffect(() => {
     if (open) {
       setValues(initialValues)
-      setSaveToRepo(false)
       setIsSubmitting(false)
     }
   }, [open, initialValues])
@@ -66,11 +61,11 @@ function VariableSubstitutionDialog({
 
     setIsSubmitting(true)
     try {
-      await onConfirm(values, saveToRepo)
+      await onConfirm(values)
     } finally {
       setIsSubmitting(false)
     }
-  }, [isSubmitting, onConfirm, saveToRepo, values])
+  }, [isSubmitting, onConfirm, values])
 
   return (
     <Dialog
@@ -81,24 +76,11 @@ function VariableSubstitutionDialog({
     >
       <FormDialog
         title="变量替换"
-        description="以下占位符将在安装时被替换。留空则保留原文。"
+        description="留空则保留原文。"
         footer={
-          <div className="flex w-full items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="save-to-repo"
-                checked={saveToRepo}
-                onCheckedChange={setSaveToRepo}
-                disabled={!repositoryUuid || isSubmitting}
-              />
-              <Label htmlFor="save-to-repo" className="text-sm font-normal">
-                保存新变量到仓库
-              </Label>
-            </div>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "安装中..." : "继续安装"}
-            </Button>
-          </div>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "安装中..." : "继续安装"}
+          </Button>
         }
         onSubmit={(e) => {
           e.preventDefault()
