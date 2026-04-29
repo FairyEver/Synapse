@@ -1,29 +1,76 @@
 import type { SynapseRepositoryConfig, SynapseVariable } from "@/types/config"
 
-function buildRepositoryVariablesPatch(
+type RepositoryVariableChangeSet = {
+  newVariables: SynapseVariable[]
+  updatedVariables: SynapseVariable[]
+}
+
+function findVariable(
+  name: string,
+  variables: SynapseVariable[],
+): SynapseVariable | undefined {
+  const normalizedName = name.toLowerCase()
+
+  return variables.find((variable) => variable.name.toLowerCase() === normalizedName)
+}
+
+function buildRepositoryVariableChangeSet(
   repository: SynapseRepositoryConfig,
   substitutions: Record<string, string>,
-): Pick<SynapseRepositoryConfig, "variables"> | null {
+): RepositoryVariableChangeSet {
   const existingVariables = repository.variables ?? []
   const newVariables: SynapseVariable[] = []
+  const updatedVariables: SynapseVariable[] = []
 
   for (const [name, value] of Object.entries(substitutions)) {
     if (!value) continue
-    const exists = existingVariables.some(
-      (variable) => variable.name.toLowerCase() === name.toLowerCase(),
-    )
-    if (!exists) {
+
+    const existing = findVariable(name, existingVariables)
+
+    if (!existing) {
       newVariables.push({ name, value })
+      continue
+    }
+
+    if (existing.value !== value) {
+      updatedVariables.push({ ...existing, value })
     }
   }
 
-  if (newVariables.length === 0) {
+  return { newVariables, updatedVariables }
+}
+
+function hasRepositoryVariableChanges(changeSet: RepositoryVariableChangeSet): boolean {
+  return changeSet.newVariables.length > 0 || changeSet.updatedVariables.length > 0
+}
+
+function buildRepositoryVariablesPatch(
+  repository: SynapseRepositoryConfig,
+  changeSet: RepositoryVariableChangeSet,
+): Pick<SynapseRepositoryConfig, "variables"> | null {
+  if (!hasRepositoryVariableChanges(changeSet)) {
     return null
   }
 
+  const updatedByName = new Map(
+    changeSet.updatedVariables.map((variable) => [
+      variable.name.toLowerCase(),
+      variable,
+    ]),
+  )
+  const existingVariables = repository.variables ?? []
+  const nextExistingVariables = existingVariables.map((variable) =>
+    updatedByName.get(variable.name.toLowerCase()) ?? variable,
+  )
+
   return {
-    variables: [...existingVariables, ...newVariables],
+    variables: [...nextExistingVariables, ...changeSet.newVariables],
   }
 }
 
-export { buildRepositoryVariablesPatch }
+export {
+  buildRepositoryVariableChangeSet,
+  buildRepositoryVariablesPatch,
+  hasRepositoryVariableChanges,
+}
+export type { RepositoryVariableChangeSet }

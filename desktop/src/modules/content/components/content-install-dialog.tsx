@@ -34,9 +34,15 @@ import type {
   SynapseEditorInstallFormValues,
 } from "@/types/editor"
 import { VariableSubstitutionDialog } from "./variable-substitution-dialog"
+import { VariableSaveConfirmationDialog } from "./variable-save-confirmation-dialog"
 import { detectPlaceholders } from "@/lib/variable-substitution"
 import { installFormDefinitionByEditorId } from "@/definitions/generated/renderer-registry"
-import { buildRepositoryVariablesPatch } from "@/modules/content/lib/repository-variables"
+import {
+  buildRepositoryVariableChangeSet,
+  buildRepositoryVariablesPatch,
+  hasRepositoryVariableChanges,
+  type RepositoryVariableChangeSet,
+} from "@/modules/content/lib/repository-variables"
 import {
   EditorWriteTargetSelector,
   type EditorWriteTargetInitialSelection,
@@ -73,7 +79,11 @@ function ContentInstallDialog({
   const { updateRepository } = useRepositoryActions()
   const [preloadedContent, setPreloadedContent] = useState<string | null>(null)
   const [isVariableConfirmOpen, setIsVariableConfirmOpen] = useState(false)
+  const [isVariableSaveConfirmOpen, setIsVariableSaveConfirmOpen] = useState(false)
   const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([])
+  const [pendingVariableChanges, setPendingVariableChanges] =
+    useState<RepositoryVariableChangeSet | null>(null)
+  const [isSavingVariables, setIsSavingVariables] = useState(false)
   const pendingSubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
   const variableConfirmPassedRef = useRef(false)
   const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
@@ -103,7 +113,10 @@ function ContentInstallDialog({
     setIsRuleProjectInstallFormOpen(false)
     setPreloadedContent(null)
     setIsVariableConfirmOpen(false)
+    setIsVariableSaveConfirmOpen(false)
     setDetectedPlaceholders([])
+    setPendingVariableChanges(null)
+    setIsSavingVariables(false)
     pendingSubstitutionsRef.current = undefined
     variableConfirmPassedRef.current = false
   }, [editor?.id, open])
@@ -228,7 +241,6 @@ function ContentInstallDialog({
 
   const handleVariableConfirm = async (
     substitutions: Record<string, string>,
-    saveToRepo: boolean,
   ) => {
     const filtered = Object.fromEntries(
       Object.entries(substitutions).filter(([, v]) => v.length > 0),
@@ -236,20 +248,52 @@ function ContentInstallDialog({
     pendingSubstitutionsRef.current = Object.keys(filtered).length > 0 ? filtered : undefined
     variableConfirmPassedRef.current = true
 
-    if (saveToRepo && activeRepository) {
-      try {
-        const patch = buildRepositoryVariablesPatch(activeRepository, substitutions)
-        if (patch) {
-          await updateRepository(activeRepository.uuid, patch)
-        }
-      } catch (error) {
-        logger.warn("Failed to save variables to repository.", { error })
-        warning("变量未保存，安装会继续。")
+    if (activeRepository) {
+      const changes = buildRepositoryVariableChangeSet(activeRepository, substitutions)
+
+      if (hasRepositoryVariableChanges(changes)) {
+        setPendingVariableChanges(changes)
+        setIsVariableConfirmOpen(false)
+        setIsVariableSaveConfirmOpen(true)
+        return
       }
     }
 
     setIsVariableConfirmOpen(false)
     await handleInstall()
+  }
+
+  const continueInstallAfterVariableSaveDecision = async () => {
+    setIsVariableSaveConfirmOpen(false)
+    setPendingVariableChanges(null)
+    await handleInstall()
+  }
+
+  const handleSkipVariableSave = async () => {
+    await continueInstallAfterVariableSaveDecision()
+  }
+
+  const handleSaveVariableChanges = async () => {
+    if (isSavingVariables) {
+      return
+    }
+
+    setIsSavingVariables(true)
+    try {
+      if (activeRepository && pendingVariableChanges) {
+        const patch = buildRepositoryVariablesPatch(activeRepository, pendingVariableChanges)
+        if (patch) {
+          await updateRepository(activeRepository.uuid, patch)
+        }
+      }
+    } catch (error) {
+      logger.warn("Failed to save variables to repository.", { error })
+      warning("变量未保存，安装会继续。")
+    } finally {
+      setIsSavingVariables(false)
+    }
+
+    await continueInstallAfterVariableSaveDecision()
   }
 
   const handleInstall = async () => {
@@ -324,8 +368,21 @@ function ContentInstallDialog({
         }}
         placeholders={detectedPlaceholders}
         repositoryVariables={activeRepository?.variables ?? []}
-        repositoryUuid={activeRepository?.uuid ?? null}
         onConfirm={handleVariableConfirm}
+      />
+      <VariableSaveConfirmationDialog
+        changes={pendingVariableChanges}
+        isSubmitting={isSavingVariables}
+        onOpenChange={(next) => {
+          if (!next) {
+            setPendingVariableChanges(null)
+            variableConfirmPassedRef.current = false
+          }
+          setIsVariableSaveConfirmOpen(next)
+        }}
+        onSave={handleSaveVariableChanges}
+        onSkip={handleSkipVariableSave}
+        open={isVariableSaveConfirmOpen}
       />
 
       {RuleProjectInstallForm && item.type === "rule" ? (
