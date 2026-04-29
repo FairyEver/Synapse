@@ -455,7 +455,7 @@ class DataStoreService {
     } catch (error) {
       logger.warn("Database corrupted. Creating fresh database.", { error })
       corrupted = true
-      this.backupAndReopenDatabase("corrupt")
+      this.backupAndReopenDatabase()
     }
 
     this.recoverLatestLegacyBackupIfCurrentIsEmpty()
@@ -749,12 +749,12 @@ class DataStoreService {
     `).all() as { name: string }[]).map((row) => row.name)
   }
 
-  private backupAndReopenDatabase(reason: "legacy" | "corrupt"): void {
+  private backupAndReopenDatabase(): void {
     try { this.db?.close() } catch { /* ignore */ }
     this.db = null
 
     const timestamp = Date.now()
-    const suffix = reason === "legacy" ? `legacy.${timestamp}` : `corrupt.${timestamp}`
+    const suffix = `corrupt.${timestamp}`
     const walPath = `${this.dbPath}-wal`
     const shmPath = `${this.dbPath}-shm`
 
