@@ -25,6 +25,11 @@ export interface BeforeQuitDeps {
 }
 
 export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
+  updateService.setBeforeInstallQuitHandler(() => {
+    logger.info("Update install requested. Allowing app to quit.")
+    deps.setAllowQuit(true)
+  })
+
   app.on("before-quit", async (event) => {
     // Cancel any in-flight update download. Best-effort, never blocks.
     try {

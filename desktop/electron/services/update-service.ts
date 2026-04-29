@@ -75,9 +75,14 @@ class UpdateService {
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
+  private beforeInstallQuitHandler: (() => void) | null = null
 
   setWindowManager(windowManager: WindowManager): void {
     this.windowManager = windowManager
+  }
+
+  setBeforeInstallQuitHandler(handler: (() => void) | null): void {
+    this.beforeInstallQuitHandler = handler
   }
 
   private clearDownloadTracking(): void {
@@ -143,6 +148,12 @@ class UpdateService {
     logger.info("Installing downloaded update.", {
       version: this.state.releaseVersion,
     })
+
+    try {
+      this.beforeInstallQuitHandler?.()
+    } catch (error) {
+      logger.error("Failed to prepare app quit for update install.", error)
+    }
 
     autoUpdater.quitAndInstall()
   }

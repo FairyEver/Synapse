@@ -107,6 +107,7 @@ describe("UpdateService", () => {
     updaterMock.autoUpdater.removeAllListeners()
     updaterMock.autoUpdater.downloadUpdate.mockClear()
     updaterMock.autoUpdater.checkForUpdates.mockClear()
+    updaterMock.autoUpdater.quitAndInstall.mockClear()
     Object.defineProperty(process, "platform", {
       configurable: true,
       value: "darwin",
@@ -219,5 +220,22 @@ describe("UpdateService", () => {
 
     expect(updaterMock.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
     expect(updateService.getState().status).toBe("not-available")
+  })
+
+  it("prepares app quit before installing a downloaded update", async () => {
+    const { updateService } = await importUpdateService()
+    const beforeInstallQuit = vi.fn()
+
+    await updateService.checkForUpdates()
+    updaterMock.autoUpdater.emit("update-downloaded", {
+      version: "0.2.32",
+      downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
+    })
+
+    updateService.setBeforeInstallQuitHandler(beforeInstallQuit)
+    await updateService.installUpdate()
+
+    expect(beforeInstallQuit).toHaveBeenCalledTimes(1)
+    expect(updaterMock.autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
   })
 })
