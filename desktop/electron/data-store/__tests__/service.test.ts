@@ -67,6 +67,69 @@ function createLegacyDatabase(filePath: string): void {
   db.close()
 }
 
+function createEmptyCurrentDatabaseWithOperationLog(filePath: string): void {
+  const db = new DatabaseSync(filePath)
+  db.exec(`
+    CREATE TABLE "_meta_tables" (
+      name TEXT PRIMARY KEY,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE "_meta_columns" (
+      table_name TEXT NOT NULL,
+      column_name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      choices TEXT,
+      description TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (table_name, column_name)
+    );
+    CREATE TABLE "_operation_log" (
+      "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+      "source" TEXT NOT NULL,
+      "action" TEXT NOT NULL,
+      "table_name" TEXT,
+      "affected" INTEGER,
+      "dry_run" INTEGER NOT NULL DEFAULT 0,
+      "created_at" TEXT NOT NULL
+    );
+  `)
+  db.close()
+}
+
+function createCurrentDatabaseWithoutColumnDescriptions(filePath: string): void {
+  const db = new DatabaseSync(filePath)
+  db.exec(`
+    CREATE TABLE "_meta_tables" (
+      name TEXT PRIMARY KEY,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE "_meta_columns" (
+      table_name TEXT NOT NULL,
+      column_name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      choices TEXT,
+      PRIMARY KEY (table_name, column_name)
+    );
+    CREATE TABLE "wdbc_money" (
+      "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+      "created_at" TEXT NOT NULL DEFAULT '',
+      "updated_at" TEXT NOT NULL DEFAULT '',
+      "person" TEXT
+    );
+  `)
+  const now = "2026-04-24T07:33:41.375Z"
+  db.prepare(`INSERT INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+    .run("wdbc_money", "部门内奖罚金钱支出收入记录", now, now)
+  db.prepare(`INSERT INTO "_meta_columns" (table_name, column_name, kind, choices) VALUES (?, ?, ?, ?)`)
+    .run("wdbc_money", "person", "single_choice", JSON.stringify(["张三", "李四"]))
+  db.prepare(`INSERT INTO "wdbc_money" (created_at, updated_at, person) VALUES (?, ?, ?)`)
+    .run(now, now, "张三")
+  db.close()
+}
+
 describe("DataStoreService table descriptions", () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-data-store-"))
@@ -201,6 +264,41 @@ describe("DataStoreService legacy database migration", () => {
       kind: "single_choice",
       choices: ["张三", "李四"],
     }))
+  })
+
+  it("recovers a legacy backup when the buggy current database only has empty system tables", async () => {
+    createEmptyCurrentDatabaseWithOperationLog(path.join(tempDir, "synapse-data.db"))
+    createLegacyDatabase(path.join(tempDir, "synapse-data.db.legacy.100"))
+
+    const module = await import("../service")
+    service = module.dataStoreService
+    service.open()
+
+    expect(service.listTables()).toContainEqual(expect.objectContaining({
+      name: "wdbc_money",
+      rowCount: 1,
+    }))
+  })
+
+  it("does not restore a legacy backup over a current database with user tables", async () => {
+    createCurrentDatabaseWithoutColumnDescriptions(path.join(tempDir, "synapse-data.db"))
+    createLegacyDatabase(path.join(tempDir, "synapse-data.db.legacy.100"))
+
+    const module = await import("../service")
+    service = module.dataStoreService
+    service.open()
+
+    expect(service.listTables()).toContainEqual(expect.objectContaining({
+      name: "wdbc_money",
+      rowCount: 1,
+    }))
+    expect(service.describeTable("wdbc_money").columns).toContainEqual(expect.objectContaining({
+      name: "person",
+      kind: "single_choice",
+      choices: ["张三", "李四"],
+      description: "",
+    }))
+    expect(readdirSync(tempDir).some((name) => /^synapse-data\.db\.legacy-migration\.\d+$/.test(name))).toBe(false)
   })
 
   it("imports a legacy database backup", async () => {

@@ -497,7 +497,7 @@ class DataStoreService {
 
     const cols = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
     const colNames = new Set(cols.map((col) => col.name))
-    return !["table_name", "column_name", "kind", "choices", "description"].every((name) => colNames.has(name))
+    return !["table_name", "column_name", "kind"].every((name) => colNames.has(name))
   }
 
   private recoverLatestLegacyBackupIfCurrentIsEmpty(): void {
@@ -799,6 +799,20 @@ class DataStoreService {
         "created_at" TEXT NOT NULL
       )
     `)
+    this.ensureSystemMetaColumnShape()
+  }
+
+  private ensureSystemMetaColumnShape(): void {
+    const db = this.getDb()
+    const columns = db.prepare(`PRAGMA table_info("_meta_columns")`).all() as { name: string }[]
+    const names = new Set(columns.map((column) => column.name))
+
+    if (!names.has("choices")) {
+      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN choices TEXT`)
+    }
+    if (!names.has("description")) {
+      db.exec(`ALTER TABLE "_meta_columns" ADD COLUMN description TEXT NOT NULL DEFAULT ''`)
+    }
   }
 
   private syncMetaTables(): void {
