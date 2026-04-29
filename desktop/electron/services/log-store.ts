@@ -1,5 +1,4 @@
 import { app } from "electron"
-import { spawn } from "node:child_process"
 import { createWriteStream, type WriteStream } from "node:fs"
 import {
   copyFile,
@@ -14,6 +13,7 @@ import {
 import os from "node:os"
 import path from "node:path"
 import { inspect } from "node:util"
+import { createZipArchive } from "../runtime/archive"
 import type {
   SynapseLogClearResult,
   SynapseLogEntry,
@@ -151,111 +151,6 @@ function writeFallbackError(message: string, error: unknown): void {
       })
 
   process.stderr.write(`[synapse-log] ${message}\n${formattedError}\n`)
-}
-
-function formatArchiveSpawnError(error: unknown): string {
-  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-    return "当前系统缺少导出日志压缩包所需的工具。"
-  }
-
-  return error instanceof Error ? error.message : "启动日志导出命令失败。"
-}
-
-function formatArchiveFailureMessage(output: string): string {
-  const fallbackMessage = "导出日志压缩包失败，请稍后重试。"
-  const firstLine = output
-    .trim()
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-
-  return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
-}
-
-function escapePowerShellSingleQuotedString(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
-}
-
-function runArchiveCommand(
-  command: string,
-  args: string[],
-  options?: {
-    cwd?: string
-  },
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn(command, args, {
-      cwd: options?.cwd,
-      env: {
-        ...process.env,
-      },
-    })
-
-    let stdout = ""
-    let stderr = ""
-
-    childProcess.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8")
-    })
-
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8")
-    })
-
-    childProcess.on("error", (error) => {
-      reject(new Error(formatArchiveSpawnError(error)))
-    })
-
-    childProcess.on("close", (code) => {
-      if (code === 0) {
-        resolve()
-        return
-      }
-
-      reject(new Error(formatArchiveFailureMessage(`${stdout}\n${stderr}`)))
-    })
-  })
-}
-
-async function createZipArchive(sourceDirectoryPath: string, outputFilePath: string): Promise<void> {
-  if (process.platform === "win32") {
-    const script = [
-      "Compress-Archive",
-      "-LiteralPath",
-      escapePowerShellSingleQuotedString(sourceDirectoryPath),
-      "-DestinationPath",
-      escapePowerShellSingleQuotedString(outputFilePath),
-      "-CompressionLevel",
-      "Optimal",
-      "-Force",
-    ].join(" ")
-
-    await runArchiveCommand("powershell.exe", [
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      script,
-    ])
-    return
-  }
-
-  if (process.platform === "darwin") {
-    await runArchiveCommand("ditto", [
-      "-c",
-      "-k",
-      "--keepParent",
-      sourceDirectoryPath,
-      outputFilePath,
-    ])
-    return
-  }
-
-  await runArchiveCommand(
-    "zip",
-    ["-r", "-q", outputFilePath, path.basename(sourceDirectoryPath)],
-    { cwd: path.dirname(sourceDirectoryPath) },
-  )
 }
 
 /**
@@ -531,7 +426,13 @@ class LogService {
           await copyFile(logFile.path, path.join(stagingDirectoryPath, logFile.name))
         }
 
-        await createZipArchive(stagingDirectoryPath, exportFilePath)
+        await createZipArchive(stagingDirectoryPath, exportFilePath, {
+          messages: {
+            missingTool: "当前系统缺少导出日志压缩包所需的工具。",
+            startFailed: "启动日志导出命令失败。",
+            failed: "导出日志压缩包失败，请稍后重试。",
+          },
+        })
       } finally {
         await rm(stagingRootPath, { recursive: true, force: true }).catch(() => undefined)
       }
