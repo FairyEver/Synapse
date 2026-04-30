@@ -43,6 +43,23 @@ describe("ShellTaskAction", () => {
     }))
   })
 
+  it("uses PowerShell when requested", async () => {
+    const runner = { run: vi.fn(async () => processResult({ stdout: "ok" })) }
+    const action = new ShellTaskAction({ processRunner: runner as never, platform: "win32" })
+
+    await action.execute({
+      task: createTask({ content: "Write-Output ok", shell: "powershell" }),
+      runId: "run:1",
+      cwd: "C:\\tmp",
+      abortSignal: new AbortController().signal,
+    })
+
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      command: "powershell.exe",
+      args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "Write-Output ok"],
+    }))
+  })
+
   it("maps non-zero exits to failed", async () => {
     const runner = { run: vi.fn(async () => processResult({ exitCode: 2, stderr: "nope" })) }
     const action = new ShellTaskAction({ processRunner: runner as never, platform: "darwin" })
@@ -101,7 +118,10 @@ function processResult(overrides: Partial<ControlledProcessResult> = {}): Contro
   }
 }
 
-function createTask(action: { readonly content: string }): ScheduledTaskEntryV1 {
+function createTask(action: {
+  readonly content: string
+  readonly shell?: "posix" | "cmd" | "powershell"
+}): ScheduledTaskEntryV1 {
   return {
     id: "task:1",
     schemaVersion: 1,

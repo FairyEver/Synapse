@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
@@ -52,9 +53,10 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
 function AgentModule() {
   const activeRepository = useActiveRepository()
   const { config } = useAppConfig()
+  const platform = getRendererPlatform()
   const projectScope = useMemo(() =>
-    resolveAgentProjectScope(activeRepository, config.global.projects),
-  [activeRepository, config.global.projects])
+    resolveAgentProjectScope(activeRepository, config.global.projects, platform),
+  [activeRepository, config.global.projects, platform])
   const [draft, setDraft] = useState("")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)

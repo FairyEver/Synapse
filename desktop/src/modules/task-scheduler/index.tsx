@@ -11,6 +11,7 @@ import {
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { getRendererPlatform } from "@/lib/runtime-platform"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,13 +24,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -82,6 +76,7 @@ const logger = createRendererLogger("task-scheduler")
 
 function TaskSchedulerModule() {
   const { config } = useAppConfig()
+  const platform = getRendererPlatform()
   const { tasks, loading, error, refresh } = useTaskSchedulerTasks()
   const { promise } = useAppNotifications()
   const [formState, setFormState] = useState<TaskFormDialogState>({ mode: "create" })
@@ -151,58 +146,58 @@ function TaskSchedulerModule() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full min-h-0 flex-col gap-4 bg-muted/30 p-4">
-        <Card className="min-h-0 flex-1 ring-0">
-          <CardHeader>
-            <CardTitle>定时任务</CardTitle>
-            <CardAction className="flex items-center gap-2">
-              <IconButton
-                label="刷新"
-                onClick={() => {
-                  void refresh()
-                }}
-              >
-                <RefreshCw />
-              </IconButton>
-              <Button
-                onClick={() => {
-                  setFormState({ mode: "create" })
-                  setIsFormOpen(true)
-                }}
-              >
-                <Plus />
-                新建任务
-              </Button>
-            </CardAction>
-          </CardHeader>
+      <div className="flex h-full min-h-0 flex-col gap-2.5 bg-muted/30 px-2 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-medium text-foreground">定时任务</h2>
+          <div className="flex items-center gap-2">
+            <IconButton
+              label="刷新"
+              onClick={() => {
+                void refresh()
+              }}
+            >
+              <RefreshCw />
+            </IconButton>
+            <Button
+              onClick={() => {
+                setFormState({ mode: "create" })
+                setIsFormOpen(true)
+              }}
+            >
+              <Plus />
+              新建任务
+            </Button>
+          </div>
+        </div>
 
-          <CardContent className="min-h-0 flex-1 overflow-auto pt-4">
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
-            {!loading && tasks.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <History />
-                  </EmptyMedia>
-                  <EmptyTitle>暂无任务</EmptyTitle>
-                  <EmptyDescription>新建任务后会按计划执行。</EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button
-                    onClick={() => {
-                      setFormState({ mode: "create" })
-                      setIsFormOpen(true)
-                    }}
-                  >
-                    <Plus />
-                    新建任务
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            ) : null}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
+          {!loading && tasks.length === 0 ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <History />
+                </EmptyMedia>
+                <EmptyTitle>暂无任务</EmptyTitle>
+                <EmptyDescription>新建任务后会按计划执行。</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button
+                  onClick={() => {
+                    setFormState({ mode: "create" })
+                    setIsFormOpen(true)
+                  }}
+                >
+                  <Plus />
+                  新建任务
+                </Button>
+              </EmptyContent>
+            </Empty>
+          ) : null}
 
-            {tasks.length > 0 ? (
+          {tasks.length > 0 ? (
+            <div className="rounded-lg bg-background">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -286,13 +281,14 @@ function TaskSchedulerModule() {
                   ))}
                 </TableBody>
               </Table>
-            ) : null}
-          </CardContent>
-        </Card>
+            </div>
+          ) : null}
+        </div>
 
         <TaskFormDialog
           busy={busy}
           open={isFormOpen}
+          platform={platform}
           projects={config.global.projects}
           state={formState}
           onCreate={handleCreate}

@@ -33,6 +33,7 @@ type TaskFormDialogProps = {
   open: boolean
   state: TaskFormDialogState
   projects: readonly SynapseProjectConfig[]
+  platform?: string
   busy: boolean
   onOpenChange: (open: boolean) => void
   onCreate: (input: ScheduledTaskCreateInput) => Promise<void>
@@ -43,6 +44,7 @@ function TaskFormDialog({
   open,
   state,
   projects,
+  platform,
   busy,
   onOpenChange,
   onCreate,
@@ -50,16 +52,16 @@ function TaskFormDialog({
 }: TaskFormDialogProps) {
   const defaultProjectId = projects[0]?.id ?? ""
   const [form, setForm] = useState<TaskFormState>(() =>
-    createTaskFormState(state.task, defaultProjectId),
+    createTaskFormState(state.task, defaultProjectId, platform),
   )
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
-      setForm(createTaskFormState(state.task, defaultProjectId))
+      setForm(createTaskFormState(state.task, defaultProjectId, platform))
       setError(null)
     }
-  }, [defaultProjectId, open, state])
+  }, [defaultProjectId, open, platform, state])
 
   const updateField = <K extends keyof TaskFormState>(key: K, value: TaskFormState[K]) => {
     setForm((current) => ({
@@ -200,7 +202,7 @@ function TaskFormDialog({
             </Field>
           ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <Field label="执行类型">
               <Select
                 value={form.actionMode}
@@ -212,6 +214,21 @@ function TaskFormDialog({
                 <SelectContent>
                   <SelectItem value="command">命令</SelectItem>
                   <SelectItem value="script">脚本</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Shell">
+              <Select
+                value={form.actionShell}
+                onValueChange={(value) => updateField("actionShell", value as TaskFormState["actionShell"])}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="posix">POSIX sh</SelectItem>
+                  <SelectItem value="cmd">cmd.exe</SelectItem>
+                  <SelectItem value="powershell">PowerShell</SelectItem>
                 </SelectContent>
               </Select>
             </Field>

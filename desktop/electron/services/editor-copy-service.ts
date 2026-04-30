@@ -12,6 +12,8 @@ import type {
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
 } from "../../src/types/editor"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
+import { arePathsEqualForCompare } from "../../src/lib/path-compare"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { editorAdapterService } from "./editor-adapter-service"
 import { pathExists } from "./fs-utils"
@@ -106,7 +108,10 @@ function deriveSafeRuleId(source: SynapseEditorCopySource): string {
 }
 
 function isSamePath(left: string, right: string): boolean {
-  return path.resolve(left) === path.resolve(right)
+  return arePathsEqualForCompare(left, right, {
+    platform: process.platform,
+    resolvePath: path.resolve,
+  })
 }
 
 function toSamePathUnavailableTarget(
@@ -312,7 +317,12 @@ class EditorCopyService {
       )
 
       for (const file of draft.files) {
-        const targetFilePath = path.join(stagingDirectoryPath, file.originalName)
+        const originalName = normalizeContentAttachmentPath(file.originalName)
+        if (!originalName) {
+          throw new Error("附件文件名不能为空。")
+        }
+
+        const targetFilePath = path.join(stagingDirectoryPath, originalName)
         await mkdir(path.dirname(targetFilePath), { recursive: true })
         await writeFile(targetFilePath, file.bytes)
       }

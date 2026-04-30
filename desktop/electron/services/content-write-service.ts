@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -256,7 +257,21 @@ async function resolveAttachmentRecords(
     (baseline?.attachments ?? []).map((attachment) => [attachment.sha256, attachment] as const),
   )
   const nextAttachments: SynapseContentAttachmentRecord[] = []
-  const pendingWrites = skillPayload.files.filter((file) => !file.sha256 || file.bytes)
+  const normalizedFiles = skillPayload.files.map((file) => ({
+    ...file,
+    originalName: normalizeContentAttachmentPath(file.originalName),
+  }))
+  const seenOriginalNames = new Set<string>()
+  for (const file of normalizedFiles) {
+    if (!file.originalName) {
+      throw new Error("附件文件名不能为空。")
+    }
+    if (seenOriginalNames.has(file.originalName)) {
+      throw new Error(`附件文件名重复：${file.originalName}`)
+    }
+    seenOriginalNames.add(file.originalName)
+  }
+  const pendingWrites = normalizedFiles.filter((file) => !file.sha256 || file.bytes)
   const written = await attachmentsPoolService.writeAttachments(
     context.repositoryRootPath,
     pendingWrites
@@ -274,7 +289,7 @@ async function resolveAttachmentRecords(
       .filter((file): file is { originalName: string; size: number; bytes: Uint8Array } => file !== null),
   )
 
-  for (const file of skillPayload.files) {
+  for (const file of normalizedFiles) {
     if (file.sha256 && !file.bytes) {
       const existingAttachment = existingAttachmentsBySha.get(file.sha256)
 

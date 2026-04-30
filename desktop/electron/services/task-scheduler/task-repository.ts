@@ -165,6 +165,14 @@ function validateTask(task: ScheduledTaskEntryV1): void {
     throw new Error("everyMinutes must be >= 1")
   }
   if (!task.action.content.trim()) throw new Error("action content is required")
+  if (
+    task.action.shell !== undefined
+    && task.action.shell !== "posix"
+    && task.action.shell !== "cmd"
+    && task.action.shell !== "powershell"
+  ) {
+    throw new Error("shell must be posix, cmd, or powershell")
+  }
   if (task.action.timeoutMins !== null && task.action.timeoutMins !== undefined) {
     if (!Number.isInteger(task.action.timeoutMins) || task.action.timeoutMins < 1) {
       throw new Error("timeoutMins must be >= 1 or null")

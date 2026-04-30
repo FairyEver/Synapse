@@ -29,3 +29,26 @@ jobs:
         run: pnpm --filter @synapse/desktop run check:ipc-codegen
       - name: Verify Phase 0 hard constraints
         run: pnpm --filter @synapse/desktop run check:hard-constraints
+
+  desktop-windows:
+    name: Desktop Windows typecheck + tests + package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @synapse/desktop run typecheck
+      - name: Run tests
+        run: pnpm --filter @synapse/desktop run test
+      - name: Build desktop
+        run: pnpm --filter @synapse/desktop run build
+      - name: Package Windows installer
+        run: pnpm --filter @synapse/desktop run package:win

@@ -6,7 +6,7 @@ import type {
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 import type { SynapseProjectConfig } from "@/types/config"
-import type { TaskFormState } from "./types"
+import type { TaskFormShell, TaskFormState } from "./types"
 
 const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   name: "",
@@ -20,6 +20,7 @@ const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   everyMinutes: "60",
   intervalAnchor: "created_at",
   actionMode: "command",
+  actionShell: "posix",
   actionContent: "",
   envText: "",
   timeoutEnabled: true,
@@ -27,11 +28,16 @@ const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   missedRunPolicy: "skip",
 }
 
-function createTaskFormState(task?: ScheduledTask, defaultProjectId = ""): TaskFormState {
+function createTaskFormState(
+  task?: ScheduledTask,
+  defaultProjectId = "",
+  platform?: string,
+): TaskFormState {
   if (!task) {
     return {
       ...DEFAULT_TASK_FORM_STATE,
       projectId: defaultProjectId,
+      actionShell: defaultTaskShell(platform),
     }
   }
 
@@ -51,6 +57,7 @@ function createTaskFormState(task?: ScheduledTask, defaultProjectId = ""): TaskF
       ? task.trigger.anchor ?? "created_at"
       : DEFAULT_TASK_FORM_STATE.intervalAnchor,
     actionMode: task.action.mode,
+    actionShell: task.action.shell ?? defaultTaskShell(platform),
     actionContent: task.action.content,
     envText: stringifyTaskEnv(task.action.env),
     timeoutEnabled: task.action.timeoutMins !== null,
@@ -92,6 +99,7 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
     action: {
       type: "shell_command",
       mode: form.actionMode,
+      shell: form.actionShell,
       content: actionContent,
       env: Object.keys(env).length > 0 ? env : undefined,
       timeoutMins: form.timeoutEnabled ? readPositiveInteger(form.timeoutMins, "超时") : null,
@@ -99,6 +107,10 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
     enabled: form.enabled,
     missedRunPolicy: form.missedRunPolicy,
   }
+}
+
+function defaultTaskShell(platform?: string): TaskFormShell {
+  return platform === "win32" ? "cmd" : "posix"
 }
 
 function parseTaskEnv(value: string): Record<string, string> {
@@ -201,6 +213,7 @@ export {
   buildTaskCreateInput,
   buildTaskUpdateInput,
   createTaskFormState,
+  defaultTaskShell,
   formatRunStatus,
   formatTaskDate,
   formatTaskScope,

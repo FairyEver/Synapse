@@ -31,4 +31,14 @@ describe("resolveAgentProjectScope", () => {
       repositoryName: "Repository",
     })
   })
+
+  it("matches Windows paths case-insensitively", () => {
+    expect(resolveAgentProjectScope({
+      uuid: "repo-1",
+      name: "Desktop",
+      localPath: "C:\\Users\\Ada\\Desktop",
+    }, [
+      { id: "project-1", name: "Desktop Project", path: "c:\\users\\ADA\\Desktop\\" },
+    ], "win32").defaultProjectId).toBe("project-1")
+  })
 })

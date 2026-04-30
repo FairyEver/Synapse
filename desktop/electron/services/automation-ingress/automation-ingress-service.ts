@@ -16,6 +16,7 @@ import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import type { ControlledProcessRunner } from "../../runtime/process"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import { isShellKind, resolveShellCommand } from "../shell-exec"
 import {
   AgentRuntimeService,
   AGENT_RUNTIME_SERVICE_ID,
@@ -266,11 +267,14 @@ export class AutomationIngressService {
     if (!workDir) throw new WebhookError("workspace_required", "workDir is required", 400)
     const timeoutMs = timeoutMinsToMs(numberValue(body.timeoutMins) ?? numberValue(body.timeout_mins))
     const env: Record<string, string> = {}
+    const shell = resolveShellCommand(shellValue(body.shell), exec, {
+      windowsDefault: "powershell",
+    })
     const result = await this.deps.processRunner.run({
       actor: { kind: "agent", id: "webhook" },
       action: "shell.exec",
-      command: shellCommand(),
-      args: shellArgs(exec),
+      command: shell.command,
+      args: [...shell.args],
       cwd: workDir,
       env,
       envAllowlist: Object.keys(env),
@@ -286,6 +290,7 @@ export class AutomationIngressService {
         projectId: project.projectId,
         runId: run.id,
         sessionKey: run.sessionKey,
+        shell: shell.shell,
       },
     })
     const output = formatShellOutput(result.stdout, result.stderr)
@@ -550,14 +555,16 @@ async function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Pr
   }
 }
 
-function shellCommand(): string {
-  return process.platform === "win32" ? "powershell.exe" : "/bin/sh"
-}
-
-function shellArgs(command: string): readonly string[] {
-  return process.platform === "win32"
-    ? ["-NoProfile", "-Command", command]
-    : ["-lc", command]
+function shellValue(value: unknown) {
+  if (value === undefined) return undefined
+  if (typeof value !== "string") {
+    throw new WebhookError("invalid_shell", "shell must be posix, cmd, or powershell", 400)
+  }
+  const normalized = value.trim().toLowerCase()
+  if (!isShellKind(normalized)) {
+    throw new WebhookError("invalid_shell", "shell must be posix, cmd, or powershell", 400)
+  }
+  return normalized
 }
 
 function timeoutMinsToMs(value: number | undefined): number | undefined {

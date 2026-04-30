@@ -1,4 +1,5 @@
 import type { AgentCommandEntryV1, ConversationEntryV1, ProviderModelEntryV1 } from "../../runtime/data-repo"
+import { isShellKind, type ShellKind } from "../shell-exec"
 import type { ProviderConfigService } from "../provider-config"
 import { agentRuntimeDefinitionById } from "../definitions/generated/main-registry"
 import type {
@@ -278,10 +279,17 @@ export class AgentCommandRouter {
         return commandResult(conversation.id, "Only admins can add exec commands.", true)
       }
       const parsed = parseAddExecArgs(args.slice(1))
-      if (!parsed) return commandResult(conversation.id, "Use /commands addexec [--work-dir dir] <name> <command>.", true)
+      if (!parsed) {
+        return commandResult(
+          conversation.id,
+          "Use /commands addexec [--shell posix|cmd|powershell] [--work-dir dir] <name> <command>.",
+          true,
+        )
+      }
       const command = await this.deps.customCommands?.addExec({
         name: parsed.name,
         exec: parsed.exec,
+        shell: parsed.shell,
         workDir: parsed.workDir,
         createdBy: message.userId,
       })
@@ -408,12 +416,21 @@ function commandName(name: string): string {
 function parseAddExecArgs(args: readonly string[]): {
   readonly name: string
   readonly exec: string
+  readonly shell?: ShellKind
   readonly workDir?: string
 } | null {
+  let shell: ShellKind | undefined
   let workDir: string | undefined
   const rest: string[] = []
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index]
+    if (value === "--shell") {
+      const next = args[index + 1]?.toLowerCase()
+      if (!isShellKind(next)) return null
+      shell = next
+      index += 1
+      continue
+    }
     if (value === "--work-dir") {
       workDir = args[index + 1]
       index += 1
@@ -423,7 +440,7 @@ function parseAddExecArgs(args: readonly string[]): {
   }
   const [name, ...command] = rest
   if (!name || command.length === 0) return null
-  return { name, exec: command.join(" "), workDir }
+  return { name, exec: command.join(" "), shell, workDir }
 }
 
 function formatPublishedCommands(commands: readonly PublishedAgentCommand[]): string {

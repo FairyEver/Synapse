@@ -5,6 +5,8 @@ export const EXECUTION_ISOLATION_SERVICE_ID = "core.execution-isolation"
 export interface RunAsConfigView {
   readonly projectId: string
   readonly enabled: boolean
+  readonly supported: boolean
+  readonly unsupportedReason?: string
   readonly user?: string
   readonly envAllowlist: readonly string[]
   readonly requirePreflight: boolean
@@ -41,4 +43,3 @@ export interface ProcessIsolationResolver {
     extraEnvAllowlist?: readonly string[],
   ): Promise<ControlledProcessIsolationOptions | undefined>
 }
-

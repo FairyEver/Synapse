@@ -6,6 +6,7 @@ import type {
 
 type TaskFormTriggerType = "cron" | "interval"
 type TaskFormScopeType = "global" | "project"
+type TaskFormShell = "posix" | "cmd" | "powershell"
 
 type TaskFormState = {
   name: string
@@ -19,6 +20,7 @@ type TaskFormState = {
   everyMinutes: string
   intervalAnchor: "created_at" | "last_completed_at"
   actionMode: "command" | "script"
+  actionShell: TaskFormShell
   actionContent: string
   envText: string
   timeoutEnabled: boolean
@@ -39,6 +41,7 @@ export type {
   TaskFormMode,
   TaskFormPayload,
   TaskFormScopeType,
+  TaskFormShell,
   TaskFormState,
   TaskFormTriggerType,
 }

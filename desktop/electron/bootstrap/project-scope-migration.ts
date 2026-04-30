@@ -10,6 +10,7 @@ import type {
 } from "../runtime/data-repo"
 import type { StructuredLogger } from "../runtime/service-registry"
 import type { SynapseConfig } from "../../src/types/config"
+import { normalizePathForCompare } from "../../src/lib/path-compare"
 import { feishuSecretId } from "../services/connectors"
 import { bindingId } from "../services/workspaces"
 
@@ -203,8 +204,10 @@ function rewriteFeishuSecretRef(
 }
 
 function normalizePathForMatch(value: string): string {
-  const normalized = path.resolve(value).replace(/[\\/]+$/, "")
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized
+  return normalizePathForCompare(value, {
+    platform: process.platform,
+    resolvePath: path.resolve,
+  })
 }
 
 function backupId(namespace: string, id: string): string {

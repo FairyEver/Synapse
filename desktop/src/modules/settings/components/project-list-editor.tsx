@@ -14,10 +14,12 @@ import {
 import { Field, FieldError, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { arePathsEqualForCompare } from "@/lib/path-compare"
+import { getProjectNameFromPath } from "@/lib/path-utils"
+import { getRendererPlatform } from "@/lib/runtime-platform"
 import { FeishuConnectorPanel } from "@/modules/settings/components/feishu-connector-panel"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseFeishuConnectorRuntimeStatus } from "@/types/connectors"
-import { getProjectNameFromPath } from "@/lib/path-utils"
 
 const logger = createRendererLogger("settings.projects")
 
@@ -33,6 +35,7 @@ type ConnectorDialogState = {
 }
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
+  const platform = getRendererPlatform()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [draftName, setDraftName] = useState("")
   const [draftPath, setDraftPath] = useState("")
@@ -71,7 +74,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       return
     }
 
-    if (projects.some((project) => project.path === nextPath)) {
+    if (projects.some((project) => arePathsEqualForCompare(project.path, nextPath, { platform }))) {
       setFormError("这个项目路径已经存在了。")
       return
     }
@@ -192,7 +195,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
 
     // Check for duplicate path (excluding current project)
     const duplicatePath = projects.some(
-      (project) => project.path === trimmedPath && project.id !== editingProject.id
+      (project) =>
+        arePathsEqualForCompare(project.path, trimmedPath, { platform })
+        && project.id !== editingProject.id,
     )
     if (duplicatePath) {
       setEditError("这个项目路径已经存在了。")

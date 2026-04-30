@@ -1,3 +1,4 @@
+import { normalizePathForCompare } from "@/lib/path-compare"
 import type { SynapseProjectConfig, SynapseRepositoryConfig } from "@/types/config"
 
 type AgentProjectScope = {
@@ -10,11 +11,12 @@ type AgentProjectScope = {
 function resolveAgentProjectScope(
   activeRepository: Pick<SynapseRepositoryConfig, "uuid" | "name" | "localPath"> | null | undefined,
   projects: readonly SynapseProjectConfig[],
+  platform?: string,
 ): AgentProjectScope {
   const projectIds = unique(projects.map((project) => project.id).filter(Boolean))
-  const repositoryPath = normalizePathForMatch(activeRepository?.localPath ?? "")
+  const repositoryPath = normalizePathForCompare(activeRepository?.localPath ?? "", { platform })
   const matchedProject = repositoryPath
-    ? projects.find((project) => normalizePathForMatch(project.path) === repositoryPath)
+    ? projects.find((project) => normalizePathForCompare(project.path, { platform }) === repositoryPath)
     : undefined
   const fallbackRepositoryId = activeRepository?.uuid
   const scopedProjectIds = unique([
@@ -28,13 +30,6 @@ function resolveAgentProjectScope(
     repositoryId: activeRepository?.uuid,
     repositoryName: activeRepository?.name,
   }
-}
-
-function normalizePathForMatch(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ""
-  const normalized = trimmed.replace(/[\\/]+$/, "")
-  return normalized || trimmed
 }
 
 function unique(values: readonly string[]): string[] {

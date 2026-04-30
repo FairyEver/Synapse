@@ -29,7 +29,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
+import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
+import { getRendererPlatform } from "@/lib/runtime-platform"
 import { RepositoryListItem } from "@/modules/settings/components/repository-list-item"
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type {
@@ -67,6 +69,7 @@ function validateLocalRepositoryName(value: string): string | null {
 function RepositoryListEditor({
   onSave,
 }: RepositoryListEditorProps) {
+  const platform = getRendererPlatform()
   const repositories = useRepositoryList()
   const activeRepository = useActiveRepository()
   const activeRepoUuid = activeRepository?.uuid ?? null
@@ -101,7 +104,8 @@ function RepositoryListEditor({
   } | null>(null)
 
   const saveRepositoryConfig = async (nextRepository: SynapseRepositoryConfig) => {
-    if (repositories.some((repository) => repository.localPath === nextRepository.localPath)) {
+    if (repositories.some((repository) =>
+      arePathsEqualForCompare(repository.localPath, nextRepository.localPath, { platform }))) {
       setFormError("这个本地目录已经存在了。")
       return false
     }
@@ -312,7 +316,9 @@ function RepositoryListEditor({
 
     // Check for duplicate path (excluding current repository)
     const duplicatePath = repositories.some(
-      (repo) => repo.localPath === trimmedPath && repo.uuid !== editingRepository.uuid
+      (repo) =>
+        arePathsEqualForCompare(repo.localPath, trimmedPath, { platform })
+        && repo.uuid !== editingRepository.uuid,
     )
     if (duplicatePath) {
       setEditError("该路径已被其他仓库使用。")

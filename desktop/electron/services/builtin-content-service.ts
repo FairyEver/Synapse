@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import type {
   SynapseContentAttachmentRecord,
   SynapseContentDetail,
@@ -58,7 +59,7 @@ function isBuiltinContentId(contentId: string): boolean {
 
 function hashAttachment(attachment: RepositorySeedAttachment): SynapseContentAttachmentRecord {
   return {
-    originalName: attachment.originalName,
+    originalName: normalizeContentAttachmentPath(attachment.originalName),
     sha256: createHash("sha256").update(attachment.bytes).digest("hex"),
     size: attachment.bytes.byteLength,
   }
@@ -175,7 +176,7 @@ class BuiltinContentService {
   ): Promise<void> {
     const record = await this.getRecord(contentType, contentId)
     const sourceAttachment = record.attachments?.find((candidate) => (
-      candidate.originalName === attachment.originalName
+      normalizeContentAttachmentPath(candidate.originalName) === attachment.originalName
       && createHash("sha256").update(candidate.bytes).digest("hex") === attachment.sha256
     ))
 

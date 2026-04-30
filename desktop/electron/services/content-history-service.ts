@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import { getContentDir } from "../../src/lib/config"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -193,8 +194,13 @@ function parseAttachmentsRecord(rawValue: unknown): SynapseContentAttachmentsRec
         return null
       }
 
+      const originalName = normalizeContentAttachmentPath(file.originalName)
+      if (!originalName) {
+        return null
+      }
+
       return {
-        originalName: file.originalName.trim(),
+        originalName,
         sha256: file.sha256.trim(),
         size: file.size,
       }

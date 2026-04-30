@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import type { SynapseContentType } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
@@ -217,9 +218,19 @@ class ContentDownloadService {
         logger.info("Wrote main content to staging.", { filePath: mainFilePath })
 
         for (const attachment of detail.attachments) {
-          const attachmentTargetPath = path.join(stagingDirectoryPath, attachment.originalName)
+          const originalName = normalizeContentAttachmentPath(attachment.originalName)
+          if (!originalName) {
+            throw new Error("附件文件名不能为空。")
+          }
+
+          const attachmentTargetPath = path.join(stagingDirectoryPath, originalName)
           if (detail.source === "builtin") {
-            await builtinContentService.copyAttachmentToPath(contentType, id, attachment, attachmentTargetPath)
+            await builtinContentService.copyAttachmentToPath(
+              contentType,
+              id,
+              { ...attachment, originalName },
+              attachmentTargetPath,
+            )
           } else {
             if (!repositoryRootPath) {
               throw new Error("当前还没有激活的本地目录。")
@@ -227,7 +238,7 @@ class ContentDownloadService {
 
             await attachmentsPoolService.copyAttachmentToPath(
               repositoryRootPath,
-              attachment,
+              { ...attachment, originalName },
               attachmentTargetPath,
             )
           }

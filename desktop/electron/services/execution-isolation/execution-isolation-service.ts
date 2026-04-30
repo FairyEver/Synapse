@@ -59,14 +59,18 @@ export class ExecutionIsolationService implements ProcessIsolationResolver {
 
   async updateConfig(input: RunAsConfigUpdate): Promise<RunAsConfigView> {
     const existing = await this.getOrCreateConfig(input.projectId)
+    const supported = isRunAsUserSupported()
     const next: RunAsConfigEntryV1 = {
       ...existing,
-      enabled: input.enabled ?? existing.enabled,
+      enabled: supported ? input.enabled ?? existing.enabled : false,
       user: input.user === undefined ? existing.user : input.user.trim() || undefined,
       envAllowlist: input.envAllowlist === undefined
         ? existing.envAllowlist
         : normalizeAllowlist(input.envAllowlist),
       requirePreflight: input.requirePreflight ?? existing.requirePreflight,
+      lastError: !supported && input.enabled
+        ? "run_as_user is not supported on Windows"
+        : existing.lastError,
       updatedAt: this.isoNow(),
     }
     await this.deps.configs.upsert(next)
@@ -79,8 +83,12 @@ export class ExecutionIsolationService implements ProcessIsolationResolver {
   ): Promise<ControlledProcessIsolationOptions | undefined> {
     const config = await this.getConfig(projectId)
     if (!config.enabled) return undefined
-    if (process.platform === "win32") {
-      throw new Error("run_as_user is not supported on Windows")
+    if (!config.supported) {
+      this.deps.logger?.warn("run_as_user is disabled on this platform.", {
+        platform: process.platform,
+        projectId,
+      })
+      return undefined
     }
     if (!config.user) {
       throw new Error("run_as_user is enabled but no target user is configured")
@@ -361,9 +369,12 @@ function configId(projectId: string): string {
 }
 
 function toView(entry: RunAsConfigEntryV1): RunAsConfigView {
+  const supported = isRunAsUserSupported()
   return {
     projectId: entry.projectId,
-    enabled: entry.enabled,
+    enabled: supported ? entry.enabled : false,
+    supported,
+    unsupportedReason: supported ? undefined : "run_as_user is not supported on Windows",
     user: entry.user,
     envAllowlist: entry.envAllowlist,
     requirePreflight: entry.requirePreflight,
@@ -373,6 +384,10 @@ function toView(entry: RunAsConfigEntryV1): RunAsConfigView {
     lastAuditProbeStatus: entry.lastAuditProbeStatus,
     lastError: entry.lastError,
   }
+}
+
+function isRunAsUserSupported(): boolean {
+  return process.platform !== "win32"
 }
 
 function normalizeAllowlist(values: readonly string[]): string[] {

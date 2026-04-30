@@ -1,4 +1,5 @@
 import type { ControlledProcessRunner } from "../../runtime/process"
+import { resolveShellCommand } from "../shell-exec"
 import type { TaskActionExecutionInput, TaskActionExecutionResult, TaskActionExecutor } from "./types"
 
 const UNLIMITED_OUTPUT_BYTES = Number.MAX_SAFE_INTEGER
@@ -15,15 +16,16 @@ export class ShellTaskAction implements TaskActionExecutor {
   async execute(input: TaskActionExecutionInput): Promise<TaskActionExecutionResult> {
     const action = input.task.action
     const platform = this.deps.platform ?? process.platform
-    const shell = platform === "win32"
-      ? { command: "cmd.exe", args: ["/d", "/s", "/c", action.content] }
-      : { command: "/bin/sh", args: ["-lc", action.content] }
+    const shell = resolveShellCommand(action.shell, action.content, {
+      platform,
+      windowsDefault: "cmd",
+    })
     const timeoutMs = action.timeoutMins === null ? undefined : (action.timeoutMins ?? 30) * 60_000
     const result = await this.deps.processRunner.run({
       actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
       action: "shell.exec",
       command: shell.command,
-      args: shell.args,
+      args: [...shell.args],
       cwd: input.cwd,
       env: mergeEnv(this.deps.baseEnv ?? process.env, action.env),
       envAllowlist: action.env ? Object.keys(action.env) : undefined,

@@ -38,6 +38,7 @@ describe("task scheduler utils", () => {
       action: {
         type: "shell_command",
         mode: "command",
+        shell: "posix",
         content: "echo ok",
         env: { NODE_ENV: "production" },
         timeoutMins: 30,
@@ -56,6 +57,7 @@ describe("task scheduler utils", () => {
       action: {
         type: "shell_command",
         mode: "script",
+        shell: "powershell",
         content: "echo sync",
         env: { A: "1" },
         timeoutMins: null,
@@ -74,8 +76,13 @@ describe("task scheduler utils", () => {
       everyMinutes: "15",
       intervalAnchor: "last_completed_at",
       actionMode: "script",
+      actionShell: "powershell",
       timeoutEnabled: false,
       envText: stringifyTaskEnv({ A: "1" }),
     })
+  })
+
+  it("defaults new Windows tasks to cmd", () => {
+    expect(createTaskFormState(undefined, "", "win32").actionShell).toBe("cmd")
   })
 })

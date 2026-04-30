@@ -21,7 +21,7 @@ describe("CustomCommandRegistry", () => {
     })
 
     await registry.addPrompt({ name: "Review", prompt: "Review {{args}}" })
-    await registry.addExec({ name: "Build", exec: "pnpm build" })
+    await registry.addExec({ name: "Build", exec: "pnpm build", shell: "powershell" })
 
     expect(await registry.resolve("review")).toEqual(expect.objectContaining({
       name: "review",
@@ -30,6 +30,7 @@ describe("CustomCommandRegistry", () => {
     expect(await registry.resolve("build")).toEqual(expect.objectContaining({
       name: "build",
       kind: "exec",
+      shell: "powershell",
       adminOnly: true,
       allowedPlatforms: ["local-renderer"],
     }))
@@ -109,4 +110,3 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
 }
-

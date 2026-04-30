@@ -19,6 +19,7 @@ import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService } from "../reply-target"
 import type { ReplyTarget } from "../reply-target"
 import type { ProcessIsolationResolver } from "../execution-isolation"
+import { resolveShellCommand } from "../shell-exec"
 import {
   prepareCodexRuntime,
   type ProviderConfigService,
@@ -1330,11 +1331,15 @@ export class AgentRuntimeService {
     if (!command.exec?.trim()) throw new Error("Command is missing exec body")
     const workDir = command.workDir ?? this.workDirFor(message)
     if (!workDir) throw new Error("Project workspace path is required")
+    const shell = resolveShellCommand(command.shell, `${command.exec} ${args.join(" ")}`.trim(), {
+      windowsDefault: "powershell",
+      posixLogin: false,
+    })
     const result = await this.deps.commandRunner.run({
       actor: { kind: "user", id: message.userId },
       action: "shell.exec",
-      command: shellCommand(),
-      args: shellArgs(`${command.exec} ${args.join(" ")}`.trim()),
+      command: shell.command,
+      args: [...shell.args],
       cwd: workDir,
       isolation: await this.resolveProcessIsolation(message),
       timeoutMs: 60_000,
@@ -1343,6 +1348,7 @@ export class AgentRuntimeService {
         projectId: this.deps.projectId,
         sessionKey: message.sessionKey,
         command: `/${command.name}`,
+        shell: shell.shell,
         platform: message.platform,
       },
     })
@@ -1862,16 +1868,6 @@ function appendRelayText(current: string, event: AgentEvent): string {
   }
   if (event.type === "error" && !current) return event.message
   return current
-}
-
-function shellCommand(): string {
-  return process.platform === "win32" ? "powershell.exe" : "sh"
-}
-
-function shellArgs(command: string): readonly string[] {
-  return process.platform === "win32"
-    ? ["-NoProfile", "-Command", command]
-    : ["-c", command]
 }
 
 function formatCommandResult(name: string, result: ControlledProcessResult): string {

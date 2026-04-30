@@ -4,6 +4,7 @@ import path from "node:path"
 import { lstat, readFile, realpath, stat } from "node:fs/promises"
 
 import type { PermissionGuard } from "../../runtime/security"
+import { normalizeContentAttachmentSegment } from "../../../src/lib/content-attachments"
 import type {
   SideChannelAttachmentInput,
   SideChannelPreparedAttachment,
@@ -56,8 +57,7 @@ export async function prepareSideChannelAttachments(
 }
 
 export function sanitizeAttachmentFileName(value: string | undefined): string {
-  const base = path.basename(value?.trim() || "attachment")
-  const cleaned = base.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^\.+/, "")
+  const cleaned = normalizeContentAttachmentSegment(value?.trim() || "attachment").replace(/^\.+/u, "")
   return cleaned || "attachment"
 }
 

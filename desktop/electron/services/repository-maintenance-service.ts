@@ -2,6 +2,7 @@ import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import { isFileNotFoundError, pathExists } from "./fs-utils"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -230,8 +231,13 @@ function parseAttachmentsRecord(rawValue: unknown): SynapseContentAttachmentsRec
         return null
       }
 
+      const originalName = normalizeContentAttachmentPath(item.originalName)
+      if (!originalName) {
+        return null
+      }
+
       return {
-        originalName: item.originalName.trim(),
+        originalName,
         sha256: item.sha256.trim(),
         size: item.size,
       }

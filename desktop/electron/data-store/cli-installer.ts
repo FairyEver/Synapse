@@ -5,6 +5,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 import { app } from "electron"
+import { normalizePathForCompare } from "../../src/lib/path-compare"
 import type { DataStoreCliDebugInfo, DataStoreCliStatus } from "../../src/types/data-store"
 import { createMainLogger } from "../services/log-store"
 
@@ -23,17 +24,15 @@ function splitPathEntries(rawPath?: string): string[] {
     .filter(Boolean)
 }
 
-function normalizePathForCompare(filePath: string): string {
-  const resolved = path.resolve(filePath)
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved
-}
-
 function dedupePaths(paths: string[]): string[] {
   const seen = new Set<string>()
   const result: string[] = []
 
   for (const candidate of paths) {
-    const normalized = normalizePathForCompare(candidate)
+    const normalized = normalizePathForCompare(candidate, {
+      platform: process.platform,
+      resolvePath: path.resolve,
+    })
     if (seen.has(normalized)) continue
     seen.add(normalized)
     result.push(candidate)
@@ -187,8 +186,12 @@ async function pickCliInstallPath(): Promise<string> {
 }
 
 function isDirInPath(dirPath: string, pathEntries: string[]): boolean {
-  const target = normalizePathForCompare(dirPath)
-  return pathEntries.some((entry) => normalizePathForCompare(entry) === target)
+  const options = {
+    platform: process.platform,
+    resolvePath: path.resolve,
+  }
+  const target = normalizePathForCompare(dirPath, options)
+  return pathEntries.some((entry) => normalizePathForCompare(entry, options) === target)
 }
 
 function getMcpScriptPath(): string {

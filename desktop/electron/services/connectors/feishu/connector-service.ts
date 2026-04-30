@@ -1539,7 +1539,8 @@ function resolveLocalPath(target: string, baseDir: string): string {
   if (path.isAbsolute(expanded)) return expanded
   const resolved = path.resolve(baseDir, expanded)
   const base = path.resolve(baseDir)
-  if (resolved !== base && !resolved.startsWith(`${base}${path.sep}`)) {
+  const relative = path.relative(base, resolved)
+  if (relative !== "" && (relative.startsWith("..") || path.isAbsolute(relative))) {
     throw new Error("工作区路径不能离开 baseDir。")
   }
   return resolved

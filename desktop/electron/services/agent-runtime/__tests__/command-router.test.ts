@@ -149,6 +149,38 @@ describe("AgentCommandRouter", () => {
     ).resultText).toBe("local-build:--prod")
   })
 
+  it("stores the requested shell for admin exec commands", async () => {
+    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+    const registry = new CustomCommandRegistry({
+      projectId: "project-1",
+      commands,
+      now: fixedNow,
+    })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "codex",
+      providerConfig,
+      customCommands: registry,
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(
+        baseMessage("/commands addexec --shell powershell deploy Write-Output ok"),
+        baseConversation(),
+      ),
+    )
+
+    expect(result.resultText).toBe("Exec command saved: /deploy")
+    expect(await registry.resolve("deploy")).toEqual(expect.objectContaining({
+      exec: "Write-Output ok",
+      shell: "powershell",
+    }))
+  })
+
   it("routes builtin /compress to the runtime callback", async () => {
     const providers = new MemoryNamespace<ProviderEntryV1>("providers")
     const secrets = new MemoryNamespace<SecretEntryV1>("secrets")

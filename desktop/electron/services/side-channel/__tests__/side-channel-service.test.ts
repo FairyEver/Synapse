@@ -18,6 +18,7 @@ import {
   AttachmentPolicyError,
   prepareSideChannelAttachments,
   SideChannelService,
+  sanitizeAttachmentFileName,
   type ReplyTransportDispatcher,
 } from "../index"
 
@@ -110,6 +111,13 @@ describe("SideChannelService", () => {
 })
 
 describe("side-channel attachment policy", () => {
+  it("normalizes Windows-reserved attachment file names", () => {
+    expect(sanitizeAttachmentFileName("C:\\temp\\CON.txt"))
+      .toBe("_CON.txt")
+    expect(sanitizeAttachmentFileName("aux. "))
+      .toBe("_aux")
+  })
+
   it("rejects oversized attachments and invalid image MIME", async () => {
     await expect(prepareSideChannelAttachments({
       files: [{

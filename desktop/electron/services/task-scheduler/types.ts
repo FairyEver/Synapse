@@ -13,6 +13,7 @@ export type TaskScope =
 export type ShellTaskAction = {
   readonly type: "shell_command"
   readonly mode: "command" | "script"
+  readonly shell?: "posix" | "cmd" | "powershell"
   readonly content: string
   readonly env?: Record<string, string>
   readonly timeoutMins?: number | null

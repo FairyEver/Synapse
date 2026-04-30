@@ -1,5 +1,6 @@
 import path from "node:path"
 import type { PrepareSkillDirectoryContext } from "../main-types"
+import { normalizeContentAttachmentPath } from "../../lib/content-attachments"
 import { SYNAPSE_SKILL_ID_FILE_NAME } from "../../../electron/services/editor-adapters/skill-identity"
 import { serializeSkillFrontmatter } from "./shared-skill-frontmatter"
 
@@ -32,9 +33,14 @@ async function writeSynapseSkillDirectory({
   )
 
   for (const attachment of detail.attachments) {
+    const originalName = normalizeContentAttachmentPath(attachment.originalName)
+    if (!originalName) {
+      throw new Error("附件文件名不能为空。")
+    }
+
     await copyAttachment(
-      attachment,
-      path.join(stagingDirectoryPath, attachment.originalName),
+      { ...attachment, originalName },
+      path.join(stagingDirectoryPath, originalName),
     )
   }
 }

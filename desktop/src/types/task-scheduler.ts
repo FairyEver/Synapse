@@ -9,6 +9,7 @@ export type ScheduledTaskScope =
 export type ScheduledTaskAction = {
   type: "shell_command"
   mode: "command" | "script"
+  shell?: "posix" | "cmd" | "powershell"
   content: string
   env?: Record<string, string>
   timeoutMins?: number | null

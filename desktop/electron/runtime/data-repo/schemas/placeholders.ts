@@ -433,6 +433,7 @@ export interface AgentCommandEntryV1 extends Record<string, unknown> {
   kind: AgentCommandKindV1
   prompt?: string
   exec?: string
+  shell?: "posix" | "cmd" | "powershell"
   workDir?: string
   enabled: boolean
   source: AgentCommandSourceV1
@@ -458,6 +459,10 @@ export const agentCommandsSchema: NamespaceSchema<AgentCommandEntryV1> = {
     && ((v as AgentCommandEntryV1).kind === "prompt" || (v as AgentCommandEntryV1).kind === "exec")
     && isOptionalString((v as AgentCommandEntryV1).prompt)
     && isOptionalString((v as AgentCommandEntryV1).exec)
+    && ((v as AgentCommandEntryV1).shell === undefined
+      || (v as AgentCommandEntryV1).shell === "posix"
+      || (v as AgentCommandEntryV1).shell === "cmd"
+      || (v as AgentCommandEntryV1).shell === "powershell")
     && isOptionalString((v as AgentCommandEntryV1).workDir)
     && typeof (v as AgentCommandEntryV1).enabled === "boolean"
     && ((v as AgentCommandEntryV1).source === "runtime" || (v as AgentCommandEntryV1).source === "file")
@@ -503,6 +508,7 @@ export type ScheduledTaskScopeV1 =
 export type ScheduledTaskActionV1 = {
   type: "shell_command"
   mode: "command" | "script"
+  shell?: "posix" | "cmd" | "powershell"
   content: string
   env?: Record<string, string>
   timeoutMins?: number | null
@@ -1088,6 +1094,7 @@ function isTaskAction(value: unknown): value is ScheduledTaskActionV1 {
   return isAnyRecord<ScheduledTaskActionV1>(value)
     && value.type === "shell_command"
     && (value.mode === "command" || value.mode === "script")
+    && (value.shell === undefined || value.shell === "posix" || value.shell === "cmd" || value.shell === "powershell")
     && typeof value.content === "string"
     && (value.env === undefined || isStringRecord(value.env))
     && (

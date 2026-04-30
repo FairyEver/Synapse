@@ -5,6 +5,7 @@ import os from "node:os"
 import path from "node:path"
 
 import type { AgentCommandEntryV1, DataNamespace } from "../../runtime/data-repo"
+import type { ShellKind } from "../shell-exec"
 import type { AgentMessage } from "./types"
 
 export type PublishedCommandSource = "builtin" | "custom" | "skill" | "agent-native"
@@ -31,6 +32,7 @@ export interface AddCustomCommandInput {
   readonly description?: string
   readonly prompt?: string
   readonly exec?: string
+  readonly shell?: ShellKind
   readonly workDir?: string
   readonly allowedPlatforms?: readonly string[]
   readonly adminOnly?: boolean
@@ -131,6 +133,7 @@ export class CustomCommandRegistry {
       kind: input.kind,
       prompt: input.prompt,
       exec: input.exec,
+      shell: input.kind === "exec" ? input.shell : undefined,
       workDir: input.workDir,
       enabled: true,
       source: "runtime",
