@@ -27,7 +27,7 @@ features:
   - title: Skills
     details: 将主说明与附件组合为 Skill，适合带模板、示例或参考文件的工作流。
   - title: 编辑器安装
-    details: 将 Rule 或 Skill 安装到 Claude Code、Cursor、Codex，并选择全局或项目级范围。
+    details: 将 Rule 或 Skill 安装到 Claude Code、Cursor、Codex、Windsurf，并选择全局或项目级范围。
   - title: 内容仓库
     details: 从本地目录或 Git 仓库读取 Rules 和 Skills，支持浏览与搜索。
   - title: 团队协作
