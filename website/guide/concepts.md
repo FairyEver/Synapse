@@ -1,76 +1,63 @@
+<!-- Sources: desktop/src/modules/rules/index.tsx; desktop/src/modules/rules/utils.ts; desktop/src/modules/skills/index.tsx; desktop/src/modules/skills/utils.ts; desktop/src/modules/settings/data.ts; desktop/src/modules/settings/components/repository-list-editor.tsx; desktop/src/modules/settings/components/project-list-editor.tsx; desktop/src/modules/content/components/content-browser-page.tsx; desktop/src/config/content-types/rule.ts; desktop/src/config/content-types/skill.ts; desktop/src/definitions/editor/*/{editor,adapter,install}.ts -->
+
 # 核心概念
 
-Synapse 围绕四个核心概念构建：Rule、Skill、仓库、项目。
+Synapse 当前围绕四个核心概念组织使用流程：Rule、Skill、仓库、项目。
 
 ## Rule（规则）
 
-Rule 是一段可复用的文本指令，通常用于定义 AI 的行为约束、输出风格或工作规范。
+Rule 是一段可复用的 Markdown 正文。它没有附件，适合保存行为约束、输出规范、审查清单等文本规则。
 
-特征：
-- 纯文本，不包含附件
-- 用于向 AI 传达"应该怎么做"或"按什么标准输出"
-- 粒度灵活，可以是一条简短约束，也可以是完整的规范文档
+Rule 有标题、名称、简介、分类和正文。名称会在安装到编辑器时作为文件名或规则标识。
 
-示例：
-- "TypeScript 代码禁止使用 `any`，优先通过类型拆分解决类型问题"
-- "中文回复不使用表情符号，直接给出结论"
-- "接口文档统一按：接口名、方法、入参、返回值、示例五段式编写"
+Rule 支持浏览、搜索、排序、收藏、最近浏览、最近删除、下载和安装到编辑器。
 
 ## Skill（能力包）
 
-Skill 是带附件的复合指令包，适用于仅靠文本描述无法完整传达的工作流。
+Skill 是由主说明和附件组成的能力包，适合保存需要文件材料配合的工作流。
 
-一个 Skill 包含：
-- **主说明** — 描述该能力包的用途与触发方式
-- **附件** — 示例文件、模板、参考数据、脚本等
+Skill 有中文名称、名称、简介、分类、主说明和附件。名称会在安装到编辑器时作为目录名。
 
-示例：
-- 周报撰写能力包：主说明 + 历史周报范本
-- 日志分析能力包：主说明 + 日志样本 + 输出模板
-- 单元测试生成能力包：主说明 + 代码样本 + 测试风格参考
+附件可以来自文件或文件夹；目录结构会保留。安装后会写入一个 Skill 目录，目录中包含 `SKILL.md` 和附件。
 
-::: tip Rule 与 Skill 的选择
-纯文本指令用 Rule；需要附带参考文件或示例的用 Skill。
-:::
+## 仓库
 
-## 仓库（Repository）
+仓库是 Synapse 管理 Rule 和 Skill 的本地目录。设置页里对应的入口是“仓库”和“本地仓库目录”。
 
-仓库是团队共享内容的存储目录，可以是：
+可以选择现有文件夹加入仓库列表，也可以新建本地仓库。仓库记录可以修改名称和路径，也可以从 Synapse 中移除。移除仓库记录不会删除本地目录。
 
-- **Git 仓库**（推荐）— 支持团队协作、版本追踪与审核流程
-- **本地目录** — 适合个人试用或独立整理
+## 项目
 
-Synapse 从仓库目录中读取 Rules 和 Skills，以可浏览、可搜索的形式呈现。Synapse 本身不托管内容，Git 平台选择、权限管理、备份策略均由团队自行决定。
+项目是 Rule 或 Skill 的项目级安装目标。设置页里对应的入口是“项目”和“本地项目”。
 
-## 项目（Project）
-
-项目是本地工作目录，即 Rule / Skill 的安装目标。例如某个代码仓库、写作项目或设计工程的根目录。
+安装到项目时，安装对话框会使用项目路径解析编辑器目标位置。也可以在安装时浏览其他目录。
 
 仓库与项目的区别：
 
-| 概念 | 作用 | 归属 |
-| --- | --- | --- |
-| **仓库** | Rules / Skills 的来源 | 团队共享 |
-| **项目** | Rules / Skills 的安装目标 | 个人本地 |
+| 概念 | 作用 |
+| --- | --- |
+| 仓库 | Synapse 读取和保存 Rule、Skill 的来源目录 |
+| 项目 | Rule、Skill 安装到编辑器时使用的目标目录 |
 
-安装时，Synapse 会根据目标编辑器（Claude Code / Cursor / Codex）将内容写入对应的规则目录。同一项目可同时服务于多个编辑器。
+## 编辑器安装范围
 
-## 概念关系
+当前代码定义的编辑器是 Cursor、Codex、Claude Code、Windsurf。四者都支持 Skill 的全局和项目安装。
+
+Rule 的项目安装支持 Cursor、Codex、Claude Code、Windsurf。Rule 的全局安装支持 Codex、Claude Code、Windsurf；Cursor 全局 Rule 当前不支持。
+
+安装路径由编辑器定义解析。项目安装会写入所选项目目录，全局安装会写入编辑器用户目录。
 
 ```text
-          仓库（团队共享）
-         ┌──────────────┐
-         │  Rule × N    │
-         │  Skill × M   │
-         └──────┬───────┘
-                │  Synapse 读取
-                ▼
-           桌面应用（浏览 / 搜索）
-                │  一键安装
-                ▼
-       ┌────────┴────────┐
-       ▼                 ▼
-  全局（所有项目）    项目（指定目录）
+仓库
+  Rule / Skill
+    ↓ 浏览、搜索、下载
+Synapse
+    ↓ 安装
+全局编辑器目录 或 项目目录
 ```
 
-了解这四个概念后，可以继续查看 [功能特性](/guide/features)。
+继续阅读：
+
+- [Rule](/guide/rules)
+- [Skill](/guide/skills)
+- [编辑器安装](/guide/editors)
