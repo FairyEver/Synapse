@@ -29,4 +29,3 @@ Skill 是由主说明和附件组成的能力包。安装后会写入一个 Skil
 ## 编辑器
 
 编辑器是 Rule 或 Skill 的安装目标。当前代码定义的编辑器是 Cursor、Codex、Claude Code、Windsurf。
-

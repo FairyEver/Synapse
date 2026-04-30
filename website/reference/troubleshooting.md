@@ -39,4 +39,3 @@ Git 仓库同步会执行 `git pull --ff-only --progress`。如果本地或远�
 待同步推送遇到 non-fast-forward、rejected 或 fetch-first 这类错误时，Synapse 会先执行 `git pull --rebase`，再重试推送。
 
 非 Git 目录不会执行 Git 同步，只会刷新本地内容索引。
-
