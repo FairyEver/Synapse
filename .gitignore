@@ -12,3 +12,4 @@ server/.env
 server/.env.local
 !*.env.example
 .superpowers/
+.worktrees/
