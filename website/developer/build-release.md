@@ -13,12 +13,13 @@ pnpm --filter @synapse/desktop run build
 该脚本依次执行：
 
 ```bash
+pnpm --filter @synapse/desktop run generate:definitions-registry
 pnpm --filter @synapse/desktop run build:renderer
 pnpm --filter @synapse/desktop run build:electron
 pnpm --filter @synapse/desktop run build:data-store
 ```
 
-`build:renderer` 使用 Vite 构建 renderer。`build:electron` 生成 IPC 代码并编译 Electron TypeScript。`build:data-store` 使用 esbuild 打包 data-store 的 CLI 和 MCP 入口。
+构建会先生成 definitions registry，再执行 renderer、Electron 和 data-store 构建。`build:renderer` 使用 Vite 构建 renderer。`build:electron` 生成 IPC 代码并编译 Electron TypeScript。`build:data-store` 使用 esbuild 打包 data-store 的 CLI 和 MCP 入口。
 
 ## 本地打包
 
