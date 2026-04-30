@@ -1,12 +1,13 @@
 # 本地开发
 
-<!-- Sources: README.md; desktop/README.md; package.json; desktop/package.json; website/package.json -->
+<!-- Sources: README.md; desktop/README.md; server/README.md; package.json; desktop/package.json; website/package.json -->
 
 ## 环境要求
 
 - Node.js 20+
 - pnpm 10.22.0
 - Git
+- Docker / Docker Compose
 
 ## 安装依赖
 
