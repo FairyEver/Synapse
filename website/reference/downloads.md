@@ -18,4 +18,4 @@ Synapse 的安装包通过 GitHub Releases 发布：
 ## 相关链接
 
 - [下载与安装](/start/install)
-- <a href="/developer/local-development">本地开发</a>
+- [本地开发](/developer/local-development)

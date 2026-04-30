@@ -26,29 +26,53 @@ export default defineConfig({
 
     nav: [
       { text: '首页', link: '/' },
-      { text: '产品介绍', link: '/guide/introduction' },
-      { text: '下载', link: '/guide/download' },
-      { text: 'FAQ', link: '/guide/faq' }
+      { text: '快速开始', link: '/start/install' },
+      { text: '用户指南', link: '/guide/rules' },
+      { text: '团队协作', link: '/team/repository-structure' },
+      { text: '高级功能', link: '/advanced/' },
+      { text: '开发者', link: '/developer/' },
+      { text: '下载', link: '/reference/downloads' }
     ],
 
     sidebar: {
-      '/guide/': [
-        {
-          text: '了解 Synapse',
-          items: [
-            { text: '产品介绍', link: '/guide/introduction' },
-            { text: '核心概念', link: '/guide/concepts' },
-            { text: '功能特性', link: '/guide/features' }
-          ]
-        },
-        {
-          text: '开始使用',
-          items: [
-            { text: '下载与安装', link: '/guide/download' },
-            { text: '常见问题', link: '/guide/faq' }
-          ]
-        }
-      ]
+      '/start/': [{ text: '快速开始', items: [
+        { text: '下载与安装', link: '/start/install' },
+        { text: '配置内容仓库', link: '/start/repository' },
+        { text: '安装第一个内容', link: '/start/first-install' }
+      ]}],
+      '/guide/': [{ text: '用户指南', items: [
+        { text: 'Rule', link: '/guide/rules' },
+        { text: 'Skill', link: '/guide/skills' },
+        { text: '编辑器安装', link: '/guide/editors' },
+        { text: '设置', link: '/guide/settings' },
+        { text: '核心概念', link: '/guide/concepts' }
+      ]}],
+      '/team/': [{ text: '团队协作', items: [
+        { text: '仓库结构', link: '/team/repository-structure' },
+        { text: '内容编写', link: '/team/content-authoring' },
+        { text: '分享与审核', link: '/team/share-review' }
+      ]}],
+      '/advanced/': [{ text: '高级功能', items: [
+        { text: '总览', link: '/advanced/' },
+        { text: 'Agent', link: '/advanced/agent' },
+        { text: 'Prompts', link: '/advanced/prompts' },
+        { text: 'Data Store', link: '/advanced/data-store' },
+        { text: 'Task Scheduler', link: '/advanced/task-scheduler' },
+        { text: 'Editor Scan', link: '/advanced/editor-scan' },
+        { text: 'Diagnostics', link: '/advanced/diagnostics' }
+      ]}],
+      '/developer/': [{ text: '开发者', items: [
+        { text: '总览', link: '/developer/' },
+        { text: '本地开发', link: '/developer/local-development' },
+        { text: '项目结构', link: '/developer/project-structure' },
+        { text: '构建与发布', link: '/developer/build-release' }
+      ]}],
+      '/reference/': [{ text: '参考', items: [
+        { text: '常见问题', link: '/reference/faq' },
+        { text: '排障', link: '/reference/troubleshooting' },
+        { text: '术语表', link: '/reference/glossary' },
+        { text: '下载', link: '/reference/downloads' }
+      ]}]
     },
 
     socialLinks: [

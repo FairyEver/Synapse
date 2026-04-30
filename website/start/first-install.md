@@ -10,7 +10,7 @@
 
 安装时选择目标编辑器。Synapse 支持将 Rule 和 Skill 安装到 Claude Code、Cursor、Codex、Windsurf。
 
-编辑器安装规则见 <a href="/guide/editors">编辑器集成</a>。
+编辑器安装规则见 [编辑器集成](/guide/editors)。
 
 ## 选择安装范围
 
