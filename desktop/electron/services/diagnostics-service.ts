@@ -23,6 +23,12 @@ import type { StructuredLogger } from "../runtime/logging"
 import type { ServiceRegistry } from "../runtime/service-registry"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { ServiceResolver } from "../modules/ops/status"
+import {
+  createWindowsCompatibilitySnapshot,
+  inspectWindowsConfiguredPaths,
+  summarizeWindowsCompatibilityLogSignals,
+  type WindowsCompatibilitySnapshot,
+} from "./windows-compatibility"
 
 type AppPathName = Parameters<Electron.App["getPath"]>[0]
 
@@ -163,11 +169,13 @@ class DiagnosticsService {
   async collect(payload: { projectId?: string } = {}): Promise<SynapseDiagnosticsReport> {
     const generatedAt = this.now().toISOString()
     const checks: SynapseDiagnosticsCheck[] = []
+    const platformInfo = this.platformInfo()
+    const windowsCompatibility = this.createWindowsCompatibilitySnapshot(platformInfo)
     const config = await this.loadConfig(checks)
     const activeProject = resolveActiveProject(config, payload.projectId)
     const activeRepository = config.repositories.find((item) => item.uuid === config.activeRepoUuid)
 
-    checks.push(this.ok("system.process", "系统", "进程", "系统信息已读取", this.platformInfo()))
+    checks.push(this.ok("system.process", "系统", "进程", "系统信息已读取", platformInfo))
     checks.push(this.ok("app.version", "应用", "版本", this.deps.appInfo.getVersion(), {
       appName: this.deps.appInfo.getName(),
       appPath: this.deps.appInfo.getAppPath(),
@@ -177,6 +185,7 @@ class DiagnosticsService {
     }))
 
     await this.addPathChecks(checks, config)
+    await this.addWindowsCompatibilityChecks(checks, config, windowsCompatibility)
     await this.addLogChecks(checks)
     await this.addDataStoreChecks(checks)
     await this.addInspectChecks(checks)
@@ -189,7 +198,10 @@ class DiagnosticsService {
       generatedAt,
       overallStatus,
       summary,
-      system: this.platformInfo(),
+      system: {
+        ...platformInfo,
+        windowsCompatibility,
+      },
       app: {
         name: this.deps.appInfo.getName(),
         version: this.deps.appInfo.getVersion(),
@@ -448,6 +460,159 @@ class DiagnosticsService {
         lifecycle.restartTrace ? "启动耗时已读取，近期有退出或重启痕迹" : "启动耗时已读取",
         details,
       )
+    })
+
+    await this.capture(checks, "logs.windows-compatibility", "日志与配置", "Windows 兼容日志", async () => {
+      const { scannedFiles, content } = await readRecentLogSnapshot()
+      const signals = summarizeWindowsCompatibilityLogSignals(content)
+      const details = {
+        logPath: this.deps.logStore.getLogDirectory(),
+        scannedFiles,
+        ...signals,
+      }
+
+      if (signals.errorCount > 0) {
+        return this.degraded(
+          "logs.windows-compatibility",
+          "日志与配置",
+          "Windows 兼容日志",
+          "近期日志包含 Windows 兼容性错误信号",
+          details,
+        )
+      }
+
+      if (signals.warningCount > 0) {
+        return this.degraded(
+          "logs.windows-compatibility",
+          "日志与配置",
+          "Windows 兼容日志",
+          "近期日志包含 Windows 兼容性风险信号",
+          details,
+        )
+      }
+
+      return this.ok(
+        "logs.windows-compatibility",
+        "日志与配置",
+        "Windows 兼容日志",
+        "未发现 Windows 兼容性风险日志",
+        details,
+      )
+    })
+  }
+
+  private async addWindowsCompatibilityChecks(
+    checks: SynapseDiagnosticsCheck[],
+    config: SynapseConfig,
+    snapshot: WindowsCompatibilitySnapshot,
+  ): Promise<void> {
+    await this.capture(checks, "windows.environment", "Windows 兼容性", "环境变量", async () => {
+      const pathextEntries = snapshot.env.pathextEntries.map((entry) => entry.toUpperCase())
+      const missingExecutableExtensions = [".EXE", ".CMD", ".BAT"].filter((entry) => !pathextEntries.includes(entry))
+      const details = {
+        platform: snapshot.platform,
+        arch: snapshot.arch,
+        release: snapshot.release,
+        runningOnWindows: snapshot.runningOnWindows,
+        pathDelimiter: snapshot.pathDelimiter,
+        ...snapshot.env,
+        missingExecutableExtensions,
+      }
+
+      if (!snapshot.runningOnWindows) {
+        return this.skipped(
+          "windows.environment",
+          "Windows 兼容性",
+          "环境变量",
+          "当前不是 Windows，已采集环境基线",
+          details,
+        )
+      }
+
+      if (snapshot.env.missingRequiredKeys.length > 0 || missingExecutableExtensions.length > 0) {
+        return this.degraded(
+          "windows.environment",
+          "Windows 兼容性",
+          "环境变量",
+          "Windows 关键环境变量不完整",
+          details,
+        )
+      }
+
+      return this.ok("windows.environment", "Windows 兼容性", "环境变量", "Windows 关键环境变量已采集", details)
+    })
+
+    await this.capture(checks, "windows.writable-data", "Windows 兼容性", "数据目录", async () => {
+      const details = snapshot.paths
+      const appDataInsideInstallPath = details.userDataInsideAppPath
+        || details.logInsideAppPath
+        || details.dbInsideAppPath
+
+      if (!snapshot.runningOnWindows) {
+        return this.skipped(
+          "windows.writable-data",
+          "Windows 兼容性",
+          "数据目录",
+          "当前不是 Windows，已采集路径基线",
+          details,
+        )
+      }
+
+      if (appDataInsideInstallPath) {
+        return this.degraded(
+          "windows.writable-data",
+          "Windows 兼容性",
+          "数据目录",
+          "应用数据目录可能位于安装目录内",
+          details,
+        )
+      }
+
+      return this.ok("windows.writable-data", "Windows 兼容性", "数据目录", "应用数据目录未落在安装目录内", details)
+    })
+
+    await this.capture(checks, "windows.configured-paths", "Windows 兼容性", "配置路径", async () => {
+      const pathSummary = inspectWindowsConfiguredPaths([
+        ...config.repositories.map((repository) => ({
+          kind: "repository" as const,
+          id: repository.uuid,
+          name: repository.name,
+          path: repository.localPath,
+        })),
+        ...config.global.projects.map((project) => ({
+          kind: "project" as const,
+          id: project.id,
+          name: project.name,
+          path: project.path,
+        })),
+      ])
+
+      if (!snapshot.runningOnWindows) {
+        return this.skipped(
+          "windows.configured-paths",
+          "Windows 兼容性",
+          "配置路径",
+          "当前不是 Windows，已采集配置路径基线",
+          pathSummary,
+        )
+      }
+
+      if (
+        pathSummary.unsafeEntryCount > 0
+        || pathSummary.nonAbsoluteEntryCount > 0
+        || pathSummary.nonFullyQualifiedEntryCount > 0
+        || pathSummary.duplicatePathGroups.length > 0
+      ) {
+        return this.degraded(
+          "windows.configured-paths",
+          "Windows 兼容性",
+          "配置路径",
+          "配置路径包含 Windows 风险",
+          pathSummary,
+        )
+      }
+
+      return this.ok("windows.configured-paths", "Windows 兼容性", "配置路径", "配置路径已通过 Windows 基础检查", pathSummary)
     })
   }
 
@@ -796,6 +961,23 @@ class DiagnosticsService {
       cpuCount: cpus.length,
       cpuModel: cpus[0]?.model,
     }
+  }
+
+  private createWindowsCompatibilitySnapshot(platformInfo: PlatformInfo): WindowsCompatibilitySnapshot {
+    return createWindowsCompatibilitySnapshot({
+      platform: typeof platformInfo.platform === "string" ? platformInfo.platform : process.platform,
+      arch: typeof platformInfo.arch === "string" ? platformInfo.arch : process.arch,
+      release: typeof platformInfo.release === "string" ? platformInfo.release : os.release(),
+      paths: {
+        appPath: this.deps.appInfo.getAppPath(),
+        cwd: process.cwd(),
+        userDataPath: this.deps.appInfo.getPath("userData"),
+        tempPath: this.deps.appInfo.getPath("temp"),
+        downloadsPath: this.deps.appInfo.getPath("downloads"),
+        logPath: this.deps.logStore.getLogDirectory(),
+        dbPath: this.deps.dataStore.getDbPath(),
+      },
+    })
   }
 }
 

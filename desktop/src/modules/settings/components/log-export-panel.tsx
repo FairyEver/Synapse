@@ -56,6 +56,29 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatWindowsPlatform(diagnostics: SynapseOpsDiagnostics | null): string {
+  const compatibility = diagnostics?.windowsCompatibility
+  if (!compatibility) return "-"
+  return `${compatibility.platform}/${compatibility.arch}`
+}
+
+function formatWindowsEnvironment(diagnostics: SynapseOpsDiagnostics | null): string {
+  const compatibility = diagnostics?.windowsCompatibility
+  if (!compatibility) return "-"
+  if (!compatibility.runningOnWindows) return "非 Windows"
+  return compatibility.env.missingRequiredKeys.length > 0
+    ? `缺少 ${compatibility.env.missingRequiredKeys.length} 项`
+    : "已采集"
+}
+
+function formatWindowsPathInfo(diagnostics: SynapseOpsDiagnostics | null): string {
+  const compatibility = diagnostics?.windowsCompatibility
+  if (!compatibility) return "-"
+  if (compatibility.paths.userDataInsideAppPath || compatibility.paths.logInsideAppPath) return "安装目录内"
+  if (compatibility.paths.userDataHasSpace || compatibility.paths.userDataHasNonAscii) return "含空格或非 ASCII"
+  return "用户目录"
+}
+
 const logger = createRendererLogger("settings.logs")
 
 function LogExportPanel() {
@@ -316,6 +339,10 @@ function LogExportPanel() {
             <DiagnosticRow label="Webhook" value={diagnostics?.webhook?.enabled ? "运行中" : "未运行"} />
             <DiagnosticRow label="Relay" value={String(diagnostics?.relay?.recentRunCount ?? 0)} />
             <DiagnosticRow label="Feishu" value={diagnostics?.feishu?.running ? "运行中" : "未运行"} />
+            <DiagnosticRow label="平台" value={formatWindowsPlatform(diagnostics)} />
+            <DiagnosticRow label="Windows 环境" value={formatWindowsEnvironment(diagnostics)} />
+            <DiagnosticRow label="PATH" value={String(diagnostics?.windowsCompatibility?.env.pathEntryCount ?? 0)} />
+            <DiagnosticRow label="用户数据" value={formatWindowsPathInfo(diagnostics)} />
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="secondary" className="max-w-full truncate">

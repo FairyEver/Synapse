@@ -121,6 +121,8 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       HOMEDRIVE: process.env.HOMEDRIVE,
       HOMEPATH: process.env.HOMEPATH,
       LOCALAPPDATA: process.env.LOCALAPPDATA,
+      Path: process.env.Path,
+      PATH: process.env.PATH,
       USERPROFILE: process.env.USERPROFILE,
     }
     Object.defineProperty(process, "platform", {
@@ -132,6 +134,8 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     process.env.HOMEDRIVE = "C:"
     process.env.HOMEPATH = "\\Users\\Ada"
     process.env.LOCALAPPDATA = "C:\\Users\\Ada\\AppData\\Local"
+    delete process.env.PATH
+    process.env.Path = "C:\\Users\\Ada\\AppData\\Roaming\\npm;C:\\Windows\\System32"
     process.env.USERPROFILE = "C:\\Users\\Ada"
 
     try {
@@ -177,6 +181,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
             HOMEDRIVE: "C:",
             HOMEPATH: "\\Users\\Ada",
             LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local",
+            Path: "C:\\Users\\Ada\\AppData\\Roaming\\npm;C:\\Windows\\System32",
             USERPROFILE: "C:\\Users\\Ada",
           }),
           shell: false,

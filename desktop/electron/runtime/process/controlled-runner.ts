@@ -14,6 +14,7 @@ import type {
 
 const DEFAULT_ENV_ALLOWLIST = [
   "PATH",
+  "PATHEXT",
   "HOME",
   "USER",
   "SHELL",
@@ -684,13 +685,27 @@ function buildAllowedEnv(
 
   for (const key of allowlist) {
     if (!key) continue
-    const value = env?.[key] ?? process.env[key]
-    if (value !== undefined) {
-      nextEnv[key] = value
-    }
+    const entry = findEnvEntry(env, key) ?? findEnvEntry(process.env, key)
+    if (entry) nextEnv[entry.key] = entry.value
   }
 
   return nextEnv
+}
+
+function findEnvEntry(
+  env: Record<string, string | undefined> | undefined,
+  key: string,
+): { key: string; value: string } | undefined {
+  const exact = env?.[key]
+  if (exact !== undefined) return { key, value: exact }
+  if (!env || process.platform !== "win32") return undefined
+
+  const lowered = key.toLowerCase()
+  const actualKey = Object.keys(env).find((candidate) => candidate.toLowerCase() === lowered)
+  if (!actualKey) return undefined
+
+  const value = env[actualKey]
+  return value === undefined ? undefined : { key: actualKey, value }
 }
 
 interface ControlledProcessLaunch {

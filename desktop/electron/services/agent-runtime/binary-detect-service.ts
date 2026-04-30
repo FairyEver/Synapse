@@ -8,6 +8,21 @@ const execFileAsync = promisify(execFile)
 
 function getCommonBinDirs(): string[] {
   const home = homedir()
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA ?? join(home, "AppData", "Roaming")
+    const localAppData = process.env.LOCALAPPDATA ?? join(home, "AppData", "Local")
+    const programData = process.env.ProgramData ?? process.env.PROGRAMDATA ?? "C:\\ProgramData"
+
+    return [
+      join(appData, "npm"),
+      join(localAppData, "Volta", "bin"),
+      join(localAppData, "Microsoft", "WindowsApps"),
+      join(home, "scoop", "shims"),
+      join(programData, "chocolatey", "bin"),
+      join(home, ".bun", "bin"),
+    ]
+  }
+
   return [
     "/opt/homebrew/bin",
     "/usr/local/bin",
@@ -20,11 +35,19 @@ function getCommonBinDirs(): string[] {
 
 async function isExecutable(filePath: string): Promise<boolean> {
   try {
-    await access(filePath, constants.X_OK)
+    await access(filePath, process.platform === "win32" ? constants.F_OK : constants.X_OK)
     return true
   } catch {
     return false
   }
+}
+
+function binaryFileNames(bin: string): string[] {
+  if (process.platform !== "win32" || /\.[A-Za-z0-9]+$/.test(bin)) {
+    return [bin]
+  }
+
+  return [`${bin}.cmd`, `${bin}.exe`, `${bin}.bat`, bin]
 }
 
 async function whichViaShell(bin: string): Promise<string | null> {
@@ -57,9 +80,11 @@ async function whichViaShell(bin: string): Promise<string | null> {
 
 async function whichViaCommonPaths(bin: string): Promise<string | null> {
   for (const dir of getCommonBinDirs()) {
-    const fullPath = join(dir, bin)
-    if (await isExecutable(fullPath)) {
-      return fullPath
+    for (const fileName of binaryFileNames(bin)) {
+      const fullPath = join(dir, fileName)
+      if (await isExecutable(fullPath)) {
+        return fullPath
+      }
     }
   }
   return null

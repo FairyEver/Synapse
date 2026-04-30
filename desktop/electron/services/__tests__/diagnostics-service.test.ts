@@ -8,6 +8,7 @@ import {
   summarizeLogSignals,
   summarizeServiceLifecycle,
 } from "../diagnostics-service"
+import { summarizeWindowsCompatibilityLogSignals } from "../windows-compatibility"
 
 describe("summarizeDiagnosticsChecks", () => {
   it("marks a report failed when any check fails", () => {
@@ -68,6 +69,33 @@ describe("summarizeLogSignals", () => {
         "[2026-04-29T03:11:18.063Z] [WARN ] AgentRuntime queued turn failed.",
         "{ error: 'write EPIPE' }",
       ],
+    })
+  })
+})
+
+describe("summarizeWindowsCompatibilityLogSignals", () => {
+  it("extracts Windows compatibility signals from recent logs", () => {
+    expect(summarizeWindowsCompatibilityLogSignals([
+      "[2026-04-29T03:11:18.063Z] [ERROR] spawn codex.cmd ENOENT",
+      "[2026-04-29T03:11:19.000Z] [WARN ] powershell.exe Compress-Archive failed",
+      "[2026-04-29T03:11:20.000Z] [INFO ] ok",
+    ].join("\n"))).toMatchObject({
+      signalCount: 2,
+      errorCount: 1,
+      warningCount: 1,
+      keywords: expect.arrayContaining(["powershell", "spawn"]),
+    })
+  })
+
+  it("does not treat normal compatibility snapshots as failures", () => {
+    expect(summarizeWindowsCompatibilityLogSignals([
+      "[2026-04-29T03:11:18.063Z] [INFO ] [main:windows.compatibility] Windows compatibility snapshot captured.",
+      "{ platform: 'win32', pathKey: 'Path', pathEntryCount: 12 }",
+    ].join("\n"))).toMatchObject({
+      signalCount: 0,
+      errorCount: 0,
+      warningCount: 0,
+      keywords: [],
     })
   })
 })
@@ -179,6 +207,67 @@ describe("DiagnosticsService.collect", () => {
       expect.objectContaining({
         id: "data-store.mcp",
         status: "ok",
+      }),
+    ]))
+  })
+
+  it("adds Windows compatibility checks to the report", async () => {
+    const service = createService({
+      appInfo: {
+        getAppPath: () => "C:\\Program Files\\Synapse",
+        getLocale: () => "zh-CN",
+        getName: () => "Synapse",
+        getVersion: () => "0.2.49",
+        hasSingleInstanceLock: () => true,
+        isPackaged: true,
+        getPath: (name) => {
+          if (name === "userData") return "C:\\Program Files\\Synapse\\data"
+          if (name === "temp") return "C:\\Users\\Ada Lovelace\\AppData\\Local\\Temp"
+          if (name === "downloads") return "C:\\Users\\Ada Lovelace\\Downloads"
+          return `C:\\Users\\Ada Lovelace\\${name}`
+        },
+      },
+      dataStore: {
+        getDbPath: () => "C:\\Program Files\\Synapse\\data\\synapse-data.db",
+        getDbSize: () => 0,
+        getDiagnosticsHealth: () => ({
+          quickCheck: "ok",
+          metaTableCount: 0,
+          metaColumnCount: 0,
+          operationLogCount: 0,
+        }),
+        getTableCount: () => 0,
+        exportDatabase: vi.fn(),
+      },
+      platformInfo: () => ({
+        platform: "win32",
+        arch: "x64",
+        release: "10.0.22631",
+        node: "v25.6.0",
+        chrome: "143.0.0",
+        electron: "41.2.1",
+        pid: 123,
+      }),
+    })
+
+    const report = await service.collect()
+
+    expect(report.system.windowsCompatibility).toEqual(expect.objectContaining({
+      platform: "win32",
+      runningOnWindows: true,
+    }))
+    expect(report.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "windows.environment",
+        status: "degraded",
+      }),
+      expect.objectContaining({
+        id: "windows.writable-data",
+        status: "degraded",
+      }),
+      expect.objectContaining({
+        id: "windows.configured-paths",
+        status: "degraded",
       }),
     ]))
   })

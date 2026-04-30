@@ -24,6 +24,7 @@ import type {
 } from "../../src/types/log"
 import type { LogSink, LogRecord, StructuredLogger } from "../runtime/logging"
 import { createLogger } from "../runtime/logging"
+import { createWindowsCompatibilitySnapshot } from "./windows-compatibility"
 
 const LOG_DIR_NAME = "logs"
 const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -209,9 +210,29 @@ class LogService {
       await mkdir(this.logDirPath, { recursive: true })
       await this.rotateToNewFile()
       await this.cleanOldLogFiles()
+      this.writeWindowsCompatibilitySnapshot()
     } catch (error) {
       writeFallbackError("Failed to initialize log directory.", error)
     }
+  }
+
+  private writeWindowsCompatibilitySnapshot(): void {
+    this.write({
+      source: "main",
+      level: "info",
+      category: "windows.compatibility",
+      message: "Windows compatibility snapshot captured.",
+      details: createWindowsCompatibilitySnapshot({
+        paths: {
+          appPath: safeGetAppPath(),
+          cwd: process.cwd(),
+          userDataPath: safeGetAppNamedPath("userData"),
+          tempPath: safeGetAppNamedPath("temp"),
+          downloadsPath: safeGetAppNamedPath("downloads"),
+          logPath: this.logDirPath,
+        },
+      }),
+    })
   }
 
   private startFlushTimer(): void {
@@ -557,4 +578,22 @@ export function createMainLogger(category: string): StructuredLogger {
     sink: logStore.createSink(),
     minLevel: "info",
   })
+}
+
+function safeGetAppPath(): string | undefined {
+  try {
+    return app.getAppPath()
+  } catch (error) {
+    writeFallbackError("Failed to read app path for compatibility log.", error)
+    return undefined
+  }
+}
+
+function safeGetAppNamedPath(name: Parameters<typeof app.getPath>[0]): string | undefined {
+  try {
+    return app.getPath(name)
+  } catch (error) {
+    writeFallbackError(`Failed to read app ${name} path for compatibility log.`, error)
+    return undefined
+  }
 }

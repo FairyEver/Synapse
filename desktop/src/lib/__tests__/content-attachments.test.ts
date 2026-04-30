@@ -36,4 +36,14 @@ describe("normalizeContentAttachmentPath", () => {
     expect(() => assertUniqueContentAttachmentPaths(["assets/a:b.txt", "assets/a?b.txt"]))
       .toThrow("附件文件名重复：assets/a_b.txt")
   })
+
+  it("rejects case-only collisions on Windows paths", () => {
+    expect(() => assertUniqueContentAttachmentPaths(["assets/Readme.md", "assets/readme.md"]))
+      .toThrow("附件文件名重复：assets/readme.md")
+  })
+
+  it("normalizes Unicode names before comparing attachment paths", () => {
+    expect(() => assertUniqueContentAttachmentPaths(["assets/e\u0301.txt", "assets/é.txt"]))
+      .toThrow("附件文件名重复：assets/é.txt")
+  })
 })

@@ -1,8 +1,11 @@
+import { normalizePathForCompare } from "./path-compare"
+
 const WINDOWS_RESERVED_BASENAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
 const WINDOWS_UNSAFE_CHARS = new Set(["<", ">", ":", "\"", "|", "?", "*"])
 
 function normalizeContentAttachmentPath(originalName: string): string {
   return originalName
+    .normalize("NFC")
     .replace(/\\/g, "/")
     .split("/")
     .map((segment) => segment.trim())
@@ -27,10 +30,11 @@ function assertUniqueContentAttachmentPaths(originalNames: readonly string[]): v
     if (!normalized) {
       throw new Error("附件文件名不能为空。")
     }
-    if (seen.has(normalized)) {
+    const windowsPathKey = normalizePathForCompare(normalized, { platform: "win32" })
+    if (seen.has(windowsPathKey)) {
       throw new Error(`附件文件名重复：${normalized}`)
     }
-    seen.add(normalized)
+    seen.add(windowsPathKey)
   }
 }
 

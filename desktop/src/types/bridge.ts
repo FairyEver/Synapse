@@ -131,6 +131,38 @@ export type SynapseOpsDiagnostics = {
   appVersion: string
   singleInstanceLocked: boolean
   logPath: string
+  windowsCompatibility?: {
+    platform: string
+    arch: string
+    release: string
+    runningOnWindows: boolean
+    env: {
+      pathKey?: string
+      hasPath: boolean
+      pathEntryCount: number
+      hasPathext: boolean
+      hasComSpec: boolean
+      hasSystemRoot: boolean
+      hasWindir: boolean
+      hasUserProfile: boolean
+      hasAppData: boolean
+      hasLocalAppData: boolean
+      missingRequiredKeys: string[]
+    }
+    paths: {
+      appPath?: string
+      userDataPath?: string
+      tempPath?: string
+      downloadsPath?: string
+      logPath?: string
+      userDataInsideAppPath: boolean
+      logInsideAppPath: boolean
+      userDataHasSpace: boolean
+      userDataHasNonAscii: boolean
+      logPathHasSpace: boolean
+      logPathHasNonAscii: boolean
+    }
+  }
   sideChannel?: {
     enabled: boolean
     bindAddress?: string
