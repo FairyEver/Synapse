@@ -1,5 +1,5 @@
 const WINDOWS_RESERVED_BASENAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
-const WINDOWS_UNSAFE_CHARS_PATTERN = /[<>:"|?*\u0000-\u001F]/gu
+const WINDOWS_UNSAFE_CHARS = new Set(["<", ">", ":", "\"", "|", "?", "*"])
 
 function normalizeContentAttachmentPath(originalName: string): string {
   return originalName
@@ -19,9 +19,26 @@ function normalizeContentAttachmentSegment(originalName: string): string {
   return segments.at(-1) ?? ""
 }
 
+function assertUniqueContentAttachmentPaths(originalNames: readonly string[]): void {
+  const seen = new Set<string>()
+
+  for (const originalName of originalNames) {
+    const normalized = normalizeContentAttachmentPath(originalName)
+    if (!normalized) {
+      throw new Error("附件文件名不能为空。")
+    }
+    if (seen.has(normalized)) {
+      throw new Error(`附件文件名重复：${normalized}`)
+    }
+    seen.add(normalized)
+  }
+}
+
 function toWindowsSafeSegment(segment: string): string {
   const cleaned = segment
-    .replace(WINDOWS_UNSAFE_CHARS_PATTERN, "_")
+    .split("")
+    .map((char) => isWindowsUnsafeChar(char) ? "_" : char)
+    .join("")
     .replace(/[. ]+$/u, "")
 
   if (!cleaned) {
@@ -31,4 +48,14 @@ function toWindowsSafeSegment(segment: string): string {
   return WINDOWS_RESERVED_BASENAME_PATTERN.test(cleaned) ? `_${cleaned}` : cleaned
 }
 
-export { normalizeContentAttachmentPath, normalizeContentAttachmentSegment }
+function isWindowsUnsafeChar(char: string): boolean {
+  const codePoint = char.codePointAt(0)
+  return WINDOWS_UNSAFE_CHARS.has(char)
+    || (codePoint !== undefined && codePoint <= 0x1f)
+}
+
+export {
+  assertUniqueContentAttachmentPaths,
+  normalizeContentAttachmentPath,
+  normalizeContentAttachmentSegment,
+}

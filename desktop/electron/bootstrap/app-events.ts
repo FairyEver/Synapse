@@ -16,6 +16,12 @@ import { createMainLogger } from "../services/log-store"
 import type { MainWindowState } from "./main-window"
 
 const logger = createMainLogger("bootstrap.app-events")
+const WINDOWS_APP_USER_MODEL_ID = "com.fairyever.synapse"
+
+export function configureWindowsAppIdentity(platform: NodeJS.Platform = process.platform): void {
+  if (platform !== "win32") return
+  app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID)
+}
 
 export function attachProcessLevelLogging(): void {
   process.on("uncaughtException", (error) => {

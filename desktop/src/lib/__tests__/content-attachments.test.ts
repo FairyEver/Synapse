@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
   normalizeContentAttachmentSegment,
 } from "../content-attachments"
@@ -29,5 +30,10 @@ describe("normalizeContentAttachmentPath", () => {
   it("normalizes one Windows-safe file segment", () => {
     expect(normalizeContentAttachmentSegment("C:\\temp\\AUX.txt"))
       .toBe("_AUX.txt")
+  })
+
+  it("rejects collisions after Windows-safe normalization", () => {
+    expect(() => assertUniqueContentAttachmentPaths(["assets/a:b.txt", "assets/a?b.txt"]))
+      .toThrow("附件文件名重复：assets/a_b.txt")
   })
 })

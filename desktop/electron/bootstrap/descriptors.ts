@@ -311,7 +311,7 @@ export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
   criticality: "fatal",
   create() {
     return createFileBackedDataRepository({
-      rootDir: `${app.getPath("userData")}/data-v1`,
+      rootDir: path.join(app.getPath("userData"), "data-v1"),
       safeStorage,
     })
   },

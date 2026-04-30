@@ -4,7 +4,10 @@ import os from "node:os"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
-import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
+import {
+  assertUniqueContentAttachmentPaths,
+  normalizeContentAttachmentPath,
+} from "../../src/lib/content-attachments"
 import type { SynapseContentType } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
@@ -216,6 +219,8 @@ class ContentDownloadService {
         const mainFilePath = path.join(stagingDirectoryPath, "main.md")
         await writeFile(mainFilePath, `${detail.content}\n`, "utf8")
         logger.info("Wrote main content to staging.", { filePath: mainFilePath })
+
+        assertUniqueContentAttachmentPaths(detail.attachments.map((attachment) => attachment.originalName))
 
         for (const attachment of detail.attachments) {
           const originalName = normalizeContentAttachmentPath(attachment.originalName)

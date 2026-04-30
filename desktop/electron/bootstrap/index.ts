@@ -42,6 +42,7 @@ export { createIpcRegistry, registeredIpcModules } from "./ipc-registry"
 
 export {
   attachActivateHandler,
+  configureWindowsAppIdentity,
   attachProcessLevelLogging,
   attachSecondInstanceFocus,
 } from "./app-events"

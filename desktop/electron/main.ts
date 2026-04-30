@@ -18,6 +18,7 @@ import {
   attachSecondInstanceFocus,
   buildServiceRegistry,
   clearStaleSingletonLock,
+  configureWindowsAppIdentity,
   createIpcRegistry,
   createMainWindow,
   createMainWindowState,
@@ -30,6 +31,7 @@ let allowAppQuit = false
 let windowManager: WindowManager | undefined
 
 attachProcessLevelLogging()
+configureWindowsAppIdentity()
 
 function focusOrCreateMainWindow(): void {
   showOrCreateMainWindow({

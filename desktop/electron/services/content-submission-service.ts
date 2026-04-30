@@ -21,6 +21,7 @@ import { contentWriteService, type ContentWriteResult } from "./content-write-se
 import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { runGitCommand, type GitCommandResult } from "./git-command"
+import { toRepositoryGitPaths } from "./git-paths"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
@@ -34,10 +35,6 @@ const logger = createMainLogger("service.content-submit")
 const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
 type PushProgressListener = (statusText: string) => void
-
-function toGitPath(filePath: string): string {
-  return filePath.split(path.sep).join("/")
-}
 
 function toCommitMessage(action: "create" | "update" | "delete" | "restore" | "purge", result: ContentWriteResult): string {
   return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
@@ -168,10 +165,7 @@ async function pullWithRebase(
 }
 
 async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
-  const relativePaths = filePaths
-    .map((filePath) => path.relative(gitRootPath, filePath))
-    .filter((relativePath) => relativePath && !relativePath.startsWith(".."))
-    .map(toGitPath)
+  const relativePaths = toRepositoryGitPaths(gitRootPath, filePaths)
 
   if (relativePaths.length === 0) {
     throw new Error("当前没有可提交的改动。")

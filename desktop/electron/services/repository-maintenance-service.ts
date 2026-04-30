@@ -20,6 +20,7 @@ import {
 } from "./content-history-service"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
+import { toRepositoryGitPaths } from "./git-paths"
 import { pendingPushesService } from "./pending-pushes-service"
 import { runGitCommand, type GitCommandResult } from "./git-command"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
@@ -68,10 +69,6 @@ type RepositoryMaintenanceResult = {
   message: string
   pendingPushCount: number
   pushed: boolean
-}
-
-function toGitPath(filePath: string): string {
-  return filePath.split(path.sep).join("/")
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -335,12 +332,7 @@ async function pullWithRebase(
 }
 
 async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
-  const relativePaths = Array.from(new Set(
-    filePaths
-      .map((filePath) => path.relative(gitRootPath, filePath))
-      .filter((relativePath) => relativePath && !relativePath.startsWith(".."))
-      .map(toGitPath),
-  ))
+  const relativePaths = toRepositoryGitPaths(gitRootPath, filePaths, { unique: true })
 
   if (relativePaths.length === 0) {
     throw new Error("当前没有可提交的改动。")

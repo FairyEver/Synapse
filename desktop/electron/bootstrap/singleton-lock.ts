@@ -17,7 +17,12 @@ import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("bootstrap.singleton-lock")
 
-export function clearStaleSingletonLock(): boolean {
+export function clearStaleSingletonLock(platform: NodeJS.Platform = process.platform): boolean {
+  if (platform === "win32") {
+    logger.debug("Skipping stale singleton lock cleanup on Windows.")
+    return false
+  }
+
   const lockPath = path.join(app.getPath("userData"), "SingletonLock")
 
   if (!existsSync(lockPath)) {

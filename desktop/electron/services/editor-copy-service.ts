@@ -12,7 +12,10 @@ import type {
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
 } from "../../src/types/editor"
-import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
+import {
+  assertUniqueContentAttachmentPaths,
+  normalizeContentAttachmentPath,
+} from "../../src/lib/content-attachments"
 import { arePathsEqualForCompare } from "../../src/lib/path-compare"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { editorAdapterService } from "./editor-adapter-service"
@@ -308,6 +311,8 @@ class EditorCopyService {
     if (draft.itemType !== "skill") {
       throw new Error("读取 Skill 内容失败。")
     }
+
+    assertUniqueContentAttachmentPaths(draft.files.map((file) => file.originalName))
 
     await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
       await writeFile(
