@@ -4,9 +4,9 @@
 
 ## 能做什么
 
-Agent 页面提供按项目范围运行的对话入口。页面会根据当前激活的仓库和全局项目配置选择可用项目；如果当前仓库路径匹配某个项目路径，会优先使用该项目。
+Agent 是高级本地运行时入口，面向已经配置 CLI、provider 和项目范围的工作流；核心文档路径仍以 Rules / Skills 的维护、安装和分享为主。页面会根据当前激活的仓库和全局项目配置选择可用项目；如果当前仓库路径匹配某个项目路径，会优先使用该项目。
 
-你可以在同一页面中管理会话、查看对话时间线、发送消息、使用命令面板、复制当前会话 transcript，并查看当前 Agent 的 CLI 标签、活跃 provider 和模型。时间线支持消息、thinking、tool call、tool result、permission request、error 和 result 等记录。
+你可以在同一页面中管理本地 Agent 会话、查看运行时间线、向已配置的运行时发送输入、使用命令面板、复制当前会话 transcript，并查看当前 Agent 的 CLI 标签、活跃 provider 和模型。时间线支持消息、thinking、tool call、tool result、permission request、error 和 result 等记录。
 
 当 Agent 请求权限时，页面会显示工具名称和输入内容，并提供允许或拒绝操作。会话侧栏会显示会话更新时间和未读数。
 
