@@ -147,6 +147,10 @@ describe("DiagnosticsService.collect", () => {
 
     expect(report.schemaVersion).toBe(1)
     expect(report.overallStatus).toBe("failed")
+    expect(report.system.macCompatibility).toEqual(expect.objectContaining({
+      platform: "darwin",
+      runningOnMac: true,
+    }))
     expect(report.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

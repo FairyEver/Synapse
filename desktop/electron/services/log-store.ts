@@ -24,6 +24,7 @@ import type {
 } from "../../src/types/log"
 import type { LogSink, LogRecord, StructuredLogger } from "../runtime/logging"
 import { createLogger } from "../runtime/logging"
+import { createMacCompatibilitySnapshot } from "./mac-compatibility"
 import { createWindowsCompatibilitySnapshot } from "./windows-compatibility"
 
 const LOG_DIR_NAME = "logs"
@@ -211,6 +212,7 @@ class LogService {
       await this.rotateToNewFile()
       await this.cleanOldLogFiles()
       this.writeWindowsCompatibilitySnapshot()
+      this.writeMacCompatibilitySnapshot()
     } catch (error) {
       writeFallbackError("Failed to initialize log directory.", error)
     }
@@ -223,6 +225,25 @@ class LogService {
       category: "windows.compatibility",
       message: "Windows compatibility snapshot captured.",
       details: createWindowsCompatibilitySnapshot({
+        paths: {
+          appPath: safeGetAppPath(),
+          cwd: process.cwd(),
+          userDataPath: safeGetAppNamedPath("userData"),
+          tempPath: safeGetAppNamedPath("temp"),
+          downloadsPath: safeGetAppNamedPath("downloads"),
+          logPath: this.logDirPath,
+        },
+      }),
+    })
+  }
+
+  private writeMacCompatibilitySnapshot(): void {
+    this.write({
+      source: "main",
+      level: "info",
+      category: "mac.compatibility",
+      message: "macOS compatibility snapshot captured.",
+      details: createMacCompatibilitySnapshot({
         paths: {
           appPath: safeGetAppPath(),
           cwd: process.cwd(),

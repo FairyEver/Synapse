@@ -22,6 +22,8 @@ import type {
 } from "@/types/diagnostics"
 
 const logger = createRendererLogger("settings.diagnostics")
+const WINDOWS_COMPATIBILITY_KEY = "windowsCompatibility"
+const MAC_COMPATIBILITY_KEY = "macCompatibility"
 
 async function runDiagnosticsWithIpcCheck(): Promise<SynapseDiagnosticsReport> {
   const bridge = requireSynapseBridge()
@@ -177,8 +179,11 @@ function DiagnosticsPanel() {
 
 function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport }) {
   const groups = useMemo(() => groupChecks(report.checks), [report])
+  const windowsCompatibilityEntries = getWindowsCompatibilityEntries(report.system[WINDOWS_COMPATIBILITY_KEY])
+  const macCompatibilityEntries = getMacCompatibilityEntries(report.system[MAC_COMPATIBILITY_KEY])
+  const compatibilityKeys = [WINDOWS_COMPATIBILITY_KEY, MAC_COMPATIBILITY_KEY]
   const infoSections = [
-    { title: "本机信息", entries: getInfoEntries(report.system) },
+    { title: "本机信息", entries: getInfoEntries(report.system, compatibilityKeys) },
     { title: "应用信息", entries: getInfoEntries(report.app) },
     { title: "当前上下文", entries: getInfoEntries(report.activeContext) },
   ].filter((section) => section.entries.length > 0)
@@ -194,6 +199,22 @@ function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport
               entries={section.entries}
             />
           ))}
+        </SettingsGroup>
+      ) : null}
+      {windowsCompatibilityEntries.length > 0 ? (
+        <SettingsGroup>
+          <InfoSection
+            title="Windows 兼容性"
+            entries={windowsCompatibilityEntries}
+          />
+        </SettingsGroup>
+      ) : null}
+      {macCompatibilityEntries.length > 0 ? (
+        <SettingsGroup>
+          <InfoSection
+            title="macOS 兼容性"
+            entries={macCompatibilityEntries}
+          />
         </SettingsGroup>
       ) : null}
       {Array.from(groups.entries()).map(([group, checks]) => (
@@ -273,8 +294,45 @@ function LongValueRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function getInfoEntries(values: Record<string, unknown>): [string, unknown][] {
-  return Object.entries(values).filter(([, value]) => value !== undefined)
+function getInfoEntries(values: Record<string, unknown>, excludedKeys: string[] = []): [string, unknown][] {
+  const excluded = new Set(excludedKeys)
+  return Object.entries(values).filter(([key, value]) => value !== undefined && !excluded.has(key))
+}
+
+function getWindowsCompatibilityEntries(value: unknown): [string, unknown][] {
+  if (!isRecord(value)) return []
+
+  const entries: [string, unknown][] = [
+    ["平台", value.platform],
+    ["架构", value.arch],
+    ["系统版本", value.release],
+    ["正在 Windows 运行", value.runningOnWindows],
+    ["PATH 分隔符", value.pathDelimiter],
+    ["环境变量", value.env],
+    ["路径", value.paths],
+  ]
+
+  return entries.filter(([, entryValue]) => entryValue !== undefined)
+}
+
+function getMacCompatibilityEntries(value: unknown): [string, unknown][] {
+  if (!isRecord(value)) return []
+
+  const entries: [string, unknown][] = [
+    ["平台", value.platform],
+    ["架构", value.arch],
+    ["系统版本", value.release],
+    ["正在 macOS 运行", value.runningOnMac],
+    ["PATH 分隔符", value.pathDelimiter],
+    ["环境变量", value.env],
+    ["路径", value.paths],
+  ]
+
+  return entries.filter(([, entryValue]) => entryValue !== undefined)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function StatusBadge({ status }: { status: SynapseDiagnosticsStatus }) {

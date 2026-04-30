@@ -51,6 +51,23 @@ describe("DiagnosticsPanel", () => {
     expect(html).toContain("aria-label=\"复制 path\"")
   })
 
+  it("renders Windows compatibility in a separate section", () => {
+    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createReport()} />)
+
+    expect(html).toContain("Windows 兼容性")
+    expect(html).toContain("环境变量")
+    expect(html).toContain("PATH 分隔符")
+    expect(html).not.toContain("windowsCompatibility")
+  })
+
+  it("renders macOS compatibility in a separate section", () => {
+    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createReport()} />)
+
+    expect(html).toContain("macOS 兼容性")
+    expect(html).toContain("正在 macOS 运行")
+    expect(html).not.toContain("macCompatibility")
+  })
+
   it("groups checks by group name", () => {
     const groups = groupChecks(createReport().checks)
 
@@ -72,6 +89,43 @@ function createReport(): SynapseDiagnosticsReport {
     summary: { ok: 1, degraded: 0, failed: 0, skipped: 0 },
     system: {
       platform: "darwin",
+      windowsCompatibility: {
+        platform: "darwin",
+        arch: "arm64",
+        release: "24.0.0",
+        runningOnWindows: false,
+        pathDelimiter: ":",
+        env: {
+          pathKey: "PATH",
+          hasPath: true,
+          pathEntryCount: 12,
+        },
+        paths: {
+          userDataPath: "/Users/liyang/Library/Application Support/Synapse",
+          logPath: "/Users/liyang/Library/Application Support/Synapse/logs",
+        },
+      },
+      macCompatibility: {
+        platform: "darwin",
+        arch: "arm64",
+        release: "24.0.0",
+        runningOnMac: true,
+        pathDelimiter: ":",
+        env: {
+          pathKey: "PATH",
+          hasPath: true,
+          pathEntryCount: 12,
+          shell: "/bin/zsh",
+          hasShell: true,
+          home: "/Users/liyang",
+          hasHome: true,
+        },
+        paths: {
+          userDataPath: "/Users/liyang/Library/Application Support/Synapse",
+          logPath: "/Users/liyang/Library/Application Support/Synapse/logs",
+          userDataInApplicationSupport: true,
+        },
+      },
     },
     app: {
       version: "0.2.49",

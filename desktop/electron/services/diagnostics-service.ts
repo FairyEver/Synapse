@@ -24,6 +24,10 @@ import type { ServiceRegistry } from "../runtime/service-registry"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { ServiceResolver } from "../modules/ops/status"
 import {
+  createMacCompatibilitySnapshot,
+  type MacCompatibilitySnapshot,
+} from "./mac-compatibility"
+import {
   createWindowsCompatibilitySnapshot,
   inspectWindowsConfiguredPaths,
   summarizeWindowsCompatibilityLogSignals,
@@ -171,6 +175,7 @@ class DiagnosticsService {
     const checks: SynapseDiagnosticsCheck[] = []
     const platformInfo = this.platformInfo()
     const windowsCompatibility = this.createWindowsCompatibilitySnapshot(platformInfo)
+    const macCompatibility = this.createMacCompatibilitySnapshot(platformInfo)
     const config = await this.loadConfig(checks)
     const activeProject = resolveActiveProject(config, payload.projectId)
     const activeRepository = config.repositories.find((item) => item.uuid === config.activeRepoUuid)
@@ -201,6 +206,7 @@ class DiagnosticsService {
       system: {
         ...platformInfo,
         windowsCompatibility,
+        macCompatibility,
       },
       app: {
         name: this.deps.appInfo.getName(),
@@ -965,6 +971,23 @@ class DiagnosticsService {
 
   private createWindowsCompatibilitySnapshot(platformInfo: PlatformInfo): WindowsCompatibilitySnapshot {
     return createWindowsCompatibilitySnapshot({
+      platform: typeof platformInfo.platform === "string" ? platformInfo.platform : process.platform,
+      arch: typeof platformInfo.arch === "string" ? platformInfo.arch : process.arch,
+      release: typeof platformInfo.release === "string" ? platformInfo.release : os.release(),
+      paths: {
+        appPath: this.deps.appInfo.getAppPath(),
+        cwd: process.cwd(),
+        userDataPath: this.deps.appInfo.getPath("userData"),
+        tempPath: this.deps.appInfo.getPath("temp"),
+        downloadsPath: this.deps.appInfo.getPath("downloads"),
+        logPath: this.deps.logStore.getLogDirectory(),
+        dbPath: this.deps.dataStore.getDbPath(),
+      },
+    })
+  }
+
+  private createMacCompatibilitySnapshot(platformInfo: PlatformInfo): MacCompatibilitySnapshot {
+    return createMacCompatibilitySnapshot({
       platform: typeof platformInfo.platform === "string" ? platformInfo.platform : process.platform,
       arch: typeof platformInfo.arch === "string" ? platformInfo.arch : process.arch,
       release: typeof platformInfo.release === "string" ? platformInfo.release : os.release(),
