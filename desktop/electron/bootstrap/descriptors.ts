@@ -51,11 +51,10 @@ import { createConfigBackupPayload } from "../services/config-backup-service"
 import {
   ScheduledTaskRepository,
   ScheduledTaskRunRepository,
-  ShellTaskAction,
-  TaskActionRegistry,
   TaskSchedulerExecutionService,
   TaskSchedulerService,
 } from "../services/task-scheduler"
+import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -711,21 +710,21 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
     const runs = new ScheduledTaskRunRepository({
       runs: dataRepository.namespace("task-scheduler.runs"),
     })
-    const actions = new TaskActionRegistry()
-    actions.register(new ShellTaskAction({
+    const actions = createBuiltinMainActionRegistry({
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-    }))
+    })
     const execution = new TaskSchedulerExecutionService({
       tasks,
       runs,
       actions,
+      permissionGuard,
+      auditSink,
       defaultCwd,
     })
     return new TaskSchedulerService({
       tasks,
       runs,
       execution,
-      permissionGuard,
       defaultCwd,
     })
   },

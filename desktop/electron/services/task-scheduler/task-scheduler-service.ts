@@ -1,14 +1,13 @@
-import type { ScheduledTaskEntryV1, ScheduledTaskRunEntryV1 } from "../../runtime/data-repo"
-import type { PermissionGuard } from "../../runtime/security"
 import { computeNextRunAt, resolveStartupSchedule } from "./schedule-calculator"
 import type { TaskSchedulerExecutionService } from "./execution-service"
 import type { ScheduledTaskRunRepository } from "./run-repository"
 import type { ScheduledTaskRepository } from "./task-repository"
 import type {
+  ScheduledTaskEntry,
   ScheduledTaskCreateInput,
+  ScheduledTaskRunEntry,
   ScheduledTaskRunTrigger,
   ScheduledTaskUpdateInput,
-  TaskAction,
 } from "./types"
 
 const TIMER_MAX_DELAY_MS = 2_147_483_647
@@ -17,7 +16,6 @@ export interface TaskSchedulerServiceDeps {
   readonly tasks: ScheduledTaskRepository
   readonly runs: ScheduledTaskRunRepository
   readonly execution: TaskSchedulerExecutionService
-  readonly permissionGuard: PermissionGuard
   readonly defaultCwd: string
   readonly now?: () => Date
 }
@@ -45,27 +43,21 @@ export class TaskSchedulerService {
     this.started = false
   }
 
-  listTasks(): Promise<ScheduledTaskEntryV1[]> {
+  listTasks(): Promise<ScheduledTaskEntry[]> {
     return this.deps.tasks.list()
   }
 
-  getTask(id: string): Promise<ScheduledTaskEntryV1 | null> {
+  getTask(id: string): Promise<ScheduledTaskEntry | null> {
     return this.deps.tasks.get(id)
   }
 
-  async createTask(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntryV1> {
-    await this.assertShellPermission(input.action, input.cwd)
+  async createTask(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
     const task = await this.deps.tasks.create(input)
     if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
     return task
   }
 
-  async updateTask(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntryV1> {
-    if (patch.action || patch.cwd !== undefined) {
-      const existing = await this.deps.tasks.get(id)
-      if (!existing) throw new Error(`Scheduled task "${id}" was not found`)
-      await this.assertShellPermission(patch.action ?? existing.action, patch.cwd ?? existing.cwd)
-    }
+  async updateTask(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
     this.cancel(id)
     const task = await this.deps.tasks.update(id, patch)
     if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
@@ -77,20 +69,20 @@ export class TaskSchedulerService {
     return { deleted: await this.deps.tasks.delete(id) }
   }
 
-  async setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntryV1> {
+  async setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
     this.cancel(id)
     const task = await this.deps.tasks.setEnabled(id, enabled)
     if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
     return task
   }
 
-  async runNow(id: string): Promise<ScheduledTaskRunEntryV1 | null> {
+  async runNow(id: string): Promise<ScheduledTaskRunEntry | null> {
     const task = await this.deps.tasks.get(id)
     if (!task) return null
     return this.executeOrSkip(task, "manual")
   }
 
-  runTaskNow(id: string): Promise<ScheduledTaskRunEntryV1 | null> {
+  runTaskNow(id: string): Promise<ScheduledTaskRunEntry | null> {
     return this.runNow(id)
   }
 
@@ -101,14 +93,14 @@ export class TaskSchedulerService {
   listRuns(
     taskId: string,
     options?: { readonly limit?: number },
-  ): Promise<ScheduledTaskRunEntryV1[]> {
+  ): Promise<ScheduledTaskRunEntry[]> {
     return this.deps.runs.listByTask(taskId, options)
   }
 
   async triggerForTest(
     id: string,
     triggeredBy: ScheduledTaskRunTrigger,
-  ): Promise<ScheduledTaskRunEntryV1 | null> {
+  ): Promise<ScheduledTaskRunEntry | null> {
     return this.runScheduled(id, triggeredBy)
   }
 
@@ -119,7 +111,7 @@ export class TaskSchedulerService {
     }
   }
 
-  private async scheduleOnStartup(task: ScheduledTaskEntryV1): Promise<void> {
+  private async scheduleOnStartup(task: ScheduledTaskEntry): Promise<void> {
     const decision = resolveStartupSchedule({
       enabled: task.enabled,
       nextRunAt: task.nextRunAt,
@@ -155,7 +147,7 @@ export class TaskSchedulerService {
   private async runScheduled(
     id: string,
     triggeredBy: ScheduledTaskRunTrigger,
-  ): Promise<ScheduledTaskRunEntryV1 | null> {
+  ): Promise<ScheduledTaskRunEntry | null> {
     this.timers.delete(id)
     const task = await this.deps.tasks.get(id)
     if (!task) return null
@@ -167,9 +159,9 @@ export class TaskSchedulerService {
   }
 
   private async executeOrSkip(
-    task: ScheduledTaskEntryV1,
+    task: ScheduledTaskEntry,
     triggeredBy: ScheduledTaskRunTrigger,
-  ): Promise<ScheduledTaskRunEntryV1> {
+  ): Promise<ScheduledTaskRunEntry> {
     if (this.runningTaskIds.has(task.id)) {
       return this.recordSkipped(task.id, triggeredBy, "task is already running")
     }
@@ -185,7 +177,7 @@ export class TaskSchedulerService {
     taskId: string,
     triggeredBy: ScheduledTaskRunTrigger,
     error: string,
-  ): Promise<ScheduledTaskRunEntryV1> {
+  ): Promise<ScheduledTaskRunEntry> {
     const run = await this.deps.runs.start(taskId, triggeredBy)
     const finished = await this.deps.runs.finish(run.id, {
       status: "skipped",
@@ -195,7 +187,7 @@ export class TaskSchedulerService {
     return finished
   }
 
-  private resolveNextRunAt(task: ScheduledTaskEntryV1, preferredNextRunAt?: string): Date {
+  private resolveNextRunAt(task: ScheduledTaskEntry, preferredNextRunAt?: string): Date {
     if (preferredNextRunAt) {
       const preferred = new Date(preferredNextRunAt)
       if (preferred.getTime() > this.now().getTime()) return preferred
@@ -212,24 +204,6 @@ export class TaskSchedulerService {
     if (!timer) return
     clearTimeout(timer)
     this.timers.delete(id)
-  }
-
-  private async assertShellPermission(action: TaskAction, cwd: string | undefined): Promise<void> {
-    if (action.type !== "shell_command") return
-    const permission = await this.deps.permissionGuard.check({
-      action: "shell.exec",
-      actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
-      resource: action.content,
-      context: {
-        source: "task-scheduler",
-        cwd: cwd ?? this.deps.defaultCwd,
-        envKeys: action.env ? Object.keys(action.env).sort() : [],
-        timeoutMins: action.timeoutMins,
-      },
-    })
-    if (!permission.allowed) {
-      throw new Error(permission.reason)
-    }
   }
 
   private now(): Date {

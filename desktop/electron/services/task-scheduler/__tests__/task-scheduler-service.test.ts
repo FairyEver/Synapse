@@ -1,18 +1,24 @@
+import { z } from "zod"
 import { describe, expect, it } from "vitest"
 
-import type {
-  DataChangeListener,
-  DataNamespace,
-  ScheduledTaskEntryV1,
-  ScheduledTaskRunEntryV1,
-} from "../../../runtime/data-repo"
-import type { PermissionGuard } from "../../../runtime/security"
-import { TaskActionRegistry } from "../action-registry"
+import {
+  MainActionRegistry,
+  type ActionExecutionInput,
+  type MainActionDefinition,
+} from "../../../action-runtime/action-registry"
+import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { TaskSchedulerExecutionService } from "../execution-service"
 import { ScheduledTaskRunRepository } from "../run-repository"
 import { ScheduledTaskRepository } from "../task-repository"
 import { TaskSchedulerService } from "../task-scheduler-service"
-import type { ScheduledTaskCreateInput, TaskActionExecutor, TaskActionExecutionInput } from "../types"
+import type {
+  ScheduledTaskEntry,
+  ScheduledTaskRunEntry,
+} from "../types"
+
+const testActionSchema = z.object({ message: z.string().min(1) })
+type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("TaskSchedulerService", () => {
   it("schedules enabled tasks on start", async () => {
@@ -26,7 +32,7 @@ describe("TaskSchedulerService", () => {
   })
 
   it("skips overlapping scheduled runs", async () => {
-    const harness = createHarness({ executor: longRunningExecutor() })
+    const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))
 
     const runPromise = harness.service.runNow("task:1")
@@ -43,7 +49,7 @@ describe("TaskSchedulerService", () => {
   })
 
   it("stops running task by run id", async () => {
-    const harness = createHarness({ executor: longRunningExecutor() })
+    const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))
 
     const runPromise = harness.service.runNow("task:1")
@@ -56,22 +62,14 @@ describe("TaskSchedulerService", () => {
 
     expect(await harness.runs.get(running!.id)).toEqual(expect.objectContaining({ status: "cancelled" }))
   })
-
-  it("denies shell task creation when permission check fails", async () => {
-    const harness = createHarness({
-      permissionGuard: permissionGuard({ allowed: false, reason: "denied by test" }),
-    })
-
-    await expect(harness.service.createTask(createTaskInput())).rejects.toThrow(/denied by test/)
-  })
 })
 
 function createHarness(options: {
-  readonly executor?: TaskActionExecutor
+  readonly action?: MainActionDefinition
   readonly permissionGuard?: PermissionGuard
 } = {}) {
-  const taskItems = new MemoryNamespace<ScheduledTaskEntryV1>("task-scheduler.tasks")
-  const runItems = new MemoryNamespace<ScheduledTaskRunEntryV1>("task-scheduler.runs")
+  const taskItems = new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks")
+  const runItems = new MemoryNamespace<ScheduledTaskRunEntry>("task-scheduler.runs")
   const tasks = new ScheduledTaskRepository({
     tasks: taskItems,
     now: () => new Date("2026-04-29T10:00:00.000Z"),
@@ -82,25 +80,14 @@ function createHarness(options: {
     now: () => new Date("2026-04-29T10:00:00.000Z"),
     idFactory: (taskId, index) => `run:${taskId}:${index}`,
   })
-  const actions = new TaskActionRegistry()
-  actions.register(options.executor ?? {
-    type: "shell_command",
-    execute: async () => ({
-      status: "success",
-      process: {
-        exitCode: 0,
-        signal: null,
-        stdout: "ok",
-        stderr: "",
-        timedOut: false,
-        durationMs: 1,
-      },
-    }),
-  } satisfies TaskActionExecutor)
+  const actions = new MainActionRegistry()
+  actions.register(options.action ?? successAction())
   const execution = new TaskSchedulerExecutionService({
     tasks,
     runs,
     actions,
+    permissionGuard: options.permissionGuard ?? permissionGuard({ allowed: true }),
+    auditSink: auditSink(),
     defaultCwd: "/tmp",
   })
   return {
@@ -108,7 +95,6 @@ function createHarness(options: {
       tasks,
       runs,
       execution,
-      permissionGuard: options.permissionGuard ?? permissionGuard({ allowed: true }),
       defaultCwd: "/tmp",
       now: () => new Date("2026-04-29T10:00:00.000Z"),
     }),
@@ -117,35 +103,48 @@ function createHarness(options: {
   }
 }
 
-function longRunningExecutor(): TaskActionExecutor {
+function successAction(): MainActionDefinition<TestActionConfig> {
   return {
-    type: "shell_command",
-    execute: (input: TaskActionExecutionInput) =>
+    manifest: {
+      id: "builtin.test",
+      title: "Test",
+      permissions: ["shell.exec"],
+      defaultConfig: { message: "ok" },
+      configSchema: testActionSchema,
+    },
+    buildPermissionRequest: ({ config, context }) => ({
+      action: "shell.exec",
+      actor: context.actor,
+      resource: config.message,
+      context: { taskId: context.taskId, runId: context.runId },
+    }),
+    execute: async () => ({
+      status: "success",
+      summary: "ok",
+    }),
+  }
+}
+
+function longRunningAction(): MainActionDefinition<TestActionConfig> {
+  return {
+    ...successAction(),
+    execute: (input: ActionExecutionInput<TestActionConfig>) =>
       new Promise((resolve) => {
-        input.abortSignal.addEventListener("abort", () => {
+        input.context.abortSignal.addEventListener("abort", () => {
           resolve({ status: "cancelled", error: "shell command cancelled" })
         }, { once: true })
       }),
   }
 }
 
-function createTaskInput(): ScheduledTaskCreateInput {
-  return {
-    name: "Build",
-    scope: { type: "global" },
-    trigger: { type: "interval", everyMinutes: 10 },
-    action: { type: "shell_command", mode: "command", content: "echo ok" },
-  }
-}
-
-function createTask(overrides: Partial<ScheduledTaskEntryV1> = {}): ScheduledTaskEntryV1 {
+function createTask(overrides: Partial<ScheduledTaskEntry> = {}): ScheduledTaskEntry {
   return {
     id: "task:1",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "Build",
     scope: { type: "global" },
-    trigger: { type: "interval", everyMinutes: 10 },
-    action: { type: "shell_command", mode: "command", content: "echo ok", timeoutMins: 30 },
+    trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+    action: { type: "builtin.test", config: { message: "ok" } },
     enabled: true,
     missedRunPolicy: "skip",
     overlapPolicy: "skip",
@@ -160,6 +159,14 @@ function permissionGuard(result: Awaited<ReturnType<PermissionGuard["check"]>>):
   return {
     registerPolicy: () => () => {},
     check: async () => result,
+  }
+}
+
+function auditSink(): AuditSink {
+  return {
+    record: () => {},
+    list: () => [],
+    clearForTests: () => {},
   }
 }
 
