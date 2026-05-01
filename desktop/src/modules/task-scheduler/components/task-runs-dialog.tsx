@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { Square } from "lucide-react"
 
+import { ActionResultView } from "@/action-runtime/action-result-view"
+import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -120,12 +122,10 @@ function TaskRunsDialog({
                   ) : null}
                 </div>
 
-                {run.exitCode !== undefined && run.exitCode !== null ? (
-                  <p className="text-sm text-muted-foreground">退出码 {run.exitCode}</p>
+                {run.result ? (
+                  <RunResult task={task} result={run.result} />
                 ) : null}
-                {run.error ? <OutputBlock label="错误" value={run.error} /> : null}
-                {run.stdout ? <OutputBlock label="stdout" value={run.stdout} /> : null}
-                {run.stderr ? <OutputBlock label="stderr" value={run.stderr} /> : null}
+                {run.error && !run.result?.error ? <OutputBlock label="错误" value={run.error} /> : null}
               </div>
             ))}
           </div>
@@ -135,6 +135,25 @@ function TaskRunsDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function RunResult({
+  task,
+  result,
+}: {
+  readonly task: ScheduledTask | null
+  readonly result: ScheduledTaskRun["result"]
+}) {
+  if (!result) return null
+  if (task) {
+    try {
+      const ResultView = rendererActionRegistry.get(task.action.type).ResultView
+      if (ResultView) return <ResultView result={result} />
+    } catch {
+      return <ActionResultView result={result} />
+    }
+  }
+  return <ActionResultView result={result} />
 }
 
 function OutputBlock({ label, value }: { label: string; value: string }) {

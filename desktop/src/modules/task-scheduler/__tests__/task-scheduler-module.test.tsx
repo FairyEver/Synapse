@@ -68,16 +68,39 @@ describe("TaskSchedulerModule", () => {
     expect(html).not.toContain(">暂停</span>")
     expect(html).not.toContain("lucide-pause")
   })
+
+  it("renders action summaries", () => {
+    useTaskSchedulerTasksMock.mockReturnValue({
+      tasks: [createTask()],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<TaskSchedulerModule />)
+
+    expect(html).toContain("命令 · echo ok")
+  })
 })
 
 function createTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   return {
     id: "task-1",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "Backup",
     scope: { type: "global" },
-    trigger: { type: "interval", everyMinutes: 1 },
-    action: { type: "shell_command", mode: "command", content: "echo ok", timeoutMins: 30 },
+    trigger: {
+      type: "builtin.interval",
+      config: { everyMinutes: 1, anchor: "created_at" },
+    },
+    action: {
+      type: "builtin.command",
+      config: {
+        command: "echo ok",
+        shell: "posix",
+        timeoutMins: 30,
+      },
+    },
     enabled: true,
     missedRunPolicy: "skip",
     overlapPolicy: "skip",

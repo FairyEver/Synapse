@@ -66,6 +66,7 @@ import {
   useTaskSchedulerTasks,
 } from "./hooks/use-task-scheduler"
 import {
+  formatTaskAction,
   formatTaskDate,
   formatTaskScope,
   formatTaskStatus,
@@ -203,6 +204,7 @@ function TaskSchedulerModule() {
                     <TableHead>名称</TableHead>
                     <TableHead>作用域</TableHead>
                     <TableHead>触发</TableHead>
+                    <TableHead>动作</TableHead>
                     <TableHead>上次</TableHead>
                     <TableHead>下次</TableHead>
                     <TableHead>状态</TableHead>
@@ -216,6 +218,7 @@ function TaskSchedulerModule() {
                       <TableCell className="font-medium">{task.name}</TableCell>
                       <TableCell>{formatTaskScope(task, config.global.projects)}</TableCell>
                       <TableCell>{formatTaskTrigger(task)}</TableCell>
+                      <TableCell>{formatTaskAction(task)}</TableCell>
                       <TableCell>{formatTaskDate(task.lastRunAt, "未运行")}</TableCell>
                       <TableCell>{formatTaskDate(task.nextRunAt, "未排期")}</TableCell>
                       <TableCell>

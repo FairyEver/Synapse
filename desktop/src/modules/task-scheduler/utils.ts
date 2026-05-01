@@ -120,6 +120,14 @@ function formatTaskTrigger(task: ScheduledTask): string {
     : `每 ${task.trigger.config.everyMinutes} 分钟`
 }
 
+function formatTaskAction(task: ScheduledTask): string {
+  try {
+    return rendererActionRegistry.summarize(task.action.type, task.action.config)
+  } catch {
+    return task.action.type
+  }
+}
+
 function formatTaskDate(value: string | undefined, fallback: string): string {
   if (!value) {
     return fallback
@@ -175,6 +183,7 @@ export {
   buildTaskUpdateInput,
   createTaskFormState,
   formatRunStatus,
+  formatTaskAction,
   formatTaskDate,
   formatTaskScope,
   formatTaskStatus,
