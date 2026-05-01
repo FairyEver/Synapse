@@ -1,10 +1,11 @@
 import { ClipboardCopy, Download, LoaderCircle, Play, RefreshCw } from "lucide-react"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useState, type ReactNode } from "react"
 
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import {
   appendDiagnosticsCheck,
@@ -24,6 +25,8 @@ import type {
 const logger = createRendererLogger("settings.diagnostics")
 const WINDOWS_COMPATIBILITY_KEY = "windowsCompatibility"
 const MAC_COMPATIBILITY_KEY = "macCompatibility"
+const COMPATIBILITY_CHECK_GROUPS = new Set(["Windows 兼容性", "macOS 兼容性"])
+const LOCAL_ENVIRONMENT_CHECK_GROUPS = new Set(["系统", "应用", "路径与权限", "IPC"])
 
 async function runDiagnosticsWithIpcCheck(): Promise<SynapseDiagnosticsReport> {
   const bridge = requireSynapseBridge()
@@ -187,10 +190,77 @@ function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport
     { title: "应用信息", entries: getInfoEntries(report.app) },
     { title: "当前上下文", entries: getInfoEntries(report.activeContext) },
   ].filter((section) => section.entries.length > 0)
+  const tabs = createDiagnosticsTabs({
+    infoSections,
+    windowsCompatibilityEntries,
+    macCompatibilityEntries,
+    groups,
+  })
+
+  if (tabs.length === 0) return null
 
   return (
-    <>
-      {infoSections.length > 0 ? (
+    <Tabs
+      defaultValue={tabs[0].value}
+      data-track="diagnostics-details-tabs"
+      className="min-w-0"
+    >
+      <TabsList variant="line" className="max-w-full flex-wrap justify-start">
+        {tabs.map((tab) => (
+          <TabsTrigger key={tab.value} value={tab.value} className="flex-none">
+            {tab.title}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {tabs.map((tab) => (
+        <TabsContent key={tab.value} value={tab.value}>
+          {tab.content}
+        </TabsContent>
+      ))}
+    </Tabs>
+  )
+}
+
+type InfoSectionModel = {
+  title: string
+  entries: [string, unknown][]
+}
+
+type DiagnosticsTab = {
+  value: string
+  title: string
+  content: ReactNode
+}
+
+type CheckGroupModel = {
+  group: string
+  checks: SynapseDiagnosticsCheck[]
+}
+
+function createDiagnosticsTabs({
+  infoSections,
+  windowsCompatibilityEntries,
+  macCompatibilityEntries,
+  groups,
+}: {
+  infoSections: InfoSectionModel[]
+  windowsCompatibilityEntries: [string, unknown][]
+  macCompatibilityEntries: [string, unknown][]
+  groups: Map<string, SynapseDiagnosticsCheck[]>
+}): DiagnosticsTab[] {
+  const tabs: DiagnosticsTab[] = []
+  const checkGroups = Array.from(groups.entries()).map(([group, checks]) => ({ group, checks }))
+  const compatibilityCheckGroups = checkGroups.filter((item) => COMPATIBILITY_CHECK_GROUPS.has(item.group))
+  const localEnvironmentCheckGroups = checkGroups.filter((item) => LOCAL_ENVIRONMENT_CHECK_GROUPS.has(item.group))
+  const runtimeCheckGroups = checkGroups.filter(
+    (item) => !COMPATIBILITY_CHECK_GROUPS.has(item.group) && !LOCAL_ENVIRONMENT_CHECK_GROUPS.has(item.group),
+  )
+
+  if (infoSections.length > 0) {
+    tabs.push({
+      value: "info",
+      title: "基础信息",
+      content: (
         <SettingsGroup>
           {infoSections.map((section) => (
             <InfoSection
@@ -200,24 +270,87 @@ function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport
             />
           ))}
         </SettingsGroup>
-      ) : null}
-      {windowsCompatibilityEntries.length > 0 ? (
-        <SettingsGroup>
-          <InfoSection
-            title="Windows 兼容性"
-            entries={windowsCompatibilityEntries}
-          />
-        </SettingsGroup>
-      ) : null}
-      {macCompatibilityEntries.length > 0 ? (
-        <SettingsGroup>
-          <InfoSection
-            title="macOS 兼容性"
-            entries={macCompatibilityEntries}
-          />
-        </SettingsGroup>
-      ) : null}
-      {Array.from(groups.entries()).map(([group, checks]) => (
+      ),
+    })
+  }
+
+  if (
+    windowsCompatibilityEntries.length > 0
+    || macCompatibilityEntries.length > 0
+    || compatibilityCheckGroups.length > 0
+  ) {
+    tabs.push(createCompatibilityTab({
+      windowsCompatibilityEntries,
+      macCompatibilityEntries,
+      compatibilityCheckGroups,
+    }))
+  }
+
+  if (localEnvironmentCheckGroups.length > 0) {
+    tabs.push({
+      value: "local-environment",
+      title: "本地环境",
+      content: (
+        <CheckGroupList groups={localEnvironmentCheckGroups} />
+      ),
+    })
+  }
+
+  if (runtimeCheckGroups.length > 0) {
+    tabs.push({
+      value: "runtime",
+      title: "运行服务",
+      content: (
+        <CheckGroupList groups={runtimeCheckGroups} />
+      ),
+    })
+  }
+
+  return tabs
+}
+
+function createCompatibilityTab({
+  windowsCompatibilityEntries,
+  macCompatibilityEntries,
+  compatibilityCheckGroups,
+}: {
+  windowsCompatibilityEntries: [string, unknown][]
+  macCompatibilityEntries: [string, unknown][]
+  compatibilityCheckGroups: CheckGroupModel[]
+}): DiagnosticsTab {
+  return {
+    value: "compatibility",
+    title: "兼容性",
+    content: (
+      <div className="flex min-w-0 flex-col gap-3">
+        {windowsCompatibilityEntries.length > 0 ? (
+          <SettingsGroup>
+            <InfoSection
+              title="Windows 兼容性"
+              entries={windowsCompatibilityEntries}
+            />
+          </SettingsGroup>
+        ) : null}
+        {macCompatibilityEntries.length > 0 ? (
+          <SettingsGroup>
+            <InfoSection
+              title="macOS 兼容性"
+              entries={macCompatibilityEntries}
+            />
+          </SettingsGroup>
+        ) : null}
+        <CheckGroupList groups={compatibilityCheckGroups} />
+      </div>
+    ),
+  }
+}
+
+function CheckGroupList({ groups }: { groups: CheckGroupModel[] }) {
+  if (groups.length === 0) return null
+
+  return (
+    <>
+      {groups.map(({ group, checks }) => (
         <SettingsGroup key={group} sectionClassName="py-3">
           <p className="text-sm font-medium text-foreground">{group}</p>
           {checks.map((check) => (

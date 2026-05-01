@@ -31,6 +31,30 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("运行设置")
   })
 
+  it("renders section navigation beside a single form column", () => {
+    const html = renderDialog()
+
+    expect(html).toContain("task-form-dialog-layout")
+    expect(html).toContain("task-form-section-nav")
+    expect(html).toContain("task-form-section-list")
+    expect(html).toContain("task-form-section-select")
+    expect(html).toContain("task-form-section-fields")
+    expect(html).toContain('aria-current="page"')
+  })
+
+  it("uses independent sidebar and form scroll panes inside the dialog body", () => {
+    const html = renderDialog()
+
+    expect(html).toContain("h-[calc(100vh-2rem)]")
+    expect(html).toContain("flex h-full min-h-0")
+    expect(html).toContain("flex-col overflow-hidden")
+    expect(html).toContain("min-h-0 flex-1 px-5 py-4 overflow-hidden")
+    expect(html).toContain("task-form-section-fields")
+    expect(html).toContain("task-form-section-sidebar")
+    expect(html).toContain("task-form-section-scroll")
+    expect(html).toContain("min-h-0 overflow-y-auto")
+  })
+
   it("shows the project selector only for project-scoped tasks", () => {
     const globalHtml = renderDialog()
     const projectHtml = renderDialog({
@@ -70,6 +94,20 @@ describe("TaskFormDialog", () => {
 
     expect(html).toContain("脚本")
     expect(html).not.toContain(">命令</label>")
+  })
+
+  it("uses compact grids for short controls", () => {
+    const html = renderDialog({
+      task: createTask({
+        scope: { type: "project", projectId: "project-1" },
+        trigger: { type: "interval", everyMinutes: 15, anchor: "last_completed_at" },
+      }),
+    })
+
+    expect(html).toContain("task-form-basic-grid")
+    expect(html).toContain("task-form-trigger-grid")
+    expect(html).toContain("task-form-run-settings-grid")
+    expect(html).not.toContain("sm:grid-cols-[auto_1fr]")
   })
 })
 

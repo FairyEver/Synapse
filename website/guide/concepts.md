@@ -41,11 +41,11 @@ Skill 有中文名称、名称、简介、分类、主说明和附件。名称�
 
 ## 编辑器安装范围
 
-当前代码定义的编辑器是 Cursor、Codex、Claude Code、Windsurf。四者都支持 Skill 的全局和项目安装。
+Synapse 当前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均支持 Skill 的全局和项目级安装。
 
 Rule 的项目安装支持 Cursor、Codex、Claude Code、Windsurf。Rule 的全局安装支持 Codex、Claude Code、Windsurf；Cursor 全局 Rule 当前不支持。
 
-安装路径由编辑器定义解析。项目安装会写入所选项目目录，全局安装会写入编辑器用户目录。
+安装路径遵循各编辑器的约定。项目级安装会写入所选项目目录，全局安装会写入编辑器用户目录。
 
 ```text
 仓库

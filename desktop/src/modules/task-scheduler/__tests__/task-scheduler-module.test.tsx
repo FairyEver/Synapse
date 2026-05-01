@@ -42,6 +42,19 @@ vi.mock("../components/task-runs-dialog", () => ({
 }))
 
 describe("TaskSchedulerModule", () => {
+  it("does not render a duplicate module heading", () => {
+    useTaskSchedulerTasksMock.mockReturnValue({
+      tasks: [],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<TaskSchedulerModule />)
+
+    expect(html).not.toContain(">定时任务</h2>")
+  })
+
   it("does not render a pause action when tasks already have an enable switch", () => {
     useTaskSchedulerTasksMock.mockReturnValue({
       tasks: [createTask({ enabled: true })],

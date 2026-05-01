@@ -4,7 +4,7 @@
 
 ## Rule 编写
 
-创建 Rule 时，写入 payload 需要包含 `title`、`name`、`description`、`category`、`icon`、`iconBg`、`iconType`、`iconImage` 和 `content`。当 `iconType` 不是 `image` 时，`icon` 和 `iconBg` 也必须是非空字符串。
+创建 Rule 时，需要提供 `title`、`name`、`description`、`category`、`icon`、`iconBg`、`iconType`、`iconImage` 和 `content`。当 `iconType` 不是 `image` 时，`icon` 和 `iconBg` 也必须填写。
 
 Rule 正文写入 `main.md`。写入时会去掉正文首尾空白，并保证文件以换行结尾。
 
@@ -12,9 +12,9 @@ Rule 正文写入 `main.md`。写入时会去掉正文首尾空白，并保证�
 
 ## Skill 编写
 
-创建 Skill 时，payload 字段与 Rule 相同，并且必须包含 `files`。Skill 的主说明同样写入 `main.md`。
+创建 Skill 时，需要填写与 Rule 相同的基础信息，并提供 `files` 附件列表。Skill 的主说明同样写入 `main.md`。
 
-Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`，以及可选的 `sha256` 和 `bytes`。新附件写入时会校验文件名、大小和重复路径；已有附件可以通过 `sha256` 继续引用。
+Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`，以及可选的 `sha256` 和 `bytes`。添加新附件时，Synapse 会检查文件名、大小和重复路径；已有附件可以通过 `sha256` 继续引用。
 
 ## 标题、简介与分类
 
@@ -30,11 +30,11 @@ Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`
 | `category` | `snapshot.json` |
 | `content` | `main.md` |
 
-写作时可以把 `title` 用作面向用户的标题，把 `description` 写成简短说明，把 `category` 保持为可分类检索的文本。这是内容维护建议；代码只校验这些字段非空。
+写作时可以把 `title` 用作面向用户的标题，把 `description` 写成简短说明，把 `category` 保持为可分类检索的文本。Synapse 会检查这些必填项是否填写完整。
 
 ## 附件
 
-只有 Skill 类型声明了附件能力。附件路径会先标准化：反斜杠会转为 `/`，空路径段、`.` 和 `..` 会被移除，Windows 不安全字符会被替换，末尾的点和空格会被去掉。
+只有 Skill 支持附件。附件路径会先标准化：反斜杠会转为 `/`，空路径段、`.` 和 `..` 会被移除，Windows 不安全字符会被替换，末尾的点和空格会被去掉。
 
 附件实体按内容 SHA-256 写入 `system/blobs`。历史版本的 `attachments.json` 只记录附件引用：
 

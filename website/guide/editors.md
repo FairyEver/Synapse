@@ -4,9 +4,9 @@
 
 ## 支持范围
 
-当前代码定义了 4 个编辑器：Cursor、Codex、Claude Code、Windsurf。四者都声明支持 Rule 和 Skill，也都声明支持全局和项目范围。
+Synapse 当前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均可安装 Rule 和 Skill，具体安装范围如下。
 
-实际安装时，目标解析还会返回更细的状态。Cursor 全局 Rule 当前返回“不支持”，因为代码中没有固定的 Cursor 全局 Rule 磁盘路径。
+安装前，Synapse 会检查目标位置是否可用。Cursor 暂不支持全局 Rule 安装，因此该组合会显示为“不支持”。
 
 | 编辑器 | Rule 全局 | Rule 项目 | Skill 全局 | Skill 项目 |
 | --- | --- | --- | --- | --- |
@@ -15,11 +15,11 @@
 | Claude Code | 支持 | 支持 | 支持 | 支持 |
 | Windsurf | 支持 | 支持 | 支持 | 支持 |
 
-路径解析支持 macOS、Linux 和 Windows。其他系统会返回“不支持”。
+安装路径支持 macOS、Linux 和 Windows。其他系统会显示为“不支持”。
 
 ## 全局安装
 
-全局安装写入编辑器的用户目录。目标位置由编辑器定义解析。
+全局安装会写入对应编辑器的用户目录。
 
 | 编辑器 | Rule | Skill |
 | --- | --- | --- |
@@ -41,33 +41,33 @@ Codex 全局 Rule 和 Windsurf 全局 Rule 会写入已有文件中的 Synapse �
 | Claude Code | `{projectPath}/.claude/rules/{name}.md` | `{projectPath}/.claude/skills/{skillName}/` |
 | Windsurf | `{projectPath}/.windsurf/rules/{name}.md` | `{projectPath}/.windsurf/skills/{skillName}/` |
 
-项目 Rule 安装可能需要补充编辑器元数据：
+安装项目级 Rule 时，部分编辑器需要补充以下信息：
 
-| 编辑器 | 元数据 |
+| 编辑器 | 需要填写的信息 |
 | --- | --- |
 | Cursor | `description`、`globs`、`alwaysApply` |
 | Claude Code | `paths` |
 | Windsurf | `trigger`，以及按触发模式使用的 `description` 或 `globs` |
 
-Codex 项目 Rule 不显示额外元数据表单。
+Codex 项目级 Rule 无需填写额外信息。
 
 ## 安装状态
 
-安装前会解析目标位置。目标状态包括：
+安装前，Synapse 会检查目标位置。状态包括：
 
 | 状态 | 含义 |
 | --- | --- |
-| `ready` | 可以写入目标文件或目录 |
-| `unsupported` | 当前编辑器或当前组合不支持 |
-| `unavailable` | 缺少编辑器用户目录，或项目路径不存在 |
-| `conflict` | Skill 目标位置已有同名目录，需要确认替换 |
+| 可安装 | 可以写入目标文件或目录 |
+| 不支持 | 当前编辑器或当前组合不支持 |
+| 不可用 | 缺少编辑器用户目录，或项目路径不存在 |
+| 冲突 | Skill 目标位置已有同名目录，需要确认替换 |
 
 安装面板会显示目标位置。文件目标提示“将写入单个文件”，目录目标提示“将写入目录”。
 
 ## 路径参考
 
-`{name}` 来自 Rule 的名称字段。若部分编辑器需要兜底，代码会使用 Synapse 生成的规则名。
+`{name}` 为 Rule 的名称。未设置名称时，Synapse 会使用自动生成的规则名。
 
-`{skillName}` 来自 Skill 的名称字段；如果旧数据没有名称，会回退到标题生成的 slug，再回退到内容 ID。
+`{skillName}` 为 Skill 的名称。未设置名称时，Synapse 会根据标题生成目录名；仍无法生成时，使用内容 ID。
 
-`{projectPath}` 是安装时选择的项目目录。项目路径不存在时，目标解析会返回不可用。
+`{projectPath}` 为安装时选择的项目目录。项目路径不存在时，安装目标会显示为不可用。

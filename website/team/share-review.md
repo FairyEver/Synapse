@@ -4,9 +4,9 @@
 
 ## 创建内容
 
-创建 Rule 或 Skill 时，Synapse 会先读取当前激活仓库，再读取当前仓库身份。内容会写入仓库目录，并生成新的内容 ID 和历史版本目录名。
+创建 Rule 或 Skill 时，Synapse 会使用当前激活仓库和仓库身份保存内容。内容会写入仓库目录，并生成新的内容 ID 和历史版本。
 
-创建完成后，内容结果包含 `id`、`type`、`title`、`latestHistoryDirname` 和 `modifiedAt`。如果仓库不是 Git 仓库，Synapse 会刷新内容索引并返回本地保存结果。
+创建完成后，Synapse 会记录 `id`、`type`、`title`、`latestHistoryDirname` 和 `modifiedAt`。如果仓库不是 Git 仓库，Synapse 会刷新内容索引并显示本地保存结果。
 
 ## 提交
 
@@ -17,7 +17,7 @@
 | `user.name` | `Synapse Bot` |
 | `user.email` | `bot@synapse.local` |
 
-随后 Synapse 会暂存本次内容写入返回的路径，并创建提交。内容提交信息格式为：
+随后 Synapse 会暂存本次变更涉及的文件，并创建提交。内容提交信息格式为：
 
 ```text
 [synapse] <action> <type> <id前8位>
@@ -25,17 +25,17 @@
 
 `action` 可以是 `create`、`update`、`delete`、`restore` 或 `purge`。
 
-创建、更新和恢复会延后推送：提交完成后进入待同步队列，并返回已保存结果。删除和永久删除会先把提交加入待同步队列，再尝试推送；如果推送成功，会清除对应待同步记录。
+创建、更新和恢复会先保存并创建提交，随后将推送任务加入待同步队列。删除和永久删除会先把提交加入待同步队列，再尝试推送；如果推送成功，会清除对应待同步记录。
 
 ## 审核
 
-内容服务会在更新、删除和恢复时检查 `baseHistoryDirname`。如果当前最新历史版本与请求中的基础版本不同，并且请求没有 `force`，结果会返回 `status: "conflict"`，同时带回最新版本目录名、修改时间和修改者显示名。
+更新、删除或恢复内容时，Synapse 会检查 `baseHistoryDirname`。如果当前最新历史版本与请求中的基础版本不同，并且请求没有 `force`，结果会返回 `status: "conflict"`，同时带回最新版本目录名、修改时间和修改者显示名。
 
-代码中的内容提交服务没有单独的审核状态或审批队列。团队如果使用 Git 平台审核，审核对象就是 Synapse 创建的普通 Git commit。
+Synapse 当前不内置单独的审核状态或审批队列。团队可以使用 Git 平台审核 Synapse 创建的普通 Git commit。
 
 ## 同步
 
-仓库同步会检查本地目录状态。非 Git 目录返回本地刷新结果；Git 目录会执行：
+仓库同步会检查本地目录状态。非 Git 目录会刷新本地内容索引；Git 目录会执行：
 
 ```text
 git pull --ff-only --progress

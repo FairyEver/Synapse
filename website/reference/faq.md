@@ -18,7 +18,7 @@
 
 ### 支持哪些编辑器？
 
-当前代码定义的编辑器是 Cursor、Codex、Claude Code、Windsurf。四者都支持 Rule 和 Skill。
+Synapse 当前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均可安装 Rule 和 Skill。
 
 编辑器安装范围和路径见 [编辑器安装](/guide/editors)。
 
@@ -71,7 +71,7 @@
 
 ### Cursor 支持全局 Rule 吗？
 
-不支持。当前代码中没有固定的 Cursor 全局 Rule 磁盘路径，因此 Cursor 全局 Rule 目标会返回“不支持”。
+不支持。Synapse 当前未提供固定的 Cursor 全局 Rule 安装位置，因此 Cursor 全局 Rule 会显示为“不支持”。
 
 ## 内容
 
@@ -95,6 +95,6 @@ Rule 和 Skill 删除后会进入最近删除，可以恢复，也可以永久�
 
 ### 创建内容后会立即推送吗？
 
-创建、更新和恢复会延后推送：提交完成后进入待同步队列，并返回已保存结果。
+创建、更新和恢复会先保存并创建提交，随后将推送任务加入待同步队列。
 
 删除和永久删除会先把提交加入待同步队列，再尝试推送。

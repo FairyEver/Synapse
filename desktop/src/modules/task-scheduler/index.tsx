@@ -147,8 +147,7 @@ function TaskSchedulerModule() {
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col gap-2.5 bg-muted/30 px-2 py-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-foreground">定时任务</h2>
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-2">
             <IconButton
               label="刷新"

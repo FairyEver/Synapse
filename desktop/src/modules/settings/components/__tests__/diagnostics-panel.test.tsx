@@ -42,17 +42,27 @@ describe("DiagnosticsPanel", () => {
     expect(html).toContain("disabled")
   })
 
-  it("renders grouped details with long values", () => {
+  it("renders the default info tab", () => {
     const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createReport()} />)
 
-    expect(html).toContain("系统")
-    expect(html).toContain("进程")
-    expect(html).toContain("/Users/liyang/Documents/very-long-project-path-that-should-wrap")
-    expect(html).toContain("aria-label=\"复制 path\"")
+    expect(html).toContain("基础信息")
+    expect(html).toContain("本机信息")
+    expect(html).toContain("platform")
+    expect(html).toContain("aria-label=\"复制 platform\"")
+  })
+
+  it("renders diagnostic categories as tabs", () => {
+    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createReport()} />)
+
+    expect(html).toContain("role=\"tablist\"")
+    expect(html).toContain("基础信息")
+    expect(html).toContain("兼容性")
+    expect(html).toContain("本地环境")
+    expect(html).toContain("运行服务")
   })
 
   it("renders Windows compatibility in a separate section", () => {
-    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createReport()} />)
+    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createCompatibilityReport()} />)
 
     expect(html).toContain("Windows 兼容性")
     expect(html).toContain("环境变量")
@@ -61,7 +71,7 @@ describe("DiagnosticsPanel", () => {
   })
 
   it("renders macOS compatibility in a separate section", () => {
-    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createReport()} />)
+    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createCompatibilityReport()} />)
 
     expect(html).toContain("macOS 兼容性")
     expect(html).toContain("正在 macOS 运行")
@@ -72,6 +82,7 @@ describe("DiagnosticsPanel", () => {
     const groups = groupChecks(createReport().checks)
 
     expect(groups.get("系统")?.map((check) => check.id)).toEqual(["system.process"])
+    expect(groups.get("Data Store")?.map((check) => check.id)).toEqual(["data-store.status"])
   })
 
   it("builds a concise diagnostic summary", () => {
@@ -134,16 +145,41 @@ function createReport(): SynapseDiagnosticsReport {
       projectId: "project-1",
       projectName: "Project",
     },
-    checks: [{
-      id: "system.process",
-      group: "系统",
-      name: "进程",
-      status: "ok",
-      severity: "info",
-      message: "通过",
-      details: {
-        path: "/Users/liyang/Documents/very-long-project-path-that-should-wrap",
+    checks: [
+      {
+        id: "system.process",
+        group: "系统",
+        name: "进程",
+        status: "ok",
+        severity: "info",
+        message: "通过",
+        details: {
+          path: "/Users/liyang/Documents/very-long-project-path-that-should-wrap",
+        },
       },
-    }],
+      {
+        id: "data-store.status",
+        group: "Data Store",
+        name: "数据库",
+        status: "ok",
+        severity: "info",
+        message: "数据库状态已读取",
+      },
+    ],
+  }
+}
+
+function createCompatibilityReport(): SynapseDiagnosticsReport {
+  const report = createReport()
+
+  return {
+    ...report,
+    system: {
+      windowsCompatibility: report.system.windowsCompatibility,
+      macCompatibility: report.system.macCompatibility,
+    },
+    app: {},
+    activeContext: {},
+    checks: [],
   }
 }

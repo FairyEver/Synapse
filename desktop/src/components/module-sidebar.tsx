@@ -17,12 +17,19 @@ import {
 type ModuleSidebarProps = {
   children: ReactNode
   className?: string
+  "data-layout"?: string
   variant?: "card" | "bare"
 }
 
-function ModuleSidebar({ children, className, variant = "card" }: ModuleSidebarProps) {
+function ModuleSidebar({
+  children,
+  className,
+  "data-layout": dataLayout,
+  variant = "card",
+}: ModuleSidebarProps) {
   return (
     <aside
+      data-layout={dataLayout}
       className={cn(
         "flex h-full min-h-0 flex-col gap-2",
         variant === "card" && "rounded-2xl bg-background p-2 ring-1 ring-foreground/10",

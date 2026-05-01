@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 
 type FormDialogProps = {
+  bodyClassName?: string
   children: ReactNode
   contentClassName?: string
   description?: ReactNode
@@ -19,6 +20,7 @@ type FormDialogProps = {
 }
 
 function FormDialog({
+  bodyClassName,
   children,
   contentClassName,
   description,
@@ -30,13 +32,18 @@ function FormDialog({
     <DialogContent
       className={cn("max-h-[calc(100vh-2rem)] overflow-hidden p-0", contentClassName)}
     >
-      <form className="flex max-h-[calc(100vh-2rem)] flex-col" onSubmit={onSubmit}>
+      <form
+        className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden"
+        onSubmit={onSubmit}
+      >
         <DialogHeader className="px-5 pt-5">
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", bodyClassName)}>
+          {children}
+        </div>
 
         <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-3 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
           {footer}
