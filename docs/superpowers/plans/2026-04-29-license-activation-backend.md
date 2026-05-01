@@ -132,7 +132,7 @@ describe("loadEnv", () => {
   it("parses required production settings", () => {
     const env = loadEnv({
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_EMAIL: "admin@example.com",
+      ADMIN_EMAIL: "admin@d2.com",
       ADMIN_PASSWORD: "change-me",
       ADMIN_JWT_SECRET: "a-secret-with-enough-length",
       LICENSE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----",
@@ -144,7 +144,7 @@ describe("loadEnv", () => {
 
     expect(env.port).toBe(3000)
     expect(env.licenseLeaseDays).toBe(7)
-    expect(env.adminEmail).toBe("admin@example.com")
+    expect(env.adminEmail).toBe("admin@d2.com")
   })
 
   it("rejects missing required settings", () => {
@@ -665,8 +665,8 @@ services:
       dockerfile: server/Dockerfile
     environment:
       DATABASE_URL: postgresql://synapse:synapse@postgres:5432/synapse
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: change-me-now
+      ADMIN_EMAIL: admin@d2.com
+      ADMIN_PASSWORD: admin@pwd
       ADMIN_JWT_SECRET: local-dev-admin-secret
       LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY}
       LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY}
@@ -1476,25 +1476,25 @@ import { AdminAuthService } from "./admin-auth.service"
 describe("AdminAuthService", () => {
   it("accepts the configured administrator password", async () => {
     const service = await AdminAuthService.createForTest({
-      email: "admin@example.com",
-      password: "change-me-now",
+      email: "admin@d2.com",
+      password: "admin@pwd",
       jwtSecret: "local-dev-admin-secret",
     })
 
-    const result = await service.login("admin@example.com", "change-me-now")
+    const result = await service.login("admin@d2.com", "admin@pwd")
 
-    expect(result.email).toBe("admin@example.com")
+    expect(result.email).toBe("admin@d2.com")
     expect(result.token.length).toBeGreaterThan(20)
   })
 
   it("rejects a wrong password", async () => {
     const service = await AdminAuthService.createForTest({
-      email: "admin@example.com",
-      password: "change-me-now",
+      email: "admin@d2.com",
+      password: "admin@pwd",
       jwtSecret: "local-dev-admin-secret",
     })
 
-    await expect(service.login("admin@example.com", "wrong-password")).rejects.toThrow("Invalid admin credentials")
+    await expect(service.login("admin@d2.com", "wrong-password")).rejects.toThrow("Invalid admin credentials")
   })
 })
 ```
@@ -1964,7 +1964,7 @@ Modify the generated `server/admin/src/components/app-sidebar.tsx` data so the m
 const data = {
   user: {
     name: "Admin",
-    email: "admin@example.com",
+    email: "admin@d2.com",
     avatar: "",
   },
   teams: [

@@ -4,25 +4,25 @@ import { AdminAuthService } from "./admin-auth.service"
 describe("AdminAuthService", () => {
   it("accepts the configured administrator password", async () => {
     const service = await AdminAuthService.createForTest({
-      email: "admin@example.com",
-      password: "change-me-now",
+      email: "admin@d2.com",
+      password: "admin@pwd",
       jwtSecret: "local-dev-admin-secret",
     })
 
-    const result = await service.login("admin@example.com", "change-me-now")
+    const result = await service.login("admin@d2.com", "admin@pwd")
 
-    expect(result.email).toBe("admin@example.com")
+    expect(result.email).toBe("admin@d2.com")
     expect(result.token.length).toBeGreaterThan(20)
   })
 
   it("rejects a wrong password", async () => {
     const service = await AdminAuthService.createForTest({
-      email: "admin@example.com",
-      password: "change-me-now",
+      email: "admin@d2.com",
+      password: "admin@pwd",
       jwtSecret: "local-dev-admin-secret",
     })
 
-    await expect(service.login("admin@example.com", "wrong-password"))
+    await expect(service.login("admin@d2.com", "wrong-password"))
       .rejects
       .toThrow("管理员账号或密码错误。")
   })

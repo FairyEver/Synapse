@@ -20,7 +20,7 @@ describe("LoginPage", () => {
   })
 
   it("submits admin credentials", async () => {
-    vi.mocked(adminApi.login).mockResolvedValue({ email: "admin@example.com" })
+    vi.mocked(adminApi.login).mockResolvedValue({ email: "admin@d2.com" })
     const onLoggedIn = vi.fn()
     const result = await render(<LoginPage onLoggedIn={onLoggedIn} />)
     cleanup = result.unmount
@@ -30,7 +30,7 @@ describe("LoginPage", () => {
     const form = result.container.querySelector("form") as HTMLFormElement
 
     await act(async () => {
-      changeInput(email, "admin@example.com")
+      changeInput(email, "admin@d2.com")
       changeInput(password, "secret")
     })
 
@@ -39,9 +39,9 @@ describe("LoginPage", () => {
     })
 
     expect(adminApi.login).toHaveBeenCalledWith({
-      email: "admin@example.com",
+      email: "admin@d2.com",
       password: "secret",
     })
-    expect(onLoggedIn).toHaveBeenCalledWith({ email: "admin@example.com" })
+    expect(onLoggedIn).toHaveBeenCalledWith({ email: "admin@d2.com" })
   })
 })

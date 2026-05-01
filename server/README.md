@@ -107,8 +107,8 @@ http://localhost:3000/admin/
 默认管理员账号来自 `server/.env`：
 
 ```text
-admin@example.com
-change-me-now
+admin@d2.com
+admin@pwd
 ```
 
 后台新建激活码时只填写设备数和到期日。激活码必须由服务端生成，创建成功后页面会显示生成结果。
@@ -300,9 +300,9 @@ services:
     image: registry.example.com/synapse-server:0.1.0
     environment:
       DATABASE_URL: postgresql://synapse:change-this-password@postgres:5432/synapse
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: change-me-now
-      ADMIN_JWT_SECRET: replace-with-at-least-16-characters
+      ADMIN_EMAIL: admin@d2.com
+      ADMIN_PASSWORD: admin@pwd
+      ADMIN_JWT_SECRET: qwer1234asdf5678
       LICENSE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
       LICENSE_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
       LICENSE_KEY_ID: production-key-2026-04

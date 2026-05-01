@@ -44,7 +44,7 @@ describe("App", () => {
   })
 
   it("centers the header separator with the trigger and title", async () => {
-    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@example.com" })
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com" })
     vi.mocked(adminApi.listActivationCodes).mockResolvedValue([])
 
     const result = await render(<App />)
