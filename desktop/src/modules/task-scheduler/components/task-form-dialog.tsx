@@ -176,7 +176,7 @@ function TaskFormDialog({
       <FormDialog
         title={state.mode === "edit" ? "编辑任务" : "新建任务"}
         bodyClassName="overflow-hidden"
-        contentClassName="h-[calc(100vh-2rem)] sm:max-w-3xl"
+        contentClassName="h-[calc(100vh-2rem)] sm:max-w-2xl"
         footer={(
           <>
             <FieldError className="sm:mr-auto">{error}</FieldError>
