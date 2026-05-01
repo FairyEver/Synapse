@@ -1,11 +1,18 @@
 import { execFile } from "node:child_process"
-import { readdir, readFile } from "node:fs/promises"
+import { readdir, readFile, readlink } from "node:fs/promises"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { clearDevProcessState, readDevProcessState } from "./dev-state.mjs"
 
 const execFileAsync = promisify(execFile)
-const MATCHERS = [
+const currentFilePath = fileURLToPath(import.meta.url)
+const defaultWorkspaceRoot = path.resolve(path.dirname(currentFilePath), "..")
+const DEV_PORTS = [19731, 19773, 5433]
+
+const RELATIVE_DEV_COMMAND_MATCHERS = [
   /scripts[/\\]dev\.mjs/u,
+  /scripts[/\\]run-with-server-env\.mjs.*run dev/u,
   /dev-renderer/u,
   /dev-electron-app/u,
   /tsc.*tsconfig\.electron\.json.*--watch/u,
@@ -13,39 +20,89 @@ const MATCHERS = [
   /vitepress.*dev/u,
   /nest.*start.*--watch/u,
   /admin[/\\]vite\.config\.ts/u,
-  /Synapse.*Electron/u,
-  /electron \./u,
+  /nodemon/u,
+  /electron[/\\]cli\.js \./u,
+  /\belectron \./u,
+  /pnpm(?:\.cjs)?.*\bdev(?::(?:website|desktop|server|renderer|electron:build|electron:app|api|admin))?\b/u,
 ]
 
-function matchesSynapseDevProcess(commandLine) {
-  return MATCHERS.some((pattern) => pattern.test(commandLine))
+const WORKSPACE_DEV_COMMAND_MATCHERS = [
+  ...RELATIVE_DEV_COMMAND_MATCHERS,
+  /server[/\\]dist[/\\]main(?:\s|$)/u,
+  /electron[/\\]dist[/\\]Electron\.app.* \./u,
+]
+
+function normalizePathForMatch(value) {
+  return path.resolve(value).replaceAll("\\", "/")
 }
 
-async function findMatchingProcesses() {
-  const tracked = await findTrackedProcesses()
+function pathIsInside(childPath, parentPath) {
+  if (typeof childPath !== "string" || childPath.length === 0) return false
 
-  if (process.platform === "win32") {
-    return [...tracked, ...await findWindowsProcesses()]
+  const child = normalizePathForMatch(childPath)
+  const parent = normalizePathForMatch(parentPath)
+  return child === parent || child.startsWith(`${parent}/`)
+}
+
+function commandContainsWorkspace(commandLine, workspaceRoot) {
+  return commandLine.replaceAll("\\", "/").includes(normalizePathForMatch(workspaceRoot))
+}
+
+function commandLooksLikeDevProcess(commandLine) {
+  return WORKSPACE_DEV_COMMAND_MATCHERS.some((pattern) => pattern.test(commandLine))
+}
+
+function matchesSynapseDevProcess(processInfo, options = {}) {
+  const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot
+  const commandLine = processInfo.commandLine ?? ""
+  const cwd = processInfo.cwd
+
+  if (!Number.isInteger(processInfo.pid) || processInfo.pid <= 0) return false
+  if (processInfo.pid === process.pid) return false
+  if (!commandLine || commandLine.includes("quit-processes.mjs")) return false
+  if (commandContainsWorkspace(commandLine, workspaceRoot)) {
+    return WORKSPACE_DEV_COMMAND_MATCHERS.some((pattern) => pattern.test(commandLine))
   }
 
-  if (process.platform === "linux") {
-    return [...tracked, ...await findLinuxProcesses()]
+  if (pathIsInside(cwd, workspaceRoot)) {
+    return RELATIVE_DEV_COMMAND_MATCHERS.some((pattern) => pattern.test(commandLine))
   }
 
-  return tracked
+  return false
 }
 
-async function findTrackedProcesses() {
-  const entries = await readDevProcessState()
-  return entries
-    .map((entry) => ({
-      pid: Number.isInteger(entry.processGroupPid) ? entry.processGroupPid : entry.pid,
-      commandLine: entry.scriptName ?? "tracked dev process",
-    }))
-    .filter((entry) => Number.isInteger(entry.pid) && entry.pid !== 0)
+async function findMatchingProcesses(options = {}) {
+  const tracked = await findTrackedProcesses(options)
+  const scanned = await findScannedProcesses(options)
+  const portProcesses = await findPortProcesses(options)
+
+  return { tracked, scanned, portProcesses }
 }
 
-async function findWindowsProcesses() {
+async function findScannedProcesses(options = {}) {
+  const platform = options.platform ?? process.platform
+
+  if (platform === "win32") {
+    return findWindowsProcesses(options)
+  }
+
+  if (platform === "linux") {
+    return findLinuxProcesses(options)
+  }
+
+  if (platform === "darwin") {
+    return findMacProcesses(options)
+  }
+
+  return []
+}
+
+async function findTrackedProcesses(options = {}) {
+  return readDevProcessState(options.statePath)
+}
+
+async function findWindowsProcesses(options = {}) {
+  const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot
   const script = [
     "Get-CimInstance Win32_Process",
     "Select-Object ProcessId,CommandLine",
@@ -64,16 +121,14 @@ async function findWindowsProcesses() {
   return rows
     .map((row) => ({
       pid: Number(row.ProcessId),
+      pgid: Number(row.ProcessId),
       commandLine: typeof row.CommandLine === "string" ? row.CommandLine : "",
     }))
-    .filter((row) =>
-      Number.isInteger(row.pid)
-      && row.pid > 0
-      && row.pid !== process.pid
-      && matchesSynapseDevProcess(row.commandLine))
+    .filter((row) => matchesSynapseDevProcess(row, { workspaceRoot }))
 }
 
-async function findLinuxProcesses() {
+async function findLinuxProcesses(options = {}) {
+  const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot
   const entries = await readdir("/proc", { withFileTypes: true })
   const rows = []
 
@@ -85,8 +140,18 @@ async function findLinuxProcesses() {
     try {
       const raw = await readFile(`/proc/${entry.name}/cmdline`, "utf8")
       const commandLine = raw.split("\0").filter(Boolean).join(" ")
-      if (matchesSynapseDevProcess(commandLine)) {
-        rows.push({ pid, commandLine })
+      if (!commandLooksLikeDevProcess(commandLine)) continue
+
+      let cwd
+      try {
+        cwd = await readlink(`/proc/${entry.name}/cwd`)
+      } catch {
+        cwd = undefined
+      }
+
+      const row = { pid, pgid: pid, commandLine, cwd }
+      if (matchesSynapseDevProcess(row, { workspaceRoot })) {
+        rows.push(row)
       }
     } catch {
       // Process may have exited while scanning.
@@ -94,6 +159,120 @@ async function findLinuxProcesses() {
   }
 
   return rows
+}
+
+function parsePsRows(output) {
+  return output
+    .split("\n")
+    .map((line) => {
+      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/u)
+      if (!match) return null
+
+      return {
+        pid: Number.parseInt(match[1], 10),
+        ppid: Number.parseInt(match[2], 10),
+        pgid: Number.parseInt(match[3], 10),
+        commandLine: match[4],
+      }
+    })
+    .filter(Boolean)
+}
+
+async function readProcessCwd(pid) {
+  try {
+    const { stdout } = await execFileAsync("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"])
+    const cwdLine = stdout.split("\n").find((line) => line.startsWith("n"))
+    return cwdLine?.slice(1)
+  } catch {
+    return undefined
+  }
+}
+
+async function findMacProcesses(options = {}) {
+  const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot
+  const { stdout } = await execFileAsync("ps", ["-axo", "pid=,ppid=,pgid=,command="])
+  const rows = parsePsRows(stdout)
+  const matched = []
+
+  for (const row of rows) {
+    if (!commandLooksLikeDevProcess(row.commandLine)) continue
+
+    const processInfo = commandContainsWorkspace(row.commandLine, workspaceRoot)
+      ? row
+      : { ...row, cwd: await readProcessCwd(row.pid) }
+
+    if (matchesSynapseDevProcess(processInfo, { workspaceRoot })) {
+      matched.push(processInfo)
+    }
+  }
+
+  return matched
+}
+
+async function findPortProcesses(options = {}) {
+  const platform = options.platform ?? process.platform
+  const ports = options.ports ?? DEV_PORTS
+
+  if (ports.length === 0) return []
+
+  if (platform === "win32") {
+    const portList = ports.join(",")
+    const script = [
+      `Get-NetTCPConnection -State Listen -LocalPort ${portList}`,
+      "Select-Object -ExpandProperty OwningProcess",
+      "Sort-Object -Unique",
+      "ConvertTo-Json -Compress",
+    ].join(" | ")
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        script,
+      ])
+      const parsed = stdout.trim() ? JSON.parse(stdout) : []
+      const pids = Array.isArray(parsed) ? parsed : [parsed]
+      return pids
+        .map((pid) => Number(pid))
+        .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid)
+        .map((pid) => ({ pid, pgid: pid, commandLine: "project port listener" }))
+    } catch {
+      return []
+    }
+  }
+
+  const args = ["-nP", ...ports.map((port) => `-iTCP:${port}`), "-sTCP:LISTEN", "-t"]
+  try {
+    const { stdout } = await execFileAsync("lsof", args)
+    return [...new Set(stdout.split(/\s+/u)
+      .map((value) => Number.parseInt(value, 10))
+      .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid))]
+      .map((pid) => ({ pid, pgid: pid, commandLine: "project port listener" }))
+  } catch {
+    return []
+  }
+}
+
+function buildTerminationTargets(trackedEntries, processRows, currentPid = process.pid) {
+  const targets = []
+
+  for (const entry of trackedEntries) {
+    const target = Number.isInteger(entry.processGroupPid) && entry.processGroupPid !== 0
+      ? entry.processGroupPid
+      : entry.pid
+    if (Number.isInteger(target) && target !== 0 && Math.abs(target) !== currentPid) {
+      targets.push(target)
+    }
+  }
+
+  for (const row of processRows) {
+    if (Number.isInteger(row.pid) && row.pid > 0 && row.pid !== currentPid) {
+      targets.push(row.pid)
+    }
+  }
+
+  return [...new Set(targets)]
 }
 
 async function isAlive(pid) {
@@ -123,10 +302,24 @@ async function terminateProcess(pid) {
   }
 }
 
-const processes = await findMatchingProcesses()
-const uniquePids = [...new Set(processes.map((item) => item.pid))]
-const results = await Promise.all(uniquePids.map(terminateProcess))
-const killedCount = results.filter(Boolean).length
+async function main() {
+  const { tracked, scanned, portProcesses } = await findMatchingProcesses()
+  const targets = buildTerminationTargets(tracked, [...scanned, ...portProcesses])
+  const results = await Promise.all(targets.map(terminateProcess))
+  const stoppedCount = results.filter(Boolean).length
 
-await clearDevProcessState()
-console.log(killedCount > 0 ? `Stopped ${killedCount} process(es).` : "Done.")
+  await clearDevProcessState()
+  console.log(stoppedCount > 0 ? `Stopped ${stoppedCount} process(es).` : "Done.")
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === currentFilePath) {
+  await main()
+}
+
+export {
+  buildTerminationTargets,
+  commandLooksLikeDevProcess,
+  findMatchingProcesses,
+  matchesSynapseDevProcess,
+  parsePsRows,
+}

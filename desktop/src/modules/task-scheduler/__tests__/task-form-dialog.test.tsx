@@ -44,6 +44,47 @@ vi.mock("@/components/ui/select", () => ({
   SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
 }))
 
+vi.mock("@/components/ui/toggle-group", () => ({
+  ToggleGroup: ({
+    children,
+    className,
+    type,
+    value,
+    "aria-label": ariaLabel,
+  }: {
+    children: React.ReactNode
+    className?: string
+    type?: string
+    value?: string
+    "aria-label"?: string
+  }) => (
+    <div
+      aria-label={ariaLabel}
+      className={className}
+      data-slot="toggle-group"
+      data-type={type}
+      data-value={value}
+    >
+      {children}
+    </div>
+  ),
+  ToggleGroupItem: ({
+    children,
+    className,
+    id,
+    value,
+  }: {
+    children: React.ReactNode
+    className?: string
+    id?: string
+    value: string
+  }) => (
+    <button className={className} data-slot="toggle-group-item" data-value={value} id={id} type="button">
+      {children}
+    </button>
+  ),
+}))
+
 describe("TaskFormDialog", () => {
   it("renders the four lightweight sections in create mode", () => {
     const html = renderDialog()
@@ -105,6 +146,36 @@ describe("TaskFormDialog", () => {
     expect(intervalHtml).toContain("task-form-interval-anchor")
   })
 
+  it("uses single-value toggle groups for short built-in task choices", () => {
+    const cronHtml = renderDialog()
+    const intervalHtml = renderDialog({
+      task: createTask({
+        scope: { type: "project", projectId: "project-1" },
+        trigger: {
+          type: "builtin.interval",
+          config: { everyMinutes: 15, anchor: "last_completed_at" },
+        },
+      }),
+    })
+
+    expect(cronHtml).toContain('aria-label="作用域"')
+    expect(cronHtml).toContain('id="task-form-scope-global"')
+    expect(cronHtml).toContain('id="task-form-scope-project"')
+    expect(cronHtml).not.toContain('id="task-form-scope"')
+
+    expect(cronHtml).toContain('aria-label="触发方式"')
+    expect(cronHtml).toContain('data-slot="toggle-group"')
+    expect(cronHtml).toContain('data-type="single"')
+    expect(cronHtml).toContain('id="task-form-trigger-type-cron"')
+    expect(cronHtml).toContain('id="task-form-trigger-type-interval"')
+    expect(cronHtml).not.toContain('id="task-form-trigger-type"')
+
+    expect(intervalHtml).toContain('aria-label="锚点"')
+    expect(intervalHtml).toContain('id="task-form-interval-anchor-created_at"')
+    expect(intervalHtml).toContain('id="task-form-interval-anchor-last_completed_at"')
+    expect(intervalHtml).not.toContain('id="task-form-interval-anchor"')
+  })
+
   it("uses the script label when editing a script task", () => {
     const html = renderDialog({
       task: createTask({
@@ -131,7 +202,85 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("HTTP 请求")
   })
 
-  it("uses compact grids for short controls", () => {
+  it("keeps the action field as a select for registry-backed actions", () => {
+    const html = renderDialog()
+
+    expect(html).toContain('id="task-form-action-type"')
+    expect(html).toContain("命令")
+    expect(html).toContain("脚本")
+    expect(html).toContain("HTTP 请求")
+  })
+
+  it("renders shell choices as single-value toggle groups", () => {
+    const commandHtml = renderDialog()
+    const scriptHtml = renderDialog({
+      task: createTask({
+        action: {
+          type: "builtin.script",
+          config: {
+            script: "echo script",
+            shell: "powershell",
+            timeoutMins: 30,
+          },
+        },
+      }),
+    })
+
+    expect(commandHtml).toContain('aria-label="Shell"')
+    expect(commandHtml).toContain('data-slot="toggle-group"')
+    expect(commandHtml).toContain('id="task-action-command-shell-posix"')
+    expect(commandHtml).toContain('id="task-action-command-shell-cmd"')
+    expect(commandHtml).toContain('id="task-action-command-shell-powershell"')
+    expect(commandHtml).not.toContain('id="task-action-command-shell"')
+
+    expect(scriptHtml).toContain('aria-label="Shell"')
+    expect(scriptHtml).toContain('data-slot="toggle-group"')
+    expect(scriptHtml).toContain('id="task-action-script-shell-posix"')
+    expect(scriptHtml).toContain('id="task-action-script-shell-cmd"')
+    expect(scriptHtml).toContain('id="task-action-script-shell-powershell"')
+    expect(scriptHtml).not.toContain('id="task-action-script-shell"')
+  })
+
+  it("renders HTTP method and body type as single-value toggle groups", () => {
+    const html = renderDialog({
+      task: createTask({
+        action: {
+          type: "builtin.http-request",
+          config: {
+            method: "POST",
+            url: "https://example.com",
+            bodyType: "json",
+            body: "{}",
+            timeoutMins: 5,
+          },
+        },
+      }),
+    })
+
+    expect(html).toContain('aria-label="方法"')
+    expect(html).toContain('id="task-action-http-method-GET"')
+    expect(html).toContain('id="task-action-http-method-POST"')
+    expect(html).toContain('id="task-action-http-method-PUT"')
+    expect(html).toContain('id="task-action-http-method-PATCH"')
+    expect(html).toContain('id="task-action-http-method-DELETE"')
+    expect(html).not.toContain('id="task-action-http-method"')
+
+    expect(html).toContain('aria-label="Body"')
+    expect(html).toContain('id="task-action-http-body-type-none"')
+    expect(html).toContain('id="task-action-http-body-type-json"')
+    expect(html).toContain('id="task-action-http-body-type-text"')
+    expect(html).not.toContain('id="task-action-http-body-type"')
+  })
+
+  it("renders cwd as an editable input with an inline choose action", () => {
+    const html = renderDialog()
+
+    expect(html).toMatch(
+      /<label[^>]*for="task-form-cwd"[^>]*>工作目录<\/label>[\s\S]*data-slot="input-group"[\s\S]*id="task-form-cwd"[\s\S]*>选择<\/button>/,
+    )
+  })
+
+  it("uses compact grids for short fields and rows for run settings", () => {
     const html = renderDialog({
       task: createTask({
         scope: { type: "project", projectId: "project-1" },
@@ -144,8 +293,14 @@ describe("TaskFormDialog", () => {
 
     expect(html).toContain("task-form-basic-grid")
     expect(html).toContain("task-form-trigger-grid")
-    expect(html).toContain("task-form-run-settings-grid")
+    expect(html).toContain("task-form-run-settings-list")
+    expect(html).not.toContain("task-form-run-settings-grid")
     expect(html).not.toContain("sm:grid-cols-[auto_1fr]")
+    expect(html.match(/task-form-run-setting-row/g)?.length).toBe(2)
+    expect(html.match(/task-form-run-setting-primary/g)?.length).toBe(2)
+    expect(html.match(/task-form-run-setting-secondary/g)?.length ?? 0).toBe(0)
+    expect(html).toContain("flex w-full items-center gap-3")
+    expect(html).not.toMatch(/task-form-run-setting-row" class="[^"]*justify-between/)
   })
 })
 

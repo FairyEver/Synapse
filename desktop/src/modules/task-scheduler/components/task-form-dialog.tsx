@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 
 import { FormDialog } from "@/components/form-dialog"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
+import { createRendererLogger } from "@/app-shell/logging"
 import {
   ModuleSidebar,
   ModuleSidebarItem,
@@ -18,6 +19,12 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -26,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTaskCreateInput, ScheduledTaskUpdateInput } from "@/types/task-scheduler"
@@ -55,6 +63,8 @@ const TASK_FORM_SECTIONS = [
 ] as const
 
 type TaskFormSectionId = (typeof TASK_FORM_SECTIONS)[number]["id"]
+
+const logger = createRendererLogger("task-scheduler.form")
 
 function TaskFormDialog({
   open,
@@ -138,6 +148,29 @@ function TaskFormDialog({
     }
   }
 
+  async function handleChooseCwd() {
+    const repositoryBridge = window.synapse?.repository
+
+    if (!repositoryBridge) {
+      setError("打开目录选择器失败。")
+      return
+    }
+
+    try {
+      const selectedPath = await repositoryBridge.chooseDirectory()
+
+      if (!selectedPath) {
+        return
+      }
+
+      updateField("cwd", selectedPath)
+      setError(null)
+    } catch (chooseError) {
+      logger.error("Failed to choose task working directory.", { error: chooseError })
+      setError("打开目录选择器失败。")
+    }
+  }
+
   return (
     <Dialog data-track="task-scheduler-form-dialog" open={open} onOpenChange={onOpenChange}>
       <FormDialog
@@ -204,21 +237,25 @@ function TaskFormDialog({
                       onChange={(event) => updateField("name", event.target.value)}
                     />
                   </TaskField>
-                  <TaskField label="作用域" htmlFor="task-form-scope">
-                    <Select
+                  <TaskField label="作用域" htmlFor="task-form-scope-global">
+                    <ToggleGroup
+                      aria-label="作用域"
+                      className="w-full"
+                      data-track="task-form-scope"
+                      type="single"
                       value={form.scopeType}
-                      onValueChange={(value) => updateField("scopeType", value as TaskFormState["scopeType"])}
+                      variant="outline"
+                      onValueChange={(value) => {
+                        if (value) updateField("scopeType", value as TaskFormState["scopeType"])
+                      }}
                     >
-                      <SelectTrigger id="task-form-scope" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="global">全局</SelectItem>
-                          <SelectItem value="project">项目</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                      <ToggleGroupItem id="task-form-scope-global" className="flex-1" value="global">
+                        全局
+                      </ToggleGroupItem>
+                      <ToggleGroupItem id="task-form-scope-project" className="flex-1" value="project">
+                        项目
+                      </ToggleGroupItem>
+                    </ToggleGroup>
                   </TaskField>
                   {form.scopeType === "project" ? (
                     <TaskField label="项目" htmlFor="task-form-project">
@@ -258,21 +295,25 @@ function TaskFormDialog({
                 title="触发计划"
               >
                 <div data-layout="task-form-trigger-grid" className="grid gap-3 md:grid-cols-3">
-                  <TaskField label="触发方式" htmlFor="task-form-trigger-type">
-                    <Select
+                  <TaskField label="触发方式" htmlFor="task-form-trigger-type-cron">
+                    <ToggleGroup
+                      aria-label="触发方式"
+                      className="w-full"
+                      data-track="task-form-trigger-type"
+                      type="single"
                       value={form.triggerType}
-                      onValueChange={(value) => updateField("triggerType", value as TaskFormState["triggerType"])}
+                      variant="outline"
+                      onValueChange={(value) => {
+                        if (value) updateField("triggerType", value as TaskFormState["triggerType"])
+                      }}
                     >
-                      <SelectTrigger id="task-form-trigger-type" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="cron">Cron</SelectItem>
-                          <SelectItem value="interval">固定间隔</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                      <ToggleGroupItem id="task-form-trigger-type-cron" className="flex-1" value="cron">
+                        Cron
+                      </ToggleGroupItem>
+                      <ToggleGroupItem id="task-form-trigger-type-interval" className="flex-1" value="interval">
+                        固定间隔
+                      </ToggleGroupItem>
+                    </ToggleGroup>
                   </TaskField>
 
                   {form.triggerType === "cron" ? (
@@ -295,21 +336,33 @@ function TaskFormDialog({
                     </TaskField>
                   )}
                   {form.triggerType === "interval" ? (
-                    <TaskField label="锚点" htmlFor="task-form-interval-anchor">
-                      <Select
+                    <TaskField label="锚点" htmlFor="task-form-interval-anchor-created_at">
+                      <ToggleGroup
+                        aria-label="锚点"
+                        className="w-full"
+                        data-track="task-form-interval-anchor"
+                        type="single"
                         value={form.intervalAnchor}
-                        onValueChange={(value) => updateField("intervalAnchor", value as TaskFormState["intervalAnchor"])}
+                        variant="outline"
+                        onValueChange={(value) => {
+                          if (value) updateField("intervalAnchor", value as TaskFormState["intervalAnchor"])
+                        }}
                       >
-                        <SelectTrigger id="task-form-interval-anchor" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="created_at">创建时间</SelectItem>
-                            <SelectItem value="last_completed_at">上次完成</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                        <ToggleGroupItem
+                          id="task-form-interval-anchor-created_at"
+                          className="flex-1"
+                          value="created_at"
+                        >
+                          创建时间
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
+                          id="task-form-interval-anchor-last_completed_at"
+                          className="flex-1"
+                          value="last_completed_at"
+                        >
+                          上次完成
+                        </ToggleGroupItem>
+                      </ToggleGroup>
                     </TaskField>
                   ) : null}
                 </div>
@@ -341,11 +394,22 @@ function TaskFormDialog({
                     </Select>
                   </TaskField>
                   <TaskField label="工作目录" htmlFor="task-form-cwd">
-                    <Input
-                      id="task-form-cwd"
-                      value={form.cwd}
-                      onChange={(event) => updateField("cwd", event.target.value)}
-                    />
+                    <InputGroup>
+                      <InputGroupInput
+                        id="task-form-cwd"
+                        value={form.cwd}
+                        onChange={(event) => updateField("cwd", event.target.value)}
+                      />
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupButton
+                          type="button"
+                          disabled={busy}
+                          onClick={handleChooseCwd}
+                        >
+                          选择
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    </InputGroup>
                   </TaskField>
                 </div>
 
@@ -362,14 +426,16 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-run-settings")}
                 title="运行设置"
               >
-                <div data-layout="task-form-run-settings-grid" className="grid gap-3 md:grid-cols-2">
+                <div data-layout="task-form-run-settings-list" className="grid gap-2">
                   <ToggleField
                     checked={form.enabled}
+                    id="task-form-enabled"
                     label="启用"
                     onCheckedChange={(checked) => updateField("enabled", checked)}
                   />
                   <ToggleField
                     checked={form.missedRunPolicy === "run_once"}
+                    id="task-form-missed-run-policy"
                     label="补跑一次"
                     onCheckedChange={(checked) =>
                       updateField("missedRunPolicy", checked ? "run_once" : "skip")
@@ -459,19 +525,25 @@ function TaskField({
 
 function ToggleField({
   checked,
+  id,
   label,
   onCheckedChange,
 }: {
   checked: boolean
+  id: string
   label: string
   onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <Field orientation="horizontal" className="items-center rounded-lg border border-border p-3">
-      <FieldLabel>{label}</FieldLabel>
-      <FieldContent className="items-end">
-        <Switch checked={checked} onCheckedChange={onCheckedChange} />
-      </FieldContent>
+    <Field className="min-h-12 justify-center rounded-lg border border-border px-3 py-2">
+      <div data-layout="task-form-run-setting-row" className="flex w-full items-center gap-3">
+        <div data-layout="task-form-run-setting-primary" className="flex items-center gap-2">
+          <FieldLabel htmlFor={id} className="shrink-0">
+            {label}
+          </FieldLabel>
+          <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+        </div>
+      </div>
     </Field>
   )
 }

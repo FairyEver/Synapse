@@ -21,9 +21,9 @@ services:
       dockerfile: server/Dockerfile
     environment:
       DATABASE_URL: postgresql://synapse:synapse@postgres:5432/synapse
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: change-me-now
-      ADMIN_JWT_SECRET: local-dev-admin-secret
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
       LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY}
       LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY}
       LICENSE_KEY_ID: local-dev-key

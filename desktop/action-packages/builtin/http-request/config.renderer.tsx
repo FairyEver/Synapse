@@ -1,16 +1,23 @@
 import { Field, FieldContent, FieldGroup, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../src/components/ui/select"
 import { Textarea } from "../../../src/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { parseRecordText, stringifyRecordText } from "../../records"
 import type { HttpRequestActionConfig } from "./schema"
+
+const HTTP_METHOD_OPTIONS: Array<{ label: string; value: HttpRequestActionConfig["method"] }> = [
+  { label: "GET", value: "GET" },
+  { label: "POST", value: "POST" },
+  { label: "PUT", value: "PUT" },
+  { label: "PATCH", value: "PATCH" },
+  { label: "DELETE", value: "DELETE" },
+]
+
+const BODY_TYPE_OPTIONS: Array<{ label: string; value: HttpRequestActionConfig["bodyType"] }> = [
+  { label: "无", value: "none" },
+  { label: "JSON", value: "json" },
+  { label: "Text", value: "text" },
+]
 
 export function HttpRequestConfigForm({
   value,
@@ -22,27 +29,30 @@ export function HttpRequestConfigForm({
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="task-action-http-method">方法</FieldLabel>
+        <FieldLabel htmlFor="task-action-http-method-GET">方法</FieldLabel>
         <FieldContent>
-          <Select
+          <ToggleGroup
+            aria-label="方法"
+            className="w-full"
+            data-track="task-action-http-method"
+            type="single"
             value={value.method}
-            onValueChange={(method) =>
-              onChange({ ...value, method: method as HttpRequestActionConfig["method"] })
-            }
+            variant="outline"
+            onValueChange={(method) => {
+              if (method) onChange({ ...value, method: method as HttpRequestActionConfig["method"] })
+            }}
           >
-            <SelectTrigger id="task-action-http-method" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="GET">GET</SelectItem>
-                <SelectItem value="POST">POST</SelectItem>
-                <SelectItem value="PUT">PUT</SelectItem>
-                <SelectItem value="PATCH">PATCH</SelectItem>
-                <SelectItem value="DELETE">DELETE</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            {HTTP_METHOD_OPTIONS.map((option) => (
+              <ToggleGroupItem
+                key={option.value}
+                id={`task-action-http-method-${option.value}`}
+                className="flex-1"
+                value={option.value}
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </FieldContent>
       </Field>
       <Field>
@@ -78,25 +88,30 @@ export function HttpRequestConfigForm({
         </FieldContent>
       </Field>
       <Field>
-        <FieldLabel htmlFor="task-action-http-body-type">Body</FieldLabel>
+        <FieldLabel htmlFor="task-action-http-body-type-none">Body</FieldLabel>
         <FieldContent>
-          <Select
+          <ToggleGroup
+            aria-label="Body"
+            className="w-full"
+            data-track="task-action-http-body-type"
+            type="single"
             value={value.bodyType}
-            onValueChange={(bodyType) =>
-              onChange({ ...value, bodyType: bodyType as HttpRequestActionConfig["bodyType"] })
-            }
+            variant="outline"
+            onValueChange={(bodyType) => {
+              if (bodyType) onChange({ ...value, bodyType: bodyType as HttpRequestActionConfig["bodyType"] })
+            }}
           >
-            <SelectTrigger id="task-action-http-body-type" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="none">无</SelectItem>
-                <SelectItem value="json">JSON</SelectItem>
-                <SelectItem value="text">Text</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            {BODY_TYPE_OPTIONS.map((option) => (
+              <ToggleGroupItem
+                key={option.value}
+                id={`task-action-http-body-type-${option.value}`}
+                className="flex-1"
+                value={option.value}
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </FieldContent>
       </Field>
       {value.bodyType === "none" ? null : (

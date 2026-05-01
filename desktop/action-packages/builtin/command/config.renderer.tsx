@@ -1,16 +1,20 @@
-import { Field, FieldContent, FieldGroup, FieldLabel } from "../../../src/components/ui/field"
-import { Input } from "../../../src/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../src/components/ui/select"
+  Field,
+  FieldContent,
+  FieldGroup,
+  FieldLabel,
+} from "../../../src/components/ui/field"
+import { Input } from "../../../src/components/ui/input"
 import { Textarea } from "../../../src/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { parseRecordText, stringifyRecordText } from "../../records"
 import type { CommandActionConfig } from "./schema"
+
+const SHELL_OPTIONS: Array<{ label: string; value: CommandActionConfig["shell"] }> = [
+  { label: "POSIX", value: "posix" },
+  { label: "cmd", value: "cmd" },
+  { label: "PowerShell", value: "powershell" },
+]
 
 export function CommandConfigForm({
   value,
@@ -22,23 +26,30 @@ export function CommandConfigForm({
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="task-action-command-shell">Shell</FieldLabel>
+        <FieldLabel htmlFor="task-action-command-shell-posix">Shell</FieldLabel>
         <FieldContent>
-          <Select
+          <ToggleGroup
+            aria-label="Shell"
+            className="w-full"
+            data-track="task-action-command-shell"
+            type="single"
             value={value.shell}
-            onValueChange={(shell) => onChange({ ...value, shell: shell as CommandActionConfig["shell"] })}
+            variant="outline"
+            onValueChange={(shell) => {
+              if (shell) onChange({ ...value, shell: shell as CommandActionConfig["shell"] })
+            }}
           >
-            <SelectTrigger id="task-action-command-shell" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="posix">POSIX</SelectItem>
-                <SelectItem value="cmd">cmd</SelectItem>
-                <SelectItem value="powershell">PowerShell</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            {SHELL_OPTIONS.map((option) => (
+              <ToggleGroupItem
+                key={option.value}
+                id={`task-action-command-shell-${option.value}`}
+                className="flex-1"
+                value={option.value}
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </FieldContent>
       </Field>
       <Field>

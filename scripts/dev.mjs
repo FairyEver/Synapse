@@ -6,6 +6,7 @@ const longRunningScripts = ["dev:website", "dev:desktop", "dev:server"]
 const children = new Set()
 const childScripts = new Map()
 let shuttingDown = false
+let persistQueue = Promise.resolve()
 
 async function runSetup(scriptName) {
   const result = await runPnpm(["run", scriptName])
@@ -44,13 +45,19 @@ function startScript(scriptName) {
 }
 
 function persistChildren() {
-  void writeDevProcessState(Array.from(children)
+  const entries = Array.from(children)
     .filter((child) => child.pid)
     .map((child) => ({
       pid: child.pid,
       processGroupPid: process.platform === "win32" ? child.pid : -child.pid,
       scriptName: childScripts.get(child),
-    })))
+    }))
+
+  persistQueue = persistQueue
+    .then(() => writeDevProcessState(entries))
+    .catch((error) => {
+      console.warn("[dev] Failed to persist dev process state.", error)
+    })
 }
 
 function stopChildren() {
