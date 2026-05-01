@@ -10,34 +10,45 @@ const taskScopeSchema = z.discriminatedUnion("type", [
 
 const taskTriggerSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("cron"),
-    expr: z.string().min(1),
-    timezone: z.string().min(1).optional(),
+    type: z.literal("builtin.cron"),
+    config: z.object({
+      expr: z.string().min(1),
+      timezone: z.string().min(1).optional(),
+    }),
   }),
   z.object({
-    type: z.literal("interval"),
-    everyMinutes: z.number().int().positive(),
-    anchor: z.enum(["created_at", "last_completed_at"]).optional(),
+    type: z.literal("builtin.interval"),
+    config: z.object({
+      everyMinutes: z.number().int().positive(),
+      anchor: z.enum(["created_at", "last_completed_at"]).optional(),
+    }),
   }),
 ])
 
-const shellTaskActionSchema = z.object({
-  type: z.literal("shell_command"),
-  mode: z.enum(["command", "script"]),
-  content: z.string().min(1),
-  env: z.record(z.string(), z.string()).optional(),
-  timeoutMins: z.number().int().positive().nullable().optional(),
+const taskActionSchema = z.object({
+  type: z.string().min(1),
+  config: z.record(z.string(), z.unknown()),
 })
-
-const taskActionSchema = shellTaskActionSchema
 
 const taskStatusSchema = z.enum(["success", "failed", "timeout", "cancelled", "skipped"])
 const runStatusSchema = z.enum(["running", "success", "failed", "timeout", "cancelled", "skipped"])
 const runTriggerSchema = z.enum(["schedule", "manual", "missed_run"])
+const actionRunResultSchema = z.object({
+  status: z.enum(["success", "failed", "timeout", "cancelled"]),
+  summary: z.string().optional(),
+  logs: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+  outputs: z.record(z.string(), z.unknown()).optional(),
+  error: z.string().optional(),
+  metrics: z.object({
+    durationMs: z.number().optional(),
+    exitCode: z.number().nullable().optional(),
+    httpStatus: z.number().optional(),
+  }).optional(),
+})
 
 const taskSchema = z.object({
   id: z.string(),
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   name: z.string(),
   description: z.string().optional(),
   scope: taskScopeSchema,
@@ -57,14 +68,12 @@ const taskSchema = z.object({
 
 const runSchema = z.object({
   id: z.string(),
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   taskId: z.string(),
   startedAt: z.string(),
   finishedAt: z.string().optional(),
   status: runStatusSchema,
-  exitCode: z.number().nullable().optional(),
-  stdout: z.string().optional(),
-  stderr: z.string().optional(),
+  result: actionRunResultSchema.optional(),
   error: z.string().optional(),
   triggeredBy: runTriggerSchema,
 })

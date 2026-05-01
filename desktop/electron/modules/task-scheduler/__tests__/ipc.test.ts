@@ -10,7 +10,7 @@ describe("taskSchedulerIpcModule", () => {
       getTask: vi.fn(async () => null),
       createTask: vi.fn(async (input) => ({
         id: "task:1",
-        schemaVersion: 1,
+        schemaVersion: 2,
         ...input,
         enabled: true,
         missedRunPolicy: "skip",
@@ -21,11 +21,11 @@ describe("taskSchedulerIpcModule", () => {
       })),
       updateTask: vi.fn(async (_id, patch) => ({
         id: "task:1",
-        schemaVersion: 1,
+        schemaVersion: 2,
         name: "Build",
         scope: { type: "global" },
-        trigger: { type: "interval", everyMinutes: 10 },
-        action: { type: "shell_command", mode: "command", content: "echo ok" },
+        trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+        action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
         enabled: true,
         missedRunPolicy: "skip",
         overlapPolicy: "skip",
@@ -37,11 +37,11 @@ describe("taskSchedulerIpcModule", () => {
       deleteTask: vi.fn(async () => ({ deleted: true })),
       setTaskEnabled: vi.fn(async (_id, enabled) => ({
         id: "task:1",
-        schemaVersion: 1,
+        schemaVersion: 2,
         name: "Build",
         scope: { type: "global" },
-        trigger: { type: "interval", everyMinutes: 10 },
-        action: { type: "shell_command", mode: "command", content: "echo ok" },
+        trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+        action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
         enabled,
         missedRunPolicy: "skip",
         overlapPolicy: "skip",
@@ -64,8 +64,8 @@ describe("taskSchedulerIpcModule", () => {
     await harness.invoke("synapse:task-scheduler:tasks:create", {
       name: "Build",
       scope: { type: "global" },
-      trigger: { type: "interval", everyMinutes: 10 },
-      action: { type: "shell_command", mode: "command", content: "echo ok" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+      action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
     })
     await harness.invoke("synapse:task-scheduler:tasks:update", {
       id: "task:1",

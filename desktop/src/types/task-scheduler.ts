@@ -1,18 +1,16 @@
+import type { ActionRunResult } from "../../action-packages/types"
+
 export type ScheduledTaskTrigger =
-  | { type: "cron"; expr: string; timezone?: string }
-  | { type: "interval"; everyMinutes: number; anchor?: "created_at" | "last_completed_at" }
+  | { type: "builtin.cron"; config: { expr: string; timezone?: string } }
+  | { type: "builtin.interval"; config: { everyMinutes: number; anchor?: "created_at" | "last_completed_at" } }
 
 export type ScheduledTaskScope =
   | { type: "global" }
   | { type: "project"; projectId: string }
 
-export type ScheduledTaskAction = {
-  type: "shell_command"
-  mode: "command" | "script"
-  shell?: "posix" | "cmd" | "powershell"
-  content: string
-  env?: Record<string, string>
-  timeoutMins?: number | null
+export type ScheduledTaskActionRef = {
+  type: string
+  config: Record<string, unknown>
 }
 
 export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled" | "skipped"
@@ -21,13 +19,13 @@ export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
 
 export type ScheduledTask = {
   id: string
-  schemaVersion: 1
+  schemaVersion: 2
   name: string
   description?: string
   scope: ScheduledTaskScope
   cwd?: string
   trigger: ScheduledTaskTrigger
-  action: ScheduledTaskAction
+  action: ScheduledTaskActionRef
   enabled: boolean
   missedRunPolicy: "skip" | "run_once"
   overlapPolicy: "skip"
@@ -45,7 +43,7 @@ export type ScheduledTaskCreateInput = {
   scope: ScheduledTaskScope
   cwd?: string
   trigger: ScheduledTaskTrigger
-  action: ScheduledTaskAction
+  action: ScheduledTaskActionRef
   enabled?: boolean
   missedRunPolicy?: "skip" | "run_once"
 }
@@ -56,21 +54,19 @@ export type ScheduledTaskUpdateInput = {
   scope?: ScheduledTaskScope
   cwd?: string
   trigger?: ScheduledTaskTrigger
-  action?: ScheduledTaskAction
+  action?: ScheduledTaskActionRef
   enabled?: boolean
   missedRunPolicy?: "skip" | "run_once"
 }
 
 export type ScheduledTaskRun = {
   id: string
-  schemaVersion: 1
+  schemaVersion: 2
   taskId: string
   startedAt: string
   finishedAt?: string
   status: ScheduledTaskRunStatus
-  exitCode?: number | null
-  stdout?: string
-  stderr?: string
+  result?: ActionRunResult
   error?: string
   triggeredBy: ScheduledTaskRunTrigger
 }
