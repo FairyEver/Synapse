@@ -498,20 +498,16 @@ export const agentCommandSettingsSchema: NamespaceSchema<AgentCommandSettingsEnt
 }
 
 export type ScheduledTaskTriggerV1 =
-  | { type: "cron"; expr: string; timezone?: string }
-  | { type: "interval"; everyMinutes: number; anchor?: "created_at" | "last_completed_at" }
+  | { type: "builtin.cron"; config: { expr: string; timezone?: string } }
+  | { type: "builtin.interval"; config: { everyMinutes: number; anchor?: "created_at" | "last_completed_at" } }
 
 export type ScheduledTaskScopeV1 =
   | { type: "global" }
   | { type: "project"; projectId: string }
 
 export type ScheduledTaskActionV1 = {
-  type: "shell_command"
-  mode: "command" | "script"
-  shell?: "posix" | "cmd" | "powershell"
-  content: string
-  env?: Record<string, string>
-  timeoutMins?: number | null
+  type: string
+  config: Record<string, unknown>
 }
 
 export type ScheduledTaskStatusV1 = "success" | "failed" | "timeout" | "cancelled" | "skipped"
@@ -520,7 +516,7 @@ export type ScheduledTaskRunTriggerV1 = "schedule" | "manual" | "missed_run"
 
 export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
   id: string
-  schemaVersion: 1
+  schemaVersion: 2
   name: string
   description?: string
   scope: ScheduledTaskScopeV1
@@ -540,26 +536,24 @@ export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
 
 export interface ScheduledTaskRunEntryV1 extends Record<string, unknown> {
   id: string
-  schemaVersion: 1
+  schemaVersion: 2
   taskId: string
   startedAt: string
   finishedAt?: string
   status: ScheduledTaskRunStatusV1
-  exitCode?: number | null
-  stdout?: string
-  stderr?: string
-  error?: string
   triggeredBy: ScheduledTaskRunTriggerV1
+  result?: Record<string, unknown>
+  error?: string
 }
 
 export const taskSchedulerTasksSchema: NamespaceSchema<ScheduledTaskEntryV1> = {
   name: "task-scheduler.tasks",
   backend: "json",
-  currentVersion: 1,
+  currentVersion: 2,
   migrations: noMigrations,
   validate: (v): v is ScheduledTaskEntryV1 =>
     isAnyRecord<ScheduledTaskEntryV1>(v)
-    && (v as ScheduledTaskEntryV1).schemaVersion === 1
+    && (v as ScheduledTaskEntryV1).schemaVersion === 2
     && typeof (v as ScheduledTaskEntryV1).id === "string"
     && typeof (v as ScheduledTaskEntryV1).name === "string"
     && isOptionalString((v as ScheduledTaskEntryV1).description)
@@ -581,25 +575,19 @@ export const taskSchedulerTasksSchema: NamespaceSchema<ScheduledTaskEntryV1> = {
 export const taskSchedulerRunsSchema: NamespaceSchema<ScheduledTaskRunEntryV1> = {
   name: "task-scheduler.runs",
   backend: "json",
-  currentVersion: 1,
+  currentVersion: 2,
   migrations: noMigrations,
   validate: (v): v is ScheduledTaskRunEntryV1 =>
     isAnyRecord<ScheduledTaskRunEntryV1>(v)
-    && (v as ScheduledTaskRunEntryV1).schemaVersion === 1
+    && (v as ScheduledTaskRunEntryV1).schemaVersion === 2
     && typeof (v as ScheduledTaskRunEntryV1).id === "string"
     && typeof (v as ScheduledTaskRunEntryV1).taskId === "string"
     && typeof (v as ScheduledTaskRunEntryV1).startedAt === "string"
     && isOptionalString((v as ScheduledTaskRunEntryV1).finishedAt)
     && isTaskRunStatus((v as ScheduledTaskRunEntryV1).status)
-    && (
-      (v as ScheduledTaskRunEntryV1).exitCode === undefined
-      || (v as ScheduledTaskRunEntryV1).exitCode === null
-      || typeof (v as ScheduledTaskRunEntryV1).exitCode === "number"
-    )
-    && isOptionalString((v as ScheduledTaskRunEntryV1).stdout)
-    && isOptionalString((v as ScheduledTaskRunEntryV1).stderr)
-    && isOptionalString((v as ScheduledTaskRunEntryV1).error)
-    && isTaskRunTrigger((v as ScheduledTaskRunEntryV1).triggeredBy),
+    && isTaskRunTrigger((v as ScheduledTaskRunEntryV1).triggeredBy)
+    && ((v as ScheduledTaskRunEntryV1).result === undefined || isAnyRecord((v as ScheduledTaskRunEntryV1).result))
+    && isOptionalString((v as ScheduledTaskRunEntryV1).error),
 }
 
 export type RunAsCheckStatusV1 = "pass" | "fail" | "unsupported"
@@ -1078,30 +1066,28 @@ function isTaskTrigger(value: unknown): value is ScheduledTaskTriggerV1 {
   return isAnyRecord<ScheduledTaskTriggerV1>(value)
     && (
       (
-        value.type === "cron"
-        && typeof value.expr === "string"
-        && isOptionalString(value.timezone)
+        value.type === "builtin.cron"
+        && isAnyRecord(value.config)
+        && typeof value.config.expr === "string"
+        && isOptionalString(value.config.timezone)
       )
       || (
-        value.type === "interval"
-        && typeof value.everyMinutes === "number"
-        && (value.anchor === undefined || value.anchor === "created_at" || value.anchor === "last_completed_at")
+        value.type === "builtin.interval"
+        && isAnyRecord(value.config)
+        && typeof value.config.everyMinutes === "number"
+        && (
+          value.config.anchor === undefined
+          || value.config.anchor === "created_at"
+          || value.config.anchor === "last_completed_at"
+        )
       )
     )
 }
 
 function isTaskAction(value: unknown): value is ScheduledTaskActionV1 {
   return isAnyRecord<ScheduledTaskActionV1>(value)
-    && value.type === "shell_command"
-    && (value.mode === "command" || value.mode === "script")
-    && (value.shell === undefined || value.shell === "posix" || value.shell === "cmd" || value.shell === "powershell")
-    && typeof value.content === "string"
-    && (value.env === undefined || isStringRecord(value.env))
-    && (
-      value.timeoutMins === undefined
-      || value.timeoutMins === null
-      || typeof value.timeoutMins === "number"
-    )
+    && typeof value.type === "string"
+    && isAnyRecord(value.config)
 }
 
 function isOptionalTaskStatus(value: unknown): boolean {

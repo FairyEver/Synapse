@@ -1,39 +1,45 @@
-import type { ControlledProcessResult } from "../../runtime/process"
+import type { ActionRunResult } from "../../../action-packages/types"
 
 export const TASK_SCHEDULER_SERVICE_ID = "core.task-scheduler"
 
 export type TaskTrigger =
-  | { readonly type: "cron"; readonly expr: string; readonly timezone?: string }
-  | { readonly type: "interval"; readonly everyMinutes: number; readonly anchor?: "created_at" | "last_completed_at" }
+  | {
+      readonly type: "builtin.cron"
+      readonly config: {
+        readonly expr: string
+        readonly timezone?: string
+      }
+    }
+  | {
+      readonly type: "builtin.interval"
+      readonly config: {
+        readonly everyMinutes: number
+        readonly anchor?: "created_at" | "last_completed_at"
+      }
+    }
 
 export type TaskScope =
   | { readonly type: "global" }
   | { readonly type: "project"; readonly projectId: string }
 
-export type ShellTaskAction = {
-  readonly type: "shell_command"
-  readonly mode: "command" | "script"
-  readonly shell?: "posix" | "cmd" | "powershell"
-  readonly content: string
-  readonly env?: Record<string, string>
-  readonly timeoutMins?: number | null
+export type TaskActionRef = {
+  readonly type: string
+  readonly config: Record<string, unknown>
 }
-
-export type TaskAction = ShellTaskAction
 
 export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
 
-export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
+export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly id: string
-  readonly schemaVersion: 1
+  readonly schemaVersion: 2
   readonly name: string
   readonly description?: string
   readonly scope: TaskScope
   readonly cwd?: string
   readonly trigger: TaskTrigger
-  readonly action: TaskAction
+  readonly action: TaskActionRef
   readonly enabled: boolean
   readonly missedRunPolicy: "skip" | "run_once"
   readonly overlapPolicy: "skip"
@@ -45,13 +51,15 @@ export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
   readonly runCount: number
 }
 
+export type ScheduledTaskEntry = ScheduledTaskEntryV2
+
 export interface ScheduledTaskCreateInput {
   readonly name: string
   readonly description?: string
   readonly scope: TaskScope
   readonly cwd?: string
   readonly trigger: TaskTrigger
-  readonly action: TaskAction
+  readonly action: TaskActionRef
   readonly enabled?: boolean
   readonly missedRunPolicy?: "skip" | "run_once"
 }
@@ -62,47 +70,27 @@ export interface ScheduledTaskUpdateInput {
   readonly scope?: TaskScope
   readonly cwd?: string
   readonly trigger?: TaskTrigger
-  readonly action?: TaskAction
+  readonly action?: TaskActionRef
   readonly enabled?: boolean
   readonly missedRunPolicy?: "skip" | "run_once"
 }
 
-export interface ScheduledTaskRunEntryV1 extends Record<string, unknown> {
+export interface ScheduledTaskRunEntryV2 extends Record<string, unknown> {
   readonly id: string
-  readonly schemaVersion: 1
+  readonly schemaVersion: 2
   readonly taskId: string
   readonly startedAt: string
   readonly finishedAt?: string
   readonly status: ScheduledTaskRunStatus
-  readonly exitCode?: number | null
-  readonly stdout?: string
-  readonly stderr?: string
-  readonly error?: string
   readonly triggeredBy: ScheduledTaskRunTrigger
+  readonly result?: ActionRunResult
+  readonly error?: string
 }
+
+export type ScheduledTaskRunEntry = ScheduledTaskRunEntryV2
 
 export interface ScheduledTaskRunFinishInput {
   readonly status: Exclude<ScheduledTaskRunStatus, "running">
-  readonly exitCode?: number | null
-  readonly stdout?: string
-  readonly stderr?: string
+  readonly result?: ActionRunResult
   readonly error?: string
-}
-
-export interface TaskActionExecutionInput {
-  readonly task: ScheduledTaskEntryV1
-  readonly runId: string
-  readonly cwd: string
-  readonly abortSignal: AbortSignal
-}
-
-export interface TaskActionExecutionResult {
-  readonly status: Exclude<ScheduledTaskRunStatus, "running">
-  readonly process?: ControlledProcessResult
-  readonly error?: string
-}
-
-export interface TaskActionExecutor {
-  readonly type: TaskAction["type"]
-  execute(input: TaskActionExecutionInput): Promise<TaskActionExecutionResult>
 }

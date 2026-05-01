@@ -1,34 +1,43 @@
 import { describe, expect, it } from "vitest"
 
-import type { DataChangeListener, DataNamespace, ScheduledTaskRunEntryV1 } from "../../../runtime/data-repo"
+import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import { ScheduledTaskRunRepository } from "../run-repository"
+import type { ScheduledTaskRunEntry } from "../types"
 
 describe("ScheduledTaskRunRepository", () => {
   it("starts and finishes runs", async () => {
     const repo = new ScheduledTaskRunRepository({
-      runs: new MemoryNamespace<ScheduledTaskRunEntryV1>("task-scheduler.runs"),
+      runs: new MemoryNamespace<ScheduledTaskRunEntry>("task-scheduler.runs"),
       now: () => new Date("2026-04-29T00:00:00.000Z"),
       idFactory: () => "run:1",
     })
 
     const run = await repo.start("task:1", "manual")
+    expect(run.schemaVersion).toBe(2)
     expect(run.status).toBe("running")
     expect(run.triggeredBy).toBe("manual")
 
     const finished = await repo.finish("run:1", {
       status: "success",
-      exitCode: 0,
-      stdout: "ok",
-      stderr: "",
+      result: {
+        status: "success",
+        summary: "退出码 0",
+        outputs: { stdout: "ok" },
+      },
     })
     expect(finished.status).toBe("success")
+    expect(finished.result).toEqual({
+      status: "success",
+      summary: "退出码 0",
+      outputs: { stdout: "ok" },
+    })
     expect(finished.finishedAt).toBe("2026-04-29T00:00:00.000Z")
   })
 
   it("keeps only the latest 100 runs for a task", async () => {
     let nextMinute = 0
     const repo = new ScheduledTaskRunRepository({
-      runs: new MemoryNamespace<ScheduledTaskRunEntryV1>("task-scheduler.runs"),
+      runs: new MemoryNamespace<ScheduledTaskRunEntry>("task-scheduler.runs"),
       now: () => new Date(Date.UTC(2026, 3, 29, 0, nextMinute, 0)),
       idFactory: (taskId, index) => `run:${taskId}:${index}`,
     })
@@ -38,9 +47,10 @@ describe("ScheduledTaskRunRepository", () => {
       await repo.start("task:1", "manual")
       await repo.finish(`run:task:1:${i + 1}`, {
         status: "success",
-        exitCode: 0,
-        stdout: String(i),
-        stderr: "",
+        result: {
+          status: "success",
+          summary: String(i),
+        },
       })
     }
 

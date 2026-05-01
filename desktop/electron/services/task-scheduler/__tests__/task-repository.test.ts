@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import type { DataChangeListener, DataNamespace, ScheduledTaskEntryV1 } from "../../../runtime/data-repo"
+import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import { ScheduledTaskRepository } from "../task-repository"
+import type { ScheduledTaskEntry } from "../types"
 
 describe("ScheduledTaskRepository", () => {
   it("creates shell tasks with defaults", async () => {
     const repo = new ScheduledTaskRepository({
-      tasks: new MemoryNamespace<ScheduledTaskEntryV1>("task-scheduler.tasks"),
+      tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),
       now: () => new Date("2026-04-29T00:00:00"),
       idFactory: () => "task:1",
     })
@@ -14,20 +15,35 @@ describe("ScheduledTaskRepository", () => {
     const task = await repo.create({
       name: "Build",
       scope: { type: "global" },
-      trigger: { type: "cron", expr: "0 2 * * *" },
-      action: { type: "shell_command", mode: "command", content: "pnpm build" },
+      trigger: { type: "builtin.cron", config: { expr: "0 2 * * *" } },
+      action: {
+        type: "builtin.command",
+        config: {
+          command: "pnpm build",
+          shell: "posix",
+          timeoutMins: 30,
+        },
+      },
     })
 
+    expect(task.schemaVersion).toBe(2)
     expect(task.enabled).toBe(true)
     expect(task.missedRunPolicy).toBe("skip")
     expect(task.overlapPolicy).toBe("skip")
-    expect(task.action.timeoutMins).toBe(30)
+    expect(task.action).toEqual({
+      type: "builtin.command",
+      config: {
+        command: "pnpm build",
+        shell: "posix",
+        timeoutMins: 30,
+      },
+    })
     expect(task.nextRunAt).toBe(new Date("2026-04-29T02:00:00").toISOString())
   })
 
   it("rejects invalid triggers and empty actions", async () => {
     const repo = new ScheduledTaskRepository({
-      tasks: new MemoryNamespace<ScheduledTaskEntryV1>("task-scheduler.tasks"),
+      tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),
       now: () => new Date("2026-04-29T00:00:00.000Z"),
       idFactory: () => "task:1",
     })
@@ -35,21 +51,21 @@ describe("ScheduledTaskRepository", () => {
     await expect(repo.create({
       name: "Build",
       scope: { type: "global" },
-      trigger: { type: "cron", expr: "bad" },
-      action: { type: "shell_command", mode: "command", content: "pnpm build" },
+      trigger: { type: "builtin.cron", config: { expr: "bad" } },
+      action: { type: "builtin.command", config: { command: "pnpm build" } },
     })).rejects.toThrow(/cron/)
     await expect(repo.create({
       name: "Build",
       scope: { type: "global" },
-      trigger: { type: "interval", everyMinutes: 0 },
-      action: { type: "shell_command", mode: "command", content: "pnpm build" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 0 } },
+      action: { type: "builtin.command", config: { command: "pnpm build" } },
     })).rejects.toThrow(/everyMinutes/)
     await expect(repo.create({
       name: "Build",
       scope: { type: "global" },
-      trigger: { type: "interval", everyMinutes: 5 },
-      action: { type: "shell_command", mode: "command", content: " " },
-    })).rejects.toThrow(/action content/)
+      trigger: { type: "builtin.interval", config: { everyMinutes: 5 } },
+      action: { type: " ", config: {} },
+    })).rejects.toThrow(/action type/)
   })
 })
 

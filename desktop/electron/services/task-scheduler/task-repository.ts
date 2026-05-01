@@ -1,23 +1,24 @@
 import { randomUUID } from "node:crypto"
 
-import type { DataNamespace, ScheduledTaskEntryV1 } from "../../runtime/data-repo"
+import type { DataNamespace } from "../../runtime/data-repo"
 import { computeNextRunAt } from "./schedule-calculator"
 import type {
+  ScheduledTaskEntry,
   ScheduledTaskCreateInput,
   ScheduledTaskRunStatus,
   ScheduledTaskUpdateInput,
-  TaskAction,
+  TaskTrigger,
 } from "./types"
 import { validateCronExpression } from "./cron-expression"
 
 export interface ScheduledTaskRepositoryDeps {
-  readonly tasks: DataNamespace<ScheduledTaskEntryV1>
+  readonly tasks: DataNamespace<ScheduledTaskEntry>
   readonly now?: () => Date
   readonly idFactory?: () => string
 }
 
 export class ScheduledTaskRepository {
-  private readonly tasks: DataNamespace<ScheduledTaskEntryV1>
+  private readonly tasks: DataNamespace<ScheduledTaskEntry>
   private readonly now: () => Date
   private readonly idFactory: () => string
 
@@ -27,18 +28,19 @@ export class ScheduledTaskRepository {
     this.idFactory = deps.idFactory ?? (() => `task:${randomUUID()}`)
   }
 
-  async create(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntryV1> {
+  async create(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
     const now = this.isoNow()
     const enabled = input.enabled ?? true
-    const task: ScheduledTaskEntryV1 = {
+    const trigger = normalizeTrigger(input.trigger)
+    const task: ScheduledTaskEntry = {
       id: this.idFactory(),
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: input.name,
       description: input.description,
       scope: input.scope,
       cwd: input.cwd,
-      trigger: input.trigger,
-      action: normalizeAction(input.action),
+      trigger,
+      action: input.action,
       enabled,
       missedRunPolicy: input.missedRunPolicy ?? "skip",
       overlapPolicy: "skip",
@@ -50,29 +52,29 @@ export class ScheduledTaskRepository {
     const next = {
       ...task,
       nextRunAt: enabled
-        ? computeNextRunAt({ trigger: input.trigger, from: this.now(), createdAt: now }).toISOString()
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: now }).toISOString()
         : undefined,
     }
     await this.tasks.upsert(next)
     return next
   }
 
-  async update(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntryV1> {
+  async update(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
     const existing = await this.require(id)
-    const trigger = patch.trigger ?? existing.trigger
+    const trigger = normalizeTrigger(patch.trigger ?? existing.trigger)
     const enabled = patch.enabled ?? existing.enabled
-    const next: ScheduledTaskEntryV1 = {
+    const next: ScheduledTaskEntry = {
       ...existing,
       ...definedPatch({
         name: patch.name,
         description: patch.description,
         scope: patch.scope,
         cwd: patch.cwd,
-        trigger: patch.trigger,
+        trigger,
         missedRunPolicy: patch.missedRunPolicy,
         enabled: patch.enabled,
       }),
-      action: patch.action === undefined ? existing.action : normalizeAction(patch.action),
+      action: patch.action === undefined ? existing.action : patch.action,
       nextRunAt: enabled
         ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt }).toISOString()
         : undefined,
@@ -90,22 +92,22 @@ export class ScheduledTaskRepository {
     return true
   }
 
-  get(id: string): Promise<ScheduledTaskEntryV1 | null> {
+  get(id: string): Promise<ScheduledTaskEntry | null> {
     return this.tasks.get(id)
   }
 
-  list(): Promise<ScheduledTaskEntryV1[]> {
+  list(): Promise<ScheduledTaskEntry[]> {
     return this.tasks.list()
   }
 
-  async setEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntryV1> {
+  async setEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
     return this.update(id, { enabled })
   }
 
-  async markScheduled(id: string, nextRunAt: string | undefined): Promise<ScheduledTaskEntryV1 | null> {
+  async markScheduled(id: string, nextRunAt: string | undefined): Promise<ScheduledTaskEntry | null> {
     const existing = await this.tasks.get(id)
     if (!existing) return null
-    const next: ScheduledTaskEntryV1 = {
+    const next: ScheduledTaskEntry = {
       ...existing,
       nextRunAt,
       updatedAt: this.isoNow(),
@@ -117,10 +119,10 @@ export class ScheduledTaskRepository {
   async markRunResult(
     id: string,
     result: { readonly status: Exclude<ScheduledTaskRunStatus, "running"> },
-  ): Promise<ScheduledTaskEntryV1 | null> {
+  ): Promise<ScheduledTaskEntry | null> {
     const existing = await this.tasks.get(id)
     if (!existing) return null
-    const next: ScheduledTaskEntryV1 = {
+    const next: ScheduledTaskEntry = {
       ...existing,
       lastRunAt: this.isoNow(),
       lastStatus: result.status,
@@ -131,7 +133,7 @@ export class ScheduledTaskRepository {
     return next
   }
 
-  private async require(id: string): Promise<ScheduledTaskEntryV1> {
+  private async require(id: string): Promise<ScheduledTaskEntry> {
     const task = await this.tasks.get(id)
     if (!task) throw new Error(`Scheduled task "${id}" was not found`)
     return task
@@ -142,42 +144,33 @@ export class ScheduledTaskRepository {
   }
 }
 
-function normalizeAction(action: TaskAction): TaskAction {
-  if (action.type !== "shell_command") return action
-  return {
-    ...action,
-    timeoutMins: action.timeoutMins === undefined ? 30 : action.timeoutMins,
+function normalizeTrigger(trigger: TaskTrigger): TaskTrigger {
+  if (trigger.type === "builtin.interval") {
+    return {
+      type: "builtin.interval",
+      config: {
+        ...trigger.config,
+        anchor: trigger.config.anchor ?? "created_at",
+      },
+    }
   }
+  return trigger
 }
 
-function validateTask(task: ScheduledTaskEntryV1): void {
+function validateTask(task: ScheduledTaskEntry): void {
   if (!task.name.trim()) throw new Error("name is required")
   if (task.scope.type === "project" && !task.scope.projectId.trim()) {
     throw new Error("projectId is required")
   }
-  if (task.trigger.type === "cron") {
-    validateCronExpression(task.trigger.expr)
-  }
-  if (
-    task.trigger.type === "interval"
-    && (!Number.isInteger(task.trigger.everyMinutes) || task.trigger.everyMinutes < 1)
+  if (task.trigger.type === "builtin.cron") {
+    validateCronExpression(task.trigger.config.expr)
+  } else if (
+    !Number.isInteger(task.trigger.config.everyMinutes)
+    || task.trigger.config.everyMinutes < 1
   ) {
     throw new Error("everyMinutes must be >= 1")
   }
-  if (!task.action.content.trim()) throw new Error("action content is required")
-  if (
-    task.action.shell !== undefined
-    && task.action.shell !== "posix"
-    && task.action.shell !== "cmd"
-    && task.action.shell !== "powershell"
-  ) {
-    throw new Error("shell must be posix, cmd, or powershell")
-  }
-  if (task.action.timeoutMins !== null && task.action.timeoutMins !== undefined) {
-    if (!Number.isInteger(task.action.timeoutMins) || task.action.timeoutMins < 1) {
-      throw new Error("timeoutMins must be >= 1 or null")
-    }
-  }
+  if (!task.action.type.trim()) throw new Error("action type is required")
 }
 
 function definedPatch<T extends Record<string, unknown>>(patch: T): Partial<T> {

@@ -5,7 +5,7 @@ import { computeNextRunAt, resolveStartupSchedule } from "../schedule-calculator
 describe("task scheduler schedule calculator", () => {
   it("computes local cron next runs", () => {
     expect(computeNextRunAt({
-      trigger: { type: "cron", expr: "*/30 * * * *" },
+      trigger: { type: "builtin.cron", config: { expr: "*/30 * * * *" } },
       from: new Date("2026-04-29T10:01:00"),
       createdAt: "2026-04-29T09:00:00",
     }).toISOString()).toBe(new Date("2026-04-29T10:30:00").toISOString())
@@ -13,7 +13,7 @@ describe("task scheduler schedule calculator", () => {
 
   it("computes interval next runs from creation anchor", () => {
     expect(computeNextRunAt({
-      trigger: { type: "interval", everyMinutes: 10, anchor: "created_at" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10, anchor: "created_at" } },
       from: new Date("2026-04-29T10:07:00"),
       createdAt: "2026-04-29T10:02:00",
     }).toISOString()).toBe(new Date("2026-04-29T10:12:00").toISOString())
@@ -24,7 +24,7 @@ describe("task scheduler schedule calculator", () => {
       enabled: true,
       nextRunAt: "2026-04-29T02:00:00.000Z",
       missedRunPolicy: "skip",
-      trigger: { type: "interval", everyMinutes: 60 },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 60 } },
       createdAt: "2026-04-29T00:00:00.000Z",
       now: new Date("2026-04-29T09:00:00.000Z"),
     })).toEqual({ action: "schedule_next" })
@@ -35,7 +35,7 @@ describe("task scheduler schedule calculator", () => {
       enabled: true,
       nextRunAt: "2026-04-29T02:00:00.000Z",
       missedRunPolicy: "run_once",
-      trigger: { type: "interval", everyMinutes: 60 },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 60 } },
       createdAt: "2026-04-29T00:00:00.000Z",
       now: new Date("2026-04-29T09:00:00.000Z"),
     })).toEqual({ action: "run_missed_once" })

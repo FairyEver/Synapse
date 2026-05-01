@@ -1,18 +1,22 @@
 import { randomUUID } from "node:crypto"
 
-import type { DataNamespace, ScheduledTaskRunEntryV1 } from "../../runtime/data-repo"
-import type { ScheduledTaskRunFinishInput, ScheduledTaskRunTrigger } from "./types"
+import type { DataNamespace } from "../../runtime/data-repo"
+import type {
+  ScheduledTaskRunEntry,
+  ScheduledTaskRunFinishInput,
+  ScheduledTaskRunTrigger,
+} from "./types"
 
 const MAX_RUNS_PER_TASK = 100
 
 export interface ScheduledTaskRunRepositoryDeps {
-  readonly runs: DataNamespace<ScheduledTaskRunEntryV1>
+  readonly runs: DataNamespace<ScheduledTaskRunEntry>
   readonly now?: () => Date
   readonly idFactory?: (taskId: string, index: number) => string
 }
 
 export class ScheduledTaskRunRepository {
-  private readonly runs: DataNamespace<ScheduledTaskRunEntryV1>
+  private readonly runs: DataNamespace<ScheduledTaskRunEntry>
   private readonly now: () => Date
   private readonly idFactory: (taskId: string, index: number) => string
   private nextIndex = 0
@@ -23,11 +27,11 @@ export class ScheduledTaskRunRepository {
     this.idFactory = deps.idFactory ?? (() => `run:${randomUUID()}`)
   }
 
-  async start(taskId: string, triggeredBy: ScheduledTaskRunTrigger): Promise<ScheduledTaskRunEntryV1> {
+  async start(taskId: string, triggeredBy: ScheduledTaskRunTrigger): Promise<ScheduledTaskRunEntry> {
     this.nextIndex += 1
-    const run: ScheduledTaskRunEntryV1 = {
+    const run: ScheduledTaskRunEntry = {
       id: this.idFactory(taskId, this.nextIndex),
-      schemaVersion: 1,
+      schemaVersion: 2,
       taskId,
       startedAt: this.isoNow(),
       status: "running",
@@ -37,15 +41,13 @@ export class ScheduledTaskRunRepository {
     return run
   }
 
-  async finish(id: string, input: ScheduledTaskRunFinishInput): Promise<ScheduledTaskRunEntryV1> {
+  async finish(id: string, input: ScheduledTaskRunFinishInput): Promise<ScheduledTaskRunEntry> {
     const existing = await this.require(id)
-    const next: ScheduledTaskRunEntryV1 = {
+    const next: ScheduledTaskRunEntry = {
       ...existing,
       finishedAt: this.isoNow(),
       status: input.status,
-      exitCode: input.exitCode,
-      stdout: input.stdout,
-      stderr: input.stderr,
+      result: input.result,
       error: input.error,
     }
     await this.runs.upsert(next)
@@ -53,11 +55,11 @@ export class ScheduledTaskRunRepository {
     return next
   }
 
-  listByTask(taskId: string, options?: { readonly limit?: number }): Promise<ScheduledTaskRunEntryV1[]> {
+  listByTask(taskId: string, options?: { readonly limit?: number }): Promise<ScheduledTaskRunEntry[]> {
     return this.listSorted(taskId, options?.limit)
   }
 
-  get(id: string): Promise<ScheduledTaskRunEntryV1 | null> {
+  get(id: string): Promise<ScheduledTaskRunEntry | null> {
     return this.runs.get(id)
   }
 
@@ -67,13 +69,13 @@ export class ScheduledTaskRunRepository {
     await Promise.all(stale.map((run) => this.runs.remove(run.id)))
   }
 
-  private async listSorted(taskId: string, limit?: number): Promise<ScheduledTaskRunEntryV1[]> {
-    const runs = await this.runs.list({ taskId } as Partial<ScheduledTaskRunEntryV1>)
+  private async listSorted(taskId: string, limit?: number): Promise<ScheduledTaskRunEntry[]> {
+    const runs = await this.runs.list({ taskId } as Partial<ScheduledTaskRunEntry>)
     const sorted = runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
     return limit === undefined ? sorted : sorted.slice(0, limit)
   }
 
-  private async require(id: string): Promise<ScheduledTaskRunEntryV1> {
+  private async require(id: string): Promise<ScheduledTaskRunEntry> {
     const run = await this.runs.get(id)
     if (!run) throw new Error(`Scheduled task run "${id}" was not found`)
     return run
