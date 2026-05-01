@@ -11,6 +11,8 @@ export default defineConfig({
     globals: false,
     environment: "node",
     include: [
+      "action-packages/**/__tests__/**/*.{test,spec}.ts",
+      "action-packages/**/*.test.ts",
       "electron/**/__tests__/**/*.{test,spec}.ts",
       "src/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "tests/unit/**/*.{test,spec}.ts",
