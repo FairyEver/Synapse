@@ -39,9 +39,6 @@ function createTaskFormState(
     }
   }
 
-  const isCronTrigger = task.trigger.type === "builtin.cron"
-  const isIntervalTrigger = task.trigger.type === "builtin.interval"
-
   return {
     name: task.name,
     description: task.description ?? "",
@@ -49,12 +46,12 @@ function createTaskFormState(
     projectId: task.scope.type === "project" ? task.scope.projectId : defaultProjectId,
     cwd: task.cwd ?? "",
     enabled: task.enabled,
-    triggerType: isCronTrigger ? "cron" : "interval",
-    cronExpr: isCronTrigger ? task.trigger.config.expr : DEFAULT_TASK_FORM_STATE.cronExpr,
-    everyMinutes: isIntervalTrigger
+    triggerType: task.trigger.type === "builtin.cron" ? "cron" : "interval",
+    cronExpr: task.trigger.type === "builtin.cron" ? task.trigger.config.expr : DEFAULT_TASK_FORM_STATE.cronExpr,
+    everyMinutes: task.trigger.type === "builtin.interval"
       ? String(task.trigger.config.everyMinutes)
       : DEFAULT_TASK_FORM_STATE.everyMinutes,
-    intervalAnchor: isIntervalTrigger
+    intervalAnchor: task.trigger.type === "builtin.interval"
       ? task.trigger.config.anchor ?? "created_at"
       : DEFAULT_TASK_FORM_STATE.intervalAnchor,
     actionType: task.action.type,

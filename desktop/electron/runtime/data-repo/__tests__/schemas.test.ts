@@ -269,15 +269,17 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(
       taskSchedulerTasksSchema.validate({
         id: "task:1",
-        schemaVersion: 1,
+        schemaVersion: 2,
         name: "Nightly backup",
         scope: { type: "global" },
-        trigger: { type: "cron", expr: "0 2 * * *" },
+        trigger: { type: "builtin.cron", config: { expr: "0 2 * * *" } },
         action: {
-          type: "shell_command",
-          mode: "command",
-          content: "echo backup",
-          timeoutMins: 30,
+          type: "builtin.command",
+          config: {
+            command: "echo backup",
+            shell: "posix",
+            timeoutMins: 30,
+          },
         },
         enabled: true,
         missedRunPolicy: "skip",
@@ -290,14 +292,16 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(
       taskSchedulerRunsSchema.validate({
         id: "run:1",
-        schemaVersion: 1,
+        schemaVersion: 2,
         taskId: "task:1",
         startedAt: "2026-04-29T00:00:00.000Z",
         finishedAt: "2026-04-29T00:00:01.000Z",
         status: "success",
-        exitCode: 0,
-        stdout: "ok",
-        stderr: "",
+        result: {
+          status: "success",
+          summary: "ok",
+          metrics: { exitCode: 0 },
+        },
         triggeredBy: "manual",
       }),
     ).toBe(true)

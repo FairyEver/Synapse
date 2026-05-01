@@ -25,12 +25,12 @@ export type RendererActionDefinition<TConfig extends ActionConfig = ActionConfig
 export class RendererActionRegistry {
   private readonly actions = new Map<string, RendererActionDefinition>()
 
-  register(action: RendererActionDefinition): void {
+  register<TConfig extends ActionConfig>(action: RendererActionDefinition<TConfig>): void {
     const { id } = action.manifest
     if (this.actions.has(id)) {
       throw new Error(`Task action "${id}" is already registered`)
     }
-    this.actions.set(id, action)
+    this.actions.set(id, action as RendererActionDefinition)
   }
 
   get(id: string): RendererActionDefinition {
