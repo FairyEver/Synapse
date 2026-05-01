@@ -19,6 +19,11 @@ export type {
 export { isFreePort, pickNextAvailablePort } from "./ports"
 export type { PickPortArgs } from "./ports"
 export { createLocalNetworkHostLifecycle } from "./local-host"
+export {
+  sendOutboundHttpRequest,
+  type OutboundHttpRequest,
+  type OutboundHttpResponse,
+} from "./outbound-http"
 export type {
   LocalHttpRequest,
   LocalHttpResponse,
