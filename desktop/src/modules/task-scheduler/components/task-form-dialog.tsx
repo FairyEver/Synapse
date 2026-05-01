@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 
 import { FormDialog } from "@/components/form-dialog"
+import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import {
   ModuleSidebar,
   ModuleSidebarItem,
@@ -19,12 +20,12 @@ import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTaskCreateInput, ScheduledTaskUpdateInput } from "@/types/task-scheduler"
@@ -89,6 +90,14 @@ function TaskFormDialog({
     }))
   }
 
+  const updateActionType = (actionType: string) => {
+    setForm((current) => ({
+      ...current,
+      actionType,
+      actionConfig: rendererActionRegistry.getDefaultConfig(actionType),
+    }))
+  }
+
   const setSectionRef = (sectionId: TaskFormSectionId) => (node: HTMLElement | null) => {
     sectionRefs.current[sectionId] = node
   }
@@ -106,9 +115,11 @@ function TaskFormDialog({
     scrollPane.scrollTo({ top, behavior: "smooth" })
   }
 
+  const selectedAction = rendererActionRegistry.get(form.actionType)
+  const ActionConfigForm = selectedAction.ConfigForm
   const canSubmit = Boolean(
     form.name.trim()
-    && form.actionContent.trim()
+    && selectedAction.manifest.configSchema.safeParse(form.actionConfig).success
     && (form.scopeType === "global" || form.projectId),
   )
 
@@ -202,8 +213,10 @@ function TaskFormDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="global">全局</SelectItem>
-                        <SelectItem value="project">项目</SelectItem>
+                        <SelectGroup>
+                          <SelectItem value="global">全局</SelectItem>
+                          <SelectItem value="project">项目</SelectItem>
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   </TaskField>
@@ -217,11 +230,13 @@ function TaskFormDialog({
                           <SelectValue placeholder="选择项目" />
                         </SelectTrigger>
                         <SelectContent>
-                          {projects.map((project) => (
-                            <SelectItem key={project.id} value={project.id}>
-                              {project.name}
-                            </SelectItem>
-                          ))}
+                          <SelectGroup>
+                            {projects.map((project) => (
+                              <SelectItem key={project.id} value={project.id}>
+                                {project.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </TaskField>
@@ -252,8 +267,10 @@ function TaskFormDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cron">Cron</SelectItem>
-                        <SelectItem value="interval">固定间隔</SelectItem>
+                        <SelectGroup>
+                          <SelectItem value="cron">Cron</SelectItem>
+                          <SelectItem value="interval">固定间隔</SelectItem>
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   </TaskField>
@@ -287,8 +304,10 @@ function TaskFormDialog({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="created_at">创建时间</SelectItem>
-                          <SelectItem value="last_completed_at">上次完成</SelectItem>
+                          <SelectGroup>
+                            <SelectItem value="created_at">创建时间</SelectItem>
+                            <SelectItem value="last_completed_at">上次完成</SelectItem>
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </TaskField>
@@ -301,33 +320,23 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-action")}
                 title="执行内容"
               >
-                <div className="grid gap-3 md:grid-cols-3">
-                  <TaskField label="执行类型" htmlFor="task-form-action-mode">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <TaskField label="动作" htmlFor="task-form-action-type">
                     <Select
-                      value={form.actionMode}
-                      onValueChange={(value) => updateField("actionMode", value as TaskFormState["actionMode"])}
+                      value={form.actionType}
+                      onValueChange={updateActionType}
                     >
-                      <SelectTrigger id="task-form-action-mode" className="w-full">
+                      <SelectTrigger id="task-form-action-type" className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="command">命令</SelectItem>
-                        <SelectItem value="script">脚本</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TaskField>
-                  <TaskField label="Shell" htmlFor="task-form-shell">
-                    <Select
-                      value={form.actionShell}
-                      onValueChange={(value) => updateField("actionShell", value as TaskFormState["actionShell"])}
-                    >
-                      <SelectTrigger id="task-form-shell" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="posix">POSIX sh</SelectItem>
-                        <SelectItem value="cmd">cmd.exe</SelectItem>
-                        <SelectItem value="powershell">PowerShell</SelectItem>
+                        <SelectGroup>
+                          {rendererActionRegistry.list().map((action) => (
+                            <SelectItem key={action.manifest.id} value={action.manifest.id}>
+                              {action.manifest.title}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   </TaskField>
@@ -340,15 +349,12 @@ function TaskFormDialog({
                   </TaskField>
                 </div>
 
-                <TaskField label={form.actionMode === "script" ? "脚本" : "命令"} htmlFor="task-form-action-content">
-                  <Textarea
-                    id="task-form-action-content"
-                    className="min-h-24"
-                    rows={5}
-                    value={form.actionContent}
-                    onChange={(event) => updateField("actionContent", event.target.value)}
+                {ActionConfigForm ? (
+                  <ActionConfigForm
+                    value={form.actionConfig}
+                    onChange={(actionConfig) => updateField("actionConfig", actionConfig)}
                   />
-                </TaskField>
+                ) : null}
               </TaskFormSection>
 
               <TaskFormSection
@@ -356,17 +362,7 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-run-settings")}
                 title="运行设置"
               >
-                <TaskField label="环境变量" htmlFor="task-form-env">
-                  <Textarea
-                    id="task-form-env"
-                    className="min-h-20"
-                    rows={3}
-                    value={form.envText}
-                    onChange={(event) => updateField("envText", event.target.value)}
-                  />
-                </TaskField>
-
-                <div data-layout="task-form-run-settings-grid" className="grid gap-3 md:grid-cols-3">
+                <div data-layout="task-form-run-settings-grid" className="grid gap-3 md:grid-cols-2">
                   <ToggleField
                     checked={form.enabled}
                     label="启用"
@@ -378,12 +374,6 @@ function TaskFormDialog({
                     onCheckedChange={(checked) =>
                       updateField("missedRunPolicy", checked ? "run_once" : "skip")
                     }
-                  />
-                  <TimeoutField
-                    checked={form.timeoutEnabled}
-                    minutes={form.timeoutMins}
-                    onCheckedChange={(checked) => updateField("timeoutEnabled", checked)}
-                    onMinutesChange={(value) => updateField("timeoutMins", value)}
                   />
                 </div>
               </TaskFormSection>
@@ -481,38 +471,6 @@ function ToggleField({
       <FieldLabel>{label}</FieldLabel>
       <FieldContent className="items-end">
         <Switch checked={checked} onCheckedChange={onCheckedChange} />
-      </FieldContent>
-    </Field>
-  )
-}
-
-function TimeoutField({
-  checked,
-  minutes,
-  onCheckedChange,
-  onMinutesChange,
-}: {
-  checked: boolean
-  minutes: string
-  onCheckedChange: (checked: boolean) => void
-  onMinutesChange: (value: string) => void
-}) {
-  return (
-    <Field orientation="horizontal" className="items-center rounded-lg border border-border p-3">
-      <FieldLabel htmlFor="task-form-timeout-mins">超时</FieldLabel>
-      <FieldContent className="flex-row items-center justify-end gap-2">
-        <Switch checked={checked} onCheckedChange={onCheckedChange} />
-        <Input
-          id="task-form-timeout-mins"
-          aria-label="超时分钟"
-          className="w-20"
-          disabled={!checked}
-          min={1}
-          type="number"
-          value={minutes}
-          onChange={(event) => onMinutesChange(event.target.value)}
-        />
-        <span className="text-sm text-muted-foreground">分钟</span>
       </FieldContent>
     </Field>
   )

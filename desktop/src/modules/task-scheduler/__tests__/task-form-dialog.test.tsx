@@ -21,6 +21,29 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
 }))
 
+vi.mock("@/components/ui/select", () => ({
+  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
+    <div data-value={value}>{children}</div>
+  ),
+  SelectTrigger: ({
+    children,
+    className,
+    id,
+  }: {
+    children: React.ReactNode
+    className?: string
+    id?: string
+  }) => (
+    <button className={className} id={id} type="button">
+      {children}
+    </button>
+  ),
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+}))
+
 describe("TaskFormDialog", () => {
   it("renders the four lightweight sections in create mode", () => {
     const html = renderDialog()
@@ -71,7 +94,10 @@ describe("TaskFormDialog", () => {
     const cronHtml = renderDialog()
     const intervalHtml = renderDialog({
       task: createTask({
-        trigger: { type: "interval", everyMinutes: 15, anchor: "last_completed_at" },
+        trigger: {
+          type: "builtin.interval",
+          config: { everyMinutes: 15, anchor: "last_completed_at" },
+        },
       }),
     })
 
@@ -83,11 +109,12 @@ describe("TaskFormDialog", () => {
     const html = renderDialog({
       task: createTask({
         action: {
-          type: "shell_command",
-          mode: "script",
-          shell: "posix",
-          content: "echo script",
-          timeoutMins: 30,
+          type: "builtin.script",
+          config: {
+            script: "echo script",
+            shell: "posix",
+            timeoutMins: 30,
+          },
         },
       }),
     })
@@ -96,11 +123,22 @@ describe("TaskFormDialog", () => {
     expect(html).not.toContain(">命令</label>")
   })
 
+  it("renders action type choices", () => {
+    const html = renderDialog()
+
+    expect(html).toContain("命令")
+    expect(html).toContain("脚本")
+    expect(html).toContain("HTTP 请求")
+  })
+
   it("uses compact grids for short controls", () => {
     const html = renderDialog({
       task: createTask({
         scope: { type: "project", projectId: "project-1" },
-        trigger: { type: "interval", everyMinutes: 15, anchor: "last_completed_at" },
+        trigger: {
+          type: "builtin.interval",
+          config: { everyMinutes: 15, anchor: "last_completed_at" },
+        },
       }),
     })
 
@@ -133,17 +171,18 @@ function renderDialog(options: { task?: ScheduledTask } = {}) {
 function createTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   return {
     id: "task-1",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "Backup",
     description: "",
     scope: { type: "global" },
-    trigger: { type: "cron", expr: "0 9 * * *" },
+    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
     action: {
-      type: "shell_command",
-      mode: "command",
-      shell: "posix",
-      content: "echo ok",
-      timeoutMins: 30,
+      type: "builtin.command",
+      config: {
+        command: "echo ok",
+        shell: "posix",
+        timeoutMins: 30,
+      },
     },
     enabled: true,
     missedRunPolicy: "skip",

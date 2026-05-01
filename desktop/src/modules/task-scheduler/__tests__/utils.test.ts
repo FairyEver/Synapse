@@ -3,64 +3,84 @@ import { describe, expect, it } from "vitest"
 import {
   buildTaskCreateInput,
   createTaskFormState,
-  parseTaskEnv,
-  stringifyTaskEnv,
+  DEFAULT_TASK_FORM_STATE,
 } from "../utils"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
 describe("task scheduler utils", () => {
-  it("parses env text into key value pairs", () => {
-    expect(parseTaskEnv("FOO=bar\nEMPTY=\n SPACED =kept")).toEqual({
-      FOO: "bar",
-      EMPTY: "",
-      SPACED: "kept",
-    })
-  })
-
-  it("rejects invalid env lines", () => {
-    expect(() => parseTaskEnv("BROKEN")).toThrow(/KEY=value/)
-  })
-
-  it("builds a cron shell task payload", () => {
+  it("builds a cron command task payload", () => {
     const payload = buildTaskCreateInput({
-      ...createTaskFormState(undefined, "project-1"),
+      ...DEFAULT_TASK_FORM_STATE,
       name: "Backup",
       scopeType: "project",
-      actionContent: "echo ok",
-      envText: "NODE_ENV=production",
+      projectId: "project-1",
+      actionType: "builtin.command",
+      actionConfig: {
+        command: "echo ok",
+        shell: "posix",
+        timeoutMins: 30,
+      },
       missedRunPolicy: "run_once",
     })
 
     expect(payload).toMatchObject({
       name: "Backup",
       scope: { type: "project", projectId: "project-1" },
-      trigger: { type: "cron", expr: "0 9 * * *" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
       action: {
-        type: "shell_command",
-        mode: "command",
-        shell: "posix",
-        content: "echo ok",
-        env: { NODE_ENV: "production" },
-        timeoutMins: 30,
+        type: "builtin.command",
+        config: {
+          command: "echo ok",
+          shell: "posix",
+          timeoutMins: 30,
+        },
       },
       missedRunPolicy: "run_once",
+    })
+  })
+
+  it("builds an HTTP request action payload", () => {
+    expect(buildTaskCreateInput({
+      ...DEFAULT_TASK_FORM_STATE,
+      name: "Ping API",
+      actionType: "builtin.http-request",
+      actionConfig: {
+        method: "POST",
+        url: "https://example.com/api",
+        bodyType: "json",
+        body: "{\"ok\":true}",
+        timeoutMins: 5,
+      },
+    }).action).toEqual({
+      type: "builtin.http-request",
+      config: {
+        method: "POST",
+        url: "https://example.com/api",
+        bodyType: "json",
+        body: "{\"ok\":true}",
+        timeoutMins: 5,
+      },
     })
   })
 
   it("hydrates form state from an interval task", () => {
     const task: ScheduledTask = {
       id: "task-1",
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "Sync",
       scope: { type: "global" },
-      trigger: { type: "interval", everyMinutes: 15, anchor: "last_completed_at" },
+      trigger: {
+        type: "builtin.interval",
+        config: { everyMinutes: 15, anchor: "last_completed_at" },
+      },
       action: {
-        type: "shell_command",
-        mode: "script",
-        shell: "powershell",
-        content: "echo sync",
-        env: { A: "1" },
-        timeoutMins: null,
+        type: "builtin.script",
+        config: {
+          script: "echo sync",
+          shell: "powershell",
+          env: { A: "1" },
+          timeoutMins: null,
+        },
       },
       enabled: false,
       missedRunPolicy: "skip",
@@ -75,14 +95,17 @@ describe("task scheduler utils", () => {
       triggerType: "interval",
       everyMinutes: "15",
       intervalAnchor: "last_completed_at",
-      actionMode: "script",
-      actionShell: "powershell",
-      timeoutEnabled: false,
-      envText: stringifyTaskEnv({ A: "1" }),
+      actionType: "builtin.script",
+      actionConfig: {
+        script: "echo sync",
+        shell: "powershell",
+        env: { A: "1" },
+        timeoutMins: null,
+      },
     })
   })
 
-  it("defaults new Windows tasks to cmd", () => {
-    expect(createTaskFormState(undefined, "", "win32").actionShell).toBe("cmd")
+  it("defaults new tasks to command actions", () => {
+    expect(createTaskFormState().actionType).toBe("builtin.command")
   })
 })

@@ -3,10 +3,10 @@ import type {
   ScheduledTaskCreateInput,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
+import type { ActionConfig } from "../../../action-packages/types"
 
 type TaskFormTriggerType = "cron" | "interval"
 type TaskFormScopeType = "global" | "project"
-type TaskFormShell = "posix" | "cmd" | "powershell"
 
 type TaskFormState = {
   name: string
@@ -19,12 +19,8 @@ type TaskFormState = {
   cronExpr: string
   everyMinutes: string
   intervalAnchor: "created_at" | "last_completed_at"
-  actionMode: "command" | "script"
-  actionShell: TaskFormShell
-  actionContent: string
-  envText: string
-  timeoutEnabled: boolean
-  timeoutMins: string
+  actionType: string
+  actionConfig: ActionConfig
   missedRunPolicy: "skip" | "run_once"
 }
 
@@ -41,7 +37,6 @@ export type {
   TaskFormMode,
   TaskFormPayload,
   TaskFormScopeType,
-  TaskFormShell,
   TaskFormState,
   TaskFormTriggerType,
 }
