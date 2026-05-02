@@ -363,6 +363,61 @@ describe("RepositorySyncCoordinator", () => {
     expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
   })
 
+  it("continues a queued push after an active sync rejects", async () => {
+    const pendingItem = createPendingEntry()
+    const failedItem = createPendingEntry({
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:00:30.000Z",
+      retryCount: 1,
+    })
+    const pendingState = createPendingState([pendingItem])
+    const failedState = createPendingState([failedItem])
+    const sync = createDeferred<never>()
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(failedState)
+      .mockResolvedValue(failedState)
+    serviceMocks.repositoryGitService.syncRepository.mockReturnValue(sync.promise)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockRejectedValue(
+      new Error("fatal: unable to access: Could not resolve host: github.com"),
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const syncRequest = coordinator.requestSync(repository, "manual")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
+    })
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+    const syncExpectation = expect(syncRequest).rejects.toThrow("sync failed")
+    const pushExpectation = expect(pushRequest).rejects.toThrow("Could not resolve host")
+
+    sync.reject(new Error("sync failed"))
+
+    await Promise.all([syncExpectation, pushExpectation])
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledWith(
+      repository,
+      "网络不可用，稍后自动重试。",
+      [1],
+      expect.objectContaining({
+        category: "network",
+      }),
+    )
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "offline",
+      phase: "retry-wait",
+      failureCategory: "network",
+    })
+  })
+
   it("merges duplicate push requests while a push is already running", async () => {
     const pendingState = createPendingState([createPendingEntry()])
     serviceMocks.pendingPushesService.readState

@@ -81,7 +81,9 @@ class RepositorySyncCoordinator {
     const state = this.getExecutionState(repository.uuid)
 
     if (state.syncPromise) {
-      return state.syncPromise.then(() => this.requestPush(repository, reason))
+      return state.syncPromise
+        .catch(() => undefined)
+        .then(() => this.requestPush(repository, reason))
     }
 
     if (state.currentPromise) {
