@@ -18,6 +18,7 @@ const serviceMocks = vi.hoisted(() => ({
   },
   contentSubmissionService: {
     flushPendingPushes: vi.fn(),
+    flushPendingPushesInExclusive: vi.fn(),
     runRepositoryGitExclusive: vi.fn(),
   },
   pendingPushesService: {
@@ -179,6 +180,9 @@ describe("RepositorySyncCoordinator", () => {
     vi.resetAllMocks()
     serviceMocks.contentSubmissionService.runRepositoryGitExclusive.mockImplementation(
       async (_repositoryUuid: string, callback: () => Promise<unknown>) => callback(),
+    )
+    serviceMocks.contentSubmissionService.flushPendingPushesInExclusive.mockImplementation(
+      async (...args: unknown[]) => serviceMocks.contentSubmissionService.flushPendingPushes(...args),
     )
   })
 

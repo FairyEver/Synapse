@@ -334,45 +334,9 @@ class ContentSubmissionService {
     onProgress?: PushProgressListener,
     options: FlushPendingPushesOptions = {},
   ): Promise<void> {
-    return this.runPushExclusive(repository.uuid, async () => {
-      const repositoryState = await repositoryStore.getRepositoryState(repository)
-
-      if (repositoryState.status !== "ready") {
-        throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
-      }
-
-      if (!repositoryState.isGitRepository) {
-        return
-      }
-
-      const pendingState = await pendingPushesService.readState(repository)
-      const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
-
-      if (pendingState.count === 0) {
-        return
-      }
-
-      try {
-        await pushRepository(repository, onProgress)
-        await pendingPushesService.clear(repository, attemptedPendingPushIds)
-        await contentIndexService.syncIndex(repository)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "推送到仓库失败。"
-
-        if (isNonFastForwardError(message)) {
-          await pullWithRebase(repository, onProgress)
-          await pushRepository(repository, onProgress)
-          await pendingPushesService.clear(repository, attemptedPendingPushIds)
-          await contentIndexService.syncIndex(repository)
-          return
-        }
-
-        if (options.recordFailure !== false) {
-          await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
-        }
-        throw error
-      }
-    })
+    return this.runPushExclusive(repository.uuid, () =>
+      this.flushPendingPushesInExclusive(repository, onProgress, options),
+    )
   }
 
   async runRepositoryGitExclusive<T>(
@@ -380,6 +344,50 @@ class ContentSubmissionService {
     callback: () => Promise<T>,
   ): Promise<T> {
     return this.runPushExclusive(repositoryUuid, callback)
+  }
+
+  async flushPendingPushesInExclusive(
+    repository: SynapseRepositoryConfig,
+    onProgress?: PushProgressListener,
+    options: FlushPendingPushesOptions = {},
+  ): Promise<void> {
+    const repositoryState = await repositoryStore.getRepositoryState(repository)
+
+    if (repositoryState.status !== "ready") {
+      throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
+    }
+
+    if (!repositoryState.isGitRepository) {
+      return
+    }
+
+    const pendingState = await pendingPushesService.readState(repository)
+    const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
+
+    if (pendingState.count === 0) {
+      return
+    }
+
+    try {
+      await pushRepository(repository, onProgress)
+      await pendingPushesService.clear(repository, attemptedPendingPushIds)
+      await contentIndexService.syncIndex(repository)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+      if (isNonFastForwardError(message)) {
+        await pullWithRebase(repository, onProgress)
+        await pushRepository(repository, onProgress)
+        await pendingPushesService.clear(repository, attemptedPendingPushIds)
+        await contentIndexService.syncIndex(repository)
+        return
+      }
+
+      if (options.recordFailure !== false) {
+        await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
+      }
+      throw error
+    }
   }
 
   private async updateContentWithConflictCheck(

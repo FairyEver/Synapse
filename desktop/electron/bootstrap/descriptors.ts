@@ -35,6 +35,7 @@ import { updateService } from "../services/update-service"
 import { initDataStore, shutdownDataStore } from "../data-store"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
+import { contentSubmissionService } from "../services/content-submission-service"
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
@@ -209,14 +210,16 @@ export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
 export const repoMaintenanceDescriptor: ServiceDescriptor<typeof repositoryMaintenanceService> = {
   id: "repo.maintenance",
   criticality: "degraded",
-  dependsOn: ["repo.watch"],
+  dependsOn: ["repo.watch", "repo.pending-pushes"],
   create(ctx) {
     void (async () => {
       try {
         const config = await configStore.load()
         for (const repository of config.repositories) {
           try {
-            await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
+            await contentSubmissionService.runRepositoryGitExclusive(repository.uuid, () =>
+              repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository),
+            )
           } catch (error) {
             ctx.logger.warn("Scheduled repository maintenance failed.", {
               error,

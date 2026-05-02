@@ -186,19 +186,6 @@ class RepositorySyncCoordinator {
       return this.requestSync(repository, reason)
     }
 
-    const pending = await pendingPushesService.readState(repository)
-
-    if (pending.count > 0) {
-      await this.requestPush(repository, reason)
-
-      return {
-        operation: "push",
-        repository: await repositoryStore.getRepositoryState(repository),
-        completedAt: this.now().toISOString(),
-        pendingPushCount: (await pendingPushesService.readState(repository)).count,
-      }
-    }
-
     if (state.currentPromise) {
       await state.currentPromise
       return this.requestSync(repository, reason)
@@ -213,13 +200,14 @@ class RepositorySyncCoordinator {
       return state.syncPromise
     }
 
-    state.syncPromise = this.runSync(repository, state)
+    state.syncPromise = this.runSync(repository, reason, state)
 
     return state.syncPromise
   }
 
   private async runSync(
     repository: SynapseRepositoryConfig,
+    reason: SyncRequestReason,
     state: RepositoryExecutionState,
   ): Promise<SynapseRepositoryOperationResult> {
     this.emitSnapshot({
@@ -233,6 +221,25 @@ class RepositorySyncCoordinator {
 
     try {
       const result = await contentSubmissionService.runRepositoryGitExclusive(repository.uuid, async () => {
+        const pending = await pendingPushesService.readState(repository)
+
+        if (pending.count > 0) {
+          let shouldContinue = false
+
+          do {
+            shouldContinue = await this.runPushOnce(repository, reason, {
+              alreadyExclusive: true,
+            })
+          } while (shouldContinue)
+
+          return {
+            operation: "push" as const,
+            repository: await repositoryStore.getRepositoryState(repository),
+            completedAt: this.now().toISOString(),
+            pendingPushCount: (await pendingPushesService.readState(repository)).count,
+          }
+        }
+
         return repositoryGitService.syncRepository(repository, (event) => {
           this.emitLegacyProgress(event)
           const current = this.getSnapshot(repository.uuid)
@@ -435,7 +442,13 @@ class RepositorySyncCoordinator {
     }
   }
 
-  private async runPushOnce(repository: SynapseRepositoryConfig, _reason: SyncRequestReason): Promise<boolean> {
+  private async runPushOnce(
+    repository: SynapseRepositoryConfig,
+    _reason: SyncRequestReason,
+    options: {
+      alreadyExclusive?: boolean
+    } = {},
+  ): Promise<boolean> {
     const pending = await pendingPushesService.readState(repository)
 
     if (pending.count === 0) {
@@ -469,7 +482,11 @@ class RepositorySyncCoordinator {
         statusText: "正在准备推送...",
         percent: 0,
       })
-      await contentSubmissionService.flushPendingPushes(
+      const flushPendingPushes = options.alreadyExclusive
+        ? contentSubmissionService.flushPendingPushesInExclusive.bind(contentSubmissionService)
+        : contentSubmissionService.flushPendingPushes.bind(contentSubmissionService)
+
+      await flushPendingPushes(
         repository,
         (statusText) => {
           this.emitLegacyProgress({
