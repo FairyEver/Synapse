@@ -124,7 +124,7 @@ function MainApp() {
   activeTabRef.current = activeTab
 
   const setActiveTab = useCallback(
-    (nextTab: AppTabId, source: "navigation" | "shortcut" | "notification") => {
+    (nextTab: AppTabId, source: "navigation" | "shortcut" | "notification" | "sync-status") => {
       const prevTab = activeTabRef.current
       if (prevTab !== nextTab) {
         logger.info("Top-level tab changed.", {
@@ -365,6 +365,7 @@ function MainApp() {
         }
         actions={
           <AppShellActions
+            activeRepository={activeRepository}
             activityLabel={toolbarState.activityLabel}
             pendingPushCount={toolbarState.pendingPushCount}
             refreshBusy={toolbarState.refreshBusy}
@@ -374,7 +375,11 @@ function MainApp() {
             repositorySwitchTitle={toolbarState.repositorySwitchTitle}
             showRefresh={toolbarState.showRefresh}
             showRepositorySwitch={toolbarState.showRepositorySwitch}
+            syncSnapshot={toolbarState.syncSnapshot}
             syncStatus={toolbarState.syncStatus}
+            onOpenRepositorySettings={() => {
+              setActiveTab("settings", "sync-status")
+            }}
             onSyncChipClick={() => setPendingPushDialogOpen(true, "sync-chip")}
             onRefresh={() => {
               if (!activeRepository) {

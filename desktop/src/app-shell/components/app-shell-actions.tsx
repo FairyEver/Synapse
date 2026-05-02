@@ -1,7 +1,10 @@
 import { ArrowLeftRight, LoaderCircle, RefreshCw } from "lucide-react"
-import { SyncStatusChip, type SyncStatus } from "@/app-shell/components/sync-status-chip"
+import { GitSyncStatusCenter } from "@/app-shell/components/git-sync-status-center"
+import type { SyncStatus } from "@/app-shell/components/sync-status-chip"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import type { SynapseRepositoryConfig } from "@/types/config"
+import type { SynapseRepositorySyncSnapshot } from "@/types/repository"
 import {
   Tooltip,
   TooltipContent,
@@ -10,6 +13,7 @@ import {
 } from "@/components/ui/tooltip"
 
 type AppShellActionsProps = {
+  activeRepository?: SynapseRepositoryConfig | null
   activityLabel?: string | null
   pendingPushCount?: number
   refreshBusy?: boolean
@@ -18,7 +22,9 @@ type AppShellActionsProps = {
   repositorySwitchTitle?: string
   showRefresh?: boolean
   showRepositorySwitch?: boolean
+  syncSnapshot?: SynapseRepositorySyncSnapshot
   syncStatus?: SyncStatus
+  onOpenRepositorySettings?: () => void
   onRefresh?: () => void
   onRepositorySwitch?: () => void
   onSyncChipClick?: () => void
@@ -26,6 +32,7 @@ type AppShellActionsProps = {
 }
 
 function AppShellActions({
+  activeRepository = null,
   activityLabel = null,
   pendingPushCount = 0,
   refreshBusy = false,
@@ -34,7 +41,9 @@ function AppShellActions({
   repositorySwitchTitle = "切换仓库",
   showRefresh = true,
   showRepositorySwitch = false,
+  syncSnapshot,
   syncStatus = "synced",
+  onOpenRepositorySettings,
   onRefresh,
   onRepositorySwitch,
   onSyncChipClick,
@@ -51,10 +60,13 @@ function AppShellActions({
             {activityLabel}
           </span>
         ) : (
-          <SyncStatusChip
+          <GitSyncStatusCenter
+            repository={activeRepository}
+            snapshot={syncSnapshot}
             status={syncStatus}
             pendingCount={pendingPushCount}
-            onClick={onSyncChipClick}
+            onRetry={onSyncChipClick ?? (() => {})}
+            onOpenSettings={onOpenRepositorySettings ?? (() => {})}
           />
         )}
       </div>

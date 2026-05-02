@@ -1,10 +1,11 @@
-import { ArrowUp, Check, LoaderCircle, WifiOff } from "lucide-react"
+import { ArrowUp, Check, CircleAlert, LoaderCircle, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-type SyncStatus = "synced" | "pending" | "syncing" | "offline"
+type SyncStatus = "synced" | "pending" | "syncing" | "offline" | "attention"
 
 type SyncStatusChipProps = {
+  asButton?: boolean
   status: SyncStatus
   pendingCount?: number
   onClick?: () => void
@@ -30,15 +31,24 @@ const statusConfig: Record<SyncStatus, {
     icon: WifiOff,
     label: () => "离线",
   },
+  attention: {
+    icon: CircleAlert,
+    label: () => "需要处理",
+  },
 }
 
-function SyncStatusChip({ status, pendingCount = 0, onClick }: SyncStatusChipProps) {
+function SyncStatusChip({
+  asButton = false,
+  status,
+  pendingCount = 0,
+  onClick,
+}: SyncStatusChipProps) {
   const config = statusConfig[status]
   const Icon = config.icon
   const label = config.label(pendingCount)
-  const isClickable = status === "pending"
+  const renderAsButton = asButton || status === "pending" || onClick !== undefined
 
-  if (isClickable) {
+  if (renderAsButton) {
     return (
       <Button
         variant="ghost"

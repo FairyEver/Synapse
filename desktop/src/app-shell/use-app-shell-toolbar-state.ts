@@ -7,9 +7,10 @@ import {
   usePendingPushes,
   useRepositoryOperation,
   useRepositoryState,
+  useRepositorySyncSnapshot,
 } from "@/app-shell/use-repository-manager"
 import type { SyncStatus } from "@/app-shell/components/sync-status-chip"
-import type { SynapseRepositoryOperationKind } from "@/types/repository"
+import type { SynapseRepositoryOperationKind, SynapseRepositorySyncSnapshot } from "@/types/repository"
 
 type RunningRepositoryOperation = {
   repositoryUuid: string
@@ -26,6 +27,7 @@ type AppShellToolbarState = {
   repositorySwitchTitle: string
   showRefresh: boolean
   showRepositorySwitch: boolean
+  syncSnapshot: SynapseRepositorySyncSnapshot | undefined
   syncStatus: SyncStatus
 }
 
@@ -46,10 +48,9 @@ function getToolbarActivityLabel(operation: SynapseRepositoryOperationKind | "sw
 
 function useAppShellToolbarState({
   hasBlockingModalOpen,
-  isOffline,
 }: {
   hasBlockingModalOpen: boolean
-  isOffline: boolean
+  isOffline?: boolean
 }): AppShellToolbarState {
   const { isReady } = useAppConfig()
   const activeRepository = useActiveRepository()
@@ -59,6 +60,7 @@ function useAppShellToolbarState({
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
   const activePendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
+  const activeSyncSnapshot = useRepositorySyncSnapshot(activeRepository?.uuid ?? "")
 
   return useMemo(() => {
     const runningOperation = activeRepositoryOperation?.isRunning
@@ -119,17 +121,19 @@ function useAppShellToolbarState({
     }
 
     const syncStatus: SyncStatus =
-      isPushOperationRunning || isSyncOperationRunning
-        ? "syncing"
-        : isOffline
+      activeSyncSnapshot?.status === "attention"
+        ? "attention"
+        : activeSyncSnapshot?.status === "offline"
           ? "offline"
-          : (activePendingPushState?.count ?? 0) > 0
-            ? "pending"
-            : "synced"
+          : activeSyncSnapshot?.status === "syncing" || isPushOperationRunning || isSyncOperationRunning
+            ? "syncing"
+            : (activeSyncSnapshot?.pendingCount ?? activePendingPushState?.count ?? 0) > 0
+              ? "pending"
+              : "synced"
 
     return {
       activityLabel,
-      pendingPushCount: activePendingPushState?.count ?? 0,
+      pendingPushCount: activeSyncSnapshot?.pendingCount ?? activePendingPushState?.count ?? 0,
       refreshBusy: isSyncOperationRunning,
       refreshDisabled: !isReady || !canSyncActiveRepository || hasToolbarLock,
       refreshTitle,
@@ -137,6 +141,7 @@ function useAppShellToolbarState({
       repositorySwitchTitle,
       showRefresh: Boolean(canSyncActiveRepository) && !isPushOperationRunning,
       showRepositorySwitch: repositories.length > 1,
+      syncSnapshot: activeSyncSnapshot,
       syncStatus,
     }
   }, [
@@ -144,8 +149,8 @@ function useAppShellToolbarState({
     activeRepositoryOperation,
     activeRepositoryState,
     activePendingPushState,
+    activeSyncSnapshot,
     hasBlockingModalOpen,
-    isOffline,
     isReady,
     isSwitchingRepository,
     repositories.length,
