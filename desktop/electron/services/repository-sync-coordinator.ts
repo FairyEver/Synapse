@@ -25,7 +25,7 @@ type SyncRequestReason = "content-saved" | "manual" | "recovery" | "maintenance"
 type RepositoryExecutionState = {
   currentPromise: Promise<void> | null
   maintenancePromise: Promise<SynapseRepositoryOperationResult> | null
-  running: boolean
+  pushFinalizing: boolean
   rerunRequested: boolean
   syncPromise: Promise<SynapseRepositoryOperationResult> | null
   retryTimer: NodeJS.Timeout | null
@@ -81,8 +81,6 @@ class RepositorySyncCoordinator {
   async requestPush(repository: SynapseRepositoryConfig, reason: SyncRequestReason): Promise<void> {
     const state = this.getExecutionState(repository.uuid)
 
-    this.clearRetryTimer(state)
-
     if (state.syncPromise) {
       return state.syncPromise
         .catch(() => undefined)
@@ -96,11 +94,18 @@ class RepositorySyncCoordinator {
     }
 
     if (state.currentPromise) {
+      if (state.pushFinalizing) {
+        return state.currentPromise
+          .catch(() => undefined)
+          .then(() => this.requestPush(repository, reason))
+      }
+
       state.rerunRequested = true
       return state.currentPromise
     }
 
-    state.running = true
+    this.clearRetryTimer(state)
+    state.pushFinalizing = false
     state.currentPromise = this.runPushLoop(repository, reason, state)
 
     return state.currentPromise
@@ -119,10 +124,11 @@ class RepositorySyncCoordinator {
         shouldContinue = await this.runPushOnce(repository, reason)
       } while (state.rerunRequested || shouldContinue)
     } finally {
+      state.pushFinalizing = true
       try {
         await this.refreshSnapshot(repository)
       } finally {
-        state.running = false
+        state.pushFinalizing = false
         state.currentPromise = null
       }
     }
@@ -281,7 +287,7 @@ class RepositorySyncCoordinator {
       state = {
         currentPromise: null,
         maintenancePromise: null,
-        running: false,
+        pushFinalizing: false,
         rerunRequested: false,
         syncPromise: null,
         retryTimer: null,
@@ -319,7 +325,7 @@ class RepositorySyncCoordinator {
       pendingCount: pending.count,
       pendingItems: pending.items,
       message: firstError?.lastError ?? `${pending.count} 条变更等待同步`,
-      detail: firstError?.title ?? undefined,
+      detail: failureCategory ? undefined : firstError?.title ?? undefined,
       failureCategory,
       lastAttemptAt: pending.items.find((item) => item.lastAttemptAt)?.lastAttemptAt ?? null,
       nextRetryAt,

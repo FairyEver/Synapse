@@ -2,7 +2,11 @@ import type { Mock } from "vitest"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { EventBus } from "../../runtime/event-bus"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
-import type { SynapsePendingPushEntry, SynapsePendingPushState } from "../../../src/types/repository"
+import type {
+  SynapsePendingPushEntry,
+  SynapsePendingPushState,
+  SynapseRepositoryOperationResult,
+} from "../../../src/types/repository"
 import { RepositorySyncCoordinator } from "../repository-sync-coordinator"
 
 const serviceMocks = vi.hoisted(() => ({
@@ -156,7 +160,7 @@ describe("RepositorySyncCoordinator", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-05-02T10:00:00.000Z"))
-    vi.clearAllMocks()
+    vi.resetAllMocks()
   })
 
   it("emits a synced snapshot when the pending queue is empty", async () => {
@@ -326,6 +330,88 @@ describe("RepositorySyncCoordinator", () => {
       status: "synced",
       pendingCount: 0,
     })
+  })
+
+  it("runs a follow-up push requested during final snapshot refresh", async () => {
+    const pendingState = createPendingState([createPendingEntry()])
+    const finalRefresh = createDeferred<SynapsePendingPushState>()
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockReturnValueOnce(finalRefresh.promise)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockResolvedValue(undefined)
+    serviceMocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const firstRequest = coordinator.requestPush(repository, "manual")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    })
+    await vi.waitFor(() => {
+      expect(serviceMocks.pendingPushesService.readState).toHaveBeenCalledTimes(3)
+    })
+
+    const secondRequest = coordinator.requestPush(repository, "content-saved")
+
+    finalRefresh.resolve(emptyPendingState)
+
+    await Promise.all([firstRequest, secondRequest])
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not clear an existing retry timer when push is only queued behind sync", async () => {
+    const pendingState = createPendingState([createPendingEntry()])
+    const failedState = createPendingState([
+      createPendingEntry({
+        lastError: "网络不可用，稍后自动重试。",
+        lastErrorCategory: "network",
+        nextRetryAt: "2026-05-02T10:00:30.000Z",
+        retryCount: 1,
+      }),
+    ])
+    const sync = createDeferred<SynapseRepositoryOperationResult>()
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(failedState)
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes
+      .mockRejectedValueOnce(new Error("fatal: unable to access: Could not resolve host: github.com"))
+      .mockResolvedValue(undefined)
+    serviceMocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    serviceMocks.repositoryGitService.syncRepository.mockReturnValue(sync.promise)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestPush(repository, "manual")).rejects.toThrow("Could not resolve host")
+    const syncRequest = coordinator.requestSync(repository, "manual")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
+    })
+    const queuedPush = coordinator.requestPush(repository, "content-saved")
+
+    expect(vi.getTimerCount()).toBe(1)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+
+    sync.resolve({
+      operation: "sync",
+      repository: repositoryState,
+      completedAt: "2026-05-02T10:00:30.000Z",
+    })
+
+    await expect(syncRequest).resolves.toMatchObject({ operation: "sync" })
+    await expect(queuedPush).resolves.toBeUndefined()
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
   })
 
   it("rejects manual sync when pending push fails", async () => {
