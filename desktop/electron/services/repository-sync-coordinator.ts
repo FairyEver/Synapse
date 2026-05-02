@@ -94,7 +94,7 @@ class RepositorySyncCoordinator {
     return snapshot
   }
 
-  async requestPush(repository: SynapseRepositoryConfig, reason: SyncRequestReason): Promise<void> {
+  requestPush(repository: SynapseRepositoryConfig, reason: SyncRequestReason): Promise<void> {
     const state = this.getExecutionState(repository.uuid)
 
     if (state.syncPromise) {

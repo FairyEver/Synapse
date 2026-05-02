@@ -408,6 +408,8 @@ describe("RepositorySyncCoordinator", () => {
 
     const secondRequest = coordinator.requestPush(repository, "content-saved")
 
+    expect(secondRequest).not.toBe(firstRequest)
+
     finalRefresh.resolve(emptyPendingState)
 
     await Promise.all([firstRequest, secondRequest])
@@ -1011,6 +1013,8 @@ describe("RepositorySyncCoordinator", () => {
 
     const firstRequest = coordinator.requestPush(repository, "manual")
     const secondRequest = coordinator.requestPush(repository, "content-saved")
+
+    expect(secondRequest).toBe(firstRequest)
 
     await vi.waitFor(() => {
       expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
