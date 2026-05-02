@@ -158,6 +158,9 @@ function requestContentSavedPush(
       error,
       repositoryUuid: repository.uuid,
     })
+    void emitLegacyPushFailed(eventBus, repository, error).catch((eventError) => {
+      logLegacyPushEventFailure(repository, eventError)
+    })
     return
   }
 

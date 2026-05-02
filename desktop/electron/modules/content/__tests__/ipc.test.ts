@@ -341,10 +341,21 @@ describe("contentIpcModule sync ownership", () => {
       contentType: "rule",
       payload: { title: "Rule" },
     } as never)).resolves.toBe(expectedResult)
+    await flushAsyncWork()
 
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       "Failed to schedule content-saved repository push.",
       expect.objectContaining({ repositoryUuid: "repo-1" }),
     )
+
+    const updatedEvents = getEvents("repository.updated")
+
+    expect(updatedEvents).toHaveLength(1)
+    expect(updatedEvents[0].payload).toMatchObject({
+      repositoryUuid: "repo-1",
+      operation: "push",
+      error: "Unexpected service id: repo.sync-coordinator",
+      message: "Unexpected service id: repo.sync-coordinator",
+    })
   })
 })
