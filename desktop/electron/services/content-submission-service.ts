@@ -38,6 +38,7 @@ type PushProgressListener = (statusText: string) => void
 type FlushPendingPushesOptions = {
   recordFailure?: boolean
 }
+type ReadyRepoProfile = Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>
 
 function toCommitMessage(action: "create" | "update" | "delete" | "restore" | "purge", result: ContentWriteResult): string {
   return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
@@ -235,11 +236,14 @@ class ContentSubmissionService {
 
   async createContent(request: SynapseCreateContentRequest): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
-    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    const writeResult = await contentWriteService.createContent(request, identity)
 
-    return this.commitAndMaybePush("create", writeResult, {
-      deferPush: true,
+    return this.runPushExclusive(repository.uuid, async () => {
+      const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
+      const writeResult = await contentWriteService.createContent(request, identity)
+
+      return this.commitAndMaybePush(repository, "create", writeResult, {
+        deferPush: true,
+      })
     })
   }
 
@@ -261,13 +265,17 @@ class ContentSubmissionService {
     assertMutableContentId(request.payload.id)
 
     const repository = await this.resolveActiveRepository()
-    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
 
-    return this.updateContentWithConflictCheck(
-      request.contentType,
-      request.payload as SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
-      identity,
-    )
+    return this.runPushExclusive(repository.uuid, async () => {
+      const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
+
+      return this.updateContentWithConflictCheck(
+        repository,
+        request.contentType,
+        request.payload as SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
+        identity,
+      )
+    })
   }
 
   async updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {
@@ -288,24 +296,33 @@ class ContentSubmissionService {
     assertMutableContentId(payload.id)
 
     const repository = await this.resolveActiveRepository()
-    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    return this.deleteWithConflictCheck(payload, identity)
+
+    return this.runPushExclusive(repository.uuid, async () => {
+      const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
+      return this.deleteWithConflictCheck(repository, payload, identity)
+    })
   }
 
   async restoreContent(payload: SynapseRestoreContentPayload): Promise<SynapseContentMutationResult> {
     assertMutableContentId(payload.id)
 
     const repository = await this.resolveActiveRepository()
-    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    return this.restoreWithConflictCheck(payload, identity)
+
+    return this.runPushExclusive(repository.uuid, async () => {
+      const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
+      return this.restoreWithConflictCheck(repository, payload, identity)
+    })
   }
 
   async purgeContent(payload: SynapsePurgeContentPayload): Promise<SynapseContentMutationResult> {
     assertMutableContentId(payload.id)
 
     const repository = await this.resolveActiveRepository()
-    const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    return this.purgeAndCommit(payload, identity)
+
+    return this.runPushExclusive(repository.uuid, async () => {
+      const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
+      return this.purgeAndCommit(repository, payload, identity)
+    })
   }
 
   async readPendingPushState(repository: SynapseRepositoryConfig) {
@@ -359,14 +376,13 @@ class ContentSubmissionService {
   }
 
   private async updateContentWithConflictCheck(
+    repository: SynapseRepositoryConfig,
     contentType: SynapseContentType,
     payload: SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
-    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
+    identity: ReadyRepoProfile,
   ): Promise<SynapseContentMutationResult> {
-    const repositoryConfig = await this.resolveActiveRepository()
-
     const latestDetail = await contentHistoryService.readCurrentDetail(
-      repositoryConfig,
+      repository,
       contentType,
       payload.id,
     )
@@ -394,16 +410,16 @@ class ContentSubmissionService {
       identity,
     )
 
-    return this.commitAndMaybePush("update", writeResult, {
+    return this.commitAndMaybePush(repository, "update", writeResult, {
       deferPush: true,
     })
   }
 
   private async deleteWithConflictCheck(
+    repository: SynapseRepositoryConfig,
     payload: SynapseDeleteContentPayload,
-    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
+    identity: ReadyRepoProfile,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
     const repositoryState = await readReadyRepositoryState(repository)
 
     if (repositoryState.isGitRepository) {
@@ -435,14 +451,14 @@ class ContentSubmissionService {
 
     const writeResult = await contentWriteService.deleteContent(payload.type, payload.id, identity)
 
-    return this.commitAndMaybePush("delete", writeResult)
+    return this.commitAndMaybePush(repository, "delete", writeResult)
   }
 
   private async restoreWithConflictCheck(
+    repository: SynapseRepositoryConfig,
     payload: SynapseRestoreContentPayload,
-    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
+    identity: ReadyRepoProfile,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
     const repositoryState = await readReadyRepositoryState(repository)
 
     if (repositoryState.isGitRepository) {
@@ -474,16 +490,16 @@ class ContentSubmissionService {
 
     const writeResult = await contentWriteService.restoreContent(payload.type, payload.id, identity)
 
-    return this.commitAndMaybePush("restore", writeResult, {
+    return this.commitAndMaybePush(repository, "restore", writeResult, {
       deferPush: true,
     })
   }
 
   private async purgeAndCommit(
+    repository: SynapseRepositoryConfig,
     payload: SynapsePurgeContentPayload,
-    identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
+    identity: ReadyRepoProfile,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
     const repositoryState = await readReadyRepositoryState(repository)
 
     if (repositoryState.isGitRepository) {
@@ -494,17 +510,17 @@ class ContentSubmissionService {
 
     const writeResult = await contentWriteService.purgeContent(payload.type, payload.id, identity)
 
-    return this.commitAndMaybePush("purge", writeResult)
+    return this.commitAndMaybePush(repository, "purge", writeResult)
   }
 
   private async commitAndMaybePush(
+    repository: SynapseRepositoryConfig,
     action: "create" | "update" | "delete" | "restore" | "purge",
     writeResult: ContentWriteResult,
     options: {
       deferPush?: boolean
     } = {},
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
     const repositoryState = await readReadyRepositoryState(repository)
 
     if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
