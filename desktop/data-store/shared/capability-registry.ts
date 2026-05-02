@@ -1,3 +1,5 @@
+import type { CapabilityDomainDefinition } from "../../synapse-capabilities/shared/types"
+
 type DataStoreCapability = {
   action: string
   mcpTool?: string
@@ -32,6 +34,11 @@ const DATA_STORE_CAPABILITIES = [
   { action: "rawSQL", mcpTool: "raw_sql", cliCommand: "sql", mutates: true },
 ] as const satisfies readonly DataStoreCapability[]
 
+const DATA_STORE_DOMAIN: CapabilityDomainDefinition = {
+  id: "data-store",
+  capabilities: DATA_STORE_CAPABILITIES,
+}
+
 function buildMcpToolActions(): Record<string, string> {
   return Object.fromEntries(
     DATA_STORE_CAPABILITIES
@@ -56,6 +63,7 @@ function getMutatingActions(): string[] {
 
 export {
   DATA_STORE_CAPABILITIES,
+  DATA_STORE_DOMAIN,
   buildMcpToolActions,
   getCliDataCommands,
   getMutatingActions,

@@ -13,6 +13,6 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["electron/**/*.ts", "action-packages/**/*.ts", "data-store/shared/**/*.ts"],
+  "include": ["electron/**/*.ts", "action-packages/**/*.ts", "data-store/shared/**/*.ts", "synapse-capabilities/shared/**/*.ts"],
   "exclude": ["**/__tests__/**", "**/*.test.ts", "**/*.spec.ts"]
 }
