@@ -280,6 +280,14 @@ describe("TaskFormDialog", () => {
     )
   })
 
+  it("renders cron as an input group with an inline editor action", () => {
+    const html = renderDialog()
+
+    expect(html).toMatch(
+      /<label[^>]*for="task-form-cron"[^>]*>Cron<\/label>[\s\S]*data-slot="input-group"[\s\S]*id="task-form-cron"[\s\S]*data-align="inline-end"[\s\S]*>编辑<\/button>/,
+    )
+  })
+
   it("uses compact grids for short fields and rows for run settings", () => {
     const html = renderDialog({
       task: createTask({
