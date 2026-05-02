@@ -27,6 +27,7 @@ import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
 import { DataStoreSettingsPanel } from "@/modules/settings/components/data-store-settings-panel"
 import { DiagnosticsPanel } from "@/modules/settings/components/diagnostics-panel"
+import { McpSettingsPanel } from "@/modules/settings/components/mcp-settings-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
@@ -239,6 +240,7 @@ function SettingsModule() {
         ) : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
         {isReady && activeCategory === "data-store" ? <DataStoreSettingsPanel /> : null}
+        {isReady && activeCategory === "mcp" ? <McpSettingsPanel /> : null}
         {isReady && activeCategory === "diagnostics" ? <DiagnosticsPanel /> : null}
         {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
 

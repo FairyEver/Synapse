@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Info,
   ScrollText,
+  Server,
   Settings2,
   Shield,
 } from "lucide-react"
@@ -52,6 +53,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Database,
     label: "数据服务",
     description: "本地数据库。",
+  },
+  {
+    id: "mcp",
+    icon: Server,
+    label: "MCP",
+    description: "服务接入。",
   },
   {
     id: "diagnostics",

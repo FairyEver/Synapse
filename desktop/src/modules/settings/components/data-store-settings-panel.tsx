@@ -34,33 +34,18 @@ import { createRendererLogger } from "@/app-shell/logging"
 import type {
   DataStoreCliDebugInfo,
   DataStoreCliStatus,
-  DataStoreMcpHttpStatus,
-  DataStoreMcpServerInfo,
-  DataStoreMcpTarget,
 } from "@/types/data-store"
 import {
   exportDB,
   getCliDebugInfo,
   getCliStatus,
-  getMCPServers,
-  getMcpHttpStatus,
   importDB,
   installCLI,
-  openMCPSettings,
-  registerMCP,
   useDataStoreStatus,
 } from "@/modules/data-store/hooks/use-data-store"
-
-import { EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
-import { mcpDefinitions } from "@/definitions/generated/renderer-registry"
+import { StatusPill } from "@/modules/settings/components/status-pill"
 
 const logger = createRendererLogger("settings.data-store")
-
-const MCP_SERVER_META = mcpDefinitions.map((definition) => ({
-  id: definition.target,
-  label: definition.label,
-  icon: definition.icon,
-}))
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -109,24 +94,6 @@ function getCliIssueText(status: DataStoreCliStatus | null): string | null {
   return "CLI 当前不可用，请查看详细信息。"
 }
 
-type StatusPillProps = {
-  active: boolean
-  activeLabel: string
-  inactiveLabel: string
-}
-
-function StatusPill({ active, activeLabel, inactiveLabel }: StatusPillProps) {
-  return active ? (
-    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-      {activeLabel}
-    </span>
-  ) : (
-    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-      {inactiveLabel}
-    </span>
-  )
-}
-
 type StatusRowProps = {
   label: string
   value: React.ReactNode
@@ -167,17 +134,14 @@ function DataStoreSettingsPanel() {
   const [isCliDetailsOpen, setIsCliDetailsOpen] = useState(false)
   const [isCliTestOpen, setIsCliTestOpen] = useState(false)
   const [isCliDebugLoading, setIsCliDebugLoading] = useState(false)
-  const [mcpServersByTarget, setMcpServersByTarget] = useState<
-    Partial<Record<DataStoreMcpTarget, DataStoreMcpServerInfo>>
-  >({})
-  const [mcpHttpStatus, setMcpHttpStatus] = useState<DataStoreMcpHttpStatus | null>(null)
 
   useEffect(() => {
     void (async () => {
       try {
         const result = await getCliStatus()
         setCliStatus(result)
-      } catch {
+      } catch (error) {
+        logger.error("Failed to load CLI status.", error)
         setCliStatus({
           installed: false,
           path: "",
@@ -191,28 +155,6 @@ function DataStoreSettingsPanel() {
       }
     })()
   }, [])
-
-  useEffect(() => {
-    void getMcpHttpStatus().then(setMcpHttpStatus).catch(() => setMcpHttpStatus(null))
-  }, [])
-
-  const refreshMcpServers = useCallback(async () => {
-    const result = await getMCPServers()
-    setMcpServersByTarget(
-      result.reduce<Partial<Record<DataStoreMcpTarget, DataStoreMcpServerInfo>>>((servers, server) => {
-        servers[server.target] = server
-        return servers
-      }, {}),
-    )
-    return result
-  }, [])
-
-  useEffect(() => {
-    void refreshMcpServers().catch((error) => {
-      logger.error("Failed to load MCP status.", error)
-      setMcpServersByTarget({})
-    })
-  }, [refreshMcpServers])
 
   const handleInstallCLI = useCallback(async () => {
     await promise(
@@ -284,39 +226,6 @@ function DataStoreSettingsPanel() {
     )
   }, [cliDebugInfo, promise, refreshCliDebugInfo])
 
-  const handleRegisterMCP = useCallback(
-    async (target: DataStoreMcpTarget) => {
-      await promise(
-        async () => {
-          const result = await registerMCP(target)
-          if (!result.success) throw new Error(result.error ?? "注册失败")
-          await refreshMcpServers()
-          logger.info("MCP registered.", { target })
-        },
-        { loading: "正在注册 MCP...", success: `MCP Server 已注册到 ${MCP_SERVER_META.find((m) => m.id === target)?.label ?? target}` },
-      )
-    },
-    [promise, refreshMcpServers],
-  )
-
-  const handleOpenMCPSettings = useCallback(
-    async (target: DataStoreMcpTarget) => {
-      await promise(
-        async () => {
-          const result = await openMCPSettings(target)
-          if (!result.success) throw new Error(result.error ?? "打开失败")
-          logger.info("MCP settings opened.", { target })
-        },
-        {
-          loading: "正在打开配置文件...",
-          success: null,
-          error: (error) => error instanceof Error ? error.message : "打开失败。",
-        },
-      )
-    },
-    [promise],
-  )
-
   const handleExport = useCallback(async () => {
     await promise(
       async () => {
@@ -345,21 +254,6 @@ function DataStoreSettingsPanel() {
     logger.info("Opening data store directory.", { path: status.dbDirectoryPath })
     window.synapse?.shell.showItemInFolder(status.dbDirectoryPath)
   }, [status?.dbDirectoryPath])
-
-  const mcpServers = MCP_SERVER_META.map((server) => {
-    const state = mcpServersByTarget[server.id]
-    return {
-      ...server,
-      registered: Boolean(state?.registered),
-      settingsFileExists: Boolean(state?.settingsFileExists),
-      mode: state?.mode ?? null,
-    }
-  })
-
-  const handleCopyMcpUrl = useCallback(() => {
-    if (!mcpHttpStatus?.url) return
-    void navigator.clipboard.writeText(mcpHttpStatus.url)
-  }, [mcpHttpStatus])
 
   return (
     <div className="flex flex-col gap-4">
@@ -427,75 +321,6 @@ function DataStoreSettingsPanel() {
               {cliStatus?.installed ? "重新安装" : "安装 CLI"}
             </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-0">
-          <CardTitle>MCP Server</CardTitle>
-          <CardAction>
-            <StatusPill
-              active={Boolean(mcpHttpStatus?.running)}
-              activeLabel="运行中"
-              inactiveLabel="未启动"
-            />
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {mcpHttpStatus?.url ? (
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
-                {mcpHttpStatus.url}
-              </code>
-              <Button variant="outline" size="sm" onClick={handleCopyMcpUrl}>
-                <Copy data-icon="inline-start" />
-                复制
-              </Button>
-            </div>
-          ) : null}
-          <Separator />
-          {mcpServers.map((server) => (
-            <div
-              key={server.id}
-              className="flex items-center justify-between gap-3"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <img
-                  src={server.icon}
-                  alt={server.label}
-                  className="size-5 shrink-0"
-                  style={EDITOR_ICON_CLIP_STYLE}
-                />
-                <span className="truncate text-sm">{server.label}</span>
-                {server.registered && server.mode === "http" ? (
-                  <StatusPill active activeLabel="已注册" inactiveLabel="" />
-                ) : server.registered && server.mode === "stdio" ? (
-                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                    需更新
-                  </span>
-                ) : (
-                  <StatusPill active={false} activeLabel="" inactiveLabel="未注册" />
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!server.settingsFileExists}
-                  onClick={() => handleOpenMCPSettings(server.id)}
-                >
-                  打开文件
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleRegisterMCP(server.id)}
-                >
-                  {server.registered ? "重新注册" : "注册"}
-                </Button>
-              </div>
-            </div>
-          ))}
         </CardContent>
       </Card>
 
