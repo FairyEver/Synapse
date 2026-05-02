@@ -349,6 +349,42 @@ describe("RepositorySyncCoordinator", () => {
     expect(coordinator.getSnapshots()).toEqual(snapshots)
   })
 
+  it("rearms persisted recoverable retry timers when hydrating snapshots", async () => {
+    const failedState = createPendingState([
+      createPendingEntry({
+        lastError: "网络不可用，稍后自动重试。",
+        lastErrorCategory: "network",
+        nextRetryAt: "2026-05-02T10:01:00.000Z",
+        retryCount: 2,
+      }),
+    ])
+    const pendingState = createPendingState([createPendingEntry({ retryCount: 2 })])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(failedState)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValueOnce(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockResolvedValue(undefined)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.refreshSnapshot(repository)).resolves.toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "offline",
+      phase: "retry-wait",
+      nextRetryAt: "2026-05-02T10:01:00.000Z",
+    })
+
+    await vi.advanceTimersByTimeAsync(59_999)
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it("clears stale retry timers when a manual retry succeeds", async () => {
     const pendingItem = createPendingEntry()
     const failedItem = createPendingEntry({

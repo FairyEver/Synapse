@@ -440,67 +440,6 @@ class RepositoryManager {
     }
   }
 
-  async waitForBackgroundPush(uuid: string, timeoutMs = 120000): Promise<void> {
-    const bridge = requireBridgeDomain("repository")
-
-    return new Promise<void>((resolve, reject) => {
-      let settled = false
-
-      const cleanup = () => {
-        window.clearTimeout(timeoutId)
-        unsubscribeUpdated?.()
-      }
-
-      const settle = (callback: () => void) => {
-        if (settled) {
-          return
-        }
-
-        settled = true
-        cleanup()
-        callback()
-      }
-
-      const timeoutId = window.setTimeout(() => {
-        settle(() => {
-          reject(new Error("等待仓库同步超时，请稍后查看右上角同步状态。"))
-        })
-      }, timeoutMs)
-
-      const unsubscribeUpdated = bridge.onUpdated((updatedEvent) => {
-        if (updatedEvent.repositoryUuid !== uuid || updatedEvent.operation !== "push") {
-          return
-        }
-
-        if (updatedEvent.error) {
-          settle(() => {
-            reject(new Error(updatedEvent.error ?? updatedEvent.message ?? "同步变更失败。"))
-          })
-          return
-        }
-
-        settle(resolve)
-      })
-
-      void bridge.getPendingPushes(uuid)
-        .then((pendingState) => {
-          const currentOperation = this.operations.get(uuid)
-          const isPushRunning =
-            currentOperation?.isRunning
-            && currentOperation?.operation === "push"
-
-          if (pendingState.count === 0 && !isPushRunning) {
-            settle(resolve)
-          }
-        })
-        .catch((error) => {
-          settle(() => {
-            reject(error instanceof Error ? error : new Error("读取同步状态失败。"))
-          })
-        })
-    })
-  }
-
   // ===== 内容操作（自动刷新）=====
   async createContent<T extends SynapseContentType>(
     contentType: T,

@@ -91,6 +91,7 @@ class RepositorySyncCoordinator {
     const snapshot = this.createSnapshotFromPending(repository.uuid, pending)
 
     this.emitSnapshot(snapshot)
+    this.syncRetryTimerFromSnapshot(repository, snapshot)
     return snapshot
   }
 
@@ -602,6 +603,26 @@ class RepositorySyncCoordinator {
       })
     }, delayMs)
     state.retryTimer.unref?.()
+  }
+
+  private syncRetryTimerFromSnapshot(
+    repository: SynapseRepositoryConfig,
+    snapshot: SynapseRepositorySyncSnapshot,
+  ): void {
+    const state = this.getExecutionState(repository.uuid)
+
+    if (
+      snapshot.pendingCount > 0
+      && snapshot.phase === "retry-wait"
+      && snapshot.primaryAction === "retry"
+      && (snapshot.status === "offline" || snapshot.status === "pending")
+      && snapshot.nextRetryAt
+    ) {
+      this.scheduleRetry(repository, snapshot.nextRetryAt)
+      return
+    }
+
+    this.clearRetryTimer(state)
   }
 
   private clearRetryTimer(state: RepositoryExecutionState): void {
