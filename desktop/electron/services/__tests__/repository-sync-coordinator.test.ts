@@ -224,8 +224,7 @@ describe("RepositorySyncCoordinator", () => {
     const failedState = createPendingState([failedItem])
     serviceMocks.pendingPushesService.readState
       .mockResolvedValueOnce(pendingState)
-      .mockResolvedValueOnce(pendingState)
-      .mockResolvedValueOnce(failedState)
+      .mockResolvedValue(failedState)
     serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
     serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
     serviceMocks.contentSubmissionService.flushPendingPushes.mockRejectedValue(
@@ -259,8 +258,7 @@ describe("RepositorySyncCoordinator", () => {
     const failedState = createPendingState([failedItem])
     serviceMocks.pendingPushesService.readState
       .mockResolvedValueOnce(pendingState)
-      .mockResolvedValueOnce(pendingState)
-      .mockResolvedValueOnce(failedState)
+      .mockResolvedValue(failedState)
     serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
     serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
     const flush = createDeferred<void>()
@@ -289,6 +287,47 @@ describe("RepositorySyncCoordinator", () => {
       phase: "retry-wait",
       failureCategory: "network",
     })
+  })
+
+  it("waits for an active push before starting a no-pending manual sync", async () => {
+    const pendingState = createPendingState([createPendingEntry()])
+    const push = createDeferred<void>()
+    const syncResult = {
+      operation: "sync" as const,
+      repository: {
+        repositoryUuid: "repo-1",
+        localPath: "/tmp/synapse-docs",
+        status: "ready" as const,
+        isGitRepository: true,
+        gitRootPath: "/tmp/synapse-docs",
+      },
+      completedAt: "2026-05-02T10:00:20.000Z",
+    }
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockReturnValue(push.promise)
+    serviceMocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    serviceMocks.repositoryGitService.syncRepository.mockResolvedValue(syncResult)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    })
+    const syncRequest = coordinator.requestSync(repository, "manual")
+
+    expect(serviceMocks.repositoryGitService.syncRepository).not.toHaveBeenCalled()
+
+    push.resolve()
+
+    await expect(pushRequest).resolves.toBeUndefined()
+    await expect(syncRequest).resolves.toEqual(syncResult)
+    expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.pendingPushesService.readState).toHaveBeenCalledTimes(5)
   })
 
   it("schedules recoverable push retries from the persisted nextRetryAt timestamp", async () => {

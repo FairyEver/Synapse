@@ -123,6 +123,13 @@ class RepositorySyncCoordinator {
     repository: SynapseRepositoryConfig,
     reason: SyncRequestReason,
   ): Promise<SynapseRepositoryOperationResult> {
+    const state = this.getExecutionState(repository.uuid)
+
+    if (state.currentPromise) {
+      await state.currentPromise
+      return this.requestSync(repository, reason)
+    }
+
     const pending = await pendingPushesService.readState(repository)
 
     if (pending.count > 0) {
@@ -136,7 +143,10 @@ class RepositorySyncCoordinator {
       }
     }
 
-    const state = this.getExecutionState(repository.uuid)
+    if (state.currentPromise) {
+      await state.currentPromise
+      return this.requestSync(repository, reason)
+    }
 
     if (state.syncPromise) {
       return state.syncPromise
