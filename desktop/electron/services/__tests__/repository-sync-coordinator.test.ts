@@ -173,8 +173,14 @@ describe("RepositorySyncCoordinator", () => {
     const eventBus = createEventBus()
     const coordinator = new RepositorySyncCoordinator({ eventBus })
 
-    await coordinator.requestPush(repository, "manual")
+    await expect(coordinator.requestPush(repository, "manual")).rejects.toThrow("Could not resolve host")
 
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledWith(
+      repository,
+      expect.any(Function),
+      { recordFailure: false },
+    )
+    expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledTimes(1)
     expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledWith(
       repository,
       "网络不可用，稍后自动重试。",
@@ -192,6 +198,41 @@ describe("RepositorySyncCoordinator", () => {
       nextRetryAt: "2026-05-02T10:00:30.000Z",
       pendingCount: 1,
       primaryAction: "retry",
+    })
+  })
+
+  it("rejects manual sync when pending push fails", async () => {
+    const pendingItem = createPendingEntry()
+    const failedItem = createPendingEntry({
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:00:30.000Z",
+      retryCount: 1,
+    })
+    const pendingState = createPendingState([pendingItem])
+    const failedState = createPendingState([failedItem])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(failedState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockRejectedValue(
+      new Error("fatal: unable to access: Could not resolve host: github.com"),
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestSync(repository, "manual")).rejects.toThrow("Could not resolve host")
+
+    expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.repositoryStore.getRepositoryState).not.toHaveBeenCalled()
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "offline",
+      phase: "retry-wait",
+      failureCategory: "network",
+      pendingCount: 1,
     })
   })
 
@@ -222,6 +263,11 @@ describe("RepositorySyncCoordinator", () => {
     await Promise.all([firstRequest, secondRequest])
 
     expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledWith(
+      repository,
+      expect.any(Function),
+      { recordFailure: false },
+    )
     expect(lastSnapshotFrom(eventBus)).toMatchObject({
       repositoryUuid: "repo-1",
       status: "synced",

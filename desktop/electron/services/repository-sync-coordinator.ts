@@ -251,17 +251,21 @@ class RepositorySyncCoordinator {
     })
 
     try {
-      await contentSubmissionService.flushPendingPushes(repository, (statusText) => {
-        const current = this.getSnapshot(repository.uuid)
+      await contentSubmissionService.flushPendingPushes(
+        repository,
+        (statusText) => {
+          const current = this.getSnapshot(repository.uuid)
 
-        this.emitSnapshot({
-          ...current,
-          status: "syncing",
-          operation: "push",
-          phase: "running",
-          message: statusText,
-        })
-      })
+          this.emitSnapshot({
+            ...current,
+            status: "syncing",
+            operation: "push",
+            phase: "running",
+            message: statusText,
+          })
+        },
+        { recordFailure: false },
+      )
       await contentIndexService.syncIndex(repository)
 
       const remaining = await pendingPushesService.readState(repository)
@@ -269,7 +273,7 @@ class RepositorySyncCoordinator {
       return remaining.count > 0
     } catch (error) {
       await this.handlePushFailure(repository, attemptedIds, nextRetryCount, error)
-      return false
+      throw error
     }
   }
 
@@ -346,7 +350,12 @@ class RepositorySyncCoordinator {
 
     state.retryTimer = setTimeout(() => {
       state.retryTimer = null
-      void this.requestPush(repository, "recovery")
+      void this.requestPush(repository, "recovery").catch((error) => {
+        logger.warn("Scheduled repository push retry failed.", {
+          error,
+          repositoryUuid: repository.uuid,
+        })
+      })
     }, 30_000)
     state.retryTimer.unref?.()
   }

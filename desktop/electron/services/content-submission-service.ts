@@ -35,6 +35,9 @@ const logger = createMainLogger("service.content-submit")
 const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
 type PushProgressListener = (statusText: string) => void
+type FlushPendingPushesOptions = {
+  recordFailure?: boolean
+}
 
 function toCommitMessage(action: "create" | "update" | "delete" | "restore" | "purge", result: ContentWriteResult): string {
   return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
@@ -312,6 +315,7 @@ class ContentSubmissionService {
   async flushPendingPushes(
     repository: SynapseRepositoryConfig,
     onProgress?: PushProgressListener,
+    options: FlushPendingPushesOptions = {},
   ): Promise<void> {
     return this.runPushExclusive(repository.uuid, async () => {
       const repositoryState = await repositoryStore.getRepositoryState(repository)
@@ -346,7 +350,9 @@ class ContentSubmissionService {
           return
         }
 
-        await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
+        if (options.recordFailure !== false) {
+          await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
+        }
         throw error
       }
     })
