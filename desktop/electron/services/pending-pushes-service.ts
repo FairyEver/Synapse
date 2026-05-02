@@ -116,6 +116,10 @@ class PendingPushesService {
     }
 
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
+      if (targetIds && targetIds.length === 0) {
+        return this.readStateRows(database)
+      }
+
       if (!targetIds) {
         database.exec("DELETE FROM pending_pushes")
       } else {
@@ -148,6 +152,10 @@ class PendingPushesService {
     }
 
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
+      if (targetIds && targetIds.length === 0) {
+        return this.readStateRows(database)
+      }
+
       const placeholders = targetIds?.map(() => "?").join(", ")
       const statement = database.prepare(`
         UPDATE pending_pushes
@@ -186,6 +194,10 @@ class PendingPushesService {
     }
 
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
+      if (targetIds && targetIds.length === 0) {
+        return this.readStateRows(database)
+      }
+
       const placeholders = targetIds?.map(() => "?").join(", ")
       const statement = database.prepare(`
         UPDATE pending_pushes
