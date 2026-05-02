@@ -128,11 +128,11 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(repoWatchDescriptor.stop).toBeTypeOf("function")
   })
 
-  it("repoMaintenanceDescriptor depends on repo.watch", async () => {
+  it("repoMaintenanceDescriptor depends on repo.watch and pending pushes", async () => {
     const { repoMaintenanceDescriptor } = await importBootstrap()
     expect(repoMaintenanceDescriptor.id).toBe("repo.maintenance")
     expect(repoMaintenanceDescriptor.criticality).toBe("degraded")
-    expect(repoMaintenanceDescriptor.dependsOn).toEqual(["repo.watch"])
+    expect(repoMaintenanceDescriptor.dependsOn).toEqual(["repo.watch", "repo.pending-pushes"])
   })
 
   it("repoPendingPushesDescriptor depends on core.data-store", async () => {

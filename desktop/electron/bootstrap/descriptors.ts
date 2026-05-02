@@ -197,7 +197,9 @@ export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
 
 /**
  * repo.maintenance — runs scheduled-due maintenance for each configured repo
- * at startup. SPEC §4 lists this as `repo.watch`-dependent. Status: degraded.
+ * at startup. It also depends on pending-push storage so scheduled Git work
+ * enters the same per-repository queue as content saves and sync. Status:
+ * degraded.
  *
  * IMPORTANT: maintenance runs `git fetch` per repo, which can hang for many
  * seconds on slow networks. The original main.ts:209 used
