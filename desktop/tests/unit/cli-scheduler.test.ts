@@ -50,7 +50,50 @@ describe("handleSchedulerCommand", () => {
     expect(apiCall).toHaveBeenNthCalledWith(2, "schedulerTaskDisable", { taskId: "task:1" })
   })
 
-  it("rejects unknown scheduler commands", async () => {
+  it("lists task runs", async () => {
+    const apiCall = vi.fn(async () => ({ data: [{ id: "run:1", status: "success" }] }))
+    const lines: string[] = []
+    await handleSchedulerCommand(["runs", "task:1", "--limit", "5"], apiCall, (line) => lines.push(line))
+    expect(apiCall).toHaveBeenCalledWith("schedulerTaskRunsList", { taskId: "task:1", limit: 5 })
+    expect(lines.join("\n")).toContain("run:1")
+  })
+
+  it("gets runtime status", async () => {
+    const apiCall = vi.fn(async () => ({ data: { runningTaskIds: [], scheduledTaskIds: ["task:1"], tasks: [] } }))
+    const lines: string[] = []
+    await handleSchedulerCommand(["status", "task:1"], apiCall, (line) => lines.push(line))
+    expect(apiCall).toHaveBeenCalledWith("schedulerTaskRuntimeStatus", { taskId: "task:1" })
+    expect(lines.join("\n")).toContain("scheduledTaskIds")
+  })
+
+  it("lists action types", async () => {
+    const apiCall = vi.fn(async () => ({ data: [{ type: "builtin.command" }] }))
+    const lines: string[] = []
+    await handleSchedulerCommand(["actions"], apiCall, (line) => lines.push(line))
+    expect(apiCall).toHaveBeenCalledWith("schedulerActionTypesList", {})
+    expect(lines.join("\n")).toContain("builtin.command")
+  })
+
+  it("updates a task from canonical JSON data", async () => {
+    const apiCall = vi.fn(async () => ({ data: { id: "task:1", name: "Updated" } }))
+    const lines: string[] = []
+    await handleSchedulerCommand([
+      "update",
+      "task:1",
+      "--data",
+      JSON.stringify({ name: "Updated", missedRunPolicy: "run_once" }),
+    ], apiCall, (line) => lines.push(line))
+    expect(apiCall).toHaveBeenCalledWith("schedulerTaskUpdate", {
+      taskId: "task:1",
+      name: "Updated",
+      missedRunPolicy: "run_once",
+    })
+    expect(lines.join("\n")).toContain("Task updated: task:1")
+  })
+
+  it("rejects hidden scheduler commands", async () => {
     await expect(handleSchedulerCommand(["delete", "task:1"], vi.fn(), () => {})).rejects.toThrow(/Unknown scheduler command/)
+    await expect(handleSchedulerCommand(["run", "task:1"], vi.fn(), () => {})).rejects.toThrow(/Unknown scheduler command/)
+    await expect(handleSchedulerCommand(["stop", "run:1"], vi.fn(), () => {})).rejects.toThrow(/Unknown scheduler command/)
   })
 })

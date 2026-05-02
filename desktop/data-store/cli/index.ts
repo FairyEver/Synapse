@@ -240,6 +240,10 @@ Usage:
   synapse scheduler create --data '{...}'                    Create scheduled task
   synapse scheduler enable <taskId>                          Enable scheduled task
   synapse scheduler disable <taskId>                         Disable scheduled task
+  synapse scheduler runs <taskId> [--limit N]                List recent task runs
+  synapse scheduler status [taskId]                          Inspect scheduler runtime status
+  synapse scheduler actions                                  List available task action types
+  synapse scheduler update <taskId> --data '{...}'           Update safe task fields
   synapse status                                     Show service status
 
 Column kinds:

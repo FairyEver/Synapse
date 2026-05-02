@@ -47,14 +47,47 @@ export async function handleSchedulerCommand(
       break
     }
 
+    case "runs": {
+      const taskId = requireArg(args[1], "Usage: synapse scheduler runs <taskId> [--limit N]")
+      const limit = getNumberFlag(args, "--limit")
+      const params: Record<string, unknown> = { taskId }
+      if (limit !== undefined) params.limit = limit
+      const result = await apiCall("schedulerTaskRunsList", params) as { data?: unknown }
+      printJson(result.data ?? [], print)
+      break
+    }
+
+    case "status": {
+      const params: Record<string, unknown> = {}
+      if (args[1] && !args[1].startsWith("--")) params.taskId = args[1]
+      const result = await apiCall("schedulerTaskRuntimeStatus", params) as { data?: unknown }
+      printJson(result.data ?? null, print)
+      break
+    }
+
+    case "actions": {
+      const result = await apiCall("schedulerActionTypesList", {}) as { data?: unknown }
+      printJson(result.data ?? [], print)
+      break
+    }
+
+    case "update": {
+      const taskId = requireArg(args[1], "Usage: synapse scheduler update <taskId> --data '{...}'")
+      const data = parseData(args, "Usage: synapse scheduler update <taskId> --data '{...}'")
+      if (!isRecord(data)) throw new Error("Invalid JSON for --data: expected object.")
+      const result = await apiCall("schedulerTaskUpdate", { taskId, ...data }) as { data?: { id?: string } }
+      print(`Task updated: ${result.data?.id ?? taskId}`)
+      break
+    }
+
     default:
       throw new Error(`Unknown scheduler command: ${command ?? ""}\nRun "synapse help" for usage.`)
   }
 }
 
-function parseData(args: string[]): unknown {
+function parseData(args: string[], usage = "Usage: synapse scheduler create --data '{...}'"): unknown {
   const value = getFlagValue(args, "--data")
-  if (value === undefined) throw new Error("Usage: synapse scheduler create --data '{...}'")
+  if (value === undefined) throw new Error(usage)
   try {
     return JSON.parse(value)
   } catch {
@@ -85,4 +118,8 @@ function requireArg(value: string | undefined, usage: string): string {
 
 function printJson(value: unknown, print: PrintLine): void {
   print(JSON.stringify(value, null, 2))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
