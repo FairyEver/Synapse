@@ -24,7 +24,7 @@ async function initDataStore(eventBus: EventBus | undefined, actionRouter: Synap
 
   let mcpPort = 0
   try {
-    mcpPort = await startMcpServer()
+    mcpPort = await startMcpServer(actionRouter)
     logger.info("MCP HTTP server ready.", { port: mcpPort })
   } catch (error) {
     logger.warn("MCP HTTP server failed to start (non-fatal).", { error })

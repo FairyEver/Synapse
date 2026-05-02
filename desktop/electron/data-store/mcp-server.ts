@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
-import { dispatchDataStoreAction } from "./dispatcher"
 import { createMainLogger } from "../services/log-store"
-import { MCP_TOOL_ACTIONS } from "../../data-store/shared/mcp-tools"
+import type { SynapseActionRouter } from "../capabilities/action-router"
+import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 import {
   processMcpRequest,
   serializeJsonRpcPayload,
@@ -18,13 +18,15 @@ const MAX_BODY_SIZE = 1024 * 1024
 
 let server: Server | null = null
 let activePort = 0
+let actionRouter: SynapseActionRouter | null = null
 
 // MCP tool calls route through the same dispatcher as the HTTP API so the two
 // protocols can never disagree about argument handling or response shape.
-function executeTool(toolName: string, args: Record<string, unknown>): unknown {
+async function executeTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
   const action = MCP_TOOL_ACTIONS[toolName]
   if (!action) throw new Error(`Unknown tool: ${toolName}`)
-  return dispatchDataStoreAction(action, args, { source: "mcp-http" })
+  if (!actionRouter) throw new Error("Synapse action router is not initialized")
+  return actionRouter.dispatch(action, args, { source: "mcp-http" })
 }
 
 // --- HTTP transport ---
@@ -113,7 +115,8 @@ function tryListen(port: number): Promise<number> {
   })
 }
 
-async function startMcpServer(): Promise<number> {
+async function startMcpServer(router: SynapseActionRouter): Promise<number> {
+  actionRouter = router
   for (let i = 0; i < MCP_PORT_ATTEMPTS; i++) {
     const port = MCP_DEFAULT_PORT + i
     try {
@@ -134,6 +137,7 @@ async function startMcpServer(): Promise<number> {
 function stopMcpServer(): Promise<void> {
   return new Promise((resolve) => {
     activePort = 0
+    actionRouter = null
     if (!server) { resolve(); return }
     server.close(() => {
       server = null

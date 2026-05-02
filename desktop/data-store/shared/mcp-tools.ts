@@ -493,7 +493,13 @@ function buildTools(): McpTool[] {
 // Maps MCP tool names (snake_case) to canonical service action names (camelCase)
 // used by the in-process service, the HTTP JSON API (http-server.ts), and the
 // stdio MCP bridge (which forwards to HTTP).
-const MCP_TOOL_ACTIONS: Record<string, string> = buildMcpToolActions()
+const DATA_STORE_MCP_TOOL_ACTIONS: Record<string, string> = buildMcpToolActions()
+const MCP_TOOL_ACTIONS: Record<string, string> = DATA_STORE_MCP_TOOL_ACTIONS
 
-export { buildTools, MCP_TOOL_ACTIONS }
+export {
+  buildTools,
+  buildTools as buildDataStoreTools,
+  DATA_STORE_MCP_TOOL_ACTIONS,
+  MCP_TOOL_ACTIONS,
+}
 export type { McpTool }

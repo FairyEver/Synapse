@@ -3,7 +3,11 @@
 // owned by each caller; this module only decides what to respond with for a
 // given parsed request, given a tool executor provided by the caller.
 
-import { buildTools, MCP_TOOL_ACTIONS } from "./mcp-tools"
+import {
+  MCP_TOOL_ACTIONS,
+  buildAllMcpTools,
+  getMcpToolDomainId,
+} from "../../synapse-capabilities/shared/registry"
 
 type JsonRpcId = number | string | null
 
@@ -47,6 +51,10 @@ function isDryRun(data: unknown): boolean {
 
 function normalizeToolResult(toolName: string, result: unknown): unknown {
   if (!isRecord(result) || result.ok !== true) return result
+
+  if (getMcpToolDomainId(toolName) === "scheduler") {
+    return result.data
+  }
 
   switch (toolName) {
     case "list_tables":
@@ -114,7 +122,7 @@ async function processMcpRequest(
   }
 
   if (method === "tools/list") {
-    return { kind: "result", id, result: { tools: buildTools() } }
+    return { kind: "result", id, result: { tools: buildAllMcpTools() } }
   }
 
   if (method === "tools/call") {

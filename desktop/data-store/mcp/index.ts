@@ -8,7 +8,7 @@ if (major < 18) {
 
 import { createInterface } from "node:readline"
 import { apiCall, isAppRunning, readServerInfo, type ServerInfo } from "../shared/resolve-user-data"
-import { MCP_TOOL_ACTIONS } from "../shared/mcp-tools"
+import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 import {
   processMcpRequest,
   serializeJsonRpcPayload,
