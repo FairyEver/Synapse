@@ -1,14 +1,18 @@
+import type { ComponentProps } from "react"
 import { ArrowUp, Check, CircleAlert, LoaderCircle, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 type SyncStatus = "synced" | "pending" | "syncing" | "offline" | "attention"
 
-type SyncStatusChipProps = {
+type SyncStatusChipProps = Omit<
+  ComponentProps<typeof Button>,
+  "children" | "onClick" | "size" | "variant"
+> & {
   asButton?: boolean
   status: SyncStatus
   pendingCount?: number
-  onClick?: () => void
+  onClick?: ComponentProps<typeof Button>["onClick"]
 }
 
 const statusConfig: Record<SyncStatus, {
@@ -42,6 +46,8 @@ function SyncStatusChip({
   status,
   pendingCount = 0,
   onClick,
+  type = "button",
+  ...buttonProps
 }: SyncStatusChipProps) {
   const config = statusConfig[status]
   const Icon = config.icon
@@ -51,11 +57,16 @@ function SyncStatusChip({
   if (renderAsButton) {
     return (
       <Button
+        {...buttonProps}
         variant="ghost"
         size="xs"
+        type={type}
         onClick={onClick}
       >
-        <Icon data-icon="inline-start" />
+        <Icon
+          className={status === "syncing" ? "animate-spin" : undefined}
+          data-icon="inline-start"
+        />
         {label}
       </Button>
     )

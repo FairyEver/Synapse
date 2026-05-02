@@ -168,12 +168,15 @@ describe("GitSyncStatusCenter", () => {
       />,
     )
 
+    const trigger = getButtonByName(container, /1 条待同步/)
+
     await act(async () => {
-      getButtonByName(container, /1 条待同步/).dispatchEvent(
+      trigger.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       )
     })
 
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
     expect(container.textContent).toContain("Team Repo")
     expect(container.textContent).toContain("1 条变更等待同步")
     expect(onRetry).not.toHaveBeenCalled()
