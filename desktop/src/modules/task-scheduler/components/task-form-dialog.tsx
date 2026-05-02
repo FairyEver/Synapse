@@ -43,6 +43,7 @@ import {
   buildTaskUpdateInput,
   createTaskFormState,
 } from "../utils"
+import { CronInput } from "./cron-input"
 
 type TaskFormDialogProps = {
   open: boolean
@@ -318,10 +319,11 @@ function TaskFormDialog({
 
                   {form.triggerType === "cron" ? (
                     <TaskField className="md:col-span-2" label="Cron" htmlFor="task-form-cron">
-                      <Input
+                      <CronInput
                         id="task-form-cron"
                         value={form.cronExpr}
-                        onChange={(event) => updateField("cronExpr", event.target.value)}
+                        disabled={busy}
+                        onChange={(value) => updateField("cronExpr", value)}
                       />
                     </TaskField>
                   ) : (
