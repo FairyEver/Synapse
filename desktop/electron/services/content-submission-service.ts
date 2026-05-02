@@ -55,7 +55,7 @@ function isNonFastForwardError(errorMessage: string): boolean {
 
 function createMutationMessage(pushed: boolean, pendingPushCount: number): string {
   if (pushed) {
-    return "已保存并同步。"
+    return "保存成功。"
   }
 
   return pendingPushCount > 1 ? `已保存，等待同步 ${pendingPushCount} 条变更。` : "已保存，等待同步。"

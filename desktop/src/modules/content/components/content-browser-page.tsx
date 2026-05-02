@@ -15,7 +15,7 @@ import { purgeContent, restoreContent } from "@/app-shell/content"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile, useIdentity, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useActiveRepository, usePendingPushes, useRepositoryState } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, useRepositoryState } from "@/app-shell/use-repository-manager"
 import {
   ModuleSidebar,
   ModuleSidebarHeader,
@@ -63,7 +63,6 @@ import {
 import { resolveDisplayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
-import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
 import { useContentCatalog } from "@/modules/content/hooks/use-content-catalog"
@@ -330,13 +329,11 @@ function DeletedContentCard({
 
 function ContentListCard({
   contentType,
-  isPendingPush,
   item,
   onInstallDialogOpenChange,
   onOpen,
 }: {
   contentType: SynapseContentType
-  isPendingPush: boolean
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
   onOpen: () => void
@@ -358,21 +355,15 @@ function ContentListCard({
         className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={onOpen}
       >
-        {isPendingPush ? (
-          <ContentIconBadge className="size-10 [&_svg]:size-5" size="md" title="正在同步...">
-            <LoaderCircle className="animate-spin" aria-hidden="true" />
-          </ContentIconBadge>
-        ) : (
-          <ContentItemIcon
-            contentId={item.id}
-            contentType={contentType}
-            icon={item.icon}
-            iconType={item.iconType}
-            iconImage={item.iconImage}
-            title={item.title}
-            tone={item.iconBg}
-          />
-        )}
+        <ContentItemIcon
+          contentId={item.id}
+          contentType={contentType}
+          icon={item.icon}
+          iconType={item.iconType}
+          iconImage={item.iconImage}
+          title={item.title}
+          tone={item.iconBg}
+        />
         <ContentItemMeta
           author={authorLabel}
           category={categoryLabel}
@@ -420,12 +411,6 @@ function ContentBrowserPage({
   const { recentlyViewedIds, addRecentlyViewed } = useContentRecentlyViewed(contentType)
   const { sortOrder, setSortOrder } = useContentSortOrder()
   const deletedContent = useDeletedContent(contentType)
-  const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
-  const isSyncing = (pendingPushState?.count ?? 0) > 0
-  const pendingTargetIds = useMemo(
-    () => new Set(pendingPushState?.items.map((entry) => entry.targetId) ?? []),
-    [pendingPushState?.items],
-  )
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategoryId, setActiveCategoryIdRaw] = useState(SYNAPSE_ALL_CATEGORY_ID)
   const activeCategoryIdRef = useRef(activeCategoryId)
@@ -464,7 +449,6 @@ function ContentBrowserPage({
   const canCreateContent =
     canBrowseContent
     && currentRepoProfileState?.status !== "needs-onboarding"
-    && !isSyncing
   const normalizedSearchQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery])
   const deferredSearchQuery = useDeferredValue(normalizedSearchQuery)
   const lastLoggedSearchQueryRef = useRef(deferredSearchQuery)
@@ -698,8 +682,6 @@ function ContentBrowserPage({
         ? "当前目录不存在，不能新建"
         : currentRepoProfileState?.status === "needs-onboarding"
           ? "先完成当前目录的身份设置"
-          : isSyncing
-            ? "正在同步变更，请稍后"
           : `新建 ${definition.singularLabel}`
 
   return (
@@ -954,7 +936,6 @@ function ContentBrowserPage({
                   <ContentListCard
                     key={item.id}
                     contentType={contentType}
-                    isPendingPush={pendingTargetIds.has(item.id)}
                     item={item}
                     onInstallDialogOpenChange={onInstallDialogOpenChange}
                     onOpen={() => {

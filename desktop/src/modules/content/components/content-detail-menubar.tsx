@@ -43,7 +43,6 @@ type ContentDetailMenubarProps = {
   installTargetRequest?: ContentInstallTargetRequest | null
   isFavorite: boolean
   isRepositoryInitializing: boolean
-  isSyncing?: boolean
   item: SynapseContentMeta
   onDelete: () => void
   onEdit: () => void
@@ -61,7 +60,6 @@ function ContentDetailMenubar({
   installTargetRequest,
   isFavorite,
   isRepositoryInitializing,
-  isSyncing = false,
   item,
   onDelete,
   onEdit,
@@ -237,7 +235,7 @@ function ContentDetailMenubar({
             variant="ghost"
             size="sm"
             className="rounded-sm px-1.5"
-            disabled={isRepositoryInitializing || isSyncing}
+            disabled={isRepositoryInitializing}
             onClick={onDelete}
           >
             删除
@@ -260,7 +258,7 @@ function ContentDetailMenubar({
           variant="ghost"
           size="sm"
           className="rounded-sm px-1.5"
-          disabled={isRepositoryInitializing || isSyncing}
+          disabled={isRepositoryInitializing}
           onClick={() => {
             void onToggleFavorite()
           }}

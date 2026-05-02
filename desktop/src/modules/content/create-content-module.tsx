@@ -3,7 +3,7 @@ import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useActiveRepository, useContentList, usePendingPushes } from "@/app-shell/use-repository-manager"
+import { useActiveRepository, useContentList } from "@/app-shell/use-repository-manager"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
@@ -61,8 +61,6 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       () => items.filter((item) => item.source !== "builtin" && item.name).map((item) => item.name!),
       [items],
     )
-    const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
-    const isSyncing = (pendingPushState?.count ?? 0) > 0
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
     const [createInitialValue, setCreateInitialValue] =
       useState<SynapseCreateContentPayload<T> | null>(null)
@@ -117,7 +115,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           loading: "正在保存...",
           success: (result) => {
             if (result.status === "saved") {
-              return result.pendingPushCount > 0 ? "已保存并同步。" : "保存成功。"
+              return result.pendingPushCount > 0 ? "已保存，等待同步。" : "保存成功。"
             }
 
             return null
@@ -140,9 +138,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const submitDisabledReason =
       currentRepoProfileState?.status === "needs-onboarding"
         ? "请先完成当前目录的身份设置"
-        : isSyncing
-          ? "正在同步变更，请稍后。"
-          : null
+        : null
 
     return (
       <>

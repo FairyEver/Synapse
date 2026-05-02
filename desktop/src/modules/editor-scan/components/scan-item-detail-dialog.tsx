@@ -46,7 +46,7 @@ import {
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useActiveRepository, usePendingPushes } from "@/app-shell/use-repository-manager"
+import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
 import type { EditorScanSkillFileEntry, ScanItemForDetail } from "@/types/editor-scan"
@@ -76,7 +76,6 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   )
   const activeRepository = useActiveRepository()
   const { currentRepoProfileState } = useCurrentRepoProfile()
-  const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
   const { success, error: notifyError } = useAppNotifications()
   const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered")
   const [contentReady, setContentReady] = useState(false)
@@ -171,11 +170,9 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       ? "先选择本地目录"
       : currentRepoProfileState?.status === "needs-onboarding"
         ? "先完成当前目录的身份设置"
-        : (pendingPushState?.count ?? 0) > 0
-          ? "正在同步变更，请稍后"
-          : !item?.path
-            ? "本地路径为空"
-            : null
+        : !item?.path
+          ? "本地路径为空"
+          : null
 
   const publishAsNew = useCallback(async () => {
     if (!item || disabledReason) return

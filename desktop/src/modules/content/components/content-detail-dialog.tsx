@@ -9,7 +9,6 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
   useContentList,
-  usePendingPushes,
   useRepositoryManager,
   useRepositoryOperation,
 } from "@/app-shell/use-repository-manager"
@@ -182,8 +181,6 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   const { isFavorite, toggleFavorite } = useContentFavorites()
   const isItemFavorite = item ? isFavorite(contentType, item.id) : false
   const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
-  const pendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
-  const isSyncing = (pendingPushState?.count ?? 0) > 0
   const isRepositoryInitializing =
     activeRepositoryOperation?.isRunning
     && activeRepositoryOperation.operation === "initialize"
@@ -192,9 +189,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
       ? "请先完成当前目录的身份设置"
       : isRepositoryInitializing
         ? "当前目录正在初始化，请稍后。"
-        : isSyncing
-          ? "正在同步变更，请稍后。"
-          : null
+        : null
 
   const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
     const prevViewMode = viewModeRef.current
@@ -305,10 +300,6 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
         invalidateIconImageCache(contentType, detail.id)
         onContentChanged?.()
 
-        if (result.pendingPushCount > 0 && activeRepository) {
-          await manager.waitForBackgroundPush(activeRepository.uuid)
-        }
-
         return result
       },
       {
@@ -330,7 +321,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             return null
           }
 
-          return result.pendingPushCount > 0 ? "已保存并同步。" : "保存成功。"
+          return result.pendingPushCount > 0 ? "已保存，等待同步。" : "保存成功。"
         },
         error: (err) => err instanceof Error ? err.message : "保存失败。",
       },
@@ -443,7 +434,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
-              disabled={isRepositoryInitializing || isSyncing}
+              disabled={isRepositoryInitializing}
               onClick={() => void handleDelete()}
             >
               删除
@@ -480,7 +471,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
               查看对方修改了什么
             </AlertDialogCancel>
             <AlertDialogAction
-              disabled={isRepositoryInitializing || isSyncing}
+              disabled={isRepositoryInitializing}
               onClick={() => void handleConflictContinue()}
             >
               继续保存
@@ -518,7 +509,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
                 <div className="flex flex-wrap items-center gap-2">
                   <ContentDetailMenubar
                     canDelete={!isReadonly}
-                    canEdit={Boolean(detail) && !isReadonly && !isRepositoryInitializing && !isSyncing}
+                    canEdit={Boolean(detail) && !isReadonly && !isRepositoryInitializing}
                     canOpenInNewWindow={Boolean(displayedVersion)}
                     installStatus={detail?.type === "rule" || detail?.type === "skill" ? {
                       entries: editorInstallStatus.entries,
@@ -530,7 +521,6 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
                     installTargetRequest={installTargetRequest}
                     isFavorite={isItemFavorite}
                     isRepositoryInitializing={Boolean(isRepositoryInitializing)}
-                    isSyncing={isSyncing}
                     item={resolvedItem}
                     onDelete={() => {
                       logger.info("Delete confirm dialog opened.", { contentId: item.id, contentType })

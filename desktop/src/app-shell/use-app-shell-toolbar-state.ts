@@ -50,7 +50,6 @@ function useAppShellToolbarState({
   hasBlockingModalOpen,
 }: {
   hasBlockingModalOpen: boolean
-  isOffline?: boolean
 }): AppShellToolbarState {
   const { isReady } = useAppConfig()
   const activeRepository = useActiveRepository()

@@ -16,21 +16,10 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
   useHasRepositories,
-  usePendingPushes,
   useRepositoryActions,
   useRepositoryManager,
   useRepositoryState,
 } from "@/app-shell/use-repository-manager"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { parseContentWindowRequest } from "@/lib/content-window"
@@ -44,7 +33,6 @@ import { EditorScanModule } from "@/modules/editor-scan"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import type { SynapseContentType } from "@/types/content"
-import type { SynapsePendingPushEntry } from "@/types/repository"
 
 type AppTabId = SynapseContentType | "agent" | "data-store" | "task-scheduler" | "editor-scan" | "settings"
 type DialogKind = "create" | "detail" | "install"
@@ -53,21 +41,6 @@ type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
 type ContentDialogHandlerMap = Record<SynapseContentType, Record<DialogKind, (open: boolean) => void>>
 
 const logger = createRendererLogger("app")
-
-const NETWORK_ERROR_PATTERNS = [
-  "could not resolve host",
-  "failed to connect",
-  "connection timed out",
-  "network is unreachable",
-  "connection reset",
-  "无法连接到远程仓库",
-]
-
-function isNetworkError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  const lowered = message.toLowerCase()
-  return NETWORK_ERROR_PATTERNS.some((pattern) => lowered.includes(pattern))
-}
 
 function createEmptyDialogStateMap(): ContentDialogStateMap {
   return Object.fromEntries(
@@ -100,15 +73,13 @@ function MainApp() {
   } = useActiveRepositorySwitch()
   const { promise } = useAppNotifications()
   const manager = useRepositoryManager()
-  const { pushRepository, syncRepository } = useRepositoryActions()
+  const { syncRepository } = useRepositoryActions()
   const [activeTab, setActiveTabRaw] = useState<AppTabId>("rule")
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
   )
   const contentDialogStatesRef = useRef(contentDialogStates)
   contentDialogStatesRef.current = contentDialogStates
-  const [isPendingPushDialogOpen, setIsPendingPushDialogOpenRaw] = useState(false)
-  const [isOffline, setIsOffline] = useState(false)
   const [pendingContentOpenRequest, setPendingContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
 
@@ -116,9 +87,6 @@ function MainApp() {
   const hasNoRepositories = !hasRepositories
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const isActiveRepositoryMissing = activeRepositoryState?.status === "missing"
-
-  // 获取待推送状态
-  const activePendingPushState = usePendingPushes(activeRepository?.uuid ?? "")
 
   const activeTabRef = useRef(activeTab)
   activeTabRef.current = activeTab
@@ -177,24 +145,6 @@ function MainApp() {
       },
     })
   }, [])
-
-  const isPendingPushDialogOpenRef = useRef(isPendingPushDialogOpen)
-  isPendingPushDialogOpenRef.current = isPendingPushDialogOpen
-
-  const setPendingPushDialogOpen = useCallback(
-    (nextOpen: boolean, source: "sync-chip" | "dialog") => {
-      const prevOpen = isPendingPushDialogOpenRef.current
-      if (prevOpen !== nextOpen) {
-        logger.info("Pending push dialog visibility changed.", {
-          from: prevOpen,
-          to: nextOpen,
-          source,
-        })
-      }
-      setIsPendingPushDialogOpenRaw(nextOpen)
-    },
-    [],
-  )
 
   const contentDialogHandlers = useMemo(
     () => Object.fromEntries(
@@ -277,10 +227,9 @@ function MainApp() {
     })
   }, [setActiveTab])
 
-  const hasBlockingModalOpen = hasContentDialogOpen || isPendingPushDialogOpen
+  const hasBlockingModalOpen = hasContentDialogOpen
   const toolbarState = useAppShellToolbarState({
     hasBlockingModalOpen,
-    isOffline,
   })
   const handleManualRepositorySync = useCallback((source: "refresh" | "sync-status") => {
     if (!activeRepository) {
@@ -295,16 +244,8 @@ function MainApp() {
       () => syncRepository(activeRepository.uuid),
       {
         loading: "正在同步仓库...",
-        success: (result) => {
-          setIsOffline(false)
-          return result.message ?? "仓库同步完成。"
-        },
-        error: (error) => {
-          if (isNetworkError(error)) {
-            setIsOffline(true)
-          }
-          return error instanceof Error ? error.message : "同步仓库失败。"
-        },
+        success: (result) => result.message ?? "仓库同步完成。",
+        error: (error) => error instanceof Error ? error.message : "同步仓库失败。",
       },
     ).catch((error) => {
       logger.error("Manual repository sync failed from app shell.", error)
@@ -322,67 +263,6 @@ function MainApp() {
 
   return (
     <IdentityGate>
-      <AlertDialog
-        open={isPendingPushDialogOpen}
-        onOpenChange={(open) => setPendingPushDialogOpen(open, "dialog")}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>同步变更</AlertDialogTitle>
-            <AlertDialogDescription>
-              本地有 {activePendingPushState?.count ?? 0} 条变更等待同步到仓库。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          {activePendingPushState && activePendingPushState.items.length > 0 ? (
-            <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-              {activePendingPushState.items.map((entry: SynapsePendingPushEntry) => (
-                <p key={entry.id}>
-                  · {entry.action} {entry.title ?? entry.targetId}
-                </p>
-              ))}
-            </div>
-          ) : null}
-
-          <AlertDialogFooter>
-            <AlertDialogCancel>稍后</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (!activeRepository) {
-                  return
-                }
-
-                logger.info("Pending push flush initiated from app shell.", {
-                  repositoryUuid: activeRepository.uuid,
-                  pendingCount: activePendingPushState?.count ?? 0,
-                })
-
-                void promise(
-                  () => pushRepository(activeRepository.uuid),
-                  {
-                    loading: "正在同步变更...",
-                    success: (result) => {
-                      setIsOffline(false)
-                      return result.message ?? "同步完成。"
-                    },
-                    error: (error) => {
-                      if (isNetworkError(error)) {
-                        setIsOffline(true)
-                      }
-                      return error instanceof Error ? error.message : "同步变更失败。"
-                    },
-                  },
-                ).catch((error) => {
-                  logger.error("Pending push flush failed from app shell.", error)
-                })
-              }}
-            >
-              立即同步
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <AppShellLayout
         navigation={
           <AppShellNavigation
