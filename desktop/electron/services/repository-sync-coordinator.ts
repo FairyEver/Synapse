@@ -81,6 +81,8 @@ class RepositorySyncCoordinator {
   async requestPush(repository: SynapseRepositoryConfig, reason: SyncRequestReason): Promise<void> {
     const state = this.getExecutionState(repository.uuid)
 
+    this.clearRetryTimer(state)
+
     if (state.syncPromise) {
       return state.syncPromise
         .catch(() => undefined)
@@ -304,26 +306,67 @@ class RepositorySyncCoordinator {
       .map((item) => item.nextRetryAt)
       .filter((value): value is string => Boolean(value))
       .sort()[0] ?? null
+    const failureCategory = firstError?.lastErrorCategory ?? null
+    const failureSnapshotState = failureCategory
+      ? this.getPersistedFailureSnapshotState(failureCategory)
+      : null
 
     return {
       repositoryUuid,
-      status: firstError?.lastErrorCategory === "network" || firstError?.lastErrorCategory === "timeout"
-        ? "offline"
-        : firstError?.lastErrorCategory
-          ? "attention"
-          : "pending",
+      status: failureSnapshotState?.status ?? "pending",
       operation: null,
-      phase: nextRetryAt ? "retry-wait" : "completed",
+      phase: failureSnapshotState?.phase ?? (nextRetryAt ? "retry-wait" : "completed"),
       pendingCount: pending.count,
       pendingItems: pending.items,
       message: firstError?.lastError ?? `${pending.count} 条变更等待同步`,
       detail: firstError?.title ?? undefined,
-      failureCategory: firstError?.lastErrorCategory ?? null,
+      failureCategory,
       lastAttemptAt: pending.items.find((item) => item.lastAttemptAt)?.lastAttemptAt ?? null,
       nextRetryAt,
       retryCount,
       canRetryNow: true,
-      primaryAction: "retry",
+      primaryAction: failureSnapshotState?.primaryAction ?? "retry",
+    }
+  }
+
+  private getPersistedFailureSnapshotState(
+    category: NonNullable<SynapseRepositorySyncSnapshot["failureCategory"]>,
+  ): Pick<SynapseRepositorySyncSnapshot, "phase" | "primaryAction" | "status"> {
+    if (category === "network" || category === "timeout") {
+      return {
+        status: "offline",
+        phase: "retry-wait",
+        primaryAction: "retry",
+      }
+    }
+
+    if (category === "missing-path" || category === "not-git") {
+      return {
+        status: "attention",
+        phase: "blocked",
+        primaryAction: "open-settings",
+      }
+    }
+
+    if (
+      category === "auth"
+      || category === "diverged"
+      || category === "git-missing"
+      || category === "ignored-paths"
+      || category === "no-changes"
+      || category === "upstream-missing"
+    ) {
+      return {
+        status: "attention",
+        phase: "blocked",
+        primaryAction: "resolve-git",
+      }
+    }
+
+    return {
+      status: "attention",
+      phase: "blocked",
+      primaryAction: null,
     }
   }
 
@@ -449,9 +492,7 @@ class RepositorySyncCoordinator {
   private scheduleRetry(repository: SynapseRepositoryConfig, nextRetryAt: string | null): void {
     const state = this.getExecutionState(repository.uuid)
 
-    if (state.retryTimer) {
-      clearTimeout(state.retryTimer)
-    }
+    this.clearRetryTimer(state)
 
     const retryAtTime = nextRetryAt ? new Date(nextRetryAt).getTime() : Number.NaN
     const delayMs = Number.isNaN(retryAtTime)
@@ -468,6 +509,15 @@ class RepositorySyncCoordinator {
       })
     }, delayMs)
     state.retryTimer.unref?.()
+  }
+
+  private clearRetryTimer(state: RepositoryExecutionState): void {
+    if (!state.retryTimer) {
+      return
+    }
+
+    clearTimeout(state.retryTimer)
+    state.retryTimer = null
   }
 
   private emitSnapshot(snapshot: SynapseRepositorySyncSnapshot): void {

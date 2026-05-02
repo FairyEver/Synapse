@@ -234,6 +234,100 @@ describe("RepositorySyncCoordinator", () => {
     })
   })
 
+  it("preserves nonrecoverable push failure state after the final refresh", async () => {
+    const pendingItem = createPendingEntry()
+    const failedItem = createPendingEntry({
+      lastError: "Git 认证失败，请检查系统凭证或 SSH Key。",
+      lastErrorCategory: "auth",
+      retryCount: 1,
+    })
+    const pendingState = createPendingState([pendingItem])
+    const failedState = createPendingState([failedItem])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(failedState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockRejectedValue(
+      new Error("Permission denied (publickey)."),
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestPush(repository, "manual")).rejects.toThrow("Permission denied")
+
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "attention",
+      phase: "blocked",
+      failureCategory: "auth",
+      primaryAction: "resolve-git",
+    })
+  })
+
+  it("maps persisted failed pending state to the correct blocked action", async () => {
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(createPendingState([
+      createPendingEntry({
+        lastError: "当前目录不是 Git 仓库。",
+        lastErrorCategory: "not-git",
+        retryCount: 1,
+      }),
+    ]))
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const snapshot = await coordinator.refreshSnapshot(repository)
+
+    expect(snapshot).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "attention",
+      phase: "blocked",
+      failureCategory: "not-git",
+      primaryAction: "open-settings",
+    })
+  })
+
+  it("clears stale retry timers when a manual retry succeeds", async () => {
+    const pendingItem = createPendingEntry()
+    const failedItem = createPendingEntry({
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:00:30.000Z",
+      retryCount: 1,
+    })
+    const pendingState = createPendingState([pendingItem])
+    const failedState = createPendingState([failedItem])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(failedState)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes
+      .mockRejectedValueOnce(new Error("fatal: unable to access: Could not resolve host: github.com"))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValue(undefined)
+    serviceMocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestPush(repository, "manual")).rejects.toThrow("Could not resolve host")
+    await expect(coordinator.requestPush(repository, "manual")).resolves.toBeUndefined()
+
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(2)
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "synced",
+      pendingCount: 0,
+    })
+  })
+
   it("rejects manual sync when pending push fails", async () => {
     const pendingItem = createPendingEntry()
     const failedItem = createPendingEntry({
