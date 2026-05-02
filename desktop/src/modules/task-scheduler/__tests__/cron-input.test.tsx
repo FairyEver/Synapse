@@ -47,6 +47,33 @@ describe("CronEditorFields", () => {
     expect(html).toContain("计划")
   })
 
+  it("renders hour before minute for common templates that use both fields", () => {
+    for (const kind of ["daily", "weekly", "monthly", "weekdays"] as const) {
+      const validation = validateCronExpression("30 9 * * *")
+      const html = renderToStaticMarkup(
+        <CronEditorFields
+          activeTab="common"
+          draft="30 9 * * *"
+          previewRuns={[new Date("2026-04-29T09:30:00")]}
+          template={{
+            ...createDefaultCronTemplateDraft(),
+            kind,
+            hour: 9,
+            minute: 30,
+          }}
+          validation={validation}
+          onDraftChange={vi.fn()}
+          onTabChange={vi.fn()}
+          onTemplateChange={vi.fn()}
+        />,
+      )
+
+      expect(html.indexOf('for="cron-editor-hour"')).toBeLessThan(
+        html.indexOf('for="cron-editor-minute"'),
+      )
+    }
+  })
+
   it("opens invalid expressions on the advanced tab", () => {
     const validation = validateCronExpression("bad")
     const html = renderToStaticMarkup(

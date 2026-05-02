@@ -241,16 +241,6 @@ function CommonTemplateFields({
             onChange={(everyMinutes) => onTemplateChange({ everyMinutes })}
           />
         ) : null}
-        {template.kind !== "every_minutes" ? (
-          <NumberField
-            id="cron-editor-minute"
-            label="分钟"
-            min={0}
-            max={59}
-            value={template.minute}
-            onChange={(minute) => onTemplateChange({ minute })}
-          />
-        ) : null}
         {template.kind === "daily" || template.kind === "weekly" || template.kind === "monthly" || template.kind === "weekdays" ? (
           <NumberField
             id="cron-editor-hour"
@@ -259,6 +249,16 @@ function CommonTemplateFields({
             max={23}
             value={template.hour}
             onChange={(hour) => onTemplateChange({ hour })}
+          />
+        ) : null}
+        {template.kind !== "every_minutes" ? (
+          <NumberField
+            id="cron-editor-minute"
+            label="分钟"
+            min={0}
+            max={59}
+            value={template.minute}
+            onChange={(minute) => onTemplateChange({ minute })}
           />
         ) : null}
         {template.kind === "monthly" ? (
