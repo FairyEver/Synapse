@@ -76,7 +76,11 @@ class RepositorySyncCoordinator {
     const snapshots: SynapseRepositorySyncSnapshot[] = []
 
     for (const repository of repositories) {
-      snapshots.push(await this.refreshSnapshot(repository))
+      if (this.hasActiveOperation(repository.uuid)) {
+        snapshots.push(this.getSnapshot(repository.uuid))
+      } else {
+        snapshots.push(await this.refreshSnapshot(repository))
+      }
     }
 
     return snapshots
@@ -341,6 +345,12 @@ class RepositorySyncCoordinator {
     }
 
     return state
+  }
+
+  private hasActiveOperation(repositoryUuid: string): boolean {
+    const state = this.executions.get(repositoryUuid)
+
+    return Boolean(state?.currentPromise || state?.syncPromise || state?.maintenancePromise)
   }
 
   private createSnapshotFromPending(

@@ -621,6 +621,48 @@ describe("RepositorySyncCoordinator", () => {
     }))
   })
 
+  it("does not hydrate over an active sync snapshot", async () => {
+    const syncResult = {
+      operation: "sync" as const,
+      repository: repositoryState,
+      completedAt: "2026-05-02T10:00:20.000Z",
+    }
+    const sync = createDeferred<typeof syncResult>()
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.repositoryGitService.syncRepository.mockReturnValue(sync.promise)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const syncRequest = coordinator.requestSync(repository, "manual")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
+    })
+
+    const beforeEvents = emittedEventsOfType(eventBus, "repository.syncSnapshotUpdated")
+    expect(beforeEvents.at(-1)?.payload.snapshot).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "syncing",
+      operation: "sync",
+    })
+
+    const snapshots = await coordinator.getSnapshotsForRepositories([repository])
+
+    expect(snapshots).toEqual([
+      expect.objectContaining({
+        repositoryUuid: "repo-1",
+        status: "syncing",
+        operation: "sync",
+      }),
+    ])
+    expect(emittedEventsOfType(eventBus, "repository.syncSnapshotUpdated")).toHaveLength(
+      beforeEvents.length,
+    )
+
+    sync.resolve(syncResult)
+    await expect(syncRequest).resolves.toEqual(syncResult)
+  })
+
   it("waits for an active push before starting maintenance", async () => {
     const pendingState = createPendingState([createPendingEntry()])
     const push = createDeferred<void>()
