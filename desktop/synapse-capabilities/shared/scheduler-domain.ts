@@ -1,0 +1,154 @@
+import type {
+  CapabilityDomainDefinition,
+  McpToolDefinition,
+} from "./types"
+
+export type SchedulerSchedule =
+  | {
+      readonly type: "cron"
+      readonly expr: string
+      readonly timezone?: string
+    }
+  | {
+      readonly type: "interval"
+      readonly everyMinutes: number
+      readonly anchor?: "created_at" | "last_completed_at"
+    }
+
+export type SchedulerTaskCreateParams = {
+  readonly name: string
+  readonly description?: string
+  readonly scope: { readonly type: "global" } | { readonly type: "project"; readonly projectId: string }
+  readonly cwd?: string
+  readonly schedule: SchedulerSchedule
+  readonly action: {
+    readonly type: string
+    readonly config: Record<string, unknown>
+  }
+  readonly enabled?: boolean
+  readonly missedRunPolicy?: "skip" | "run_once"
+}
+
+export type SchedulerTaskListParams = {
+  readonly enabled?: boolean
+  readonly limit?: number
+}
+
+export type SchedulerTaskIdParams = {
+  readonly taskId: string
+}
+
+const taskIdProperty = {
+  type: "string",
+  description: "Scheduled task id. If only a task name is known, call scheduler_task_list first and use the returned id.",
+}
+
+const schedulerCapabilities = [
+  { action: "schedulerTaskList", mcpTool: "scheduler_task_list", cliCommand: "scheduler list", mutates: false },
+  { action: "schedulerTaskGet", mcpTool: "scheduler_task_get", cliCommand: "scheduler get", mutates: false },
+  { action: "schedulerTaskCreate", mcpTool: "scheduler_task_create", cliCommand: "scheduler create", mutates: true },
+  { action: "schedulerTaskEnable", mcpTool: "scheduler_task_enable", cliCommand: "scheduler enable", mutates: true },
+  { action: "schedulerTaskDisable", mcpTool: "scheduler_task_disable", cliCommand: "scheduler disable", mutates: true },
+] as const
+
+export const SCHEDULER_DOMAIN: CapabilityDomainDefinition = {
+  id: "scheduler",
+  capabilities: schedulerCapabilities,
+}
+
+export const SCHEDULER_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
+  schedulerCapabilities.map((capability) => [capability.mcpTool, capability.action]),
+)
+
+export function buildSchedulerTools(): McpToolDefinition[] {
+  return [
+    {
+      name: "scheduler_task_list",
+      description: "List scheduled tasks. If only a task name is known, use this first to find the task id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          enabled: { type: "boolean", description: "Optional filter for enabled or disabled tasks." },
+          limit: { type: "number", description: "Optional maximum number of tasks to return." },
+        },
+      },
+    },
+    {
+      name: "scheduler_task_get",
+      description: "Get one scheduled task by taskId. Task names are not unique; use scheduler_task_list first if needed.",
+      inputSchema: {
+        type: "object",
+        properties: { taskId: taskIdProperty },
+        required: ["taskId"],
+      },
+    },
+    {
+      name: "scheduler_task_create",
+      description: "Create a scheduled task. Supports cron and interval schedules and existing Action Runtime action types.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Task name." },
+          description: { type: "string", description: "Optional task description." },
+          scope: {
+            anyOf: [
+              { type: "object", properties: { type: { type: "string", enum: ["global"] } }, required: ["type"] },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["project"] },
+                  projectId: { type: "string" },
+                },
+                required: ["type", "projectId"],
+              },
+            ],
+          },
+          cwd: { type: "string", description: "Optional working directory." },
+          schedule: {
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["cron"] },
+                  expr: { type: "string", description: "Five-field cron expression." },
+                  timezone: { type: "string" },
+                },
+                required: ["type", "expr"],
+              },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["interval"] },
+                  everyMinutes: { type: "number", description: "Positive integer interval in minutes." },
+                  anchor: { type: "string", enum: ["created_at", "last_completed_at"] },
+                },
+                required: ["type", "everyMinutes"],
+              },
+            ],
+          },
+          action: {
+            type: "object",
+            properties: {
+              type: { type: "string", description: "Action type, such as builtin.command, builtin.script, or builtin.http-request." },
+              config: { type: "object", description: "Action config validated by the existing action runtime." },
+            },
+            required: ["type", "config"],
+          },
+          enabled: { type: "boolean" },
+          missedRunPolicy: { type: "string", enum: ["skip", "run_once"] },
+        },
+        required: ["name", "scope", "schedule", "action"],
+      },
+    },
+    {
+      name: "scheduler_task_enable",
+      description: "Enable one scheduled task by taskId.",
+      inputSchema: { type: "object", properties: { taskId: taskIdProperty }, required: ["taskId"] },
+    },
+    {
+      name: "scheduler_task_disable",
+      description: "Disable one scheduled task by taskId. This prevents future scheduled runs and does not stop a currently running run.",
+      inputSchema: { type: "object", properties: { taskId: taskIdProperty }, required: ["taskId"] },
+    },
+  ]
+}
