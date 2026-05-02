@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto"
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
-import { dispatchDataStoreAction } from "./dispatcher"
+import type { SynapseActionRouter } from "../capabilities/action-router"
 import type { DataStoreServerInfo } from "./types"
 import { createMainLogger } from "../services/log-store"
 
@@ -11,6 +11,7 @@ const logger = createMainLogger("data-store.http")
 
 let server: Server | null = null
 let serverInfo: DataStoreServerInfo | null = null
+let actionRouter: SynapseActionRouter | null = null
 
 function getServerInfoPath(): string {
   return path.join(app.getPath("userData"), "data-server.json")
@@ -81,13 +82,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   try {
     const sourceHeader = req.headers["x-synapse-client"]
     const source = sourceHeader === "cli" || sourceHeader === "mcp-stdio" ? sourceHeader : "api"
-    const result = dispatchDataStoreAction(action, params, { source })
+    const result = await actionRouterForRequest().dispatch(action, params, { source })
     sendJson(res, 200, result)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     logger.warn("API request failed.", { action, error: message })
     sendJson(res, 200, { ok: false, error: message })
   }
+}
+
+function actionRouterForRequest(): SynapseActionRouter {
+  if (!actionRouter) {
+    throw new Error("Synapse action router is not initialized")
+  }
+  return actionRouter
 }
 
 function cleanupStaleServerInfo(): void {
@@ -110,7 +118,8 @@ function cleanupStaleServerInfo(): void {
   }
 }
 
-function startHttpServer(): Promise<number> {
+function startHttpServer(router: SynapseActionRouter): Promise<number> {
+  actionRouter = router
   cleanupStaleServerInfo()
   return new Promise((resolve, reject) => {
     const s = createServer((req, res) => {
@@ -162,6 +171,7 @@ function stopHttpServer(): Promise<void> {
     } catch { /* ignore */ }
 
     serverInfo = null
+    actionRouter = null
 
     if (!server) {
       resolve()

@@ -105,11 +105,15 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAppIconDescriptor.dependsOn).toBeUndefined()
   })
 
-  it("coreDataStoreDescriptor is degraded, depends on core.config + core.event-bus, has stop", async () => {
+  it("coreDataStoreDescriptor is degraded, depends on config, event bus, and scheduler, has stop", async () => {
     const { coreDataStoreDescriptor } = await importBootstrap()
     expect(coreDataStoreDescriptor.id).toBe("core.data-store")
     expect(coreDataStoreDescriptor.criticality).toBe("degraded")
-    expect(coreDataStoreDescriptor.dependsOn).toEqual(["core.config", "core.event-bus"])
+    expect(coreDataStoreDescriptor.dependsOn).toEqual([
+      "core.config",
+      "core.event-bus",
+      "core.task-scheduler",
+    ])
     expect(coreDataStoreDescriptor.stop).toBeTypeOf("function")
   })
 

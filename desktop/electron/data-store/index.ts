@@ -1,4 +1,5 @@
 import type { EventBus } from "../runtime/event-bus"
+import type { SynapseActionRouter } from "../capabilities/action-router"
 import { dataStoreService } from "./service"
 import { startHttpServer, stopHttpServer } from "./http-server"
 import { startMcpServer, stopMcpServer } from "./mcp-server"
@@ -10,7 +11,7 @@ import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("data-store")
 
-async function initDataStore(eventBus?: EventBus): Promise<void> {
+async function initDataStore(eventBus: EventBus | undefined, actionRouter: SynapseActionRouter): Promise<void> {
   logger.info("Initializing data store.")
 
   const { corrupted } = dataStoreService.open()
@@ -18,7 +19,7 @@ async function initDataStore(eventBus?: EventBus): Promise<void> {
     logger.warn("Data store was corrupted and has been recreated.")
   }
 
-  const port = await startHttpServer()
+  const port = await startHttpServer(actionRouter)
   logger.info("Data store HTTP server ready.", { port })
 
   let mcpPort = 0

@@ -166,7 +166,11 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.execution-isolation",
       "core.feishu-connector",
     ])
-    expect(byId.get("core.data-store")?.dependsOn).toEqual(["core.config", "core.event-bus"])
+    expect(byId.get("core.data-store")?.dependsOn).toEqual([
+      "core.config",
+      "core.event-bus",
+      "core.task-scheduler",
+    ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
       "core.config",
       "core.logging",
@@ -197,6 +201,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     // Each dependency precedes its dependent.
     const idx = (id: string) => order.indexOf(id)
     expect(idx("core.config")).toBeLessThan(idx("core.data-store"))
+    expect(idx("core.task-scheduler")).toBeLessThan(idx("core.data-store"))
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))

@@ -28,11 +28,13 @@ import path from "node:path"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
+import { createSynapseActionRouter } from "../capabilities/action-router"
 import { configStore } from "../services/config-store"
 import { logStore } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { initDataStore, shutdownDataStore } from "../data-store"
+import { dispatchDataStoreAction } from "../data-store/dispatcher"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { contentSubmissionService } from "../services/content-submission-service"
@@ -55,6 +57,7 @@ import {
   ScheduledTaskRunRepository,
   TaskSchedulerExecutionService,
   TaskSchedulerService,
+  dispatchSchedulerAction,
 } from "../services/task-scheduler"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
 import type { WindowManager } from "../runtime/window"
@@ -139,10 +142,15 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
 export const coreDataStoreDescriptor: ServiceDescriptor<{ initialized: true }> = {
   id: "core.data-store",
   criticality: "degraded",
-  dependsOn: ["core.config", "core.event-bus"],
+  dependsOn: ["core.config", "core.event-bus", "core.task-scheduler"],
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
-    await initDataStore(eventBus)
+    const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
+    const actionRouter = createSynapseActionRouter({
+      dataStoreDispatch: dispatchDataStoreAction,
+      schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, action, params),
+    })
+    await initDataStore(eventBus, actionRouter)
     return { initialized: true }
   },
   async stop() {
