@@ -119,6 +119,17 @@ function lastSnapshotFrom(eventBus: EventBus) {
   return lastCall?.[0].payload.snapshot
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, reject, resolve }
+}
+
 describe("RepositorySyncCoordinator", () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -233,6 +244,91 @@ describe("RepositorySyncCoordinator", () => {
       phase: "retry-wait",
       failureCategory: "network",
       pendingCount: 1,
+    })
+  })
+
+  it("joins a running push when manual sync starts before the push fails", async () => {
+    const pendingItem = createPendingEntry()
+    const failedItem = createPendingEntry({
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:00:30.000Z",
+      retryCount: 1,
+    })
+    const pendingState = createPendingState([pendingItem])
+    const failedState = createPendingState([failedItem])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(failedState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    const flush = createDeferred<void>()
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockReturnValue(flush.promise)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    })
+    const syncRequest = coordinator.requestSync(repository, "manual")
+    const pushExpectation = expect(pushRequest).rejects.toThrow("Could not resolve host")
+    const syncExpectation = expect(syncRequest).rejects.toThrow("Could not resolve host")
+
+    flush.reject(new Error("fatal: unable to access: Could not resolve host: github.com"))
+
+    await Promise.all([pushExpectation, syncExpectation])
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.repositoryStore.getRepositoryState).not.toHaveBeenCalled()
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "offline",
+      phase: "retry-wait",
+      failureCategory: "network",
+    })
+  })
+
+  it("schedules recoverable push retries from the persisted nextRetryAt timestamp", async () => {
+    const pendingItem = createPendingEntry({ retryCount: 1 })
+    const failedItem = createPendingEntry({
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:01:00.000Z",
+      retryCount: 2,
+    })
+    const pendingState = createPendingState([pendingItem])
+    const failedState = createPendingState([failedItem])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(failedState)
+      .mockResolvedValueOnce(pendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes
+      .mockRejectedValueOnce(new Error("fatal: unable to access: Could not resolve host: github.com"))
+      .mockReturnValueOnce(new Promise<void>(() => {}))
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestPush(repository, "manual")).rejects.toThrow("Could not resolve host")
+
+    expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledWith(
+      repository,
+      "网络不可用，稍后自动重试。",
+      [1],
+      expect.objectContaining({
+        nextRetryAt: "2026-05-02T10:01:00.000Z",
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(59_999)
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(2)
     })
   })
 

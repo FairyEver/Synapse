@@ -23,6 +23,7 @@ const MAX_RETRY_DELAY_MS = 5 * 60 * 1000
 type SyncRequestReason = "content-saved" | "manual" | "recovery" | "maintenance" | "initialize" | "quit"
 
 type RepositoryExecutionState = {
+  currentPromise: Promise<void> | null
   running: boolean
   rerunRequested: boolean
   retryTimer: NodeJS.Timeout | null
@@ -78,13 +79,22 @@ class RepositorySyncCoordinator {
   async requestPush(repository: SynapseRepositoryConfig, reason: SyncRequestReason): Promise<void> {
     const state = this.getExecutionState(repository.uuid)
 
-    if (state.running) {
+    if (state.currentPromise) {
       state.rerunRequested = true
-      return
+      return state.currentPromise
     }
 
     state.running = true
+    state.currentPromise = this.runPushLoop(repository, reason, state)
 
+    return state.currentPromise
+  }
+
+  private async runPushLoop(
+    repository: SynapseRepositoryConfig,
+    reason: SyncRequestReason,
+    state: RepositoryExecutionState,
+  ): Promise<void> {
     try {
       let shouldContinue = false
 
@@ -93,8 +103,12 @@ class RepositorySyncCoordinator {
         shouldContinue = await this.runPushOnce(repository, reason)
       } while (state.rerunRequested || shouldContinue)
     } finally {
-      state.running = false
-      await this.refreshSnapshot(repository)
+      try {
+        await this.refreshSnapshot(repository)
+      } finally {
+        state.running = false
+        state.currentPromise = null
+      }
     }
   }
 
@@ -179,7 +193,12 @@ class RepositorySyncCoordinator {
     let state = this.executions.get(repositoryUuid)
 
     if (!state) {
-      state = { running: false, rerunRequested: false, retryTimer: null }
+      state = {
+        currentPromise: null,
+        running: false,
+        rerunRequested: false,
+        retryTimer: null,
+      }
       this.executions.set(repositoryUuid, state)
     }
 
@@ -291,9 +310,10 @@ class RepositorySyncCoordinator {
   ): Promise<void> {
     const fallback = error instanceof Error ? error.message : "推送到仓库失败。"
     const failure = classifyGitFailure(fallback, "推送到仓库失败。")
+    const nextRetryAt = failure.recoverable ? this.calculateNextRetryAt(nextRetryCount) : null
     const retryState = await pendingPushesService.markFailure(repository, failure.message, attemptedIds, {
       category: failure.category,
-      nextRetryAt: failure.recoverable ? this.calculateNextRetryAt(nextRetryCount) : null,
+      nextRetryAt,
     })
     const snapshot = this.createSnapshotFromPending(repository.uuid, retryState)
 
@@ -309,7 +329,7 @@ class RepositorySyncCoordinator {
     })
 
     if (failure.recoverable) {
-      this.scheduleRetry(repository)
+      this.scheduleRetry(repository, nextRetryAt)
     }
 
     logger.warn("Repository push failed.", {
@@ -341,12 +361,17 @@ class RepositorySyncCoordinator {
     })
   }
 
-  private scheduleRetry(repository: SynapseRepositoryConfig): void {
+  private scheduleRetry(repository: SynapseRepositoryConfig, nextRetryAt: string | null): void {
     const state = this.getExecutionState(repository.uuid)
 
     if (state.retryTimer) {
       clearTimeout(state.retryTimer)
     }
+
+    const retryAtTime = nextRetryAt ? new Date(nextRetryAt).getTime() : Number.NaN
+    const delayMs = Number.isNaN(retryAtTime)
+      ? 30_000
+      : Math.max(0, retryAtTime - this.now().getTime())
 
     state.retryTimer = setTimeout(() => {
       state.retryTimer = null
@@ -356,7 +381,7 @@ class RepositorySyncCoordinator {
           repositoryUuid: repository.uuid,
         })
       })
-    }, 30_000)
+    }, delayMs)
     state.retryTimer.unref?.()
   }
 
