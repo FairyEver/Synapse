@@ -1,3 +1,4 @@
+import type { DatabaseSync } from "node:sqlite"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapsePendingPushEntry, SynapsePendingPushState } from "../../src/types/repository"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
@@ -38,6 +39,11 @@ function mapPendingPushRow(row: Record<string, unknown>): SynapsePendingPushEntr
     createdAt: row.created_at,
     retryCount: row.retry_count,
     lastError: typeof row.last_error === "string" ? row.last_error : null,
+    lastAttemptAt: typeof row.last_attempt_at === "string" ? row.last_attempt_at : null,
+    nextRetryAt: typeof row.next_retry_at === "string" ? row.next_retry_at : null,
+    lastErrorCategory: typeof row.last_error_category === "string"
+      ? row.last_error_category as SynapsePendingPushEntry["lastErrorCategory"]
+      : null,
   }
 }
 
@@ -57,19 +63,7 @@ class PendingPushesService {
     }
 
     return withRepositoryCacheDatabase(repository.uuid, (database) => {
-      const rows = database.prepare(`
-        SELECT *
-        FROM pending_pushes
-        ORDER BY created_at ASC, id ASC
-      `).all() as Record<string, unknown>[]
-      const items = rows
-        .map(mapPendingPushRow)
-        .filter((item): item is SynapsePendingPushEntry => item !== null)
-
-      return {
-        count: items.length,
-        items,
-      }
+      return this.readStateRows(database)
     }, {
       includePendingPushes: true,
     })
@@ -105,19 +99,7 @@ class PendingPushesService {
         new Date().toISOString(),
       )
 
-      const rows = database.prepare(`
-        SELECT *
-        FROM pending_pushes
-        ORDER BY created_at ASC, id ASC
-      `).all() as Record<string, unknown>[]
-      const items = rows
-        .map(mapPendingPushRow)
-        .filter((item): item is SynapsePendingPushEntry => item !== null)
-
-      return {
-        count: items.length,
-        items,
-      }
+      return this.readStateRows(database)
     }, {
       includePendingPushes: true,
     })
@@ -145,27 +127,15 @@ class PendingPushesService {
         `).run(...targetIds)
       }
 
-      const rows = database.prepare(`
-        SELECT *
-        FROM pending_pushes
-        ORDER BY created_at ASC, id ASC
-      `).all() as Record<string, unknown>[]
-      const items = rows
-        .map(mapPendingPushRow)
-        .filter((item): item is SynapsePendingPushEntry => item !== null)
-
-      return {
-        count: items.length,
-        items,
-      }
+      return this.readStateRows(database)
     }, {
       includePendingPushes: true,
     })
   }
 
-  async markFailure(
+  async markAttempt(
     repository: SynapseRepositoryConfig,
-    lastError: string,
+    attemptedAt: string,
     ids?: number[],
   ): Promise<SynapsePendingPushState> {
     const targetIds = getTargetIds(ids)
@@ -181,30 +151,58 @@ class PendingPushesService {
       const placeholders = targetIds?.map(() => "?").join(", ")
       const statement = database.prepare(`
         UPDATE pending_pushes
-        SET retry_count = retry_count + 1,
-            last_error = ?
+        SET last_attempt_at = ?
         ${placeholders ? `WHERE id IN (${placeholders})` : ""}
       `)
 
       if (targetIds) {
-        statement.run(lastError, ...targetIds)
+        statement.run(attemptedAt, ...targetIds)
       } else {
-        statement.run(lastError)
+        statement.run(attemptedAt)
       }
 
-      const rows = database.prepare(`
-        SELECT *
-        FROM pending_pushes
-        ORDER BY created_at ASC, id ASC
-      `).all() as Record<string, unknown>[]
-      const items = rows
-        .map(mapPendingPushRow)
-        .filter((item): item is SynapsePendingPushEntry => item !== null)
+      return this.readStateRows(database)
+    }, {
+      includePendingPushes: true,
+    })
+  }
 
+  async markFailure(
+    repository: SynapseRepositoryConfig,
+    lastError: string,
+    ids?: number[],
+    metadata: {
+      category?: SynapsePendingPushEntry["lastErrorCategory"]
+      nextRetryAt?: string | null
+    } = {},
+  ): Promise<SynapsePendingPushState> {
+    const targetIds = getTargetIds(ids)
+
+    if (!(await this.canUsePendingPushes(repository))) {
       return {
-        count: items.length,
-        items,
+        count: 0,
+        items: [],
       }
+    }
+
+    return withRepositoryCacheDatabase(repository.uuid, (database) => {
+      const placeholders = targetIds?.map(() => "?").join(", ")
+      const statement = database.prepare(`
+        UPDATE pending_pushes
+        SET retry_count = retry_count + 1,
+            last_error = ?,
+            last_error_category = ?,
+            next_retry_at = ?
+        ${placeholders ? `WHERE id IN (${placeholders})` : ""}
+      `)
+
+      if (targetIds) {
+        statement.run(lastError, metadata.category ?? null, metadata.nextRetryAt ?? null, ...targetIds)
+      } else {
+        statement.run(lastError, metadata.category ?? null, metadata.nextRetryAt ?? null)
+      }
+
+      return this.readStateRows(database)
     }, {
       includePendingPushes: true,
     })
@@ -220,6 +218,19 @@ class PendingPushesService {
     }
 
     return totalCount
+  }
+
+  private readStateRows(database: DatabaseSync): SynapsePendingPushState {
+    const rows = database.prepare(`
+      SELECT *
+      FROM pending_pushes
+      ORDER BY created_at ASC, id ASC
+    `).all() as Record<string, unknown>[]
+    const items = rows
+      .map(mapPendingPushRow)
+      .filter((item): item is SynapsePendingPushEntry => item !== null)
+
+    return { count: items.length, items }
   }
 }
 

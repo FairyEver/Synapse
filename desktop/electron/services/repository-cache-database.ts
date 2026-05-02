@@ -105,6 +105,21 @@ function ensureRepositoryCacheSchema(
         last_error TEXT
       );
     `)
+
+    for (const stmt of [
+      `ALTER TABLE pending_pushes ADD COLUMN last_attempt_at TEXT`,
+      `ALTER TABLE pending_pushes ADD COLUMN next_retry_at TEXT`,
+      `ALTER TABLE pending_pushes ADD COLUMN last_error_category TEXT`,
+    ]) {
+      try {
+        database.exec(stmt)
+      } catch (error) {
+        const message = (error as Error).message ?? ""
+        if (!message.includes("duplicate column")) {
+          throw error
+        }
+      }
+    }
   }
 }
 
