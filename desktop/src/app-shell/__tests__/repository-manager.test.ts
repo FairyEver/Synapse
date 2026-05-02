@@ -4,7 +4,10 @@ import { RepositoryManager } from "../repository-manager"
 import type { SynapseBridge } from "@/types/bridge"
 import type { SynapseConfig, SynapseRepositoryConfig } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
-import type { SynapseRepositoryLocalState } from "@/types/repository"
+import type {
+  SynapseRepositoryLocalState,
+  SynapseRepositorySyncSnapshotUpdatedEvent,
+} from "@/types/repository"
 
 const repository: SynapseRepositoryConfig = {
   uuid: "repo-1",
@@ -92,9 +95,11 @@ function createBridge(): SynapseBridge {
     repository: {
       getStates: vi.fn(async () => [repositoryState]),
       getPendingPushes: vi.fn(async () => ({ count: 0, items: [] })),
+      getSyncSnapshots: vi.fn(async () => []),
       onProgress: vi.fn(() => () => {}),
       onUpdated: vi.fn(() => () => {}),
       onPendingPushesUpdated: vi.fn(() => () => {}),
+      onSyncSnapshotUpdated: vi.fn(() => () => {}),
       sync: vi.fn(async () => {
         synced = true
         return {
@@ -122,5 +127,37 @@ describe("RepositoryManager", () => {
     await manager.syncRepository(repository.uuid)
 
     expect(manager.getContentList("skill")).toHaveLength(4)
+  })
+
+  it("stores sync snapshot updates and mirrors pending pushes", async () => {
+    const snapshotListeners: Array<(event: SynapseRepositorySyncSnapshotUpdatedEvent) => void> = []
+    const bridge = createBridge()
+    bridge.repository.onSyncSnapshotUpdated = vi.fn((listener) => {
+      snapshotListeners.push(listener)
+      return () => {}
+    })
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+    await manager.initialize()
+
+    expect(snapshotListeners).toHaveLength(1)
+    snapshotListeners[0]({
+      repositoryUuid: repository.uuid,
+      snapshot: {
+        repositoryUuid: repository.uuid,
+        status: "pending",
+        operation: null,
+        phase: "completed",
+        pendingCount: 1,
+        pendingItems: [],
+        message: "1 条变更等待同步",
+        retryCount: 0,
+        canRetryNow: true,
+        primaryAction: "retry",
+      },
+    })
+
+    expect(manager.getSyncSnapshot(repository.uuid)?.status).toBe("pending")
+    expect(manager.getPendingPushes(repository.uuid)).toEqual({ count: 1, items: [] })
   })
 })

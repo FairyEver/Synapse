@@ -24,6 +24,8 @@ import type {
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
+  SynapseRepositorySyncSnapshot,
+  SynapseRepositorySyncSnapshotUpdatedEvent,
   SynapseRepositoryUpdatedEvent,
   SynapseRepositoryValidationResult,
 } from "@/types/repository"
@@ -57,6 +59,7 @@ class RepositoryManager {
   private repositoryStates: Map<string, SynapseRepositoryLocalState> = new Map()
   private operations: Map<string, RepositoryOperationState> = new Map()
   private pendingPushes: Map<string, SynapsePendingPushState> = new Map()
+  private syncSnapshots: Map<string, SynapseRepositorySyncSnapshot> = new Map()
 
   // ===== 内容缓存 =====
   private contentCache: Map<SynapseContentType, SynapseContentMeta[]> = new Map()
@@ -73,6 +76,7 @@ class RepositoryManager {
   private unsubscribeProgress: (() => void) | null = null
   private unsubscribeUpdated: (() => void) | null = null
   private unsubscribePendingPushes: (() => void) | null = null
+  private unsubscribeSyncSnapshot: (() => void) | null = null
 
   // ===== 初始化 =====
   async initialize(): Promise<void> {
@@ -80,6 +84,7 @@ class RepositoryManager {
     this.setupBridgeListeners()
     await this.refreshRepositoryStates()
     await this.refreshPendingPushesForRepositories(this.getRepositories().map((repository) => repository.uuid))
+    await this.refreshSyncSnapshots()
 
     // 初始化内容订阅者 Map
     for (const contentType of ["rule", "skill", "prompt"] as SynapseContentType[]) {
@@ -93,6 +98,7 @@ class RepositoryManager {
     this.unsubscribeProgress?.()
     this.unsubscribeUpdated?.()
     this.unsubscribePendingPushes?.()
+    this.unsubscribeSyncSnapshot?.()
   }
 
   // ===== 配置管理 =====
@@ -305,6 +311,10 @@ class RepositoryManager {
 
   getPendingPushes(uuid: string): SynapsePendingPushState | undefined {
     return this.pendingPushes.get(uuid)
+  }
+
+  getSyncSnapshot(uuid: string): SynapseRepositorySyncSnapshot | undefined {
+    return this.syncSnapshots.get(uuid)
   }
 
   // ===== 公共访问器（供组件使用）=====
@@ -734,6 +744,20 @@ class RepositoryManager {
     this.notifyRepositorySubscribers()
   }
 
+  private async refreshSyncSnapshots(): Promise<void> {
+    const bridge = getSynapseBridge()?.repository
+    if (!bridge?.getSyncSnapshots) {
+      return
+    }
+
+    const snapshots = await bridge.getSyncSnapshots()
+    this.syncSnapshots.clear()
+    for (const snapshot of snapshots) {
+      this.syncSnapshots.set(snapshot.repositoryUuid, snapshot)
+    }
+    this.notifyRepositorySubscribers()
+  }
+
   private setupBridgeListeners(): void {
     const bridge = getSynapseBridge()?.repository
     if (!bridge) {
@@ -769,6 +793,17 @@ class RepositoryManager {
         this.notifyRepositorySubscribers()
       },
     )
+
+    this.unsubscribeSyncSnapshot = bridge.onSyncSnapshotUpdated?.(
+      (event: SynapseRepositorySyncSnapshotUpdatedEvent) => {
+        this.syncSnapshots.set(event.repositoryUuid, event.snapshot)
+        this.pendingPushes.set(event.repositoryUuid, {
+          count: event.snapshot.pendingCount,
+          items: event.snapshot.pendingItems,
+        })
+        this.notifyRepositorySubscribers()
+      },
+    ) ?? null
   }
 
   private setOperationState(uuid: string, state: RepositoryOperationState): void {
@@ -793,6 +828,12 @@ class RepositoryManager {
     for (const repositoryUuid of this.pendingPushes.keys()) {
       if (!validRepositoryUuids.has(repositoryUuid)) {
         this.pendingPushes.delete(repositoryUuid)
+      }
+    }
+
+    for (const repositoryUuid of this.syncSnapshots.keys()) {
+      if (!validRepositoryUuids.has(repositoryUuid)) {
+        this.syncSnapshots.delete(repositoryUuid)
       }
     }
   }

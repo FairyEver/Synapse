@@ -155,6 +155,10 @@ function usePendingPushes(uuid: string): SynapsePendingPushState | undefined {
   return useRepositorySubscription((manager) => manager.getPendingPushes(uuid))
 }
 
+function useRepositorySyncSnapshot(uuid: string) {
+  return useRepositorySubscription((manager) => manager.getSyncSnapshot(uuid))
+}
+
 function useHasRunningRepositoryOperation(): boolean {
   return useRepositorySubscription((manager) => {
     return Array.from(manager.getAllOperations().values()).some((operation) => operation.isRunning)
@@ -283,4 +287,5 @@ export {
   useRepositoryState,
   useRepositoryOperation,
   usePendingPushes,
+  useRepositorySyncSnapshot,
 }
