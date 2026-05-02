@@ -18,6 +18,7 @@ import { createMetricsRegistry, createTracer } from "../runtime/observability"
 import type { ProcessRuntime } from "../runtime/process"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import {
+  coreActionRuntimeDescriptor,
   coreAppIconDescriptor,
   coreAuditSinkDescriptor,
   coreAutomationIngressDescriptor,
@@ -77,6 +78,7 @@ export function buildServiceRegistry(
   registry.register(coreFeishuConnectorDescriptor)
   registry.register(coreRelayDescriptor)
   registry.register(coreAutomationIngressDescriptor)
+  registry.register(coreActionRuntimeDescriptor)
   registry.register(coreTaskSchedulerDescriptor)
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDataStoreDescriptor)

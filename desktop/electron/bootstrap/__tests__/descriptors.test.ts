@@ -105,7 +105,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAppIconDescriptor.dependsOn).toBeUndefined()
   })
 
-  it("coreDataStoreDescriptor is degraded, depends on config, event bus, and scheduler, has stop", async () => {
+  it("coreDataStoreDescriptor is degraded, depends on config, event bus, scheduler, and action runtime, has stop", async () => {
     const { coreDataStoreDescriptor } = await importBootstrap()
     expect(coreDataStoreDescriptor.id).toBe("core.data-store")
     expect(coreDataStoreDescriptor.criticality).toBe("degraded")
@@ -113,8 +113,30 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.config",
       "core.event-bus",
       "core.task-scheduler",
+      "core.action-runtime",
     ])
     expect(coreDataStoreDescriptor.stop).toBeTypeOf("function")
+  })
+
+  it("coreActionRuntimeDescriptor creates the shared action registry", async () => {
+    const { coreActionRuntimeDescriptor } = await importBootstrap()
+    expect(coreActionRuntimeDescriptor.id).toBe("core.action-runtime")
+    expect(coreActionRuntimeDescriptor.criticality).toBe("fatal")
+    expect(coreActionRuntimeDescriptor.dependsOn).toEqual([
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(coreActionRuntimeDescriptor.create).toBeTypeOf("function")
+  })
+
+  it("coreTaskSchedulerDescriptor depends on action runtime", async () => {
+    const { coreTaskSchedulerDescriptor } = await importBootstrap()
+    expect(coreTaskSchedulerDescriptor.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+      "core.action-runtime",
+    ])
   })
 
   it("coreUpdateDescriptor is degraded and depends on core.config + core.window-manager", async () => {

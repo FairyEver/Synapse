@@ -10,6 +10,7 @@
  */
 
 export {
+  coreActionRuntimeDescriptor,
   coreAppIconDescriptor,
   coreConfigDescriptor,
   coreDataStoreDescriptor,

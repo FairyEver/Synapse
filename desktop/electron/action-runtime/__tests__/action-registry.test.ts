@@ -5,6 +5,7 @@ import {
   MainActionRegistry,
   type MainActionDefinition,
 } from "../action-registry"
+import { createBuiltinMainActionRegistry } from "../builtin-actions"
 
 const testSchema = z.object({ message: z.string().min(1) })
 type TestConfig = z.infer<typeof testSchema>
@@ -15,6 +16,9 @@ const action: MainActionDefinition<TestConfig> = {
     title: "Test",
     permissions: ["shell.exec"],
     defaultConfig: { message: "ok" },
+    configFields: [
+      { name: "message", kind: "string", required: true, defaultValue: "ok" },
+    ],
     configSchema: testSchema,
   },
   buildPermissionRequest: ({ config, context }) => ({
@@ -57,5 +61,34 @@ describe("MainActionRegistry", () => {
 
     expect(registry.parseConfig("builtin.test", { message: "hello" })).toEqual({ message: "hello" })
     expect(() => registry.parseConfig("builtin.test", { message: "" })).toThrow()
+  })
+
+  it("built-in action manifests expose public config fields", () => {
+    const registry = createBuiltinMainActionRegistry({
+      processRunner: {
+        run: async () => ({
+          exitCode: 0,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          durationMs: 0,
+        }),
+      },
+    })
+
+    const summaries = registry.list().map((item) => ({
+      id: item.manifest.id,
+      fields: item.manifest.configFields.map((field) => field.name),
+    }))
+
+    expect(summaries).toEqual(expect.arrayContaining([
+      { id: "builtin.command", fields: ["command", "shell", "env", "timeoutMins"] },
+      { id: "builtin.script", fields: ["script", "shell", "env", "timeoutMins"] },
+      {
+        id: "builtin.http-request",
+        fields: ["method", "url", "headers", "query", "bodyType", "body", "timeoutMins"],
+      },
+    ]))
   })
 })

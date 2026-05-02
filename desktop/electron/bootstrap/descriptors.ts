@@ -60,6 +60,7 @@ import {
   dispatchSchedulerAction,
 } from "../services/task-scheduler"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
+import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
@@ -131,6 +132,22 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
   },
 }
 
+export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> = {
+  id: "core.action-runtime",
+  criticality: "fatal",
+  dependsOn: [
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    return createBuiltinMainActionRegistry({
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+    })
+  },
+}
+
 /**
  * core.data-store — opens SQLite, starts HTTP + MCP servers, registers IPC,
  * wires change dispatcher, attempts CLI install, attempts MCP registration.
@@ -142,13 +159,14 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
 export const coreDataStoreDescriptor: ServiceDescriptor<{ initialized: true }> = {
   id: "core.data-store",
   criticality: "degraded",
-  dependsOn: ["core.config", "core.event-bus", "core.task-scheduler"],
+  dependsOn: ["core.config", "core.event-bus", "core.task-scheduler", "core.action-runtime"],
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
     const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
+    const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
     const actionRouter = createSynapseActionRouter({
       dataStoreDispatch: dispatchDataStoreAction,
-      schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, action, params),
+      schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
     })
     await initDataStore(eventBus, actionRouter)
     return { initialized: true }
@@ -723,6 +741,7 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
+    "core.action-runtime",
   ],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
@@ -735,9 +754,7 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
     const runs = new ScheduledTaskRunRepository({
       runs: dataRepository.namespace("task-scheduler.runs"),
     })
-    const actions = createBuiltinMainActionRegistry({
-      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-    })
+    const actions = ctx.registry.get<MainActionRegistry>("core.action-runtime")
     const execution = new TaskSchedulerExecutionService({
       tasks,
       runs,

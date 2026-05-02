@@ -29,10 +29,27 @@ export type ActionPermissionName =
   | "network.connect"
   | string
 
+export type ActionConfigFieldKind =
+  | "string"
+  | "number"
+  | "boolean"
+  | "enum"
+  | "record"
+
+export type ActionConfigFieldDescriptor = {
+  readonly name: string
+  readonly kind: ActionConfigFieldKind
+  readonly required: boolean
+  readonly description?: string
+  readonly choices?: readonly string[]
+  readonly defaultValue?: unknown
+}
+
 export type ActionManifest<TConfig extends ActionConfig = ActionConfig> = {
   readonly id: string
   readonly title: string
   readonly permissions: readonly ActionPermissionName[]
   readonly defaultConfig: TConfig
   readonly configSchema: z.ZodType<TConfig>
+  readonly configFields: readonly ActionConfigFieldDescriptor[]
 }
