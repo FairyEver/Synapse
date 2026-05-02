@@ -19,4 +19,9 @@ export {
 export {
   TaskSchedulerService,
 } from "./task-scheduler-service"
+export {
+  dispatchSchedulerAction,
+  toPublicTaskSummary,
+  type SchedulerTaskSummary,
+} from "./external-api"
 export * from "./types"
