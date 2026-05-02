@@ -39,6 +39,7 @@ import { createMainLogger } from "../../services/log-store"
 import type { RepositorySyncCoordinator } from "../../services/repository-sync-coordinator"
 
 const logger = createMainLogger("ipc.content")
+const legacyContentSavedPushEvents = new Map<string, Promise<void>>()
 
 // Helper to resolve active repository
 async function resolveActiveRepository(): Promise<SynapseRepositoryConfig | null> {
@@ -155,18 +156,33 @@ function requestContentSavedPush(
   }
 
   try {
-    void coordinator.requestPush(repository, "content-saved").then(
-      () => {
-        void emitLegacyPushSucceeded(eventBus, repository).catch((error) => {
-          logLegacyPushEventFailure(repository, error)
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+
+    if (legacyContentSavedPushEvents.has(repository.uuid)) {
+      void pushRequest.catch((error) => {
+        logger.warn("Coalesced content-saved repository push request failed.", {
+          error,
+          repositoryUuid: repository.uuid,
         })
-      },
-      (error) => {
-        void emitLegacyPushFailed(eventBus, repository, error).catch((eventError) => {
-          logLegacyPushEventFailure(repository, eventError)
-        })
-      },
-    )
+      })
+      return
+    }
+
+    const legacyEventRequest = pushRequest
+      .then(
+        () => emitLegacyPushSucceeded(eventBus, repository),
+        (error) => emitLegacyPushFailed(eventBus, repository, error),
+      )
+      .catch((error) => {
+        logLegacyPushEventFailure(repository, error)
+      })
+      .finally(() => {
+        if (legacyContentSavedPushEvents.get(repository.uuid) === legacyEventRequest) {
+          legacyContentSavedPushEvents.delete(repository.uuid)
+        }
+      })
+
+    legacyContentSavedPushEvents.set(repository.uuid, legacyEventRequest)
   } catch (error) {
     logger.warn("Failed to schedule content-saved repository push.", {
       error,

@@ -197,6 +197,45 @@ describe("contentIpcModule sync ownership", () => {
     expect(updatedEvents[0].payload.error).toBeUndefined()
   })
 
+  it("coalesces legacy push completion events for merged in-flight coordinator requests", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    const push = createDeferred<undefined>()
+    mocks.coordinator.requestPush.mockReturnValue(push.promise)
+    mocks.contentSubmissionService.readPendingPushState
+      .mockResolvedValueOnce({ count: 1, items: [] })
+      .mockResolvedValueOnce({ count: 1, items: [] })
+      .mockResolvedValueOnce({ count: 0, items: [] })
+
+    await contentIpcModule.methods.create.handler(createContext() as never, {
+      contentType: "rule",
+      payload: { title: "First" },
+    } as never)
+    await contentIpcModule.methods.update.handler(createContext() as never, {
+      contentType: "rule",
+      payload: { id: "rule-1", title: "Second" },
+    } as never)
+
+    expect(mocks.coordinator.requestPush).toHaveBeenCalledTimes(2)
+
+    push.resolve(undefined)
+    await flushAsyncWork()
+
+    const pendingEvents = getEvents("repository.pendingPushesUpdated")
+    const updatedEvents = getEvents("repository.updated")
+
+    expect(pendingEvents).toHaveLength(3)
+    expect(pendingEvents[2].payload).toEqual({
+      repositoryUuid: "repo-1",
+      pendingPushes: { count: 0, items: [] },
+    })
+    expect(updatedEvents).toHaveLength(1)
+    expect(updatedEvents[0].payload).toMatchObject({
+      repositoryUuid: "repo-1",
+      operation: "push",
+      message: "同步完成。",
+    })
+  })
+
   it("emits legacy push error events after coordinator push fails", async () => {
     const { contentIpcModule } = await import("../ipc")
     const push = createDeferred<undefined>()
