@@ -236,6 +236,52 @@ describe("contentIpcModule sync ownership", () => {
     })
   })
 
+  it("emits legacy completion events for a follow-up coordinator push with a different promise", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    const firstPush = createDeferred<undefined>()
+    const secondPush = createDeferred<undefined>()
+    mocks.coordinator.requestPush
+      .mockReturnValueOnce(firstPush.promise)
+      .mockReturnValueOnce(secondPush.promise)
+    mocks.contentSubmissionService.readPendingPushState
+      .mockResolvedValueOnce({ count: 2, items: [] })
+      .mockResolvedValueOnce({ count: 2, items: [] })
+      .mockResolvedValueOnce({ count: 1, items: [] })
+      .mockResolvedValueOnce({ count: 0, items: [] })
+
+    await contentIpcModule.methods.create.handler(createContext() as never, {
+      contentType: "rule",
+      payload: { title: "First" },
+    } as never)
+    await contentIpcModule.methods.update.handler(createContext() as never, {
+      contentType: "rule",
+      payload: { id: "rule-1", title: "Second" },
+    } as never)
+
+    firstPush.resolve(undefined)
+    await flushAsyncWork()
+    secondPush.resolve(undefined)
+    await flushAsyncWork()
+
+    const pendingEvents = getEvents("repository.pendingPushesUpdated")
+    const updatedEvents = getEvents("repository.updated")
+
+    expect(pendingEvents).toHaveLength(4)
+    expect(pendingEvents[2].payload.pendingPushes).toEqual({ count: 1, items: [] })
+    expect(pendingEvents[3].payload.pendingPushes).toEqual({ count: 0, items: [] })
+    expect(updatedEvents).toHaveLength(2)
+    expect(updatedEvents[0].payload).toMatchObject({
+      repositoryUuid: "repo-1",
+      operation: "push",
+      message: "同步完成。",
+    })
+    expect(updatedEvents[1].payload).toMatchObject({
+      repositoryUuid: "repo-1",
+      operation: "push",
+      message: "同步完成。",
+    })
+  })
+
   it("emits legacy push error events after coordinator push fails", async () => {
     const { contentIpcModule } = await import("../ipc")
     const push = createDeferred<undefined>()
