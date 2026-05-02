@@ -27,7 +27,7 @@ type AppShellActionsProps = {
   onOpenRepositorySettings?: () => void
   onRefresh?: () => void
   onRepositorySwitch?: () => void
-  onSyncChipClick?: () => void
+  onSyncStatusRetry?: () => void
   refreshTitle?: string
 }
 
@@ -46,7 +46,7 @@ function AppShellActions({
   onOpenRepositorySettings,
   onRefresh,
   onRepositorySwitch,
-  onSyncChipClick,
+  onSyncStatusRetry,
   refreshTitle = "同步仓库",
 }: AppShellActionsProps) {
   const hasActions = showRefresh || showRepositorySwitch
@@ -65,7 +65,7 @@ function AppShellActions({
             snapshot={syncSnapshot}
             status={syncStatus}
             pendingCount={pendingPushCount}
-            onRetry={onSyncChipClick ?? (() => {})}
+            onRetry={onSyncStatusRetry ?? (() => {})}
             onOpenSettings={onOpenRepositorySettings ?? (() => {})}
           />
         )}

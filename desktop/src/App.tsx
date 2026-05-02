@@ -282,6 +282,34 @@ function MainApp() {
     hasBlockingModalOpen,
     isOffline,
   })
+  const handleManualRepositorySync = useCallback((source: "refresh" | "sync-status") => {
+    if (!activeRepository) {
+      return
+    }
+
+    logger.info("Manual repository sync requested from app shell.", {
+      repositoryUuid: activeRepository.uuid,
+      source,
+    })
+    void promise(
+      () => syncRepository(activeRepository.uuid),
+      {
+        loading: "正在同步仓库...",
+        success: (result) => {
+          setIsOffline(false)
+          return result.message ?? "仓库同步完成。"
+        },
+        error: (error) => {
+          if (isNetworkError(error)) {
+            setIsOffline(true)
+          }
+          return error instanceof Error ? error.message : "同步仓库失败。"
+        },
+      },
+    ).catch((error) => {
+      logger.error("Manual repository sync failed from app shell.", error)
+    })
+  }, [activeRepository, promise, syncRepository])
 
   // 如果没有仓库或当前仓库缺失，显示空状态页面
   if (hasNoRepositories) {
@@ -380,34 +408,8 @@ function MainApp() {
             onOpenRepositorySettings={() => {
               setActiveTab("settings", "sync-status")
             }}
-            onSyncChipClick={() => setPendingPushDialogOpen(true, "sync-chip")}
-            onRefresh={() => {
-              if (!activeRepository) {
-                return
-              }
-
-              logger.info("Manual repository sync requested from app shell.", {
-                repositoryUuid: activeRepository.uuid,
-              })
-              void promise(
-                () => syncRepository(activeRepository.uuid),
-                {
-                  loading: "正在同步仓库...",
-                  success: (result) => {
-                    setIsOffline(false)
-                    return result.message ?? "仓库同步完成。"
-                  },
-                  error: (error) => {
-                    if (isNetworkError(error)) {
-                      setIsOffline(true)
-                    }
-                    return error instanceof Error ? error.message : "同步仓库失败。"
-                  },
-                },
-              ).catch((error) => {
-                logger.error("Manual repository sync failed from app shell.", error)
-              })
-            }}
+            onSyncStatusRetry={() => handleManualRepositorySync("sync-status")}
+            onRefresh={() => handleManualRepositorySync("refresh")}
             onRepositorySwitch={() => {
               if (toolbarState.repositorySwitchDisabled || isSwitchingRepository) {
                 return
