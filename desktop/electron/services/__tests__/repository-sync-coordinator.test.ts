@@ -80,6 +80,13 @@ const repository: SynapseRepositoryConfig = {
   contentDirs: {},
 }
 
+const secondRepository: SynapseRepositoryConfig = {
+  uuid: "repo-2",
+  name: "Playbooks",
+  localPath: "/tmp/synapse-playbooks",
+  contentDirs: {},
+}
+
 const emptyPendingState: SynapsePendingPushState = {
   count: 0,
   items: [],
@@ -129,6 +136,14 @@ function lastSnapshotFrom(eventBus: EventBus) {
   const lastCall = emit.mock.calls.at(-1)
 
   return lastCall?.[0].payload.snapshot
+}
+
+function emittedEventsOfType(eventBus: EventBus, type: string) {
+  const emit = eventBus.emit as Mock
+
+  return emit.mock.calls
+    .map((call) => call[0])
+    .filter((event) => event.type === type)
 }
 
 function createDeferred<T>() {
@@ -289,6 +304,41 @@ describe("RepositorySyncCoordinator", () => {
       failureCategory: "not-git",
       primaryAction: "open-settings",
     })
+  })
+
+  it("hydrates snapshots for configured repositories from persisted pending state", async () => {
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValueOnce(createPendingState([
+        createPendingEntry({
+          id: 2,
+          lastError: "网络不可用，稍后自动重试。",
+          lastErrorCategory: "network",
+          nextRetryAt: "2026-05-02T10:00:30.000Z",
+          retryCount: 1,
+          targetId: "playbook-1",
+        }),
+      ]))
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const snapshots = await coordinator.getSnapshotsForRepositories([repository, secondRepository])
+
+    expect(snapshots).toHaveLength(2)
+    expect(snapshots).toEqual([
+      expect.objectContaining({
+        repositoryUuid: "repo-1",
+        status: "synced",
+        pendingCount: 0,
+      }),
+      expect.objectContaining({
+        repositoryUuid: "repo-2",
+        status: "offline",
+        pendingCount: 1,
+        failureCategory: "network",
+      }),
+    ])
+    expect(coordinator.getSnapshots()).toEqual(snapshots)
   })
 
   it("clears stale retry timers when a manual retry succeeds", async () => {
@@ -532,6 +582,45 @@ describe("RepositorySyncCoordinator", () => {
     expect(serviceMocks.pendingPushesService.readState).toHaveBeenCalledTimes(5)
   })
 
+  it("emits legacy progress events during sync", async () => {
+    const syncResult = {
+      operation: "sync" as const,
+      repository: repositoryState,
+      completedAt: "2026-05-02T10:00:20.000Z",
+    }
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.repositoryGitService.syncRepository.mockImplementation(
+      async (_repository, onProgress: (event: {
+        repositoryUuid: string
+        operation: "sync"
+        statusText: string
+        percent: number | null
+      }) => void) => {
+        onProgress({
+          repositoryUuid: "repo-1",
+          operation: "sync",
+          statusText: "正在拉取仓库",
+          percent: 40,
+        })
+        return syncResult
+      },
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestSync(repository, "manual")).resolves.toEqual(syncResult)
+
+    expect(emittedEventsOfType(eventBus, "repository.progress")).toContainEqual(expect.objectContaining({
+      domain: "repository",
+      payload: {
+        repositoryUuid: "repo-1",
+        operation: "sync",
+        statusText: "正在拉取仓库",
+        percent: 40,
+      },
+    }))
+  })
+
   it("waits for an active push before starting maintenance", async () => {
     const pendingState = createPendingState([createPendingEntry()])
     const push = createDeferred<void>()
@@ -567,6 +656,34 @@ describe("RepositorySyncCoordinator", () => {
     expect(serviceMocks.repositoryMaintenanceService.runManualMaintenance).toHaveBeenCalledTimes(1)
   })
 
+  it("emits legacy progress events during push and leaves index refresh to the flush service", async () => {
+    const pendingState = createPendingState([createPendingEntry()])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockImplementation(
+      async (_repository, onProgress: (statusText: string) => void) => {
+        onProgress("正在推送变更")
+      },
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestPush(repository, "manual")).resolves.toBeUndefined()
+
+    expect(emittedEventsOfType(eventBus, "repository.progress")).toContainEqual(expect.objectContaining({
+      domain: "repository",
+      payload: {
+        repositoryUuid: "repo-1",
+        operation: "push",
+        statusText: "正在推送变更",
+        percent: null,
+      },
+    }))
+    expect(serviceMocks.contentIndexService.syncIndex).not.toHaveBeenCalled()
+  })
+
   it("waits for active maintenance before starting a push", async () => {
     const pendingState = createPendingState([createPendingEntry()])
     const maintenance = createDeferred<ReturnType<typeof createMaintenanceResult>>()
@@ -596,6 +713,35 @@ describe("RepositorySyncCoordinator", () => {
     await expect(maintenanceRequest).resolves.toMatchObject({ operation: "maintenance" })
     await expect(pushRequest).resolves.toBeUndefined()
     expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+  })
+
+  it("emits legacy progress events during maintenance", async () => {
+    const maintenanceResult = createMaintenanceResult({ message: "整理完成。" })
+    serviceMocks.repositoryMaintenanceService.runManualMaintenance.mockImplementation(
+      async (_repository, onProgress: (statusText: string) => void) => {
+        onProgress("正在整理仓库")
+        return maintenanceResult
+      },
+    )
+    serviceMocks.repositoryStore.getRepositoryState.mockResolvedValue(repositoryState)
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestMaintenance(repository)).resolves.toMatchObject({
+      operation: "maintenance",
+      message: "整理完成。",
+    })
+
+    expect(emittedEventsOfType(eventBus, "repository.progress")).toContainEqual(expect.objectContaining({
+      domain: "repository",
+      payload: {
+        repositoryUuid: "repo-1",
+        operation: "maintenance",
+        statusText: "正在整理仓库",
+        percent: null,
+      },
+    }))
   })
 
   it("emits a terminal failure snapshot when maintenance fails", async () => {

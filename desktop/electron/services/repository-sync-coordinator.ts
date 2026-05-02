@@ -4,11 +4,11 @@ import type {
   SynapsePendingPushState,
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
+  SynapseRepositoryProgressEvent,
   SynapseRepositorySyncSnapshot,
   SynapseRepositorySyncSnapshotUpdatedEvent,
 } from "../../src/types/repository"
 import { configStore } from "./config-store"
-import { contentIndexService } from "./content-index-service"
 import { contentSubmissionService } from "./content-submission-service"
 import { classifyGitFailure } from "./git-error-utils"
 import { createMainLogger } from "./log-store"
@@ -68,6 +68,18 @@ class RepositorySyncCoordinator {
 
   getSnapshots(): SynapseRepositorySyncSnapshot[] {
     return Array.from(this.snapshots.values())
+  }
+
+  async getSnapshotsForRepositories(
+    repositories: SynapseRepositoryConfig[],
+  ): Promise<SynapseRepositorySyncSnapshot[]> {
+    const snapshots: SynapseRepositorySyncSnapshot[] = []
+
+    for (const repository of repositories) {
+      snapshots.push(await this.refreshSnapshot(repository))
+    }
+
+    return snapshots
   }
 
   async refreshSnapshot(repository: SynapseRepositoryConfig): Promise<SynapseRepositorySyncSnapshot> {
@@ -217,6 +229,7 @@ class RepositorySyncCoordinator {
 
     try {
       const result = await repositoryGitService.syncRepository(repository, (event) => {
+        this.emitLegacyProgress(event)
         const current = this.getSnapshot(repository.uuid)
 
         this.emitSnapshot({
@@ -265,7 +278,19 @@ class RepositorySyncCoordinator {
     state: RepositoryExecutionState,
   ): Promise<SynapseRepositoryOperationResult> {
     try {
+      this.emitLegacyProgress({
+        repositoryUuid: repository.uuid,
+        operation: "maintenance",
+        statusText: "正在准备整理...",
+        percent: 0,
+      })
       const result = await repositoryMaintenanceService.runManualMaintenance(repository, (statusText) => {
+        this.emitLegacyProgress({
+          repositoryUuid: repository.uuid,
+          operation: "maintenance",
+          statusText,
+          percent: null,
+        })
         const current = this.getSnapshot(repository.uuid)
 
         this.emitSnapshot({
@@ -424,9 +449,21 @@ class RepositorySyncCoordinator {
     })
 
     try {
+      this.emitLegacyProgress({
+        repositoryUuid: repository.uuid,
+        operation: "push",
+        statusText: "正在准备推送...",
+        percent: 0,
+      })
       await contentSubmissionService.flushPendingPushes(
         repository,
         (statusText) => {
+          this.emitLegacyProgress({
+            repositoryUuid: repository.uuid,
+            operation: "push",
+            statusText,
+            percent: null,
+          })
           const current = this.getSnapshot(repository.uuid)
 
           this.emitSnapshot({
@@ -439,7 +476,6 @@ class RepositorySyncCoordinator {
         },
         { recordFailure: false },
       )
-      await contentIndexService.syncIndex(repository)
 
       const remaining = await pendingPushesService.readState(repository)
 
@@ -555,6 +591,15 @@ class RepositorySyncCoordinator {
         repositoryUuid: snapshot.repositoryUuid,
         snapshot,
       } satisfies SynapseRepositorySyncSnapshotUpdatedEvent,
+      timestamp: this.now().toISOString(),
+    })
+  }
+
+  private emitLegacyProgress(payload: SynapseRepositoryProgressEvent): void {
+    this.eventBus.emit({
+      domain: "repository",
+      type: "repository.progress",
+      payload,
       timestamp: this.now().toISOString(),
     })
   }

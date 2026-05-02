@@ -95,6 +95,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.window-manager",
         "repo.maintenance",
         "repo.pending-pushes",
+        "repo.sync-coordinator",
         "repo.watch",
         "ui.tray",
       ].sort(),
@@ -178,6 +179,10 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config"])
     expect(byId.get("repo.maintenance")?.dependsOn).toEqual(["repo.watch"])
     expect(byId.get("repo.pending-pushes")?.dependsOn).toEqual(["core.data-store"])
+    expect(byId.get("repo.sync-coordinator")?.dependsOn).toEqual([
+      "core.event-bus",
+      "repo.pending-pushes",
+    ])
     expect(byId.get("ui.tray")?.dependsOn).toEqual(["core.app-icon"])
 
     // Every registered service starts pending.
@@ -207,6 +212,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.data-store")).toBeLessThan(idx("repo.pending-pushes"))
+    expect(idx("core.event-bus")).toBeLessThan(idx("repo.sync-coordinator"))
+    expect(idx("repo.pending-pushes")).toBeLessThan(idx("repo.sync-coordinator"))
     expect(idx("core.data-store")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.app-icon")).toBeLessThan(idx("ui.tray"))
   })

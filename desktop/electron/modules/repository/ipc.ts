@@ -215,7 +215,8 @@ export const repositoryIpcModule: IpcModule = {
       response: z.array(syncSnapshotSchema),
       handler: async (ctx) => {
         const coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
-        return coordinator.getSnapshots()
+        const config = await configStore.load()
+        return coordinator.getSnapshotsForRepositories(config.repositories)
       },
     },
     initializeStructure: {
