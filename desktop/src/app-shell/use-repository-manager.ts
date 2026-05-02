@@ -21,6 +21,7 @@ import type {
   SynapsePendingPushState,
   SynapseRepositoryInitializationResult,
   SynapseRepositoryOperationResult,
+  SynapseRepositorySyncSnapshot,
 } from "@/types/repository"
 
 // ===== useRepositoryManager =====
@@ -155,7 +156,7 @@ function usePendingPushes(uuid: string): SynapsePendingPushState | undefined {
   return useRepositorySubscription((manager) => manager.getPendingPushes(uuid))
 }
 
-function useRepositorySyncSnapshot(uuid: string) {
+function useRepositorySyncSnapshot(uuid: string): SynapseRepositorySyncSnapshot | undefined {
   return useRepositorySubscription((manager) => manager.getSyncSnapshot(uuid))
 }
 

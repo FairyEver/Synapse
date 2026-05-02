@@ -6,6 +6,7 @@ import type { SynapseConfig, SynapseRepositoryConfig } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 import type {
   SynapseRepositoryLocalState,
+  SynapseRepositorySyncSnapshot,
   SynapseRepositorySyncSnapshotUpdatedEvent,
 } from "@/types/repository"
 
@@ -22,6 +23,19 @@ const repositoryState: SynapseRepositoryLocalState = {
   status: "ready",
   isGitRepository: true,
   gitRootPath: repository.localPath,
+}
+
+const pendingSnapshot: SynapseRepositorySyncSnapshot = {
+  repositoryUuid: repository.uuid,
+  status: "pending",
+  operation: null,
+  phase: "completed",
+  pendingCount: 1,
+  pendingItems: [],
+  message: "1 条变更等待同步",
+  retryCount: 0,
+  canRetryNow: true,
+  primaryAction: "retry",
 }
 
 const config: SynapseConfig = {
@@ -143,19 +157,20 @@ describe("RepositoryManager", () => {
     expect(snapshotListeners).toHaveLength(1)
     snapshotListeners[0]({
       repositoryUuid: repository.uuid,
-      snapshot: {
-        repositoryUuid: repository.uuid,
-        status: "pending",
-        operation: null,
-        phase: "completed",
-        pendingCount: 1,
-        pendingItems: [],
-        message: "1 条变更等待同步",
-        retryCount: 0,
-        canRetryNow: true,
-        primaryAction: "retry",
-      },
+      snapshot: pendingSnapshot,
     })
+
+    expect(manager.getSyncSnapshot(repository.uuid)?.status).toBe("pending")
+    expect(manager.getPendingPushes(repository.uuid)).toEqual({ count: 1, items: [] })
+  })
+
+  it("hydrates sync snapshots and mirrors pending pushes during initialize", async () => {
+    const bridge = createBridge()
+    bridge.repository.getSyncSnapshots = vi.fn(async () => [pendingSnapshot])
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+
+    await manager.initialize()
 
     expect(manager.getSyncSnapshot(repository.uuid)?.status).toBe("pending")
     expect(manager.getPendingPushes(repository.uuid)).toEqual({ count: 1, items: [] })

@@ -753,7 +753,7 @@ class RepositoryManager {
     const snapshots = await bridge.getSyncSnapshots()
     this.syncSnapshots.clear()
     for (const snapshot of snapshots) {
-      this.syncSnapshots.set(snapshot.repositoryUuid, snapshot)
+      this.applySyncSnapshot(snapshot)
     }
     this.notifyRepositorySubscribers()
   }
@@ -796,14 +796,18 @@ class RepositoryManager {
 
     this.unsubscribeSyncSnapshot = bridge.onSyncSnapshotUpdated?.(
       (event: SynapseRepositorySyncSnapshotUpdatedEvent) => {
-        this.syncSnapshots.set(event.repositoryUuid, event.snapshot)
-        this.pendingPushes.set(event.repositoryUuid, {
-          count: event.snapshot.pendingCount,
-          items: event.snapshot.pendingItems,
-        })
+        this.applySyncSnapshot(event.snapshot)
         this.notifyRepositorySubscribers()
       },
     ) ?? null
+  }
+
+  private applySyncSnapshot(snapshot: SynapseRepositorySyncSnapshot): void {
+    this.syncSnapshots.set(snapshot.repositoryUuid, snapshot)
+    this.pendingPushes.set(snapshot.repositoryUuid, {
+      count: snapshot.pendingCount,
+      items: snapshot.pendingItems,
+    })
   }
 
   private setOperationState(uuid: string, state: RepositoryOperationState): void {
