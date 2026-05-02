@@ -17,6 +17,13 @@ const repository: SynapseRepositoryConfig = {
   contentDirs: {},
 }
 
+const addedRepository: SynapseRepositoryConfig = {
+  uuid: "repo-2",
+  name: "Added",
+  localPath: "/added",
+  contentDirs: {},
+}
+
 const repositoryState: SynapseRepositoryLocalState = {
   repositoryUuid: repository.uuid,
   localPath: repository.localPath,
@@ -36,6 +43,11 @@ const pendingSnapshot: SynapseRepositorySyncSnapshot = {
   retryCount: 0,
   canRetryNow: true,
   primaryAction: "retry",
+}
+
+const addedPendingSnapshot: SynapseRepositorySyncSnapshot = {
+  ...pendingSnapshot,
+  repositoryUuid: addedRepository.uuid,
 }
 
 const config: SynapseConfig = {
@@ -174,5 +186,20 @@ describe("RepositoryManager", () => {
 
     expect(manager.getSyncSnapshot(repository.uuid)?.status).toBe("pending")
     expect(manager.getPendingPushes(repository.uuid)).toEqual({ count: 1, items: [] })
+  })
+
+  it("refreshes sync snapshots after replacing repositories", async () => {
+    let snapshots: SynapseRepositorySyncSnapshot[] = []
+    const bridge = createBridge()
+    bridge.repository.getSyncSnapshots = vi.fn(async () => snapshots)
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+    await manager.initialize()
+
+    snapshots = [addedPendingSnapshot]
+    await manager.replaceRepositories([repository, addedRepository], repository.uuid)
+
+    expect(manager.getSyncSnapshot(addedRepository.uuid)?.status).toBe("pending")
+    expect(manager.getPendingPushes(addedRepository.uuid)).toEqual({ count: 1, items: [] })
   })
 })

@@ -207,6 +207,7 @@ class RepositoryManager {
     })
     await this.refreshRepositoryStates()
     await this.refreshPendingPushes(repository.uuid)
+    await this.refreshSyncSnapshots()
 
     if (activeRepositoryChanged) {
       await this.refreshAllContent()
@@ -242,6 +243,8 @@ class RepositoryManager {
     if (isActiveRepository) {
       await this.refreshPendingPushes(uuid)
     }
+
+    await this.refreshSyncSnapshots()
 
     if (isActiveRepository && contentSourceChanged) {
       await this.refreshAllContent()
@@ -285,6 +288,8 @@ class RepositoryManager {
     if (nextActiveRepoUuid) {
       await this.refreshPendingPushes(nextActiveRepoUuid)
     }
+
+    await this.refreshSyncSnapshots()
 
     if ((activeRepositoryChanged || activeRepositoryContentSourceChanged) && nextActiveRepoUuid) {
       await this.refreshAllContent()
