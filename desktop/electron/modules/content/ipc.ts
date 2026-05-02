@@ -74,15 +74,105 @@ async function notifyPendingPushesUpdated(
   })
 }
 
-function requestContentSavedPush(ctx: IpcHandlerContext, repository: SynapseRepositoryConfig): void {
-  const coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
-
-  void coordinator.requestPush(repository, "content-saved").catch((error) => {
-    logger.warn("Failed to request content-saved repository push.", {
+async function notifyPendingPushesUpdatedIfPossible(
+  eventBus: EventBus,
+  repository: SynapseRepositoryConfig,
+): Promise<void> {
+  try {
+    await notifyPendingPushesUpdated(eventBus, repository)
+  } catch (error) {
+    logger.warn("Failed to refresh pending pushes after content-saved repository push.", {
       error,
       repositoryUuid: repository.uuid,
     })
+  }
+}
+
+function emitLegacyPushUpdated(
+  eventBus: EventBus,
+  repository: SynapseRepositoryConfig,
+  result: { error?: string; message: string },
+): void {
+  eventBus.emit({
+    domain: "repository",
+    type: "repository.updated",
+    payload: {
+      repositoryUuid: repository.uuid,
+      operation: "push",
+      completedAt: new Date().toISOString(),
+      ...result,
+    },
+    timestamp: new Date().toISOString(),
   })
+}
+
+async function emitLegacyPushSucceeded(
+  eventBus: EventBus,
+  repository: SynapseRepositoryConfig,
+): Promise<void> {
+  await notifyPendingPushesUpdatedIfPossible(eventBus, repository)
+  emitLegacyPushUpdated(eventBus, repository, { message: "同步完成。" })
+}
+
+async function emitLegacyPushFailed(
+  eventBus: EventBus,
+  repository: SynapseRepositoryConfig,
+  error: unknown,
+): Promise<void> {
+  const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+  logger.warn("Failed to request content-saved repository push.", {
+    error,
+    repositoryUuid: repository.uuid,
+  })
+
+  await notifyPendingPushesUpdatedIfPossible(eventBus, repository)
+  emitLegacyPushUpdated(eventBus, repository, { error: message, message })
+}
+
+function logLegacyPushEventFailure(repository: SynapseRepositoryConfig, error: unknown): void {
+  logger.warn("Failed to emit legacy content-saved repository push event.", {
+    error,
+    repositoryUuid: repository.uuid,
+  })
+}
+
+function requestContentSavedPush(
+  ctx: IpcHandlerContext,
+  eventBus: EventBus,
+  repository: SynapseRepositoryConfig,
+): void {
+  let coordinator: RepositorySyncCoordinator
+
+  try {
+    coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
+  } catch (error) {
+    logger.warn("Failed to schedule content-saved repository push.", {
+      error,
+      repositoryUuid: repository.uuid,
+    })
+    return
+  }
+
+  try {
+    void coordinator.requestPush(repository, "content-saved").then(
+      () => {
+        void emitLegacyPushSucceeded(eventBus, repository).catch((error) => {
+          logLegacyPushEventFailure(repository, error)
+        })
+      },
+      (error) => {
+        void emitLegacyPushFailed(eventBus, repository, error).catch((eventError) => {
+          logLegacyPushEventFailure(repository, eventError)
+        })
+      },
+    )
+  } catch (error) {
+    logger.warn("Failed to schedule content-saved repository push.", {
+      error,
+      repositoryUuid: repository.uuid,
+    })
+  }
 }
 
 export const contentIpcModule: IpcModule = {
@@ -157,7 +247,7 @@ export const contentIpcModule: IpcModule = {
         await notifyPendingPushesUpdated(eventBus, repository)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-          requestContentSavedPush(ctx, repository)
+          requestContentSavedPush(ctx, eventBus, repository)
         }
 
         return result
@@ -178,7 +268,7 @@ export const contentIpcModule: IpcModule = {
         await notifyPendingPushesUpdated(eventBus, repository)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-          requestContentSavedPush(ctx, repository)
+          requestContentSavedPush(ctx, eventBus, repository)
         }
 
         return result
@@ -222,7 +312,7 @@ export const contentIpcModule: IpcModule = {
         await notifyPendingPushesUpdated(eventBus, repository)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-          requestContentSavedPush(ctx, repository)
+          requestContentSavedPush(ctx, eventBus, repository)
         }
 
         return result
