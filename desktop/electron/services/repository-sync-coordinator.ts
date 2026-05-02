@@ -24,6 +24,7 @@ type SyncRequestReason = "content-saved" | "manual" | "recovery" | "maintenance"
 
 type RepositoryExecutionState = {
   currentPromise: Promise<void> | null
+  maintenancePromise: Promise<SynapseRepositoryOperationResult> | null
   running: boolean
   rerunRequested: boolean
   syncPromise: Promise<SynapseRepositoryOperationResult> | null
@@ -86,6 +87,12 @@ class RepositorySyncCoordinator {
         .then(() => this.requestPush(repository, reason))
     }
 
+    if (state.maintenancePromise) {
+      return state.maintenancePromise
+        .catch(() => undefined)
+        .then(() => this.requestPush(repository, reason))
+    }
+
     if (state.currentPromise) {
       state.rerunRequested = true
       return state.currentPromise
@@ -125,6 +132,11 @@ class RepositorySyncCoordinator {
   ): Promise<SynapseRepositoryOperationResult> {
     const state = this.getExecutionState(repository.uuid)
 
+    if (state.maintenancePromise) {
+      await state.maintenancePromise
+      return this.requestSync(repository, reason)
+    }
+
     if (state.currentPromise) {
       await state.currentPromise
       return this.requestSync(repository, reason)
@@ -145,6 +157,11 @@ class RepositorySyncCoordinator {
 
     if (state.currentPromise) {
       await state.currentPromise
+      return this.requestSync(repository, reason)
+    }
+
+    if (state.maintenancePromise) {
+      await state.maintenancePromise
       return this.requestSync(repository, reason)
     }
 
@@ -194,26 +211,58 @@ class RepositorySyncCoordinator {
   }
 
   async requestMaintenance(repository: SynapseRepositoryConfig): Promise<SynapseRepositoryOperationResult> {
-    const result = await repositoryMaintenanceService.runManualMaintenance(repository, (statusText) => {
-      const current = this.getSnapshot(repository.uuid)
+    const state = this.getExecutionState(repository.uuid)
 
-      this.emitSnapshot({
-        ...current,
-        status: "syncing",
-        operation: "maintenance",
-        phase: "running",
-        message: statusText,
+    if (state.currentPromise) {
+      await state.currentPromise
+      return this.requestMaintenance(repository)
+    }
+
+    if (state.syncPromise) {
+      await state.syncPromise
+      return this.requestMaintenance(repository)
+    }
+
+    if (state.maintenancePromise) {
+      return state.maintenancePromise
+    }
+
+    state.maintenancePromise = this.runMaintenance(repository, state)
+
+    return state.maintenancePromise
+  }
+
+  private async runMaintenance(
+    repository: SynapseRepositoryConfig,
+    state: RepositoryExecutionState,
+  ): Promise<SynapseRepositoryOperationResult> {
+    try {
+      const result = await repositoryMaintenanceService.runManualMaintenance(repository, (statusText) => {
+        const current = this.getSnapshot(repository.uuid)
+
+        this.emitSnapshot({
+          ...current,
+          status: "syncing",
+          operation: "maintenance",
+          phase: "running",
+          message: statusText,
+        })
       })
-    })
 
-    await this.refreshSnapshot(repository)
+      await this.refreshSnapshot(repository)
 
-    return {
-      operation: "maintenance",
-      repository: await repositoryStore.getRepositoryState(repository),
-      completedAt: this.now().toISOString(),
-      message: result.message,
-      pendingPushCount: result.pendingPushCount,
+      return {
+        operation: "maintenance",
+        repository: await repositoryStore.getRepositoryState(repository),
+        completedAt: this.now().toISOString(),
+        message: result.message,
+        pendingPushCount: result.pendingPushCount,
+      }
+    } catch (error) {
+      await this.handleOperationFailure(repository, "maintenance", error)
+      throw error
+    } finally {
+      state.maintenancePromise = null
     }
   }
 
@@ -229,6 +278,7 @@ class RepositorySyncCoordinator {
     if (!state) {
       state = {
         currentPromise: null,
+        maintenancePromise: null,
         running: false,
         rerunRequested: false,
         syncPromise: null,

@@ -81,6 +81,14 @@ const emptyPendingState: SynapsePendingPushState = {
   items: [],
 }
 
+const repositoryState = {
+  repositoryUuid: "repo-1",
+  localPath: "/tmp/synapse-docs",
+  status: "ready" as const,
+  isGitRepository: true,
+  gitRootPath: "/tmp/synapse-docs",
+}
+
 function createPendingEntry(overrides: Partial<SynapsePendingPushEntry> = {}): SynapsePendingPushEntry {
   return {
     id: 1,
@@ -128,6 +136,20 @@ function createDeferred<T>() {
   })
 
   return { promise, reject, resolve }
+}
+
+function createMaintenanceResult(overrides: Partial<{
+  message: string
+  pendingPushCount: number
+}> = {}) {
+  return {
+    compactedCount: 0,
+    deletedAttachmentCount: 0,
+    message: "没有需要整理的内容。",
+    pendingPushCount: 0,
+    pushed: false,
+    ...overrides,
+  }
 }
 
 describe("RepositorySyncCoordinator", () => {
@@ -328,6 +350,95 @@ describe("RepositorySyncCoordinator", () => {
     await expect(syncRequest).resolves.toEqual(syncResult)
     expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
     expect(serviceMocks.pendingPushesService.readState).toHaveBeenCalledTimes(5)
+  })
+
+  it("waits for an active push before starting maintenance", async () => {
+    const pendingState = createPendingState([createPendingEntry()])
+    const push = createDeferred<void>()
+    const maintenanceResult = createMaintenanceResult({ message: "整理完成。" })
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockReturnValue(push.promise)
+    serviceMocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    serviceMocks.repositoryMaintenanceService.runManualMaintenance.mockResolvedValue(maintenanceResult)
+    serviceMocks.repositoryStore.getRepositoryState.mockResolvedValue(repositoryState)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    })
+    const maintenanceRequest = coordinator.requestMaintenance(repository)
+
+    expect(serviceMocks.repositoryMaintenanceService.runManualMaintenance).not.toHaveBeenCalled()
+
+    push.resolve()
+
+    await expect(pushRequest).resolves.toBeUndefined()
+    await expect(maintenanceRequest).resolves.toMatchObject({
+      operation: "maintenance",
+      message: "整理完成。",
+      pendingPushCount: 0,
+    })
+    expect(serviceMocks.repositoryMaintenanceService.runManualMaintenance).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for active maintenance before starting a push", async () => {
+    const pendingState = createPendingState([createPendingEntry()])
+    const maintenance = createDeferred<ReturnType<typeof createMaintenanceResult>>()
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.repositoryMaintenanceService.runManualMaintenance.mockReturnValue(maintenance.promise)
+    serviceMocks.repositoryStore.getRepositoryState.mockResolvedValue(repositoryState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockResolvedValue(undefined)
+    serviceMocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const maintenanceRequest = coordinator.requestMaintenance(repository)
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositoryMaintenanceService.runManualMaintenance).toHaveBeenCalledTimes(1)
+    })
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).not.toHaveBeenCalled()
+
+    maintenance.resolve(createMaintenanceResult())
+
+    await expect(maintenanceRequest).resolves.toMatchObject({ operation: "maintenance" })
+    await expect(pushRequest).resolves.toBeUndefined()
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+  })
+
+  it("emits a terminal failure snapshot when maintenance fails", async () => {
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.repositoryMaintenanceService.runManualMaintenance.mockImplementation(
+      async (_repository, onProgress: (statusText: string) => void) => {
+        onProgress("正在整理仓库")
+        throw new Error("fatal: not a git repository")
+      },
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestMaintenance(repository)).rejects.toThrow("not a git repository")
+
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "attention",
+      operation: "maintenance",
+      phase: "blocked",
+      failureCategory: "not-git",
+      message: "当前目录不是 Git 仓库。",
+    })
   })
 
   it("schedules recoverable push retries from the persisted nextRetryAt timestamp", async () => {
