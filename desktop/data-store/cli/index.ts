@@ -8,6 +8,7 @@ if (major < 18) {
 
 import { apiCall, isAppRunning, readServerInfo, type ServerInfo } from "../shared/resolve-user-data"
 import { getCliDataCommands } from "../shared/capability-registry"
+import { handleSchedulerCommand } from "./scheduler"
 
 function printTable(rows: Record<string, unknown>[]): void {
   if (rows.length === 0) {
@@ -234,6 +235,11 @@ Usage:
   synapse delete-where <table> --where-json '{...}' [--dry-run]  Delete rows
   synapse read-sql '<SQL>' [--params '[...]']        Execute read-only SQL
   synapse sql '<SQL>' [--params '[...]']             Execute raw SQL
+  synapse scheduler list [--enabled|--disabled] [--limit N]  List scheduled tasks
+  synapse scheduler get <taskId>                             Get scheduled task detail
+  synapse scheduler create --data '{...}'                    Create scheduled task
+  synapse scheduler enable <taskId>                          Enable scheduled task
+  synapse scheduler disable <taskId>                         Disable scheduled task
   synapse status                                     Show service status
 
 Column kinds:
@@ -245,7 +251,7 @@ Choice columns:
     return
   }
 
-  const KNOWN_COMMANDS = new Set([...getCliDataCommands(), "status"])
+  const KNOWN_COMMANDS = new Set([...getCliDataCommands(), "scheduler", "status"])
   if (!KNOWN_COMMANDS.has(command)) {
     console.error(`Unknown command: ${command}\nRun "synapse help" for usage.`)
     process.exit(1)
@@ -287,6 +293,11 @@ Choice columns:
   }
 
   try {
+    if (command === "scheduler") {
+      await handleSchedulerCommand(args.slice(1), (action, params = {}) => apiCall(info, action, params))
+      return
+    }
+
     switch (command) {
       case "tables": {
         const result = await apiCall(info, "listTables") as { data: unknown[] }
