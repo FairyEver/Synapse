@@ -620,16 +620,7 @@ class ContentSubmissionService {
     const pendingPushState = await pendingPushesService.readState(repository)
 
     if (pushed) {
-      void repositoryMaintenanceService.maybeRunAfterPush(repository, {
-        contentId: writeResult.id,
-        contentType: writeResult.type,
-      }).catch((error) => {
-        logger.warn("Post-push maintenance failed.", {
-          error,
-          repositoryUuid: repository.uuid,
-          writeResult,
-        })
-      })
+      this.schedulePostPushMaintenance(repository, writeResult)
     }
 
     return {
@@ -643,6 +634,22 @@ class ContentSubmissionService {
       pendingPushCount: pendingPushState.count,
       message: createMutationMessage(pushed, pendingPushState.count),
     }
+  }
+
+  private schedulePostPushMaintenance(
+    repository: SynapseRepositoryConfig,
+    writeResult: ContentWriteResult,
+  ): void {
+    void this.runPushExclusive(repository.uuid, () => repositoryMaintenanceService.maybeRunAfterPush(repository, {
+      contentId: writeResult.id,
+      contentType: writeResult.type,
+    })).catch((error) => {
+      logger.warn("Post-push maintenance failed.", {
+        error,
+        repositoryUuid: repository.uuid,
+        writeResult,
+      })
+    })
   }
 
   private async resolveActiveRepository(): Promise<SynapseRepositoryConfig> {
