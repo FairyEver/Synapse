@@ -375,6 +375,13 @@ class ContentSubmissionService {
     })
   }
 
+  async runRepositoryGitExclusive<T>(
+    repositoryUuid: string,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    return this.runPushExclusive(repositoryUuid, callback)
+  }
+
   private async updateContentWithConflictCheck(
     repository: SynapseRepositoryConfig,
     contentType: SynapseContentType,

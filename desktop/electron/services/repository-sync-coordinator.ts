@@ -232,16 +232,18 @@ class RepositorySyncCoordinator {
     })
 
     try {
-      const result = await repositoryGitService.syncRepository(repository, (event) => {
-        this.emitLegacyProgress(event)
-        const current = this.getSnapshot(repository.uuid)
+      const result = await contentSubmissionService.runRepositoryGitExclusive(repository.uuid, async () => {
+        return repositoryGitService.syncRepository(repository, (event) => {
+          this.emitLegacyProgress(event)
+          const current = this.getSnapshot(repository.uuid)
 
-        this.emitSnapshot({
-          ...current,
-          status: "syncing",
-          operation: "sync",
-          phase: "running",
-          message: event.statusText,
+          this.emitSnapshot({
+            ...current,
+            status: "syncing",
+            operation: "sync",
+            phase: "running",
+            message: event.statusText,
+          })
         })
       })
 
@@ -288,21 +290,23 @@ class RepositorySyncCoordinator {
         statusText: "正在准备整理...",
         percent: 0,
       })
-      const result = await repositoryMaintenanceService.runManualMaintenance(repository, (statusText) => {
-        this.emitLegacyProgress({
-          repositoryUuid: repository.uuid,
-          operation: "maintenance",
-          statusText,
-          percent: null,
-        })
-        const current = this.getSnapshot(repository.uuid)
+      const result = await contentSubmissionService.runRepositoryGitExclusive(repository.uuid, async () => {
+        return repositoryMaintenanceService.runManualMaintenance(repository, (statusText) => {
+          this.emitLegacyProgress({
+            repositoryUuid: repository.uuid,
+            operation: "maintenance",
+            statusText,
+            percent: null,
+          })
+          const current = this.getSnapshot(repository.uuid)
 
-        this.emitSnapshot({
-          ...current,
-          status: "syncing",
-          operation: "maintenance",
-          phase: "running",
-          message: statusText,
+          this.emitSnapshot({
+            ...current,
+            status: "syncing",
+            operation: "maintenance",
+            phase: "running",
+            message: statusText,
+          })
         })
       })
 

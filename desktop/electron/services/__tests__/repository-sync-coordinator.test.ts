@@ -18,6 +18,7 @@ const serviceMocks = vi.hoisted(() => ({
   },
   contentSubmissionService: {
     flushPendingPushes: vi.fn(),
+    runRepositoryGitExclusive: vi.fn(),
   },
   pendingPushesService: {
     countAll: vi.fn(),
@@ -176,6 +177,9 @@ describe("RepositorySyncCoordinator", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-05-02T10:00:00.000Z"))
     vi.resetAllMocks()
+    serviceMocks.contentSubmissionService.runRepositoryGitExclusive.mockImplementation(
+      async (_repositoryUuid: string, callback: () => Promise<unknown>) => callback(),
+    )
   })
 
   it("emits a synced snapshot when the pending queue is empty", async () => {
