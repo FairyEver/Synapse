@@ -26,6 +26,7 @@ type RepositoryExecutionState = {
   currentPromise: Promise<void> | null
   running: boolean
   rerunRequested: boolean
+  syncPromise: Promise<SynapseRepositoryOperationResult> | null
   retryTimer: NodeJS.Timeout | null
 }
 
@@ -79,6 +80,10 @@ class RepositorySyncCoordinator {
   async requestPush(repository: SynapseRepositoryConfig, reason: SyncRequestReason): Promise<void> {
     const state = this.getExecutionState(repository.uuid)
 
+    if (state.syncPromise) {
+      return state.syncPromise.then(() => this.requestPush(repository, reason))
+    }
+
     if (state.currentPromise) {
       state.rerunRequested = true
       return state.currentPromise
@@ -129,6 +134,21 @@ class RepositorySyncCoordinator {
       }
     }
 
+    const state = this.getExecutionState(repository.uuid)
+
+    if (state.syncPromise) {
+      return state.syncPromise
+    }
+
+    state.syncPromise = this.runSync(repository, state)
+
+    return state.syncPromise
+  }
+
+  private async runSync(
+    repository: SynapseRepositoryConfig,
+    state: RepositoryExecutionState,
+  ): Promise<SynapseRepositoryOperationResult> {
     this.emitSnapshot({
       ...createEmptySnapshot(repository.uuid),
       status: "syncing",
@@ -156,6 +176,8 @@ class RepositorySyncCoordinator {
     } catch (error) {
       await this.handleOperationFailure(repository, "sync", error)
       throw error
+    } finally {
+      state.syncPromise = null
     }
   }
 
@@ -197,6 +219,7 @@ class RepositorySyncCoordinator {
         currentPromise: null,
         running: false,
         rerunRequested: false,
+        syncPromise: null,
         retryTimer: null,
       }
       this.executions.set(repositoryUuid, state)

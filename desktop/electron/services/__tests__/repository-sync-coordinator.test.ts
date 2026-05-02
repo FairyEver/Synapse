@@ -332,6 +332,37 @@ describe("RepositorySyncCoordinator", () => {
     })
   })
 
+  it("merges duplicate manual sync requests when there are no pending pushes", async () => {
+    const syncResult = {
+      operation: "sync" as const,
+      repository: {
+        repositoryUuid: "repo-1",
+        localPath: "/tmp/synapse-docs",
+        status: "ready" as const,
+        isGitRepository: true,
+        gitRootPath: "/tmp/synapse-docs",
+      },
+      completedAt: "2026-05-02T10:00:15.000Z",
+    }
+    const sync = createDeferred<typeof syncResult>()
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.repositoryGitService.syncRepository.mockReturnValue(sync.promise)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const firstRequest = coordinator.requestSync(repository, "manual")
+    const secondRequest = coordinator.requestSync(repository, "manual")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
+    })
+    sync.resolve(syncResult)
+
+    await expect(firstRequest).resolves.toEqual(syncResult)
+    await expect(secondRequest).resolves.toEqual(syncResult)
+    expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
+  })
+
   it("merges duplicate push requests while a push is already running", async () => {
     const pendingState = createPendingState([createPendingEntry()])
     serviceMocks.pendingPushesService.readState
