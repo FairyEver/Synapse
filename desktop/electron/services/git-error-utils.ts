@@ -1,15 +1,51 @@
-export function formatGitFailureMessage(
-  output: string,
-  fallbackMessage: string,
-): string {
-  const normalizedOutput = output.trim()
-  const firstLine = normalizedOutput
+import type { SynapseRepositorySyncFailureCategory } from "../../src/types/repository"
+
+export type GitFailureInfo = {
+  category: SynapseRepositorySyncFailureCategory
+  message: string
+  detail?: string
+  recoverable: boolean
+  primaryAction: "retry" | "open-settings" | "resolve-git" | null
+}
+
+function firstUsefulLine(output: string): string | undefined {
+  return output
+    .trim()
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0)
-  const loweredOutput = normalizedOutput.toLowerCase()
+}
 
-  // 认证相关
+export function classifyGitFailure(output: string, fallbackMessage: string): GitFailureInfo {
+  const normalizedOutput = output.trim()
+  const loweredOutput = normalizedOutput.toLowerCase()
+  const detail = firstUsefulLine(normalizedOutput)
+
+  if (
+    loweredOutput.includes("could not resolve host")
+    || loweredOutput.includes("failed to connect")
+    || loweredOutput.includes("network is unreachable")
+    || loweredOutput.includes("connection reset")
+  ) {
+    return {
+      category: "network",
+      message: "网络不可用，稍后自动重试。",
+      detail,
+      recoverable: true,
+      primaryAction: "retry",
+    }
+  }
+
+  if (loweredOutput.includes("connection timed out") || loweredOutput.includes("operation timed out")) {
+    return {
+      category: "timeout",
+      message: "同步超时，稍后自动重试。",
+      detail,
+      recoverable: true,
+      primaryAction: "retry",
+    }
+  }
+
   if (
     loweredOutput.includes("authentication failed")
     || loweredOutput.includes("could not read username")
@@ -17,63 +53,88 @@ export function formatGitFailureMessage(
     || loweredOutput.includes("permission denied")
     || loweredOutput.includes("fatal: could not read from remote repository")
   ) {
-    return "Git 认证失败。请检查系统凭证、SSH Key 或 credential.helper 配置。"
+    return {
+      category: "auth",
+      message: "Git 认证失败，请检查系统凭证或 SSH Key。",
+      detail,
+      recoverable: false,
+      primaryAction: "resolve-git",
+    }
   }
 
-  // 仓库不存在
-  if (
-    loweredOutput.includes("repository not found")
-    || loweredOutput.includes("not found")
-    || loweredOutput.includes("no such remote")
-  ) {
-    return "当前仓库没有可用的远程配置，或当前账号没有访问权限。"
-  }
-
-  // 网络问题
-  if (
-    loweredOutput.includes("could not resolve host")
-    || loweredOutput.includes("failed to connect")
-    || loweredOutput.includes("connection timed out")
-    || loweredOutput.includes("network is unreachable")
-    || loweredOutput.includes("connection reset")
-  ) {
-    return "无法连接到远程仓库。请检查网络连接、代理设置或仓库域名。"
-  }
-
-  // 分支问题
   if (
     loweredOutput.includes("there is no tracking information for the current branch")
     || loweredOutput.includes("no upstream configured for branch")
     || loweredOutput.includes("has no upstream branch")
   ) {
-    return "当前分支还没有配置上游分支，暂时无法在 Synapse 中执行同步。"
+    return {
+      category: "upstream-missing",
+      message: "当前分支还没有配置上游分支。",
+      detail,
+      recoverable: false,
+      primaryAction: "resolve-git",
+    }
   }
 
-  // 快进失败
-  if (loweredOutput.includes("not possible to fast-forward")) {
-    return "当前仓库无法快进同步，请先在你常用的 Git 工具里处理分支分叉。"
+  if (
+    loweredOutput.includes("not possible to fast-forward")
+    || loweredOutput.includes("non-fast-forward")
+    || loweredOutput.includes("[rejected]")
+    || loweredOutput.includes("fetch first")
+    || loweredOutput.includes("merge conflict")
+    || loweredOutput.includes("could not apply")
+  ) {
+    return {
+      category: "diverged",
+      message: "仓库分支需要手动处理后再同步。",
+      detail,
+      recoverable: false,
+      primaryAction: "resolve-git",
+    }
   }
 
-  // 非 Git 仓库
   if (loweredOutput.includes("not a git repository")) {
-    return "当前目录不是 Git 仓库，无法执行同步。"
+    return {
+      category: "not-git",
+      message: "当前目录不是 Git 仓库。",
+      detail,
+      recoverable: false,
+      primaryAction: "open-settings",
+    }
   }
 
-  // .gitignore 忽略
   if (
     loweredOutput.includes("paths are ignored by one of your .gitignore files")
     || loweredOutput.includes("the following paths are ignored")
   ) {
-    return "目标内容目录被 .gitignore 忽略了，请先调整仓库规则后再试。"
+    return {
+      category: "ignored-paths",
+      message: "内容目录被 .gitignore 忽略，请调整仓库规则。",
+      detail,
+      recoverable: false,
+      primaryAction: "resolve-git",
+    }
   }
 
-  // 无变更
-  if (
-    loweredOutput.includes("nothing to commit")
-    || loweredOutput.includes("no changes added to commit")
-  ) {
-    return "当前没有可提交的改动。"
+  if (loweredOutput.includes("nothing to commit") || loweredOutput.includes("no changes added to commit")) {
+    return {
+      category: "no-changes",
+      message: "当前没有可提交的改动。",
+      detail,
+      recoverable: false,
+      primaryAction: null,
+    }
   }
 
-  return firstLine ? `${fallbackMessage}\n${firstLine}` : fallbackMessage
+  return {
+    category: "unknown",
+    message: detail ? `${fallbackMessage}\n${detail}` : fallbackMessage,
+    detail,
+    recoverable: false,
+    primaryAction: null,
+  }
+}
+
+export function formatGitFailureMessage(output: string, fallbackMessage: string): string {
+  return classifyGitFailure(output, fallbackMessage).message
 }

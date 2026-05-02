@@ -2,6 +2,43 @@ import type { SynapseRepositoryConfig } from "./config"
 
 export type SynapseRepositoryOperationKind = "sync" | "push" | "maintenance" | "initialize"
 
+export const SYNAPSE_REPOSITORY_SYNC_FAILURE_CATEGORIES = [
+  "network",
+  "timeout",
+  "auth",
+  "upstream-missing",
+  "diverged",
+  "missing-path",
+  "not-git",
+  "ignored-paths",
+  "git-missing",
+  "no-changes",
+  "unknown",
+] as const
+
+export type SynapseRepositorySyncFailureCategory =
+  (typeof SYNAPSE_REPOSITORY_SYNC_FAILURE_CATEGORIES)[number]
+
+export type SynapseRepositorySyncStatus =
+  | "synced"
+  | "syncing"
+  | "pending"
+  | "offline"
+  | "attention"
+
+export type SynapseRepositorySyncPhase =
+  | "preparing"
+  | "running"
+  | "retry-wait"
+  | "blocked"
+  | "completed"
+
+export type SynapseRepositorySyncPrimaryAction =
+  | "retry"
+  | "open-settings"
+  | "resolve-git"
+  | null
+
 export type SynapseRepositoryLocalStatus = "missing" | "ready"
 
 export type SynapseRepositoryLocalState = {
@@ -66,7 +103,32 @@ export type SynapsePendingPushEntry = {
   createdAt: string
   retryCount: number
   lastError: string | null
+  lastErrorCategory?: SynapseRepositorySyncFailureCategory | null
+  lastAttemptAt?: string | null
+  nextRetryAt?: string | null
   title: string | null
+}
+
+export type SynapseRepositorySyncSnapshot = {
+  repositoryUuid: string
+  status: SynapseRepositorySyncStatus
+  operation: SynapseRepositoryOperationKind | null
+  phase: SynapseRepositorySyncPhase
+  pendingCount: number
+  pendingItems: SynapsePendingPushEntry[]
+  message: string
+  detail?: string
+  failureCategory?: SynapseRepositorySyncFailureCategory | null
+  lastAttemptAt?: string | null
+  nextRetryAt?: string | null
+  retryCount: number
+  canRetryNow: boolean
+  primaryAction: SynapseRepositorySyncPrimaryAction
+}
+
+export type SynapseRepositorySyncSnapshotUpdatedEvent = {
+  repositoryUuid: string
+  snapshot: SynapseRepositorySyncSnapshot
 }
 
 export type SynapsePendingPushState = {
