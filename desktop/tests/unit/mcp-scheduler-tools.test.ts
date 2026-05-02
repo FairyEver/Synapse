@@ -16,6 +16,17 @@ describe("MCP Scheduler tools", () => {
     expect(names).toContain("scheduler_task_disable")
   })
 
+  it("lists second-phase Scheduler MCP tools and omits hidden tools", () => {
+    const names = buildAllMcpTools().map((tool) => tool.name)
+    expect(names).toContain("scheduler_task_runs_list")
+    expect(names).toContain("scheduler_task_runtime_status")
+    expect(names).toContain("scheduler_action_types_list")
+    expect(names).toContain("scheduler_task_update")
+    expect(names).not.toContain("scheduler_task_delete")
+    expect(names).not.toContain("scheduler_task_run_now")
+    expect(names).not.toContain("scheduler_task_stop_run")
+  })
+
   it("maps Scheduler MCP tools to Scheduler actions", () => {
     expect(MCP_TOOL_ACTIONS.scheduler_task_list).toBe("schedulerTaskList")
     expect(MCP_TOOL_ACTIONS.scheduler_task_get).toBe("schedulerTaskGet")

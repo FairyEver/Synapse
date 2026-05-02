@@ -29,6 +29,24 @@ export type SchedulerTaskCreateParams = {
   readonly missedRunPolicy?: "skip" | "run_once"
 }
 
+export type SchedulerTaskUpdateParams = {
+  readonly taskId: string
+  readonly name?: string
+  readonly description?: string
+  readonly cwd?: string
+  readonly schedule?: SchedulerSchedule
+  readonly missedRunPolicy?: "skip" | "run_once"
+}
+
+export type SchedulerTaskRunsListParams = {
+  readonly taskId: string
+  readonly limit?: number
+}
+
+export type SchedulerTaskRuntimeStatusParams = {
+  readonly taskId?: string
+}
+
 export type SchedulerTaskListParams = {
   readonly enabled?: boolean
   readonly limit?: number
@@ -49,6 +67,10 @@ const schedulerCapabilities = [
   { action: "schedulerTaskCreate", mcpTool: "scheduler_task_create", cliCommand: "scheduler create", mutates: true },
   { action: "schedulerTaskEnable", mcpTool: "scheduler_task_enable", cliCommand: "scheduler enable", mutates: true },
   { action: "schedulerTaskDisable", mcpTool: "scheduler_task_disable", cliCommand: "scheduler disable", mutates: true },
+  { action: "schedulerTaskRunsList", mcpTool: "scheduler_task_runs_list", cliCommand: "scheduler runs", mutates: false },
+  { action: "schedulerTaskRuntimeStatus", mcpTool: "scheduler_task_runtime_status", cliCommand: "scheduler status", mutates: false },
+  { action: "schedulerActionTypesList", mcpTool: "scheduler_action_types_list", cliCommand: "scheduler actions", mutates: false },
+  { action: "schedulerTaskUpdate", mcpTool: "scheduler_task_update", cliCommand: "scheduler update", mutates: true },
 ] as const
 
 export const SCHEDULER_DOMAIN: CapabilityDomainDefinition = {
@@ -149,6 +171,70 @@ export function buildSchedulerTools(): McpToolDefinition[] {
       name: "scheduler_task_disable",
       description: "Disable one scheduled task by taskId. This prevents future scheduled runs and does not stop a currently running run.",
       inputSchema: { type: "object", properties: { taskId: taskIdProperty }, required: ["taskId"] },
+    },
+    {
+      name: "scheduler_task_runs_list",
+      description: "List recent runs for one scheduled task. This is read-only and does not stop or start runs.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: taskIdProperty,
+          limit: { type: "number", description: "Optional maximum number of runs. Defaults to 20 and caps at 100." },
+        },
+        required: ["taskId"],
+      },
+    },
+    {
+      name: "scheduler_task_runtime_status",
+      description: "Inspect Scheduler runtime state. Pass taskId for one task, or omit it for all tasks.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string", description: "Optional scheduled task id." },
+        },
+      },
+    },
+    {
+      name: "scheduler_action_types_list",
+      description: "List task action types that can be used when creating scheduled tasks, including public config fields and defaults.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "scheduler_task_update",
+      description: "Conservatively update a scheduled task. Only name, description, cwd, schedule, and missedRunPolicy are accepted. Use scheduler_task_enable or scheduler_task_disable for enabled state. Task action, scope, delete, manual run, and stop-run are not exposed through MCP.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: taskIdProperty,
+          name: { type: "string", description: "Optional new task name." },
+          description: { type: "string", description: "Optional new task description." },
+          cwd: { type: "string", description: "Optional working directory." },
+          schedule: {
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["cron"] },
+                  expr: { type: "string", description: "Five-field cron expression." },
+                  timezone: { type: "string" },
+                },
+                required: ["type", "expr"],
+              },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["interval"] },
+                  everyMinutes: { type: "number", description: "Positive integer interval in minutes." },
+                  anchor: { type: "string", enum: ["created_at", "last_completed_at"] },
+                },
+                required: ["type", "everyMinutes"],
+              },
+            ],
+          },
+          missedRunPolicy: { type: "string", enum: ["skip", "run_once"] },
+        },
+        required: ["taskId"],
+      },
     },
   ]
 }
