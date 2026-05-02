@@ -60,4 +60,50 @@ describe("MCP Scheduler tools", () => {
       }],
     })
   })
+
+  it("routes new Scheduler MCP tools through their action names", async () => {
+    const executeTool = vi.fn(async () => ({
+      ok: true,
+      data: [{ id: "run:1", status: "success" }],
+      total: 1,
+    }))
+    const response = await processMcpRequest({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "scheduler_task_runs_list",
+        arguments: { taskId: "task:1" },
+      },
+    }, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
+
+    expect(executeTool).toHaveBeenCalledWith("scheduler_task_runs_list", { taskId: "task:1" })
+    expect(response.kind).toBe("result")
+    if (response.kind !== "result") return
+    expect(response.result).toEqual({
+      content: [{
+        type: "text",
+        text: JSON.stringify([{ id: "run:1", status: "success" }], null, 2),
+      }],
+    })
+  })
+
+  it("keeps hidden Scheduler MCP tools unknown", async () => {
+    const response = await processMcpRequest({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "scheduler_task_delete",
+        arguments: { taskId: "task:1" },
+      },
+    }, SYNAPSE_DATA_SERVER_IDENTITY, async () => ({ ok: true }))
+
+    expect(response.kind).toBe("result")
+    if (response.kind !== "result") return
+    expect(response.result).toEqual({
+      content: [{ type: "text", text: "Unknown tool: scheduler_task_delete" }],
+      isError: true,
+    })
+  })
 })
