@@ -1,0 +1,231 @@
+import type { Mock } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { EventBus } from "../../runtime/event-bus"
+import type { SynapseRepositoryConfig } from "../../../src/types/config"
+import type { SynapsePendingPushEntry, SynapsePendingPushState } from "../../../src/types/repository"
+import { RepositorySyncCoordinator } from "../repository-sync-coordinator"
+
+const serviceMocks = vi.hoisted(() => ({
+  configStore: {
+    load: vi.fn(),
+  },
+  contentIndexService: {
+    syncIndex: vi.fn(),
+  },
+  contentSubmissionService: {
+    flushPendingPushes: vi.fn(),
+  },
+  pendingPushesService: {
+    countAll: vi.fn(),
+    markAttempt: vi.fn(),
+    markFailure: vi.fn(),
+    readState: vi.fn(),
+  },
+  repositoryGitService: {
+    syncRepository: vi.fn(),
+  },
+  repositoryMaintenanceService: {
+    runManualMaintenance: vi.fn(),
+  },
+  repositoryStore: {
+    getRepositoryState: vi.fn(),
+  },
+}))
+
+vi.mock("../config-store", () => ({
+  configStore: serviceMocks.configStore,
+}))
+
+vi.mock("../content-index-service", () => ({
+  contentIndexService: serviceMocks.contentIndexService,
+}))
+
+vi.mock("../content-submission-service", () => ({
+  contentSubmissionService: serviceMocks.contentSubmissionService,
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => ({
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  }),
+}))
+
+vi.mock("../pending-pushes-service", () => ({
+  pendingPushesService: serviceMocks.pendingPushesService,
+}))
+
+vi.mock("../repository-git-service", () => ({
+  repositoryGitService: serviceMocks.repositoryGitService,
+}))
+
+vi.mock("../repository-maintenance-service", () => ({
+  repositoryMaintenanceService: serviceMocks.repositoryMaintenanceService,
+}))
+
+vi.mock("../repository-store", () => ({
+  repositoryStore: serviceMocks.repositoryStore,
+}))
+
+const repository: SynapseRepositoryConfig = {
+  uuid: "repo-1",
+  name: "Docs",
+  localPath: "/tmp/synapse-docs",
+  contentDirs: {},
+}
+
+const emptyPendingState: SynapsePendingPushState = {
+  count: 0,
+  items: [],
+}
+
+function createPendingEntry(overrides: Partial<SynapsePendingPushEntry> = {}): SynapsePendingPushEntry {
+  return {
+    id: 1,
+    action: "save",
+    commitHash: null,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    lastError: null,
+    lastErrorCategory: null,
+    retryCount: 0,
+    targetId: "rule-1",
+    title: "Rule 1",
+    ...overrides,
+  }
+}
+
+function createPendingState(items: SynapsePendingPushEntry[]): SynapsePendingPushState {
+  return {
+    count: items.length,
+    items,
+  }
+}
+
+function createEventBus(): EventBus {
+  return {
+    emit: vi.fn(),
+    emitInternal: vi.fn(),
+    on: vi.fn(() => vi.fn()),
+    onType: vi.fn(() => vi.fn()),
+  }
+}
+
+function lastSnapshotFrom(eventBus: EventBus) {
+  const emit = eventBus.emit as Mock
+  const lastCall = emit.mock.calls.at(-1)
+
+  return lastCall?.[0].payload.snapshot
+}
+
+describe("RepositorySyncCoordinator", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-05-02T10:00:00.000Z"))
+    vi.clearAllMocks()
+  })
+
+  it("emits a synced snapshot when the pending queue is empty", async () => {
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const snapshot = await coordinator.refreshSnapshot(repository)
+
+    expect(snapshot).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "synced",
+      operation: null,
+      phase: "completed",
+      pendingCount: 0,
+      message: "已同步",
+    })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "repository",
+      type: "repository.syncSnapshotUpdated",
+      payload: {
+        repositoryUuid: "repo-1",
+        snapshot,
+      },
+      timestamp: "2026-05-02T10:00:00.000Z",
+    }))
+  })
+
+  it("marks network push failures as offline retry-wait snapshots", async () => {
+    const pendingItem = createPendingEntry()
+    const failedItem = createPendingEntry({
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:00:30.000Z",
+      retryCount: 1,
+    })
+    const pendingState = createPendingState([pendingItem])
+    const failedState = createPendingState([failedItem])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(failedState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    serviceMocks.pendingPushesService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockRejectedValue(
+      new Error("fatal: unable to access: Could not resolve host: github.com"),
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await coordinator.requestPush(repository, "manual")
+
+    expect(serviceMocks.pendingPushesService.markFailure).toHaveBeenCalledWith(
+      repository,
+      "网络不可用，稍后自动重试。",
+      [1],
+      {
+        category: "network",
+        nextRetryAt: "2026-05-02T10:00:30.000Z",
+      },
+    )
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "offline",
+      phase: "retry-wait",
+      failureCategory: "network",
+      nextRetryAt: "2026-05-02T10:00:30.000Z",
+      pendingCount: 1,
+      primaryAction: "retry",
+    })
+  })
+
+  it("merges duplicate push requests while a push is already running", async () => {
+    const pendingState = createPendingState([createPendingEntry()])
+    serviceMocks.pendingPushesService.readState
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValueOnce(emptyPendingState)
+      .mockResolvedValue(emptyPendingState)
+    serviceMocks.pendingPushesService.markAttempt.mockResolvedValue(pendingState)
+    let resolveFlush: () => void = () => {}
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockImplementation(
+      () => new Promise<void>((resolve) => {
+        resolveFlush = resolve
+      }),
+    )
+    serviceMocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const firstRequest = coordinator.requestPush(repository, "manual")
+    const secondRequest = coordinator.requestPush(repository, "content-saved")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    })
+    resolveFlush()
+    await Promise.all([firstRequest, secondRequest])
+
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "synced",
+      pendingCount: 0,
+    })
+  })
+})
