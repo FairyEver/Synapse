@@ -4,7 +4,7 @@ import { createSynapseActionRouter } from "../action-router"
 
 describe("createSynapseActionRouter", () => {
   it("routes Data Store actions to the Data Store dispatcher", async () => {
-    const dataStoreDispatch = vi.fn(() => ({ ok: true, data: ["tables"] }))
+    const dataStoreDispatch = vi.fn(() => ({ ok: true as const, data: ["tables"] }))
     const schedulerDispatch = vi.fn()
     const router = createSynapseActionRouter({
       dataStoreDispatch,
@@ -21,7 +21,7 @@ describe("createSynapseActionRouter", () => {
 
   it("routes Scheduler actions to the Scheduler dispatcher", async () => {
     const dataStoreDispatch = vi.fn()
-    const schedulerDispatch = vi.fn(async () => ({ ok: true, data: [] }))
+    const schedulerDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
     const router = createSynapseActionRouter({
       dataStoreDispatch,
       schedulerDispatch,
