@@ -43,6 +43,7 @@ import {
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
+  repoSyncCoordinatorDescriptor,
   repoWatchDescriptor,
   type TrayShowOrCreateCallback,
 } from "./descriptors"
@@ -84,6 +85,7 @@ export function buildServiceRegistry(
   registry.register(repoWatchDescriptor)
   registry.register(repoMaintenanceDescriptor)
   registry.register(repoPendingPushesDescriptor)
+  registry.register(repoSyncCoordinatorDescriptor)
   registry.register(createUiTrayDescriptor(options.trayShowOrCreate))
 
   return registry

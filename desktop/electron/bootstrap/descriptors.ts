@@ -36,6 +36,7 @@ import { initDataStore, shutdownDataStore } from "../data-store"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { pendingPushesService } from "../services/pending-pushes-service"
+import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService } from "../services/agent-runtime"
 import { createProviderConfigProjectService } from "../services/provider-config"
@@ -242,6 +243,17 @@ export const repoPendingPushesDescriptor: ServiceDescriptor<typeof pendingPushes
   criticality: "degraded",
   dependsOn: ["core.data-store"],
   create: () => pendingPushesService,
+}
+
+export const repoSyncCoordinatorDescriptor: ServiceDescriptor<RepositorySyncCoordinator> = {
+  id: "repo.sync-coordinator",
+  criticality: "degraded",
+  dependsOn: ["core.event-bus", "repo.pending-pushes"],
+  create(ctx) {
+    return new RepositorySyncCoordinator({
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
+    })
+  },
 }
 
 /**

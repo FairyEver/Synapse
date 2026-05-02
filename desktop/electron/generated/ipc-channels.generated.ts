@@ -78,6 +78,7 @@ export const IPC_CHANNELS = {
     "checkInitializationPreview": "synapse:repository:check-initialization-preview",
     "createLocalRepository": "synapse:repository:create-local-repository",
     "getPendingPushes": "synapse:repository:get-pending-pushes",
+    "getSyncSnapshots": "synapse:repository:get-sync-snapshots",
     "initializeStructure": "synapse:repository:initialize-structure",
     "chooseDirectory": "synapse:repository:choose-directory",
     "validateDirectory": "synapse:repository:validate-directory",

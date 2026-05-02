@@ -19,6 +19,7 @@ export {
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
+  repoSyncCoordinatorDescriptor,
   repoWatchDescriptor,
 } from "./descriptors"
 export type { TrayShowOrCreateCallback } from "./descriptors"

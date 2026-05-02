@@ -13,12 +13,11 @@ import type { SynapseRepositoryConfig } from "../../../src/types/config"
 import type { SynapseCreateLocalRepositoryPayload, SynapseRepositoryValidationResult } from "../../../src/types/repository"
 import { configStore } from "../../services/config-store"
 import { contentIndexService } from "../../services/content-index-service"
-import { repositoryMaintenanceService } from "../../services/repository-maintenance-service"
 import { contentSubmissionService } from "../../services/content-submission-service"
-import { repositoryGitService } from "../../services/repository-git-service"
 import { createMainLogger } from "../../services/log-store"
 import { repositoryStore } from "../../services/repository-store"
 import { repositoryStructureService } from "../../services/repository-structure-service"
+import { RepositorySyncCoordinator } from "../../services/repository-sync-coordinator"
 
 const logger = createMainLogger("ipc.repository")
 
@@ -74,6 +73,20 @@ const createLocalRepositoryResultSchema = z.object({
   repository: repositoryConfigSchema,
 })
 
+const syncFailureCategorySchema = z.enum([
+  "network",
+  "timeout",
+  "auth",
+  "upstream-missing",
+  "diverged",
+  "missing-path",
+  "not-git",
+  "ignored-paths",
+  "git-missing",
+  "no-changes",
+  "unknown",
+])
+
 const pendingPushEntrySchema = z.object({
   id: z.number(),
   commitHash: z.string().nullable(),
@@ -82,12 +95,32 @@ const pendingPushEntrySchema = z.object({
   createdAt: z.string(),
   retryCount: z.number(),
   lastError: z.string().nullable(),
+  lastErrorCategory: syncFailureCategorySchema.nullable().optional(),
+  lastAttemptAt: z.string().nullable().optional(),
+  nextRetryAt: z.string().nullable().optional(),
   title: z.string().nullable(),
 })
 
 const pendingPushesSchema = z.object({
   count: z.number(),
   items: z.array(pendingPushEntrySchema),
+})
+
+const syncSnapshotSchema = z.object({
+  repositoryUuid: z.string(),
+  status: z.enum(["synced", "syncing", "pending", "offline", "attention"]),
+  operation: z.enum(["sync", "push", "maintenance", "initialize"]).nullable(),
+  phase: z.enum(["preparing", "running", "retry-wait", "blocked", "completed"]),
+  pendingCount: z.number(),
+  pendingItems: z.array(pendingPushEntrySchema),
+  message: z.string(),
+  detail: z.string().optional(),
+  failureCategory: syncFailureCategorySchema.nullable().optional(),
+  lastAttemptAt: z.string().nullable().optional(),
+  nextRetryAt: z.string().nullable().optional(),
+  retryCount: z.number(),
+  canRetryNow: z.boolean(),
+  primaryAction: z.enum(["retry", "open-settings", "resolve-git"]).nullable(),
 })
 
 const initializeResultSchema = z.object({
@@ -173,6 +206,16 @@ export const repositoryIpcModule: IpcModule = {
       handler: async (_ctx, request: { repositoryUuid: string }) => {
         const repository = await resolveRepositoryConfig(request.repositoryUuid)
         return contentSubmissionService.readPendingPushState(repository)
+      },
+    },
+    getSyncSnapshots: {
+      kind: "invoke",
+      channel: "synapse:repository:get-sync-snapshots",
+      request: z.void(),
+      response: z.array(syncSnapshotSchema),
+      handler: async (ctx) => {
+        const coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
+        return coordinator.getSnapshots()
       },
     },
     initializeStructure: {
@@ -269,17 +312,13 @@ export const repositoryIpcModule: IpcModule = {
         logger.info(`Handling repository.sync request. repositoryUuid: ${request.repositoryUuid}`)
         const repository = await resolveRepositoryConfig(request.repositoryUuid)
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
+        const coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
 
         try {
-          const result = await repositoryGitService.syncRepository(repository, (progressEvent) => {
-            eventBus.emit({
-              domain: "repository",
-              type: "repository.progress",
-              payload: progressEvent,
-              timestamp: new Date().toISOString(),
-            })
-          })
-          await contentIndexService.syncIndex(repository)
+          const result = await coordinator.requestSync(repository, "manual")
+          if (result.operation === "sync") {
+            await contentIndexService.syncIndex(repository)
+          }
           const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
 
           eventBus.emit({
@@ -319,39 +358,10 @@ export const repositoryIpcModule: IpcModule = {
       handler: async (ctx, request: { repositoryUuid: string }) => {
         const repository = await resolveRepositoryConfig(request.repositoryUuid)
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
+        const coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
 
         try {
-          eventBus.emit({
-            domain: "repository",
-            type: "repository.progress",
-            payload: {
-              repositoryUuid: request.repositoryUuid,
-              operation: "maintenance",
-              statusText: "正在准备整理...",
-              percent: 0,
-            },
-            timestamp: new Date().toISOString(),
-          })
-
-          const maintenanceResult = await repositoryMaintenanceService.runManualMaintenance(
-            repository,
-            (statusText) => {
-              eventBus.emit({
-                domain: "repository",
-                type: "repository.progress",
-                payload: {
-                  repositoryUuid: request.repositoryUuid,
-                  operation: "maintenance",
-                  statusText,
-                  percent: null,
-                },
-                timestamp: new Date().toISOString(),
-              })
-            },
-          )
-
-          const repositoryState = await repositoryStore.getRepositoryState(repository)
-          const completedAt = new Date().toISOString()
+          const result = await coordinator.requestMaintenance(repository)
           const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
 
           eventBus.emit({
@@ -359,8 +369,8 @@ export const repositoryIpcModule: IpcModule = {
             type: "repository.updated",
             payload: {
               repositoryUuid: request.repositoryUuid,
-              operation: "maintenance",
-              completedAt,
+              operation: result.operation,
+              completedAt: result.completedAt,
             },
             timestamp: new Date().toISOString(),
           })
@@ -374,13 +384,7 @@ export const repositoryIpcModule: IpcModule = {
             timestamp: new Date().toISOString(),
           })
 
-          return {
-            operation: "maintenance" as const,
-            repository: repositoryState,
-            completedAt,
-            message: maintenanceResult.message,
-            pendingPushCount: maintenanceResult.pendingPushCount,
-          }
+          return result
         } catch (error) {
           logger.error(`repository.runMaintenance request failed. repositoryUuid: ${request.repositoryUuid}, error: ${error}`)
           throw error
@@ -395,34 +399,10 @@ export const repositoryIpcModule: IpcModule = {
       handler: async (ctx, request: { repositoryUuid: string }) => {
         const repository = await resolveRepositoryConfig(request.repositoryUuid)
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
+        const coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
 
         try {
-          eventBus.emit({
-            domain: "repository",
-            type: "repository.progress",
-            payload: {
-              repositoryUuid: request.repositoryUuid,
-              operation: "push",
-              statusText: "正在准备推送...",
-              percent: 0,
-            },
-            timestamp: new Date().toISOString(),
-          })
-
-          await contentSubmissionService.flushPendingPushes(repository, (statusText) => {
-            eventBus.emit({
-              domain: "repository",
-              type: "repository.progress",
-              payload: {
-                repositoryUuid: request.repositoryUuid,
-                operation: "push",
-                statusText,
-                percent: null,
-              },
-              timestamp: new Date().toISOString(),
-            })
-          })
-
+          await coordinator.requestPush(repository, "manual")
           const repositoryState = await repositoryStore.getRepositoryState(repository)
           const completedAt = new Date().toISOString()
           const pendingPushes = await contentSubmissionService.readPendingPushState(repository)

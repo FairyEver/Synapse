@@ -11,6 +11,7 @@ import type { DataStoreChangeEvent } from "../src/types/data-store"
 import type {
   SynapsePendingPushUpdatedEvent,
   SynapseRepositoryProgressEvent,
+  SynapseRepositorySyncSnapshotUpdatedEvent,
   SynapseRepositoryUpdatedEvent,
 } from "../src/types/repository"
 import type { SynapseAppUpdateState } from "../src/types/update"
@@ -89,6 +90,7 @@ const IPC_CHANNELS = {
     "checkInitializationPreview": "synapse:repository:check-initialization-preview",
     "createLocalRepository": "synapse:repository:create-local-repository",
     "getPendingPushes": "synapse:repository:get-pending-pushes",
+    "getSyncSnapshots": "synapse:repository:get-sync-snapshots",
     "initializeStructure": "synapse:repository:initialize-structure",
     "chooseDirectory": "synapse:repository:choose-directory",
     "validateDirectory": "synapse:repository:validate-directory",
@@ -371,6 +373,7 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.repository.flushPendingPushes)({ repositoryUuid }),
     getPendingPushes: (repositoryUuid) =>
       invoke(IPC_CHANNELS.repository.getPendingPushes)({ repositoryUuid }),
+    getSyncSnapshots: invoke(IPC_CHANNELS.repository.getSyncSnapshots),
     getStates: invoke(IPC_CHANNELS.repository.getStates),
     initializeStructure: (repositoryUuid) =>
       invoke(IPC_CHANNELS.repository.initializeStructure)({ repositoryUuid }),
@@ -378,6 +381,11 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       "repository",
       "repository.pendingPushesUpdated",
+    ),
+    onSyncSnapshotUpdated: createDomainEventPayloadSubscription<SynapseRepositorySyncSnapshotUpdatedEvent>(
+      subscribe,
+      "repository",
+      "repository.syncSnapshotUpdated",
     ),
     runMaintenance: (repositoryUuid) =>
       invoke(IPC_CHANNELS.repository.runMaintenance)({ repositoryUuid }),

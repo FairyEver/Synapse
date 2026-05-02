@@ -116,6 +116,8 @@ import type {
   SynapsePendingPushState,
   SynapsePendingPushUpdatedEvent,
   SynapseRepositoryProgressEvent,
+  SynapseRepositorySyncSnapshot,
+  SynapseRepositorySyncSnapshotUpdatedEvent,
   SynapseRepositoryUpdatedEvent,
   SynapseRepositoryValidationResult,
 } from "./repository"
@@ -326,11 +328,15 @@ export type SynapseBridge = {
     chooseDirectory: () => Promise<string | null>
     flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     getPendingPushes: (repositoryUuid: string) => Promise<SynapsePendingPushState>
+    getSyncSnapshots: () => Promise<SynapseRepositorySyncSnapshot[]>
     getStates: () => Promise<SynapseRepositoryLocalState[]>
     initializeStructure: (
       repositoryUuid: string,
     ) => Promise<SynapseRepositoryInitializationResult>
     onPendingPushesUpdated: (listener: (payload: SynapsePendingPushUpdatedEvent) => void) => () => void
+    onSyncSnapshotUpdated: (
+      listener: (payload: SynapseRepositorySyncSnapshotUpdatedEvent) => void,
+    ) => () => void
     runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
     onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
