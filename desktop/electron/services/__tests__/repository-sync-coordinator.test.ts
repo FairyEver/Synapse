@@ -748,6 +748,62 @@ describe("RepositorySyncCoordinator", () => {
     })
   })
 
+  it("preserves failed sync snapshot when queued push has no pending work", async () => {
+    const sync = createDeferred<never>()
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.repositoryGitService.syncRepository.mockReturnValue(sync.promise)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const syncRequest = coordinator.requestSync(repository, "manual")
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositoryGitService.syncRepository).toHaveBeenCalledTimes(1)
+    })
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+
+    sync.reject(new Error("fatal: not a git repository"))
+
+    await expect(syncRequest).rejects.toThrow("not a git repository")
+    await expect(pushRequest).rejects.toThrow("not a git repository")
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).not.toHaveBeenCalled()
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "attention",
+      operation: "sync",
+      phase: "blocked",
+      failureCategory: "not-git",
+    })
+  })
+
+  it("preserves failed maintenance snapshot when queued push has no pending work", async () => {
+    const maintenance = createDeferred<never>()
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.repositoryMaintenanceService.runManualMaintenance.mockReturnValue(maintenance.promise)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const maintenanceRequest = coordinator.requestMaintenance(repository)
+
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositoryMaintenanceService.runManualMaintenance).toHaveBeenCalledTimes(1)
+    })
+    const pushRequest = coordinator.requestPush(repository, "content-saved")
+
+    maintenance.reject(new Error("fatal: not a git repository"))
+
+    await expect(maintenanceRequest).rejects.toThrow("not a git repository")
+    await expect(pushRequest).rejects.toThrow("not a git repository")
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).not.toHaveBeenCalled()
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      repositoryUuid: "repo-1",
+      status: "attention",
+      operation: "maintenance",
+      phase: "blocked",
+      failureCategory: "not-git",
+    })
+  })
+
   it("merges duplicate push requests while a push is already running", async () => {
     const pendingState = createPendingState([createPendingEntry()])
     serviceMocks.pendingPushesService.readState

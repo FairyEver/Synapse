@@ -82,15 +82,11 @@ class RepositorySyncCoordinator {
     const state = this.getExecutionState(repository.uuid)
 
     if (state.syncPromise) {
-      return state.syncPromise
-        .catch(() => undefined)
-        .then(() => this.requestPush(repository, reason))
+      return this.requestPushAfterOperationSettles(repository, reason, state.syncPromise)
     }
 
     if (state.maintenancePromise) {
-      return state.maintenancePromise
-        .catch(() => undefined)
-        .then(() => this.requestPush(repository, reason))
+      return this.requestPushAfterOperationSettles(repository, reason, state.maintenancePromise)
     }
 
     if (state.currentPromise) {
@@ -109,6 +105,30 @@ class RepositorySyncCoordinator {
     state.currentPromise = this.runPushLoop(repository, reason, state)
 
     return state.currentPromise
+  }
+
+  private async requestPushAfterOperationSettles(
+    repository: SynapseRepositoryConfig,
+    reason: SyncRequestReason,
+    operationPromise: Promise<unknown>,
+  ): Promise<void> {
+    let operationError: unknown = null
+
+    try {
+      await operationPromise
+    } catch (error) {
+      operationError = error
+    }
+
+    if (operationError) {
+      const pending = await pendingPushesService.readState(repository)
+
+      if (pending.count === 0) {
+        throw operationError
+      }
+    }
+
+    return this.requestPush(repository, reason)
   }
 
   private async runPushLoop(
