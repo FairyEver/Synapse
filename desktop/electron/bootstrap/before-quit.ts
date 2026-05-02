@@ -7,9 +7,8 @@
 
 import { app, dialog } from "electron"
 import { configStore } from "../services/config-store"
-import { contentSubmissionService } from "../services/content-submission-service"
 import { createMainLogger, logStore } from "../services/log-store"
-import { pendingPushesService } from "../services/pending-pushes-service"
+import type { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { updateService } from "../services/update-service"
 import type { ServiceRegistryImpl } from "../runtime/service-registry"
 import type { MainWindowState } from "./main-window"
@@ -69,8 +68,8 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
 
     await logStore.flush()
 
-    const config = await configStore.load()
-    const pendingPushCount = await pendingPushesService.countAll(config.repositories)
+    const coordinator = deps.registry.get<RepositorySyncCoordinator>("repo.sync-coordinator")
+    const pendingPushCount = await coordinator.countAllPending()
 
     if (pendingPushCount === 0) {
       clearTimeout(quitTimeout)
@@ -101,8 +100,10 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
       : await dialog.showMessageBox(messageBoxOptions)
 
     if (result.response === 0) {
+      const config = await configStore.load()
+
       for (const repository of config.repositories) {
-        await contentSubmissionService.flushPendingPushes(repository)
+        await coordinator.requestPush(repository, "quit")
       }
     }
 

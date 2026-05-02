@@ -44,12 +44,6 @@ vi.mock("../../services/config-store", () => ({
   },
 }))
 
-vi.mock("../../services/content-submission-service", () => ({
-  contentSubmissionService: {
-    flushPendingPushes: vi.fn(async () => {}),
-  },
-}))
-
 vi.mock("../../services/log-store", () => ({
   createMainLogger: () => ({
     error: vi.fn(),
@@ -57,12 +51,6 @@ vi.mock("../../services/log-store", () => ({
     warn: vi.fn(),
   }),
   logStore: logStoreMock,
-}))
-
-vi.mock("../../services/pending-pushes-service", () => ({
-  pendingPushesService: {
-    countAll: vi.fn(async () => 0),
-  },
 }))
 
 vi.mock("../../services/update-service", () => ({
@@ -94,5 +82,58 @@ describe("attachBeforeQuitHandler", () => {
     expect(allowQuit).toBe(true)
     expect(stopAll).not.toHaveBeenCalled()
     expect(logStoreMock.dispose).not.toHaveBeenCalled()
+  })
+
+  it("flushes pending pushes through the coordinator before quit when requested", async () => {
+    const { configStore } = await import("../../services/config-store")
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const repository = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: "/repo",
+      contentDirs: {},
+    }
+    const coordinator = {
+      countAllPending: vi.fn(async () => 1),
+      requestPush: vi.fn(async () => undefined),
+    }
+    vi.mocked(configStore.load).mockResolvedValueOnce({
+      activeRepoUuid: "repo-1",
+      repositories: [repository],
+      global: {},
+    } as never)
+    electronMock.showMessageBox.mockResolvedValueOnce({ response: 0 } as never)
+    let allowQuit = false
+    const stopAll = vi.fn(async () => {})
+
+    attachBeforeQuitHandler({
+      state: { current: null },
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "repo.sync-coordinator") {
+            return coordinator
+          }
+          throw new Error(`Unexpected service id: ${id}`)
+        }),
+        stopAll,
+      } as never,
+      setAllowQuit: (value) => {
+        allowQuit = value
+      },
+      isAllowedToQuit: () => allowQuit,
+    })
+    const beforeQuitHandler = electronMock.app.on.mock.calls.find(
+      ([eventName]) => eventName === "before-quit",
+    )?.[1] as (event: { preventDefault: () => void }) => Promise<void>
+
+    await beforeQuitHandler({ preventDefault: vi.fn() })
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(coordinator.requestPush).toHaveBeenCalledTimes(1)
+    expect(coordinator.requestPush).toHaveBeenCalledWith(
+      expect.objectContaining({ uuid: "repo-1" }),
+      "quit",
+    )
+    expect(allowQuit).toBe(true)
   })
 })

@@ -8,7 +8,7 @@
 import { z } from "zod"
 import { app, dialog } from "electron"
 import path from "node:path"
-import type { IpcModule } from "../../runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { getContentTypeDefinition } from "../../../src/config/content-types"
@@ -36,11 +36,9 @@ import { contentSubmissionService } from "../../services/content-submission-serv
 import { contentWindowService } from "../../services/content-window-service"
 import { editorAdapterService } from "../../services/editor-adapter-service"
 import { createMainLogger } from "../../services/log-store"
+import type { RepositorySyncCoordinator } from "../../services/repository-sync-coordinator"
 
 const logger = createMainLogger("ipc.content")
-
-// Background push state management
-const backgroundPushStates = new Map<string, { rerunRequested: boolean }>()
 
 // Helper to resolve active repository
 async function resolveActiveRepository(): Promise<SynapseRepositoryConfig | null> {
@@ -76,105 +74,15 @@ async function notifyPendingPushesUpdated(
   })
 }
 
-// Helper to schedule background push
-function scheduleBackgroundPush(eventBus: EventBus, repository: SynapseRepositoryConfig): void {
-  const activeState = backgroundPushStates.get(repository.uuid)
+function requestContentSavedPush(ctx: IpcHandlerContext, repository: SynapseRepositoryConfig): void {
+  const coordinator = ctx.resolve<RepositorySyncCoordinator>("repo.sync-coordinator")
 
-  if (activeState) {
-    activeState.rerunRequested = true
-    return
-  }
-
-  const nextState = {
-    rerunRequested: false,
-  }
-
-  backgroundPushStates.set(repository.uuid, nextState)
-
-  void (async () => {
-    try {
-      while (true) {
-        nextState.rerunRequested = false
-
-        eventBus.emit({
-          domain: "repository",
-          type: "repository.progress",
-          payload: {
-            repositoryUuid: repository.uuid,
-            operation: "push",
-            statusText: "正在同步...",
-            percent: 0,
-          },
-          timestamp: new Date().toISOString(),
-        })
-
-        try {
-          await contentSubmissionService.flushPendingPushes(repository, (statusText) => {
-            eventBus.emit({
-              domain: "repository",
-              type: "repository.progress",
-              payload: {
-                repositoryUuid: repository.uuid,
-                operation: "push",
-                statusText,
-                percent: null,
-              },
-              timestamp: new Date().toISOString(),
-            })
-          })
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "推送到仓库失败。"
-
-          await notifyPendingPushesUpdated(eventBus, repository)
-
-          eventBus.emit({
-            domain: "repository",
-            type: "repository.updated",
-            payload: {
-              repositoryUuid: repository.uuid,
-              operation: "push",
-              completedAt: new Date().toISOString(),
-              error: message,
-              message,
-            },
-            timestamp: new Date().toISOString(),
-          })
-          return
-        }
-
-        const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
-
-        eventBus.emit({
-          domain: "repository",
-          type: "repository.pendingPushesUpdated",
-          payload: {
-            repositoryUuid: repository.uuid,
-            pendingPushes,
-          },
-          timestamp: new Date().toISOString(),
-        })
-
-        if (nextState.rerunRequested || pendingPushes.count > 0) {
-          continue
-        }
-
-        eventBus.emit({
-          domain: "repository",
-          type: "repository.updated",
-          payload: {
-            repositoryUuid: repository.uuid,
-            operation: "push",
-            completedAt: new Date().toISOString(),
-            message: "同步完成。",
-          },
-          timestamp: new Date().toISOString(),
-        })
-        return
-      }
-    } finally {
-      backgroundPushStates.delete(repository.uuid)
-    }
-  })()
+  void coordinator.requestPush(repository, "content-saved").catch((error) => {
+    logger.warn("Failed to request content-saved repository push.", {
+      error,
+      repositoryUuid: repository.uuid,
+    })
+  })
 }
 
 export const contentIpcModule: IpcModule = {
@@ -249,7 +157,7 @@ export const contentIpcModule: IpcModule = {
         await notifyPendingPushesUpdated(eventBus, repository)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-          scheduleBackgroundPush(eventBus, repository)
+          requestContentSavedPush(ctx, repository)
         }
 
         return result
@@ -270,7 +178,7 @@ export const contentIpcModule: IpcModule = {
         await notifyPendingPushesUpdated(eventBus, repository)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-          scheduleBackgroundPush(eventBus, repository)
+          requestContentSavedPush(ctx, repository)
         }
 
         return result
@@ -314,7 +222,7 @@ export const contentIpcModule: IpcModule = {
         await notifyPendingPushesUpdated(eventBus, repository)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
-          scheduleBackgroundPush(eventBus, repository)
+          requestContentSavedPush(ctx, repository)
         }
 
         return result
