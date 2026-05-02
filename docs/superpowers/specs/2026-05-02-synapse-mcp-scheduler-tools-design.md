@@ -2,103 +2,182 @@
 
 ## Context
 
-Synapse currently exposes Data Store capabilities through an MCP server named `synapse-database`. The server supports HTTP and stdio transports and already registers itself with supported editors. Its database tools are stable and should not be renamed or behaviorally changed in this phase.
+Synapse currently exposes Data Store capabilities through one local MCP server. That server already supports HTTP MCP and stdio MCP, and its existing database tools are stable.
 
-Synapse also has a first-class Task Scheduler module. The scheduler already supports cron and interval triggers, task enablement, manual runs, run history, and action execution through the existing Action Runtime.
+Synapse also has a first-class Task Scheduler module. The scheduler already supports cron and interval triggers, task enablement, manual runs, run history, and action execution through the existing scheduler and Action Runtime services.
 
-The new goal is to let agents create and manage scheduled tasks through MCP without changing existing database MCP behavior.
+The new goal is to extend the same MCP server from "database-only" capabilities into a broader Synapse capability surface. The first added domain is Task Scheduler.
+
+This must not merge Data Store and Task Scheduler into one domain. They are separate domains behind shared transport surfaces.
 
 ## Goals
 
-- Rename the MCP product identity from Data Store MCP to Synapse MCP.
-- Keep every existing database MCP tool name, input schema, result shape, validation path, and execution path unchanged.
-- Add scheduler MCP tools for creating and managing scheduled tasks.
-- Support the same scheduler tools through HTTP MCP and stdio MCP.
-- Route scheduler MCP calls through `TaskSchedulerService`, not directly through task repositories.
-- Keep the first version focused on safe task management; do not expose deletion or run-result mutation.
+- Keep one MCP server for Synapse local capabilities.
+- Keep every existing Data Store MCP tool name, input schema, result shape, validation path, and execution path unchanged.
+- Add a separate Scheduler domain with `scheduler_` MCP tools.
+- Add matching HTTP API actions and CLI commands for the same Scheduler capabilities.
+- Make API, CLI, and MCP use the same Scheduler action names and canonical input shapes.
+- Route Scheduler calls through `TaskSchedulerService`, not task repositories.
+- Keep the first Scheduler MCP phase focused on task creation, enablement, disablement, listing, and detail lookup.
+- Design the capability layer so later domains can be added without editing Data Store internals.
 
 ## Non-Goals
 
-- No rename of existing database tools such as `list_tables`, `query`, `insert`, or `operation_log`.
-- No `database_*` tool migration in this phase.
-- No `synapse_overview` tool in this phase.
-- No scheduler task deletion through MCP.
-- No stop-run tool through MCP.
-- No workflow composer, multi-action task orchestration, or new action types.
-- No renderer UI redesign beyond product copy needed for the MCP service name.
+- No rename of existing Data Store tools such as `list_tables`, `query`, `insert`, or `operation_log`.
+- No migration to `database_*` tool names in this phase.
+- No Scheduler task deletion through MCP, CLI, or the new HTTP action set.
+- No stop-running-run tool in this phase.
+- No Scheduler update tool in this phase.
+- No manual run tool in this phase.
+- No run-history MCP tool in this phase.
+- No workflow composer, multi-action orchestration, or new action types.
+- No renderer UI redesign.
 
 ## Chosen Approach
 
-Upgrade the existing MCP service identity to Synapse MCP and append a scheduler tool group.
-
-Existing database tools remain exactly as they are. The scheduler tools use the `scheduler_` prefix and resource-style naming:
+Use one shared transport layer with multiple isolated capability domains.
 
 ```text
-scheduler_task_list
-scheduler_task_get
-scheduler_task_create
-scheduler_task_update
-scheduler_task_enable
-scheduler_task_disable
-scheduler_task_run
-scheduler_task_runs_list
+Synapse local capability gateway
+  Data Store domain
+    existing Data Store actions
+    existing Data Store MCP tools
+    existing Data Store dispatcher
+
+  Scheduler domain
+    new Scheduler actions
+    new Scheduler MCP tools
+    new Scheduler dispatcher
 ```
 
-This gives agents one Synapse MCP server for local Synapse capabilities while keeping the database protocol stable.
+The outer gateway owns transport concerns:
 
-## Service Identity
+- HTTP API request routing.
+- MCP tool listing and tool-call routing.
+- CLI top-level command routing.
+- Source tracking such as `api`, `cli`, `mcp-http`, and `mcp-stdio`.
 
-The current MCP identity lives in `desktop/data-store/shared/server-identity.ts`.
+Each domain owns its own capability definitions, validation, parameter conversion, result normalization, and service calls.
 
-The implementation should change the current server name from `synapse-database` to:
+The Data Store domain must not import Scheduler logic. The Scheduler domain must not import Data Store business logic.
+
+## Existing Data Store Behavior
+
+The existing database behavior remains unchanged:
+
+- Existing MCP tool names stay as they are.
+- Existing MCP input schemas stay as they are.
+- Existing MCP result normalization stays behaviorally equivalent.
+- Existing Data Store actions continue to route to `dispatchDataStoreAction`.
+- Existing Data Store HTTP API calls continue to work.
+- Existing Data Store CLI commands continue to work.
+
+The current Data Store implementation already has the useful pattern this design should copy:
+
+- One registry maps action names to MCP tools and CLI commands.
+- CLI and stdio MCP call the running Electron app through local HTTP.
+- HTTP dispatches by `action`.
+- MCP HTTP and stdio MCP use shared tool definitions.
+
+The Scheduler domain should reuse that pattern, not be added into the Data Store dispatcher.
+
+## Capability Domain Model
+
+Introduce a domain-oriented capability model. File names are illustrative; implementation should follow existing repository placement conventions while preserving domain boundaries.
+
+```ts
+type SynapseCapabilityDomain = {
+  id: string
+  actions: readonly CapabilityAction[]
+  dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> | DispatchResult
+}
+
+type CapabilityAction = {
+  action: string
+  mcpTool?: McpToolDefinition
+  cliCommand?: CliCommandDefinition
+  mutates: boolean
+}
+```
+
+Data Store registers one domain. Scheduler registers another domain.
+
+The gateway can then provide shared helpers:
+
+- `getAllMcpTools()`
+- `getActionForMcpTool(toolName)`
+- `getCliCommands()`
+- `dispatchSynapseAction(action, params, context)`
+
+This keeps later domains extensible. Adding a `rules`, `skills`, or `content` domain should not require editing Data Store capability files.
+
+## Scheduler Actions
+
+The first Scheduler action set is:
 
 ```text
-synapse
+schedulerTaskList
+schedulerTaskGet
+schedulerTaskCreate
+schedulerTaskEnable
+schedulerTaskDisable
 ```
 
-`SYNAPSE_DATA_SERVER_IDENTITY.name` should follow that name so MCP `initialize` returns the new Synapse identity.
+These are the canonical action names used by the HTTP API. CLI and MCP map onto the same names.
 
-To avoid duplicate editor registrations after the rename, the previous names should be treated as legacy registration names:
+| Capability | HTTP action | CLI | MCP tool |
+| --- | --- | --- | --- |
+| List tasks | `schedulerTaskList` | `synapse scheduler list` | `scheduler_task_list` |
+| Get one task | `schedulerTaskGet` | `synapse scheduler get <taskId>` | `scheduler_task_get` |
+| Create task | `schedulerTaskCreate` | `synapse scheduler create --data '{...}'` | `scheduler_task_create` |
+| Enable task | `schedulerTaskEnable` | `synapse scheduler enable <taskId>` | `scheduler_task_enable` |
+| Disable task | `schedulerTaskDisable` | `synapse scheduler disable <taskId>` | `scheduler_task_disable` |
 
-```text
-synapse-database
-synapse-data
-```
+## Scheduler Identity And Lookup
 
-The existing registration flow already has a legacy-name removal pattern. The implementation should reuse that pattern instead of inventing a second migration path.
+Task detail lookup is by `taskId` only.
 
-User-facing settings copy should say `Synapse MCP`. File and module paths remain under `data-store` for this phase to keep the code change small.
+Task names are human-facing labels. They are not unique and can be changed. Agents that only know a name should call `scheduler_task_list`, inspect the returned entries, pick the matching `id`, then call `scheduler_task_get`.
 
-## Existing Database Tools
+Do not add `get by name` in this phase.
 
-The database tools remain unchanged:
+## Scheduler Canonical Inputs
 
-- Tool names stay as they are.
-- `inputSchema` stays as it is.
-- `MCP_TOOL_ACTIONS` mappings for database tools stay behaviorally equivalent.
-- `normalizeToolResult` keeps returning the same shapes.
-- `dispatchDataStoreAction` remains the database execution path.
-- Data Store HTTP API and CLI behavior remain unchanged.
+The HTTP action input shape is the canonical shape. CLI and MCP should adapt into this shape and should not invent different semantics.
 
-Adding scheduler tools must not require callers to migrate any existing database MCP prompts or integrations.
-
-## Scheduler Tool Semantics
-
-### `scheduler_task_list`
-
-Lists scheduled tasks.
+### `schedulerTaskList`
 
 Input:
 
 ```json
-{}
+{
+  "enabled": true,
+  "limit": 50
+}
 ```
 
-Returns the same task entry shape exposed by the existing task scheduler IPC API.
+Both fields are optional.
 
-### `scheduler_task_get`
+The first implementation supports `enabled` and `limit`. Do not add exact-name lookup. If name search is needed later, add `nameContains` and keep the result as a list.
 
-Gets one scheduled task.
+Result should be a summary list that is sufficient for an agent to choose an id:
+
+```ts
+type SchedulerTaskSummary = {
+  id: string
+  name: string
+  description?: string
+  enabled: boolean
+  schedule: SchedulerSchedule
+  action: { type: string }
+  nextRunAt?: string
+  lastRunAt?: string
+  lastStatus?: string
+  runCount: number
+}
+```
+
+### `schedulerTaskGet`
 
 Input:
 
@@ -108,13 +187,11 @@ Input:
 }
 ```
 
-Returns a task entry or `null`.
+Returns the full task detail or `null`.
 
-### `scheduler_task_create`
+### `schedulerTaskCreate`
 
-Creates a scheduled task.
-
-Input uses a slightly agent-friendly `schedule` field and maps to the existing scheduler create shape:
+Input:
 
 ```json
 {
@@ -127,7 +204,7 @@ Input uses a slightly agent-friendly `schedule` field and maps to the existing s
     "expr": "0 9 * * *"
   },
   "action": {
-    "type": "builtin.http-request",
+    "type": "builtin.command",
     "config": {}
   },
   "enabled": true,
@@ -142,12 +219,14 @@ Supported schedules:
 { "type": "interval", "everyMinutes": 30, "anchor": "created_at" }
 ```
 
-The MCP layer maps schedules to the internal trigger model:
+The Scheduler dispatcher maps the public `schedule` field to the existing internal `trigger` model:
 
 ```text
 cron     -> { type: "builtin.cron", config: { expr, timezone? } }
 interval -> { type: "builtin.interval", config: { everyMinutes, anchor? } }
 ```
+
+The public API should not require agents or CLI users to know internal trigger type names such as `builtin.cron`.
 
 Supported action types are the action types already registered by the Action Runtime:
 
@@ -157,41 +236,9 @@ builtin.script
 builtin.http-request
 ```
 
-The action config is validated by the existing action package schema during normal scheduler execution.
+Action config validation should use the same validation path used by the existing Scheduler and Action Runtime. The Scheduler MCP/API/CLI layer must not create a second action validation system.
 
-### `scheduler_task_update`
-
-Updates a scheduled task.
-
-Input:
-
-```json
-{
-  "taskId": "task:...",
-  "patch": {
-    "name": "New name",
-    "description": "Optional",
-    "scope": { "type": "global" },
-    "cwd": "/optional/path",
-    "schedule": {
-      "type": "interval",
-      "everyMinutes": 60
-    },
-    "action": {
-      "type": "builtin.command",
-      "config": {}
-    },
-    "enabled": true,
-    "missedRunPolicy": "skip"
-  }
-}
-```
-
-Only provided fields are changed. A provided `schedule` is mapped to the internal trigger model before calling `TaskSchedulerService.updateTask`.
-
-### `scheduler_task_enable`
-
-Enables one task.
+### `schedulerTaskEnable`
 
 Input:
 
@@ -201,11 +248,9 @@ Input:
 }
 ```
 
-This maps to `TaskSchedulerService.setTaskEnabled(taskId, true)`.
+Maps to `TaskSchedulerService.setTaskEnabled(taskId, true)`.
 
-### `scheduler_task_disable`
-
-Disables one task.
+### `schedulerTaskDisable`
 
 Input:
 
@@ -215,116 +260,217 @@ Input:
 }
 ```
 
-This maps to `TaskSchedulerService.setTaskEnabled(taskId, false)`.
+Maps to `TaskSchedulerService.setTaskEnabled(taskId, false)`.
 
-Separate enable and disable tools are easier for agents to call correctly than a boolean setter.
+Disabling a task means it remains in the task list but will not be scheduled for future runs. It does not stop a currently running run.
 
-### `scheduler_task_run`
+## HTTP API Design
 
-Manually runs one task.
-
-Input:
+Keep the existing local HTTP request style:
 
 ```json
 {
-  "taskId": "task:..."
+  "action": "schedulerTaskCreate",
+  "...": "canonical action params"
 }
 ```
 
-This maps to `TaskSchedulerService.runTaskNow(taskId)`.
+The HTTP layer should not know Scheduler details. It should call a neutral action router:
 
-The tool does not allow the caller to set `triggeredBy`, write run output, or forge a run status.
-
-### `scheduler_task_runs_list`
-
-Lists run history for one task.
-
-Input:
-
-```json
-{
-  "taskId": "task:...",
-  "limit": 20
-}
+```text
+POST /api
+  -> dispatchSynapseAction(action, params, context)
+    -> Data Store domain dispatcher
+    -> Scheduler domain dispatcher
 ```
 
-This maps to `TaskSchedulerService.listRuns(taskId, { limit })`. The limit should follow the same max bound used by the existing IPC layer.
+Expected source values:
 
-## Execution Boundary
+```text
+api
+cli
+mcp-stdio
+mcp-http
+```
 
-Scheduler MCP calls must resolve the existing `core.task-scheduler` service through the Electron service registry. They must not write `task-scheduler.tasks` or `task-scheduler.runs` repositories directly.
+Data Store mutation operation logging remains Data Store-owned. Scheduler can add its own operation logging later if needed, but the first phase should not write Scheduler events into the Data Store operation log.
 
-The MCP tool executor should have two domains:
+## CLI Design
 
-- database tools: existing `dispatchDataStoreAction` path
-- scheduler tools: new `TaskSchedulerService` path
+Keep one `synapse` CLI binary.
 
-Unknown tools continue to return the current MCP unknown-tool response.
+Existing Data Store commands remain at their current paths, for example:
 
-## HTTP And Stdio Transport
+```bash
+synapse tables
+synapse query todos
+```
+
+Add Scheduler as a separate subcommand namespace:
+
+```bash
+synapse scheduler list
+synapse scheduler get task:...
+synapse scheduler create --data '{...}'
+synapse scheduler enable task:...
+synapse scheduler disable task:...
+```
+
+The CLI should:
+
+- Parse command-line arguments.
+- Convert them to canonical action params.
+- Call local HTTP with the canonical action name.
+- Print concise human-readable output.
+- Exit non-zero on errors.
+
+The CLI should not call `TaskSchedulerService` directly.
+
+Historical CLI build paths can remain as thin transport wrappers if that keeps packaging small, but Scheduler parsing and capability definitions should not live inside Data Store business modules.
+
+## MCP Design
+
+Append Scheduler tools to the existing MCP `tools/list` result:
+
+```text
+scheduler_task_list
+scheduler_task_get
+scheduler_task_create
+scheduler_task_enable
+scheduler_task_disable
+```
+
+Existing Data Store tools remain unchanged and stay in the same MCP server.
+
+MCP tool schemas should be generated or exported from the Scheduler domain capability definition. They should not be hand-copied into a Data Store-specific MCP file.
+
+MCP result normalization should be domain-aware:
+
+- Data Store tools keep the current Data Store result normalization.
+- Scheduler tools return Scheduler task payloads directly after transport wrapping.
+
+Unknown tools continue to return the current MCP unknown-tool response shape.
+
+## HTTP MCP And Stdio MCP
 
 HTTP MCP and stdio MCP must expose the same tools and behavior.
 
-The Electron in-process MCP server is the authoritative execution environment because it can resolve `TaskSchedulerService`. The stdio bridge cannot own scheduler execution directly.
+The Electron in-process environment is the authoritative execution environment because it can resolve `TaskSchedulerService`.
 
-To keep behavior aligned, stdio tool calls should route to the running Electron app rather than duplicating scheduler logic. The stdio bridge should forward MCP JSON-RPC requests to the in-process MCP HTTP endpoint after resolving its local URL from app-persisted server metadata.
+The stdio MCP bridge should continue to forward tool calls to the running Electron app through local HTTP `/api`, matching the current Data Store pattern. It must not own Scheduler execution logic and it must not proxy by guessing the MCP HTTP port.
 
-The app-persisted metadata should include the active MCP URL after the in-process MCP HTTP server starts. Use the existing server metadata file that stdio already reads, extending it with an `mcpUrl` field. The bridge must not guess the port because the HTTP MCP server can move to the next port when the preferred port is occupied.
+The implementation must keep these true:
 
-With that routing:
+- Tool definitions come from one shared source.
+- Tool-to-action mappings come from one shared source.
+- Scheduler execution happens in Electron main process.
+- stdio and HTTP return equivalent MCP results for the same tool call.
 
-- tool definitions come from one shared source
-- database behavior remains unchanged
-- scheduler execution happens in the Electron main process
-- stdio and HTTP return the same response shape for the same tool call
+## Service Boundary
+
+Scheduler calls must resolve the existing `core.task-scheduler` service through the Electron service registry or receive it through explicit dependency injection in tests.
+
+Scheduler transport layers must not write these repositories directly:
+
+```text
+task-scheduler.tasks
+task-scheduler.runs
+```
+
+Allowed service calls in this phase:
+
+```text
+TaskSchedulerService.listTasks()
+TaskSchedulerService.getTask(taskId)
+TaskSchedulerService.createTask(mappedInput)
+TaskSchedulerService.setTaskEnabled(taskId, true)
+TaskSchedulerService.setTaskEnabled(taskId, false)
+```
+
+Do not expose `deleteTask`, `runTaskNow`, `stopRun`, or `listRuns` through the new external Scheduler capability set in this phase.
 
 ## Permissions And Audit
 
-Scheduler MCP tools must rely on the same scheduler and action execution path as the app UI.
+Creating, enabling, and disabling tasks should record the request source in the dispatch context.
 
-Important constraints:
+Task execution remains governed by the existing Scheduler and Action Runtime path:
 
-- Creating and updating tasks go through `TaskSchedulerService`.
-- Manual runs go through `TaskSchedulerService.runTaskNow`.
-- Action execution continues to use existing Action Runtime permission checks.
-- `builtin.command` and `builtin.script` remain shell execution operations.
-- `builtin.http-request` remains a network operation.
-- MCP callers cannot bypass scheduler overlap, missed-run, timeout, or run-history behavior.
-- MCP callers cannot write run records directly.
+```text
+TaskSchedulerService
+  -> TaskSchedulerExecutionService
+  -> Action Runtime
+  -> PermissionGuard
+  -> AuditSink
+```
 
-If a permission check fails during execution, the tool should return the same failure information the scheduler records for that run. MCP must not pretend to have a UI confirmation step.
+MCP cannot bypass shell, script, network, timeout, overlap, missed-run, or run-history behavior.
+
+First phase MCP does not add an interactive permission-confirmation flow. If a scheduled action later fails because permissions deny execution, the failure should be recorded through the same Scheduler execution path already used by the app.
 
 ## Error Handling
 
-Tool errors should stay concise and machine-readable through the existing MCP response shape.
+Use the same underlying error message across HTTP, CLI, and MCP.
 
-Expected error cases:
+Expected cases:
 
-- Unknown scheduler task id.
+- Unknown action.
+- Unknown MCP tool.
+- Missing or invalid `taskId`.
+- Unknown Scheduler task id for enable or disable.
 - Invalid cron expression.
 - Invalid interval.
 - Invalid action type or action config.
-- Permission denial during execution.
-- Task action failure, timeout, or cancellation.
+- Synapse app is not running for CLI or stdio MCP.
 
-Scheduler runtime errors must finish the run through the existing scheduler execution service where a run has already started.
+Transport-specific wrapping:
+
+- HTTP returns `{ ok: false, error }`.
+- CLI prints the error and exits non-zero.
+- MCP returns `isError: true` with the same message.
+
+`schedulerTaskGet` returns `null` for a missing task, matching existing service behavior. Enable and disable should surface an error if the task does not exist.
 
 ## Testing
 
-Add focused tests for the MCP layer:
+Add focused tests around drift prevention and domain isolation.
 
-- Existing database MCP tools still appear with the same names.
-- Existing database MCP schemas are unchanged.
-- Existing database MCP calls still normalize results the same way.
-- `tools/list` includes the eight scheduler tools.
-- `scheduler_task_create` maps cron schedule input to `builtin.cron`.
-- `scheduler_task_create` maps interval schedule input to `builtin.interval`.
-- `scheduler_task_update` patches only provided fields.
-- `scheduler_task_enable` and `scheduler_task_disable` call `setTaskEnabled` with the correct boolean.
-- `scheduler_task_run` calls `runTaskNow`.
-- `scheduler_task_runs_list` calls `listRuns` with `taskId` and `limit`.
-- stdio and HTTP use the same tool definitions.
-- MCP server identity returns the Synapse-level server name.
+Capability registry tests:
+
+- Data Store actions are still registered in the Data Store domain.
+- Scheduler actions are registered in the Scheduler domain.
+- `schedulerTaskList`, `schedulerTaskGet`, `schedulerTaskCreate`, `schedulerTaskEnable`, and `schedulerTaskDisable` each have API action, CLI command, and MCP tool metadata.
+- The combined MCP tool list includes existing Data Store tools and new Scheduler tools.
+- Existing Data Store tool names are unchanged.
+
+Scheduler dispatcher tests:
+
+- `schedulerTaskCreate` maps cron schedule input to `builtin.cron`.
+- `schedulerTaskCreate` maps interval schedule input to `builtin.interval`.
+- `schedulerTaskEnable` calls `setTaskEnabled(taskId, true)`.
+- `schedulerTaskDisable` calls `setTaskEnabled(taskId, false)`.
+- `schedulerTaskGet` calls `getTask(taskId)`.
+- `schedulerTaskList` applies supported filters without exact-name lookup.
+
+HTTP router tests:
+
+- Data Store actions route to Data Store dispatcher.
+- Scheduler actions route to Scheduler dispatcher.
+- Unknown actions return the existing error shape.
+
+CLI tests:
+
+- `synapse scheduler list` calls `schedulerTaskList`.
+- `synapse scheduler get <taskId>` calls `schedulerTaskGet`.
+- `synapse scheduler create --data '{...}'` calls `schedulerTaskCreate`.
+- `synapse scheduler enable <taskId>` calls `schedulerTaskEnable`.
+- `synapse scheduler disable <taskId>` calls `schedulerTaskDisable`.
+
+MCP tests:
+
+- `tools/list` includes the five Scheduler tools.
+- Existing Data Store MCP tools still appear with unchanged names.
+- Scheduler MCP tool calls route to Scheduler actions.
+- HTTP MCP and stdio MCP use the same tool definitions and tool-to-action mappings.
 
 Verification commands:
 
@@ -338,12 +484,14 @@ Do not start the dev server or open runtime previews for this work unless explic
 
 ## Acceptance Criteria
 
-- MCP service is presented as Synapse MCP.
-- Existing database MCP tools are not renamed.
-- Existing database MCP behavior remains unchanged.
-- Scheduler tools are visible from MCP `tools/list`.
-- Scheduler tools work from both HTTP MCP and stdio MCP.
-- Scheduler tools call `TaskSchedulerService`.
-- Agents can create, update, enable, disable, run, inspect, and read run history for tasks.
-- MCP does not expose scheduler delete, stop-run, or run-result mutation in this phase.
-- Hard constraints, typecheck, and tests pass.
+- The same MCP server exposes existing Data Store tools and new Scheduler tools.
+- Existing Data Store MCP tool names, schemas, and results are unchanged.
+- Data Store and Scheduler remain separate capability domains.
+- Scheduler has API, CLI, and MCP entry points with aligned action names and input shapes.
+- Scheduler task detail lookup uses `taskId`, not name.
+- Agents can list tasks, inspect one task by id, create tasks, enable tasks, and disable tasks.
+- Agents cannot delete tasks, stop running runs, manually run tasks, mutate run results, or list run history through this first external Scheduler capability set.
+- Scheduler external calls route through `TaskSchedulerService`.
+- Scheduler transport code does not directly write task repositories.
+- The design supports adding later domains without editing Data Store internals.
+- Hard constraints, typecheck, and tests pass after implementation.
