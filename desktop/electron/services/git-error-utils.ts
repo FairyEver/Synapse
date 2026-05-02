@@ -1,11 +1,14 @@
-import type { SynapseRepositorySyncFailureCategory } from "../../src/types/repository"
+import type {
+  SynapseRepositorySyncFailureCategory,
+  SynapseRepositorySyncPrimaryAction,
+} from "../../src/types/repository"
 
 export type GitFailureInfo = {
   category: SynapseRepositorySyncFailureCategory
   message: string
   detail?: string
   recoverable: boolean
-  primaryAction: "retry" | "open-settings" | "resolve-git" | null
+  primaryAction: SynapseRepositorySyncPrimaryAction
 }
 
 function firstUsefulLine(output: string): string | undefined {
@@ -56,6 +59,20 @@ export function classifyGitFailure(output: string, fallbackMessage: string): Git
     return {
       category: "auth",
       message: "Git 认证失败，请检查系统凭证或 SSH Key。",
+      detail,
+      recoverable: false,
+      primaryAction: "resolve-git",
+    }
+  }
+
+  if (
+    loweredOutput.includes("repository not found")
+    || loweredOutput.includes("not found")
+    || loweredOutput.includes("no such remote")
+  ) {
+    return {
+      category: "upstream-missing",
+      message: "当前仓库没有可用的远程配置，或当前账号没有访问权限。",
       detail,
       recoverable: false,
       primaryAction: "resolve-git",

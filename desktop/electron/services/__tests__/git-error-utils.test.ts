@@ -25,6 +25,20 @@ describe("git-error-utils", () => {
     expect(result.primaryAction).toBe("resolve-git")
   })
 
+  it.each([
+    "fatal: repository not found",
+    "fatal: remote origin not found",
+    "fatal: no such remote 'origin'",
+  ])("preserves remote missing compatibility message for %s", (output) => {
+    const result = classifyGitFailure(output, "fallback")
+
+    expect(result.category).toBe("upstream-missing")
+    expect(result.recoverable).toBe(false)
+    expect(result.primaryAction).toBe("resolve-git")
+    expect(result.message).toBe("当前仓库没有可用的远程配置，或当前账号没有访问权限。")
+    expect(result.message).not.toContain(output)
+  })
+
   it("keeps formatGitFailureMessage compatible", () => {
     expect(formatGitFailureMessage("fatal: not a git repository", "fallback"))
       .toBe("当前目录不是 Git 仓库。")
