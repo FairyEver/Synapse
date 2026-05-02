@@ -107,6 +107,9 @@ const testAction: MainActionDefinition<TestActionConfig> = {
     title: "Test",
     permissions: ["shell.exec"],
     defaultConfig: { message: "ok" },
+    configFields: [
+      { name: "message", kind: "string", required: true, defaultValue: "ok" },
+    ],
     configSchema: testActionSchema,
   },
   buildPermissionRequest: ({ config, context }) => ({

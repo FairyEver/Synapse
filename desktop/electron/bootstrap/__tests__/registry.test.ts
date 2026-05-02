@@ -71,6 +71,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     const ids = inspected.map((e) => e.id).sort()
     expect(ids).toEqual(
       [
+        "core.action-runtime",
         "core.audit-sink",
         "core.app-icon",
         "core.automation-ingress",
@@ -112,6 +113,10 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.app-icon")?.dependsOn).toEqual([])
     expect(byId.get("core.window-manager")?.dependsOn).toEqual([])
     expect(byId.get("core.event-bus")?.dependsOn).toEqual(["core.window-manager"])
+    expect(byId.get("core.action-runtime")?.dependsOn).toEqual([
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(byId.get("core.project-containers")?.dependsOn).toEqual([
       "core.event-bus",
       "core.data-repository",
@@ -144,6 +149,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.action-runtime",
     ])
     expect(byId.get("core.execution-isolation")?.dependsOn).toEqual([
       "core.data-repository",
@@ -170,6 +176,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.config",
       "core.event-bus",
       "core.task-scheduler",
+      "core.action-runtime",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
       "core.config",
@@ -201,6 +208,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     // Each dependency precedes its dependent.
     const idx = (id: string) => order.indexOf(id)
     expect(idx("core.config")).toBeLessThan(idx("core.data-store"))
+    expect(idx("core.action-runtime")).toBeLessThan(idx("core.task-scheduler"))
+    expect(idx("core.action-runtime")).toBeLessThan(idx("core.data-store"))
     expect(idx("core.task-scheduler")).toBeLessThan(idx("core.data-store"))
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
@@ -230,6 +239,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     const inspected = registry.inspect()
     const fatals = inspected.filter((e) => e.criticality === "fatal").map((e) => e.id).sort()
     expect(fatals).toEqual([
+      "core.action-runtime",
       "core.audit-sink",
       "core.config",
       "core.data-repository",

@@ -84,6 +84,7 @@ function testAction(): MainActionDefinition<TestActionConfig> {
       action: "shell.exec",
       actor: context.actor,
       resource: config.command,
+      context: { taskId: context.taskId, runId: context.runId },
     }),
     execute: async (_input: ActionExecutionInput<TestActionConfig>) => ({ status: "success" }),
   }
