@@ -28,10 +28,12 @@ function IdentityGate({ children }: { children: ReactNode }) {
     generateNewId,
     localIdentityState,
     isReady,
+    refreshIdentity,
   } = useLocalIdentity()
   const [recoveryValue, setRecoveryValue] = useState("")
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
 
   const normalizedRecoveryValue = useMemo(
     () => normalizeUserIdInput(recoveryValue),
@@ -55,6 +57,24 @@ function IdentityGate({ children }: { children: ReactNode }) {
         <div className="flex flex-col gap-3">
           <h1 className="text-lg font-medium text-foreground">无法读取身份信息</h1>
           <p className="text-sm text-muted-foreground">{error}</p>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              disabled={isRetrying}
+              onClick={() => {
+                setIsRetrying(true)
+                void refreshIdentity()
+                  .catch((retryError) => {
+                    logger.error("Failed to retry identity load.", { error: retryError })
+                  })
+                  .finally(() => {
+                    setIsRetrying(false)
+                  })
+              }}
+            >
+              {isRetrying ? "正在重试..." : "重试"}
+            </Button>
+          </div>
         </div>
       </IdentityScreenShell>
     )
@@ -105,6 +125,9 @@ function IdentityGate({ children }: { children: ReactNode }) {
                       elapsedMs: Math.round(performance.now() - startedAt),
                       error: generationError,
                     })
+                    setRecoveryError(
+                      generationError instanceof Error ? generationError.message : "生成新 ID 失败。",
+                    )
                   })
                   .finally(() => {
                     setIsSubmitting(false)
