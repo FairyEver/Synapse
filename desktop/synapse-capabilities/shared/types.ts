@@ -1,3 +1,5 @@
+import type { CapabilityId } from "./naming"
+
 export type SynapseActionSource = "api" | "cli" | "mcp-stdio" | "mcp-http"
 
 export type DispatchContext = {
@@ -22,10 +24,11 @@ export type McpToolDefinition = {
 }
 
 export type CapabilityDefinition = {
-  readonly action: string
-  readonly mcpTool?: string
-  readonly cliCommand?: string
+  readonly id: CapabilityId
+  readonly title: string
+  readonly description: string
   readonly mutates: boolean
+  readonly risk?: "normal" | "high"
 }
 
 export type CapabilityDomainDefinition = {
