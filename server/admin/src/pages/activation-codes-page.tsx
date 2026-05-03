@@ -40,7 +40,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useApiResource } from "@/hooks/use-api-resource"
-import { adminApi, type ManagedStatus } from "@/lib/api"
+import { adminApi, type ActivationAttempt, type ActivationCode, type ManagedStatus } from "@/lib/api"
 import { formatDate } from "@/lib/format"
 
 type ExpirationMode = "date" | "duration"
@@ -171,6 +171,11 @@ export function ActivationCodesPage() {
   const [generatedCodes, setGeneratedCodes] = React.useState<string[]>([])
   const [generatedCodesOpen, setGeneratedCodesOpen] = React.useState(false)
   const [copyState, setCopyState] = React.useState<"idle" | "copied" | "failed">("idle")
+  const [attemptsOpen, setAttemptsOpen] = React.useState(false)
+  const [attemptsLoading, setAttemptsLoading] = React.useState(false)
+  const [attemptsError, setAttemptsError] = React.useState<string | null>(null)
+  const [attempts, setAttempts] = React.useState<ActivationAttempt[]>([])
+  const [selectedCodeHint, setSelectedCodeHint] = React.useState<string | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
 
@@ -237,6 +242,34 @@ export function ActivationCodesPage() {
 
   async function archiveActivationCode(id: string) {
     await adminApi.archiveActivationCode(id)
+    reload()
+  }
+
+  async function openAttempts(item: ActivationCode) {
+    setSelectedCodeHint(item.codeHint)
+    setAttemptsOpen(true)
+    setAttempts([])
+    setAttemptsError(null)
+    setAttemptsLoading(true)
+    try {
+      setAttempts(await adminApi.listActivationAttempts(item.id))
+    } catch (caught) {
+      setAttemptsError(caught instanceof Error ? caught.message : "加载失败")
+    } finally {
+      setAttemptsLoading(false)
+    }
+  }
+
+  async function unlockActivationCode(id: string) {
+    await adminApi.updateActivationCodeRiskLock(id, { locked: false, note: null })
+    reload()
+  }
+
+  async function replaceActivationCode(id: string) {
+    const result = await adminApi.replaceActivationCode(id)
+    setGeneratedCodes([result.code])
+    setGeneratedCodesOpen(true)
+    setCopyState("idle")
     reload()
   }
 
@@ -396,6 +429,47 @@ export function ActivationCodesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        <Dialog open={attemptsOpen} onOpenChange={setAttemptsOpen}>
+          <DialogContent className="sm:max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>激活记录</DialogTitle>
+              <DialogDescription className="sr-only">{selectedCodeHint ?? "激活码"}</DialogDescription>
+            </DialogHeader>
+            {attemptsLoading ? <PageState>加载中</PageState> : null}
+            {attemptsError ? <PageState>{attemptsError}</PageState> : null}
+            {!attemptsLoading && !attemptsError && attempts.length === 0 ? (
+              <PageState>暂无记录</PageState>
+            ) : null}
+            {attempts.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>时间</TableHead>
+                    <TableHead>结果</TableHead>
+                    <TableHead>邮箱</TableHead>
+                    <TableHead>设备</TableHead>
+                    <TableHead>IP</TableHead>
+                    <TableHead>User-Agent</TableHead>
+                    <TableHead>原因</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attempts.map((attempt) => (
+                    <TableRow key={attempt.id}>
+                      <TableCell>{formatDate(attempt.createdAt)}</TableCell>
+                      <TableCell>{attempt.outcome}</TableCell>
+                      <TableCell>{attempt.email}</TableCell>
+                      <TableCell>{attempt.deviceIdHash}</TableCell>
+                      <TableCell>{attempt.ipAddress}</TableCell>
+                      <TableCell>{attempt.userAgent}</TableCell>
+                      <TableCell>{attempt.reason}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
       {loading ? <PageState>加载中</PageState> : null}
       {error ? <PageState>{error}</PageState> : null}
@@ -405,6 +479,7 @@ export function ActivationCodesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>状态</TableHead>
+              <TableHead>风控</TableHead>
               <TableHead>激活码标识</TableHead>
               <TableHead className="text-right">设备数</TableHead>
               <TableHead>到期</TableHead>
@@ -420,6 +495,7 @@ export function ActivationCodesPage() {
                 <TableCell>
                   <StatusBadge status={item.status} />
                 </TableCell>
+                <TableCell>{item.riskLockedAt ? "已锁定" : "正常"}</TableCell>
                 <TableCell>{item.codeHint ?? "无"}</TableCell>
                 <TableCell className="text-right">{item.maxDevices}</TableCell>
                 <TableCell>{formatDate(item.expiresAt)}</TableCell>
@@ -431,6 +507,34 @@ export function ActivationCodesPage() {
                     value={item.status}
                     onChange={(next) => updateStatus(item.id, next)}
                   >
+                    <TableActionButton
+                      type="button"
+                      onClick={() => {
+                        void openAttempts(item)
+                      }}
+                    >
+                      记录
+                    </TableActionButton>
+                    {item.riskLockedAt ? (
+                      <TableActionButton
+                        type="button"
+                        onClick={() => {
+                          void unlockActivationCode(item.id)
+                        }}
+                      >
+                        解锁
+                      </TableActionButton>
+                    ) : null}
+                    {item.boundAccountId ? (
+                      <TableActionButton
+                        type="button"
+                        onClick={() => {
+                          void replaceActivationCode(item.id)
+                        }}
+                      >
+                        换码
+                      </TableActionButton>
+                    ) : null}
                     <TableActionButton
                       type="button"
                       onClick={() => {

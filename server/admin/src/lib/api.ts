@@ -16,6 +16,11 @@ export interface ActivationCode {
   readonly boundAccount: { readonly email: string } | null
   readonly redeemedAt: string | null
   readonly archivedAt: string | null
+  readonly riskLockedAt: string | null
+  readonly riskLockedReason: string | null
+  readonly riskUnlockedAt: string | null
+  readonly riskReviewNote: string | null
+  readonly replacedByActivationCodeId: string | null
   readonly createdAt: string
 }
 
@@ -78,6 +83,29 @@ export interface Lease {
   readonly tokenId: string
   readonly issuedAt: string
   readonly expiresAt: string
+  readonly createdAt: string
+}
+
+export type ActivationAttemptOutcome =
+  | "success"
+  | "invalid_code"
+  | "bound_conflict"
+  | "rate_limited"
+  | "risk_locked"
+  | "device_limit"
+  | "blocked"
+
+export interface ActivationAttempt {
+  readonly id: string
+  readonly activationCodeId: string | null
+  readonly activationCodeHash: string
+  readonly activationCodeHint: string | null
+  readonly email: string
+  readonly deviceIdHash: string
+  readonly ipAddress: string
+  readonly userAgent: string
+  readonly outcome: ActivationAttemptOutcome
+  readonly reason: string
   readonly createdAt: string
 }
 
@@ -167,6 +195,20 @@ export const adminApi = {
   archiveActivationCode: (id: string) =>
     request<ActivationCode>(`/admin/api/activation-codes/${id}/archive`, {
       method: "PATCH",
+    }),
+  listActivationAttempts: (id: string) =>
+    request<ActivationAttempt[]>(`/admin/api/activation-codes/${id}/attempts`),
+  updateActivationCodeRiskLock: (
+    id: string,
+    input: { readonly locked: boolean; readonly note: string | null },
+  ) =>
+    request<ActivationCode>(`/admin/api/activation-codes/${id}/risk-lock`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  replaceActivationCode: (id: string) =>
+    request<CreatedActivationCode>(`/admin/api/activation-codes/${id}/replace`, {
+      method: "POST",
     }),
   listAccounts: () => request<Account[]>("/admin/api/accounts"),
   getAccount: (id: string) => request<Account>(`/admin/api/accounts/${id}`),

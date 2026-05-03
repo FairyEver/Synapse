@@ -10,8 +10,32 @@ vi.mock("@/lib/api", () => ({
     createActivationCode: vi.fn(),
     updateActivationCode: vi.fn(),
     archiveActivationCode: vi.fn(),
+    listActivationAttempts: vi.fn(),
+    updateActivationCodeRiskLock: vi.fn(),
+    replaceActivationCode: vi.fn(),
   },
 }))
+
+function activationCodeFixture(overrides: Partial<ActivationCode> = {}): ActivationCode {
+  return {
+    id: "code_1",
+    codeHint: "SYN-****-0001",
+    status: "active",
+    maxDevices: 1,
+    expiresAt: null,
+    boundAccountId: null,
+    boundAccount: null,
+    redeemedAt: null,
+    archivedAt: null,
+    riskLockedAt: null,
+    riskLockedReason: null,
+    riskUnlockedAt: null,
+    riskReviewNote: null,
+    replacedByActivationCodeId: null,
+    createdAt: "2026-04-29T00:00:00.000Z",
+    ...overrides,
+  }
+}
 
 describe("ActivationCodesPage", () => {
   let cleanup: (() => void) | null = null
@@ -24,18 +48,10 @@ describe("ActivationCodesPage", () => {
   })
 
   it("renders activation codes returned by the admin api", async () => {
-    const activationCode = {
-      id: "code_1",
-      codeHint: "SYN-****-0001",
-      status: "active",
-      maxDevices: 1,
-      expiresAt: null,
+    const activationCode = activationCodeFixture({
       boundAccountId: "account_1",
       boundAccount: { email: "user@example.com" },
-      redeemedAt: null,
-      archivedAt: null,
-      createdAt: "2026-04-29T00:00:00.000Z",
-    } satisfies ActivationCode
+    })
     vi.mocked(adminApi.listActivationCodes).mockResolvedValue([activationCode])
 
     const result = await render(<ActivationCodesPage />)
@@ -74,18 +90,7 @@ describe("ActivationCodesPage", () => {
   })
 
   it("renders fixed action buttons for activation code status changes", async () => {
-    const activationCode = {
-      id: "code_1",
-      codeHint: "SYN-****-0001",
-      status: "active",
-      maxDevices: 1,
-      expiresAt: null,
-      boundAccountId: null,
-      boundAccount: null,
-      redeemedAt: null,
-      archivedAt: null,
-      createdAt: "2026-04-29T00:00:00.000Z",
-    } satisfies ActivationCode
+    const activationCode = activationCodeFixture()
     vi.mocked(adminApi.listActivationCodes).mockResolvedValue([activationCode])
     vi.mocked(adminApi.updateActivationCode).mockResolvedValue({
       ...activationCode,
@@ -105,7 +110,7 @@ describe("ActivationCodesPage", () => {
       expect(operationCell?.className).toContain("right-0")
       expect(operationCell?.querySelector("div")?.className).toContain("gap-px")
       const actionButtons = Array.from(operationCell?.querySelectorAll("button") ?? [])
-      expect(actionButtons).toHaveLength(4)
+      expect(actionButtons).toHaveLength(5)
       actionButtons.forEach((button) => {
         expect(button.getAttribute("data-variant")).toBe("ghost")
         expect(button.getAttribute("data-size")).toBe("sm")
@@ -125,18 +130,7 @@ describe("ActivationCodesPage", () => {
   })
 
   it("archives activation codes from the action column", async () => {
-    const activationCode = {
-      id: "code_1",
-      codeHint: "SYN-****-0001",
-      status: "active",
-      maxDevices: 1,
-      expiresAt: null,
-      boundAccountId: null,
-      boundAccount: null,
-      redeemedAt: null,
-      archivedAt: null,
-      createdAt: "2026-04-29T00:00:00.000Z",
-    } satisfies ActivationCode
+    const activationCode = activationCodeFixture()
     vi.mocked(adminApi.listActivationCodes).mockResolvedValue([activationCode])
     vi.mocked(adminApi.archiveActivationCode).mockResolvedValue({
       ...activationCode,
@@ -158,6 +152,126 @@ describe("ActivationCodesPage", () => {
     })
 
     expect(adminApi.archiveActivationCode).toHaveBeenCalledWith("code_1")
+  })
+
+  it("renders risk state and opens activation attempt records", async () => {
+    const activationCode = activationCodeFixture({
+      boundAccountId: "account_1",
+      boundAccount: { email: "user@example.com" },
+      riskLockedAt: "2026-05-03T00:00:00.000Z",
+      riskLockedReason: "激活码来源异常。",
+    })
+    vi.mocked(adminApi.listActivationCodes).mockResolvedValue([activationCode])
+    vi.mocked(adminApi.listActivationAttempts).mockResolvedValue([
+      {
+        id: "attempt_1",
+        activationCodeId: "code_1",
+        activationCodeHash: "hash_1",
+        activationCodeHint: "SYN-****-0001",
+        email: "attacker@example.com",
+        deviceIdHash: "device_hash_1",
+        ipAddress: "127.0.0.1",
+        userAgent: "Vitest",
+        outcome: "bound_conflict",
+        reason: "激活码已绑定其他账号。",
+        createdAt: "2026-05-03T00:00:00.000Z",
+      },
+    ])
+
+    const result = await render(<ActivationCodesPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("风控")
+      expect(result.container.textContent).toContain("已锁定")
+    })
+
+    const recordsButton = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "记录") as HTMLButtonElement
+
+    await act(async () => {
+      recordsButton.click()
+    })
+
+    await waitFor(() => {
+      expect(adminApi.listActivationAttempts).toHaveBeenCalledWith("code_1")
+      expect(document.body.textContent).toContain("attacker@example.com")
+      expect(document.body.textContent).toContain("127.0.0.1")
+      expect(document.body.textContent).toContain("Vitest")
+    })
+  })
+
+  it("unlocks risk locked activation codes", async () => {
+    const activationCode = activationCodeFixture({
+      boundAccountId: "account_1",
+      boundAccount: { email: "user@example.com" },
+      riskLockedAt: "2026-05-03T00:00:00.000Z",
+      riskLockedReason: "激活码来源异常。",
+    })
+    vi.mocked(adminApi.listActivationCodes).mockResolvedValue([activationCode])
+    vi.mocked(adminApi.updateActivationCodeRiskLock).mockResolvedValue({
+      ...activationCode,
+      riskLockedAt: null,
+      riskLockedReason: null,
+    })
+
+    const result = await render(<ActivationCodesPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("解锁")
+    })
+
+    const unlockButton = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "解锁") as HTMLButtonElement
+
+    await act(async () => {
+      unlockButton.click()
+    })
+
+    expect(adminApi.updateActivationCodeRiskLock).toHaveBeenCalledWith("code_1", {
+      locked: false,
+      note: null,
+    })
+  })
+
+  it("replaces bound activation codes and shows the new code once", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+    const activationCode = activationCodeFixture({
+      boundAccountId: "account_1",
+      boundAccount: { email: "user@example.com" },
+      riskLockedAt: "2026-05-03T00:00:00.000Z",
+      riskLockedReason: "激活码来源异常。",
+    })
+    vi.mocked(adminApi.listActivationCodes).mockResolvedValue([activationCode])
+    vi.mocked(adminApi.replaceActivationCode).mockResolvedValue({
+      id: "new_code",
+      code: "SYN-NEWC-0001",
+      maxDevices: 1,
+    })
+
+    const result = await render(<ActivationCodesPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("换码")
+    })
+
+    const replaceButton = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "换码") as HTMLButtonElement
+
+    await act(async () => {
+      replaceButton.click()
+    })
+
+    expect(adminApi.replaceActivationCode).toHaveBeenCalledWith("code_1")
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("SYN-NEWC-0001")
+    })
   })
 
   it("resolves duration expiration to a concrete timestamp", () => {
