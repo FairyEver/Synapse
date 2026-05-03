@@ -74,7 +74,7 @@ export default defineConfig({
         { text: '术语表', link: '/reference/glossary' },
         { text: 'MCP 能力', link: '/reference/synapse-mcp-capabilities' },
         { text: '能力矩阵', link: '/reference/capability-naming-matrix' },
-        { text: '维护指南', link: '/reference/capability-authoring' },
+        { text: '能力维护', link: '/reference/capability-authoring' },
         { text: '下载', link: '/reference/downloads' }
       ]}]
     },

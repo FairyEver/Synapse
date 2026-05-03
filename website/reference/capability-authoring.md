@@ -1,27 +1,27 @@
-# Capability 维护指南
+# MCP 能力维护指南
 
 <!-- Sources: desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/types.ts; desktop/database/shared/capability-registry.ts; desktop/database/shared/mcp-tools.ts; desktop/electron/database/dispatcher.ts; desktop/database/cli/database.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/services/task-scheduler/external-capabilities.ts; desktop/database/cli/scheduler.ts; desktop/electron/capabilities/action-router.ts -->
 
-新增或修改通过本地 HTTP API、MCP tool、CLI command、public service method 暴露的 Synapse capability 时，使用这份指南。
+新增或修改通过本地 HTTP API、MCP 工具、CLI 命令、服务方法暴露的 Synapse MCP 能力时，使用这份指南。
 
-Capability manifest 是事实来源。参考文档只记录当前 public surface，不单独定义行为。
+能力清单是事实来源。参考文档只记录当前公开入口，不单独定义行为。
 
 ## 当前源文件
 
-Shared capability layer:
+共享能力层：
 
 - `desktop/synapse-capabilities/shared/naming.ts`
 - `desktop/synapse-capabilities/shared/registry.ts`
 - `desktop/synapse-capabilities/shared/types.ts`
 
-Database domain:
+Database 领域：
 
 - `desktop/database/shared/capability-registry.ts`
 - `desktop/database/shared/mcp-tools.ts`
 - `desktop/electron/database/dispatcher.ts`
 - `desktop/database/cli/database.ts`
 
-Scheduler domain:
+Scheduler 领域：
 
 - `desktop/synapse-capabilities/shared/scheduler-domain.ts`
 - `desktop/electron/services/task-scheduler/external-capabilities.ts`
@@ -37,13 +37,13 @@ Routing and transport:
 
 ## 命名规则
 
-Canonical capability id 使用：
+规范能力 ID 使用：
 
 ```text
 <domain>.<resource>.<action>
 ```
 
-使用 `desktop/synapse-capabilities/shared/naming.ts` 中的 helper 派生 public names：
+使用 `desktop/synapse-capabilities/shared/naming.ts` 中的 helper 派生公开名称：
 
 | Helper | Output |
 | --- | --- |
@@ -53,53 +53,53 @@ Canonical capability id 使用：
 
 规则：
 
-- domain 和 resource 使用完整英文词。
-- Database capability 使用 `database` domain。
-- Scheduler capability 使用 `scheduler` domain。
+- domain 和 resource 这两个 token 使用完整英文词。
+- Database 能力使用 `database` 领域。
+- Scheduler 能力使用 `scheduler` 领域。
 - 默认使用单数 resource；只有语义需要时使用复数，例如 `database.rows.update`。
 - 一个 token 内的多词使用 snake_case，例如 `choice_usage`。
 - action 使用 `CAPABILITY_ACTIONS` 中的受控词。
-- `execute` 只用于 SQL、command、script 或类似执行类能力。
+- `execute` 只用于 SQL、命令、脚本或类似执行类能力。
 - 会修改数据的能力必须标记 `mutates: true`。
 - 高风险执行类能力必须标记 `risk: "high"`。
 
-Public JSON 字段使用 camelCase。CLI flag 使用 kebab-case。
+公开 JSON 字段使用 camelCase。CLI flag 使用 kebab-case。
 
-## 新增同域能力
+## 新增同领域能力
 
-1. 在所属 domain 添加 manifest item。
-2. 确认 id 通过 `isCanonicalCapabilityId`。
-3. 确认 MCP、CLI、service 名称均由 canonical id 派生。
-4. 新增或更新 MCP tool schema。
-5. 新增或更新所属 domain dispatcher。
-6. 若需要 CLI 暴露，新增或更新 CLI command。
-7. HTTP routing 保持使用 canonical action id。
+1. 在所属领域添加能力清单条目。
+2. 确认 ID 通过 `isCanonicalCapabilityId`。
+3. 确认 MCP、CLI、服务方法名称均由规范能力 ID 派生。
+4. 新增或更新 MCP 工具 schema。
+5. 新增或更新所属领域 dispatcher。
+6. 若需要 CLI 暴露，新增或更新 CLI 命令。
+7. HTTP routing 保持使用规范 action ID。
 8. 更新 [能力矩阵](/reference/capability-naming-matrix)。
 9. 运行相关单测。
 
-Domain 行为留在所属 domain 内。Database capability 不应导入 Scheduler 业务内部实现；Scheduler capability 不应导入 Database 业务内部实现。
+领域行为留在所属领域内。Database 能力不应导入 Scheduler 业务内部实现；Scheduler 能力不应导入 Database 业务内部实现。
 
-## 新增未来 Domain
+## 新增未来领域
 
-未来 domain 对外暴露前需要具备：
+未来领域对外暴露前需要具备：
 
-- Domain id
-- Domain manifest
-- Domain-owned dispatcher
-- Service ownership boundary
-- MCP tool definitions or generation path
-- CLI namespace if CLI exposure is needed
-- HTTP action routing through the shared action router
-- Result normalization rules
-- Permission and audit handling when sensitive operations are involved
-- Tests for domain registration, public name derivation, routing, and hidden operations
-- Matrix rows for public capabilities
+- 领域 ID
+- 领域能力清单
+- 领域自有 dispatcher
+- 服务所有权边界
+- MCP 工具定义或生成路径
+- 需要 CLI 暴露时的 CLI namespace
+- 通过 shared action router 完成的 HTTP action routing
+- 结果归一化规则
+- 涉及敏感操作时的权限与审计处理
+- 覆盖领域注册、公开名称派生、路由和隐藏操作的测试
+- 公开能力的矩阵行
 
-不要在这份参考里提前定义未来 domain 的具体 resource 名称。只有实现该 domain 时再补具体名称。
+不要在这份参考里提前定义未来领域的具体 resource 名称。只有实现该领域时再补具体名称。
 
-## MCP Tool 规则
+## MCP 工具规则
 
-MCP tool 名称从 canonical id 派生：
+MCP 工具名称从规范能力 ID 派生：
 
 ```text
 database.row.create -> database_row_create
@@ -116,7 +116,7 @@ MCP schema 应满足：
 
 ## CLI 规则
 
-CLI command path 从 canonical id 派生，并暴露在 `synapse` binary 下。
+CLI 命令路径从规范能力 ID 派生，并暴露在 `synapse` binary 下。
 
 ```bash
 synapse database row create tasks --data '{"title":"Ship"}'
@@ -138,7 +138,7 @@ synapse scheduler run list task:1 --limit 5
 
 ## HTTP Action 规则
 
-本地 HTTP API 在顶层 `action` 字段接收 canonical capability id。其他顶层字段作为参数。
+本地 HTTP API 在顶层 `action` 字段接收规范能力 ID。其他顶层字段作为参数。
 
 ```json
 {
@@ -157,25 +157,25 @@ synapse scheduler run list task:1 --limit 5
 }
 ```
 
-HTTP server 通过 `createSynapseActionRouter` 路由。新 domain 必须先注册到 shared capability registry，HTTP action 才能 dispatch。
+HTTP server 通过 `createSynapseActionRouter` 路由。新领域必须先注册到共享能力注册表，HTTP action 才能 dispatch。
 
 ## 示例
 
-### Database Table List
+### Database 表列表
 
-Canonical id:
+规范能力 ID:
 
 ```text
 database.table.list
 ```
 
-MCP tool:
+MCP 工具:
 
 ```text
 database_table_list
 ```
 
-MCP arguments:
+MCP 参数:
 
 ```json
 {}
@@ -195,27 +195,27 @@ HTTP body:
 }
 ```
 
-Service method:
+服务方法:
 
 ```text
 databaseTableList
 ```
 
-### Database Row Create
+### Database 行创建
 
-Canonical id:
+规范能力 ID:
 
 ```text
 database.row.create
 ```
 
-MCP tool:
+MCP 工具:
 
 ```text
 database_row_create
 ```
 
-MCP arguments:
+MCP 参数:
 
 ```json
 {
@@ -244,27 +244,27 @@ HTTP body:
 }
 ```
 
-Service method:
+服务方法:
 
 ```text
 databaseRowCreate
 ```
 
-### Scheduler Task List
+### Scheduler 任务列表
 
-Canonical id:
+规范能力 ID:
 
 ```text
 scheduler.task.list
 ```
 
-MCP tool:
+MCP 工具:
 
 ```text
 scheduler_task_list
 ```
 
-MCP arguments:
+MCP 参数:
 
 ```json
 {
@@ -289,27 +289,27 @@ HTTP body:
 }
 ```
 
-Service method:
+服务方法:
 
 ```text
 schedulerTaskList
 ```
 
-### Scheduler Run List
+### Scheduler 运行记录列表
 
-Canonical id:
+规范能力 ID:
 
 ```text
 scheduler.run.list
 ```
 
-MCP tool:
+MCP 工具:
 
 ```text
 scheduler_run_list
 ```
 
-MCP arguments:
+MCP 参数:
 
 ```json
 {
@@ -334,7 +334,7 @@ HTTP body:
 }
 ```
 
-Service method:
+服务方法:
 
 ```text
 schedulerRunList
@@ -342,17 +342,17 @@ schedulerRunList
 
 ## Review Checklist
 
-每次 capability 变更都要确认：
+每次能力变更都要确认：
 
-- canonical id 符合 `<domain>.<resource>.<action>`。
-- domain 拥有对应行为。
-- MCP tool、CLI command、service method 均由 canonical id 派生。
-- input schema 使用 camelCase public JSON 字段。
+- 规范能力 ID 符合 `<domain>.<resource>.<action>`。
+- 领域拥有对应行为。
+- MCP 工具、CLI 命令、服务方法均由规范能力 ID 派生。
+- input schema 使用 camelCase 公开 JSON 字段。
 - CLI flag 使用 kebab-case。
 - mutating 与 high-risk metadata 正确。
 - hidden 或 destructive operation 没有被意外暴露。
 - [能力矩阵](/reference/capability-naming-matrix) 已更新。
-- 相关 capability tests 通过。
+- 相关能力测试通过。
 
 相关测试：
 
@@ -362,13 +362,13 @@ pnpm --filter @synapse/desktop run test -- tests/unit/capability-naming.test.ts 
 
 ## 防漂移
 
-当前矩阵可以继续手写，但 review 时必须与 manifest 核对。
+当前矩阵可以继续手写，但评审时必须与能力清单核对。
 
 后续优先方向：
 
 ```text
-hand-written explanations
-  + generated or checked capability matrix
+手写说明
+  + 生成或校验的能力矩阵
 ```
 
-不要把矩阵当成第二套事实来源。当前 capability 定义由 manifest 负责。
+不要把矩阵当成第二套事实来源。当前能力定义由能力清单负责。

@@ -1,10 +1,10 @@
-# 能力矩阵
+# MCP 能力矩阵
 
 <!-- Sources: docs/reference/capability-naming-matrix.md; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/synapse-capabilities/shared/naming.ts -->
 
-Canonical capability id 使用 `<domain>.<resource>.<action>`。
+本页列出当前公开的 Synapse MCP 能力。规范能力 ID 使用 `<domain>.<resource>.<action>`。
 
-| Capability id | MCP tool | CLI command | Service method |
+| 能力 ID | MCP 工具 | CLI 命令 | 服务方法 |
 | --- | --- | --- | --- |
 | `database.table.list` | `database_table_list` | `synapse database table list` | `databaseTableList` |
 | `database.table.describe` | `database_table_describe` | `synapse database table describe` | `databaseTableDescribe` |
@@ -40,4 +40,4 @@ Canonical capability id 使用 `<domain>.<resource>.<action>`。
 | `scheduler.runtime.inspect` | `scheduler_runtime_inspect` | `synapse scheduler runtime inspect` | `schedulerRuntimeInspect` |
 | `scheduler.action_type.list` | `scheduler_action_type_list` | `synapse scheduler action-type list` | `schedulerActionTypeList` |
 
-Only the canonical names in this matrix are supported public names.
+只支持本矩阵中的规范公开名称。
