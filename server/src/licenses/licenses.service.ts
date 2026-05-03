@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import { PrismaService } from "../prisma/prisma.service"
+import type { ActivationRiskService } from "./activation-risk.service"
 import { hashActivationCode, hashDeviceId } from "./hash"
 import { signLicenseLease, verifyLicenseLease } from "./license-token"
 import type { DeviceMetadata, LicenseLeasePayload, ManagedStatus } from "./license.types"
@@ -106,14 +107,22 @@ export class LicensesService {
   constructor(
     private readonly settings: LicenseSettings,
     private readonly repository: LicenseRepository,
+    private readonly risk?: Pick<ActivationRiskService, "assertNotRateLimited" | "recordAttempt" | "evaluateCodeRisk">,
   ) {}
 
-  static createInMemory(settings: LicenseSettings): LicensesService {
-    return new LicensesService(settings, new InMemoryLicenseRepository())
+  static createInMemory(
+    settings: LicenseSettings,
+    risk?: Pick<ActivationRiskService, "assertNotRateLimited" | "recordAttempt" | "evaluateCodeRisk">,
+  ): LicensesService {
+    return new LicensesService(settings, new InMemoryLicenseRepository(), risk)
   }
 
-  static createWithPrisma(settings: LicenseSettings, prisma: PrismaService): LicensesService {
-    return new LicensesService(settings, new PrismaLicenseRepository(prisma))
+  static createWithPrisma(
+    settings: LicenseSettings,
+    prisma: PrismaService,
+    risk?: Pick<ActivationRiskService, "assertNotRateLimited" | "recordAttempt" | "evaluateCodeRisk">,
+  ): LicensesService {
+    return new LicensesService(settings, new PrismaLicenseRepository(prisma), risk)
   }
 
   seedActivationCode(input: { codeHash: string; maxDevices: number }): void {
