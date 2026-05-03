@@ -245,15 +245,20 @@ function DatabaseModule() {
   const handleUpdateColumnDescription = useCallback(
     async (column: string, description: string) => {
       if (!selectedTable) return
-      await databaseColumnUpdate(selectedTable, column, description)
-      logger.info("Column description updated.", {
-        table: selectedTable,
-        column,
-        description: sanitizeTrackValue(column, description),
-      })
-      await refreshSchema()
+      try {
+        await databaseColumnUpdate(selectedTable, column, description)
+        logger.info("Column description updated.", {
+          table: selectedTable,
+          column,
+          description: sanitizeTrackValue(column, description),
+        })
+        await refreshSchema()
+      } catch (updateError) {
+        logger.error("Failed to update column description.", { error: updateError })
+        showError(updateError instanceof Error ? updateError.message : "更新列描述失败。")
+      }
     },
-    [selectedTable, refreshSchema],
+    [selectedTable, refreshSchema, showError],
   )
 
   const handleUpdateColumnChoices = useCallback(
