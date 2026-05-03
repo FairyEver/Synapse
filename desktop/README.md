@@ -292,8 +292,8 @@ export const mcpDefinition = {
 
 | `settingsFormat` | 行为 |
 | --- | --- |
-| `json-mcp-servers` | 写入 JSON 配置的 `mcpServers.synapse-database` |
-| `codex-toml` | 写入 Codex TOML 的 `[mcp_servers.synapse-database]` |
+| `json-mcp-servers` | 写入 JSON 配置的 `mcpServers.synapse-mcp` |
+| `codex-toml` | 写入 Codex TOML 的 `[mcp_servers.synapse-mcp]` |
 
 项目 Rule 安装前需要额外表单时，增加 `forms.tsx`，导出 `installFormDefinition`：
 
@@ -317,22 +317,22 @@ export const installFormDefinition = {
 
 以下对比的是 Synapse 数据存储模块在 `CLI`、`MCP`、`API` 三条入口上的能力覆盖情况。
 
-### 数据服务 MCP 安装规则
+### Synapse MCP 安装规则
 
-在设置页的"数据服务"中点击 MCP 注册时，Synapse 会按各编辑器的官方全局配置位置写入 `synapse-database` 这个 MCP server。
+在设置页的 MCP 中点击注册时，Synapse 会按各编辑器的官方全局配置位置写入 `synapse-mcp` 这个 MCP server。
 
 | 编辑器 | 全局配置文件 | 写入格式 |
 | --- | --- | --- |
-| Claude Code | `~/.claude/settings.json` | JSON，写入 `mcpServers.synapse-database` |
-| Cursor | `~/.cursor/mcp.json` | JSON，写入 `mcpServers.synapse-database` |
-| Codex | `~/.codex/config.toml` | TOML，写入 `[mcp_servers.synapse-database]` |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON，写入 `mcpServers.synapse-database` |
+| Claude Code | `~/.claude/settings.json` | JSON，写入 `mcpServers.synapse-mcp` |
+| Cursor | `~/.cursor/mcp.json` | JSON，写入 `mcpServers.synapse-mcp` |
+| Codex | `~/.codex/config.toml` | TOML，写入 `[mcp_servers.synapse-mcp]` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON，写入 `mcpServers.synapse-mcp` |
 
 写入规则：
 
-- JSON 配置会保留原文件中的其他字段，只增量写入 `mcpServers.synapse-database.url`。
-- Codex 会在 `~/.codex/config.toml` 中增量更新 `synapse-database` 对应的 table，不会覆盖其他如 `model`、`profiles`、审批策略等现有配置。
-- "重新注册"只更新 `synapse-database` 这一项；"打开文件"打开的也是上述官方全局配置文件。
+- JSON 配置会保留原文件中的其他字段，只增量写入 `mcpServers.synapse-mcp.url`。
+- Codex 会在 `~/.codex/config.toml` 中增量更新 `synapse-mcp` 对应的 table，不会覆盖其他如 `model`、`profiles`、审批策略等现有配置。
+- "重新注册"只更新 `synapse-mcp` 这一项；"打开文件"打开的也是上述官方全局配置文件。
 - Windsurf 的 MCP 配置路径与 JSON 结构依据官方 [Cascade MCP Integration](https://docs.windsurf.com/windsurf/cascade/mcp) 文档。
 
 说明：

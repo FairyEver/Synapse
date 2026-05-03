@@ -19,7 +19,7 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 
 ## Synapse MCP shortcut
 
-When the user mentions `sss`, treat it as Synapse Services Shortcut and use the matching `synapse-database` MCP tool by intent:
+When the user mentions `sss`, use the matching `synapse-mcp` MCP tool by intent:
 
 - Database, table, column, row, SQL, Database, or data CRUD requests use Database tools.
 - Scheduled task, scheduler, cron/interval, enable/disable, run history, or runtime status requests use scheduler tools.

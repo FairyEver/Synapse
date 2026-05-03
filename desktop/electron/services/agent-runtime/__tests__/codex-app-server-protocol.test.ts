@@ -76,13 +76,13 @@ describe("Codex app-server protocol helpers", () => {
 
     expect(permissionEventForCodexServerRequest("req-6", {
       method: "mcpServer/elicitation/request",
-      params: { serverName: "synapse-database", message: "Authorize MCP" },
+      params: { serverName: "synapse-mcp", message: "Authorize MCP" },
     })).toEqual(expect.objectContaining({
       type: "permissionRequest",
       requestId: "req-6",
       toolName: "MCP Elicitation",
       toolInput: "Authorize MCP",
-      toolInputRaw: { serverName: "synapse-database", message: "Authorize MCP" },
+      toolInputRaw: { serverName: "synapse-mcp", message: "Authorize MCP" },
     }))
 
     expect(permissionEventForCodexServerRequest("req-7", {

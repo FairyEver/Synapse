@@ -71,10 +71,10 @@
       "Bash(rtk ls *)",
       "Bash(mv /Users/liyang/.claude/skills/detect-duplicate-logs/SKILL.md /Users/liyang/Documents/code/github/Synapse/.claude/skills/detect-duplicate-logs/SKILL.md)",
       "Bash(rmdir /Users/liyang/.claude/skills/detect-duplicate-logs)",
-      "mcp__synapse-database__database_table_list",
-      "mcp__synapse-database__database_row_list",
-      "mcp__synapse-database__database_table_describe",
-      "mcp__synapse-database__database_row_delete"
+      "mcp__synapse-mcp__database_table_list",
+      "mcp__synapse-mcp__database_row_list",
+      "mcp__synapse-mcp__database_table_describe",
+      "mcp__synapse-mcp__database_row_delete"
     ]
   }
 }

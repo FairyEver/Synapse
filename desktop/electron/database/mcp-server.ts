@@ -8,7 +8,7 @@ import {
   type JsonRpcRequest,
   type McpRpcResponse,
 } from "../../database/shared/mcp-rpc"
-import { SYNAPSE_DATABASE_SERVER_IDENTITY } from "../../database/shared/server-identity"
+import { SYNAPSE_MCP_SERVER_IDENTITY } from "../../database/shared/server-identity"
 
 const logger = createMainLogger("database.mcp-server")
 
@@ -86,7 +86,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return
   }
 
-  const response = await processMcpRequest(body, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
+  const response = await processMcpRequest(body, SYNAPSE_MCP_SERVER_IDENTITY, executeTool)
   sendRpcResponse(res, response)
 }
 

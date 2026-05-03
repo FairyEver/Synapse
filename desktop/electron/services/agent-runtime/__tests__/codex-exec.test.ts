@@ -233,7 +233,7 @@ describe("Codex exec adapter", () => {
       params: {
         threadId: "thread-1",
         turnId: "turn-1",
-        serverName: "synapse-database",
+        serverName: "synapse-mcp",
         mode: "url",
         message: "Authorize MCP",
         url: "http://127.0.0.1:23578/mcp",
@@ -248,7 +248,7 @@ describe("Codex exec adapter", () => {
         requestId: "mcp-1",
         toolName: "MCP Elicitation",
         toolInput: "Authorize MCP",
-        toolInputRaw: expect.objectContaining({ serverName: "synapse-database" }),
+        toolInputRaw: expect.objectContaining({ serverName: "synapse-mcp" }),
       }),
     )
 
@@ -525,7 +525,7 @@ describe("Codex JSONL parser", () => {
       type: "item.started",
       item: {
         type: "mcpToolCall",
-        server: "synapse_database",
+        server: "synapse_mcp",
         tool: "database_table_list",
         arguments: {},
       },
@@ -534,7 +534,7 @@ describe("Codex JSONL parser", () => {
       type: "item.completed",
       item: {
         type: "mcpToolCall",
-        server: "synapse_database",
+        server: "synapse_mcp",
         tool: "database_table_list",
         arguments: {},
         status: "completed",
@@ -578,12 +578,12 @@ describe("Codex JSONL parser", () => {
       }),
       expect.objectContaining({
         type: "toolUse",
-        toolName: "synapse_database.database_table_list",
+        toolName: "synapse_mcp.database_table_list",
         toolInput: "{}",
       }),
       expect.objectContaining({
         type: "toolResult",
-        toolName: "synapse_database.database_table_list",
+        toolName: "synapse_mcp.database_table_list",
         content: "{\"content\":[]}",
         success: true,
       }),

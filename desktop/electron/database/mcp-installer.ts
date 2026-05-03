@@ -5,7 +5,7 @@ import { shell } from "electron"
 import { createMainLogger } from "../services/log-store"
 import { mcpDefinitions } from "../services/definitions/generated/main-registry"
 import type { SynapseMcpDefinition } from "../../src/definitions/types"
-import { SYNAPSE_DATABASE_SERVER_NAME, SYNAPSE_DATABASE_LEGACY_SERVER_NAMES } from "../../database/shared/server-identity"
+import { SYNAPSE_MCP_LEGACY_SERVER_NAMES, SYNAPSE_MCP_SERVER_NAME } from "../../database/shared/server-identity"
 
 const logger = createMainLogger("database.mcp-installer")
 
@@ -113,7 +113,7 @@ function detectJsonRegistration(settings: Record<string, unknown>): { registered
   const servers = settings.mcpServers
   if (!isRecord(servers)) return { registered: false, mode: null, url: null }
 
-  const server = servers[SYNAPSE_DATABASE_SERVER_NAME]
+  const server = servers[SYNAPSE_MCP_SERVER_NAME]
   if (!isRecord(server)) return { registered: false, mode: null, url: null }
 
   if (typeof server.url === "string" && server.url.startsWith("http://127.0.0.1:")) {
@@ -131,7 +131,7 @@ function registerJsonMcp(settingsPath: string, mcpUrl: string): void {
   const settings = readJsonSettings(settingsPath)
   const servers = isRecord(settings.mcpServers) ? settings.mcpServers : {}
 
-  servers[SYNAPSE_DATABASE_SERVER_NAME] = { url: mcpUrl }
+  servers[SYNAPSE_MCP_SERVER_NAME] = { url: mcpUrl }
   settings.mcpServers = servers
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
 }
@@ -186,7 +186,7 @@ function findCodexServerSectionRange(lines: string[], serverName: string): { sta
 
 function buildCodexServerBlock(mcpUrl: string, lineEnding: string): string {
   return [
-    getCodexServerTableName(SYNAPSE_DATABASE_SERVER_NAME),
+    getCodexServerTableName(SYNAPSE_MCP_SERVER_NAME),
     `url = ${escapeTomlString(mcpUrl)}`,
   ].join(lineEnding)
 }
@@ -195,7 +195,7 @@ function upsertCodexServerConfig(raw: string, mcpUrl: string): string {
   const lineEnding = getLineEnding(raw)
   const block = buildCodexServerBlock(mcpUrl, lineEnding)
   const lines = raw.length > 0 ? raw.split(/\r?\n/) : []
-  const existingRange = findCodexServerSectionRange(lines, SYNAPSE_DATABASE_SERVER_NAME)
+  const existingRange = findCodexServerSectionRange(lines, SYNAPSE_MCP_SERVER_NAME)
 
   if (existingRange) {
     const nextLines = [
@@ -216,7 +216,7 @@ function upsertCodexServerConfig(raw: string, mcpUrl: string): string {
 
 function extractCodexServerSection(raw: string): string | null {
   const lines = raw.split(/\r?\n/)
-  const range = findCodexServerSectionRange(lines, SYNAPSE_DATABASE_SERVER_NAME)
+  const range = findCodexServerSectionRange(lines, SYNAPSE_MCP_SERVER_NAME)
 
   if (!range) {
     return null
@@ -318,9 +318,9 @@ function unregisterMcp(target: McpTarget, serverName: string): { success: boolea
 }
 
 function cleanupLegacyMcpNames(): void {
-  if (SYNAPSE_DATABASE_LEGACY_SERVER_NAMES.length === 0) return
-  for (const legacy of SYNAPSE_DATABASE_LEGACY_SERVER_NAMES) {
-    if (legacy === SYNAPSE_DATABASE_SERVER_NAME) continue
+  if (SYNAPSE_MCP_LEGACY_SERVER_NAMES.length === 0) return
+  for (const legacy of SYNAPSE_MCP_LEGACY_SERVER_NAMES) {
+    if (legacy === SYNAPSE_MCP_SERVER_NAME) continue
     for (const target of MCP_TARGETS) {
       const { success, modified } = unregisterMcp(target, legacy)
       if (success && modified) {

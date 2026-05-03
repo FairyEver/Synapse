@@ -1594,7 +1594,7 @@ it("routes new Scheduler MCP tools through their action names", async () => {
       name: "scheduler_task_runs_list",
       arguments: { taskId: "task:1" },
     },
-  }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
+  }, SYNAPSE_MCP_SERVER_IDENTITY, executeTool)
 
   expect(executeTool).toHaveBeenCalledWith("scheduler_task_runs_list", { taskId: "task:1" })
   expect(response.kind).toBe("result")
@@ -1616,7 +1616,7 @@ it("keeps hidden Scheduler MCP tools unknown", async () => {
       name: "scheduler_task_delete",
       arguments: { taskId: "task:1" },
     },
-  }, SYNAPSE_DATABASE_SERVER_IDENTITY, async () => ({ ok: true }))
+  }, SYNAPSE_MCP_SERVER_IDENTITY, async () => ({ ok: true }))
 
   expect(response.kind).toBe("result")
   if (response.kind !== "result") return

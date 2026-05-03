@@ -205,7 +205,7 @@ function generateMCPExample(schema: DatabaseTableSchema): string {
     lines.push(schema.description, ``)
   }
   lines.push(
-    `**MCP 服务**：\`synapse-database\`（系统列 \`id\` / \`created_at\` / \`updated_at\` 自动维护，插入/更新时不要传）`,
+    `**MCP 服务**：\`synapse-mcp\`（系统列 \`id\` / \`created_at\` / \`updated_at\` 自动维护，插入/更新时不要传）`,
     ``,
     `## 业务列`,
     ...formatColumnLines(editableCols),
@@ -262,7 +262,7 @@ function generateSkillContext(schema: DatabaseTableSchema): string {
   }
 
   lines.push(
-    `此表通过 MCP 服务 \`synapse-database\` 读写。下文覆盖结构、可用操作、取值规则和调用示例。`,
+    `此表通过 MCP 服务 \`synapse-mcp\` 读写。下文覆盖结构、可用操作、取值规则和调用示例。`,
     ``,
     `## 列结构`,
     ``,
@@ -397,8 +397,8 @@ function buildSkillName(tableName: string): string {
 function buildSkillDescription(schema: DatabaseTableSchema): string {
   const tableRef = `\`${schema.name}\``
   const head = schema.description
-    ? `通过 synapse-database MCP 读写 ${tableRef} 表（${schema.description}）。`
-    : `通过 synapse-database MCP 读写 ${tableRef} 表。`
+    ? `通过 synapse-mcp 读写 ${tableRef} 表（${schema.description}）。`
+    : `通过 synapse-mcp 读写 ${tableRef} 表。`
   const triggers = `Use when 查询 ${schema.name}、插入 ${schema.name}、更新 ${schema.name}、删除 ${schema.name}、统计 ${schema.name}、操作 ${schema.name} 表、${schema.name} CRUD、按字段筛选 ${schema.name} 数据。`
   return head + triggers
 }
@@ -442,7 +442,7 @@ const SCHEMA_COPY_GROUPS: SchemaCopyGroup[] = [
       {
         key: "mcp",
         label: "MCP 调用速查",
-        description: "synapse-database 的 CRUD 示例",
+        description: "synapse-mcp 的 CRUD 示例",
         generate: generateMCPExample,
       },
       {

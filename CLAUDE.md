@@ -48,7 +48,7 @@ dev 端口：desktop 5173 / website 5174，详见 `.claude/rules/workspace-dev-p
 
 ## Synapse MCP 快捷指令
 
-当消息中出现 "sss" 时，将其理解为 Synapse Services Shortcut，并使用 `synapse-database` MCP 中与意图匹配的工具。
+当消息中出现 "sss" 时，按意图使用 `synapse-mcp` MCP 中匹配的工具。
 
 - 涉及数据库、表、字段、记录、SQL、Database、数据增删改查时，使用 Database 相关工具。
 - 涉及定时任务、调度、cron/interval、启停、运行记录或 runtime 状态时，使用 scheduler 相关工具。

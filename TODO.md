@@ -31,7 +31,7 @@ Synapse Database 的列元数据从旧的 `_meta_columns.enum_values` schema 升
 
 删除前必须用测试确认以下场景仍符合预期：当前 schema 数据库、旧 schema 数据库、legacy 备份恢复、旧备份导入。
 
-## Data Store 到 Database 改名兼容清理
+## Data Store / 旧 MCP 名兼容清理
 
 - 创建时间：2026-05-03
 - 当前状态：暂时保留兼容逻辑
@@ -45,9 +45,9 @@ Synapse Database 的列元数据从旧的 `_meta_columns.enum_values` schema 升
 
 ### 起因
 
-Synapse 的数据能力从旧命名 `Data Store` / `data-store` / `synapse-data` 统一改为 `Database` / `database` / `synapse-database`。
+Synapse 的数据能力从旧命名 `Data Store` / `data-store` / `synapse-data` 统一改为 `Database` / `database`。MCP server 名从历史的 `synapse-data` / `synapse-database` / `synapse-services` 统一到当前的 `synapse-mcp`。
 
-这次改名会影响已经安装过旧版本的用户，因为他们本机可能仍然存在旧数据库文件、旧 WAL/SHM 文件、旧 legacy 备份文件，或者编辑器配置里仍注册着旧 MCP server 名 `synapse-data`。
+这次改名会影响已经安装过旧版本的用户，因为他们本机可能仍然存在旧数据库文件、旧 WAL/SHM 文件、旧 legacy 备份文件，或者编辑器配置里仍注册着旧 MCP server 名。
 
 ### 当前结果
 
@@ -56,7 +56,7 @@ Synapse 的数据能力从旧命名 `Data Store` / `data-store` / `synapse-data`
 - 如果用户目录里只有 `synapse-data.db`，启动时自动迁移为 `synapse-database.db`，并同步迁移 `-wal` / `-shm`。
 - 如果当前 `synapse-database.db` 为空，会尝试从最新 `synapse-data.db.legacy.<timestamp>` 备份恢复。
 - `import-legacy-database.mjs` 继续识别旧备份命名，允许用户手动导入历史备份。
-- MCP 自动注册时会清理旧 server 名 `synapse-data`，再注册新 server 名 `synapse-database`。
+- MCP 自动注册时会清理旧 server 名 `synapse-data` / `synapse-database` / `synapse-services`，再注册当前 server 名 `synapse-mcp`。
 - 应用 reset 时同时保留 `synapse-database.db` 和 `synapse-data.db` 前缀，避免迁移前旧数据被误删。
 
 ### 删除建议
@@ -72,7 +72,7 @@ Synapse 的数据能力从旧命名 `Data Store` / `data-store` / `synapse-data`
 
 建议分阶段删除：
 
-- 第一阶段：删除 MCP 旧名 `synapse-data` 清理逻辑，仅保留当前 `synapse-database` 注册。
+- 第一阶段：删除 MCP 旧名清理逻辑，仅保留当前 `synapse-mcp` 注册。
 - 第二阶段：删除 `synapse-data.db` 自动改名和 reset 保护。
 - 第三阶段：删除 legacy 备份自动恢复。
 - 最后阶段：再考虑是否删除手动导入旧备份的兼容能力；这部分可以保留更久，因为用户可能很久以后才导入历史备份。

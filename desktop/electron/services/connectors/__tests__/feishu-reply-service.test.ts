@@ -59,7 +59,7 @@ describe("FeishuReplyService", () => {
       requestId: "codex-mcp-1",
       toolName: "MCP Elicitation",
       toolInput: "Authorize MCP",
-      toolInputRaw: { serverName: "synapse-database" },
+      toolInputRaw: { serverName: "synapse-mcp" },
     })
 
     expect(client.calls).toEqual([

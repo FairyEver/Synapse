@@ -1248,7 +1248,7 @@ Create `desktop/tests/unit/mcp-scheduler-tools.test.ts`:
 import { describe, expect, it, vi } from "vitest"
 
 import { processMcpRequest } from "../../database/shared/mcp-rpc"
-import { SYNAPSE_DATABASE_SERVER_IDENTITY } from "../../database/shared/server-identity"
+import { SYNAPSE_MCP_SERVER_IDENTITY } from "../../database/shared/server-identity"
 import { buildAllMcpTools, MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 
 describe("MCP Scheduler tools", () => {
@@ -1285,7 +1285,7 @@ describe("MCP Scheduler tools", () => {
         name: "scheduler_task_list",
         arguments: {},
       },
-    }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
+    }, SYNAPSE_MCP_SERVER_IDENTITY, executeTool)
 
     expect(response.kind).toBe("result")
     if (response.kind !== "result") return
