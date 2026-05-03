@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
 import {
   History,
+  LoaderCircle,
   Pencil,
   Play,
   Plus,
@@ -171,8 +172,20 @@ function TaskSchedulerModule() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
+          {error ? (
+            <div className="flex items-center gap-3 p-4">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                重试
+              </Button>
+            </div>
+          ) : null}
+          {loading ? (
+            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              加载中
+            </div>
+          ) : null}
           {!loading && tasks.length === 0 ? (
             <Empty>
               <EmptyHeader>
