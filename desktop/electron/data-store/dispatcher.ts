@@ -63,9 +63,9 @@ function requireWhereClause(params: Record<string, unknown>, key: string): DataS
 // --- action handlers ---
 
 const ACTION_HANDLERS: Record<string, ActionHandler> = {
-  listTables: () => ({ ok: true, data: dataStoreService.listTables() }),
+  "database.table.list": () => ({ ok: true, data: dataStoreService.listTables() }),
 
-  createTable: (params) => {
+  "database.table.create": (params) => {
     dataStoreService.createTable(
       requireString(params, "name"),
       requireArray(params, "columns") as Column[],
@@ -74,22 +74,22 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  dropTable: (params) => {
+  "database.table.delete": (params) => {
     dataStoreService.dropTable(requireString(params, "name"))
     return { ok: true }
   },
 
-  describeTable: (params) => ({
+  "database.table.describe": (params) => ({
     ok: true,
     data: dataStoreService.describeTable(requireString(params, "name")),
   }),
 
-  databaseOverview: () => ({
+  "database.overview.get": () => ({
     ok: true,
     data: dataStoreService.getDatabaseOverview(),
   }),
 
-  updateTableDescription: (params) => {
+  "database.table.update": (params) => {
     dataStoreService.updateTableDescription(
       requireString(params, "table"),
       requireText(params, "description"),
@@ -97,7 +97,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  addColumn: (params) => {
+  "database.column.create": (params) => {
     // Legacy callers pass 'name' instead of 'table'; keep both shapes working.
     const tableRaw = params.table ?? params.name
     if (typeof tableRaw !== "string" || !tableRaw) {
@@ -110,7 +110,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  updateColumnDescription: (params) => {
+  "database.column.update": (params) => {
     dataStoreService.updateColumnDescription(
       requireString(params, "table"),
       requireString(params, "column"),
@@ -119,7 +119,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  updateColumnChoices: (params) => {
+  "database.choice.update": (params) => {
     dataStoreService.updateColumnChoices(
       requireString(params, "table"),
       requireString(params, "column"),
@@ -128,7 +128,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  getColumnChoicesUsage: (params) => ({
+  "database.choice_usage.get": (params) => ({
     ok: true,
     data: dataStoreService.getColumnChoicesUsage(
       requireString(params, "table"),
@@ -136,7 +136,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     ),
   }),
 
-  insert: (params) => {
+  "database.row.create": (params) => {
     const result = dataStoreService.insert(
       requireString(params, "table"),
       requireObject(params, "data"),
@@ -144,7 +144,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: result, affected: 1 }
   },
 
-  batchInsert: (params) => {
+  "database.rows.create": (params) => {
     const result = dataStoreService.batchInsert(
       requireString(params, "table"),
       requireArray(params, "rows") as Record<string, unknown>[],
@@ -152,13 +152,13 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: result, affected: result.ids.length }
   },
 
-  query: (params) => {
+  "database.row.list": (params) => {
     requireString(params, "table")
     const result = dataStoreService.query(params as DataStoreQueryParams)
     return { ok: true, data: result.rows, total: result.total }
   },
 
-  update: (params) => {
+  "database.row.update": (params) => {
     const result = dataStoreService.update(
       requireString(params, "table"),
       requireNumber(params, "id"),
@@ -167,7 +167,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { id: params.id }, affected: result.affected }
   },
 
-  delete: (params) => {
+  "database.row.delete": (params) => {
     const result = dataStoreService.delete(
       requireString(params, "table"),
       requireNumber(params, "id"),
@@ -175,7 +175,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { id: params.id }, affected: result.affected }
   },
 
-  updateWhere: (params) => {
+  "database.rows.update": (params) => {
     const result = dataStoreService.updateWhere(
       requireString(params, "table"),
       requireWhereClause(params, "where"),
@@ -185,7 +185,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { ids: result.ids, dryRun: result.dryRun }, affected: result.affected }
   },
 
-  deleteWhere: (params) => {
+  "database.rows.delete": (params) => {
     const result = dataStoreService.deleteWhere(
       requireString(params, "table"),
       requireWhereClause(params, "where"),
@@ -194,20 +194,20 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { ids: result.ids, dryRun: result.dryRun }, affected: result.affected }
   },
 
-  count: (params) => {
+  "database.row.count": (params) => {
     const where = params.where as DataStoreWhereClause | undefined
     const result = dataStoreService.count(requireString(params, "table"), where)
     return { ok: true, data: result }
   },
 
-  operationLog: (params) => ({
+  "database.log.list": (params) => ({
     ok: true,
     data: dataStoreService.listOperationLog(
       typeof params.limit === "number" && Number.isFinite(params.limit) && params.limit >= 0 ? params.limit : 50,
     ),
   }),
 
-  renameTable: (params) => {
+  "database.table.rename": (params) => {
     dataStoreService.renameTable(
       requireString(params, "from"),
       requireString(params, "to"),
@@ -215,7 +215,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  renameColumn: (params) => {
+  "database.column.rename": (params) => {
     dataStoreService.renameColumn(
       requireString(params, "table"),
       requireString(params, "from"),
@@ -224,7 +224,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  dropColumn: (params) => {
+  "database.column.delete": (params) => {
     dataStoreService.dropColumn(
       requireString(params, "table"),
       requireString(params, "column"),
@@ -232,7 +232,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  readSQL: (params) => ({
+  "database.sql.read": (params) => ({
     ok: true,
     data: dataStoreService.readSQL(
       requireString(params, "sql"),
@@ -240,7 +240,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     ),
   }),
 
-  rawSQL: (params) => {
+  "database.sql.execute": (params) => {
     const result = dataStoreService.rawSQL(
       requireString(params, "sql"),
       params.params as unknown[] | undefined,

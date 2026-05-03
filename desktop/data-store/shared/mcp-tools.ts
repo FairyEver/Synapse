@@ -81,12 +81,12 @@ const whereClauseSchema = {
 function buildTools(): McpTool[] {
   return [
     {
-      name: "list_tables",
+      name: "database_table_list",
       description: "List all user tables in the data store. Use description to choose the relevant table when the user describes a purpose rather than an exact table name. Returns an array of { name, description, rowCount, createdAt, updatedAt }.",
       inputSchema: { type: "object", properties: {} },
     },
     {
-      name: "create_table",
+      name: "database_table_create",
       description: `Create a user table with at least one column; system columns id, created_at, and updated_at are added automatically. Column kinds:\n${kindDescription}\nTable and column names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and columns cannot be id, created_at, or updated_at. Provide a one-line description for each column to capture user intent.`,
       inputSchema: {
         type: "object",
@@ -132,22 +132,22 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "drop_table",
+      name: "database_table_delete",
       description: "Drop a user table and all of its rows and metadata. This action is irreversible.",
       inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
     },
     {
-      name: "describe_table",
+      name: "database_table_describe",
       description: "Return table schema and metadata as { name, description, columns, rowCount, createdAt, updatedAt }. Call this before inserts, updates, filters, or schema-sensitive operations. Each column includes { name, kind, choices?, description?, primaryKey?, system? }.",
       inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
     },
     {
-      name: "database_overview",
+      name: "database_overview_get",
       description: "Return an overview of all user tables, table descriptions, row counts, and column summaries. Use this first when the user asks broadly about available data.",
       inputSchema: { type: "object", properties: {} },
     },
     {
-      name: "update_table_description",
+      name: "database_table_update",
       description: "Update the stored table description metadata. This keeps list_tables and describe_table useful for agents without changing rows or columns.",
       inputSchema: {
         type: "object",
@@ -162,7 +162,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "add_column",
+      name: "database_column_create",
       description: `Add one column to an existing table and update table metadata. Use the same kind rules as create_table:\n${kindDescription}\nColumn names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at. Defaults for multi_choice must be arrays, and choice defaults must already appear in choices. Provide a one-line description for the column to capture user intent.`,
       inputSchema: {
         type: "object",
@@ -200,7 +200,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "update_column_description",
+      name: "database_column_update",
       description: "Update the stored description metadata for a user column. This does not change column kind or row data.",
       inputSchema: {
         type: "object",
@@ -213,7 +213,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "update_column_choices",
+      name: "database_choice_update",
       description: "Replace the choices metadata for a single_choice or multi_choice column. Requires at least one choice and rejects the change if existing rows contain values outside the new list.",
       inputSchema: {
         type: "object",
@@ -230,7 +230,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "get_column_choices_usage",
+      name: "database_choice_usage_get",
       description: "Return usage counts for every configured choice in a single_choice or multi_choice column. Use before update_column_choices when you need to know which choices are currently used by rows.",
       inputSchema: {
         type: "object",
@@ -242,7 +242,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "insert",
+      name: "database_row_create",
       description: "Insert one row and return { id }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call describe_table first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
@@ -257,7 +257,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "batch_insert",
+      name: "database_rows_create",
       description: "Insert multiple rows in one transaction and return { ids }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call describe_table first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
@@ -273,7 +273,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "query",
+      name: "database_row_list",
       description: "Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts an equality object { column: value }, an ANDed expression array [{ field, op, value }], or a group { combinator: 'all'|'any', conditions }; op is =, !=, >, <, >=, <=, LIKE, or CONTAINS, and CONTAINS only works on multi_choice columns with one scalar item. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to 100, offset defaults to 0, json and multi_choice values are parsed on read, and boolean values are returned as true or false.",
       inputSchema: {
         type: "object",
@@ -304,7 +304,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "update",
+      name: "database_row_update",
       description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same value rules as insert apply. Call describe_table first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
@@ -320,7 +320,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "delete",
+      name: "database_row_delete",
       description: "Delete one row by id and return { affected }, where 0 means no row matched.",
       inputSchema: {
         type: "object",
@@ -332,7 +332,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "update_where",
+      name: "database_rows_update",
       description: "Partially update every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns, updated_at is rewritten automatically, and the same write-value rules as insert apply. Use update for a single row by id.",
       inputSchema: {
         type: "object",
@@ -355,7 +355,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "delete_where",
+      name: "database_rows_delete",
       description: "Delete every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns. Use delete for a single row by id; to clear a whole table, drop and recreate it.",
       inputSchema: {
         type: "object",
@@ -374,7 +374,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "count",
+      name: "database_row_count",
       description: "Count rows in a table with an optional where clause and return { count }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns. Use this instead of query when you only need the number of matching rows.",
       inputSchema: {
         type: "object",
@@ -389,7 +389,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "operation_log",
+      name: "database_log_list",
       description: "Return recent Data Store mutation operations. Use this when the user asks what an Agent or CLI recently changed.",
       inputSchema: {
         type: "object",
@@ -399,7 +399,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "rename_table",
+      name: "database_table_rename",
       description: "Rename a table without changing its rows, system columns, or stored metadata. The target name must not already exist and must start with a letter, contain only letters, digits, or underscores, and not start with _.",
       inputSchema: {
         type: "object",
@@ -414,7 +414,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "rename_column",
+      name: "database_column_rename",
       description: "Rename a user column without changing its data, description metadata, kind, or choices. The target column must not already exist, and both names follow the normal column rules: start with a letter, use only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at.",
       inputSchema: {
         type: "object",
@@ -430,7 +430,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "drop_column",
+      name: "database_column_delete",
       description: "Drop one user column and all values stored in it. Cannot target id, created_at, or updated_at, and refuses to remove the last non-system column of a table.",
       inputSchema: {
         type: "object",
@@ -442,7 +442,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "read_sql",
+      name: "database_sql_read",
       description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, PRAGMA, and EXPLAIN. Prefer this over raw_sql for inspection and reporting.",
       inputSchema: {
         type: "object",
@@ -465,7 +465,7 @@ function buildTools(): McpTool[] {
       },
     },
     {
-      name: "raw_sql",
+      name: "database_sql_execute",
       description: "Execute raw SQL with optional positional bind params. Prefer read_sql for inspection and structured tools for normal writes. Use raw_sql only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables prefixed with _ and ATTACH or DETACH are blocked.",
       inputSchema: {
         type: "object",
