@@ -219,23 +219,23 @@ function parseField(field: string, spec: FieldSpec): ReadonlySet<number> {
 
   for (const segment of field.split(",")) {
     const trimmed = segment.trim()
-    if (!trimmed) throw new Error(`${spec.label}不合法`)
+    if (!trimmed) throw new Error(`${spec.label}包含空段`)
     addSegment(values, trimmed.toLowerCase(), spec)
   }
 
-  if (values.size === 0) throw new Error(`${spec.label}不合法`)
+  if (values.size === 0) throw new Error(`${spec.label}没有有效值`)
   return new Set([...values].sort((a, b) => a - b))
 }
 
 function addSegment(values: Set<number>, segment: string, spec: FieldSpec): void {
   const [rangePart, stepPart] = segment.split("/")
   if (segment.includes("/") && (rangePart === undefined || stepPart === undefined || stepPart === "")) {
-    throw new Error(`${spec.label}不合法`)
+    throw new Error(`${spec.label}的步长格式不正确`)
   }
 
   const step = stepPart === undefined ? 1 : Number(stepPart)
   if (!Number.isInteger(step) || step <= 0) {
-    throw new Error(`${spec.label}不合法`)
+    throw new Error(`${spec.label}的步长必须是正整数`)
   }
 
   const range = parseRange(rangePart ?? "", spec)
@@ -249,12 +249,12 @@ function parseRange(value: string, spec: FieldSpec): { readonly start: number; r
 
   const [startRaw, endRaw] = value.split("-")
   if (value.includes("-") && (!startRaw || !endRaw)) {
-    throw new Error(`${spec.label}不合法`)
+    throw new Error(`${spec.label}的范围格式不正确`)
   }
 
   const start = parseValue(startRaw ?? "", spec)
   const end = endRaw === undefined ? start : parseValue(endRaw, spec)
-  if (start > end) throw new Error(`${spec.label}不合法`)
+  if (start > end) throw new Error(`${spec.label}的范围起始值不能大于结束值`)
   return { start, end }
 }
 
@@ -262,7 +262,7 @@ function parseValue(value: string, spec: FieldSpec): number {
   const aliased = spec.aliases?.[value]
   const number = aliased ?? Number(value)
   if (!Number.isInteger(number) || number < spec.min || number > spec.max) {
-    throw new Error(`${spec.label}不合法`)
+    throw new Error(`${spec.label}的值 ${value} 超出范围（${spec.min}-${spec.max}）`)
   }
   return number
 }
