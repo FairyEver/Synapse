@@ -27,7 +27,7 @@ describe("TaskSchedulerService", () => {
 
     await harness.service.start()
 
-    expect(harness.service.inspect().timers).toContain("task:1")
+    expect(harness.service.schedulerRuntimeInspect().timers).toContain("task:1")
     harness.service.stop()
   })
 
@@ -36,7 +36,7 @@ describe("TaskSchedulerService", () => {
     await harness.taskItems.upsert(createTask({ id: "task:1" }))
 
     const runPromise = harness.service.runNow("task:1")
-    await waitFor(async () => harness.service.inspect().runningTaskIds.includes("task:1"))
+    await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
     await harness.service.triggerForTest("task:1", "schedule")
 
     expect(await harness.runs.listByTask("task:1")).toEqual(expect.arrayContaining([

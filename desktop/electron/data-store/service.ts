@@ -1009,7 +1009,7 @@ class DataStoreService {
     }
   }
 
-  listTables(): DataStoreTableInfo[] {
+  databaseTableList(): DataStoreTableInfo[] {
     const db = this.getDb()
     const tables = db.prepare(`SELECT name, description, created_at, updated_at FROM "_meta_tables" ORDER BY name`).all() as {
       name: string
@@ -1035,9 +1035,9 @@ class DataStoreService {
     })
   }
 
-  getDatabaseOverview(): DataStoreOverview {
-    const tables = this.listTables().map((table) => {
-      const schema = this.describeTable(table.name)
+  databaseOverviewGet(): DataStoreOverview {
+    const tables = this.databaseTableList().map((table) => {
+      const schema = this.databaseTableDescribe(table.name)
       return {
         name: schema.name,
         description: schema.description,
@@ -1055,7 +1055,7 @@ class DataStoreService {
     return { tableCount: tables.length, tables }
   }
 
-  createTable(name: string, columns: Column[], description?: string): void {
+  databaseTableCreate(name: string, columns: Column[], description?: string): void {
     validateName(name, "table")
     if (columns.length === 0) {
       throw new Error("At least one column is required")
@@ -1098,7 +1098,7 @@ class DataStoreService {
     this.refreshColumnMetaCache()
   }
 
-  dropTable(name: string): void {
+  databaseTableDelete(name: string): void {
     validateName(name, "table")
     this.assertTableExists(name)
 
@@ -1117,7 +1117,7 @@ class DataStoreService {
     this.columnMeta.delete(name)
   }
 
-  describeTable(name: string): DataStoreTableSchema {
+  databaseTableDescribe(name: string): DataStoreTableSchema {
     this.assertTableExists(name)
 
     const db = this.getDb()
@@ -1199,7 +1199,7 @@ class DataStoreService {
     }
   }
 
-  updateTableDescription(table: string, description: string): void {
+  databaseTableUpdate(table: string, description: string): void {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1208,7 +1208,7 @@ class DataStoreService {
       .run(description, new Date().toISOString(), table)
   }
 
-  addColumn(table: string, column: Column & { default?: unknown }): void {
+  databaseColumnCreate(table: string, column: Column & { default?: unknown }): void {
     validateName(table, "table")
     validateColumnName(column.name)
     validateColumnKind(column.kind)
@@ -1271,7 +1271,7 @@ class DataStoreService {
     this.refreshColumnMetaCache()
   }
 
-  updateColumnDescription(table: string, column: string, description: string): void {
+  databaseColumnUpdate(table: string, column: string, description: string): void {
     validateName(table, "table")
     validateColumnName(column)
     this.assertTableExists(table)
@@ -1289,7 +1289,7 @@ class DataStoreService {
     this.refreshColumnMetaCache()
   }
 
-  getColumnChoicesUsage(table: string, column: string): Record<string, number> {
+  databaseChoiceUsageGet(table: string, column: string): Record<string, number> {
     validateName(table, "table")
     validateColumnName(column)
     this.assertTableExists(table)
@@ -1331,7 +1331,7 @@ class DataStoreService {
     return usage
   }
 
-  updateColumnChoices(table: string, column: string, choices: string[]): void {
+  databaseChoiceUpdate(table: string, column: string, choices: string[]): void {
     validateName(table, "table")
     validateColumnName(column)
     this.assertTableExists(table)
@@ -1382,7 +1382,7 @@ class DataStoreService {
     this.columnMeta.set(table, existing)
   }
 
-  insert(table: string, data: Record<string, unknown>): { id: number } {
+  databaseRowCreate(table: string, data: Record<string, unknown>): { id: number } {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1416,7 +1416,7 @@ class DataStoreService {
     return { id: toNumber(result.lastInsertRowid) }
   }
 
-  batchInsert(table: string, rows: Record<string, unknown>[]): { ids: number[] } {
+  databaseRowsCreate(table: string, rows: Record<string, unknown>[]): { ids: number[] } {
     validateName(table, "table")
     this.assertTableExists(table)
     if (rows.length === 0) return { ids: [] }
@@ -1464,7 +1464,7 @@ class DataStoreService {
     return { ids }
   }
 
-  query(params: DataStoreQueryParams): DataStoreQueryResult {
+  databaseRowList(params: DataStoreQueryParams): DataStoreQueryResult {
     validateName(params.table, "table")
     this.assertTableExists(params.table)
 
@@ -1504,7 +1504,7 @@ class DataStoreService {
     return { rows, total: countRow.total }
   }
 
-  update(table: string, id: number, data: Record<string, unknown>): { affected: number } {
+  databaseRowUpdate(table: string, id: number, data: Record<string, unknown>): { affected: number } {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1538,7 +1538,7 @@ class DataStoreService {
     return { affected: toNumber(result.changes) }
   }
 
-  delete(table: string, id: number): { affected: number } {
+  databaseRowDelete(table: string, id: number): { affected: number } {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1547,7 +1547,7 @@ class DataStoreService {
     return { affected: toNumber(result.changes) }
   }
 
-  updateWhere(table: string, where: DataStoreWhereClause, data: Record<string, unknown>, options: BulkMutationOptions = {}): DataStoreBulkMutationResult {
+  databaseRowsUpdate(table: string, where: DataStoreWhereClause, data: Record<string, unknown>, options: BulkMutationOptions = {}): DataStoreBulkMutationResult {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1607,7 +1607,7 @@ class DataStoreService {
     }
   }
 
-  deleteWhere(table: string, where: DataStoreWhereClause, options: BulkMutationOptions = {}): DataStoreBulkMutationResult {
+  databaseRowsDelete(table: string, where: DataStoreWhereClause, options: BulkMutationOptions = {}): DataStoreBulkMutationResult {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1645,7 +1645,7 @@ class DataStoreService {
     }
   }
 
-  rawSQL(sql: string, params?: unknown[]): { rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number } {
+  databaseSqlExecute(sql: string, params?: unknown[]): { rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number } {
     const normalized = sql.trim().toLowerCase()
 
     if (/\b_\w+/i.test(sql) && /\b_[a-zA-Z]\w*\b/.test(sql)) {
@@ -1676,7 +1676,7 @@ class DataStoreService {
     return { changes: toNumber(result.changes), lastInsertRowid: toNumber(result.lastInsertRowid) }
   }
 
-  readSQL(sql: string, params?: unknown[]): { rows: Record<string, unknown>[] } {
+  databaseSqlRead(sql: string, params?: unknown[]): { rows: Record<string, unknown>[] } {
     const normalized = sql.trim().toLowerCase()
     if (!/^(select|pragma|explain)\b/.test(normalized)) {
       throw new Error("readSQL is read-only. Use rawSQL when you explicitly need to write.")
@@ -1712,7 +1712,7 @@ class DataStoreService {
     )
   }
 
-  listOperationLog(limit = 50): DataStoreOperationLogEntry[] {
+  databaseLogList(limit = 50): DataStoreOperationLogEntry[] {
     const db = this.getDb()
     const rows = db.prepare(`
       SELECT "id", "source", "action", "table_name", "affected", "dry_run", "created_at"
@@ -1740,7 +1740,7 @@ class DataStoreService {
     }))
   }
 
-  count(table: string, where?: DataStoreWhereClause): { count: number } {
+  databaseRowCount(table: string, where?: DataStoreWhereClause): { count: number } {
     validateName(table, "table")
     this.assertTableExists(table)
 
@@ -1753,7 +1753,7 @@ class DataStoreService {
     return { count: toNumber(row.count) }
   }
 
-  renameTable(from: string, to: string): void {
+  databaseTableRename(from: string, to: string): void {
     validateName(from, "table")
     validateName(to, "table")
     if (from === to) return
@@ -1784,7 +1784,7 @@ class DataStoreService {
     }
   }
 
-  renameColumn(table: string, from: string, to: string): void {
+  databaseColumnRename(table: string, from: string, to: string): void {
     validateName(table, "table")
     validateColumnName(from)
     validateColumnName(to)
@@ -1816,7 +1816,7 @@ class DataStoreService {
     this.refreshColumnMetaCache()
   }
 
-  dropColumn(table: string, column: string): void {
+  databaseColumnDelete(table: string, column: string): void {
     validateName(table, "table")
     validateColumnName(column)
     this.assertTableExists(table)
@@ -1973,7 +1973,7 @@ class DataStoreService {
     this.assertTableExists(table)
 
     const db = this.getDb()
-    const schema = this.describeTable(table)
+    const schema = this.databaseTableDescribe(table)
     const userColumns = schema.columns.filter((column) => !column.system && !column.primaryKey)
     const rows = db.prepare(`SELECT * FROM ${q(table)} ORDER BY "id" ASC`).all() as Record<string, unknown>[]
     const payload: TableExportPayload = {

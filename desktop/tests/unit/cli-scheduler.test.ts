@@ -7,7 +7,7 @@ describe("handleSchedulerCommand", () => {
     const apiCall = vi.fn(async () => ({ data: [{ id: "task:1", name: "Daily", enabled: true }] }))
     const lines: string[] = []
     await handleSchedulerCommand(["list"], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenCalledWith("schedulerTaskList", {})
+    expect(apiCall).toHaveBeenCalledWith("scheduler.task.list", {})
     expect(lines.join("\n")).toContain("task:1")
   })
 
@@ -15,7 +15,7 @@ describe("handleSchedulerCommand", () => {
     const apiCall = vi.fn(async () => ({ data: { id: "task:1", name: "Daily" } }))
     const lines: string[] = []
     await handleSchedulerCommand(["get", "task:1"], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenCalledWith("schedulerTaskGet", { taskId: "task:1" })
+    expect(apiCall).toHaveBeenCalledWith("scheduler.task.get", { taskId: "task:1" })
     expect(lines.join("\n")).toContain("Daily")
   })
 
@@ -32,7 +32,7 @@ describe("handleSchedulerCommand", () => {
         action: { type: "builtin.command", config: { command: "date" } },
       }),
     ], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenCalledWith("schedulerTaskCreate", {
+    expect(apiCall).toHaveBeenCalledWith("scheduler.task.create", {
       name: "Daily",
       scope: { type: "global" },
       schedule: { type: "interval", everyMinutes: 30 },
@@ -46,15 +46,15 @@ describe("handleSchedulerCommand", () => {
     const lines: string[] = []
     await handleSchedulerCommand(["enable", "task:1"], apiCall, (line) => lines.push(line))
     await handleSchedulerCommand(["disable", "task:1"], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenNthCalledWith(1, "schedulerTaskEnable", { taskId: "task:1" })
-    expect(apiCall).toHaveBeenNthCalledWith(2, "schedulerTaskDisable", { taskId: "task:1" })
+    expect(apiCall).toHaveBeenNthCalledWith(1, "scheduler.task.enable", { taskId: "task:1" })
+    expect(apiCall).toHaveBeenNthCalledWith(2, "scheduler.task.disable", { taskId: "task:1" })
   })
 
   it("lists task runs", async () => {
     const apiCall = vi.fn(async () => ({ data: [{ id: "run:1", status: "success" }] }))
     const lines: string[] = []
     await handleSchedulerCommand(["runs", "task:1", "--limit", "5"], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenCalledWith("schedulerTaskRunsList", { taskId: "task:1", limit: 5 })
+    expect(apiCall).toHaveBeenCalledWith("scheduler.run.list", { taskId: "task:1", limit: 5 })
     expect(lines.join("\n")).toContain("run:1")
   })
 
@@ -62,7 +62,7 @@ describe("handleSchedulerCommand", () => {
     const apiCall = vi.fn(async () => ({ data: { runningTaskIds: [], scheduledTaskIds: ["task:1"], tasks: [] } }))
     const lines: string[] = []
     await handleSchedulerCommand(["status", "task:1"], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenCalledWith("schedulerTaskRuntimeStatus", { taskId: "task:1" })
+    expect(apiCall).toHaveBeenCalledWith("scheduler.runtime.inspect", { taskId: "task:1" })
     expect(lines.join("\n")).toContain("scheduledTaskIds")
   })
 
@@ -70,7 +70,7 @@ describe("handleSchedulerCommand", () => {
     const apiCall = vi.fn(async () => ({ data: [{ type: "builtin.command" }] }))
     const lines: string[] = []
     await handleSchedulerCommand(["actions"], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenCalledWith("schedulerActionTypesList", {})
+    expect(apiCall).toHaveBeenCalledWith("scheduler.action_type.list", {})
     expect(lines.join("\n")).toContain("builtin.command")
   })
 
@@ -83,7 +83,7 @@ describe("handleSchedulerCommand", () => {
       "--data",
       JSON.stringify({ name: "Updated", missedRunPolicy: "run_once" }),
     ], apiCall, (line) => lines.push(line))
-    expect(apiCall).toHaveBeenCalledWith("schedulerTaskUpdate", {
+    expect(apiCall).toHaveBeenCalledWith("scheduler.task.update", {
       taskId: "task:1",
       name: "Updated",
       missedRunPolicy: "run_once",

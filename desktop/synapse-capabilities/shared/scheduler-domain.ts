@@ -174,7 +174,7 @@ export function buildSchedulerTools(): McpToolDefinition[] {
       inputSchema: { type: "object", properties: { taskId: taskIdProperty }, required: ["taskId"] },
     },
     {
-      name: "scheduler_task_runs_list",
+      name: "scheduler_run_list",
       description: "List recent runs for one scheduled task. This is read-only and does not stop or start runs.",
       inputSchema: {
         type: "object",
@@ -186,7 +186,7 @@ export function buildSchedulerTools(): McpToolDefinition[] {
       },
     },
     {
-      name: "scheduler_task_runtime_status",
+      name: "scheduler_runtime_inspect",
       description: "Inspect Scheduler runtime state. Pass taskId for one task, or omit it for all tasks.",
       inputSchema: {
         type: "object",
@@ -196,7 +196,7 @@ export function buildSchedulerTools(): McpToolDefinition[] {
       },
     },
     {
-      name: "scheduler_action_types_list",
+      name: "scheduler_action_type_list",
       description: "List task action types that can be used when creating scheduled tasks, including public config fields and defaults.",
       inputSchema: { type: "object", properties: {} },
     },

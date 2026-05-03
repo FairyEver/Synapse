@@ -19,7 +19,7 @@ describe("Data Store operation log", () => {
     vi.resetModules()
     const { dataStoreService } = await import("../../electron/data-store/service")
     dataStoreService.open()
-    dataStoreService.createTable("tasks", [{ name: "title", kind: "text" }])
+    dataStoreService.databaseTableCreate("tasks", [{ name: "title", kind: "text" }])
   })
 
   afterEach(async () => {

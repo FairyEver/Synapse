@@ -30,13 +30,13 @@ describe("DataStoreService overview", () => {
   })
 
   it("summarizes tables, descriptions, row counts, and columns", () => {
-    service.createTable("tasks", [
+    service.databaseTableCreate("tasks", [
       { name: "title", kind: "text", description: "Task title" },
       { name: "priority", kind: "single_choice", choices: ["high", "low"], description: "Priority" },
     ], "Task tracker")
-    service.insert("tasks", { title: "Ship", priority: "high" })
+    service.databaseRowCreate("tasks", { title: "Ship", priority: "high" })
 
-    expect(service.getDatabaseOverview()).toEqual({
+    expect(service.databaseOverviewGet()).toEqual({
       tableCount: 1,
       tables: [
         expect.objectContaining({

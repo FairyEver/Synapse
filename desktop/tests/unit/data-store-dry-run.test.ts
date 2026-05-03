@@ -21,11 +21,11 @@ describe("DataStoreService bulk dry run", () => {
     const module = await import("../../electron/data-store/service")
     service = module.dataStoreService
     service.open()
-    service.createTable("tasks", [
+    service.databaseTableCreate("tasks", [
       { name: "title", kind: "text" },
       { name: "done", kind: "boolean" },
     ])
-    service.batchInsert("tasks", [
+    service.databaseRowsCreate("tasks", [
       { title: "A", done: false },
       { title: "B", done: false },
     ])
@@ -38,16 +38,16 @@ describe("DataStoreService bulk dry run", () => {
   })
 
   it("previews updateWhere without changing rows", () => {
-    const preview = service.updateWhere("tasks", { done: false }, { done: true }, { dryRun: true })
+    const preview = service.databaseRowsUpdate("tasks", { done: false }, { done: true }, { dryRun: true })
 
     expect(preview).toEqual({ affected: 2, ids: [1, 2], dryRun: true })
-    expect(service.count("tasks", { done: true })).toEqual({ count: 0 })
+    expect(service.databaseRowCount("tasks", { done: true })).toEqual({ count: 0 })
   })
 
   it("previews deleteWhere without deleting rows", () => {
-    const preview = service.deleteWhere("tasks", { done: false }, { dryRun: true })
+    const preview = service.databaseRowsDelete("tasks", { done: false }, { dryRun: true })
 
     expect(preview).toEqual({ affected: 2, ids: [1, 2], dryRun: true })
-    expect(service.count("tasks")).toEqual({ count: 2 })
+    expect(service.databaseRowCount("tasks")).toEqual({ count: 2 })
   })
 })

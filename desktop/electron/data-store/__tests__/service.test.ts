@@ -148,48 +148,48 @@ describe("DataStoreService table descriptions", () => {
   })
 
   it("updates table descriptions in list and schema metadata", () => {
-    service.createTable(
+    service.databaseTableCreate(
       "customer_orders",
       [{ name: "customer_name", kind: "text" }],
       "old note",
     )
 
-    service.updateTableDescription("customer_orders", "客户订单")
+    service.databaseTableUpdate("customer_orders", "客户订单")
 
-    expect(service.describeTable("customer_orders").description).toBe("客户订单")
-    expect(service.listTables()).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableDescribe("customer_orders").description).toBe("客户订单")
+    expect(service.databaseTableList()).toContainEqual(expect.objectContaining({
       name: "customer_orders",
       description: "客户订单",
     }))
   })
 
   it("allows clearing a table description", () => {
-    service.createTable(
+    service.databaseTableCreate(
       "product_sku",
       [{ name: "sku_code", kind: "text" }],
       "商品编码",
     )
 
-    service.updateTableDescription("product_sku", "")
+    service.databaseTableUpdate("product_sku", "")
 
-    expect(service.describeTable("product_sku").description).toBe("")
-    expect(service.listTables()).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableDescribe("product_sku").description).toBe("")
+    expect(service.databaseTableList()).toContainEqual(expect.objectContaining({
       name: "product_sku",
       description: "",
     }))
   })
 
   it("rejects non-exact numeric writes", () => {
-    service.createTable("metrics", [
+    service.databaseTableCreate("metrics", [
       { name: "count_value", kind: "integer" },
       { name: "score_value", kind: "decimal" },
     ])
 
-    expect(() => service.insert("metrics", { count_value: "12abc" })).toThrow(/count_value/)
-    expect(() => service.insert("metrics", { score_value: "1.2x" })).toThrow(/score_value/)
+    expect(() => service.databaseRowCreate("metrics", { count_value: "12abc" })).toThrow(/count_value/)
+    expect(() => service.databaseRowCreate("metrics", { score_value: "1.2x" })).toThrow(/score_value/)
 
-    service.insert("metrics", { count_value: "12", score_value: "1.25" })
-    const result = service.query({ table: "metrics" })
+    service.databaseRowCreate("metrics", { count_value: "12", score_value: "1.25" })
+    const result = service.databaseRowList({ table: "metrics" })
     expect(result.rows[0]).toMatchObject({
       count_value: 12,
       score_value: 1.25,
@@ -217,7 +217,7 @@ describe("DataStoreService legacy database migration", () => {
     service = module.dataStoreService
     service.open()
 
-    const schema = service.describeTable("wdbc_money")
+    const schema = service.databaseTableDescribe("wdbc_money")
     expect(schema.rowCount).toBe(1)
     expect(schema.columns).toContainEqual(expect.objectContaining({
       name: "person",
@@ -229,7 +229,7 @@ describe("DataStoreService legacy database migration", () => {
       name: "amount",
       kind: "decimal",
     }))
-    expect(service.query({ table: "wdbc_money" }).rows[0]).toMatchObject({
+    expect(service.databaseRowList({ table: "wdbc_money" }).rows[0]).toMatchObject({
       reason: "迟到",
       person: "张三",
       type: "收入",
@@ -255,11 +255,11 @@ describe("DataStoreService legacy database migration", () => {
     service = module.dataStoreService
     service.open()
 
-    expect(service.listTables()).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableList()).toContainEqual(expect.objectContaining({
       name: "wdbc_money",
       rowCount: 1,
     }))
-    expect(service.describeTable("wdbc_money").columns).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableDescribe("wdbc_money").columns).toContainEqual(expect.objectContaining({
       name: "person",
       kind: "single_choice",
       choices: ["张三", "李四"],
@@ -274,7 +274,7 @@ describe("DataStoreService legacy database migration", () => {
     service = module.dataStoreService
     service.open()
 
-    expect(service.listTables()).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableList()).toContainEqual(expect.objectContaining({
       name: "wdbc_money",
       rowCount: 1,
     }))
@@ -288,11 +288,11 @@ describe("DataStoreService legacy database migration", () => {
     service = module.dataStoreService
     service.open()
 
-    expect(service.listTables()).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableList()).toContainEqual(expect.objectContaining({
       name: "wdbc_money",
       rowCount: 1,
     }))
-    expect(service.describeTable("wdbc_money").columns).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableDescribe("wdbc_money").columns).toContainEqual(expect.objectContaining({
       name: "person",
       kind: "single_choice",
       choices: ["张三", "李四"],
@@ -311,11 +311,11 @@ describe("DataStoreService legacy database migration", () => {
 
     service.importDatabase(sourcePath)
 
-    expect(service.listTables()).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableList()).toContainEqual(expect.objectContaining({
       name: "wdbc_money",
       rowCount: 1,
     }))
-    expect(service.describeTable("wdbc_money").columns).toContainEqual(expect.objectContaining({
+    expect(service.databaseTableDescribe("wdbc_money").columns).toContainEqual(expect.objectContaining({
       name: "type",
       kind: "single_choice",
       choices: ["收入", "支出"],

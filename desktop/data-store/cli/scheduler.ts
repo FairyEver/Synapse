@@ -14,35 +14,35 @@ export async function handleSchedulerCommand(
       if (args.includes("--disabled")) params.enabled = false
       const limit = getNumberFlag(args, "--limit")
       if (limit !== undefined) params.limit = limit
-      const result = await apiCall("schedulerTaskList", params) as { data?: unknown }
+      const result = await apiCall("scheduler.task.list", params) as { data?: unknown }
       printJson(result.data ?? [], print)
       break
     }
 
     case "get": {
       const taskId = requireArg(args[1], "Usage: synapse scheduler get <taskId>")
-      const result = await apiCall("schedulerTaskGet", { taskId }) as { data?: unknown }
+      const result = await apiCall("scheduler.task.get", { taskId }) as { data?: unknown }
       printJson(result.data ?? null, print)
       break
     }
 
     case "create": {
       const data = parseData(args)
-      const result = await apiCall("schedulerTaskCreate", data as Record<string, unknown>) as { data?: { id?: string } }
+      const result = await apiCall("scheduler.task.create", data as Record<string, unknown>) as { data?: { id?: string } }
       print(`Task created: ${result.data?.id ?? "-"}`)
       break
     }
 
     case "enable": {
       const taskId = requireArg(args[1], "Usage: synapse scheduler enable <taskId>")
-      await apiCall("schedulerTaskEnable", { taskId })
+      await apiCall("scheduler.task.enable", { taskId })
       print(`Task enabled: ${taskId}`)
       break
     }
 
     case "disable": {
       const taskId = requireArg(args[1], "Usage: synapse scheduler disable <taskId>")
-      await apiCall("schedulerTaskDisable", { taskId })
+      await apiCall("scheduler.task.disable", { taskId })
       print(`Task disabled: ${taskId}`)
       break
     }
@@ -52,7 +52,7 @@ export async function handleSchedulerCommand(
       const limit = getNumberFlag(args, "--limit")
       const params: Record<string, unknown> = { taskId }
       if (limit !== undefined) params.limit = limit
-      const result = await apiCall("schedulerTaskRunsList", params) as { data?: unknown }
+      const result = await apiCall("scheduler.run.list", params) as { data?: unknown }
       printJson(result.data ?? [], print)
       break
     }
@@ -60,13 +60,13 @@ export async function handleSchedulerCommand(
     case "status": {
       const params: Record<string, unknown> = {}
       if (args[1] && !args[1].startsWith("--")) params.taskId = args[1]
-      const result = await apiCall("schedulerTaskRuntimeStatus", params) as { data?: unknown }
+      const result = await apiCall("scheduler.runtime.inspect", params) as { data?: unknown }
       printJson(result.data ?? null, print)
       break
     }
 
     case "actions": {
-      const result = await apiCall("schedulerActionTypesList", {}) as { data?: unknown }
+      const result = await apiCall("scheduler.action_type.list", {}) as { data?: unknown }
       printJson(result.data ?? [], print)
       break
     }
@@ -75,7 +75,7 @@ export async function handleSchedulerCommand(
       const taskId = requireArg(args[1], "Usage: synapse scheduler update <taskId> --data '{...}'")
       const data = parseData(args, "Usage: synapse scheduler update <taskId> --data '{...}'")
       if (!isRecord(data)) throw new Error("Invalid JSON for --data: expected object.")
-      const result = await apiCall("schedulerTaskUpdate", { taskId, ...data }) as { data?: { id?: string } }
+      const result = await apiCall("scheduler.task.update", { taskId, ...data }) as { data?: { id?: string } }
       print(`Task updated: ${result.data?.id ?? taskId}`)
       break
     }

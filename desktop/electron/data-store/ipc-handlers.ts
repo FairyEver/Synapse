@@ -22,7 +22,7 @@ function registerDataStoreHandlers(): void {
   if (handlersRegistered) return
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.listTables, async () => {
-    return dataStoreService.listTables()
+    return dataStoreService.databaseTableList()
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.createTable, async (_event, params: {
@@ -30,29 +30,29 @@ function registerDataStoreHandlers(): void {
     description?: string
     columns: Column[]
   }) => {
-    dataStoreService.createTable(params.name, params.columns, params.description)
+    dataStoreService.databaseTableCreate(params.name, params.columns, params.description)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.dropTable, async (_event, name: string) => {
-    dataStoreService.dropTable(name)
+    dataStoreService.databaseTableDelete(name)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.describeTable, async (_event, name: string) => {
-    return dataStoreService.describeTable(name)
+    return dataStoreService.databaseTableDescribe(name)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateTableDescription, async (_event, params: {
     table: string
     description: string
   }) => {
-    dataStoreService.updateTableDescription(params.table, params.description)
+    dataStoreService.databaseTableUpdate(params.table, params.description)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.addColumn, async (_event, params: {
     table: string
     column: Column & { default?: unknown }
   }) => {
-    dataStoreService.addColumn(params.table, params.column)
+    dataStoreService.databaseColumnCreate(params.table, params.column)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateColumnDescription, async (_event, params: {
@@ -60,7 +60,7 @@ function registerDataStoreHandlers(): void {
     column: string
     description: string
   }) => {
-    dataStoreService.updateColumnDescription(params.table, params.column, params.description)
+    dataStoreService.databaseColumnUpdate(params.table, params.column, params.description)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateColumnChoices, async (_event, params: {
@@ -68,32 +68,32 @@ function registerDataStoreHandlers(): void {
     column: string
     choices: string[]
   }) => {
-    dataStoreService.updateColumnChoices(params.table, params.column, params.choices)
+    dataStoreService.databaseChoiceUpdate(params.table, params.column, params.choices)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getColumnChoicesUsage, async (_event, params: {
     table: string
     column: string
   }) => {
-    return dataStoreService.getColumnChoicesUsage(params.table, params.column)
+    return dataStoreService.databaseChoiceUsageGet(params.table, params.column)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.insert, async (_event, params: {
     table: string
     data: Record<string, unknown>
   }) => {
-    return dataStoreService.insert(params.table, params.data)
+    return dataStoreService.databaseRowCreate(params.table, params.data)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.batchInsert, async (_event, params: {
     table: string
     rows: Record<string, unknown>[]
   }) => {
-    return dataStoreService.batchInsert(params.table, params.rows)
+    return dataStoreService.databaseRowsCreate(params.table, params.rows)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.query, async (_event, params: DataStoreQueryParams) => {
-    return dataStoreService.query(params)
+    return dataStoreService.databaseRowList(params)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.update, async (_event, params: {
@@ -101,14 +101,14 @@ function registerDataStoreHandlers(): void {
     id: number
     data: Record<string, unknown>
   }) => {
-    return dataStoreService.update(params.table, params.id, params.data)
+    return dataStoreService.databaseRowUpdate(params.table, params.id, params.data)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.delete, async (_event, params: {
     table: string
     id: number
   }) => {
-    return dataStoreService.delete(params.table, params.id)
+    return dataStoreService.databaseRowDelete(params.table, params.id)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.updateWhere, async (_event, params: {
@@ -116,28 +116,28 @@ function registerDataStoreHandlers(): void {
     where: DataStoreWhereClause
     data: Record<string, unknown>
   }) => {
-    return dataStoreService.updateWhere(params.table, params.where, params.data)
+    return dataStoreService.databaseRowsUpdate(params.table, params.where, params.data)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.deleteWhere, async (_event, params: {
     table: string
     where: DataStoreWhereClause
   }) => {
-    return dataStoreService.deleteWhere(params.table, params.where)
+    return dataStoreService.databaseRowsDelete(params.table, params.where)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.count, async (_event, params: {
     table: string
     where?: DataStoreWhereClause
   }) => {
-    return dataStoreService.count(params.table, params.where)
+    return dataStoreService.databaseRowCount(params.table, params.where)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.renameTable, async (_event, params: {
     from: string
     to: string
   }) => {
-    dataStoreService.renameTable(params.from, params.to)
+    dataStoreService.databaseTableRename(params.from, params.to)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.renameColumn, async (_event, params: {
@@ -145,21 +145,21 @@ function registerDataStoreHandlers(): void {
     from: string
     to: string
   }) => {
-    dataStoreService.renameColumn(params.table, params.from, params.to)
+    dataStoreService.databaseColumnRename(params.table, params.from, params.to)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.dropColumn, async (_event, params: {
     table: string
     column: string
   }) => {
-    dataStoreService.dropColumn(params.table, params.column)
+    dataStoreService.databaseColumnDelete(params.table, params.column)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.rawSQL, async (_event, params: {
     sql: string
     params?: unknown[]
   }) => {
-    return dataStoreService.rawSQL(params.sql, params.params)
+    return dataStoreService.databaseSqlExecute(params.sql, params.params)
   })
 
   handleValidatedIpc(DATA_STORE_IPC_CHANNELS.getStatus, async () => {

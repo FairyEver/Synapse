@@ -21,8 +21,8 @@ describe("DataStoreService readSQL", () => {
     const module = await import("../../electron/data-store/service")
     service = module.dataStoreService
     service.open()
-    service.createTable("tasks", [{ name: "title", kind: "text" }])
-    service.insert("tasks", { title: "Ship" })
+    service.databaseTableCreate("tasks", [{ name: "title", kind: "text" }])
+    service.databaseRowCreate("tasks", { title: "Ship" })
   })
 
   afterEach(async () => {
@@ -32,12 +32,12 @@ describe("DataStoreService readSQL", () => {
   })
 
   it("allows SELECT statements with bind params", () => {
-    expect(service.readSQL("SELECT title FROM tasks WHERE title = ?", ["Ship"])).toEqual({
+    expect(service.databaseSqlRead("SELECT title FROM tasks WHERE title = ?", ["Ship"])).toEqual({
       rows: [{ title: "Ship" }],
     })
   })
 
   it("rejects write statements", () => {
-    expect(() => service.readSQL("DELETE FROM tasks")).toThrow(/read-only/i)
+    expect(() => service.databaseSqlRead("DELETE FROM tasks")).toThrow(/read-only/i)
   })
 })
