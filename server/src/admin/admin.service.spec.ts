@@ -29,6 +29,11 @@ describe("AdminService", () => {
         },
         redeemedAt: true,
         archivedAt: true,
+        riskLockedAt: true,
+        riskLockedReason: true,
+        riskUnlockedAt: true,
+        riskReviewNote: true,
+        replacedByActivationCodeId: true,
         createdAt: true,
       },
     })
@@ -59,6 +64,106 @@ describe("AdminService", () => {
     expect(update).toHaveBeenCalledWith({
       where: { id: "code_1" },
       data: { archivedAt: expect.any(Date) },
+    })
+  })
+
+  it("lists activation attempts for one code", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    const service = new AdminService({
+      activationAttempt: { findMany },
+    } as unknown as PrismaService)
+
+    await service.listActivationAttempts("code_1")
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { activationCodeId: "code_1" },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    })
+  })
+
+  it("updates activation code risk lock state", async () => {
+    const risk = {
+      setRiskLock: vi.fn().mockResolvedValue({ id: "code_1" }),
+    }
+    const service = new AdminService({} as unknown as PrismaService, risk as never)
+
+    await service.updateActivationCodeRiskLock("code_1", {
+      locked: false,
+      note: "确认正常",
+    })
+
+    expect(risk.setRiskLock).toHaveBeenCalledWith("code_1", {
+      locked: false,
+      note: "确认正常",
+    })
+  })
+
+  it("replaces a bound activation code and migrates the license", async () => {
+    const findUniqueOrThrow = vi.fn().mockResolvedValue({
+      id: "old_code",
+      boundAccountId: "account_1",
+      maxDevices: 1,
+      expiresAt: new Date("2026-06-01T00:00:00.000Z"),
+      redeemedAt: new Date("2026-05-01T00:00:00.000Z"),
+      license: { id: "license_1" },
+    })
+    const create = vi.fn().mockResolvedValue({
+      id: "new_code",
+      maxDevices: 1,
+    })
+    const updateActivationCode = vi.fn().mockResolvedValue({ id: "old_code" })
+    const updateLicense = vi.fn().mockResolvedValue({ id: "license_1" })
+    const transaction = vi.fn(async (callback) => callback({
+      activationCode: {
+        findUniqueOrThrow,
+        create,
+        update: updateActivationCode,
+      },
+      license: {
+        update: updateLicense,
+      },
+    }))
+    class TestAdminService extends AdminService {
+      protected override createActivationCodeValue(): string {
+        return "SYN-NEWC-0001"
+      }
+    }
+    const service = new TestAdminService({
+      $transaction: transaction,
+    } as unknown as PrismaService)
+
+    const result = await service.replaceActivationCode("old_code")
+
+    expect(findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { id: "old_code" },
+      include: { license: true },
+    })
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        codeHint: "SYN-****-0001",
+        codeHash: hashActivationCode("SYN-NEWC-0001"),
+        maxDevices: 1,
+        expiresAt: new Date("2026-06-01T00:00:00.000Z"),
+        boundAccountId: "account_1",
+        redeemedAt: new Date("2026-05-01T00:00:00.000Z"),
+      },
+    })
+    expect(updateLicense).toHaveBeenCalledWith({
+      where: { id: "license_1" },
+      data: { activationCodeId: "new_code" },
+    })
+    expect(updateActivationCode).toHaveBeenCalledWith({
+      where: { id: "old_code" },
+      data: {
+        status: "revoked",
+        replacedByActivationCodeId: "new_code",
+      },
+    })
+    expect(result).toEqual({
+      id: "new_code",
+      code: "SYN-NEWC-0001",
+      maxDevices: 1,
     })
   })
 

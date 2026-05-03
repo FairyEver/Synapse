@@ -76,4 +76,59 @@ describe("AdminController", () => {
 
     expect(archiveActivationCode).toHaveBeenCalledWith("code_1")
   })
+
+  it("lists activation attempts", async () => {
+    const listActivationAttempts = vi.fn().mockResolvedValue([])
+    const controller = new AdminController({
+      listActivationAttempts,
+    } as unknown as AdminService)
+
+    await controller.listActivationAttempts("code_1")
+
+    expect(listActivationAttempts).toHaveBeenCalledWith("code_1")
+  })
+
+  it("updates risk lock state", async () => {
+    const updateActivationCodeRiskLock = vi.fn().mockResolvedValue({ id: "code_1" })
+    const controller = new AdminController({
+      updateActivationCodeRiskLock,
+    } as unknown as AdminService)
+
+    await controller.updateActivationCodeRiskLock("code_1", {
+      locked: false,
+      note: "确认正常",
+    })
+
+    expect(updateActivationCodeRiskLock).toHaveBeenCalledWith("code_1", {
+      locked: false,
+      note: "确认正常",
+    })
+  })
+
+  it("rejects invalid risk lock requests", () => {
+    const updateActivationCodeRiskLock = vi.fn()
+    const controller = new AdminController({
+      updateActivationCodeRiskLock,
+    } as unknown as AdminService)
+
+    expect(() => controller.updateActivationCodeRiskLock("code_1", {
+      locked: "false",
+    })).toThrow(BadRequestException)
+    expect(updateActivationCodeRiskLock).not.toHaveBeenCalled()
+  })
+
+  it("replaces activation codes", async () => {
+    const replaceActivationCode = vi.fn().mockResolvedValue({
+      id: "new_code",
+      code: "SYN-NEWC-0001",
+      maxDevices: 1,
+    })
+    const controller = new AdminController({
+      replaceActivationCode,
+    } as unknown as AdminService)
+
+    await controller.replaceActivationCode("old_code")
+
+    expect(replaceActivationCode).toHaveBeenCalledWith("old_code")
+  })
 })

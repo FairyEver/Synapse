@@ -9,6 +9,11 @@ const createActivationCodeSchema = z.object({
   quantity: z.number().int().positive().max(100).default(1),
 }).strict()
 type CreateActivationCodeRequest = z.infer<typeof createActivationCodeSchema>
+const riskLockSchema = z.object({
+  locked: z.boolean(),
+  note: z.string().trim().max(500).nullable().optional(),
+}).strict()
+type RiskLockRequest = z.infer<typeof riskLockSchema>
 
 @UseGuards(AdminAuthGuard)
 @Controller("/admin/api")
@@ -35,6 +40,21 @@ export class AdminController {
   @Patch("/activation-codes/:id/archive")
   archiveActivationCode(@Param("id") id: string) {
     return this.admin.archiveActivationCode(id)
+  }
+
+  @Get("/activation-codes/:id/attempts")
+  listActivationAttempts(@Param("id") id: string) {
+    return this.admin.listActivationAttempts(id)
+  }
+
+  @Patch("/activation-codes/:id/risk-lock")
+  updateActivationCodeRiskLock(@Param("id") id: string, @Body() body: unknown) {
+    return this.admin.updateActivationCodeRiskLock(id, parseRiskLock(body))
+  }
+
+  @Post("/activation-codes/:id/replace")
+  replaceActivationCode(@Param("id") id: string) {
+    return this.admin.replaceActivationCode(id)
   }
 
   @Get("/accounts")
@@ -72,6 +92,14 @@ function parseCreateActivationCode(body: unknown): CreateActivationCodeRequest {
   const result = createActivationCodeSchema.safeParse(body)
   if (!result.success) {
     throw new BadRequestException("激活码创建请求无效。")
+  }
+  return result.data
+}
+
+function parseRiskLock(body: unknown): RiskLockRequest {
+  const result = riskLockSchema.safeParse(body)
+  if (!result.success) {
+    throw new BadRequestException("风控状态请求无效。")
   }
   return result.data
 }

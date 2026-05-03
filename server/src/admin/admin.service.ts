@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { randomBytes } from "node:crypto"
 import { z } from "zod"
+import { ActivationRiskService } from "../licenses/activation-risk.service"
 import { hashActivationCode, normalizeActivationCode } from "../licenses/hash"
 import { PrismaService } from "../prisma/prisma.service"
 
@@ -16,7 +17,11 @@ export function generateActivationCode(): string {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(ActivationRiskService)
+    private readonly risk?: Pick<ActivationRiskService, "setRiskLock">,
+  ) {}
 
   async createActivationCode(input: {
     maxDevices: number
@@ -84,6 +89,11 @@ export class AdminService {
         },
         redeemedAt: true,
         archivedAt: true,
+        riskLockedAt: true,
+        riskLockedReason: true,
+        riskUnlockedAt: true,
+        riskReviewNote: true,
+        replacedByActivationCodeId: true,
         createdAt: true,
       },
     })
@@ -102,6 +112,63 @@ export class AdminService {
     return this.prisma.activationCode.update({
       where: { id },
       data: { archivedAt: new Date() },
+    })
+  }
+
+  listActivationAttempts(id: string) {
+    return this.prisma.activationAttempt.findMany({
+      where: { activationCodeId: id },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    })
+  }
+
+  updateActivationCodeRiskLock(
+    id: string,
+    input: { readonly locked: boolean; readonly note?: string | null },
+  ) {
+    if (!this.risk) {
+      throw new InternalServerErrorException("风控服务不可用。")
+    }
+    return this.risk.setRiskLock(id, input)
+  }
+
+  async replaceActivationCode(id: string) {
+    const code = normalizeActivationCode(this.createActivationCodeValue())
+    return this.prisma.$transaction(async (tx) => {
+      const oldCode = await tx.activationCode.findUniqueOrThrow({
+        where: { id },
+        include: { license: true },
+      })
+      if (!oldCode.boundAccountId || !oldCode.license) {
+        throw new BadRequestException("激活码尚未绑定账号。")
+      }
+
+      const newCode = await tx.activationCode.create({
+        data: {
+          codeHint: createActivationCodeHint(code),
+          codeHash: hashActivationCode(code),
+          maxDevices: oldCode.maxDevices,
+          expiresAt: oldCode.expiresAt,
+          boundAccountId: oldCode.boundAccountId,
+          redeemedAt: oldCode.redeemedAt ?? new Date(),
+        },
+      })
+
+      await tx.license.update({
+        where: { id: oldCode.license.id },
+        data: { activationCodeId: newCode.id },
+      })
+
+      await tx.activationCode.update({
+        where: { id },
+        data: {
+          status: "revoked",
+          replacedByActivationCodeId: newCode.id,
+        },
+      })
+
+      return { id: newCode.id, code, maxDevices: newCode.maxDevices }
     })
   }
 
