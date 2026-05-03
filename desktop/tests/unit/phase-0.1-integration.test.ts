@@ -52,11 +52,11 @@ describe("Phase 0.1 integration: 9-service lifecycle (T1.9)", () => {
     registry.register(fakeDescriptor("core.logging", [], "fatal"))
     registry.register(fakeDescriptor("core.config", [], "fatal"))
     registry.register(fakeDescriptor("core.app-icon", [], "degraded"))
-    registry.register(fakeDescriptor("core.data-store", ["core.config"], "degraded"))
+    registry.register(fakeDescriptor("core.database", ["core.config"], "degraded"))
     registry.register(fakeDescriptor("core.update", ["core.config"], "degraded"))
     registry.register(fakeDescriptor("repo.watch", ["core.config"], "degraded"))
     registry.register(fakeDescriptor("repo.maintenance", ["repo.watch"], "degraded"))
-    registry.register(fakeDescriptor("repo.pending-pushes", ["core.data-store"], "degraded"))
+    registry.register(fakeDescriptor("repo.pending-pushes", ["core.database"], "degraded"))
     registry.register(fakeDescriptor("ui.tray", ["core.app-icon"], "degraded"))
 
     const startResult = await registry.startAll()
@@ -70,10 +70,10 @@ describe("Phase 0.1 integration: 9-service lifecycle (T1.9)", () => {
 
     // Topo sanity in stage trace: each dep is created before its dependent.
     const idx = (event: string) => stage.indexOf(event)
-    expect(idx("create:core.config")).toBeLessThan(idx("create:core.data-store"))
+    expect(idx("create:core.config")).toBeLessThan(idx("create:core.database"))
     expect(idx("create:core.config")).toBeLessThan(idx("create:repo.watch"))
     expect(idx("create:repo.watch")).toBeLessThan(idx("create:repo.maintenance"))
-    expect(idx("create:core.data-store")).toBeLessThan(idx("create:repo.pending-pushes"))
+    expect(idx("create:core.database")).toBeLessThan(idx("create:repo.pending-pushes"))
     expect(idx("create:core.app-icon")).toBeLessThan(idx("create:ui.tray"))
 
     // Stop within 15s deadline.
@@ -92,7 +92,7 @@ describe("Phase 0.1 integration: 9-service lifecycle (T1.9)", () => {
     expect(stopIdx("repo.maintenance")).toBeLessThan(stopIdx("repo.watch"))
     expect(stopIdx("repo.watch")).toBeLessThan(stopIdx("core.config"))
     expect(stopIdx("ui.tray")).toBeLessThan(stopIdx("core.app-icon"))
-    expect(stopIdx("repo.pending-pushes")).toBeLessThan(stopIdx("core.data-store"))
+    expect(stopIdx("repo.pending-pushes")).toBeLessThan(stopIdx("core.database"))
   })
 
   it("buildServiceRegistry-shaped graph plans without error (no cycles, no missing deps)", async () => {
@@ -100,11 +100,11 @@ describe("Phase 0.1 integration: 9-service lifecycle (T1.9)", () => {
     registry.register(fakeDescriptor("core.logging", [], "fatal"))
     registry.register(fakeDescriptor("core.config", [], "fatal"))
     registry.register(fakeDescriptor("core.app-icon", [], "degraded"))
-    registry.register(fakeDescriptor("core.data-store", ["core.config"], "degraded"))
+    registry.register(fakeDescriptor("core.database", ["core.config"], "degraded"))
     registry.register(fakeDescriptor("core.update", ["core.config"], "degraded"))
     registry.register(fakeDescriptor("repo.watch", ["core.config"], "degraded"))
     registry.register(fakeDescriptor("repo.maintenance", ["repo.watch"], "degraded"))
-    registry.register(fakeDescriptor("repo.pending-pushes", ["core.data-store"], "degraded"))
+    registry.register(fakeDescriptor("repo.pending-pushes", ["core.database"], "degraded"))
     registry.register(fakeDescriptor("ui.tray", ["core.app-icon"], "degraded"))
 
     expect(() => registry.planStartOrder()).not.toThrow()

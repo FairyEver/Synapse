@@ -15,17 +15,17 @@ import { Separator } from "@/components/ui/separator"
 import { mcpDefinitions } from "@/definitions/generated/renderer-registry"
 import { EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
 import {
-  getMCPServers,
-  getMcpHttpStatus,
-  openMCPSettings,
-  registerMCP,
-} from "@/modules/data-store/hooks/use-data-store"
+  databaseMcpServersGet,
+  databaseMcpHttpStatusGet,
+  databaseMcpSettingsOpen,
+  databaseMcpRegister,
+} from "@/modules/database/hooks/use-database"
 import { StatusPill } from "@/modules/settings/components/status-pill"
 import type {
-  DataStoreMcpHttpStatus,
-  DataStoreMcpServerInfo,
-  DataStoreMcpTarget,
-} from "@/types/data-store"
+  DatabaseMcpHttpStatus,
+  DatabaseMcpServerInfo,
+  DatabaseMcpTarget,
+} from "@/types/database"
 
 const logger = createRendererLogger("settings.mcp")
 
@@ -38,18 +38,18 @@ const MCP_SERVER_META = mcpDefinitions.map((definition) => ({
 function McpSettingsPanel() {
   const { promise } = useAppNotifications()
   const [mcpServersByTarget, setMcpServersByTarget] = useState<
-    Partial<Record<DataStoreMcpTarget, DataStoreMcpServerInfo>>
+    Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>
   >({})
-  const [mcpHttpStatus, setMcpHttpStatus] = useState<DataStoreMcpHttpStatus | null>(null)
+  const [mcpHttpStatus, setMcpHttpStatus] = useState<DatabaseMcpHttpStatus | null>(null)
 
   useEffect(() => {
-    void getMcpHttpStatus().then(setMcpHttpStatus).catch(() => setMcpHttpStatus(null))
+    void databaseMcpHttpStatusGet().then(setMcpHttpStatus).catch(() => setMcpHttpStatus(null))
   }, [])
 
   const refreshMcpServers = useCallback(async () => {
-    const result = await getMCPServers()
+    const result = await databaseMcpServersGet()
     setMcpServersByTarget(
-      result.reduce<Partial<Record<DataStoreMcpTarget, DataStoreMcpServerInfo>>>((servers, server) => {
+      result.reduce<Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>>((servers, server) => {
         servers[server.target] = server
         return servers
       }, {}),
@@ -65,10 +65,10 @@ function McpSettingsPanel() {
   }, [refreshMcpServers])
 
   const handleRegisterMCP = useCallback(
-    async (target: DataStoreMcpTarget) => {
+    async (target: DatabaseMcpTarget) => {
       await promise(
         async () => {
-          const result = await registerMCP(target)
+          const result = await databaseMcpRegister(target)
           if (!result.success) throw new Error(result.error ?? "注册失败")
           await refreshMcpServers()
           logger.info("MCP registered.", { target })
@@ -83,10 +83,10 @@ function McpSettingsPanel() {
   )
 
   const handleOpenMCPSettings = useCallback(
-    async (target: DataStoreMcpTarget) => {
+    async (target: DatabaseMcpTarget) => {
       await promise(
         async () => {
-          const result = await openMCPSettings(target)
+          const result = await databaseMcpSettingsOpen(target)
           if (!result.success) throw new Error(result.error ?? "打开失败")
           logger.info("MCP settings opened.", { target })
         },

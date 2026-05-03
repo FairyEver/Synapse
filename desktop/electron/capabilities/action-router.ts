@@ -15,7 +15,7 @@ export type SynapseActionRouter = {
 }
 
 export type SynapseActionRouterDeps = {
-  readonly dataStoreDispatch: DomainDispatch
+  readonly databaseDispatch: DomainDispatch
   readonly schedulerDispatch: DomainDispatch
 }
 
@@ -23,7 +23,7 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
   return {
     async dispatch(action, params, context) {
       const domainId = getActionDomainId(action)
-      if (domainId === "data-store") return deps.dataStoreDispatch(action, params, context)
+      if (domainId === "database") return deps.databaseDispatch(action, params, context)
       if (domainId === "scheduler") return deps.schedulerDispatch(action, params, context)
       throw new Error(`Unknown action: ${action}`)
     },

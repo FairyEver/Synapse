@@ -14,23 +14,23 @@
 
 - Create `desktop/synapse-capabilities/shared/naming.ts`: canonical id validation and derivation helpers.
 - Modify `desktop/synapse-capabilities/shared/types.ts`: manifest types based on `id` instead of hand-written action/tool/CLI names.
-- Modify `desktop/data-store/shared/capability-registry.ts`: Database canonical ids and metadata.
+- Modify `desktop/database/shared/capability-registry.ts`: Database canonical ids and metadata.
 - Modify `desktop/synapse-capabilities/shared/scheduler-domain.ts`: Scheduler canonical ids and generated tool names.
 - Modify `desktop/synapse-capabilities/shared/registry.ts`: combine manifests and derive MCP/action/domain maps.
-- Modify `desktop/data-store/shared/mcp-tools.ts`: rename Database MCP tools and parameter names.
-- Modify `desktop/data-store/shared/mcp-rpc.ts`: normalize results by canonical action ids.
-- Modify `desktop/electron/data-store/dispatcher.ts`: canonical action handlers, canonical params, public handler names.
-- Modify `desktop/electron/data-store/service.ts`: rename public Database service methods used by external capability handlers.
-- Modify `desktop/electron/data-store/ipc-handlers.ts`: call renamed service methods without renaming IPC channels.
+- Modify `desktop/database/shared/mcp-tools.ts`: rename Database MCP tools and parameter names.
+- Modify `desktop/database/shared/mcp-rpc.ts`: normalize results by canonical action ids.
+- Modify `desktop/electron/database/dispatcher.ts`: canonical action handlers, canonical params, public handler names.
+- Modify `desktop/electron/database/service.ts`: rename public Database service methods used by external capability handlers.
+- Modify `desktop/electron/database/ipc-handlers.ts`: call renamed service methods and use canonical IPC channel keys.
 - Modify `desktop/electron/services/task-scheduler/external-capabilities.ts`: canonical Scheduler action switch and public adapter method names.
 - Modify `desktop/electron/capabilities/action-router.ts`: route by canonical domain ids.
-- Modify `desktop/data-store/cli/index.ts`: route `synapse database <resource> <action>` and keep `synapse status`.
-- Modify `desktop/data-store/cli/scheduler.ts`: route `synapse scheduler task|run|runtime|action-type <action>`.
-- Create `desktop/data-store/cli/database.ts`: focused parser for `synapse database <resource> <action>` commands.
+- Modify `desktop/database/cli/index.ts`: route `synapse database <resource> <action>` and keep `synapse status`.
+- Modify `desktop/database/cli/scheduler.ts`: route `synapse scheduler task|run|runtime|action-type <action>`.
+- Create `desktop/database/cli/database.ts`: focused parser for `synapse database <resource> <action>` commands.
 - Create `docs/reference/capability-naming-matrix.md`: checked-in human-readable matrix.
-- Create `desktop/scripts/report-capability-name-migration.mjs`: report old-name references in user-local files without editing them.
+- Do not add a user-local migration report script; the final product has no legacy alias surface.
 - Update tests under `desktop/tests/unit/`, `desktop/electron/**/__tests__/`, and `desktop/electron/services/task-scheduler/__tests__/`.
-- Update user-visible English copy in renderer/settings/diagnostics from `Data Store` to `Database`.
+- Update user-visible English copy in renderer/settings/diagnostics from `Database` to `Database`.
 
 ## Task 1: Canonical Naming Helpers
 
@@ -59,7 +59,7 @@ describe("capability naming", () => {
     expect(isCanonicalCapabilityId("database.table.list")).toBe(true)
     expect(isCanonicalCapabilityId("scheduler.action_type.list")).toBe(true)
     expect(isCanonicalCapabilityId("database.table.fetch")).toBe(false)
-    expect(isCanonicalCapabilityId("data-store.table.list")).toBe(false)
+    expect(isCanonicalCapabilityId("database.table.list")).toBe(false)
     expect(isCanonicalCapabilityId("database.Table.list")).toBe(false)
   })
 
@@ -233,20 +233,20 @@ git commit -m "feat: add canonical capability naming helpers"
 ## Task 2: Canonical Capability Manifests
 
 **Files:**
-- Modify: `desktop/data-store/shared/capability-registry.ts`
+- Modify: `desktop/database/shared/capability-registry.ts`
 - Modify: `desktop/synapse-capabilities/shared/scheduler-domain.ts`
 - Modify: `desktop/synapse-capabilities/shared/registry.ts`
 - Test: `desktop/tests/unit/synapse-capabilities.test.ts`
-- Test: `desktop/tests/unit/data-store-capability-parity.test.ts`
+- Test: `desktop/tests/unit/database-capability-parity.test.ts`
 
 - [ ] **Step 1: Write failing manifest parity expectations**
 
 Update `desktop/tests/unit/synapse-capabilities.test.ts` so it expects:
 
 ```ts
-expect(DATA_STORE_DOMAIN.id).toBe("database")
-expect(DATA_STORE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("database.table.list")
-expect(DATA_STORE_DOMAIN.capabilities.map((capability) => capability.id)).not.toContain("listTables")
+expect(DATABASE_DOMAIN.id).toBe("database")
+expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("database.table.list")
+expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).not.toContain("databaseTableList")
 
 expect(SCHEDULER_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
   "scheduler.task.list",
@@ -265,21 +265,21 @@ expect(getActionDomainId("database.table.list")).toBe("database")
 expect(getActionDomainId("scheduler.task.list")).toBe("scheduler")
 ```
 
-Update `desktop/tests/unit/data-store-capability-parity.test.ts` so it compares dispatcher actions to manifest ids instead of legacy action names.
+Update `desktop/tests/unit/database-capability-parity.test.ts` so it compares dispatcher actions to manifest ids instead of legacy action names.
 
 - [ ] **Step 2: Run manifest tests and verify they fail**
 
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/data-store-capability-parity.test.ts
+pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/database-capability-parity.test.ts
 ```
 
 Expected: FAIL because registries still expose legacy names.
 
 - [ ] **Step 3: Replace Database capability registry entries**
 
-In `desktop/data-store/shared/capability-registry.ts`, replace `DATA_STORE_CAPABILITIES` with `DATABASE_CAPABILITIES`:
+In `desktop/database/shared/capability-registry.ts`, replace `DATABASE_CAPABILITIES` with `DATABASE_CAPABILITIES`:
 
 ```ts
 const DATABASE_CAPABILITIES = [
@@ -310,7 +310,7 @@ const DATABASE_CAPABILITIES = [
 ] as const
 ```
 
-Update imports in tests and registries to use `DATABASE_CAPABILITIES`. Do not keep `DATA_STORE_CAPABILITIES` as a compatibility alias.
+Update imports in tests and registries to use `DATABASE_CAPABILITIES`. Do not keep `DATABASE_CAPABILITIES` as a compatibility alias.
 
 - [ ] **Step 4: Generate MCP maps from canonical ids**
 
@@ -375,7 +375,7 @@ export function getActionDomainId(action: string): string | null {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/data-store-capability-parity.test.ts
+pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/database-capability-parity.test.ts
 ```
 
 Expected: PASS after all imports and assertions use canonical ids.
@@ -383,22 +383,22 @@ Expected: PASS after all imports and assertions use canonical ids.
 - [ ] **Step 8: Commit Task 2**
 
 ```bash
-git add desktop/data-store/shared/capability-registry.ts desktop/synapse-capabilities/shared/scheduler-domain.ts desktop/synapse-capabilities/shared/registry.ts desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/data-store-capability-parity.test.ts
+git add desktop/database/shared/capability-registry.ts desktop/synapse-capabilities/shared/scheduler-domain.ts desktop/synapse-capabilities/shared/registry.ts desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/database-capability-parity.test.ts
 git commit -m "feat: define canonical capability manifests"
 ```
 
 ## Task 3: Database MCP Tools And Dispatcher
 
 **Files:**
-- Modify: `desktop/data-store/shared/mcp-tools.ts`
-- Modify: `desktop/data-store/shared/mcp-rpc.ts`
-- Modify: `desktop/electron/data-store/dispatcher.ts`
-- Test: `desktop/tests/unit/data-store-mcp-tools.test.ts`
-- Test: `desktop/tests/unit/data-store-mcp-rpc.test.ts`
+- Modify: `desktop/database/shared/mcp-tools.ts`
+- Modify: `desktop/database/shared/mcp-rpc.ts`
+- Modify: `desktop/electron/database/dispatcher.ts`
+- Test: `desktop/tests/unit/database-mcp-tools.test.ts`
+- Test: `desktop/tests/unit/database-mcp-rpc.test.ts`
 
 - [ ] **Step 1: Write failing MCP tool tests for Database canonical names**
 
-Update `desktop/tests/unit/data-store-mcp-tools.test.ts`:
+Update `desktop/tests/unit/database-mcp-tools.test.ts`:
 
 ```ts
 expect(getTool("database_table_list").description).toContain("Use description to choose")
@@ -417,13 +417,13 @@ expect(getTool("database_log_list").description).toContain("recently changed")
 Add negative expectations:
 
 ```ts
-expect(buildTools().map((tool) => tool.name)).not.toContain("list_tables")
-expect(buildTools().map((tool) => tool.name)).not.toContain("operation_log")
+expect(buildTools().map((tool) => tool.name)).not.toContain("database_table_list")
+expect(buildTools().map((tool) => tool.name)).not.toContain("database_log_list")
 ```
 
 - [ ] **Step 2: Write failing MCP RPC result-shape tests**
 
-Update `desktop/tests/unit/data-store-mcp-rpc.test.ts` to call:
+Update `desktop/tests/unit/database-mcp-rpc.test.ts` to call:
 
 ```ts
 await callTool("database_table_list", { ok: true, data: [{ name: "projects" }] })
@@ -444,47 +444,47 @@ Expected shapes remain:
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/data-store-mcp-tools.test.ts desktop/tests/unit/data-store-mcp-rpc.test.ts
+pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/database-mcp-tools.test.ts desktop/tests/unit/database-mcp-rpc.test.ts
 ```
 
 Expected: FAIL because old tool names and result switch cases are still used.
 
 - [ ] **Step 4: Rename Database MCP tool schemas**
 
-In `desktop/data-store/shared/mcp-tools.ts`, rename each tool and public parameter:
+In `desktop/database/shared/mcp-tools.ts`, rename each tool and public parameter:
 
 ```text
-list_tables -> database_table_list
-create_table name -> database_table_create tableName
-drop_table name -> database_table_delete tableName
-describe_table name -> database_table_describe tableName
-database_overview -> database_overview_get
-update_table_description table -> database_table_update tableName
+database_table_list -> database_table_list
+database_table_create name -> database_table_create tableName
+database_table_delete name -> database_table_delete tableName
+database_table_describe name -> database_table_describe tableName
+database_overview_get -> database_overview_get
+database_table_update table -> database_table_update tableName
 add_column table -> database_column_create tableName
 update_column_description table/column -> database_column_update tableName/columnName
 update_column_choices table/column -> database_choice_update tableName/columnName
 get_column_choices_usage table/column -> database_choice_usage_get tableName/columnName
 insert table -> database_row_create tableName
-batch_insert table -> database_rows_create tableName
+database_rows_create table -> database_rows_create tableName
 query table -> database_row_list tableName
 count table -> database_row_count tableName
 update table/id -> database_row_update tableName/rowId
 delete table/id -> database_row_delete tableName/rowId
-update_where table -> database_rows_update tableName
-delete_where table -> database_rows_delete tableName
-operation_log -> database_log_list
+database_rows_update table -> database_rows_update tableName
+database_rows_delete table -> database_rows_delete tableName
+database_log_list -> database_log_list
 rename_table from/to -> database_table_rename fromTableName/toTableName
-rename_column table/from/to -> database_column_rename tableName/fromColumnName/toColumnName
-drop_column table/column -> database_column_delete tableName/columnName
-read_sql -> database_sql_read
-raw_sql -> database_sql_execute
+database_column_rename table/from/to -> database_column_rename tableName/fromColumnName/toColumnName
+database_column_delete table/column -> database_column_delete tableName/columnName
+database_sql_read -> database_sql_read
+database_sql_execute -> database_sql_execute
 ```
 
 Keep descriptions concise and agent-facing. Do not add UI-style explanation paragraphs.
 
 - [ ] **Step 5: Update MCP result normalization**
 
-In `desktop/data-store/shared/mcp-rpc.ts`, normalize by canonical tool/action names:
+In `desktop/database/shared/mcp-rpc.ts`, normalize by canonical tool/action names:
 
 ```ts
 case "database.table.list":
@@ -528,12 +528,12 @@ Then call `normalizeToolResult(action, result)`.
 
 - [ ] **Step 6: Rename Database dispatcher handlers and params**
 
-In `desktop/electron/data-store/dispatcher.ts`, rename `ACTION_HANDLERS` keys to canonical ids and read canonical param names:
+In `desktop/electron/database/dispatcher.ts`, rename `ACTION_HANDLERS` keys to canonical ids and read canonical param names:
 
 ```ts
-"database.table.list": () => ({ ok: true, data: dataStoreService.databaseTableList() }),
+"database.table.list": () => ({ ok: true, data: databaseService.databaseTableList() }),
 "database.table.create": (params) => {
-  dataStoreService.databaseTableCreate(
+  databaseService.databaseTableCreate(
     requireString(params, "tableName"),
     requireArray(params, "columns") as Column[],
     params.description as string | undefined,
@@ -542,10 +542,10 @@ In `desktop/electron/data-store/dispatcher.ts`, rename `ACTION_HANDLERS` keys to
 },
 "database.table.describe": (params) => ({
   ok: true,
-  data: dataStoreService.databaseTableDescribe(requireString(params, "tableName")),
+  data: databaseService.databaseTableDescribe(requireString(params, "tableName")),
 }),
 "database.row.update": (params) => {
-  const result = dataStoreService.databaseRowUpdate(
+  const result = databaseService.databaseRowUpdate(
     requireString(params, "tableName"),
     requireNumber(params, "rowId"),
     requireObject(params, "data"),
@@ -576,7 +576,7 @@ function extractTableName(action: string, params: Record<string, unknown>): stri
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/data-store-mcp-tools.test.ts desktop/tests/unit/data-store-mcp-rpc.test.ts desktop/tests/unit/data-store-capability-parity.test.ts
+pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/database-mcp-tools.test.ts desktop/tests/unit/database-mcp-rpc.test.ts desktop/tests/unit/database-capability-parity.test.ts
 ```
 
 Expected: PASS.
@@ -584,34 +584,34 @@ Expected: PASS.
 - [ ] **Step 9: Commit Task 3**
 
 ```bash
-git add desktop/data-store/shared/mcp-tools.ts desktop/data-store/shared/mcp-rpc.ts desktop/electron/data-store/dispatcher.ts desktop/tests/unit/data-store-mcp-tools.test.ts desktop/tests/unit/data-store-mcp-rpc.test.ts desktop/tests/unit/data-store-capability-parity.test.ts
+git add desktop/database/shared/mcp-tools.ts desktop/database/shared/mcp-rpc.ts desktop/electron/database/dispatcher.ts desktop/tests/unit/database-mcp-tools.test.ts desktop/tests/unit/database-mcp-rpc.test.ts desktop/tests/unit/database-capability-parity.test.ts
 git commit -m "feat: rename database mcp capabilities"
 ```
 
 ## Task 4: Public Database Service Method Names
 
 **Files:**
-- Modify: `desktop/electron/data-store/service.ts`
-- Modify: `desktop/electron/data-store/ipc-handlers.ts`
+- Modify: `desktop/electron/database/service.ts`
+- Modify: `desktop/electron/database/ipc-handlers.ts`
 - Modify: `desktop/electron/services/diagnostics-service.ts`
-- Test: `desktop/electron/data-store/__tests__/service.test.ts`
+- Test: `desktop/electron/database/__tests__/service.test.ts`
 - Test: `desktop/electron/services/__tests__/diagnostics-service.test.ts`
 
 - [ ] **Step 1: Update service tests to canonical public method names**
 
-In `desktop/electron/data-store/__tests__/service.test.ts`, replace public method calls:
+In `desktop/electron/database/__tests__/service.test.ts`, replace public method calls:
 
 ```text
-listTables() -> databaseTableList()
+databaseTableList() -> databaseTableList()
 getDatabaseOverview() -> databaseOverviewGet()
-createTable(...) -> databaseTableCreate(...)
-dropTable(...) -> databaseTableDelete(...)
-describeTable(...) -> databaseTableDescribe(...)
-updateTableDescription(...) -> databaseTableUpdate(...)
+databaseTableCreate(...) -> databaseTableCreate(...)
+databaseTableDelete(...) -> databaseTableDelete(...)
+databaseTableDescribe(...) -> databaseTableDescribe(...)
+databaseTableUpdate(...) -> databaseTableUpdate(...)
 getColumnChoicesUsage(...) -> databaseChoiceUsageGet(...)
 updateColumnChoices(...) -> databaseChoiceUpdate(...)
-rawSQL(...) -> databaseSqlExecute(...)
-readSQL(...) -> databaseSqlRead(...)
+databaseSqlExecute(...) -> databaseSqlExecute(...)
+databaseSqlRead(...) -> databaseSqlRead(...)
 listOperationLog(...) -> databaseLogList(...)
 ```
 
@@ -622,40 +622,40 @@ Do not rename test descriptions unless the old wording is user-visible.
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/data-store/__tests__/service.test.ts
+pnpm --filter @synapse/desktop exec vitest run desktop/electron/database/__tests__/service.test.ts
 ```
 
 Expected: FAIL because methods are still legacy named.
 
 - [ ] **Step 3: Rename public methods in `service.ts`**
 
-Rename public methods in `desktop/electron/data-store/service.ts`:
+Rename public methods in `desktop/electron/database/service.ts`:
 
 ```text
-listTables -> databaseTableList
+databaseTableList -> databaseTableList
 getDatabaseOverview -> databaseOverviewGet
-createTable -> databaseTableCreate
-dropTable -> databaseTableDelete
-describeTable -> databaseTableDescribe
-updateTableDescription -> databaseTableUpdate
+databaseTableCreate -> databaseTableCreate
+databaseTableDelete -> databaseTableDelete
+databaseTableDescribe -> databaseTableDescribe
+databaseTableUpdate -> databaseTableUpdate
 addColumn -> databaseColumnCreate
-dropColumn -> databaseColumnDelete
+databaseColumnDelete -> databaseColumnDelete
 renameTable -> databaseTableRename
-renameColumn -> databaseColumnRename
+databaseColumnRename -> databaseColumnRename
 updateColumnDescription -> databaseColumnUpdate
 updateColumnChoices -> databaseChoiceUpdate
 getColumnChoicesUsage -> databaseChoiceUsageGet
 insert -> databaseRowCreate
-batchInsert -> databaseRowsCreate
+databaseRowsCreate -> databaseRowsCreate
 query -> databaseRowList
 count -> databaseRowCount
 update -> databaseRowUpdate
 delete -> databaseRowDelete
-updateWhere -> databaseRowsUpdate
-deleteWhere -> databaseRowsDelete
+databaseRowsUpdate -> databaseRowsUpdate
+databaseRowsDelete -> databaseRowsDelete
 listOperationLog -> databaseLogList
-readSQL -> databaseSqlRead
-rawSQL -> databaseSqlExecute
+databaseSqlRead -> databaseSqlRead
+databaseSqlExecute -> databaseSqlExecute
 ```
 
 Update internal calls inside `service.ts` too:
@@ -677,28 +677,28 @@ Keep private helper names unchanged unless TypeScript forces a local update.
 Update callsites in:
 
 ```text
-desktop/electron/data-store/dispatcher.ts
-desktop/electron/data-store/ipc-handlers.ts
+desktop/electron/database/dispatcher.ts
+desktop/electron/database/ipc-handlers.ts
 desktop/electron/services/diagnostics-service.ts
-desktop/electron/data-store/__tests__/service.test.ts
+desktop/electron/database/__tests__/service.test.ts
 ```
 
 Example in `ipc-handlers.ts`:
 
 ```ts
-handleValidatedIpc(DATA_STORE_IPC_CHANNELS.listTables, async () => {
-  return dataStoreService.databaseTableList()
+handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableList, async () => {
+  return databaseService.databaseTableList()
 })
 ```
 
-Do not rename `DATA_STORE_IPC_CHANNELS` keys or preload bridge methods in this task.
+Rename `DATABASE_IPC_CHANNELS` keys and preload bridge methods to the same lower-camel names as the service methods.
 
 - [ ] **Step 5: Run service and type checks for touched surface**
 
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/data-store/__tests__/service.test.ts desktop/electron/services/__tests__/diagnostics-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run desktop/electron/database/__tests__/service.test.ts desktop/electron/services/__tests__/diagnostics-service.test.ts
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -707,7 +707,7 @@ Expected: tests PASS and typecheck PASS.
 - [ ] **Step 6: Commit Task 4**
 
 ```bash
-git add desktop/electron/data-store/service.ts desktop/electron/data-store/dispatcher.ts desktop/electron/data-store/ipc-handlers.ts desktop/electron/services/diagnostics-service.ts desktop/electron/data-store/__tests__/service.test.ts desktop/electron/services/__tests__/diagnostics-service.test.ts
+git add desktop/electron/database/service.ts desktop/electron/database/dispatcher.ts desktop/electron/database/ipc-handlers.ts desktop/electron/services/diagnostics-service.ts desktop/electron/database/__tests__/service.test.ts desktop/electron/services/__tests__/diagnostics-service.test.ts
 git commit -m "refactor: align database service method names"
 ```
 
@@ -810,8 +810,8 @@ git commit -m "feat: rename scheduler external capabilities"
 **Files:**
 - Modify: `desktop/electron/capabilities/action-router.ts`
 - Modify: `desktop/electron/capabilities/__tests__/action-router.test.ts`
-- Modify: `desktop/data-store/mcp/index.ts`
-- Modify: `desktop/electron/data-store/mcp-server.ts`
+- Modify: `desktop/database/mcp/index.ts`
+- Modify: `desktop/electron/database/mcp-server.ts`
 - Test: `desktop/tests/unit/mcp-scheduler-tools.test.ts`
 
 - [ ] **Step 1: Update action router tests**
@@ -823,7 +823,7 @@ await expect(router.dispatch("database.table.list", {}, { source: "api" })).reso
   ok: true,
   data: ["tables"],
 })
-expect(dataStoreDispatch).toHaveBeenCalledWith("database.table.list", {}, { source: "api" })
+expect(databaseDispatch).toHaveBeenCalledWith("database.table.list", {}, { source: "api" })
 
 await expect(router.dispatch("scheduler.task.list", {}, { source: "api" })).resolves.toEqual({
   ok: true,
@@ -839,7 +839,7 @@ expect(schedulerDispatch).toHaveBeenCalledWith("scheduler.run.list", { taskId: "
 Old action rejection:
 
 ```ts
-await expect(router.dispatch("listTables", {}, { source: "api" })).rejects.toThrow(/Unknown action/)
+await expect(router.dispatch("databaseTableList", {}, { source: "api" })).rejects.toThrow(/Unknown action/)
 await expect(router.dispatch("schedulerTaskList", {}, { source: "api" })).rejects.toThrow(/Unknown action/)
 ```
 
@@ -855,7 +855,7 @@ Expected: FAIL until registries and dispatcher use canonical ids everywhere.
 
 - [ ] **Step 3: Ensure MCP transport forwards canonical actions**
 
-In `desktop/data-store/mcp/index.ts`, no behavior change is needed if `MCP_TOOL_ACTIONS` maps generated MCP tool names to canonical ids:
+In `desktop/database/mcp/index.ts`, no behavior change is needed if `MCP_TOOL_ACTIONS` maps generated MCP tool names to canonical ids:
 
 ```ts
 const action = MCP_TOOL_ACTIONS[toolName]
@@ -863,7 +863,7 @@ if (!action) throw new Error(`Unknown tool: ${toolName}`)
 return await apiCall(getServerInfo(), action, args, "mcp-stdio")
 ```
 
-Verify `desktop/electron/data-store/mcp-server.ts` uses the same mapping:
+Verify `desktop/electron/database/mcp-server.ts` uses the same mapping:
 
 ```ts
 const action = MCP_TOOL_ACTIONS[toolName]
@@ -876,7 +876,7 @@ return actionRouter.dispatch(action, args, { source: "mcp-http" })
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/capabilities/__tests__/action-router.test.ts desktop/tests/unit/mcp-scheduler-tools.test.ts desktop/tests/unit/data-store-mcp-rpc.test.ts
+pnpm --filter @synapse/desktop exec vitest run desktop/electron/capabilities/__tests__/action-router.test.ts desktop/tests/unit/mcp-scheduler-tools.test.ts desktop/tests/unit/database-mcp-rpc.test.ts
 ```
 
 Expected: PASS.
@@ -884,16 +884,16 @@ Expected: PASS.
 - [ ] **Step 5: Commit Task 6**
 
 ```bash
-git add desktop/electron/capabilities/action-router.ts desktop/electron/capabilities/__tests__/action-router.test.ts desktop/data-store/mcp/index.ts desktop/electron/data-store/mcp-server.ts desktop/tests/unit/mcp-scheduler-tools.test.ts desktop/tests/unit/data-store-mcp-rpc.test.ts
+git add desktop/electron/capabilities/action-router.ts desktop/electron/capabilities/__tests__/action-router.test.ts desktop/database/mcp/index.ts desktop/electron/database/mcp-server.ts desktop/tests/unit/mcp-scheduler-tools.test.ts desktop/tests/unit/database-mcp-rpc.test.ts
 git commit -m "feat: route external api by canonical actions"
 ```
 
 ## Task 7: CLI Domain Resource Action Parser
 
 **Files:**
-- Create: `desktop/data-store/cli/database.ts`
-- Modify: `desktop/data-store/cli/index.ts`
-- Modify: `desktop/data-store/cli/scheduler.ts`
+- Create: `desktop/database/cli/database.ts`
+- Modify: `desktop/database/cli/index.ts`
+- Modify: `desktop/database/cli/scheduler.ts`
 - Test: `desktop/tests/unit/cli-scheduler.test.ts`
 - Test: create `desktop/tests/unit/cli-database.test.ts`
 
@@ -903,7 +903,7 @@ Create `desktop/tests/unit/cli-database.test.ts` with focused handler tests:
 
 ```ts
 import { describe, expect, it, vi } from "vitest"
-import { handleDatabaseCommand } from "../../data-store/cli/database"
+import { handleDatabaseCommand } from "../../database/cli/database"
 
 describe("database cli commands", () => {
   it("routes table list and describe", async () => {
@@ -971,7 +971,7 @@ Expected: FAIL because the new Database handler does not exist and Scheduler sti
 
 - [ ] **Step 4: Implement `handleDatabaseCommand`**
 
-Create `desktop/data-store/cli/database.ts`. Implement commands using canonical actions and canonical params:
+Create `desktop/database/cli/database.ts`. Implement commands using canonical actions and canonical params:
 
 ```ts
 type CliApiCall = (action: string, params?: Record<string, unknown>) => Promise<unknown>
@@ -1029,7 +1029,7 @@ Use existing parse helpers from `index.ts` by moving shared helpers into this fi
 
 - [ ] **Step 5: Update root CLI routing**
 
-In `desktop/data-store/cli/index.ts`, route top-level `database` and `scheduler`:
+In `desktop/database/cli/index.ts`, route top-level `database` and `scheduler`:
 
 ```ts
 if (command === "database") {
@@ -1056,7 +1056,7 @@ synapse scheduler run list <taskId> [--limit N]
 
 - [ ] **Step 6: Update Scheduler CLI parser**
 
-In `desktop/data-store/cli/scheduler.ts`, parse `resource.action`:
+In `desktop/database/cli/scheduler.ts`, parse `resource.action`:
 
 ```ts
 const [resource, action, ...rest] = args
@@ -1090,15 +1090,15 @@ Expected: PASS.
 - [ ] **Step 8: Commit Task 7**
 
 ```bash
-git add desktop/data-store/cli/index.ts desktop/data-store/cli/database.ts desktop/data-store/cli/scheduler.ts desktop/tests/unit/cli-database.test.ts desktop/tests/unit/cli-scheduler.test.ts
+git add desktop/database/cli/index.ts desktop/database/cli/database.ts desktop/database/cli/scheduler.ts desktop/tests/unit/cli-database.test.ts desktop/tests/unit/cli-scheduler.test.ts
 git commit -m "feat: add canonical database and scheduler cli commands"
 ```
 
-## Task 8: UI Copy From Data Store To Database
+## Task 8: UI Copy From Database To Database
 
 **Files:**
 - Modify: `desktop/src/modules/settings/data.ts`
-- Modify: `desktop/src/modules/settings/components/data-store-settings-panel.tsx`
+- Modify: `desktop/src/modules/settings/components/database-settings-panel.tsx`
 - Modify: `desktop/src/modules/settings/components/mcp-settings-panel.tsx`
 - Modify: `desktop/electron/services/diagnostics-service.ts`
 - Modify: `desktop/src/modules/settings/components/__tests__/diagnostics-panel.test.tsx`
@@ -1109,7 +1109,7 @@ git commit -m "feat: add canonical database and scheduler cli commands"
 Update tests that assert English group labels:
 
 ```ts
-expect(groups.get("Database")?.map((check) => check.id)).toEqual(["data-store.status"])
+expect(groups.get("Database")?.map((check) => check.id)).toEqual(["database.status"])
 ```
 
 Update diagnostics fixture groups:
@@ -1126,27 +1126,27 @@ Run:
 pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/components/__tests__/diagnostics-panel.test.tsx desktop/electron/services/__tests__/diagnostics-service.test.ts
 ```
 
-Expected: FAIL because UI still emits `Data Store`.
+Expected: FAIL because UI still emits `Database`.
 
 - [ ] **Step 3: Replace user-visible English copy only**
 
 Replace visible strings:
 
 ```text
-Data Store -> Database
-Synapse Data Store CLI -> Synapse Database CLI
-Data Store mutations -> Database mutations
+旧资源名 -> Database
+Synapse Database CLI -> Synapse Database CLI
+Database mutations -> database mutations
 ```
 
-Do not rename:
+Rename project-level identifiers as well:
 
 ```text
-desktop/src/modules/data-store
-DataStoreTableInfo
-DATA_STORE_IPC_CHANNELS
-synapse:data-store:*
-data-track="data-store-*"
-logger name "data-store.*"
+desktop/src/modules/database
+DatabaseTableInfo
+DATABASE_IPC_CHANNELS
+synapse:database:*
+data-track="database-*"
+logger name "database.*"
 ```
 
 Chinese copy such as `数据库` stays unchanged.
@@ -1164,15 +1164,14 @@ Expected: PASS.
 - [ ] **Step 5: Commit Task 8**
 
 ```bash
-git add desktop/src/modules/settings/data.ts desktop/src/modules/settings/components/data-store-settings-panel.tsx desktop/src/modules/settings/components/mcp-settings-panel.tsx desktop/electron/services/diagnostics-service.ts desktop/src/modules/settings/components/__tests__/diagnostics-panel.test.tsx desktop/electron/services/__tests__/diagnostics-service.test.ts
-git commit -m "refactor: rename visible data store copy to database"
+git add desktop/src/modules/settings/data.ts desktop/src/modules/settings/components/database-settings-panel.tsx desktop/src/modules/settings/components/mcp-settings-panel.tsx desktop/electron/services/diagnostics-service.ts desktop/src/modules/settings/components/__tests__/diagnostics-panel.test.tsx desktop/electron/services/__tests__/diagnostics-service.test.ts
+git commit -m "refactor: rename visible database copy to database"
 ```
 
 ## Task 9: Naming Matrix And User-Local Migration Report
 
 **Files:**
 - Create: `docs/reference/capability-naming-matrix.md`
-- Create: `desktop/scripts/report-capability-name-migration.mjs`
 - Test: `desktop/tests/unit/capability-naming-matrix.test.ts`
 
 - [ ] **Step 1: Write failing matrix parity test**
@@ -1230,7 +1229,7 @@ Populate all Database and Scheduler rows from `docs/superpowers/specs/2026-05-03
 
 - [ ] **Step 4: Create user-local migration report script**
 
-Create `desktop/scripts/report-capability-name-migration.mjs`:
+Do not create a user-local migration report script:
 
 ```js
 #!/usr/bin/env node
@@ -1239,17 +1238,17 @@ import { homedir } from "node:os"
 import path from "node:path"
 
 const replacements = new Map([
-  ["list_tables", "database_table_list"],
-  ["operation_log", "database_log_list"],
+  ["database_table_list", "database_table_list"],
+  ["database_log_list", "database_log_list"],
   ["scheduler_task_runs_list", "scheduler_run_list"],
   ["scheduler_task_runtime_status", "scheduler_runtime_inspect"],
   ["scheduler_action_types_list", "scheduler_action_type_list"],
-  ["listTables", "database.table.list"],
-  ["operationLog", "database.log.list"],
+  ["databaseTableList", "database.table.list"],
+  ["databaseLogList", "database.log.list"],
   ["schedulerTaskRunsList", "scheduler.run.list"],
-  ["synapse tables", "synapse database table list"],
-  ["synapse operation-log", "synapse database log list"],
-  ["synapse scheduler runs", "synapse scheduler run list"],
+  ["synapse database table list", "synapse database table list"],
+  ["synapse database log list", "synapse database log list"],
+  ["synapse scheduler run list", "synapse scheduler run list"],
 ])
 
 const roots = [
@@ -1320,7 +1319,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit Task 9**
 
 ```bash
-git add docs/reference/capability-naming-matrix.md desktop/scripts/report-capability-name-migration.mjs desktop/tests/unit/capability-naming-matrix.test.ts
+git add docs/reference/capability-naming-matrix.md desktop/tests/unit/capability-naming-matrix.test.ts
 git commit -m "docs: add capability naming matrix"
 ```
 
@@ -1335,14 +1334,14 @@ git commit -m "docs: add capability naming matrix"
 Run:
 
 ```bash
-rg -n "list_tables|operation_log|scheduler_task_runs_list|schedulerTaskRunsList|schedulerTaskRuntimeStatus|schedulerActionTypesList|schedulerTaskUpdate|listTables|operationLog|synapse tables|synapse operation-log|synapse scheduler runs|Data Store" desktop/data-store desktop/electron desktop/src desktop/tests docs/reference AGENTS.md README.md
+rg -n "database_table_list|database_log_list|scheduler_task_runs_list|schedulerTaskRunsList|schedulerTaskRuntimeStatus|schedulerActionTypesList|schedulerTaskUpdate|databaseTableList|databaseLogList|synapse database table list|synapse database log list|synapse scheduler run list|Database" desktop/database desktop/electron desktop/src desktop/tests docs/reference AGENTS.md README.md
 ```
 
 Expected after cleanup:
 
 - No old MCP/API/CLI names in active code except negative tests or migration report replacements.
-- No user-visible `Data Store` copy in renderer/electron diagnostics except negative documentation or migration-report strings.
-- Internal identifiers such as `data-store` paths, `DataStore` types, IPC channels, and tracking ids may remain.
+- No user-visible `Database` copy in renderer/electron diagnostics except negative documentation or migration-report strings.
+- Internal identifiers such as `database` paths, `Database` types, IPC channels, and tracking ids may remain.
 
 - [ ] **Step 2: Update active docs and generated copy formats**
 
@@ -1350,9 +1349,9 @@ Update references in active docs and copy helpers:
 
 ```text
 AGENTS.md shortcut wording: "Database, table, column, row, SQL, or data CRUD requests use Database tools."
-desktop/src/modules/data-store/components/schema-copy-formats.ts MCP snippets
-desktop/data-store/cli/index.ts help text
-README.md only if it documents current Data Store/CLI/MCP names
+desktop/src/modules/database/components/schema-copy-formats.ts MCP snippets
+desktop/database/cli/index.ts help text
+README.md only if it documents current Database/CLI/MCP names
 ```
 
 Do not rewrite historical superpowers specs from prior dates. They document past decisions.
@@ -1366,14 +1365,14 @@ pnpm --filter @synapse/desktop exec vitest run \
   desktop/tests/unit/capability-naming.test.ts \
   desktop/tests/unit/capability-naming-matrix.test.ts \
   desktop/tests/unit/synapse-capabilities.test.ts \
-  desktop/tests/unit/data-store-capability-parity.test.ts \
-  desktop/tests/unit/data-store-mcp-tools.test.ts \
-  desktop/tests/unit/data-store-mcp-rpc.test.ts \
+  desktop/tests/unit/database-capability-parity.test.ts \
+  desktop/tests/unit/database-mcp-tools.test.ts \
+  desktop/tests/unit/database-mcp-rpc.test.ts \
   desktop/tests/unit/mcp-scheduler-tools.test.ts \
   desktop/tests/unit/cli-database.test.ts \
   desktop/tests/unit/cli-scheduler.test.ts \
   desktop/electron/capabilities/__tests__/action-router.test.ts \
-  desktop/electron/data-store/__tests__/service.test.ts \
+  desktop/electron/database/__tests__/service.test.ts \
   desktop/electron/services/task-scheduler/__tests__/external-api.test.ts
 ```
 
@@ -1396,7 +1395,7 @@ Expected: all commands PASS.
 Run:
 
 ```bash
-node desktop/scripts/report-capability-name-migration.mjs
+node
 ```
 
 Expected: prints either no local references or a report of local files with suggested replacements. Do not edit those local files automatically.
@@ -1411,7 +1410,6 @@ git commit -m "test: enforce canonical capability names"
 ## Handoff Notes
 
 - Do not start a dev server or browser preview for this task.
-- Keep renderer UI work to visible copy only.
-- Keep `desktop/src/modules/data-store`, `DataStore*` types, `synapse:data-store:*` IPC channels, and `data-store-*` tracking ids unless a compile failure proves one must move.
+- This migration is project-wide: renderer, preload, Electron, CLI/MCP bundles, scripts, tests, docs, and tracking ids should all use `database`.
 - Old API/MCP/CLI names should fail, not warn.
 - When a test fails because it encodes old names, update the test only if the new behavior is covered by the spec.

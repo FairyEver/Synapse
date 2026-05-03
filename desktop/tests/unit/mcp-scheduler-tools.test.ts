@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { processMcpRequest } from "../../data-store/shared/mcp-rpc"
-import { SYNAPSE_DATA_SERVER_IDENTITY } from "../../data-store/shared/server-identity"
+import { processMcpRequest } from "../../database/shared/mcp-rpc"
+import { SYNAPSE_DATABASE_SERVER_IDENTITY } from "../../database/shared/server-identity"
 import { buildAllMcpTools, MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 
 describe("MCP Scheduler tools", () => {
-  it("lists existing Data Store tools and new Scheduler tools", () => {
+  it("lists existing Database tools and new Scheduler tools", () => {
     const names = buildAllMcpTools().map((tool) => tool.name)
-    expect(names).toContain("list_tables")
-    expect(names).toContain("query")
+    expect(names).toContain("database_table_list")
+    expect(names).toContain("database_row_list")
     expect(names).toContain("scheduler_task_list")
     expect(names).toContain("scheduler_task_get")
     expect(names).toContain("scheduler_task_create")
@@ -18,9 +18,9 @@ describe("MCP Scheduler tools", () => {
 
   it("lists second-phase Scheduler MCP tools and omits hidden tools", () => {
     const names = buildAllMcpTools().map((tool) => tool.name)
-    expect(names).toContain("scheduler_task_runs_list")
-    expect(names).toContain("scheduler_task_runtime_status")
-    expect(names).toContain("scheduler_action_types_list")
+    expect(names).toContain("scheduler_run_list")
+    expect(names).toContain("scheduler_runtime_inspect")
+    expect(names).toContain("scheduler_action_type_list")
     expect(names).toContain("scheduler_task_update")
     expect(names).not.toContain("scheduler_task_delete")
     expect(names).not.toContain("scheduler_task_run_now")
@@ -28,11 +28,14 @@ describe("MCP Scheduler tools", () => {
   })
 
   it("maps Scheduler MCP tools to Scheduler actions", () => {
-    expect(MCP_TOOL_ACTIONS.scheduler_task_list).toBe("schedulerTaskList")
-    expect(MCP_TOOL_ACTIONS.scheduler_task_get).toBe("schedulerTaskGet")
-    expect(MCP_TOOL_ACTIONS.scheduler_task_create).toBe("schedulerTaskCreate")
-    expect(MCP_TOOL_ACTIONS.scheduler_task_enable).toBe("schedulerTaskEnable")
-    expect(MCP_TOOL_ACTIONS.scheduler_task_disable).toBe("schedulerTaskDisable")
+    expect(MCP_TOOL_ACTIONS.scheduler_task_list).toBe("scheduler.task.list")
+    expect(MCP_TOOL_ACTIONS.scheduler_task_get).toBe("scheduler.task.get")
+    expect(MCP_TOOL_ACTIONS.scheduler_task_create).toBe("scheduler.task.create")
+    expect(MCP_TOOL_ACTIONS.scheduler_task_enable).toBe("scheduler.task.enable")
+    expect(MCP_TOOL_ACTIONS.scheduler_task_disable).toBe("scheduler.task.disable")
+    expect(MCP_TOOL_ACTIONS.scheduler_run_list).toBe("scheduler.run.list")
+    expect(MCP_TOOL_ACTIONS.scheduler_runtime_inspect).toBe("scheduler.runtime.inspect")
+    expect(MCP_TOOL_ACTIONS.scheduler_action_type_list).toBe("scheduler.action_type.list")
   })
 
   it("normalizes Scheduler MCP tool results to data payload", async () => {
@@ -49,7 +52,7 @@ describe("MCP Scheduler tools", () => {
         name: "scheduler_task_list",
         arguments: {},
       },
-    }, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
+    }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
 
     expect(response.kind).toBe("result")
     if (response.kind !== "result") return
@@ -72,12 +75,12 @@ describe("MCP Scheduler tools", () => {
       id: 1,
       method: "tools/call",
       params: {
-        name: "scheduler_task_runs_list",
+        name: "scheduler_run_list",
         arguments: { taskId: "task:1" },
       },
-    }, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
+    }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
 
-    expect(executeTool).toHaveBeenCalledWith("scheduler_task_runs_list", { taskId: "task:1" })
+    expect(executeTool).toHaveBeenCalledWith("scheduler_run_list", { taskId: "task:1" })
     expect(response.kind).toBe("result")
     if (response.kind !== "result") return
     expect(response.result).toEqual({
@@ -97,7 +100,7 @@ describe("MCP Scheduler tools", () => {
         name: "scheduler_task_delete",
         arguments: { taskId: "task:1" },
       },
-    }, SYNAPSE_DATA_SERVER_IDENTITY, async () => ({ ok: true }))
+    }, SYNAPSE_DATABASE_SERVER_IDENTITY, async () => ({ ok: true }))
 
     expect(response.kind).toBe("result")
     if (response.kind !== "result") return

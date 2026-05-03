@@ -44,8 +44,8 @@ describe("summarizeDiagnosticsChecks", () => {
 
   it("marks a report degraded when warnings exist without failures", () => {
     const checks: SynapseDiagnosticsCheck[] = [{
-      id: "data-store.cli",
-      group: "Data Store",
+      id: "database.cli",
+      group: "Database",
       name: "CLI",
       status: "degraded",
       severity: "warning",
@@ -104,14 +104,14 @@ describe("summarizeServiceLifecycle", () => {
   it("extracts startup timing and restart traces from lifecycle logs", () => {
     const summary = summarizeServiceLifecycle([
       "[2026-04-29T03:31:20.000Z] [INFO ] [main:main] Electron app is ready. Initializing IPC registry.",
-      "[2026-04-29T03:31:20.100Z] [INFO ] [main:data-store] Data store HTTP server ready.",
-      "[2026-04-29T03:31:20.200Z] [INFO ] [main:data-store] MCP HTTP server ready.",
-      "[2026-04-29T03:31:20.300Z] [INFO ] [main:data-store] Data store initialized.",
+      "[2026-04-29T03:31:20.100Z] [INFO ] [main:database] Database HTTP server ready.",
+      "[2026-04-29T03:31:20.200Z] [INFO ] [main:database] MCP HTTP server ready.",
+      "[2026-04-29T03:31:20.300Z] [INFO ] [main:database] Database initialized.",
       "[2026-04-29T03:31:20.500Z] [INFO ] [main:main] Service registry started. Creating main window.",
       "[2026-04-29T03:31:20.800Z] [INFO ] [main:bootstrap.main-window] Main window is ready to show.",
       "[2026-04-29T03:31:21.000Z] [INFO ] [renderer:renderer.bootstrap] Renderer bootstrap started.",
       "[2026-04-29T03:31:21.200Z] [INFO ] [renderer:app] App mounted.",
-      "[2026-04-29T03:32:00.000Z] [INFO ] [main:data-store] Data store shut down.",
+      "[2026-04-29T03:32:00.000Z] [INFO ] [main:database] Database shut down.",
     ].join("\n"))
 
     expect(summary.runCount).toBe(1)
@@ -119,9 +119,9 @@ describe("summarizeServiceLifecycle", () => {
     expect(summary.latestStartedAt).toBe("2026-04-29T03:31:20.000Z")
     expect(summary.latestStartupDurationsMs).toMatchObject({
       electronReady: 0,
-      dataStoreHttpReady: 100,
+      databaseHttpReady: 100,
       mcpHttpReady: 200,
-      dataStoreInitialized: 300,
+      databaseInitialized: 300,
       serviceRegistryStarted: 500,
       mainWindowReady: 800,
       rendererBootstrapStarted: 1000,
@@ -162,7 +162,7 @@ describe("DiagnosticsService.collect", () => {
     )
   })
 
-  it("surfaces recent log warnings, cli path mismatch, datastore health, and mcp probe", async () => {
+  it("surfaces recent log warnings, cli path mismatch, database health, and mcp probe", async () => {
     const service = createService({
       logStore: {
         getLogDirectory: () => "/logs",
@@ -201,15 +201,15 @@ describe("DiagnosticsService.collect", () => {
         status: "degraded",
       }),
       expect.objectContaining({
-        id: "data-store.integrity",
+        id: "database.integrity",
         status: "ok",
       }),
       expect.objectContaining({
-        id: "data-store.cli",
+        id: "database.cli",
         status: "degraded",
       }),
       expect.objectContaining({
-        id: "data-store.mcp",
+        id: "database.mcp",
         status: "ok",
       }),
     ]))
@@ -231,8 +231,8 @@ describe("DiagnosticsService.collect", () => {
           return `C:\\Users\\Ada Lovelace\\${name}`
         },
       },
-      dataStore: {
-        getDbPath: () => "C:\\Program Files\\Synapse\\data\\synapse-data.db",
+      database: {
+        getDbPath: () => "C:\\Program Files\\Synapse\\data\\synapse-database.db",
         getDbSize: () => 0,
         getDiagnosticsHealth: () => ({
           quickCheck: "ok",
@@ -352,8 +352,8 @@ function createService(
       readLogsByNames: vi.fn(async () => ""),
       flush: vi.fn(async () => undefined),
     },
-    dataStore: {
-      getDbPath: () => "/data/synapse-data.db",
+    database: {
+      getDbPath: () => "/data/synapse-database.db",
       getDbSize: () => 0,
       getDiagnosticsHealth: () => ({
         quickCheck: "ok",
@@ -364,7 +364,7 @@ function createService(
       getTableCount: () => 0,
       exportDatabase: vi.fn(),
     },
-    getDataStoreRuntimeStatus: vi.fn(() => ({
+    getDatabaseRuntimeStatus: vi.fn(() => ({
       running: true,
       port: 19731,
       dbSize: 0,

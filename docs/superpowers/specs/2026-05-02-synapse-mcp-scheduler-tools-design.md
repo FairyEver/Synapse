@@ -2,29 +2,29 @@
 
 ## Context
 
-Synapse currently exposes Data Store capabilities through one local MCP server. That server already supports HTTP MCP and stdio MCP, and its existing database tools are stable.
+Synapse currently exposes Database capabilities through one local MCP server. That server already supports HTTP MCP and stdio MCP, and its existing database tools are stable.
 
 Synapse also has a first-class Task Scheduler module. The scheduler already supports cron and interval triggers, task enablement, manual runs, run history, and action execution through the existing scheduler and Action Runtime services.
 
 The new goal is to extend the same MCP server from "database-only" capabilities into a broader Synapse capability surface. The first added domain is Task Scheduler.
 
-This must not merge Data Store and Task Scheduler into one domain. They are separate domains behind shared transport surfaces.
+This must not merge Database and Task Scheduler into one domain. They are separate domains behind shared transport surfaces.
 
 ## Goals
 
 - Keep one MCP server for Synapse local capabilities.
-- Keep every existing Data Store MCP tool name, input schema, result shape, validation path, and execution path unchanged.
+- Keep every existing Database MCP tool name, input schema, result shape, validation path, and execution path unchanged.
 - Add a separate Scheduler domain with `scheduler_` MCP tools.
 - Add matching HTTP API actions and CLI commands for the same Scheduler capabilities.
 - Make API, CLI, and MCP use the same Scheduler action names and canonical input shapes.
 - Route Scheduler calls through `TaskSchedulerService`, not task repositories.
 - Keep the first Scheduler MCP phase focused on task creation, enablement, disablement, listing, and detail lookup.
-- Design the capability layer so later domains can be added without editing Data Store internals.
+- Design the capability layer so later domains can be added without editing Database internals.
 
 ## Non-Goals
 
-- No rename of existing Data Store tools such as `list_tables`, `query`, `insert`, or `operation_log`.
-- No migration to `database_*` tool names in this phase.
+- Database tools use canonical `database_*` names such as `database_table_list`, `database_row_list`, `database_row_create`, and `database_log_list`.
+- No additional Database behavior changes in this phase.
 - No Scheduler task deletion through MCP, CLI, or the new HTTP action set.
 - No stop-running-run tool in this phase.
 - No Scheduler update tool in this phase.
@@ -39,10 +39,10 @@ Use one shared transport layer with multiple isolated capability domains.
 
 ```text
 Synapse local capability gateway
-  Data Store domain
-    existing Data Store actions
-    existing Data Store MCP tools
-    existing Data Store dispatcher
+  Database domain
+    existing Database actions
+    existing Database MCP tools
+    existing Database dispatcher
 
   Scheduler domain
     new Scheduler actions
@@ -59,27 +59,27 @@ The outer gateway owns transport concerns:
 
 Each domain owns its own capability definitions, validation, parameter conversion, result normalization, and service calls.
 
-The Data Store domain must not import Scheduler logic. The Scheduler domain must not import Data Store business logic.
+The Database domain must not import Scheduler logic. The Scheduler domain must not import Database business logic.
 
-## Existing Data Store Behavior
+## Existing Database Behavior
 
 The existing database behavior remains unchanged:
 
 - Existing MCP tool names stay as they are.
 - Existing MCP input schemas stay as they are.
 - Existing MCP result normalization stays behaviorally equivalent.
-- Existing Data Store actions continue to route to `dispatchDataStoreAction`.
-- Existing Data Store HTTP API calls continue to work.
-- Existing Data Store CLI commands continue to work.
+- Existing Database actions continue to route to `dispatchDatabaseAction`.
+- Existing Database HTTP API calls continue to work.
+- Existing Database CLI commands continue to work.
 
-The current Data Store implementation already has the useful pattern this design should copy:
+The current Database implementation already has the useful pattern this design should copy:
 
 - One registry maps action names to MCP tools and CLI commands.
 - CLI and stdio MCP call the running Electron app through local HTTP.
 - HTTP dispatches by `action`.
 - MCP HTTP and stdio MCP use shared tool definitions.
 
-The Scheduler domain should reuse that pattern, not be added into the Data Store dispatcher.
+The Scheduler domain should reuse that pattern, not be added into the Database dispatcher.
 
 ## Capability Domain Model
 
@@ -100,7 +100,7 @@ type CapabilityAction = {
 }
 ```
 
-Data Store registers one domain. Scheduler registers another domain.
+Database registers one domain. Scheduler registers another domain.
 
 The gateway can then provide shared helpers:
 
@@ -109,7 +109,7 @@ The gateway can then provide shared helpers:
 - `getCliCommands()`
 - `dispatchSynapseAction(action, params, context)`
 
-This keeps later domains extensible. Adding a `rules`, `skills`, or `content` domain should not require editing Data Store capability files.
+This keeps later domains extensible. Adding a `rules`, `skills`, or `content` domain should not require editing Database capability files.
 
 ## Scheduler Actions
 
@@ -280,7 +280,7 @@ The HTTP layer should not know Scheduler details. It should call a neutral actio
 ```text
 POST /api
   -> dispatchSynapseAction(action, params, context)
-    -> Data Store domain dispatcher
+    -> Database domain dispatcher
     -> Scheduler domain dispatcher
 ```
 
@@ -293,17 +293,17 @@ mcp-stdio
 mcp-http
 ```
 
-Data Store mutation operation logging remains Data Store-owned. Scheduler can add its own operation logging later if needed, but the first phase should not write Scheduler events into the Data Store operation log.
+Database mutation operation logging remains Database-owned. Scheduler can add its own operation logging later if needed, but the first phase should not write Scheduler events into the Database operation log.
 
 ## CLI Design
 
 Keep one `synapse` CLI binary.
 
-Existing Data Store commands remain at their current paths, for example:
+Existing Database commands remain at their current paths, for example:
 
 ```bash
-synapse tables
-synapse query todos
+synapse database table list
+synapse database row list todos
 ```
 
 Add Scheduler as a separate subcommand namespace:
@@ -326,7 +326,7 @@ The CLI should:
 
 The CLI should not call `TaskSchedulerService` directly.
 
-Historical CLI build paths can remain as thin transport wrappers if that keeps packaging small, but Scheduler parsing and capability definitions should not live inside Data Store business modules.
+Historical CLI build paths can remain as thin transport wrappers if that keeps packaging small, but Scheduler parsing and capability definitions should not live inside Database business modules.
 
 ## MCP Design
 
@@ -340,13 +340,13 @@ scheduler_task_enable
 scheduler_task_disable
 ```
 
-Existing Data Store tools remain unchanged and stay in the same MCP server.
+Existing Database tools remain unchanged and stay in the same MCP server.
 
-MCP tool schemas should be generated or exported from the Scheduler domain capability definition. They should not be hand-copied into a Data Store-specific MCP file.
+MCP tool schemas should be generated or exported from the Scheduler domain capability definition. They should not be hand-copied into a Database-specific MCP file.
 
 MCP result normalization should be domain-aware:
 
-- Data Store tools keep the current Data Store result normalization.
+- Database tools keep the current Database result normalization.
 - Scheduler tools return Scheduler task payloads directly after transport wrapping.
 
 Unknown tools continue to return the current MCP unknown-tool response shape.
@@ -357,7 +357,7 @@ HTTP MCP and stdio MCP must expose the same tools and behavior.
 
 The Electron in-process environment is the authoritative execution environment because it can resolve `TaskSchedulerService`.
 
-The stdio MCP bridge should continue to forward tool calls to the running Electron app through local HTTP `/api`, matching the current Data Store pattern. It must not own Scheduler execution logic and it must not proxy by guessing the MCP HTTP port.
+The stdio MCP bridge should continue to forward tool calls to the running Electron app through local HTTP `/api`, matching the current Database pattern. It must not own Scheduler execution logic and it must not proxy by guessing the MCP HTTP port.
 
 The implementation must keep these true:
 
@@ -436,11 +436,11 @@ Add focused tests around drift prevention and domain isolation.
 
 Capability registry tests:
 
-- Data Store actions are still registered in the Data Store domain.
+- Database actions are still registered in the Database domain.
 - Scheduler actions are registered in the Scheduler domain.
 - `schedulerTaskList`, `schedulerTaskGet`, `schedulerTaskCreate`, `schedulerTaskEnable`, and `schedulerTaskDisable` each have API action, CLI command, and MCP tool metadata.
-- The combined MCP tool list includes existing Data Store tools and new Scheduler tools.
-- Existing Data Store tool names are unchanged.
+- The combined MCP tool list includes existing Database tools and new Scheduler tools.
+- Existing Database tool names are unchanged.
 
 Scheduler dispatcher tests:
 
@@ -453,7 +453,7 @@ Scheduler dispatcher tests:
 
 HTTP router tests:
 
-- Data Store actions route to Data Store dispatcher.
+- Database actions route to Database dispatcher.
 - Scheduler actions route to Scheduler dispatcher.
 - Unknown actions return the existing error shape.
 
@@ -468,7 +468,7 @@ CLI tests:
 MCP tests:
 
 - `tools/list` includes the five Scheduler tools.
-- Existing Data Store MCP tools still appear with unchanged names.
+- Existing Database MCP tools still appear with unchanged names.
 - Scheduler MCP tool calls route to Scheduler actions.
 - HTTP MCP and stdio MCP use the same tool definitions and tool-to-action mappings.
 
@@ -484,14 +484,14 @@ Do not start the dev server or open runtime previews for this work unless explic
 
 ## Acceptance Criteria
 
-- The same MCP server exposes existing Data Store tools and new Scheduler tools.
-- Existing Data Store MCP tool names, schemas, and results are unchanged.
-- Data Store and Scheduler remain separate capability domains.
+- The same MCP server exposes existing Database tools and new Scheduler tools.
+- Existing Database MCP tool names, schemas, and results are unchanged.
+- Database and Scheduler remain separate capability domains.
 - Scheduler has API, CLI, and MCP entry points with aligned action names and input shapes.
 - Scheduler task detail lookup uses `taskId`, not name.
 - Agents can list tasks, inspect one task by id, create tasks, enable tasks, and disable tasks.
 - Agents cannot delete tasks, stop running runs, manually run tasks, mutate run results, or list run history through this first external Scheduler capability set.
 - Scheduler external calls route through `TaskSchedulerService`.
 - Scheduler transport code does not directly write task repositories.
-- The design supports adding later domains without editing Data Store internals.
+- The design supports adding later domains without editing Database internals.
 - Hard constraints, typecheck, and tests pass after implementation.

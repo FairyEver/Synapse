@@ -11,7 +11,7 @@
  *   configStore.load()                   -> core.config        (fatal)
  *   logStore                             -> core.logging       (fatal)
  *   initializeAppIcon()                  -> core.app-icon      (degraded)
- *   initDataStore()                      -> core.data-store    (degraded)
+ *   initDatabase()                      -> core.database    (degraded)
  *   updateService.initialize()           -> core.update        (degraded)
  *   repositoryStore.watchRepository(*)   -> repo.watch         (degraded)
  *   repositoryMaintenanceService         -> repo.maintenance   (degraded)
@@ -19,7 +19,7 @@
  *   createTray()                         -> ui.tray            (degraded)
  *
  * Phase 0.1 lands core.config + core.logging here (T1.5).
- * T1.6 adds core.data-store / core.update / core.app-icon.
+ * T1.6 adds core.database / core.update / core.app-icon.
  * T1.7 adds repo.* + ui.tray.
  */
 
@@ -33,8 +33,8 @@ import { configStore } from "../services/config-store"
 import { logStore } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
-import { initDataStore, shutdownDataStore } from "../data-store"
-import { dispatchDataStoreAction } from "../data-store/dispatcher"
+import { initDatabase, shutdownDatabase } from "../database"
+import { dispatchDatabaseAction } from "../database/dispatcher"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { contentSubmissionService } from "../services/content-submission-service"
@@ -77,11 +77,11 @@ import { createNetworkServiceRegistry } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
 import { createProjectContainerRegistry } from "../runtime/project-container"
 import { migrateRepositoryScopedConnectorData } from "./project-scope-migration"
-import { dataStoreService } from "../data-store/service"
-import { getHttpPort } from "../data-store/http-server"
-import { getCliDebugInfo } from "../data-store/cli-installer"
-import { getMcpServers } from "../data-store/mcp-installer"
-import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../data-store/mcp-server"
+import { databaseService } from "../database/service"
+import { getHttpPort } from "../database/http-server"
+import { getCliDebugInfo } from "../database/cli-installer"
+import { getMcpServers } from "../database/mcp-installer"
+import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../database/mcp-server"
 import { collectOpsStatus } from "../modules/ops/status"
 
 /**
@@ -149,15 +149,15 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
 }
 
 /**
- * core.data-store — opens SQLite, starts HTTP + MCP servers, registers IPC,
+ * core.database — opens SQLite, starts HTTP + MCP servers, registers IPC,
  * wires change dispatcher, attempts CLI install, attempts MCP registration.
- * Wraps `initDataStore()` and `shutdownDataStore()`.
+ * Wraps `initDatabase()` and `shutdownDatabase()`.
  *
- * Status: degraded — SPEC §4 mapping. If the data store fails the app still
+ * Status: degraded — SPEC §4 mapping. If the database fails the app still
  * runs without CLI/MCP.
  */
-export const coreDataStoreDescriptor: ServiceDescriptor<{ initialized: true }> = {
-  id: "core.data-store",
+export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = {
+  id: "core.database",
   criticality: "degraded",
   dependsOn: ["core.config", "core.event-bus", "core.task-scheduler", "core.action-runtime"],
   async create(ctx) {
@@ -165,14 +165,14 @@ export const coreDataStoreDescriptor: ServiceDescriptor<{ initialized: true }> =
     const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
     const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
     const actionRouter = createSynapseActionRouter({
-      dataStoreDispatch: dispatchDataStoreAction,
+      databaseDispatch: dispatchDatabaseAction,
       schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
     })
-    await initDataStore(eventBus, actionRouter)
+    await initDatabase(eventBus, actionRouter)
     return { initialized: true }
   },
   async stop() {
-    await shutdownDataStore()
+    await shutdownDatabase()
   },
 }
 
@@ -272,7 +272,7 @@ export const repoMaintenanceDescriptor: ServiceDescriptor<typeof repositoryMaint
 export const repoPendingPushesDescriptor: ServiceDescriptor<typeof pendingPushesService> = {
   id: "repo.pending-pushes",
   criticality: "degraded",
-  dependsOn: ["core.data-store"],
+  dependsOn: ["core.database"],
   create: () => pendingPushesService,
 }
 
@@ -368,7 +368,7 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
-    "core.data-store",
+    "core.database",
   ],
   create(ctx) {
     return new DiagnosticsService({
@@ -377,14 +377,14 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
       dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
       serviceRegistry: ctx.registry,
       logStore,
-      dataStore: dataStoreService,
-      getDataStoreRuntimeStatus: () => {
-        const dbPath = dataStoreService.getDbPath()
+      database: databaseService,
+      getDatabaseRuntimeStatus: () => {
+        const dbPath = databaseService.getDbPath()
         return {
           port: getHttpPort(),
           running: getHttpPort() > 0,
-          dbSize: dataStoreService.getDbSize(),
-          tableCount: dataStoreService.getTableCount(),
+          dbSize: databaseService.getDbSize(),
+          tableCount: databaseService.getTableCount(),
           dbDirectoryPath: path.dirname(dbPath),
         }
       },

@@ -2,6 +2,7 @@ import type {
   CapabilityDomainDefinition,
   McpToolDefinition,
 } from "./types"
+import { capabilityIdToMcpTool } from "./naming"
 
 export type SchedulerSchedule =
   | {
@@ -62,15 +63,15 @@ const taskIdProperty = {
 }
 
 const schedulerCapabilities = [
-  { action: "schedulerTaskList", mcpTool: "scheduler_task_list", cliCommand: "scheduler list", mutates: false },
-  { action: "schedulerTaskGet", mcpTool: "scheduler_task_get", cliCommand: "scheduler get", mutates: false },
-  { action: "schedulerTaskCreate", mcpTool: "scheduler_task_create", cliCommand: "scheduler create", mutates: true },
-  { action: "schedulerTaskEnable", mcpTool: "scheduler_task_enable", cliCommand: "scheduler enable", mutates: true },
-  { action: "schedulerTaskDisable", mcpTool: "scheduler_task_disable", cliCommand: "scheduler disable", mutates: true },
-  { action: "schedulerTaskRunsList", mcpTool: "scheduler_task_runs_list", cliCommand: "scheduler runs", mutates: false },
-  { action: "schedulerTaskRuntimeStatus", mcpTool: "scheduler_task_runtime_status", cliCommand: "scheduler status", mutates: false },
-  { action: "schedulerActionTypesList", mcpTool: "scheduler_action_types_list", cliCommand: "scheduler actions", mutates: false },
-  { action: "schedulerTaskUpdate", mcpTool: "scheduler_task_update", cliCommand: "scheduler update", mutates: true },
+  { id: "scheduler.task.list", title: "List tasks", description: "List scheduled tasks.", mutates: false },
+  { id: "scheduler.task.get", title: "Get task", description: "Get one scheduled task.", mutates: false },
+  { id: "scheduler.task.create", title: "Create task", description: "Create one scheduled task.", mutates: true },
+  { id: "scheduler.task.enable", title: "Enable task", description: "Enable one scheduled task.", mutates: true },
+  { id: "scheduler.task.disable", title: "Disable task", description: "Disable one scheduled task.", mutates: true },
+  { id: "scheduler.run.list", title: "List runs", description: "List recent runs for one scheduled task.", mutates: false },
+  { id: "scheduler.runtime.inspect", title: "Inspect runtime", description: "Inspect Scheduler runtime state.", mutates: false },
+  { id: "scheduler.action_type.list", title: "List action types", description: "List task action types.", mutates: false },
+  { id: "scheduler.task.update", title: "Update task", description: "Update safe scheduled task fields.", mutates: true },
 ] as const
 
 export const SCHEDULER_DOMAIN: CapabilityDomainDefinition = {
@@ -79,7 +80,7 @@ export const SCHEDULER_DOMAIN: CapabilityDomainDefinition = {
 }
 
 export const SCHEDULER_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  schedulerCapabilities.map((capability) => [capability.mcpTool, capability.action]),
+  schedulerCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
 )
 
 export function buildSchedulerTools(): McpToolDefinition[] {
@@ -173,7 +174,7 @@ export function buildSchedulerTools(): McpToolDefinition[] {
       inputSchema: { type: "object", properties: { taskId: taskIdProperty }, required: ["taskId"] },
     },
     {
-      name: "scheduler_task_runs_list",
+      name: "scheduler_run_list",
       description: "List recent runs for one scheduled task. This is read-only and does not stop or start runs.",
       inputSchema: {
         type: "object",
@@ -185,7 +186,7 @@ export function buildSchedulerTools(): McpToolDefinition[] {
       },
     },
     {
-      name: "scheduler_task_runtime_status",
+      name: "scheduler_runtime_inspect",
       description: "Inspect Scheduler runtime state. Pass taskId for one task, or omit it for all tasks.",
       inputSchema: {
         type: "object",
@@ -195,7 +196,7 @@ export function buildSchedulerTools(): McpToolDefinition[] {
       },
     },
     {
-      name: "scheduler_action_types_list",
+      name: "scheduler_action_type_list",
       description: "List task action types that can be used when creating scheduled tasks, including public config fields and defaults.",
       inputSchema: { type: "object", properties: {} },
     },

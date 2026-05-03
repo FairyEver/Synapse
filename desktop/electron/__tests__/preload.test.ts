@@ -91,19 +91,19 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ repositoryUuid: "repo-1" })
   })
 
-  it("subscribes data-store change listeners to the EventBus domain channel", async () => {
+  it("subscribes database change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
 
-    bridge.dataStore.onChanged(listener)
+    bridge.database.onChanged(listener)
 
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
-    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:data-store")
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:database")
 
     const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
     wrapped?.({}, {
-      domain: "data-store",
-      type: "data-store.changed",
+      domain: "database",
+      type: "database.changed",
       payload: { table: "notes" },
       timestamp: "2026-04-28T00:00:00.000Z",
     })
@@ -111,16 +111,16 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ table: "notes" })
   })
 
-  it("maps table description updates to the data-store IPC channel", async () => {
+  it("maps table description updates to the database IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.dataStore.updateTableDescription({
+    await bridge.database.databaseTableUpdate({
       table: "customer_orders",
       description: "客户订单",
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:data-store:update-table-description",
+      "synapse:database:table:update",
       {
         table: "customer_orders",
         description: "客户订单",

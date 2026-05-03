@@ -13,10 +13,10 @@ import type {
   SynapseDiagnosticsReport,
 } from "../../src/types/diagnostics"
 import type {
-  DataStoreMcpHttpStatus,
-  DataStoreMcpServerInfo,
-  DataStoreStatus,
-} from "../../src/types/data-store"
+  DatabaseMcpHttpStatus,
+  DatabaseMcpServerInfo,
+  DatabaseStatus,
+} from "../../src/types/database"
 import type { SynapseOpsDiagnostics } from "../../src/types/bridge"
 import type { DataRepository } from "../runtime/data-repo"
 import type { StructuredLogger } from "../runtime/logging"
@@ -69,7 +69,7 @@ type LogStoreLike = {
   readLogsByNames(fileNames: string[]): Promise<string>
 }
 
-type DataStoreLike = {
+type DatabaseLike = {
   exportDatabase(targetPath: string): void
   getDbPath(): string
   getDbSize(): number
@@ -106,15 +106,15 @@ type DiagnosticsServiceDeps = {
   dataRepository: Pick<DataRepository, "inspect">
   serviceRegistry: Pick<ServiceRegistry, "get" | "inspect">
   logStore: LogStoreLike
-  dataStore: DataStoreLike
-  getDataStoreRuntimeStatus: () => DataStoreStatus
+  database: DatabaseLike
+  getDatabaseRuntimeStatus: () => DatabaseStatus
   collectOpsStatus: (
     resolve: ServiceResolver,
     request?: { projectId?: string },
   ) => Promise<SynapseOpsDiagnostics>
   getCliDebugInfo: () => Promise<CliDebugInfo>
-  getMcpHttpStatus: () => DataStoreMcpHttpStatus
-  getMcpServers: () => MaybePromise<DataStoreMcpServerInfo[]>
+  getMcpHttpStatus: () => DatabaseMcpHttpStatus
+  getMcpServers: () => MaybePromise<DatabaseMcpServerInfo[]>
   probeMcpHttp: (url: string) => Promise<McpHttpProbeResult>
   permissionGuard: PermissionGuard
   auditSink: AuditSink
@@ -192,7 +192,7 @@ class DiagnosticsService {
     await this.addPathChecks(checks, config)
     await this.addWindowsCompatibilityChecks(checks, config, windowsCompatibility)
     await this.addLogChecks(checks)
-    await this.addDataStoreChecks(checks)
+    await this.addDatabaseChecks(checks)
     await this.addInspectChecks(checks)
     await this.addOpsChecks(checks, payload.projectId)
 
@@ -270,7 +270,7 @@ class DiagnosticsService {
     try {
       await mkdir(path.join(packageRoot, "logs"), { recursive: true })
       await mkdir(path.join(packageRoot, "config"), { recursive: true })
-      await mkdir(path.join(packageRoot, "data-store"), { recursive: true })
+      await mkdir(path.join(packageRoot, "database"), { recursive: true })
 
       const report = {
         ...payload.report,
@@ -300,14 +300,14 @@ class DiagnosticsService {
         skipped,
       )
 
-      const databaseTargetPath = path.join(packageRoot, "data-store", "synapse-data.db")
+      const databaseTargetPath = path.join(packageRoot, "database", "synapse-database.db")
       await this.copyOptionalFile(
-        this.deps.dataStore.getDbPath(),
+        this.deps.database.getDbPath(),
         databaseTargetPath,
-        "data-store/synapse-data.db",
+        "database/synapse-database.db",
         included,
         skipped,
-        () => this.deps.dataStore.exportDatabase(databaseTargetPath),
+        () => this.deps.database.exportDatabase(databaseTargetPath),
       )
 
       await this.copyLogFiles(packageRoot, included, skipped)
@@ -632,57 +632,57 @@ class DiagnosticsService {
     return { scannedFiles, content }
   }
 
-  private async addDataStoreChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
-    await this.capture(checks, "data-store.status", "Data Store", "数据库", async () => {
-      const runtimeStatus = this.deps.getDataStoreRuntimeStatus()
+  private async addDatabaseChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
+    await this.capture(checks, "database.status", "Database", "数据库", async () => {
+      const runtimeStatus = this.deps.getDatabaseRuntimeStatus()
       const details = {
         ...runtimeStatus,
-        dbPath: this.deps.dataStore.getDbPath(),
-        dbSize: this.deps.dataStore.getDbSize(),
-        tableCount: this.deps.dataStore.getTableCount(),
+        dbPath: this.deps.database.getDbPath(),
+        dbSize: this.deps.database.getDbSize(),
+        tableCount: this.deps.database.getTableCount(),
       }
       return runtimeStatus.running
-        ? this.ok("data-store.status", "Data Store", "数据库", "数据库状态已读取", details)
-        : this.degraded("data-store.status", "Data Store", "数据库", "数据库未运行", details)
+        ? this.ok("database.status", "Database", "数据库", "数据库状态已读取", details)
+        : this.degraded("database.status", "Database", "数据库", "数据库未运行", details)
     })
 
-    await this.capture(checks, "data-store.integrity", "Data Store", "完整性", async () => {
-      const runtimeStatus = this.deps.getDataStoreRuntimeStatus()
+    await this.capture(checks, "database.integrity", "Database", "完整性", async () => {
+      const runtimeStatus = this.deps.getDatabaseRuntimeStatus()
       if (!runtimeStatus.running) {
-        return this.degraded("data-store.integrity", "Data Store", "完整性", "数据库未运行，未执行完整性检查", runtimeStatus)
+        return this.degraded("database.integrity", "Database", "完整性", "数据库未运行，未执行完整性检查", runtimeStatus)
       }
 
-      const health = this.deps.dataStore.getDiagnosticsHealth()
+      const health = this.deps.database.getDiagnosticsHealth()
       const details = {
         ...health,
-        tableCount: this.deps.dataStore.getTableCount(),
-        dbPath: this.deps.dataStore.getDbPath(),
-        dbSize: this.deps.dataStore.getDbSize(),
+        tableCount: this.deps.database.getTableCount(),
+        dbPath: this.deps.database.getDbPath(),
+        dbSize: this.deps.database.getDbSize(),
       }
 
       return health.quickCheck === "ok"
-        ? this.ok("data-store.integrity", "Data Store", "完整性", "数据库完整", details)
-        : this.failed("data-store.integrity", "Data Store", "完整性", "数据库完整性检查失败", details)
+        ? this.ok("database.integrity", "Database", "完整性", "数据库完整", details)
+        : this.failed("database.integrity", "Database", "完整性", "数据库完整性检查失败", details)
     })
 
-    await this.capture(checks, "data-store.cli", "Data Store", "CLI", async () => {
+    await this.capture(checks, "database.cli", "Database", "CLI", async () => {
       const debugInfo = await this.deps.getCliDebugInfo()
       const available = debugInfo.status?.available === true
       const pathAnalysis = analyzeCliPaths(debugInfo)
       const details = { ...debugInfo, pathAnalysis }
 
       if (!available) {
-        return this.degraded("data-store.cli", "Data Store", "CLI", "CLI 不可用", details)
+        return this.degraded("database.cli", "Database", "CLI", "CLI 不可用", details)
       }
 
       return pathAnalysis.installedPath
         && pathAnalysis.preferredInstallPath
         && pathAnalysis.installedPath !== pathAnalysis.preferredInstallPath
-        ? this.degraded("data-store.cli", "Data Store", "CLI", "CLI 可用，命中路径不是推荐位置", details)
-        : this.ok("data-store.cli", "Data Store", "CLI", "CLI 可用", details)
+        ? this.degraded("database.cli", "Database", "CLI", "CLI 可用，命中路径不是推荐位置", details)
+        : this.ok("database.cli", "Database", "CLI", "CLI 可用", details)
     })
 
-    await this.capture(checks, "data-store.mcp", "Data Store", "MCP", async () => {
+    await this.capture(checks, "database.mcp", "Database", "MCP", async () => {
       const http = this.deps.getMcpHttpStatus()
       const registrations = await Promise.resolve(this.deps.getMcpServers())
       const probe = http.running && http.url
@@ -697,13 +697,13 @@ class DiagnosticsService {
       }
 
       if (!http.running) {
-        return this.degraded("data-store.mcp", "Data Store", "MCP", "MCP HTTP 未运行", details)
+        return this.degraded("database.mcp", "Database", "MCP", "MCP HTTP 未运行", details)
       }
       if (!probe.ok) {
-        return this.degraded("data-store.mcp", "Data Store", "MCP", "MCP ping 失败", details)
+        return this.degraded("database.mcp", "Database", "MCP", "MCP ping 失败", details)
       }
 
-      return this.ok("data-store.mcp", "Data Store", "MCP", "MCP 可用", details)
+      return this.ok("database.mcp", "Database", "MCP", "MCP 可用", details)
     })
   }
 
@@ -765,7 +765,7 @@ class DiagnosticsService {
       action: "network.connect",
       actor: { kind: "user" },
       resource: url,
-      context: { source: "ops.runDiagnostics", target: "data-store.mcp" },
+      context: { source: "ops.runDiagnostics", target: "database.mcp" },
     })
 
     if (!permission.allowed) {
@@ -776,7 +776,7 @@ class DiagnosticsService {
         outcome: "denied",
         metadata: {
           source: "ops.runDiagnostics",
-          target: "data-store.mcp",
+          target: "database.mcp",
           reason: permission.reason,
           policyId: permission.policyId,
         },
@@ -791,7 +791,7 @@ class DiagnosticsService {
         actor: { kind: "user" },
         resource: url,
         outcome: "allowed",
-        metadata: { source: "ops.runDiagnostics", target: "data-store.mcp" },
+        metadata: { source: "ops.runDiagnostics", target: "database.mcp" },
       })
       return result
     } catch (error) {
@@ -801,7 +801,7 @@ class DiagnosticsService {
         actor: { kind: "user" },
         resource: url,
         outcome: "failed",
-        metadata: { source: "ops.runDiagnostics", target: "data-store.mcp", error: message },
+        metadata: { source: "ops.runDiagnostics", target: "database.mcp", error: message },
       })
       return { ok: false, method: "ping", error: message }
     }
@@ -981,7 +981,7 @@ class DiagnosticsService {
         tempPath: this.deps.appInfo.getPath("temp"),
         downloadsPath: this.deps.appInfo.getPath("downloads"),
         logPath: this.deps.logStore.getLogDirectory(),
-        dbPath: this.deps.dataStore.getDbPath(),
+        dbPath: this.deps.database.getDbPath(),
       },
     })
   }
@@ -998,7 +998,7 @@ class DiagnosticsService {
         tempPath: this.deps.appInfo.getPath("temp"),
         downloadsPath: this.deps.appInfo.getPath("downloads"),
         logPath: this.deps.logStore.getLogDirectory(),
-        dbPath: this.deps.dataStore.getDbPath(),
+        dbPath: this.deps.database.getDbPath(),
       },
     })
   }
@@ -1116,8 +1116,8 @@ function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {
       continue
     }
 
-    if (line.includes("Data store HTTP server ready.")) {
-      recordDuration("dataStoreHttpReady", timestamp)
+    if (line.includes("Database HTTP server ready.")) {
+      recordDuration("databaseHttpReady", timestamp)
       recordSample(line)
       continue
     }
@@ -1128,8 +1128,8 @@ function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {
       continue
     }
 
-    if (line.includes("Data store initialized.")) {
-      recordDuration("dataStoreInitialized", timestamp)
+    if (line.includes("Database initialized.")) {
+      recordDuration("databaseInitialized", timestamp)
       recordSample(line)
       continue
     }
@@ -1162,7 +1162,7 @@ function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {
       continue
     }
 
-    if (line.includes("Shutting down data store.") || line.includes("Data store shut down.")) {
+    if (line.includes("Shutting down database.") || line.includes("Database shut down.")) {
       shutdownCount += 1
       recordSample(line)
     }

@@ -124,10 +124,10 @@ function buildDiagnosticsSummary(report: SynapseDiagnosticsReport): string {
     "windows.environment",
     "windows.writable-data",
     "windows.configured-paths",
-    "data-store.status",
-    "data-store.integrity",
-    "data-store.cli",
-    "data-store.mcp",
+    "database.status",
+    "database.integrity",
+    "database.cli",
+    "database.mcp",
   ]
     .map((id) => report.checks.find((check) => check.id === id))
     .filter((check): check is SynapseDiagnosticsCheck => Boolean(check))

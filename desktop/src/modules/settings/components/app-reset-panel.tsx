@@ -73,7 +73,7 @@ function AppResetPanel() {
             <div>
               <p className="mb-1 text-foreground">不会清空：</p>
               <ol className="list-decimal pl-5 space-y-1">
-                <li>数据服务中的数据库（表结构与数据保持不变）</li>
+                <li>数据库中的表结构与数据</li>
                 <li>仓库目录中的实际文件（仍保留在原位置，重新导入即可访问）</li>
               </ol>
             </div>

@@ -1,0 +1,179 @@
+// Shared MCP JSON-RPC handler used by both the in-process HTTP MCP server and
+// the stdio MCP bridge. The transport layer (HTTP body vs. stdin line) is
+// owned by each caller; this module only decides what to respond with for a
+// given parsed request, given a tool executor provided by the caller.
+
+import {
+  MCP_TOOL_ACTIONS,
+  buildAllMcpTools,
+} from "../../synapse-capabilities/shared/registry"
+
+type JsonRpcId = number | string | null
+
+type JsonRpcRequest = {
+  jsonrpc: "2.0"
+  id?: JsonRpcId
+  method: string
+  params?: Record<string, unknown>
+}
+
+type McpRpcResponse =
+  | { kind: "result"; id: JsonRpcId; result: unknown }
+  | { kind: "error"; id: JsonRpcId; code: number; message: string }
+  | { kind: "none" }
+
+type McpServerIdentity = {
+  name: string
+  version: string
+}
+
+type ToolExecutor = (toolName: string, args: Record<string, unknown>) => unknown | Promise<unknown>
+
+const PROTOCOL_VERSION = "2024-11-05"
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function idsFromData(data: unknown): unknown[] {
+  if (!isRecord(data) || !Array.isArray(data.ids)) return []
+  return data.ids
+}
+
+function isDryRun(data: unknown): boolean {
+  return isRecord(data) && data.dryRun === true
+}
+
+function normalizeToolResult(action: string, result: unknown): unknown {
+  if (!isRecord(result) || result.ok !== true) return result
+
+  if (action.startsWith("scheduler.")) {
+    return result.data
+  }
+
+  switch (action) {
+    case "database.table.list":
+    case "database.table.describe":
+    case "database.overview.get":
+    case "database.row.create":
+    case "database.rows.create":
+    case "database.row.count":
+    case "database.log.list":
+    case "database.sql.read":
+    case "database.sql.execute":
+    case "database.choice_usage.get":
+      return result.data
+
+    case "database.row.list":
+      return {
+        rows: Array.isArray(result.data) ? result.data : [],
+        total: numberOrZero(result.total),
+      }
+
+    case "database.row.update":
+    case "database.row.delete":
+      return { affected: numberOrZero(result.affected) }
+
+    case "database.rows.update":
+    case "database.rows.delete":
+      return {
+        affected: numberOrZero(result.affected),
+        ids: idsFromData(result.data),
+        ...(isDryRun(result.data) ? { dryRun: true } : {}),
+      }
+
+    default:
+      return { ok: true }
+  }
+}
+
+async function processMcpRequest(
+  req: JsonRpcRequest,
+  identity: McpServerIdentity,
+  executeTool: ToolExecutor,
+): Promise<McpRpcResponse> {
+  const id = req.id ?? null
+  const method = req.method
+
+  if (method === "initialize") {
+    return {
+      kind: "result",
+      id,
+      result: {
+        protocolVersion: PROTOCOL_VERSION,
+        capabilities: { tools: {} },
+        serverInfo: identity,
+      },
+    }
+  }
+
+  // All MCP notifications per spec expect no response.
+  if (method.startsWith("notifications/")) {
+    return { kind: "none" }
+  }
+
+  if (method === "ping") {
+    return { kind: "result", id, result: {} }
+  }
+
+  if (method === "tools/list") {
+    return { kind: "result", id, result: { tools: buildAllMcpTools() } }
+  }
+
+  if (method === "tools/call") {
+    const params = req.params
+    if (!params || typeof params !== "object") {
+      return {
+        kind: "result",
+        id,
+        result: { content: [{ type: "text", text: "Error: missing params" }], isError: true },
+      }
+    }
+    const toolName = (params as { name: string }).name
+    const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {}
+
+    if (!(toolName in MCP_TOOL_ACTIONS)) {
+      return {
+        kind: "result",
+        id,
+        result: { content: [{ type: "text", text: `Unknown tool: ${toolName}` }], isError: true },
+      }
+    }
+
+    try {
+      const result = await executeTool(toolName, toolArgs)
+      const payload = normalizeToolResult(MCP_TOOL_ACTIONS[toolName] ?? toolName, result)
+      return {
+        kind: "result",
+        id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] },
+      }
+    } catch (error) {
+      return {
+        kind: "result",
+        id,
+        result: {
+          content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+          isError: true,
+        },
+      }
+    }
+  }
+
+  return { kind: "error", id, code: -32601, message: `Method not found: ${method}` }
+}
+
+function serializeJsonRpcPayload(response: McpRpcResponse): string | null {
+  if (response.kind === "none") return null
+  if (response.kind === "result") {
+    return JSON.stringify({ jsonrpc: "2.0", id: response.id, result: response.result })
+  }
+  return JSON.stringify({ jsonrpc: "2.0", id: response.id, error: { code: response.code, message: response.message } })
+}
+
+export { processMcpRequest, serializeJsonRpcPayload, PROTOCOL_VERSION }
+export type { JsonRpcId, JsonRpcRequest, McpRpcResponse, McpServerIdentity, ToolExecutor }

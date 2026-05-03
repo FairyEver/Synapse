@@ -25,7 +25,7 @@ import {
   coreBridgeAdapterDescriptor,
   coreConfigDescriptor,
   coreDataRepositoryDescriptor,
-  coreDataStoreDescriptor,
+  coreDatabaseDescriptor,
   coreDiagnosticsDescriptor,
   coreEventBusDescriptor,
   coreExecutionIsolationDescriptor,
@@ -81,7 +81,7 @@ export function buildServiceRegistry(
   registry.register(coreActionRuntimeDescriptor)
   registry.register(coreTaskSchedulerDescriptor)
   registry.register(coreBridgeAdapterDescriptor)
-  registry.register(coreDataStoreDescriptor)
+  registry.register(coreDatabaseDescriptor)
   registry.register(coreDiagnosticsDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)

@@ -1,20 +1,20 @@
 import type {
-  DataStoreChangeEvent,
-  DataStoreCliDebugInfo,
-  DataStoreCliStatus,
-  DataStoreMcpHttpStatus,
-  DataStoreMcpServerInfo,
-  DataStoreMcpStatus,
-  DataStoreMcpTarget,
+  DatabaseChangeEvent,
+  DatabaseCliDebugInfo,
+  DatabaseCliStatus,
+  DatabaseMcpHttpStatus,
+  DatabaseMcpServerInfo,
+  DatabaseMcpStatus,
+  DatabaseMcpTarget,
   Column,
-  DataStoreQueryParams,
-  DataStoreQueryResult,
-  DataStoreStatus,
-  DataStoreTableImportInspection,
-  DataStoreTableInfo,
-  DataStoreTableSchema,
-  DataStoreWhereClause,
-} from "./data-store"
+  DatabaseQueryParams,
+  DatabaseQueryResult,
+  DatabaseStatus,
+  DatabaseTableImportInspection,
+  DatabaseTableInfo,
+  DatabaseTableSchema,
+  DatabaseWhereClause,
+} from "./database"
 import type {
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
@@ -351,46 +351,46 @@ export type SynapseBridge = {
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
     onOpenUpdatePage: (listener: () => void) => () => void
   }
-  dataStore: {
-    listTables: () => Promise<DataStoreTableInfo[]>
-    createTable: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
-    dropTable: (name: string) => Promise<void>
-    describeTable: (name: string) => Promise<DataStoreTableSchema>
-    updateTableDescription: (params: { table: string; description: string }) => Promise<void>
-    addColumn: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
-    updateColumnDescription: (params: { table: string; column: string; description: string }) => Promise<void>
-    updateColumnChoices: (params: { table: string; column: string; choices: string[] }) => Promise<void>
-    getColumnChoicesUsage: (params: { table: string; column: string }) => Promise<Record<string, number>>
-    insert: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
-    batchInsert: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
-    query: (params: DataStoreQueryParams) => Promise<DataStoreQueryResult>
-    update: (params: { table: string; id: number; data: Record<string, unknown> }) => Promise<{ affected: number }>
-    delete: (params: { table: string; id: number }) => Promise<{ affected: number }>
-    updateWhere: (params: { table: string; where: DataStoreWhereClause; data: Record<string, unknown> }) => Promise<{ affected: number; ids: number[] }>
-    deleteWhere: (params: { table: string; where: DataStoreWhereClause }) => Promise<{ affected: number; ids: number[] }>
-    count: (params: { table: string; where?: DataStoreWhereClause }) => Promise<{ count: number }>
-    renameTable: (params: { from: string; to: string }) => Promise<void>
-    renameColumn: (params: { table: string; from: string; to: string }) => Promise<void>
-    dropColumn: (params: { table: string; column: string }) => Promise<void>
-    rawSQL: (params: { sql: string; params?: unknown[] }) => Promise<{ rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number }>
-    getStatus: () => Promise<DataStoreStatus>
-    exportDB: () => Promise<{ success: boolean; path?: string }>
-    importDB: () => Promise<{ success: boolean }>
-    exportTable: (table: string) => Promise<{ success: boolean; path?: string }>
-    inspectTableImport: () => Promise<
+  database: {
+    databaseTableList: () => Promise<DatabaseTableInfo[]>
+    databaseTableCreate: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
+    databaseTableDelete: (name: string) => Promise<void>
+    databaseTableDescribe: (name: string) => Promise<DatabaseTableSchema>
+    databaseTableUpdate: (params: { table: string; description: string }) => Promise<void>
+    databaseColumnCreate: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
+    databaseColumnUpdate: (params: { table: string; column: string; description: string }) => Promise<void>
+    databaseChoiceUpdate: (params: { table: string; column: string; choices: string[] }) => Promise<void>
+    databaseChoiceUsageGet: (params: { table: string; column: string }) => Promise<Record<string, number>>
+    databaseRowCreate: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
+    databaseRowsCreate: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
+    databaseRowList: (params: DatabaseQueryParams) => Promise<DatabaseQueryResult>
+    databaseRowUpdate: (params: { table: string; id: number; data: Record<string, unknown> }) => Promise<{ affected: number }>
+    databaseRowDelete: (params: { table: string; id: number }) => Promise<{ affected: number }>
+    databaseRowsUpdate: (params: { table: string; where: DatabaseWhereClause; data: Record<string, unknown> }) => Promise<{ affected: number; ids: number[] }>
+    databaseRowsDelete: (params: { table: string; where: DatabaseWhereClause }) => Promise<{ affected: number; ids: number[] }>
+    databaseRowCount: (params: { table: string; where?: DatabaseWhereClause }) => Promise<{ count: number }>
+    databaseTableRename: (params: { from: string; to: string }) => Promise<void>
+    databaseColumnRename: (params: { table: string; from: string; to: string }) => Promise<void>
+    databaseColumnDelete: (params: { table: string; column: string }) => Promise<void>
+    databaseSqlExecute: (params: { sql: string; params?: unknown[] }) => Promise<{ rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number }>
+    databaseStatusGet: () => Promise<DatabaseStatus>
+    databaseExport: () => Promise<{ success: boolean; path?: string }>
+    databaseImport: () => Promise<{ success: boolean }>
+    databaseTableExport: (table: string) => Promise<{ success: boolean; path?: string }>
+    databaseTableImportInspect: () => Promise<
       { success: false }
-      | ({ success: true } & DataStoreTableImportInspection)
+      | ({ success: true } & DatabaseTableImportInspection)
     >
-    importTable: (sourcePath: string) => Promise<{ success: boolean; tableName?: string }>
-    installCLI: () => Promise<{ success: boolean; path?: string; error?: string }>
-    getCliStatus: () => Promise<DataStoreCliStatus>
-    getCliDebugInfo: () => Promise<DataStoreCliDebugInfo>
-    getMcpHttpStatus: () => Promise<DataStoreMcpHttpStatus>
-    getMcpStatus: () => Promise<DataStoreMcpStatus>
-    getMCPServers: () => Promise<DataStoreMcpServerInfo[]>
-    openMCPSettings: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
-    registerMCP: (target: DataStoreMcpTarget) => Promise<{ success: boolean; error?: string }>
-    onChanged: (listener: (event: DataStoreChangeEvent) => void) => () => void
+    databaseTableImport: (sourcePath: string) => Promise<{ success: boolean; tableName?: string }>
+    databaseCliInstall: () => Promise<{ success: boolean; path?: string; error?: string }>
+    databaseCliStatusGet: () => Promise<DatabaseCliStatus>
+    databaseCliDebugInfoGet: () => Promise<DatabaseCliDebugInfo>
+    databaseMcpHttpStatusGet: () => Promise<DatabaseMcpHttpStatus>
+    databaseMcpStatusGet: () => Promise<DatabaseMcpStatus>
+    databaseMcpServersGet: () => Promise<DatabaseMcpServerInfo[]>
+    databaseMcpSettingsOpen: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }>
+    databaseMcpRegister: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }>
+    onChanged: (listener: (event: DatabaseChangeEvent) => void) => () => void
   }
   taskScheduler: {
     listTasks: () => Promise<ScheduledTask[]>

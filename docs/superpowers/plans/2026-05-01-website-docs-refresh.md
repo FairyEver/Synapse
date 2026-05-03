@@ -37,7 +37,7 @@
   - `website/advanced/index.md`
   - `website/advanced/agent.md`
   - `website/advanced/prompts.md`
-  - `website/advanced/data-store.md`
+  - `website/advanced/database.md`
   - `website/advanced/task-scheduler.md`
   - `website/advanced/editor-scan.md`
   - `website/advanced/diagnostics.md`
@@ -386,7 +386,7 @@ Expected: build passes before commit.
 - Create: `website/advanced/index.md`
 - Create: `website/advanced/agent.md`
 - Create: `website/advanced/prompts.md`
-- Create: `website/advanced/data-store.md`
+- Create: `website/advanced/database.md`
 - Create: `website/advanced/task-scheduler.md`
 - Create: `website/advanced/editor-scan.md`
 - Create: `website/advanced/diagnostics.md`
@@ -414,15 +414,15 @@ find desktop/src/modules/prompts -maxdepth 3 -type f | sort
 sed -n '1,260p' desktop/src/modules/prompts/index.tsx
 ```
 
-- [ ] **Step 3: Read Data Store evidence**
+- [ ] **Step 3: Read Database evidence**
 
 Run:
 
 ```bash
-find desktop/src/modules/data-store desktop/electron/data-store -maxdepth 3 -type f | sort
-sed -n '1,320p' desktop/src/modules/data-store/index.tsx
-sed -n '1,280p' desktop/electron/data-store/service.ts
-sed -n '1,240p' desktop/electron/data-store/types.ts
+find desktop/src/modules/database desktop/electron/database -maxdepth 3 -type f | sort
+sed -n '1,320p' desktop/src/modules/database/index.tsx
+sed -n '1,280p' desktop/electron/database/service.ts
+sed -n '1,240p' desktop/electron/database/types.ts
 ```
 
 - [ ] **Step 4: Read Task Scheduler evidence**
@@ -715,7 +715,7 @@ sidebar: {
         { text: '总览', link: '/advanced/' },
         { text: 'Agent', link: '/advanced/agent' },
         { text: 'Prompts', link: '/advanced/prompts' },
-        { text: 'Data Store', link: '/advanced/data-store' },
+        { text: 'Database', link: '/advanced/database' },
         { text: 'Task Scheduler', link: '/advanced/task-scheduler' },
         { text: 'Editor Scan', link: '/advanced/editor-scan' },
         { text: 'Diagnostics', link: '/advanced/diagnostics' }

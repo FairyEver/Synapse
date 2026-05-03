@@ -45,17 +45,18 @@ const baseRun: ScheduledTaskRunEntry = {
 
 function serviceMock(): TaskSchedulerService {
   return {
-    listTasks: vi.fn(async () => [baseTask, { ...baseTask, id: "task:2", enabled: false }]),
-    getTask: vi.fn(async (id: string) => (id === "task:1" ? baseTask : null)),
-    createTask: vi.fn(async (input) => ({ ...baseTask, ...input, id: "task:new" })),
-    updateTask: vi.fn(async (_id, patch) => ({
+    schedulerTaskList: vi.fn(async () => [baseTask, { ...baseTask, id: "task:2", enabled: false }]),
+    schedulerTaskGet: vi.fn(async (id: string) => (id === "task:1" ? baseTask : null)),
+    schedulerTaskCreate: vi.fn(async (input) => ({ ...baseTask, ...input, id: "task:new" })),
+    schedulerTaskUpdate: vi.fn(async (_id, patch) => ({
       ...baseTask,
       ...patch,
       updatedAt: "2026-05-02T00:20:00.000Z",
     })),
-    setTaskEnabled: vi.fn(async (_id: string, enabled: boolean) => ({ ...baseTask, enabled })),
-    listRuns: vi.fn(async () => [baseRun]),
-    inspect: vi.fn(() => ({ timers: ["task:1"], runningTaskIds: ["task:2"] })),
+    schedulerTaskEnable: vi.fn(async (_id: string) => ({ ...baseTask, enabled: true })),
+    schedulerTaskDisable: vi.fn(async (_id: string) => ({ ...baseTask, enabled: false })),
+    schedulerRunList: vi.fn(async () => [baseRun]),
+    schedulerRuntimeInspect: vi.fn(() => ({ timers: ["task:1"], runningTaskIds: ["task:2"] })),
   } as unknown as TaskSchedulerService
 }
 
@@ -95,23 +96,23 @@ describe("task scheduler external api", () => {
     const service = serviceMock()
     const actions = actionRegistry()
 
-    await expect(dispatchSchedulerAction(service, actions, "schedulerTaskList", { enabled: true }))
+    await expect(dispatchSchedulerAction(service, actions, "scheduler.task.list", { enabled: true }))
       .resolves.toEqual({ ok: true, data: [toPublicTaskSummary(baseTask)], total: 1 })
-    await expect(dispatchSchedulerAction(service, actions, "schedulerTaskGet", { taskId: "task:1" }))
+    await expect(dispatchSchedulerAction(service, actions, "scheduler.task.get", { taskId: "task:1" }))
       .resolves.toEqual({ ok: true, data: baseTask })
-    await dispatchSchedulerAction(service, actions, "schedulerTaskEnable", { taskId: "task:1" })
-    await dispatchSchedulerAction(service, actions, "schedulerTaskDisable", { taskId: "task:1" })
-    expect(service.setTaskEnabled).toHaveBeenNthCalledWith(1, "task:1", true)
-    expect(service.setTaskEnabled).toHaveBeenNthCalledWith(2, "task:1", false)
+    await dispatchSchedulerAction(service, actions, "scheduler.task.enable", { taskId: "task:1" })
+    await dispatchSchedulerAction(service, actions, "scheduler.task.disable", { taskId: "task:1" })
+    expect(service.schedulerTaskEnable).toHaveBeenCalledWith("task:1")
+    expect(service.schedulerTaskDisable).toHaveBeenCalledWith("task:1")
   })
 
   it("lists run summaries without log payloads", async () => {
     const service = serviceMock()
-    const result = await dispatchSchedulerAction(service, actionRegistry(), "schedulerTaskRunsList", {
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.run.list", {
       taskId: "task:1",
     })
 
-    expect(service.listRuns).toHaveBeenCalledWith("task:1", { limit: 20 })
+    expect(service.schedulerRunList).toHaveBeenCalledWith("task:1", { limit: 20 })
     expect(result).toEqual({
       ok: true,
       data: [{
@@ -131,7 +132,7 @@ describe("task scheduler external api", () => {
 
   it("returns runtime status for all tasks and one task", async () => {
     const service = serviceMock()
-    const all = await dispatchSchedulerAction(service, actionRegistry(), "schedulerTaskRuntimeStatus", {})
+    const all = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.runtime.inspect", {})
     expect(all).toEqual(expect.objectContaining({
       ok: true,
       data: expect.objectContaining({
@@ -140,7 +141,7 @@ describe("task scheduler external api", () => {
       }),
     }))
 
-    const one = await dispatchSchedulerAction(service, actionRegistry(), "schedulerTaskRuntimeStatus", {
+    const one = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.runtime.inspect", {
       taskId: "task:1",
     })
     expect(one).toEqual(expect.objectContaining({
@@ -152,7 +153,7 @@ describe("task scheduler external api", () => {
   })
 
   it("lists public action type descriptors from the shared registry", async () => {
-    const result = await dispatchSchedulerAction(serviceMock(), actionRegistry(), "schedulerActionTypesList", {})
+    const result = await dispatchSchedulerAction(serviceMock(), actionRegistry(), "scheduler.action_type.list", {})
     expect(result).toEqual({
       ok: true,
       data: [{
@@ -168,14 +169,14 @@ describe("task scheduler external api", () => {
 
   it("updates only conservative public fields", async () => {
     const service = serviceMock()
-    await dispatchSchedulerAction(service, actionRegistry(), "schedulerTaskUpdate", {
+    await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.update", {
       taskId: "task:1",
       name: "Updated",
       schedule: { type: "cron", expr: "0 9 * * *", timezone: "Asia/Shanghai" },
       missedRunPolicy: "run_once",
     })
 
-    expect(service.updateTask).toHaveBeenCalledWith("task:1", {
+    expect(service.schedulerTaskUpdate).toHaveBeenCalledWith("task:1", {
       name: "Updated",
       description: undefined,
       cwd: undefined,
@@ -187,9 +188,9 @@ describe("task scheduler external api", () => {
   it("rejects empty and forbidden update patches", async () => {
     const service = serviceMock()
     const actions = actionRegistry()
-    await expect(dispatchSchedulerAction(service, actions, "schedulerTaskUpdate", { taskId: "task:1" }))
+    await expect(dispatchSchedulerAction(service, actions, "scheduler.task.update", { taskId: "task:1" }))
       .rejects.toThrow(/at least one field/)
-    await expect(dispatchSchedulerAction(service, actions, "schedulerTaskUpdate", {
+    await expect(dispatchSchedulerAction(service, actions, "scheduler.task.update", {
       taskId: "task:1",
       action: { type: "builtin.command", config: { command: "rm -rf /tmp/x" } },
     }))
@@ -197,7 +198,7 @@ describe("task scheduler external api", () => {
   })
 
   it("rejects hidden external actions", async () => {
-    await expect(dispatchSchedulerAction(serviceMock(), actionRegistry(), "schedulerTaskDelete", { taskId: "task:1" }))
+    await expect(dispatchSchedulerAction(serviceMock(), actionRegistry(), "scheduler.task.delete", { taskId: "task:1" }))
       .rejects.toThrow(/Unknown scheduler action/)
   })
 })

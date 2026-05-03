@@ -24,11 +24,11 @@ paths:
 - 新增编辑器只需实现 adapter 接口，不改核心逻辑
 - 内容安装使用原子操作（写临时文件 → rename）
 
-## Data Store
+## Database
 
-- SQLite 数据层在 `electron/data-store/`
+- SQLite 数据层在 `electron/database/`
 - 四种访问接口：CLI / MCP / HTTP / IPC，共享同一个 service 层
-- 查询逻辑集中在 `data-store/service.ts`，不在各接口层重复
+- 查询逻辑集中在 `database/service.ts`，不在各接口层重复
 
 ## 日志
 

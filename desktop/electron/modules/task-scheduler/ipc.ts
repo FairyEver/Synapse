@@ -124,7 +124,7 @@ export const taskSchedulerIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.array(taskSchema),
-      handler: async (ctx) => ctx.resolve<TaskSchedulerService>("core.task-scheduler").listTasks(),
+      handler: async (ctx) => ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskList(),
     },
     getTask: {
       channel: "synapse:task-scheduler:tasks:get",
@@ -132,7 +132,7 @@ export const taskSchedulerIpcModule: IpcModule = {
       request: taskIdRequestSchema,
       response: taskSchema.nullable(),
       handler: async (ctx, request: TaskIdRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").getTask(request.taskId),
+        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskGet(request.taskId),
     },
     createTask: {
       channel: "synapse:task-scheduler:tasks:create",
@@ -140,7 +140,7 @@ export const taskSchedulerIpcModule: IpcModule = {
       request: createTaskInputSchema,
       response: taskSchema,
       handler: async (ctx, request: CreateTaskInput) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").createTask(request),
+        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskCreate(request),
     },
     updateTask: {
       channel: "synapse:task-scheduler:tasks:update",
@@ -148,7 +148,7 @@ export const taskSchedulerIpcModule: IpcModule = {
       request: updateTaskRequestSchema,
       response: taskSchema,
       handler: async (ctx, request: UpdateTaskRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").updateTask(request.id, request.patch),
+        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskUpdate(request.id, request.patch),
     },
     deleteTask: {
       channel: "synapse:task-scheduler:tasks:delete",
@@ -164,7 +164,9 @@ export const taskSchedulerIpcModule: IpcModule = {
       request: taskIdRequestSchema.extend({ enabled: z.boolean() }),
       response: taskSchema,
       handler: async (ctx, request: SetTaskEnabledRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").setTaskEnabled(request.taskId, request.enabled),
+        request.enabled
+          ? ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskEnable(request.taskId)
+          : ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskDisable(request.taskId),
     },
     runTask: {
       channel: "synapse:task-scheduler:tasks:run",
@@ -190,7 +192,7 @@ export const taskSchedulerIpcModule: IpcModule = {
       }),
       response: z.array(runSchema),
       handler: async (ctx, request: ListRunsRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").listRuns(request.taskId, { limit: request.limit }),
+        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerRunList(request.taskId, { limit: request.limit }),
     },
   },
   events: {},

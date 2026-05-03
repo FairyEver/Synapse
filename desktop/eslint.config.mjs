@@ -25,7 +25,7 @@ export default tseslint.config(
   },
   // electron/ directory uses tsconfig.electron.json
   {
-    files: ["electron/**/*.ts", "data-store/**/*.ts"],
+    files: ["electron/**/*.ts", "database/**/*.ts"],
     languageOptions: {
       parserOptions: {
         ecmaVersion: 2022,

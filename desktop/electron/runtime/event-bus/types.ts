@@ -7,7 +7,7 @@ export type EventDomain =
   | "repository"
   | "content"
   | "update"
-  | "data-store"
+  | "database"
   | "agent"      // M1
   | "connector"  // M3
   | "scheduler"  // M4

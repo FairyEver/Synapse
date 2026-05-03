@@ -526,7 +526,7 @@ describe("Codex JSONL parser", () => {
       item: {
         type: "mcpToolCall",
         server: "synapse_database",
-        tool: "list_tables",
+        tool: "database_table_list",
         arguments: {},
       },
     }))
@@ -535,7 +535,7 @@ describe("Codex JSONL parser", () => {
       item: {
         type: "mcpToolCall",
         server: "synapse_database",
-        tool: "list_tables",
+        tool: "database_table_list",
         arguments: {},
         status: "completed",
         result: { content: [] },
@@ -578,12 +578,12 @@ describe("Codex JSONL parser", () => {
       }),
       expect.objectContaining({
         type: "toolUse",
-        toolName: "synapse_database.list_tables",
+        toolName: "synapse_database.database_table_list",
         toolInput: "{}",
       }),
       expect.objectContaining({
         type: "toolResult",
-        toolName: "synapse_database.list_tables",
+        toolName: "synapse_database.database_table_list",
         content: "{\"content\":[]}",
         success: true,
       }),

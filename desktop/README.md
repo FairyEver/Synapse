@@ -10,7 +10,7 @@ Synapse 的桌面端子包，基于 Electron + Vite + React + Tailwind CSS + sha
 pnpm install                                      # 安装全部工作区依赖
 pnpm --filter @synapse/desktop run dev           # 启动本地开发环境
 pnpm --filter @synapse/desktop run typecheck     # 类型检查
-pnpm --filter @synapse/desktop run build         # 渲染端 + 主进程 + data-store 构建
+pnpm --filter @synapse/desktop run build         # 渲染端 + 主进程 + database 构建
 pnpm --filter @synapse/desktop run package:mac   # 打包 macOS（dmg + zip）
 pnpm --filter @synapse/desktop run package:win   # 打包 Windows（nsis）
 ```
@@ -35,7 +35,7 @@ pnpm --filter @synapse/desktop run bump:commit:push    # 递增 desktop 子包 p
 `push` 到 `main` 后，`.github/workflows/release.yml` 会自动：
 
 1. 装依赖（`pnpm install --frozen-lockfile`，需要根目录 `pnpm-lock.yaml` 已提交）。
-2. 依次执行 `pnpm --filter @synapse/desktop run build:renderer`、`pnpm --filter @synapse/desktop run build:electron`、`pnpm --filter @synapse/desktop run build:data-store`。
+2. 依次执行 `pnpm --filter @synapse/desktop run build:renderer`、`pnpm --filter @synapse/desktop run build:electron`、`pnpm --filter @synapse/desktop run build:database`。
 3. 执行 `pnpm --filter @synapse/desktop run package:mac` / `pnpm --filter @synapse/desktop run package:win`。
 4. 把 `desktop/release/` 下的产物上传到 `FairyEver/SynapseAppRelease` 仓库的 GitHub Release。
 
@@ -43,7 +43,7 @@ pnpm --filter @synapse/desktop run bump:commit:push    # 递增 desktop 子包 p
 
 ```bash
 pnpm install --frozen-lockfile   # 验证 lockfile 与 CI 行为一致
-pnpm --filter @synapse/desktop run build        # 跑完 renderer + electron + data-store
+pnpm --filter @synapse/desktop run build        # 跑完 renderer + electron + database
 pnpm --filter @synapse/desktop run package:mac  # 可选：本地验证打包产物
 ```
 
@@ -292,8 +292,8 @@ export const mcpDefinition = {
 
 | `settingsFormat` | 行为 |
 | --- | --- |
-| `json-mcp-servers` | 写入 JSON 配置的 `mcpServers.synapse-data` |
-| `codex-toml` | 写入 Codex TOML 的 `[mcp_servers.synapse-data]` |
+| `json-mcp-servers` | 写入 JSON 配置的 `mcpServers.synapse-database` |
+| `codex-toml` | 写入 Codex TOML 的 `[mcp_servers.synapse-database]` |
 
 项目 Rule 安装前需要额外表单时，增加 `forms.tsx`，导出 `installFormDefinition`：
 
@@ -319,39 +319,39 @@ export const installFormDefinition = {
 
 ### 数据服务 MCP 安装规则
 
-在设置页的"数据服务"中点击 MCP 注册时，Synapse 会按各编辑器的官方全局配置位置写入 `synapse-data` 这个 MCP server。
+在设置页的"数据服务"中点击 MCP 注册时，Synapse 会按各编辑器的官方全局配置位置写入 `synapse-database` 这个 MCP server。
 
 | 编辑器 | 全局配置文件 | 写入格式 |
 | --- | --- | --- |
-| Claude Code | `~/.claude/settings.json` | JSON，写入 `mcpServers.synapse-data` |
-| Cursor | `~/.cursor/mcp.json` | JSON，写入 `mcpServers.synapse-data` |
-| Codex | `~/.codex/config.toml` | TOML，写入 `[mcp_servers.synapse-data]` |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON，写入 `mcpServers.synapse-data` |
+| Claude Code | `~/.claude/settings.json` | JSON，写入 `mcpServers.synapse-database` |
+| Cursor | `~/.cursor/mcp.json` | JSON，写入 `mcpServers.synapse-database` |
+| Codex | `~/.codex/config.toml` | TOML，写入 `[mcp_servers.synapse-database]` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON，写入 `mcpServers.synapse-database` |
 
 写入规则：
 
-- JSON 配置会保留原文件中的其他字段，只增量写入 `mcpServers.synapse-data.url`。
-- Codex 会在 `~/.codex/config.toml` 中增量更新 `synapse-data` 对应的 table，不会覆盖其他如 `model`、`profiles`、审批策略等现有配置。
-- "重新注册"只更新 `synapse-data` 这一项；"打开文件"打开的也是上述官方全局配置文件。
+- JSON 配置会保留原文件中的其他字段，只增量写入 `mcpServers.synapse-database.url`。
+- Codex 会在 `~/.codex/config.toml` 中增量更新 `synapse-database` 对应的 table，不会覆盖其他如 `model`、`profiles`、审批策略等现有配置。
+- "重新注册"只更新 `synapse-database` 这一项；"打开文件"打开的也是上述官方全局配置文件。
 - Windsurf 的 MCP 配置路径与 JSON 结构依据官方 [Cascade MCP Integration](https://docs.windsurf.com/windsurf/cascade/mcp) 文档。
 
 说明：
 
 - `支持`：有明确的一等命令 / tool / action。
 - `部分支持`：能做，但结构化能力不完整。
-- `仅 raw_sql`：没有专门接口，只能通过原始 SQL 完成。
+- `仅 SQL`：没有专门接口，只能通过原始 SQL 完成。
 - `不支持`：当前没有提供对应能力。
 
 | 能力 | CLI | MCP | API | 说明 |
 | --- | --- | --- | --- | --- |
-| 列出数据表 | 支持 | 支持 | 支持 | `tables` / `list_tables` / `listTables` |
-| 新建数据表 | 支持 | 支持 | 支持 | 支持列定义；CLI 当前不支持传表描述 |
+| 列出数据表 | 支持 | 支持 | 支持 | `database table list` / `database_table_list` / `database.table.list` |
+| 新建数据表 | 支持 | 支持 | 支持 | 支持列定义与表描述 |
 | 删除数据表 | 支持 | 支持 | 支持 | 删除整张表及其数据 |
 | 查看表结构 | 部分支持 | 支持 | 支持 | CLI 当前主要输出列信息，不会完整暴露描述、行数、时间等元数据 |
 | 新增列 | 部分支持 | 支持 | 支持 | CLI 当前不支持传默认值；MCP/API 支持 `default` |
-| 删除列 | 仅 raw_sql | 仅 raw_sql | 仅 raw_sql | 没有结构化 `dropColumn` 能力 |
-| 重命名列 | 仅 raw_sql | 仅 raw_sql | 仅 raw_sql | 没有结构化 `renameColumn` 能力 |
-| 修改列类型 / 默认值 | 仅 raw_sql | 仅 raw_sql | 仅 raw_sql | 没有结构化 schema migration 能力 |
+| 删除列 | 支持 | 支持 | 支持 | `database column delete` / `database_column_delete` / `database.column.delete` |
+| 重命名列 | 支持 | 支持 | 支持 | `database column rename` / `database_column_rename` / `database.column.rename` |
+| 修改列类型 / 默认值 | 仅 SQL | 仅 SQL | 仅 SQL | 没有结构化 schema migration 能力 |
 | 插入单条数据 | 支持 | 支持 | 支持 | 单行新增 |
 | 批量插入数据 | 支持 | 支持 | 支持 | 事务内批量插入 |
 | 查询数据 | 支持 | 支持 | 支持 | 三端都支持基础查询 |
@@ -359,17 +359,17 @@ export const installFormDefinition = {
 | 排序查询 | 不支持 | 支持 | 支持 | CLI 没有结构化排序参数 |
 | 分页查询 | 部分支持 | 支持 | 支持 | CLI 仅支持 `limit`，没有 `offset` |
 | 按 id 更新数据 | 支持 | 支持 | 支持 | 仅支持单条记录局部更新 |
-| 按条件批量更新 | 仅 raw_sql | 仅 raw_sql | 仅 raw_sql | 没有结构化 `updateMany` / `updateWhere` |
+| 按条件批量更新 | 支持 | 支持 | 支持 | `database rows update` / `database_rows_update` / `database.rows.update` |
 | 按 id 删除数据 | 支持 | 支持 | 支持 | 仅支持单条删除 |
-| 按条件批量删除 | 仅 raw_sql | 仅 raw_sql | 仅 raw_sql | 没有结构化 `deleteMany` / `deleteWhere` |
-| 执行原始 SQL | 支持 | 支持 | 支持 | 可作为高级兜底能力，禁止访问系统表，禁止 `ATTACH/DETACH` |
+| 按条件批量删除 | 支持 | 支持 | 支持 | `database rows delete` / `database_rows_delete` / `database.rows.delete` |
+| 执行原始 SQL | 支持 | 支持 | 支持 | `database sql execute` / `database_sql_execute` / `database.sql.execute` |
 
 当前结论：
 
 - 三条链路共用同一个底层数据服务，所以重叠能力的实际行为大体一致。
 - `MCP` 与 `API` 的结构化能力基本对齐。
 - `CLI` 明显更窄，尤其是在条件查询、排序、分页、列默认值、表元数据展示这些方面。
-- 如果要做到"数据表能力完全一致"，优先需要补齐 `CLI` 的查询参数和 schema 变更参数，并决定是否把删列、改列、按条件更新/删除升级为正式接口，而不是继续只留给 `raw_sql`。
+- 如果要做到"数据表能力完全一致"，优先需要补齐 `CLI` 的查询参数和 schema 变更参数，并决定是否把删列、改列、按条件更新/删除升级为正式接口，而不是继续只留给 `database_sql_execute`。
 
 ---
 

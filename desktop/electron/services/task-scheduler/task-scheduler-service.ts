@@ -43,21 +43,21 @@ export class TaskSchedulerService {
     this.started = false
   }
 
-  listTasks(): Promise<ScheduledTaskEntry[]> {
+  schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
     return this.deps.tasks.list()
   }
 
-  getTask(id: string): Promise<ScheduledTaskEntry | null> {
+  schedulerTaskGet(id: string): Promise<ScheduledTaskEntry | null> {
     return this.deps.tasks.get(id)
   }
 
-  async createTask(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
+  async schedulerTaskCreate(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
     const task = await this.deps.tasks.create(input)
     if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
     return task
   }
 
-  async updateTask(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
+  async schedulerTaskUpdate(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
     this.cancel(id)
     const task = await this.deps.tasks.update(id, patch)
     if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
@@ -69,7 +69,15 @@ export class TaskSchedulerService {
     return { deleted: await this.deps.tasks.delete(id) }
   }
 
-  async setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
+  async schedulerTaskEnable(id: string): Promise<ScheduledTaskEntry> {
+    return this.setTaskEnabled(id, true)
+  }
+
+  async schedulerTaskDisable(id: string): Promise<ScheduledTaskEntry> {
+    return this.setTaskEnabled(id, false)
+  }
+
+  private async setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
     this.cancel(id)
     const task = await this.deps.tasks.setEnabled(id, enabled)
     if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
@@ -90,7 +98,7 @@ export class TaskSchedulerService {
     return { stopped: this.deps.execution.stopRun(runId) }
   }
 
-  listRuns(
+  schedulerRunList(
     taskId: string,
     options?: { readonly limit?: number },
   ): Promise<ScheduledTaskRunEntry[]> {
@@ -104,7 +112,7 @@ export class TaskSchedulerService {
     return this.runScheduled(id, triggeredBy)
   }
 
-  inspect(): { readonly timers: readonly string[]; readonly runningTaskIds: readonly string[] } {
+  schedulerRuntimeInspect(): { readonly timers: readonly string[]; readonly runningTaskIds: readonly string[] } {
     return {
       timers: [...this.timers.keys()],
       runningTaskIds: [...this.runningTaskIds],

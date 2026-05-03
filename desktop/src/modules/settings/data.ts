@@ -49,9 +49,9 @@ const settingsCategories: SettingsCategory[] = [
     description: "安装时替换占位符。",
   },
   {
-    id: "data-store",
+    id: "database",
     icon: Database,
-    label: "数据服务",
+    label: "数据库",
     description: "本地数据库。",
   },
   {

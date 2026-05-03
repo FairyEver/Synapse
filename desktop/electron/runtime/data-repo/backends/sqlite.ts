@@ -23,10 +23,10 @@
  * Phase 0.2 keeps this minimal — Phase M2 (per SPEC §15.6) adds FTS5 and
  * archive-aware list().
  *
- * NOTE: This is a SEPARATE backend from `electron/data-store/` (the MCP
+ * NOTE: This is a SEPARATE backend from `electron/database/` (the MCP
  * business-data layer). They both happen to use better-sqlite3 (via node:sqlite),
  * but their schemas, lifecycles, and consumers are independent. The SPEC §5
- * `business-db` namespace will simply re-export the existing dataStoreService
+ * `business-db` namespace will simply re-export the existing databaseService
  * unchanged and is implemented in T2.5 alongside this generic backend.
  */
 

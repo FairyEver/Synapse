@@ -30,7 +30,7 @@
 
 - 普通使用者主线：读取 `website/` 现有文档、`desktop/src/modules/rules/`、`desktop/src/modules/skills/`、`desktop/src/modules/settings/`、相关 Electron content/editor 服务。
 - 团队协作：读取内容创建、提交、仓库结构、Git 服务相关代码，例如 `desktop/electron/services/content-*`、`repository-*`、`pending-pushes-service.ts`。
-- 高级功能：逐页读取对应 renderer 模块与 Electron IPC/service，例如 Agent、Prompts、Data Store、Task Scheduler、Editor Scan、Diagnostics。
+- 高级功能：逐页读取对应 renderer 模块与 Electron IPC/service，例如 Agent、Prompts、Database、Task Scheduler、Editor Scan、Diagnostics。
 - 开发者文档：读取根目录 `README.md`、`desktop/README.md`、`package.json`、`desktop/package.json`、Electron runtime/bootstrap 结构。
 
 如果某个功能无法从代码或现有文档确认，应降级为“入口和用途说明”或暂不写入；不得编造流程、限制、字段、支持范围或状态。
@@ -43,7 +43,7 @@
 - `快速开始`：下载与安装、首次配置仓库、安装第一个 Rule/Skill。
 - `用户指南`：Rules、Skills、仓库、项目、编辑器安装范围、搜索与同步。
 - `团队协作`：推荐仓库结构、内容编写规范、创建与分享、Git 审核流程。
-- `高级功能`：Agent、Prompts、Data Store、Task Scheduler、Editor Scan、Diagnostics 等当前可见模块。
+- `高级功能`：Agent、Prompts、Database、Task Scheduler、Editor Scan、Diagnostics 等当前可见模块。
 - `开发者`：本地开发、仓库结构、常用脚本、构建打包、发布入口。
 - `参考`：FAQ、排障、版本与下载、术语表。
 
@@ -77,7 +77,7 @@
 - `advanced/index.md`：高级功能总览。
 - `advanced/agent.md`
 - `advanced/prompts.md`
-- `advanced/data-store.md`
+- `advanced/database.md`
 - `advanced/task-scheduler.md`
 - `advanced/editor-scan.md`
 - `advanced/diagnostics.md`

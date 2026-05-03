@@ -20,7 +20,14 @@ import type {
 
 type SchedulerServicePort = Pick<
   TaskSchedulerService,
-  "listTasks" | "getTask" | "createTask" | "updateTask" | "setTaskEnabled" | "listRuns" | "inspect"
+  | "schedulerTaskList"
+  | "schedulerTaskGet"
+  | "schedulerTaskCreate"
+  | "schedulerTaskUpdate"
+  | "schedulerTaskEnable"
+  | "schedulerTaskDisable"
+  | "schedulerRunList"
+  | "schedulerRuntimeInspect"
 >
 
 export type SchedulerTaskSummary = {
@@ -43,9 +50,9 @@ export async function dispatchSchedulerAction(
   params: Record<string, unknown>,
 ): Promise<DispatchResult> {
   switch (action) {
-    case "schedulerTaskList": {
+    case "scheduler.task.list": {
       const input = parseListParams(params)
-      const tasks = await service.listTasks()
+      const tasks = await service.schedulerTaskList()
       const filtered = tasks
         .filter((task) => input.enabled === undefined || task.enabled === input.enabled)
         .slice(0, input.limit ?? tasks.length)
@@ -53,40 +60,40 @@ export async function dispatchSchedulerAction(
       return { ok: true, data: filtered, total: filtered.length }
     }
 
-    case "schedulerTaskGet": {
+    case "scheduler.task.get": {
       const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: await service.getTask(taskId) }
+      return { ok: true, data: await service.schedulerTaskGet(taskId) }
     }
 
-    case "schedulerTaskCreate": {
+    case "scheduler.task.create": {
       const input = toCreateInput(parseCreateParams(params))
-      return { ok: true, data: await service.createTask(input) }
+      return { ok: true, data: await service.schedulerTaskCreate(input) }
     }
 
-    case "schedulerTaskEnable": {
+    case "scheduler.task.enable": {
       const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: await service.setTaskEnabled(taskId, true) }
+      return { ok: true, data: await service.schedulerTaskEnable(taskId) }
     }
 
-    case "schedulerTaskDisable": {
+    case "scheduler.task.disable": {
       const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: await service.setTaskEnabled(taskId, false) }
+      return { ok: true, data: await service.schedulerTaskDisable(taskId) }
     }
 
-    case "schedulerTaskRunsList": {
+    case "scheduler.run.list": {
       const input = parseRunsListParams(params)
-      const task = await service.getTask(input.taskId)
+      const task = await service.schedulerTaskGet(input.taskId)
       if (!task) throw new Error(`Scheduled task "${input.taskId}" was not found`)
-      const runs = await service.listRuns(input.taskId, { limit: input.limit })
+      const runs = await service.schedulerRunList(input.taskId, { limit: input.limit })
       return { ok: true, data: runs.map(toRunSummary), total: runs.length }
     }
 
-    case "schedulerTaskRuntimeStatus": {
+    case "scheduler.runtime.inspect": {
       const input = parseRuntimeStatusParams(params)
       return { ok: true, data: await buildRuntimeStatus(service, input) }
     }
 
-    case "schedulerActionTypesList": {
+    case "scheduler.action_type.list": {
       const summaries = actions.list().map((definition) => ({
         type: definition.manifest.id,
         title: definition.manifest.title,
@@ -97,9 +104,9 @@ export async function dispatchSchedulerAction(
       return { ok: true, data: summaries, total: summaries.length }
     }
 
-    case "schedulerTaskUpdate": {
+    case "scheduler.task.update": {
       const input = parseUpdateParams(params)
-      return { ok: true, data: await service.updateTask(input.taskId, toUpdatePatch(input)) }
+      return { ok: true, data: await service.schedulerTaskUpdate(input.taskId, toUpdatePatch(input)) }
     }
 
     default:
@@ -140,12 +147,12 @@ async function buildRuntimeStatus(
   service: SchedulerServicePort,
   input: SchedulerTaskRuntimeStatusParams,
 ) {
-  const inspect = service.inspect()
+  const inspect = service.schedulerRuntimeInspect()
   const runningTaskIds = [...inspect.runningTaskIds]
   const scheduledTaskIds = [...inspect.timers]
   const tasks = input.taskId
-    ? [await service.getTask(input.taskId)]
-    : await service.listTasks()
+    ? [await service.schedulerTaskGet(input.taskId)]
+    : await service.schedulerTaskList()
   if (input.taskId && !tasks[0]) {
     throw new Error(`Scheduled task "${input.taskId}" was not found`)
   }
@@ -244,7 +251,7 @@ function parseUpdateParams(params: Record<string, unknown>): SchedulerTaskUpdate
     && input.schedule === undefined
     && input.missedRunPolicy === undefined
   ) {
-    throw new Error("schedulerTaskUpdate requires at least one field to update")
+    throw new Error("scheduler.task.update requires at least one field to update")
   }
   return input
 }
