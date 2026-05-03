@@ -91,17 +91,17 @@ description: 根据当前代码更新 MCP 工具描述，让 AI 编辑器更好�
 
 为每个工具编写新的 description，遵循以下模板：
 
-**简单工具**（database_table_list、database_table_delete、delete）：
+**简单工具**（database_table_list、database_table_delete、database_row_delete）：
 ```
 [一句话功能说明]
 ```
 
-**创建/修改类工具**（database_table_create、add_column、insert、update）：
+**创建/修改类工具**（database_table_create、database_column_create、database_row_create、database_row_update）：
 ```
 [功能说明]. [格式要求]. [约束说明]
 ```
 
-**查询类工具**（query、database_sql_execute）：
+**查询类工具**（database_row_list、database_sql_execute）：
 ```
 [功能说明]. [参数用法]. [限制说明]
 ```

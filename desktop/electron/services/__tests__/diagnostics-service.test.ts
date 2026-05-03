@@ -162,7 +162,7 @@ describe("DiagnosticsService.collect", () => {
     )
   })
 
-  it("surfaces recent log warnings, cli path mismatch, datastore health, and mcp probe", async () => {
+  it("surfaces recent log warnings, cli path mismatch, database health, and mcp probe", async () => {
     const service = createService({
       logStore: {
         getLogDirectory: () => "/logs",

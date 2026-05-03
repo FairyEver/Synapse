@@ -266,7 +266,7 @@ function buildTools(): McpTool[] {
           rows: {
             type: "array",
             items: { type: "object" },
-            description: "Array of row objects keyed by column name. Each row follows the same value rules as insert.",
+            description: "Array of row objects keyed by column name. Each row follows the same value rules as database_row_create.",
           },
         },
         required: ["tableName", "rows"],
@@ -305,7 +305,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_row_update",
-      description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same value rules as insert apply. Call database_table_describe first if you do not know the column set or choices.",
+      description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same value rules as database_row_create apply. Call database_table_describe first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
         properties: {
@@ -333,7 +333,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_rows_update",
-      description: "Partially update every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns, updated_at is rewritten automatically, and the same write-value rules as insert apply. Use update for a single row by id.",
+      description: "Partially update every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as database_row_list, including CONTAINS for multi_choice columns, updated_at is rewritten automatically, and the same write-value rules as database_row_create apply. Use database_row_update for a single row by id.",
       inputSchema: {
         type: "object",
         properties: {
@@ -356,7 +356,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_rows_delete",
-      description: "Delete every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns. Use delete for a single row by id; to clear a whole table, drop and recreate it.",
+      description: "Delete every row matching a non-empty where clause and return { affected, ids }. where uses the same shapes and operators as database_row_list, including CONTAINS for multi_choice columns. Use database_row_delete for a single row by id; to clear a whole table, use database_table_delete then database_table_create.",
       inputSchema: {
         type: "object",
         properties: {
@@ -375,7 +375,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_row_count",
-      description: "Count rows in a table with an optional where clause and return { count }. where uses the same shapes and operators as query, including CONTAINS for multi_choice columns. Use this instead of query when you only need the number of matching rows.",
+      description: "Count rows in a table with an optional where clause and return { count }. where uses the same shapes and operators as database_row_list, including CONTAINS for multi_choice columns. Use this instead of database_row_list when you only need the number of matching rows.",
       inputSchema: {
         type: "object",
         properties: {

@@ -49,13 +49,13 @@ Create:
 - `desktop/tests/unit/database-overview.test.ts`  
   Service-level test for database overview shape.
 
-- `desktop/tests/unit/database-read-sql.test.ts`  
+- `desktop/tests/unit/database-sql-read.test.ts`  
   Service-level test for read-only SQL behavior.
 
 - `desktop/tests/unit/database-dry-run.test.ts`  
   Service-level test for update/delete dry-run behavior.
 
-- `desktop/tests/unit/database-operation-log.test.ts`  
+- `desktop/tests/unit/database-log-list.test.ts`  
   Dispatcher/service test for mutation logging.
 
 Modify:
@@ -73,7 +73,7 @@ Modify:
   Pass source `"mcp-stdio"` to API calls.
 
 - `desktop/database/cli/index.ts`  
-  Add `overview`, `read-sql`, `operation-log`, `--dry-run`; use registry for known data commands where practical.
+  Add `database overview get`, `database sql read`, `database log list`, `--dry-run`; use registry for known data commands where practical.
 
 - `desktop/electron/database/types.ts`  
   Add overview, operation log, and dry-run result types.
@@ -123,27 +123,27 @@ type DatabaseCapability = {
 }
 
 const DATABASE_CAPABILITIES = [
-  { action: "databaseTableList", mcpTool: "database_table_list", cliCommand: "tables", mutates: false },
-  { action: "databaseTableCreate", mcpTool: "database_table_create", cliCommand: "create", mutates: true },
-  { action: "databaseTableDelete", mcpTool: "database_table_delete", cliCommand: "drop", mutates: true },
-  { action: "databaseTableDescribe", mcpTool: "database_table_describe", cliCommand: "describe", mutates: false },
-  { action: "databaseTableUpdate", mcpTool: "database_table_update", cliCommand: "update-table-description", mutates: true },
-  { action: "addColumn", mcpTool: "add_column", cliCommand: "add-column", mutates: true },
-  { action: "updateColumnDescription", mcpTool: "update_column_description", cliCommand: "update-column-description", mutates: true },
-  { action: "updateColumnChoices", mcpTool: "update_column_choices", cliCommand: "update-column-choices", mutates: true },
-  { action: "getColumnChoicesUsage", mcpTool: "get_column_choices_usage", cliCommand: "choice-usage", mutates: false },
-  { action: "insert", mcpTool: "insert", cliCommand: "insert", mutates: true },
-  { action: "databaseRowsCreate", mcpTool: "database_rows_create", cliCommand: "insert", mutates: true },
-  { action: "query", mcpTool: "query", cliCommand: "query", mutates: false },
-  { action: "update", mcpTool: "update", cliCommand: "update", mutates: true },
-  { action: "delete", mcpTool: "delete", cliCommand: "delete", mutates: true },
-  { action: "databaseRowsUpdate", mcpTool: "database_rows_update", cliCommand: "update-where", mutates: true },
-  { action: "databaseRowsDelete", mcpTool: "database_rows_delete", cliCommand: "delete-where", mutates: true },
-  { action: "count", mcpTool: "count", cliCommand: "count", mutates: false },
-  { action: "renameTable", mcpTool: "rename_table", cliCommand: "rename-table", mutates: true },
-  { action: "databaseColumnRename", mcpTool: "database_column_rename", cliCommand: "rename-column", mutates: true },
-  { action: "databaseColumnDelete", mcpTool: "database_column_delete", cliCommand: "drop-column", mutates: true },
-  { action: "databaseSqlExecute", mcpTool: "database_sql_execute", cliCommand: "sql", mutates: true },
+  { action: "databaseTableList", mcpTool: "database_table_list", cliCommand: "database table list", mutates: false },
+  { action: "databaseTableCreate", mcpTool: "database_table_create", cliCommand: "database table create", mutates: true },
+  { action: "databaseTableDelete", mcpTool: "database_table_delete", cliCommand: "database table delete", mutates: true },
+  { action: "databaseTableDescribe", mcpTool: "database_table_describe", cliCommand: "database table describe", mutates: false },
+  { action: "databaseTableUpdate", mcpTool: "database_table_update", cliCommand: "database table update", mutates: true },
+  { action: "databaseColumnCreate", mcpTool: "database_column_create", cliCommand: "database column create", mutates: true },
+  { action: "databaseColumnUpdate", mcpTool: "database_column_update", cliCommand: "database column update", mutates: true },
+  { action: "databaseChoiceUpdate", mcpTool: "database_choice_update", cliCommand: "database choice update", mutates: true },
+  { action: "databaseChoiceUsageGet", mcpTool: "database_choice_usage_get", cliCommand: "database choice-usage get", mutates: false },
+  { action: "databaseRowCreate", mcpTool: "database_row_create", cliCommand: "database row create", mutates: true },
+  { action: "databaseRowsCreate", mcpTool: "database_rows_create", cliCommand: "database rows create", mutates: true },
+  { action: "databaseRowList", mcpTool: "database_row_list", cliCommand: "database row list", mutates: false },
+  { action: "databaseRowUpdate", mcpTool: "database_row_update", cliCommand: "database row update", mutates: true },
+  { action: "databaseRowDelete", mcpTool: "database_row_delete", cliCommand: "database row delete", mutates: true },
+  { action: "databaseRowsUpdate", mcpTool: "database_rows_update", cliCommand: "database rows update", mutates: true },
+  { action: "databaseRowsDelete", mcpTool: "database_rows_delete", cliCommand: "database rows delete", mutates: true },
+  { action: "databaseRowCount", mcpTool: "database_row_count", cliCommand: "database row count", mutates: false },
+  { action: "databaseTableRename", mcpTool: "database_table_rename", cliCommand: "database table rename", mutates: true },
+  { action: "databaseColumnRename", mcpTool: "database_column_rename", cliCommand: "database column rename", mutates: true },
+  { action: "databaseColumnDelete", mcpTool: "database_column_delete", cliCommand: "database column delete", mutates: true },
+  { action: "databaseSqlExecute", mcpTool: "database_sql_execute", cliCommand: "database sql execute", mutates: true },
 ] as const satisfies readonly DatabaseCapability[]
 
 function buildMcpToolActions(): Record<string, string> {
@@ -479,7 +479,7 @@ case "database_overview_get":
 In `desktop/database/cli/index.ts`, add a usage line:
 
 ```text
-  synapse overview                                   Show all tables and column summaries
+  synapse database overview get                                   Show all tables and column summaries
 ```
 
 Add a switch case:
@@ -535,11 +535,11 @@ git commit -m "feat: add database overview for agents"
 - Modify: `desktop/database/shared/mcp-tools.ts`
 - Modify: `desktop/database/shared/mcp-rpc.ts`
 - Modify: `desktop/database/cli/index.ts`
-- Create: `desktop/tests/unit/database-read-sql.test.ts`
+- Create: `desktop/tests/unit/database-sql-read.test.ts`
 
 - [ ] **Step 1: Write the failing service test**
 
-Create `desktop/tests/unit/database-read-sql.test.ts`:
+Create `desktop/tests/unit/database-sql-read.test.ts`:
 
 ```ts
 import { mkdtemp, rm } from "node:fs/promises"
@@ -591,7 +591,7 @@ describe("DatabaseService databaseSqlRead", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run tests/unit/database-read-sql.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/database-sql-read.test.ts
 ```
 
 Expected:
@@ -638,7 +638,7 @@ databaseSqlRead: (params) => ({
 Append to `DATABASE_CAPABILITIES`:
 
 ```ts
-{ action: "databaseSqlRead", mcpTool: "database_sql_read", cliCommand: "read-sql", mutates: false },
+{ action: "databaseSqlRead", mcpTool: "database_sql_read", cliCommand: "database sql read", mutates: false },
 ```
 
 Add MCP tool:
@@ -667,9 +667,9 @@ Add `database_sql_read` to the `result.data` group in `mcp-rpc.ts`.
 Add CLI command:
 
 ```ts
-case "read-sql": {
+case "sql.read": {
   const sql = args[1]
-  if (!sql) { console.error("Usage: synapse read-sql '<SQL>' [--params '[...]']"); process.exit(1) }
+  if (!sql) { console.error("Usage: synapse database sql read '<SQL>' [--params '[...]']"); process.exit(1) }
   const params = parseJsonFlag(args, "--params")
   if (params !== undefined && !Array.isArray(params)) {
     console.error("Invalid --params value: expected a JSON array")
@@ -686,7 +686,7 @@ case "read-sql": {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run tests/unit/database-read-sql.test.ts tests/unit/database-capability-parity.test.ts tests/unit/database-mcp-tools.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/database-sql-read.test.ts tests/unit/database-capability-parity.test.ts tests/unit/database-mcp-tools.test.ts
 pnpm --filter @synapse/desktop run build:database
 ```
 
@@ -700,7 +700,7 @@ build:database exits 0
 - [ ] **Step 6: Commit**
 
 ```bash
-git add desktop/electron/database/service.ts desktop/electron/database/dispatcher.ts desktop/database/shared/capability-registry.ts desktop/database/shared/mcp-tools.ts desktop/database/shared/mcp-rpc.ts desktop/database/cli/index.ts desktop/tests/unit/database-read-sql.test.ts
+git add desktop/electron/database/service.ts desktop/electron/database/dispatcher.ts desktop/database/shared/capability-registry.ts desktop/database/shared/mcp-tools.ts desktop/database/shared/mcp-rpc.ts desktop/database/cli/index.ts desktop/tests/unit/database-sql-read.test.ts
 git commit -m "feat: add read-only sql database tool"
 ```
 
@@ -915,7 +915,7 @@ git commit -m "feat: add dry-run preview for database bulk mutations"
 - Modify: `desktop/database/shared/mcp-tools.ts`
 - Modify: `desktop/database/shared/mcp-rpc.ts`
 - Modify: `desktop/database/cli/index.ts`
-- Create: `desktop/tests/unit/database-operation-log.test.ts`
+- Create: `desktop/tests/unit/database-log-list.test.ts`
 
 - [ ] **Step 1: Add operation log types**
 
@@ -981,7 +981,7 @@ recordOperation(entry: {
   )
 }
 
-listOperationLog(limit = 50): DatabaseOperationLogEntry[] {
+databaseLogList(limit = 50): DatabaseOperationLogEntry[] {
   const db = this.getDb()
   const rows = db.prepare(`
     SELECT "id", "source", "action", "table_name", "affected", "dry_run", "created_at"
@@ -1044,7 +1044,7 @@ Add handler:
 ```ts
 databaseLogList: (params) => ({
   ok: true,
-  data: databaseService.listOperationLog(
+  data: databaseService.databaseLogList(
     typeof params.limit === "number" && Number.isFinite(params.limit) ? params.limit : 50,
   ),
 }),
@@ -1094,7 +1094,7 @@ return await apiCall(getServerInfo(), action, args, "mcp-stdio")
 Append to registry:
 
 ```ts
-{ action: "databaseLogList", mcpTool: "database_log_list", cliCommand: "operation-log", mutates: false },
+{ action: "databaseLogList", mcpTool: "database_log_list", cliCommand: "database log list", mutates: false },
 ```
 
 Add MCP tool:
@@ -1117,7 +1117,7 @@ Add `database_log_list` to `mcp-rpc.ts` result-data group.
 Add CLI case:
 
 ```ts
-case "operation-log": {
+case "log.list": {
   const limit = parseNonNegativeIntegerFlag(args, "--limit")
   const result = await apiCall(info, "databaseLogList", { limit }) as { data: Record<string, unknown>[] }
   printTable(result.data)
@@ -1127,7 +1127,7 @@ case "operation-log": {
 
 - [ ] **Step 7: Write operation log test**
 
-Create `desktop/tests/unit/database-operation-log.test.ts`:
+Create `desktop/tests/unit/database-log-list.test.ts`:
 
 ```ts
 import { mkdtemp, rm } from "node:fs/promises"
@@ -1163,13 +1163,13 @@ describe("Database operation log", () => {
   it("records mutating dispatcher actions with source and affected count", async () => {
     const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
 
-    dispatchDatabaseAction("insert", { table: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
+    dispatchDatabaseAction("database.row.create", { tableName: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
 
-    const result = dispatchDatabaseAction("databaseLogList", { limit: 5 })
+    const result = dispatchDatabaseAction("database.log.list", { limit: 5 })
     expect(result.data).toEqual([
       expect.objectContaining({
         source: "mcp-stdio",
-        action: "insert",
+        action: "database.row.create",
         table: "tasks",
         affected: 1,
         dryRun: false,
@@ -1184,7 +1184,7 @@ describe("Database operation log", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run tests/unit/database-operation-log.test.ts tests/unit/database-capability-parity.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/database-log-list.test.ts tests/unit/database-capability-parity.test.ts
 pnpm --filter @synapse/desktop run build:database
 ```
 
@@ -1198,7 +1198,7 @@ build:database exits 0
 - [ ] **Step 9: Commit**
 
 ```bash
-git add desktop/electron/database/types.ts desktop/electron/database/service.ts desktop/electron/database/dispatcher.ts desktop/electron/database/http-server.ts desktop/electron/database/mcp-server.ts desktop/database/shared/resolve-user-data.ts desktop/database/mcp/index.ts desktop/database/shared/capability-registry.ts desktop/database/shared/mcp-tools.ts desktop/database/shared/mcp-rpc.ts desktop/database/cli/index.ts desktop/tests/unit/database-operation-log.test.ts
+git add desktop/electron/database/types.ts desktop/electron/database/service.ts desktop/electron/database/dispatcher.ts desktop/electron/database/http-server.ts desktop/electron/database/mcp-server.ts desktop/database/shared/resolve-user-data.ts desktop/database/mcp/index.ts desktop/database/shared/capability-registry.ts desktop/database/shared/mcp-tools.ts desktop/database/shared/mcp-rpc.ts desktop/database/cli/index.ts desktop/tests/unit/database-log-list.test.ts
 git commit -m "feat: add database operation log"
 ```
 
@@ -1252,11 +1252,11 @@ it("guides agents toward overview, database_sql_read, and database_log_list befo
 In `desktop/database/cli/index.ts`, ensure help includes:
 
 ```text
-  synapse overview                                   Show all tables and column summaries
-  synapse read-sql '<SQL>' [--params '[...]']        Execute read-only SQL
+  synapse database overview get                                   Show all tables and column summaries
+  synapse database sql read '<SQL>' [--params '[...]']        Execute read-only SQL
   synapse database log list [--limit N]                  Show recent Database mutations
-  synapse update-where <table> --where-json '{...}' --data '{"k":"v"}' [--dry-run]
-  synapse delete-where <table> --where-json '{...}' [--dry-run]
+  synapse database rows update <tableName> --where-json '{...}' --data '{"k":"v"}' [--dry-run]
+  synapse database rows delete <tableName> --where-json '{...}' [--dry-run]
 ```
 
 - [ ] **Step 4: Run full focused verification**
@@ -1269,9 +1269,9 @@ pnpm --filter @synapse/desktop exec vitest run \
   tests/unit/database-mcp-tools.test.ts \
   tests/unit/database-mcp-rpc.test.ts \
   tests/unit/database-overview.test.ts \
-  tests/unit/database-read-sql.test.ts \
+  tests/unit/database-sql-read.test.ts \
   tests/unit/database-dry-run.test.ts \
-  tests/unit/database-operation-log.test.ts \
+  tests/unit/database-log-list.test.ts \
   electron/database/__tests__/service.test.ts
 pnpm --filter @synapse/desktop run build:database
 pnpm --filter @synapse/desktop exec tsc -p tsconfig.test.json --noEmit --pretty false
@@ -1311,7 +1311,7 @@ Type consistency:
 
 - Action names use camelCase: `databaseOverviewGet`, `databaseSqlRead`, `databaseLogList`.
 - MCP names use snake_case: `database_overview_get`, `database_sql_read`, `database_log_list`.
-- CLI commands use kebab-case: `overview`, `read-sql`, `operation-log`.
+- CLI commands use kebab-case: `database overview get`, `database sql read`, `database log list`.
 
 Verification:
 

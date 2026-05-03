@@ -23,8 +23,8 @@ This must not merge Database and Task Scheduler into one domain. They are separa
 
 ## Non-Goals
 
-- No rename of existing Database tools such as `database_table_list`, `query`, `insert`, or `database_log_list`.
-- No migration to `database_*` tool names in this phase.
+- Database tools use canonical `database_*` names such as `database_table_list`, `database_row_list`, `database_row_create`, and `database_log_list`.
+- No additional Database behavior changes in this phase.
 - No Scheduler task deletion through MCP, CLI, or the new HTTP action set.
 - No stop-running-run tool in this phase.
 - No Scheduler update tool in this phase.
@@ -303,7 +303,7 @@ Existing Database commands remain at their current paths, for example:
 
 ```bash
 synapse database table list
-synapse query todos
+synapse database row list todos
 ```
 
 Add Scheduler as a separate subcommand namespace:
