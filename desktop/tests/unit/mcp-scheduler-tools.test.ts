@@ -5,7 +5,7 @@ import { SYNAPSE_DATA_SERVER_IDENTITY } from "../../data-store/shared/server-ide
 import { buildAllMcpTools, MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 
 describe("MCP Scheduler tools", () => {
-  it("lists existing Data Store tools and new Scheduler tools", () => {
+  it("lists existing Database tools and new Scheduler tools", () => {
     const names = buildAllMcpTools().map((tool) => tool.name)
     expect(names).toContain("database_table_list")
     expect(names).toContain("database_row_list")

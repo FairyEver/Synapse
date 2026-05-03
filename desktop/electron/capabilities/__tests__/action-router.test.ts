@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { createSynapseActionRouter } from "../action-router"
 
 describe("createSynapseActionRouter", () => {
-  it("routes Data Store actions to the Data Store dispatcher", async () => {
+  it("routes Database actions to the Database dispatcher", async () => {
     const dataStoreDispatch = vi.fn(() => ({ ok: true as const, data: ["tables"] }))
     const schedulerDispatch = vi.fn()
     const router = createSynapseActionRouter({

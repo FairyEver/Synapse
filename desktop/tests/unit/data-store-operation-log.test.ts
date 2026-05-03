@@ -12,7 +12,7 @@ vi.mock("../../electron/services/log-store", () => ({
 
 let tempDir = ""
 
-describe("Data Store operation log", () => {
+describe("Database operation log", () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-data-store-"))
     electronMock.app.getPath.mockReturnValue(tempDir)

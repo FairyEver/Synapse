@@ -109,7 +109,7 @@ describe("Codex app-server protocol helpers", () => {
     })).toBeNull()
     expect(permissionEventForCodexServerRequest("req-2", {
       method: "item/tool/call",
-      params: { tool: "list_tables" },
+      params: { tool: "database_table_list" },
     })).toBeNull()
   })
 

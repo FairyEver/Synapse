@@ -1554,7 +1554,7 @@ class DataStoreService {
     const whereEmpty = !where
       || (Array.isArray(where) ? where.length === 0 : Object.keys(where).length === 0)
     if (whereEmpty) {
-      throw new Error("updateWhere requires a non-empty where clause. Use 'update' to target a single row by id.")
+      throw new Error("database.rows.update requires a non-empty where clause. Use database.row.update to target a single row by id.")
     }
 
     const db = this.getDb()
@@ -1614,7 +1614,7 @@ class DataStoreService {
     const whereEmpty = !where
       || (Array.isArray(where) ? where.length === 0 : Object.keys(where).length === 0)
     if (whereEmpty) {
-      throw new Error("deleteWhere requires a non-empty where clause. Use 'delete' to target a single row by id, or drop and recreate the table to clear it.")
+      throw new Error("database.rows.delete requires a non-empty where clause. Use database.row.delete to target a single row by id, or drop and recreate the table to clear it.")
     }
 
     const db = this.getDb()
@@ -1679,7 +1679,7 @@ class DataStoreService {
   databaseSqlRead(sql: string, params?: unknown[]): { rows: Record<string, unknown>[] } {
     const normalized = sql.trim().toLowerCase()
     if (!/^(select|pragma|explain)\b/.test(normalized)) {
-      throw new Error("readSQL is read-only. Use rawSQL when you explicitly need to write.")
+      throw new Error("database.sql.read is read-only. Use database.sql.execute when you explicitly need to write.")
     }
     if (/\b(attach|detach)\b/i.test(normalized)) {
       throw new Error("ATTACH and DETACH statements are not allowed")

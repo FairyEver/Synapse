@@ -22,7 +22,7 @@ describe("Synapse capability domains", () => {
 })
 
 describe("Scheduler capability domain", () => {
-  it("registers Scheduler actions separately from Data Store", () => {
+  it("registers Scheduler actions separately from Database", () => {
     expect(SCHEDULER_DOMAIN.id).toBe("scheduler")
     expect(SCHEDULER_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
       "scheduler.task.list",

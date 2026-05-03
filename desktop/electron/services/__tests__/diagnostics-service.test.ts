@@ -45,7 +45,7 @@ describe("summarizeDiagnosticsChecks", () => {
   it("marks a report degraded when warnings exist without failures", () => {
     const checks: SynapseDiagnosticsCheck[] = [{
       id: "data-store.cli",
-      group: "Data Store",
+      group: "Database",
       name: "CLI",
       status: "degraded",
       severity: "warning",

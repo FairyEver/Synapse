@@ -9,7 +9,7 @@ describe("settingsCategories", () => {
       label: category.label,
     }))
 
-    expect(categories).toContainEqual({ id: "data-store", label: "数据服务" })
+    expect(categories).toContainEqual({ id: "data-store", label: "数据库" })
     expect(categories).toContainEqual({ id: "mcp", label: "MCP" })
   })
 })

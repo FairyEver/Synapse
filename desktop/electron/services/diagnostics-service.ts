@@ -633,7 +633,7 @@ class DiagnosticsService {
   }
 
   private async addDataStoreChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
-    await this.capture(checks, "data-store.status", "Data Store", "数据库", async () => {
+    await this.capture(checks, "data-store.status", "Database", "数据库", async () => {
       const runtimeStatus = this.deps.getDataStoreRuntimeStatus()
       const details = {
         ...runtimeStatus,
@@ -642,14 +642,14 @@ class DiagnosticsService {
         tableCount: this.deps.dataStore.getTableCount(),
       }
       return runtimeStatus.running
-        ? this.ok("data-store.status", "Data Store", "数据库", "数据库状态已读取", details)
-        : this.degraded("data-store.status", "Data Store", "数据库", "数据库未运行", details)
+        ? this.ok("data-store.status", "Database", "数据库", "数据库状态已读取", details)
+        : this.degraded("data-store.status", "Database", "数据库", "数据库未运行", details)
     })
 
-    await this.capture(checks, "data-store.integrity", "Data Store", "完整性", async () => {
+    await this.capture(checks, "data-store.integrity", "Database", "完整性", async () => {
       const runtimeStatus = this.deps.getDataStoreRuntimeStatus()
       if (!runtimeStatus.running) {
-        return this.degraded("data-store.integrity", "Data Store", "完整性", "数据库未运行，未执行完整性检查", runtimeStatus)
+        return this.degraded("data-store.integrity", "Database", "完整性", "数据库未运行，未执行完整性检查", runtimeStatus)
       }
 
       const health = this.deps.dataStore.getDiagnosticsHealth()
@@ -661,28 +661,28 @@ class DiagnosticsService {
       }
 
       return health.quickCheck === "ok"
-        ? this.ok("data-store.integrity", "Data Store", "完整性", "数据库完整", details)
-        : this.failed("data-store.integrity", "Data Store", "完整性", "数据库完整性检查失败", details)
+        ? this.ok("data-store.integrity", "Database", "完整性", "数据库完整", details)
+        : this.failed("data-store.integrity", "Database", "完整性", "数据库完整性检查失败", details)
     })
 
-    await this.capture(checks, "data-store.cli", "Data Store", "CLI", async () => {
+    await this.capture(checks, "data-store.cli", "Database", "CLI", async () => {
       const debugInfo = await this.deps.getCliDebugInfo()
       const available = debugInfo.status?.available === true
       const pathAnalysis = analyzeCliPaths(debugInfo)
       const details = { ...debugInfo, pathAnalysis }
 
       if (!available) {
-        return this.degraded("data-store.cli", "Data Store", "CLI", "CLI 不可用", details)
+        return this.degraded("data-store.cli", "Database", "CLI", "CLI 不可用", details)
       }
 
       return pathAnalysis.installedPath
         && pathAnalysis.preferredInstallPath
         && pathAnalysis.installedPath !== pathAnalysis.preferredInstallPath
-        ? this.degraded("data-store.cli", "Data Store", "CLI", "CLI 可用，命中路径不是推荐位置", details)
-        : this.ok("data-store.cli", "Data Store", "CLI", "CLI 可用", details)
+        ? this.degraded("data-store.cli", "Database", "CLI", "CLI 可用，命中路径不是推荐位置", details)
+        : this.ok("data-store.cli", "Database", "CLI", "CLI 可用", details)
     })
 
-    await this.capture(checks, "data-store.mcp", "Data Store", "MCP", async () => {
+    await this.capture(checks, "data-store.mcp", "Database", "MCP", async () => {
       const http = this.deps.getMcpHttpStatus()
       const registrations = await Promise.resolve(this.deps.getMcpServers())
       const probe = http.running && http.url
@@ -697,13 +697,13 @@ class DiagnosticsService {
       }
 
       if (!http.running) {
-        return this.degraded("data-store.mcp", "Data Store", "MCP", "MCP HTTP 未运行", details)
+        return this.degraded("data-store.mcp", "Database", "MCP", "MCP HTTP 未运行", details)
       }
       if (!probe.ok) {
-        return this.degraded("data-store.mcp", "Data Store", "MCP", "MCP ping 失败", details)
+        return this.degraded("data-store.mcp", "Database", "MCP", "MCP ping 失败", details)
       }
 
-      return this.ok("data-store.mcp", "Data Store", "MCP", "MCP 可用", details)
+      return this.ok("data-store.mcp", "Database", "MCP", "MCP 可用", details)
     })
   }
 

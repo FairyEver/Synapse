@@ -51,7 +51,7 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "data-store",
     icon: Database,
-    label: "数据服务",
+    label: "数据库",
     description: "本地数据库。",
   },
   {

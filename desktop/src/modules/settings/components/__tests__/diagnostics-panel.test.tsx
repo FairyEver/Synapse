@@ -82,7 +82,7 @@ describe("DiagnosticsPanel", () => {
     const groups = groupChecks(createReport().checks)
 
     expect(groups.get("系统")?.map((check) => check.id)).toEqual(["system.process"])
-    expect(groups.get("Data Store")?.map((check) => check.id)).toEqual(["data-store.status"])
+    expect(groups.get("Database")?.map((check) => check.id)).toEqual(["data-store.status"])
   })
 
   it("builds a concise diagnostic summary", () => {
@@ -159,7 +159,7 @@ function createReport(): SynapseDiagnosticsReport {
       },
       {
         id: "data-store.status",
-        group: "Data Store",
+        group: "Database",
         name: "数据库",
         status: "ok",
         severity: "info",
