@@ -1,6 +1,6 @@
 # Synapse MCP 能力
 
-<!-- Sources: docs/reference/synapse-mcp-capabilities.md; docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/capabilities/action-router.ts -->
 
 Synapse 通过一套 canonical capability surface 暴露本地能力。一个能力先定义在 manifest 中，再通过本地 HTTP API、MCP tool、CLI command 和 service method 对外使用。
 

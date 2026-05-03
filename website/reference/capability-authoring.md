@@ -1,6 +1,6 @@
 # Capability 维护指南
 
-<!-- Sources: docs/reference/capability-authoring.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/types.ts; desktop/database/shared/capability-registry.ts; desktop/database/shared/mcp-tools.ts; desktop/electron/database/dispatcher.ts; desktop/database/cli/database.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/services/task-scheduler/external-capabilities.ts; desktop/database/cli/scheduler.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/types.ts; desktop/database/shared/capability-registry.ts; desktop/database/shared/mcp-tools.ts; desktop/electron/database/dispatcher.ts; desktop/database/cli/database.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/services/task-scheduler/external-capabilities.ts; desktop/database/cli/scheduler.ts; desktop/electron/capabilities/action-router.ts -->
 
 新增或修改通过本地 HTTP API、MCP tool、CLI command、public service method 暴露的 Synapse capability 时，使用这份指南。
 
