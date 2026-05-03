@@ -5,7 +5,13 @@ import { PrismaService } from "../prisma/prisma.service"
 import type { ActivationRiskService } from "./activation-risk.service"
 import { hashActivationCode, hashDeviceId } from "./hash"
 import { signLicenseLease, verifyLicenseLease } from "./license-token"
-import type { DeviceMetadata, LicenseLeasePayload, ManagedStatus } from "./license.types"
+import {
+  ActivationError,
+  type ActivationAttemptOutcome,
+  type DeviceMetadata,
+  type LicenseLeasePayload,
+  type ManagedStatus,
+} from "./license.types"
 
 interface LicenseSettings {
   readonly privateKey: string
@@ -16,11 +22,13 @@ interface LicenseSettings {
 
 interface ActivationRecord {
   readonly id: string
+  readonly codeHint?: string | null
   readonly codeHash: string
   status: ManagedStatus
   readonly maxDevices: number
   boundAccountId: string | null
   readonly expiresAt?: Date | null
+  riskLockedAt?: Date | null
 }
 
 interface AccountRecord {
@@ -52,6 +60,8 @@ interface RedeemRequest {
   readonly email: string
   readonly activationCode: string
   readonly device: DeviceMetadata
+  readonly ipAddress: string
+  readonly userAgent: string
 }
 
 interface RenewRequest {
@@ -125,7 +135,7 @@ export class LicensesService {
     return new LicensesService(settings, new PrismaLicenseRepository(prisma), risk)
   }
 
-  seedActivationCode(input: { codeHash: string; maxDevices: number }): void {
+  seedActivationCode(input: { codeHash: string; maxDevices: number; riskLockedAt?: Date | null }): void {
     if (!(this.repository instanceof InMemoryLicenseRepository)) {
       throw new Error("seedActivationCode 仅可用于内存测试。")
     }
@@ -144,19 +154,44 @@ export class LicensesService {
   async redeem(request: RedeemRequest): Promise<LicenseResponse> {
     const email = normalizeEmail(request.email)
     const codeHash = hashActivationCode(request.activationCode)
+    const deviceIdHash = hashDeviceId(request.device.deviceId)
+    if (this.risk) {
+      try {
+        await this.risk.assertNotRateLimited({
+          email,
+          deviceIdHash,
+          ipAddress: request.ipAddress,
+        })
+      } catch (error) {
+        if (error instanceof ActivationError) {
+          await this.recordRedeemAttempt(request, null, "rate_limited", error.message)
+        }
+        throw error
+      }
+    }
+
     const activation = await this.repository.findActivationByHash(codeHash)
 
     if (!activation || activation.status !== "active" || isPast(activation.expiresAt)) {
-      throw new Error("激活码无效。")
+      await this.recordRedeemAttempt(request, activation, "invalid_code", "激活码无效。")
+      await this.evaluateActivationRisk(activation, codeHash)
+      throw new ActivationError("ACTIVATION_INVALID", "激活失败，请检查信息。")
     }
 
     const account = await this.repository.findOrCreateAccount(email)
     if (account.status !== "active") {
+      await this.recordRedeemAttempt(request, activation, "blocked", "账号已停用。")
       throw new Error("账号已停用。")
     }
 
     if (activation.boundAccountId && activation.boundAccountId !== account.id) {
-      throw new Error("激活码已绑定其他账号。")
+      await this.recordRedeemAttempt(request, activation, "bound_conflict", "激活码已绑定其他账号。")
+      await this.evaluateActivationRisk(activation, codeHash)
+      throw new ActivationError("ACTIVATION_BOUND_CONFLICT", "激活码已绑定其他账号。")
+    }
+    if (activation.riskLockedAt && !activation.boundAccountId) {
+      await this.recordRedeemAttempt(request, activation, "risk_locked", "激活码暂不可用，请联系管理员。")
+      throw new ActivationError("ACTIVATION_RISK_LOCKED", "激活码暂不可用，请联系管理员。")
     }
     if (!activation.boundAccountId) {
       await this.repository.bindActivationToAccount(activation.id, account.id)
@@ -165,10 +200,33 @@ export class LicensesService {
 
     const license = await this.repository.findOrCreateLicense(account.id, activation)
     if (license.status !== "active" || isPast(license.expiresAt)) {
+      await this.recordRedeemAttempt(request, activation, "blocked", "授权不可用。")
       throw new Error("授权不可用。")
     }
 
-    const device = await this.findOrCreateDevice(license, request.device)
+    if (activation.riskLockedAt) {
+      const existingDevices = await this.repository.findDevicesByLicense(license.id)
+      const existingActiveDevice = existingDevices.find((device) =>
+        device.deviceIdHash === deviceIdHash && device.status === "active",
+      )
+      if (!existingActiveDevice) {
+        await this.recordRedeemAttempt(request, activation, "risk_locked", "激活码暂不可用，请联系管理员。")
+        throw new ActivationError("ACTIVATION_RISK_LOCKED", "激活码暂不可用，请联系管理员。")
+      }
+    }
+
+    let device: DeviceRecord
+    try {
+      device = await this.findOrCreateDevice(license, request.device)
+    } catch (error) {
+      if (error instanceof Error && error.message === "设备数量已达上限。") {
+        await this.recordRedeemAttempt(request, activation, "device_limit", error.message)
+        await this.evaluateActivationRisk(activation, codeHash)
+        throw new ActivationError("ACTIVATION_DEVICE_LIMIT", error.message)
+      }
+      throw error
+    }
+    await this.recordRedeemAttempt(request, activation, "success", "激活成功。")
     const leaseToken = await this.issueLease(account, license, device)
 
     return { email, deviceIdHash: device.deviceIdHash, leaseToken }
@@ -280,6 +338,34 @@ export class LicensesService {
     })
     return signLicenseLease(payload, this.settings.privateKey)
   }
+
+  private async recordRedeemAttempt(
+    request: RedeemRequest,
+    activation: ActivationRecord | null,
+    outcome: ActivationAttemptOutcome,
+    reason: string,
+  ): Promise<void> {
+    if (!this.risk) return
+    await this.risk.recordAttempt({
+      activationCodeId: activation?.id ?? null,
+      activationCodeHash: hashActivationCode(request.activationCode),
+      activationCodeHint: activation?.codeHint ?? null,
+      email: normalizeEmail(request.email),
+      deviceIdHash: hashDeviceId(request.device.deviceId),
+      ipAddress: request.ipAddress,
+      userAgent: request.userAgent,
+      outcome,
+      reason,
+    })
+  }
+
+  private async evaluateActivationRisk(activation: ActivationRecord | null, codeHash: string): Promise<void> {
+    if (!this.risk || !activation) return
+    await this.risk.evaluateCodeRisk({
+      activationCodeId: activation.id,
+      activationCodeHash: codeHash,
+    })
+  }
 }
 
 function normalizeEmail(email: string): string {
@@ -296,13 +382,14 @@ class InMemoryLicenseRepository implements LicenseRepository {
   private readonly licenses = new Map<string, LicenseRecord>()
   private readonly devices = new Map<string, DeviceRecord>()
 
-  seedActivationCode(input: { codeHash: string; maxDevices: number }): void {
+  seedActivationCode(input: { codeHash: string; maxDevices: number; riskLockedAt?: Date | null }): void {
     this.activations.set(input.codeHash, {
       id: randomUUID(),
       codeHash: input.codeHash,
       status: "active",
       maxDevices: input.maxDevices,
       boundAccountId: null,
+      riskLockedAt: input.riskLockedAt ?? null,
     })
   }
 

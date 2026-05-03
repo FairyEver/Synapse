@@ -7,8 +7,10 @@ import {
   Get,
   InternalServerErrorException,
   Post,
+  Req,
 } from "@nestjs/common"
 import { z } from "zod"
+import { ActivationError } from "./license.types"
 import { LicensesService } from "./licenses.service"
 
 const deviceSchema = z.object({
@@ -39,9 +41,16 @@ export class LicensesController {
   }
 
   @Post("/activations/redeem")
-  async redeem(@Body() body: unknown) {
+  async redeem(
+    @Body() body: unknown,
+    @Req() request: { readonly ip?: string; readonly headers?: Record<string, unknown> },
+  ) {
     try {
-      return await this.licenses.redeem(redeemSchema.parse(body))
+      return await this.licenses.redeem({
+        ...redeemSchema.parse(body),
+        ipAddress: request.ip ?? "",
+        userAgent: readUserAgent(request.headers?.["user-agent"]),
+      })
     } catch (error) {
       throw mapLicenseError(error)
     }
@@ -70,6 +79,16 @@ function mapLicenseError(error: unknown): Error {
   if (error instanceof z.ZodError) {
     return new BadRequestException("授权请求无效。")
   }
+  if (error instanceof ActivationError) {
+    const body = { code: error.code, message: error.message }
+    if (error.code === "ACTIVATION_BOUND_CONFLICT" || error.code === "ACTIVATION_DEVICE_LIMIT") {
+      return new ConflictException(body)
+    }
+    if (error.code === "ACTIVATION_RISK_LOCKED") {
+      return new ForbiddenException(body)
+    }
+    return new BadRequestException(body)
+  }
   if (!(error instanceof Error)) {
     return new InternalServerErrorException("授权请求失败。")
   }
@@ -92,4 +111,9 @@ function mapLicenseError(error: unknown): Error {
   }
 
   return new InternalServerErrorException("授权请求失败。")
+}
+
+function readUserAgent(value: unknown): string {
+  if (Array.isArray(value)) return value.join(" ")
+  return typeof value === "string" ? value : ""
 }

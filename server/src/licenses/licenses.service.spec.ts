@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { hashActivationCode, hashDeviceId } from "./hash"
 import type { ManagedStatus } from "./license.types"
 import { LicensesService } from "./licenses.service"
@@ -10,6 +10,11 @@ function keys(): { privateKey: string; publicKey: string } {
     privateKey: pair.privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
     publicKey: pair.publicKey.export({ format: "pem", type: "spki" }).toString(),
   }
+}
+
+const requestSource = {
+  ipAddress: "127.0.0.1",
+  userAgent: "Vitest",
 }
 
 describe("LicensesService", () => {
@@ -32,6 +37,7 @@ describe("LicensesService", () => {
         platform: "darwin",
         appVersion: "0.2.54",
       },
+      ...requestSource,
     })
 
     expect(result.email).toBe("user@example.com")
@@ -52,12 +58,14 @@ describe("LicensesService", () => {
       email: "first@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
     })
 
     await expect(service.redeem({
       email: "second@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-2", name: "ThinkPad", platform: "win32", appVersion: "0.2.54" },
+      ...requestSource,
     })).rejects.toThrow("激活码已绑定其他账号。")
   })
 
@@ -75,12 +83,14 @@ describe("LicensesService", () => {
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
     })
 
     await expect(service.redeem({
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-2", name: "ThinkPad", platform: "win32", appVersion: "0.2.54" },
+      ...requestSource,
     })).rejects.toThrow("设备数量已达上限。")
   })
 
@@ -98,6 +108,7 @@ describe("LicensesService", () => {
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
     })
 
     const repository = (service as unknown as TestableLicenseService).repository
@@ -109,6 +120,7 @@ describe("LicensesService", () => {
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.55" },
+      ...requestSource,
     })).rejects.toThrow("设备已停用。")
   })
 
@@ -125,6 +137,7 @@ describe("LicensesService", () => {
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
     })
 
     const renewed = await service.renew({
@@ -150,6 +163,7 @@ describe("LicensesService", () => {
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
     })
 
     const repository = (service as unknown as TestableLicenseService).repository
@@ -162,11 +176,82 @@ describe("LicensesService", () => {
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.55" },
     })).rejects.toThrow("授权不可用。")
   })
+
+  it("rejects new activation when a code is risk locked", async () => {
+    const pair = keys()
+    const risk = {
+      assertNotRateLimited: vi.fn(),
+      recordAttempt: vi.fn(),
+      evaluateCodeRisk: vi.fn(),
+    }
+    const service = LicensesService.createInMemory({
+      privateKey: pair.privateKey,
+      publicKey: pair.publicKey,
+      keyId: "test",
+      leaseDays: 7,
+    }, risk as never)
+    service.seedActivationCode({
+      codeHash: hashActivationCode("ABCD-1234"),
+      maxDevices: 1,
+      riskLockedAt: new Date("2026-05-03T00:00:00.000Z"),
+    })
+
+    await expect(service.redeem({
+      email: "user@example.com",
+      activationCode: "ABCD-1234",
+      device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
+    })).rejects.toMatchObject({
+      code: "ACTIVATION_RISK_LOCKED",
+    })
+
+    expect(risk.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "risk_locked",
+    }))
+  })
+
+  it("allows an existing active device to recover a lost lease while the code is risk locked", async () => {
+    const pair = keys()
+    const risk = {
+      assertNotRateLimited: vi.fn(),
+      recordAttempt: vi.fn(),
+      evaluateCodeRisk: vi.fn(),
+    }
+    const service = LicensesService.createInMemory({
+      privateKey: pair.privateKey,
+      publicKey: pair.publicKey,
+      keyId: "test",
+      leaseDays: 7,
+    }, risk as never)
+    service.seedActivationCode({ codeHash: hashActivationCode("ABCD-1234"), maxDevices: 1 })
+
+    await service.redeem({
+      email: "user@example.com",
+      activationCode: "ABCD-1234",
+      device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
+    })
+
+    const repository = (service as unknown as TestableLicenseService).repository
+    const activation = repository.activations.get(hashActivationCode("ABCD-1234"))
+    if (!activation) throw new Error("Seeded activation code is missing")
+    activation.riskLockedAt = new Date("2026-05-03T00:00:00.000Z")
+
+    await expect(service.redeem({
+      email: "user@example.com",
+      activationCode: "ABCD-1234",
+      device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.55" },
+      ...requestSource,
+    })).resolves.toMatchObject({
+      email: "user@example.com",
+      deviceIdHash: hashDeviceId("device-1"),
+    })
+  })
 })
 
 interface TestableLicenseService {
   readonly repository: {
-    readonly activations: Map<string, { status: ManagedStatus }>
+    readonly activations: Map<string, { status: ManagedStatus; riskLockedAt?: Date | null }>
     readonly devices: Map<string, { status: "active" | "revoked" }>
   }
 }
