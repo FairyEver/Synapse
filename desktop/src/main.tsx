@@ -1,6 +1,7 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import App from "@/App"
+import { AppErrorBoundary } from "@/components/app-error-boundary"
 import { ActiveRepositorySwitchProvider } from "@/app-shell/active-repository-switch"
 import { AppConfigProvider } from "@/app-shell/config"
 import { IdentityProvider } from "@/app-shell/identity-context"
@@ -17,18 +18,20 @@ installRendererLogForwarding()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AppConfigProvider>
-      <RepositoryManagerProvider>
-        <LicenseProvider>
-          <IdentityProvider>
-            <AppNotificationsProvider>
-              <ActiveRepositorySwitchProvider>
-                <App />
-              </ActiveRepositorySwitchProvider>
-            </AppNotificationsProvider>
-          </IdentityProvider>
-        </LicenseProvider>
-      </RepositoryManagerProvider>
-    </AppConfigProvider>
+    <AppErrorBoundary>
+      <AppConfigProvider>
+        <RepositoryManagerProvider>
+          <LicenseProvider>
+            <IdentityProvider>
+              <AppNotificationsProvider>
+                <ActiveRepositorySwitchProvider>
+                  <App />
+                </ActiveRepositorySwitchProvider>
+              </AppNotificationsProvider>
+            </IdentityProvider>
+          </LicenseProvider>
+        </RepositoryManagerProvider>
+      </AppConfigProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 )
