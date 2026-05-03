@@ -21,7 +21,7 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 
 When the user mentions `sss`, treat it as Synapse Services Shortcut and use the matching `synapse-database` MCP tool by intent:
 
-- Database, table, column, row, SQL, Data Store, or data CRUD requests use Data Store tools.
+- Database, table, column, row, SQL, Database, or data CRUD requests use Database tools.
 - Scheduled task, scheduler, cron/interval, enable/disable, run history, or runtime status requests use scheduler tools.
 - If `sss` appears without a clear domain, infer from context; if still unclear, ask one short clarification.
 
@@ -70,7 +70,7 @@ enforces them; CI runs it on push.
 6. **No `modules/A` importing `modules/B/internal`**: cross-module communication goes through `ServiceRegistry.get<T>(id)` or `EventBus`. Shared types live in `src/types/`.
 7. **No empty `catch {}`**: handle, log via `StructuredLogger.warn(...)`, or rethrow with context. Never silently swallow.
 8. **Renderer**: only `window.synapse.*` for Electron capabilities. No direct `ipcRenderer` use.
-9. **`runtime/*` is pure infrastructure**: it never imports `desktop/electron/services/*`, `desktop/electron/data-store/*`, or business code. Glue lives in `desktop/electron/bootstrap/`.
+9. **`runtime/*` is pure infrastructure**: it never imports `desktop/electron/services/*`, `desktop/electron/database/*`, or business code. Glue lives in `desktop/electron/bootstrap/`.
 10. **Sensitive operations** (shell, file write outside userData, network connect, extension load, agent spawn, secret access): go through `PermissionGuard.check()` and record on `AuditSink`.
 11. **Extensible enums** (content types, editor adapters, connectors, providers, hook types, UI panels): register via `ExtensionPoint`. New hardcoded enums need explicit approval.
 

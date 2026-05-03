@@ -4,7 +4,7 @@
 
 Add a Diagnostics page under Settings for production troubleshooting and internal functional checks.
 
-The page should help a user produce one complete artifact for developers when Synapse misbehaves on their machine. It should show a clear result in the app, preserve full local values in the report, run only safe probes, and export a single ZIP package containing the report, logs, config snapshot, and Data Store database copy.
+The page should help a user produce one complete artifact for developers when Synapse misbehaves on their machine. It should show a clear result in the app, preserve full local values in the report, run only safe probes, and export a single ZIP package containing the report, logs, config snapshot, and Database database copy.
 
 ## Decisions
 
@@ -35,8 +35,8 @@ Related sources to reuse:
 
 - Log export and archive logic in `desktop/electron/services/log-store.ts`
 - Config backup shape in `desktop/electron/services/config-backup-service.ts`
-- Data Store status and database export in `desktop/electron/data-store/service.ts`
-- Data Store CLI and MCP checks in `desktop/electron/data-store/cli-installer.ts`, `desktop/electron/data-store/mcp-installer.ts`, and `desktop/electron/data-store/mcp-server.ts`
+- Database status and database export in `desktop/electron/database/service.ts`
+- Database CLI and MCP checks in `desktop/electron/database/cli-installer.ts`, `desktop/electron/database/mcp-installer.ts`, and `desktop/electron/database/mcp-server.ts`
 - Service/Data repository inspect types in `desktop/electron/runtime/service-registry/` and `desktop/electron/runtime/data-repo/`
 
 ## User Flow
@@ -83,7 +83,7 @@ Render grouped sections:
 - `路径与权限`: temp write/read/delete probe, log directory, configured repositories, configured projects.
 - `服务`: migrated IPC modules, core service registry inspect, service failures if available.
 - `Agent`: `AgentRuntimeService.getStatus()` for the selected or first project.
-- `Data Store`: DB path, size, table count, HTTP status, CLI debug info, MCP HTTP status, MCP registrations.
+- `Database`: DB path, size, table count, HTTP status, CLI debug info, MCP HTTP status, MCP registrations.
 - `连接器`: Side-channel, Webhook, Relay, Feishu status.
 - `日志与配置`: log file count/size and exported bundle contents.
 
@@ -230,10 +230,10 @@ Run these checks:
 - Project paths: exists, is directory, readable.
 - Current ops status values: version, single-instance lock, logs path, Side-channel, Webhook, Relay, Agent, Feishu.
 - Log file list: count and total size.
-- Data Store status: running, port, DB size, table count, DB directory.
-- Data Store DB copy readiness: source path exists and can be stat'ed.
-- Data Store CLI debug info.
-- Data Store MCP HTTP status and target registrations.
+- Database status: running, port, DB size, table count, DB directory.
+- Database DB copy readiness: source path exists and can be stat'ed.
+- Database CLI debug info.
+- Database MCP HTTP status and target registrations.
 - Agent runtime status for the selected project or first configured project.
 - Service registry inspect from the diagnostics service dependency.
 - DataRepository inspect from the diagnostics service dependency.
@@ -243,7 +243,7 @@ Do not run:
 
 - Agent messages or new sessions.
 - Network calls to external hosts.
-- Destructive Data Store actions.
+- Destructive Database actions.
 - Repository sync, Git push, maintenance, or content writes.
 - Config import/reset.
 - Log clear.
@@ -274,8 +274,8 @@ synapse-diagnostics-2026-04-29T03-31-20-000Z/
     synapse-*.log
   config/
     config-backup.json
-  data-store/
-    synapse-data.db
+  database/
+    synapse-database.db
 ```
 
 `manifest.json` includes:
@@ -291,7 +291,7 @@ synapse-diagnostics-2026-04-29T03-31-20-000Z/
 
 `config/config-backup.json` uses the existing config backup shape. Extract `createConfigBackupPayload()` from `config-backup-service.ts` so diagnostics can create the payload without opening a save dialog.
 
-`data-store/synapse-data.db` uses `dataStoreService.exportDatabase(targetPath)`.
+`database/synapse-database.db` uses `databaseService.exportDatabase(targetPath)`.
 
 Logs include current log files. Call `logStore.flush()` before copying.
 
@@ -399,7 +399,7 @@ Do not start the development server as part of verification.
 - Raw JSON opens in a modal and can be copied.
 - Long paths, stack traces, and JSON values remain accessible without breaking layout.
 - A single ZIP diagnostic package can be exported.
-- The ZIP includes report, manifest, logs, config backup, and Data Store database. If a file cannot be copied, it is omitted and listed in `manifest.skipped`.
+- The ZIP includes report, manifest, logs, config backup, and Database database. If a file cannot be copied, it is omitted and listed in `manifest.skipped`.
 - Optional export failures are recorded in the manifest.
 - Renderer does not directly assemble diagnostics from many bridge calls.
 - Main-process implementation respects existing IPC, PermissionGuard, AuditSink, and hard-constraint rules.

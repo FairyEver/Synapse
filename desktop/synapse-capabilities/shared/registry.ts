@@ -1,5 +1,5 @@
-import { DATABASE_DOMAIN, buildMcpToolActions as buildDatabaseMcpToolActions } from "../../data-store/shared/capability-registry"
-import { buildTools as buildDataStoreTools } from "../../data-store/shared/mcp-tools"
+import { DATABASE_DOMAIN, buildMcpToolActions as buildDatabaseMcpToolActions } from "../../database/shared/capability-registry"
+import { buildTools as buildDatabaseTools } from "../../database/shared/mcp-tools"
 import {
   SCHEDULER_DOMAIN,
   SCHEDULER_MCP_TOOL_ACTIONS,
@@ -19,7 +19,7 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
 
 export function buildAllMcpTools(): McpToolDefinition[] {
   return [
-    ...buildDataStoreTools(),
+    ...buildDatabaseTools(),
     ...buildSchedulerTools(),
   ]
 }

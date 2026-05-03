@@ -11,7 +11,7 @@ underlying service capability
   -> MCP tool
 ```
 
-The current names were added in phases. Database capabilities still use older Data Store names such as `listTables`, `list_tables`, and `synapse tables`. Scheduler capabilities use newer names such as `schedulerTaskCreate`, `scheduler_task_create`, and `synapse scheduler create`.
+The current names were added in phases. Database capabilities still use older Database names such as `databaseTableList`, `database_table_list`, and `synapse database table list`. Scheduler capabilities use newer names such as `schedulerTaskCreate`, `scheduler_task_create`, and `synapse scheduler create`.
 
 This creates four naming systems for one capability. Future domains would drift unless Synapse makes one canonical manifest the source of truth.
 
@@ -26,17 +26,17 @@ There is no historical compatibility requirement for this rename. Old MCP tools,
 - Use `database` as the domain name instead of `data_store`.
 - Keep `scheduler` as the domain name.
 - Align public service and dispatcher handler method names with the same vocabulary.
-- Update user-visible English UI copy from "Data Store" to "Database".
+- Update user-visible English UI copy from "Database" to "Database".
 - Add tests and a human-readable naming matrix to prevent future drift.
 - Remove old names directly. Do not add compatibility aliases or deprecated command paths.
 
 ## Non-Goals
 
 - No renderer preload API rename unless it is part of the external capability chain.
-- No directory, IPC channel, data-track, or type-name rename just because it contains `data-store` or `DataStore`.
+- No directory, IPC channel, data-track, or type-name rename just because it contains `database` or `Database`.
 - No rename of persisted Action Runtime type ids such as `builtin.command`, `builtin.script`, or `builtin.http-request`.
 - No broad internal refactor beyond public service or dispatcher methods that represent external capabilities.
-- No UI redesign. This only changes user-visible wording from Data Store to Database where applicable.
+- No UI redesign. This only changes user-visible wording from Database to Database where applicable.
 
 ## Naming Principles
 
@@ -171,30 +171,30 @@ scheduler.* -> Scheduler dispatcher
 
 | Current action | Canonical id | MCP tool | CLI command | Service method |
 | --- | --- | --- | --- | --- |
-| `listTables` | `database.table.list` | `database_table_list` | `synapse database table list` | `databaseTableList` |
-| `describeTable` | `database.table.describe` | `database_table_describe` | `synapse database table describe <tableName>` | `databaseTableDescribe` |
-| `createTable` | `database.table.create` | `database_table_create` | `synapse database table create <tableName>` | `databaseTableCreate` |
-| `dropTable` | `database.table.delete` | `database_table_delete` | `synapse database table delete <tableName>` | `databaseTableDelete` |
+| `databaseTableList` | `database.table.list` | `database_table_list` | `synapse database table list` | `databaseTableList` |
+| `databaseTableDescribe` | `database.table.describe` | `database_table_describe` | `synapse database table describe <tableName>` | `databaseTableDescribe` |
+| `databaseTableCreate` | `database.table.create` | `database_table_create` | `synapse database table create <tableName>` | `databaseTableCreate` |
+| `databaseTableDelete` | `database.table.delete` | `database_table_delete` | `synapse database table delete <tableName>` | `databaseTableDelete` |
 | `renameTable` | `database.table.rename` | `database_table_rename` | `synapse database table rename <fromTableName> <toTableName>` | `databaseTableRename` |
-| `updateTableDescription` | `database.table.update` | `database_table_update` | `synapse database table update <tableName>` | `databaseTableUpdate` |
-| `databaseOverview` | `database.overview.get` | `database_overview_get` | `synapse database overview get` | `databaseOverviewGet` |
+| `databaseTableUpdate` | `database.table.update` | `database_table_update` | `synapse database table update <tableName>` | `databaseTableUpdate` |
+| `databaseOverviewGet` | `database.overview.get` | `database_overview_get` | `synapse database overview get` | `databaseOverviewGet` |
 | `addColumn` | `database.column.create` | `database_column_create` | `synapse database column create <tableName>` | `databaseColumnCreate` |
-| `dropColumn` | `database.column.delete` | `database_column_delete` | `synapse database column delete <tableName> <columnName>` | `databaseColumnDelete` |
-| `renameColumn` | `database.column.rename` | `database_column_rename` | `synapse database column rename <tableName> <fromColumnName> <toColumnName>` | `databaseColumnRename` |
+| `databaseColumnDelete` | `database.column.delete` | `database_column_delete` | `synapse database column delete <tableName> <columnName>` | `databaseColumnDelete` |
+| `databaseColumnRename` | `database.column.rename` | `database_column_rename` | `synapse database column rename <tableName> <fromColumnName> <toColumnName>` | `databaseColumnRename` |
 | `updateColumnDescription` | `database.column.update` | `database_column_update` | `synapse database column update <tableName> <columnName>` | `databaseColumnUpdate` |
 | `updateColumnChoices` | `database.choice.update` | `database_choice_update` | `synapse database choice update <tableName> <columnName>` | `databaseChoiceUpdate` |
 | `getColumnChoicesUsage` | `database.choice_usage.get` | `database_choice_usage_get` | `synapse database choice-usage get <tableName> <columnName>` | `databaseChoiceUsageGet` |
 | `insert` | `database.row.create` | `database_row_create` | `synapse database row create <tableName>` | `databaseRowCreate` |
-| `batchInsert` | `database.rows.create` | `database_rows_create` | `synapse database rows create <tableName>` | `databaseRowsCreate` |
+| `databaseRowsCreate` | `database.rows.create` | `database_rows_create` | `synapse database rows create <tableName>` | `databaseRowsCreate` |
 | `query` | `database.row.list` | `database_row_list` | `synapse database row list <tableName>` | `databaseRowList` |
 | `count` | `database.row.count` | `database_row_count` | `synapse database row count <tableName>` | `databaseRowCount` |
 | `update` | `database.row.update` | `database_row_update` | `synapse database row update <tableName> <rowId>` | `databaseRowUpdate` |
 | `delete` | `database.row.delete` | `database_row_delete` | `synapse database row delete <tableName> <rowId>` | `databaseRowDelete` |
-| `updateWhere` | `database.rows.update` | `database_rows_update` | `synapse database rows update <tableName>` | `databaseRowsUpdate` |
-| `deleteWhere` | `database.rows.delete` | `database_rows_delete` | `synapse database rows delete <tableName>` | `databaseRowsDelete` |
-| `operationLog` | `database.log.list` | `database_log_list` | `synapse database log list` | `databaseLogList` |
-| `readSQL` | `database.sql.read` | `database_sql_read` | `synapse database sql read '<SQL>'` | `databaseSqlRead` |
-| `rawSQL` | `database.sql.execute` | `database_sql_execute` | `synapse database sql execute '<SQL>'` | `databaseSqlExecute` |
+| `databaseRowsUpdate` | `database.rows.update` | `database_rows_update` | `synapse database rows update <tableName>` | `databaseRowsUpdate` |
+| `databaseRowsDelete` | `database.rows.delete` | `database_rows_delete` | `synapse database rows delete <tableName>` | `databaseRowsDelete` |
+| `databaseLogList` | `database.log.list` | `database_log_list` | `synapse database log list` | `databaseLogList` |
+| `databaseSqlRead` | `database.sql.read` | `database_sql_read` | `synapse database sql read '<SQL>'` | `databaseSqlRead` |
+| `databaseSqlExecute` | `database.sql.execute` | `database_sql_execute` | `synapse database sql execute '<SQL>'` | `databaseSqlExecute` |
 
 Notes:
 
@@ -298,27 +298,27 @@ They are persisted task configuration values and represent plugin or action type
 
 ## UI Copy
 
-User-visible English copy should use `Database` instead of `Data Store`.
+User-visible English copy should use `Database`.
 
 Examples:
 
 ```text
-Data Store -> Database
-Synapse Data Store CLI -> Synapse Database CLI
-Data Store mutations -> Database mutations
+旧资源名 -> Database
+Synapse Database CLI -> Synapse Database CLI
+Database mutations -> database mutations
 ```
 
 Chinese copy that already says "数据库" should stay as-is.
 
-Do not rename module paths such as `desktop/src/modules/data-store`, types such as `DataStoreTableInfo`, IPC channels such as `synapse:data-store:*`, or tracking ids such as `data-store-row-save` as part of UI copy cleanup.
+The final migration is project-wide: paths, types, IPC/preload bridge names, tracking ids, scripts, generated bundle names, tests, and docs should all use the `database` naming family. Only true storage internals or legacy cleanup sentinels may keep historical values when changing them would break existing user data cleanup.
 
 ## Migration Strategy
 
 Because there is no compatibility requirement, remove old names directly:
 
-- Remove old MCP tool names such as `list_tables`, `operation_log`, and `scheduler_task_runs_list`.
-- Remove old API actions such as `listTables`, `operationLog`, and `schedulerTaskRunsList`.
-- Remove old CLI commands such as `synapse tables`, `synapse operation-log`, and `synapse scheduler runs`.
+- Remove old MCP tool names such as `database_table_list`, `database_log_list`, and `scheduler_task_runs_list`.
+- Remove old API actions such as `databaseTableList`, `databaseLogList`, and `schedulerTaskRunsList`.
+- Remove old CLI commands such as `synapse database table list`, `synapse database log list`, and `synapse scheduler run list`.
 - Update tests, docs, and generated copy to use canonical names.
 
 Repository content can be changed automatically.
@@ -371,7 +371,7 @@ The matrix can be generated from the manifest or kept as a checked-in snapshot t
 5. Route local HTTP API by canonical id.
 6. Change CLI parsing to the domain/resource/action path style.
 7. Rename public service and dispatcher methods that correspond to external capabilities.
-8. Update UI-visible English copy from Data Store to Database.
+8. Update UI-visible English copy from Database to Database.
 9. Update docs and generated schema copy formats.
 10. Add the naming matrix and migration scan/report.
 11. Remove tests that assert old names and add rejection tests for old names.
@@ -381,7 +381,7 @@ The matrix can be generated from the manifest or kept as a checked-in snapshot t
 - One manifest item is enough to derive API action, MCP tool, CLI command, and public service method names.
 - Current Database and Scheduler capabilities use canonical ids.
 - Old external names no longer work and are covered by negative tests.
-- User-visible English UI says Database, not Data Store.
+- User-visible English UI says Database, not Database.
 - Existing Chinese database copy remains stable.
 - No unrelated preload API, IPC channel, type, directory, or tracking id churn is introduced.
 - Tests document and enforce the naming scheme.

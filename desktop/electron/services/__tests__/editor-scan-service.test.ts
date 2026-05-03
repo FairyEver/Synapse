@@ -422,9 +422,9 @@ describe("editor scan quick publish", () => {
     await writeFile(
       filePath,
       [
-        "<!-- synapse-rule:builtin__rule__data-store-shortcut:begin -->",
+        "<!-- synapse-rule:builtin__rule__database-shortcut:begin -->",
         "Use sss.",
-        "<!-- synapse-rule:builtin__rule__data-store-shortcut:end -->",
+        "<!-- synapse-rule:builtin__rule__database-shortcut:end -->",
       ].join("\n"),
     )
 
@@ -432,9 +432,9 @@ describe("editor scan quick publish", () => {
 
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({
-      name: "builtin__rule__data-store-shortcut",
+      name: "builtin__rule__database-shortcut",
       source: "synapse",
-      synapseContentId: "builtin__rule__data-store-shortcut",
+      synapseContentId: "builtin__rule__database-shortcut",
       content: "Use sss.",
     })
   })

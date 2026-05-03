@@ -7,19 +7,19 @@
 - Electron 41 + Vite 8 + React 19 + TypeScript 6
 - shadcn/ui (radix-nova preset) + Tailwind CSS 4
 - pnpm monorepo（`desktop/` + `website/` + `server/`）
-- Git-based 内容存储 + SQLite Data Store
+- Git-based 内容存储 + SQLite Database
 
 ## 架构速览
 
 ```
 desktop/
-├── electron/           # 主进程：IPC handlers + services + data-store
+├── electron/           # 主进程：IPC handlers + services + database
 │   ├── ipc/            # 按领域拆分的 IPC handler（content / repository / editor / identity / config …）
 │   ├── services/       # 业务逻辑（content-service / repository-git-service / editor-adapters / …）
-│   └── data-store/     # SQLite 数据层，提供 CLI / MCP / HTTP / IPC 四种访问接口
+│   └── database/     # SQLite 数据层，提供 CLI / MCP / HTTP / IPC 四种访问接口
 ├── src/                # 渲染进程：React SPA
 │   ├── app-shell/      # 壳层：Context Providers / Navigation / Logging
-│   ├── modules/        # 功能模块：rules / skills / prompts / content / cli / data-store / settings
+│   ├── modules/        # 功能模块：rules / skills / prompts / content / cli / database / settings
 │   ├── components/ui/  # shadcn 组件库
 │   ├── hooks/          # 共享 hooks
 │   ├── lib/            # 工具函数（electron-bridge / markdown / config）
@@ -50,7 +50,7 @@ dev 端口：desktop 5173 / website 5174，详见 `.claude/rules/workspace-dev-p
 
 当消息中出现 "sss" 时，将其理解为 Synapse Services Shortcut，并使用 `synapse-database` MCP 中与意图匹配的工具。
 
-- 涉及数据库、表、字段、记录、SQL、Data Store、数据增删改查时，使用 Data Store 相关工具。
+- 涉及数据库、表、字段、记录、SQL、Database、数据增删改查时，使用 Database 相关工具。
 - 涉及定时任务、调度、cron/interval、启停、运行记录或 runtime 状态时，使用 scheduler 相关工具。
 - 只出现 "sss" 但领域不明确时，先根据上下文判断；仍不明确就问一句简短澄清。
 

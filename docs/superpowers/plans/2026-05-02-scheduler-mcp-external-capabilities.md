@@ -21,7 +21,7 @@ Hard constraints:
 - Every exposed capability must align across underlying capability, API action, CLI command, and MCP tool.
 - Do not expose delete, manual run, or stop-run through API, CLI, or MCP.
 - Do not expose fake tools that only tell agents to use the UI.
-- Do not change existing Data Store MCP behavior.
+- Do not change existing Database MCP behavior.
 - Do not change renderer UI behavior in this plan.
 
 ## File Structure
@@ -46,7 +46,7 @@ Modify:
   Adds public config field descriptors for `builtin.http-request`.
 
 - `desktop/electron/bootstrap/descriptors.ts`  
-  Adds `core.action-runtime`; rewires `core.task-scheduler` and `core.data-store` to use it.
+  Adds `core.action-runtime`; rewires `core.task-scheduler` and `core.database` to use it.
 
 - `desktop/electron/bootstrap/index.ts`  
   Exports `coreActionRuntimeDescriptor`.
@@ -78,10 +78,10 @@ Modify:
 - `desktop/electron/capabilities/__tests__/action-router.test.ts`  
   Adds routing tests for a new Scheduler action and unknown delete action.
 
-- `desktop/data-store/cli/scheduler.ts`  
+- `desktop/database/cli/scheduler.ts`  
   Adds `runs`, `status`, `actions`, and `update` CLI commands. Keeps `delete`, `run`, and `stop` unsupported.
 
-- `desktop/data-store/cli/index.ts`  
+- `desktop/database/cli/index.ts`  
   Updates help text for new Scheduler commands and keeps hidden commands absent.
 
 - `desktop/tests/unit/cli-scheduler.test.ts`  
@@ -107,22 +107,22 @@ No renderer files should change.
 
 - [ ] **Step 1: Write failing descriptor tests**
 
-Update the existing `coreDataStoreDescriptor` dependency test in
+Update the existing `coreDatabaseDescriptor` dependency test in
 `desktop/electron/bootstrap/__tests__/descriptors.test.ts` so the expected
 dependency list includes the shared action runtime:
 
 ```ts
-it("coreDataStoreDescriptor is degraded, depends on config, event bus, scheduler, and action runtime, has stop", async () => {
-  const { coreDataStoreDescriptor } = await importBootstrap()
-  expect(coreDataStoreDescriptor.id).toBe("core.data-store")
-  expect(coreDataStoreDescriptor.criticality).toBe("degraded")
-  expect(coreDataStoreDescriptor.dependsOn).toEqual([
+it("coreDatabaseDescriptor is degraded, depends on config, event bus, scheduler, and action runtime, has stop", async () => {
+  const { coreDatabaseDescriptor } = await importBootstrap()
+  expect(coreDatabaseDescriptor.id).toBe("core.database")
+  expect(coreDatabaseDescriptor.criticality).toBe("degraded")
+  expect(coreDatabaseDescriptor.dependsOn).toEqual([
     "core.config",
     "core.event-bus",
     "core.task-scheduler",
     "core.action-runtime",
   ])
-  expect(coreDataStoreDescriptor.stop).toBeTypeOf("function")
+  expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
 })
 ```
 
@@ -446,15 +446,15 @@ const actions = createBuiltinMainActionRegistry({
 })
 ```
 
-- [ ] **Step 9: Rewire Data Store descriptor to use action runtime**
+- [ ] **Step 9: Rewire Database descriptor to use action runtime**
 
-Change `coreDataStoreDescriptor.dependsOn`:
+Change `coreDatabaseDescriptor.dependsOn`:
 
 ```ts
 dependsOn: ["core.config", "core.event-bus", "core.task-scheduler", "core.action-runtime"],
 ```
 
-Inside `coreDataStoreDescriptor.create`, add:
+Inside `coreDatabaseDescriptor.create`, add:
 
 ```ts
 const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
@@ -475,7 +475,7 @@ export {
   coreActionRuntimeDescriptor,
   coreAppIconDescriptor,
   coreConfigDescriptor,
-  coreDataStoreDescriptor,
+  coreDatabaseDescriptor,
   coreLoggingDescriptor,
   coreTaskSchedulerDescriptor,
   coreUpdateDescriptor,
@@ -1350,22 +1350,22 @@ Add to `desktop/electron/capabilities/__tests__/action-router.test.ts`:
 
 ```ts
 it("routes second-phase Scheduler actions to the Scheduler dispatcher", async () => {
-  const dataStoreDispatch = vi.fn()
+  const databaseDispatch = vi.fn()
   const schedulerDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
   const router = createSynapseActionRouter({
-    dataStoreDispatch,
+    databaseDispatch,
     schedulerDispatch,
   })
 
   await expect(router.dispatch("schedulerTaskRunsList", { taskId: "task:1" }, { source: "api" }))
     .resolves.toEqual({ ok: true, data: [] })
   expect(schedulerDispatch).toHaveBeenCalledWith("schedulerTaskRunsList", { taskId: "task:1" }, { source: "api" })
-  expect(dataStoreDispatch).not.toHaveBeenCalled()
+  expect(databaseDispatch).not.toHaveBeenCalled()
 })
 
 it("keeps schedulerTaskDelete unknown on the external router", async () => {
   const router = createSynapseActionRouter({
-    dataStoreDispatch: vi.fn(),
+    databaseDispatch: vi.fn(),
     schedulerDispatch: vi.fn(),
   })
 
@@ -1386,12 +1386,12 @@ Expected: FAIL until Task 2 has registered `schedulerTaskRunsList`; PASS after T
 
 - [ ] **Step 3: Wire descriptor dispatch signature**
 
-In `desktop/electron/bootstrap/descriptors.ts`, make sure `coreDataStoreDescriptor.create` uses:
+In `desktop/electron/bootstrap/descriptors.ts`, make sure `coreDatabaseDescriptor.create` uses:
 
 ```ts
 const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
 const actionRouter = createSynapseActionRouter({
-  dataStoreDispatch: dispatchDataStoreAction,
+  databaseDispatch: dispatchDatabaseAction,
   schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
 })
 ```
@@ -1421,8 +1421,8 @@ git commit -m "feat: route scheduler external actions"
 ### Task 5: Add Scheduler CLI Commands
 
 **Files:**
-- Modify: `desktop/data-store/cli/scheduler.ts`
-- Modify: `desktop/data-store/cli/index.ts`
+- Modify: `desktop/database/cli/scheduler.ts`
+- Modify: `desktop/database/cli/index.ts`
 - Modify: `desktop/tests/unit/cli-scheduler.test.ts`
 
 - [ ] **Step 1: Write failing CLI tests**
@@ -1490,11 +1490,11 @@ Expected: FAIL because new CLI commands are missing.
 
 - [ ] **Step 3: Update Scheduler CLI handler**
 
-Modify `desktop/data-store/cli/scheduler.ts` by adding these cases before `default`:
+Modify `desktop/database/cli/scheduler.ts` by adding these cases before `default`:
 
 ```ts
 case "runs": {
-  const taskId = requireArg(args[1], "Usage: synapse scheduler runs <taskId> [--limit N]")
+  const taskId = requireArg(args[1], "Usage: synapse scheduler run list <taskId> [--limit N]")
   const limit = getNumberFlag(args, "--limit")
   const params: Record<string, unknown> = { taskId }
   if (limit !== undefined) params.limit = limit
@@ -1537,12 +1537,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 - [ ] **Step 4: Update CLI help**
 
-Modify the Scheduler section in `desktop/data-store/cli/index.ts` help text to include:
+Modify the Scheduler section in `desktop/database/cli/index.ts` help text to include:
 
 ```text
-  synapse scheduler runs <taskId> [--limit N]               List recent task runs
-  synapse scheduler status [taskId]                         Inspect scheduler runtime status
-  synapse scheduler actions                                 List available task action types
+  synapse scheduler run list <taskId> [--limit N]               List recent task runs
+  synapse scheduler runtime inspect [taskId]                         Inspect scheduler runtime status
+  synapse scheduler action-type list                                 List available task action types
   synapse scheduler update <taskId> --data '{...}'          Update safe task fields
 ```
 
@@ -1561,8 +1561,8 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add desktop/data-store/cli/scheduler.ts \
-  desktop/data-store/cli/index.ts \
+git add desktop/database/cli/scheduler.ts \
+  desktop/database/cli/index.ts \
   desktop/tests/unit/cli-scheduler.test.ts
 git commit -m "feat: add scheduler observation cli commands"
 ```
@@ -1573,7 +1573,7 @@ git commit -m "feat: add scheduler observation cli commands"
 
 **Files:**
 - Modify: `desktop/tests/unit/mcp-scheduler-tools.test.ts`
-- Modify: `desktop/tests/unit/data-store-mcp-rpc.test.ts`
+- Modify: `desktop/tests/unit/database-mcp-rpc.test.ts`
 
 - [ ] **Step 1: Add MCP routing tests**
 
@@ -1594,7 +1594,7 @@ it("routes new Scheduler MCP tools through their action names", async () => {
       name: "scheduler_task_runs_list",
       arguments: { taskId: "task:1" },
     },
-  }, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
+  }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
 
   expect(executeTool).toHaveBeenCalledWith("scheduler_task_runs_list", { taskId: "task:1" })
   expect(response.kind).toBe("result")
@@ -1616,7 +1616,7 @@ it("keeps hidden Scheduler MCP tools unknown", async () => {
       name: "scheduler_task_delete",
       arguments: { taskId: "task:1" },
     },
-  }, SYNAPSE_DATA_SERVER_IDENTITY, async () => ({ ok: true }))
+  }, SYNAPSE_DATABASE_SERVER_IDENTITY, async () => ({ ok: true }))
 
   expect(response.kind).toBe("result")
   if (response.kind !== "result") return
@@ -1632,7 +1632,7 @@ it("keeps hidden Scheduler MCP tools unknown", async () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run tests/unit/mcp-scheduler-tools.test.ts tests/unit/data-store-mcp-rpc.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/mcp-scheduler-tools.test.ts tests/unit/database-mcp-rpc.test.ts
 ```
 
 Expected: PASS.
@@ -1641,7 +1641,7 @@ Expected: PASS.
 
 ```bash
 git add desktop/tests/unit/mcp-scheduler-tools.test.ts \
-  desktop/tests/unit/data-store-mcp-rpc.test.ts
+  desktop/tests/unit/database-mcp-rpc.test.ts
 git commit -m "test: cover scheduler mcp external tools"
 ```
 
@@ -1711,7 +1711,7 @@ Spec coverage:
 - Action type listing: Task 1 adds public manifest fields and shared registry, Task 3 adds adapter behavior, Task 5 adds CLI.
 - Conservative update: Task 2 adds metadata/schema, Task 3 adds restricted validation and service call, Task 5 adds CLI.
 - Delete/manual-run/stop hidden: Task 2 negative matrix tests, Task 5 CLI negative tests, Task 6 MCP unknown-tool test.
-- Data Store unchanged: Task 6 runs Data Store MCP RPC tests; Task 7 runs full verification.
+- Database unchanged: Task 6 runs Database MCP RPC tests; Task 7 runs full verification.
 
 Type consistency:
 

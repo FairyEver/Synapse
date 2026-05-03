@@ -93,7 +93,7 @@ Use these priorities:
 | Priority | Interaction | Expected log |
 | --- | --- | --- |
 | P0 | App-level tab/page transitions, destructive operations, async operations with IO | from/to, target id/name, source, elapsedMs for async |
-| P1 | Dialog open/close, form submit, table row/cell edit, list item select, repository/content/data-store changes | semantic action and target |
+| P1 | Dialog open/close, form submit, table row/cell edit, list item select, repository/content/database changes | semantic action and target |
 | P2 | Search input, filters, sorting, pagination, view mode, table column resize | new value or summarized value |
 | P3 | Generic button/menu click already covered by primitive but weakly named | add or improve `data-track` |
 | P4 | Scroll in important containers | debounced final position, direction, percent |

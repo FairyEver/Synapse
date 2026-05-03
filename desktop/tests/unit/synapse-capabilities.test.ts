@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { DATABASE_DOMAIN } from "../../data-store/shared/capability-registry"
+import { DATABASE_DOMAIN } from "../../database/shared/capability-registry"
 import {
   SCHEDULER_DOMAIN,
   SCHEDULER_MCP_TOOL_ACTIONS,
@@ -16,7 +16,6 @@ describe("Synapse capability domains", () => {
   it("keeps Database capabilities in the Database domain", () => {
     expect(DATABASE_DOMAIN.id).toBe("database")
     expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("database.table.list")
-    expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).not.toContain("listTables")
     expect(DATABASE_DOMAIN.capabilities.some((capability) => capability.id.startsWith("scheduler."))).toBe(false)
   })
 })

@@ -234,7 +234,7 @@ Modify `desktop/tsconfig.electron.json`:
 
 ```json
 {
-  "include": ["electron/**/*.ts", "action-packages/**/*.ts", "data-store/shared/**/*.ts"]
+  "include": ["electron/**/*.ts", "action-packages/**/*.ts", "database/shared/**/*.ts"]
 }
 ```
 

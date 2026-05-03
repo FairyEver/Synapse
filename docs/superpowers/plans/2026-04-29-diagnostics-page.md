@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a manual Diagnostics page in Settings that runs safe local probes, shows grouped conclusions, opens raw JSON in a dialog, and exports one ZIP package with report, logs, config backup, and Data Store database.
+**Goal:** Add a manual Diagnostics page in Settings that runs safe local probes, shows grouped conclusions, opens raw JSON in a dialog, and exports one ZIP package with report, logs, config backup, and Database database.
 
 **Architecture:** Renderer owns only presentation and user-triggered actions. Electron main owns report collection, safe probes, bundle creation, permissions, and audit. A new `core.diagnostics` service is wired through `ServiceRegistry`, while `ops` IPC remains a thin bridge.
 
@@ -658,8 +658,8 @@ describe("summarizeDiagnosticsChecks", () => {
 
   it("marks a report degraded when warnings exist without failures", () => {
     const checks: SynapseDiagnosticsCheck[] = [{
-      id: "data-store.cli",
-      group: "Data Store",
+      id: "database.cli",
+      group: "Database",
       name: "CLI",
       status: "degraded",
       severity: "warning",
@@ -737,13 +737,13 @@ function createService(overrides: Partial<ConstructorParameters<typeof Diagnosti
       listLogFilesInfo: vi.fn(async () => []),
       flush: vi.fn(async () => undefined),
     },
-    dataStore: {
-      getDbPath: () => "/data/synapse-data.db",
+    database: {
+      getDbPath: () => "/data/synapse-database.db",
       getDbSize: () => 0,
       getTableCount: () => 0,
       exportDatabase: vi.fn(),
     },
-    getDataStoreRuntimeStatus: vi.fn(() => ({
+    getDatabaseRuntimeStatus: vi.fn(() => ({
       running: true,
       port: 19731,
       dbDirectoryPath: "/data",
@@ -825,7 +825,7 @@ import type { ServiceRegistry } from "../runtime/service-registry"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { StructuredLogger } from "../runtime/logging"
 import type { OpsStatus, ServiceResolver } from "../modules/ops/status"
-import type { DataStoreCliDebugInfo, DataStoreMcpHttpStatus, DataStoreMcpServerInfo } from "../../src/types/data-store"
+import type { DatabaseCliDebugInfo, DatabaseMcpHttpStatus, DatabaseMcpServerInfo } from "../../src/types/database"
 
 type AppInfo = {
   getVersion(): string
@@ -858,14 +858,14 @@ type LogStoreLike = {
   listLogFilesInfo(): Promise<Array<{ name: string; sizeBytes: number }>>
 }
 
-type DataStoreLike = {
+type DatabaseLike = {
   exportDatabase(targetPath: string): void
   getDbPath(): string
   getDbSize(): number
   getTableCount(): number
 }
 
-type DataStoreRuntimeStatus = {
+type DatabaseRuntimeStatus = {
   running: boolean
   port: number
   dbDirectoryPath: string
@@ -877,12 +877,12 @@ type DiagnosticsServiceDeps = {
   dataRepository: Pick<DataRepository, "inspect">
   serviceRegistry: Pick<ServiceRegistry, "get" | "inspect">
   logStore: LogStoreLike
-  dataStore: DataStoreLike
-  getDataStoreRuntimeStatus: () => DataStoreRuntimeStatus
+  database: DatabaseLike
+  getDatabaseRuntimeStatus: () => DatabaseRuntimeStatus
   collectOpsStatus: (resolve: ServiceResolver, projectId?: string) => Promise<OpsStatus>
-  getCliDebugInfo: () => Promise<Partial<DataStoreCliDebugInfo>>
-  getMcpHttpStatus: () => DataStoreMcpHttpStatus
-  getMcpServers: () => Promise<DataStoreMcpServerInfo[]>
+  getCliDebugInfo: () => Promise<Partial<DatabaseCliDebugInfo>>
+  getMcpHttpStatus: () => DatabaseMcpHttpStatus
+  getMcpServers: () => Promise<DatabaseMcpServerInfo[]>
   permissionGuard: PermissionGuard
   auditSink: AuditSink
   logger: StructuredLogger
@@ -934,7 +934,7 @@ class DiagnosticsService {
 
     await this.addPathChecks(checks, config)
     await this.addLogChecks(checks)
-    await this.addDataStoreChecks(checks)
+    await this.addDatabaseChecks(checks)
     await this.addInspectChecks(checks)
     await this.addOpsChecks(checks, payload.projectId)
 
@@ -1002,29 +1002,29 @@ class DiagnosticsService {
     })
   }
 
-  private async addDataStoreChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
-    const runtimeStatus = this.deps.getDataStoreRuntimeStatus()
-    checks.push(this.ok("data-store.status", "Data Store", "数据库", "数据库状态已读取", {
+  private async addDatabaseChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
+    const runtimeStatus = this.deps.getDatabaseRuntimeStatus()
+    checks.push(this.ok("database.status", "Database", "数据库", "数据库状态已读取", {
       running: runtimeStatus.running,
       port: runtimeStatus.port,
       dbDirectoryPath: runtimeStatus.dbDirectoryPath,
-      dbPath: this.deps.dataStore.getDbPath(),
-      dbSize: this.deps.dataStore.getDbSize(),
-      tableCount: this.deps.dataStore.getTableCount(),
+      dbPath: this.deps.database.getDbPath(),
+      dbSize: this.deps.database.getDbSize(),
+      tableCount: this.deps.database.getTableCount(),
     }))
 
-    await this.capture(checks, "data-store.cli", "Data Store", "CLI", async () => {
+    await this.capture(checks, "database.cli", "Database", "CLI", async () => {
       const debugInfo = await this.deps.getCliDebugInfo()
       const available = Boolean(debugInfo.status?.available)
       return available
-        ? this.ok("data-store.cli", "Data Store", "CLI", "CLI 可用", debugInfo)
-        : this.degraded("data-store.cli", "Data Store", "CLI", "CLI 不可用", debugInfo)
+        ? this.ok("database.cli", "Database", "CLI", "CLI 可用", debugInfo)
+        : this.degraded("database.cli", "Database", "CLI", "CLI 不可用", debugInfo)
     })
 
-    await this.capture(checks, "data-store.mcp", "Data Store", "MCP", async () => {
+    await this.capture(checks, "database.mcp", "Database", "MCP", async () => {
       const http = this.deps.getMcpHttpStatus()
       const registrations = await this.deps.getMcpServers()
-      return this.ok("data-store.mcp", "Data Store", "MCP", "MCP 状态已读取", {
+      return this.ok("database.mcp", "Database", "MCP", "MCP 状态已读取", {
         http,
         registrations,
       })
@@ -1352,7 +1352,7 @@ Add to `DiagnosticsService`:
     try {
       await mkdir(path.join(packageRoot, "logs"), { recursive: true })
       await mkdir(path.join(packageRoot, "config"), { recursive: true })
-      await mkdir(path.join(packageRoot, "data-store"), { recursive: true })
+      await mkdir(path.join(packageRoot, "database"), { recursive: true })
 
       await this.writeTextFile(
         path.join(packageRoot, "diagnostics.json"),
@@ -1369,12 +1369,12 @@ Add to `DiagnosticsService`:
       )
 
       await this.copyOptionalFile(
-        this.deps.dataStore.getDbPath(),
-        path.join(packageRoot, "data-store", "synapse-data.db"),
-        "data-store/synapse-data.db",
+        this.deps.database.getDbPath(),
+        path.join(packageRoot, "database", "synapse-database.db"),
+        "database/synapse-database.db",
         included,
         skipped,
-        () => this.deps.dataStore.exportDatabase(path.join(packageRoot, "data-store", "synapse-data.db")),
+        () => this.deps.database.exportDatabase(path.join(packageRoot, "database", "synapse-database.db")),
       )
 
       await this.copyLogFiles(packageRoot, included, skipped)
@@ -1570,11 +1570,11 @@ import path from "node:path"
 import { DiagnosticsService } from "../services/diagnostics-service"
 import { createZipArchive } from "../runtime/archive"
 import { collectOpsStatus } from "../modules/ops/status"
-import { dataStoreService } from "../data-store/service"
-import { getHttpPort } from "../data-store/http-server"
-import { getCliDebugInfo } from "../data-store/cli-installer"
-import { getMcpServers } from "../data-store/mcp-installer"
-import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../data-store/mcp-server"
+import { databaseService } from "../database/service"
+import { getHttpPort } from "../database/http-server"
+import { getCliDebugInfo } from "../database/cli-installer"
+import { getMcpServers } from "../database/mcp-installer"
+import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../database/mcp-server"
 import { createConfigBackupPayload } from "../services/config-backup-service"
 ```
 
@@ -1588,7 +1588,7 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
   criticality: "degraded",
   dependsOn: [
     "core.config",
-    "core.data-store",
+    "core.database",
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
@@ -1601,9 +1601,9 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
       dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
       serviceRegistry: ctx.registry,
       logStore,
-      dataStore: dataStoreService,
-      getDataStoreRuntimeStatus: () => {
-        const dbPath = dataStoreService.getDbPath()
+      database: databaseService,
+      getDatabaseRuntimeStatus: () => {
+        const dbPath = databaseService.getDbPath()
         return {
           running: getHttpPort() > 0,
           port: getHttpPort(),
@@ -1637,7 +1637,7 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
 
 - [ ] **Step 3: Register descriptor**
 
-In `desktop/electron/bootstrap/registry.ts`, add `coreDiagnosticsDescriptor` to imports and register it after `coreDataStoreDescriptor`:
+In `desktop/electron/bootstrap/registry.ts`, add `coreDiagnosticsDescriptor` to imports and register it after `coreDatabaseDescriptor`:
 
 ```ts
   registry.register(coreDiagnosticsDescriptor)
@@ -2261,7 +2261,7 @@ type SettingsCategoryId =
   | "scheduled-tasks"
   | "tools"
   | "variables"
-  | "data-store"
+  | "database"
   | "logs"
   | "diagnostics"
   | "about"

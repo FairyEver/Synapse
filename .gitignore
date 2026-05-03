@@ -2,7 +2,7 @@ node_modules
 dist
 admin-dist
 dist-electron
-dist-data-store
+dist-database
 release
 .DS_Store
 *.log

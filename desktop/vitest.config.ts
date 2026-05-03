@@ -21,7 +21,7 @@ export default defineConfig({
       "tests/fuzz/**/*.{test,spec}.ts",
       "tests/e2e/**/*.{test,spec}.ts",
     ],
-    exclude: ["node_modules", "dist", "dist-electron", "dist-data-store"],
+    exclude: ["node_modules", "dist", "dist-electron", "dist-database"],
     reporters: process.env.CI ? ["default"] : ["default"],
     coverage: {
       provider: "v8",

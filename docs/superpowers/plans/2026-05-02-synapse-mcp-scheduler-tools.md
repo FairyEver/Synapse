@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add Task Scheduler list/get/create/enable/disable capabilities to the existing Synapse MCP server, HTTP API, and CLI without mixing Scheduler into the Data Store domain.
+**Goal:** Add Task Scheduler list/get/create/enable/disable capabilities to the existing Synapse MCP server, HTTP API, and CLI without mixing Scheduler into the Database domain.
 
-**Architecture:** Add a neutral capability registry that can aggregate isolated domains. Keep Data Store as its own domain and add Scheduler as a second domain. Route HTTP, MCP HTTP, stdio MCP, and CLI calls through canonical actions, with Scheduler execution delegated to `TaskSchedulerService`.
+**Architecture:** Add a neutral capability registry that can aggregate isolated domains. Keep Database as its own domain and add Scheduler as a second domain. Route HTTP, MCP HTTP, stdio MCP, and CLI calls through canonical actions, with Scheduler execution delegated to `TaskSchedulerService`.
 
 **Tech Stack:** Electron main process, TypeScript, Zod-style runtime checks where existing code already uses them, local HTTP `/api`, stdio MCP bridge, Vitest.
 
@@ -18,8 +18,8 @@ Read this first:
 
 Hard constraints from the spec:
 
-- Data Store and Scheduler are separate capability domains.
-- Existing Data Store MCP tool names, schemas, and result normalization stay unchanged.
+- Database and Scheduler are separate capability domains.
+- Existing Database MCP tool names, schemas, and result normalization stay unchanged.
 - First phase Scheduler actions are exactly `schedulerTaskList`, `schedulerTaskGet`, `schedulerTaskCreate`, `schedulerTaskEnable`, and `schedulerTaskDisable`.
 - Task detail lookup uses `taskId`, not name.
 - External Scheduler calls go through `TaskSchedulerService`, never task repositories.
@@ -33,11 +33,11 @@ Create neutral shared capability files:
 - Create `desktop/synapse-capabilities/shared/scheduler-domain.ts` for Scheduler action metadata, public input shapes, and MCP tool schemas.
 - Create `desktop/synapse-capabilities/shared/registry.ts` for combined domain registration, tool/action lookup, and CLI command lookup.
 
-Keep Data Store files domain-owned:
+Keep Database files domain-owned:
 
-- Modify `desktop/data-store/shared/capability-registry.ts` to export a Data Store domain definition while keeping existing exports working.
-- Modify `desktop/data-store/shared/mcp-tools.ts` to expose Data Store-only tool builders and keep compatibility exports.
-- Modify `desktop/data-store/shared/mcp-rpc.ts` to consume the combined MCP tool registry and domain-aware result normalization.
+- Modify `desktop/database/shared/capability-registry.ts` to export a Database domain definition while keeping existing exports working.
+- Modify `desktop/database/shared/mcp-tools.ts` to expose Database-only tool builders and keep compatibility exports.
+- Modify `desktop/database/shared/mcp-rpc.ts` to consume the combined MCP tool registry and domain-aware result normalization.
 
 Add Scheduler domain execution:
 
@@ -46,22 +46,22 @@ Add Scheduler domain execution:
 
 Add a neutral Electron action router:
 
-- Create `desktop/electron/capabilities/action-router.ts` to route actions to Data Store or Scheduler dispatchers.
+- Create `desktop/electron/capabilities/action-router.ts` to route actions to Database or Scheduler dispatchers.
 - Test with `desktop/electron/capabilities/__tests__/action-router.test.ts`.
 
 Wire transports:
 
-- Modify `desktop/electron/data-store/http-server.ts` to use the neutral action router.
-- Modify `desktop/electron/data-store/mcp-server.ts` to use the combined MCP tool/action registry and neutral action router.
-- Modify `desktop/electron/data-store/index.ts` to accept an action router when starting HTTP and MCP servers.
-- Modify `desktop/electron/bootstrap/descriptors.ts` so `core.data-store` depends on `core.task-scheduler`, builds the action router, and passes it to `initDataStore`.
+- Modify `desktop/electron/database/http-server.ts` to use the neutral action router.
+- Modify `desktop/electron/database/mcp-server.ts` to use the combined MCP tool/action registry and neutral action router.
+- Modify `desktop/electron/database/index.ts` to accept an action router when starting HTTP and MCP servers.
+- Modify `desktop/electron/bootstrap/descriptors.ts` so `core.database` depends on `core.task-scheduler`, builds the action router, and passes it to `initDatabase`.
 - Modify `desktop/electron/bootstrap/__tests__/registry.test.ts` and `desktop/electron/bootstrap/__tests__/descriptors.test.ts` for the new dependency.
 
 Wire stdio MCP and CLI:
 
-- Modify `desktop/data-store/mcp/index.ts` to use the combined MCP tool/action registry.
-- Create `desktop/data-store/cli/scheduler.ts` for Scheduler CLI parsing and printing.
-- Modify `desktop/data-store/cli/index.ts` to delegate `synapse scheduler ...` to the Scheduler CLI namespace.
+- Modify `desktop/database/mcp/index.ts` to use the combined MCP tool/action registry.
+- Create `desktop/database/cli/scheduler.ts` for Scheduler CLI parsing and printing.
+- Modify `desktop/database/cli/index.ts` to delegate `synapse scheduler ...` to the Scheduler CLI namespace.
 
 Typecheck support:
 
@@ -75,11 +75,11 @@ Tests:
 
 ---
 
-### Task 1: Add Neutral Capability Types And Data Store Domain Adapter
+### Task 1: Add Neutral Capability Types And Database Domain Adapter
 
 **Files:**
 - Create: `desktop/synapse-capabilities/shared/types.ts`
-- Modify: `desktop/data-store/shared/capability-registry.ts`
+- Modify: `desktop/database/shared/capability-registry.ts`
 - Modify: `desktop/tsconfig.electron.json`
 - Test: `desktop/tests/unit/synapse-capabilities.test.ts`
 
@@ -90,14 +90,14 @@ Create `desktop/tests/unit/synapse-capabilities.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest"
 
-import { DATA_STORE_DOMAIN } from "../../data-store/shared/capability-registry"
+import { DATABASE_DOMAIN } from "../../database/shared/capability-registry"
 
 describe("Synapse capability domains", () => {
-  it("keeps Data Store capabilities in the Data Store domain", () => {
-    expect(DATA_STORE_DOMAIN.id).toBe("data-store")
-    expect(DATA_STORE_DOMAIN.capabilities.map((capability) => capability.action)).toContain("listTables")
-    expect(DATA_STORE_DOMAIN.capabilities.map((capability) => capability.mcpTool)).toContain("list_tables")
-    expect(DATA_STORE_DOMAIN.capabilities.some((capability) => capability.action.startsWith("scheduler"))).toBe(false)
+  it("keeps Database capabilities in the Database domain", () => {
+    expect(DATABASE_DOMAIN.id).toBe("database")
+    expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.action)).toContain("databaseTableList")
+    expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.mcpTool)).toContain("database_table_list")
+    expect(DATABASE_DOMAIN.capabilities.some((capability) => capability.action.startsWith("scheduler"))).toBe(false)
   })
 })
 ```
@@ -110,7 +110,7 @@ Run:
 pnpm --filter @synapse/desktop exec vitest run tests/unit/synapse-capabilities.test.ts
 ```
 
-Expected: FAIL because `DATA_STORE_DOMAIN` does not exist.
+Expected: FAIL because `DATABASE_DOMAIN` does not exist.
 
 - [ ] **Step 3: Add neutral capability types**
 
@@ -153,55 +153,55 @@ export type CapabilityDomainDefinition = {
 }
 ```
 
-- [ ] **Step 4: Export a Data Store domain definition without changing existing helpers**
+- [ ] **Step 4: Export a Database domain definition without changing existing helpers**
 
-Modify `desktop/data-store/shared/capability-registry.ts`:
+Modify `desktop/database/shared/capability-registry.ts`:
 
 ```ts
 import type { CapabilityDomainDefinition } from "../../synapse-capabilities/shared/types"
 
-type DataStoreCapability = {
+type DatabaseCapability = {
   action: string
   mcpTool?: string
   cliCommand?: string
   mutates: boolean
 }
 
-const DATA_STORE_CAPABILITIES = [
-  { action: "listTables", mcpTool: "list_tables", cliCommand: "tables", mutates: false },
-  { action: "createTable", mcpTool: "create_table", cliCommand: "create", mutates: true },
-  { action: "dropTable", mcpTool: "drop_table", cliCommand: "drop", mutates: true },
-  { action: "describeTable", mcpTool: "describe_table", cliCommand: "describe", mutates: false },
-  { action: "databaseOverview", mcpTool: "database_overview", cliCommand: "overview", mutates: false },
-  { action: "updateTableDescription", mcpTool: "update_table_description", cliCommand: "update-table-description", mutates: true },
+const DATABASE_CAPABILITIES = [
+  { action: "databaseTableList", mcpTool: "database_table_list", cliCommand: "tables", mutates: false },
+  { action: "databaseTableCreate", mcpTool: "database_table_create", cliCommand: "create", mutates: true },
+  { action: "databaseTableDelete", mcpTool: "database_table_delete", cliCommand: "drop", mutates: true },
+  { action: "databaseTableDescribe", mcpTool: "database_table_describe", cliCommand: "describe", mutates: false },
+  { action: "databaseOverviewGet", mcpTool: "database_overview_get", cliCommand: "overview", mutates: false },
+  { action: "databaseTableUpdate", mcpTool: "database_table_update", cliCommand: "update-table-description", mutates: true },
   { action: "addColumn", mcpTool: "add_column", cliCommand: "add-column", mutates: true },
   { action: "updateColumnDescription", mcpTool: "update_column_description", cliCommand: "update-column-description", mutates: true },
   { action: "updateColumnChoices", mcpTool: "update_column_choices", cliCommand: "update-column-choices", mutates: true },
   { action: "getColumnChoicesUsage", mcpTool: "get_column_choices_usage", cliCommand: "choice-usage", mutates: false },
   { action: "insert", mcpTool: "insert", cliCommand: "insert", mutates: true },
-  { action: "batchInsert", mcpTool: "batch_insert", cliCommand: "insert", mutates: true },
+  { action: "databaseRowsCreate", mcpTool: "database_rows_create", cliCommand: "insert", mutates: true },
   { action: "query", mcpTool: "query", cliCommand: "query", mutates: false },
   { action: "update", mcpTool: "update", cliCommand: "update", mutates: true },
   { action: "delete", mcpTool: "delete", cliCommand: "delete", mutates: true },
-  { action: "updateWhere", mcpTool: "update_where", cliCommand: "update-where", mutates: true },
-  { action: "deleteWhere", mcpTool: "delete_where", cliCommand: "delete-where", mutates: true },
+  { action: "databaseRowsUpdate", mcpTool: "database_rows_update", cliCommand: "update-where", mutates: true },
+  { action: "databaseRowsDelete", mcpTool: "database_rows_delete", cliCommand: "delete-where", mutates: true },
   { action: "count", mcpTool: "count", cliCommand: "count", mutates: false },
-  { action: "operationLog", mcpTool: "operation_log", cliCommand: "operation-log", mutates: false },
+  { action: "databaseLogList", mcpTool: "database_log_list", cliCommand: "operation-log", mutates: false },
   { action: "renameTable", mcpTool: "rename_table", cliCommand: "rename-table", mutates: true },
-  { action: "renameColumn", mcpTool: "rename_column", cliCommand: "rename-column", mutates: true },
-  { action: "dropColumn", mcpTool: "drop_column", cliCommand: "drop-column", mutates: true },
-  { action: "readSQL", mcpTool: "read_sql", cliCommand: "read-sql", mutates: false },
-  { action: "rawSQL", mcpTool: "raw_sql", cliCommand: "sql", mutates: true },
-] as const satisfies readonly DataStoreCapability[]
+  { action: "databaseColumnRename", mcpTool: "database_column_rename", cliCommand: "rename-column", mutates: true },
+  { action: "databaseColumnDelete", mcpTool: "database_column_delete", cliCommand: "drop-column", mutates: true },
+  { action: "databaseSqlRead", mcpTool: "database_sql_read", cliCommand: "read-sql", mutates: false },
+  { action: "databaseSqlExecute", mcpTool: "database_sql_execute", cliCommand: "sql", mutates: true },
+] as const satisfies readonly DatabaseCapability[]
 
-const DATA_STORE_DOMAIN: CapabilityDomainDefinition = {
-  id: "data-store",
-  capabilities: DATA_STORE_CAPABILITIES,
+const DATABASE_DOMAIN: CapabilityDomainDefinition = {
+  id: "database",
+  capabilities: DATABASE_CAPABILITIES,
 }
 
 function buildMcpToolActions(): Record<string, string> {
   return Object.fromEntries(
-    DATA_STORE_CAPABILITIES
+    DATABASE_CAPABILITIES
       .filter((capability) => capability.mcpTool)
       .map((capability) => [capability.mcpTool, capability.action]),
   )
@@ -209,26 +209,26 @@ function buildMcpToolActions(): Record<string, string> {
 
 function getCliDataCommands(): string[] {
   return Array.from(new Set(
-    DATA_STORE_CAPABILITIES
+    DATABASE_CAPABILITIES
       .filter((capability) => capability.cliCommand)
       .map((capability) => capability.cliCommand as string),
   ))
 }
 
 function getMutatingActions(): string[] {
-  return DATA_STORE_CAPABILITIES
+  return DATABASE_CAPABILITIES
     .filter((capability) => capability.mutates)
     .map((capability) => capability.action)
 }
 
 export {
-  DATA_STORE_CAPABILITIES,
-  DATA_STORE_DOMAIN,
+  DATABASE_CAPABILITIES,
+  DATABASE_DOMAIN,
   buildMcpToolActions,
   getCliDataCommands,
   getMutatingActions,
 }
-export type { DataStoreCapability }
+export type { DatabaseCapability }
 ```
 
 - [ ] **Step 5: Include neutral shared files in Electron typecheck**
@@ -240,7 +240,7 @@ Modify `desktop/tsconfig.electron.json`:
   "include": [
     "electron/**/*.ts",
     "action-packages/**/*.ts",
-    "data-store/shared/**/*.ts",
+    "database/shared/**/*.ts",
     "synapse-capabilities/shared/**/*.ts"
   ]
 }
@@ -261,7 +261,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add desktop/synapse-capabilities/shared/types.ts desktop/data-store/shared/capability-registry.ts desktop/tsconfig.electron.json desktop/tests/unit/synapse-capabilities.test.ts
+git add desktop/synapse-capabilities/shared/types.ts desktop/database/shared/capability-registry.ts desktop/tsconfig.electron.json desktop/tests/unit/synapse-capabilities.test.ts
 git commit -m "feat: add capability domain metadata"
 ```
 
@@ -291,7 +291,7 @@ import {
 } from "../../synapse-capabilities/shared/registry"
 
 describe("Scheduler capability domain", () => {
-  it("registers Scheduler actions separately from Data Store", () => {
+  it("registers Scheduler actions separately from Database", () => {
     expect(SCHEDULER_DOMAIN.id).toBe("scheduler")
     expect(SCHEDULER_DOMAIN.capabilities.map((capability) => capability.action)).toEqual([
       "schedulerTaskList",
@@ -309,16 +309,16 @@ describe("Scheduler capability domain", () => {
     ])
   })
 
-  it("combines Data Store and Scheduler MCP tools without renaming Data Store tools", () => {
+  it("combines Database and Scheduler MCP tools without renaming Database tools", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
-    expect(toolNames).toContain("list_tables")
+    expect(toolNames).toContain("database_table_list")
     expect(toolNames).toContain("query")
-    expect(toolNames).toContain("operation_log")
+    expect(toolNames).toContain("database_log_list")
     expect(toolNames).toContain("scheduler_task_list")
     expect(toolNames).toContain("scheduler_task_create")
     expect(MCP_TOOL_ACTIONS.scheduler_task_create).toBe("schedulerTaskCreate")
     expect(SCHEDULER_MCP_TOOL_ACTIONS.scheduler_task_disable).toBe("schedulerTaskDisable")
-    expect(getActionDomainId("listTables")).toBe("data-store")
+    expect(getActionDomainId("databaseTableList")).toBe("database")
     expect(getActionDomainId("schedulerTaskList")).toBe("scheduler")
   })
 
@@ -507,8 +507,8 @@ export function buildSchedulerTools(): McpToolDefinition[] {
 Create `desktop/synapse-capabilities/shared/registry.ts`:
 
 ```ts
-import { DATA_STORE_DOMAIN, buildMcpToolActions as buildDataStoreMcpToolActions } from "../../data-store/shared/capability-registry"
-import { buildTools as buildDataStoreTools } from "../../data-store/shared/mcp-tools"
+import { DATABASE_DOMAIN, buildMcpToolActions as buildDatabaseMcpToolActions } from "../../database/shared/capability-registry"
+import { buildTools as buildDatabaseTools } from "../../database/shared/mcp-tools"
 import {
   SCHEDULER_DOMAIN,
   SCHEDULER_MCP_TOOL_ACTIONS,
@@ -517,18 +517,18 @@ import {
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
-  DATA_STORE_DOMAIN,
+  DATABASE_DOMAIN,
   SCHEDULER_DOMAIN,
 ]
 
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
-  ...buildDataStoreMcpToolActions(),
+  ...buildDatabaseMcpToolActions(),
   ...SCHEDULER_MCP_TOOL_ACTIONS,
 }
 
 export function buildAllMcpTools(): McpToolDefinition[] {
   return [
-    ...buildDataStoreTools(),
+    ...buildDatabaseTools(),
     ...buildSchedulerTools(),
   ]
 }
@@ -967,8 +967,8 @@ git commit -m "feat: add scheduler external action dispatcher"
 **Files:**
 - Create: `desktop/electron/capabilities/action-router.ts`
 - Test: `desktop/electron/capabilities/__tests__/action-router.test.ts`
-- Modify: `desktop/electron/data-store/http-server.ts`
-- Modify: `desktop/electron/data-store/index.ts`
+- Modify: `desktop/electron/database/http-server.ts`
+- Modify: `desktop/electron/database/index.ts`
 - Modify: `desktop/electron/bootstrap/descriptors.ts`
 - Modify: `desktop/electron/bootstrap/__tests__/registry.test.ts`
 - Modify: `desktop/electron/bootstrap/__tests__/descriptors.test.ts`
@@ -983,27 +983,27 @@ import { describe, expect, it, vi } from "vitest"
 import { createSynapseActionRouter } from "../action-router"
 
 describe("createSynapseActionRouter", () => {
-  it("routes Data Store actions to the Data Store dispatcher", async () => {
-    const dataStoreDispatch = vi.fn(() => ({ ok: true, data: ["tables"] }))
+  it("routes Database actions to the Database dispatcher", async () => {
+    const databaseDispatch = vi.fn(() => ({ ok: true, data: ["tables"] }))
     const schedulerDispatch = vi.fn()
     const router = createSynapseActionRouter({
-      dataStoreDispatch,
+      databaseDispatch,
       schedulerDispatch,
     })
 
-    await expect(router.dispatch("listTables", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("databaseTableList", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: ["tables"],
     })
-    expect(dataStoreDispatch).toHaveBeenCalledWith("listTables", {}, { source: "api" })
+    expect(databaseDispatch).toHaveBeenCalledWith("databaseTableList", {}, { source: "api" })
     expect(schedulerDispatch).not.toHaveBeenCalled()
   })
 
   it("routes Scheduler actions to the Scheduler dispatcher", async () => {
-    const dataStoreDispatch = vi.fn()
+    const databaseDispatch = vi.fn()
     const schedulerDispatch = vi.fn(async () => ({ ok: true, data: [] }))
     const router = createSynapseActionRouter({
-      dataStoreDispatch,
+      databaseDispatch,
       schedulerDispatch,
     })
 
@@ -1012,12 +1012,12 @@ describe("createSynapseActionRouter", () => {
       data: [],
     })
     expect(schedulerDispatch).toHaveBeenCalledWith("schedulerTaskList", {}, { source: "api" })
-    expect(dataStoreDispatch).not.toHaveBeenCalled()
+    expect(databaseDispatch).not.toHaveBeenCalled()
   })
 
   it("rejects unknown actions", async () => {
     const router = createSynapseActionRouter({
-      dataStoreDispatch: vi.fn(),
+      databaseDispatch: vi.fn(),
       schedulerDispatch: vi.fn(),
     })
 
@@ -1058,7 +1058,7 @@ export type SynapseActionRouter = {
 }
 
 export type SynapseActionRouterDeps = {
-  readonly dataStoreDispatch: DomainDispatch
+  readonly databaseDispatch: DomainDispatch
   readonly schedulerDispatch: DomainDispatch
 }
 
@@ -1066,7 +1066,7 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
   return {
     async dispatch(action, params, context) {
       const domainId = getActionDomainId(action)
-      if (domainId === "data-store") return deps.dataStoreDispatch(action, params, context)
+      if (domainId === "database") return deps.databaseDispatch(action, params, context)
       if (domainId === "scheduler") return deps.schedulerDispatch(action, params, context)
       throw new Error(`Unknown action: ${action}`)
     },
@@ -1086,7 +1086,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Wire HTTP server to action router**
 
-Modify `desktop/electron/data-store/http-server.ts`:
+Modify `desktop/electron/database/http-server.ts`:
 
 ```ts
 import type { SynapseActionRouter } from "../capabilities/action-router"
@@ -1136,11 +1136,11 @@ In `stopHttpServer`, clear the router:
     actionRouter = null
 ```
 
-Remove the direct `dispatchDataStoreAction` import from this file.
+Remove the direct `dispatchDatabaseAction` import from this file.
 
-- [ ] **Step 6: Wire data-store initialization to accept the router**
+- [ ] **Step 6: Wire database initialization to accept the router**
 
-Modify `desktop/electron/data-store/index.ts`:
+Modify `desktop/electron/database/index.ts`:
 
 ```ts
 import type { SynapseActionRouter } from "../capabilities/action-router"
@@ -1149,7 +1149,7 @@ import type { SynapseActionRouter } from "../capabilities/action-router"
 Change the init signature:
 
 ```ts
-async function initDataStore(eventBus: EventBus | undefined, actionRouter: SynapseActionRouter): Promise<void> {
+async function initDatabase(eventBus: EventBus | undefined, actionRouter: SynapseActionRouter): Promise<void> {
 ```
 
 Change the HTTP start call:
@@ -1164,11 +1164,11 @@ Modify `desktop/electron/bootstrap/descriptors.ts`:
 
 ```ts
 import { createSynapseActionRouter } from "../capabilities/action-router"
-import { dispatchDataStoreAction } from "../data-store/dispatcher"
+import { dispatchDatabaseAction } from "../database/dispatcher"
 import { dispatchSchedulerAction, type TaskSchedulerService } from "../services/task-scheduler"
 ```
 
-Change `coreDataStoreDescriptor.dependsOn`:
+Change `coreDatabaseDescriptor.dependsOn`:
 
 ```ts
 dependsOn: ["core.config", "core.event-bus", "core.task-scheduler"],
@@ -1181,10 +1181,10 @@ Change `create`:
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
     const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
     const actionRouter = createSynapseActionRouter({
-      dataStoreDispatch: dispatchDataStoreAction,
+      databaseDispatch: dispatchDatabaseAction,
       schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, action, params),
     })
-    await initDataStore(eventBus, actionRouter)
+    await initDatabase(eventBus, actionRouter)
     return { initialized: true }
   },
 ```
@@ -1194,18 +1194,18 @@ Change `create`:
 Modify `desktop/electron/bootstrap/__tests__/registry.test.ts`:
 
 ```ts
-expect(byId.get("core.data-store")?.dependsOn).toEqual([
+expect(byId.get("core.database")?.dependsOn).toEqual([
   "core.config",
   "core.event-bus",
   "core.task-scheduler",
 ])
-expect(idx("core.task-scheduler")).toBeLessThan(idx("core.data-store"))
+expect(idx("core.task-scheduler")).toBeLessThan(idx("core.database"))
 ```
 
-Modify `desktop/electron/bootstrap/__tests__/descriptors.test.ts` wherever it expects `core.data-store` dependencies:
+Modify `desktop/electron/bootstrap/__tests__/descriptors.test.ts` wherever it expects `core.database` dependencies:
 
 ```ts
-expect(coreDataStoreDescriptor.dependsOn).toEqual([
+expect(coreDatabaseDescriptor.dependsOn).toEqual([
   "core.config",
   "core.event-bus",
   "core.task-scheduler",
@@ -1225,7 +1225,7 @@ Expected: PASS.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add desktop/electron/capabilities/action-router.ts desktop/electron/capabilities/__tests__/action-router.test.ts desktop/electron/data-store/http-server.ts desktop/electron/data-store/index.ts desktop/electron/bootstrap/descriptors.ts desktop/electron/bootstrap/__tests__/registry.test.ts desktop/electron/bootstrap/__tests__/descriptors.test.ts
+git add desktop/electron/capabilities/action-router.ts desktop/electron/capabilities/__tests__/action-router.test.ts desktop/electron/database/http-server.ts desktop/electron/database/index.ts desktop/electron/bootstrap/descriptors.ts desktop/electron/bootstrap/__tests__/registry.test.ts desktop/electron/bootstrap/__tests__/descriptors.test.ts
 git commit -m "feat: route local api through capability domains"
 ```
 
@@ -1234,10 +1234,10 @@ git commit -m "feat: route local api through capability domains"
 ### Task 5: Wire MCP HTTP And Stdio MCP To Combined Registry
 
 **Files:**
-- Modify: `desktop/data-store/shared/mcp-tools.ts`
-- Modify: `desktop/data-store/shared/mcp-rpc.ts`
-- Modify: `desktop/electron/data-store/mcp-server.ts`
-- Modify: `desktop/data-store/mcp/index.ts`
+- Modify: `desktop/database/shared/mcp-tools.ts`
+- Modify: `desktop/database/shared/mcp-rpc.ts`
+- Modify: `desktop/electron/database/mcp-server.ts`
+- Modify: `desktop/database/mcp/index.ts`
 - Test: `desktop/tests/unit/mcp-scheduler-tools.test.ts`
 
 - [ ] **Step 1: Write failing MCP tests**
@@ -1247,14 +1247,14 @@ Create `desktop/tests/unit/mcp-scheduler-tools.test.ts`:
 ```ts
 import { describe, expect, it, vi } from "vitest"
 
-import { processMcpRequest } from "../../data-store/shared/mcp-rpc"
-import { SYNAPSE_DATA_SERVER_IDENTITY } from "../../data-store/shared/server-identity"
+import { processMcpRequest } from "../../database/shared/mcp-rpc"
+import { SYNAPSE_DATABASE_SERVER_IDENTITY } from "../../database/shared/server-identity"
 import { buildAllMcpTools, MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 
 describe("MCP Scheduler tools", () => {
-  it("lists existing Data Store tools and new Scheduler tools", () => {
+  it("lists existing Database tools and new Scheduler tools", () => {
     const names = buildAllMcpTools().map((tool) => tool.name)
-    expect(names).toContain("list_tables")
+    expect(names).toContain("database_table_list")
     expect(names).toContain("query")
     expect(names).toContain("scheduler_task_list")
     expect(names).toContain("scheduler_task_get")
@@ -1285,7 +1285,7 @@ describe("MCP Scheduler tools", () => {
         name: "scheduler_task_list",
         arguments: {},
       },
-    }, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
+    }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
 
     expect(response.kind).toBe("result")
     if (response.kind !== "result") return
@@ -1307,29 +1307,29 @@ Run:
 pnpm --filter @synapse/desktop exec vitest run tests/unit/mcp-scheduler-tools.test.ts
 ```
 
-Expected: FAIL because `mcp-rpc.ts` still uses Data Store-only registry and normalization.
+Expected: FAIL because `mcp-rpc.ts` still uses Database-only registry and normalization.
 
-- [ ] **Step 3: Make Data Store MCP tool exports domain-specific and compatibility-safe**
+- [ ] **Step 3: Make Database MCP tool exports domain-specific and compatibility-safe**
 
-Modify `desktop/data-store/shared/mcp-tools.ts` near the bottom:
+Modify `desktop/database/shared/mcp-tools.ts` near the bottom:
 
 ```ts
-const DATA_STORE_MCP_TOOL_ACTIONS: Record<string, string> = buildMcpToolActions()
-const MCP_TOOL_ACTIONS: Record<string, string> = DATA_STORE_MCP_TOOL_ACTIONS
+const DATABASE_MCP_TOOL_ACTIONS: Record<string, string> = buildMcpToolActions()
+const MCP_TOOL_ACTIONS: Record<string, string> = DATABASE_MCP_TOOL_ACTIONS
 
 export {
   buildTools,
-  buildTools as buildDataStoreTools,
-  DATA_STORE_MCP_TOOL_ACTIONS,
+  buildTools as buildDatabaseTools,
+  DATABASE_MCP_TOOL_ACTIONS,
   MCP_TOOL_ACTIONS,
 }
 ```
 
-Keep every existing Data Store tool schema unchanged.
+Keep every existing Database tool schema unchanged.
 
 - [ ] **Step 4: Update MCP RPC to use combined tools and domain-aware normalization**
 
-Modify imports in `desktop/data-store/shared/mcp-rpc.ts`:
+Modify imports in `desktop/database/shared/mcp-rpc.ts`:
 
 ```ts
 import {
@@ -1358,14 +1358,14 @@ function normalizeToolResult(toolName: string, result: unknown): unknown {
   }
 
   switch (toolName) {
-    // keep existing Data Store cases unchanged
+    // keep existing Database cases unchanged
   }
 }
 ```
 
 - [ ] **Step 5: Wire MCP HTTP server to combined action registry and router**
 
-Modify `desktop/electron/data-store/mcp-server.ts`:
+Modify `desktop/electron/database/mcp-server.ts`:
 
 ```ts
 import type { SynapseActionRouter } from "../capabilities/action-router"
@@ -1404,7 +1404,7 @@ In `stopMcpServer`, clear the router:
       actionRouter = null
 ```
 
-Modify `desktop/electron/data-store/index.ts`:
+Modify `desktop/electron/database/index.ts`:
 
 ```ts
     mcpPort = await startMcpServer(actionRouter)
@@ -1412,7 +1412,7 @@ Modify `desktop/electron/data-store/index.ts`:
 
 - [ ] **Step 6: Wire stdio MCP bridge to combined registry**
 
-Modify imports in `desktop/data-store/mcp/index.ts`:
+Modify imports in `desktop/database/mcp/index.ts`:
 
 ```ts
 import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
@@ -1433,7 +1433,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add desktop/data-store/shared/mcp-tools.ts desktop/data-store/shared/mcp-rpc.ts desktop/electron/data-store/mcp-server.ts desktop/electron/data-store/index.ts desktop/data-store/mcp/index.ts desktop/tests/unit/mcp-scheduler-tools.test.ts
+git add desktop/database/shared/mcp-tools.ts desktop/database/shared/mcp-rpc.ts desktop/electron/database/mcp-server.ts desktop/electron/database/index.ts desktop/database/mcp/index.ts desktop/tests/unit/mcp-scheduler-tools.test.ts
 git commit -m "feat: expose scheduler tools through mcp"
 ```
 
@@ -1442,8 +1442,8 @@ git commit -m "feat: expose scheduler tools through mcp"
 ### Task 6: Add Scheduler CLI Namespace
 
 **Files:**
-- Create: `desktop/data-store/cli/scheduler.ts`
-- Modify: `desktop/data-store/cli/index.ts`
+- Create: `desktop/database/cli/scheduler.ts`
+- Modify: `desktop/database/cli/index.ts`
 - Test: `desktop/tests/unit/cli-scheduler.test.ts`
 
 - [ ] **Step 1: Write failing CLI parser tests**
@@ -1453,7 +1453,7 @@ Create `desktop/tests/unit/cli-scheduler.test.ts`:
 ```ts
 import { describe, expect, it, vi } from "vitest"
 
-import { handleSchedulerCommand } from "../../data-store/cli/scheduler"
+import { handleSchedulerCommand } from "../../database/cli/scheduler"
 
 describe("handleSchedulerCommand", () => {
   it("lists scheduler tasks", async () => {
@@ -1521,7 +1521,7 @@ Expected: FAIL because `scheduler.ts` does not exist.
 
 - [ ] **Step 3: Implement Scheduler CLI handler**
 
-Create `desktop/data-store/cli/scheduler.ts`:
+Create `desktop/database/cli/scheduler.ts`:
 
 ```ts
 type CliApiCall = (action: string, params?: Record<string, unknown>) => Promise<unknown>
@@ -1633,7 +1633,7 @@ printJson(result.data ?? null, print)
 
 - [ ] **Step 5: Delegate top-level CLI to Scheduler namespace**
 
-Modify `desktop/data-store/cli/index.ts` imports:
+Modify `desktop/database/cli/index.ts` imports:
 
 ```ts
 import { handleSchedulerCommand } from "./scheduler"
@@ -1677,7 +1677,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add desktop/data-store/cli/scheduler.ts desktop/data-store/cli/index.ts desktop/tests/unit/cli-scheduler.test.ts
+git add desktop/database/cli/scheduler.ts desktop/database/cli/index.ts desktop/tests/unit/cli-scheduler.test.ts
 git commit -m "feat: add scheduler cli namespace"
 ```
 
@@ -1733,7 +1733,7 @@ Expected: PASS.
 Run:
 
 ```bash
-rg -n "scheduler_task_(delete|update|run|stop|runs)|schedulerTask(Delete|Update|Run|Stop|Runs)" desktop/synapse-capabilities desktop/data-store desktop/electron
+rg -n "scheduler_task_(delete|update|run|stop|runs)|schedulerTask(Delete|Update|Run|Stop|Runs)" desktop/synapse-capabilities desktop/database desktop/electron
 ```
 
 Expected: no matches.
@@ -1743,7 +1743,7 @@ Expected: no matches.
 Run:
 
 ```bash
-rg -n "scheduler|TaskScheduler" desktop/electron/data-store/dispatcher.ts desktop/data-store/shared/capability-registry.ts desktop/data-store/shared/mcp-tools.ts
+rg -n "scheduler|TaskScheduler" desktop/electron/database/dispatcher.ts desktop/database/shared/capability-registry.ts desktop/database/shared/mcp-tools.ts
 ```
 
 Expected: no matches.
@@ -1764,7 +1764,7 @@ If no changes were needed, do not create an empty commit.
 ## Self-Review Checklist
 
 - Spec coverage: Tasks cover shared domains, Scheduler action metadata, Scheduler dispatcher, HTTP API, MCP HTTP, stdio MCP, CLI, dependency ordering, and verification.
-- Domain isolation: Scheduler is not added to Data Store dispatcher, Data Store capability registry, or Data Store MCP schemas.
+- Domain isolation: Scheduler is not added to Database dispatcher, Database capability registry, or Database MCP schemas.
 - First-phase scope: The plan exposes only list/get/create/enable/disable.
 - ID lookup: `schedulerTaskGet` and `scheduler_task_get` use only `taskId`.
 - Transport alignment: API, CLI, and MCP map to the same canonical action names.

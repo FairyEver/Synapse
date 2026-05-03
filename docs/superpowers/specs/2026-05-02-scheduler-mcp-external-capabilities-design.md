@@ -2,7 +2,7 @@
 
 ## Context
 
-Synapse already exposes one local MCP server for Data Store tools and first-phase Scheduler tools. The first Scheduler MCP phase added external list, get, create, enable, and disable actions.
+Synapse already exposes one local MCP server for Database tools and first-phase Scheduler tools. The first Scheduler MCP phase added external list, get, create, enable, and disable actions.
 
 The next phase extends the Scheduler external capability surface while preserving the rule that every exposed capability must align across four layers:
 
@@ -34,7 +34,7 @@ No MCP tool should exist as a placeholder. If a capability is not intended to be
 - No update of task `action`, `scope`, `enabled`, run counters, run status, or computed scheduling fields.
 - No workflow composer, multi-action orchestration, or new action type.
 - No renderer UI redesign.
-- No change to existing Data Store MCP tools, schemas, or result normalization.
+- No change to existing Database MCP tools, schemas, or result normalization.
 
 ## Chosen Approach
 
@@ -93,10 +93,10 @@ core.action-runtime
 
 `core.task-scheduler` depends on `core.action-runtime` and uses that registry for execution.
 
-`core.data-store` builds the neutral `SynapseActionRouter` using:
+`core.database` builds the neutral `SynapseActionRouter` using:
 
 ```text
-dataStoreDispatch
+databaseDispatch
 schedulerDispatch(taskSchedulerService, actionRuntimeRegistry)
 ```
 
@@ -152,7 +152,7 @@ scheduler_task_runs_list
 CLI:
 
 ```bash
-synapse scheduler runs <taskId> [--limit N]
+synapse scheduler run list <taskId> [--limit N]
 ```
 
 API input:
@@ -213,7 +213,7 @@ scheduler_task_runtime_status
 CLI:
 
 ```bash
-synapse scheduler status [taskId]
+synapse scheduler runtime inspect [taskId]
 ```
 
 API input:
@@ -271,7 +271,7 @@ scheduler_action_types_list
 CLI:
 
 ```bash
-synapse scheduler actions
+synapse scheduler action-type list
 ```
 
 API input:
@@ -451,9 +451,9 @@ Errors remain transport-wrapped:
 Add Scheduler CLI commands:
 
 ```bash
-synapse scheduler runs <taskId> [--limit N]
-synapse scheduler status [taskId]
-synapse scheduler actions
+synapse scheduler run list <taskId> [--limit N]
+synapse scheduler runtime inspect [taskId]
+synapse scheduler action-type list
 synapse scheduler update <taskId> --data '{...}'
 ```
 
@@ -493,11 +493,11 @@ scheduler_task_run_now
 scheduler_task_stop_run
 ```
 
-MCP schemas are exported from the Scheduler capability domain. They should not be copied into Data Store MCP files.
+MCP schemas are exported from the Scheduler capability domain. They should not be copied into Database MCP files.
 
 MCP result normalization remains domain-aware:
 
-- Data Store tools keep the current normalization.
+- Database tools keep the current normalization.
 - Scheduler tools return Scheduler payloads directly.
 
 HTTP MCP and stdio MCP must expose the same tools and route to the same action names.
@@ -549,7 +549,7 @@ Capability registry tests:
 
 - New actions are registered in the Scheduler domain.
 - Each new action has CLI and MCP metadata.
-- Data Store actions remain in the Data Store domain.
+- Database actions remain in the Database domain.
 - The external matrix does not include delete, manual run, or stop-run.
 
 Action Runtime tests:
@@ -570,9 +570,9 @@ Scheduler external adapter tests:
 
 CLI tests:
 
-- `synapse scheduler runs <taskId>` calls `schedulerTaskRunsList`.
-- `synapse scheduler status [taskId]` calls `schedulerTaskRuntimeStatus`.
-- `synapse scheduler actions` calls `schedulerActionTypesList`.
+- `synapse scheduler run list <taskId>` calls `schedulerTaskRunsList`.
+- `synapse scheduler runtime inspect [taskId]` calls `schedulerTaskRuntimeStatus`.
+- `synapse scheduler action-type list` calls `schedulerActionTypesList`.
 - `synapse scheduler update <taskId> --data '{...}'` calls `schedulerTaskUpdate`.
 - `synapse scheduler delete`, `run`, and `stop` are rejected.
 
@@ -587,7 +587,7 @@ Router/API tests:
 
 - New Scheduler actions route to Scheduler dispatcher.
 - Unknown delete/run/stop action remains unknown.
-- Existing Data Store routing is unchanged.
+- Existing Database routing is unchanged.
 
 Verification commands:
 
@@ -601,12 +601,12 @@ Do not start the dev server or open runtime previews for this work unless explic
 
 ## Acceptance Criteria
 
-- The same MCP server exposes existing Data Store tools, existing Scheduler tools, and the four new Scheduler tools.
+- The same MCP server exposes existing Database tools, existing Scheduler tools, and the four new Scheduler tools.
 - Every new Scheduler external capability has aligned underlying service call, API action, CLI command, and MCP tool.
 - Action Runtime registry is first-class and shared between action type listing and scheduled task execution.
 - Agents can list task runs, inspect runtime status, inspect available action types, and conservatively update task definitions.
 - Agents cannot delete tasks, manually run tasks, stop runs, or change task actions through API, CLI, or MCP.
 - Delete remains UI-only in this phase.
-- Existing Data Store MCP behavior is unchanged.
+- Existing Database MCP behavior is unchanged.
 - Existing first-phase Scheduler MCP behavior is unchanged.
 - Hard constraints, typecheck, and tests pass after implementation.

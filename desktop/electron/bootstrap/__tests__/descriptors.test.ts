@@ -105,17 +105,17 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAppIconDescriptor.dependsOn).toBeUndefined()
   })
 
-  it("coreDataStoreDescriptor is degraded, depends on config, event bus, scheduler, and action runtime, has stop", async () => {
-    const { coreDataStoreDescriptor } = await importBootstrap()
-    expect(coreDataStoreDescriptor.id).toBe("core.data-store")
-    expect(coreDataStoreDescriptor.criticality).toBe("degraded")
-    expect(coreDataStoreDescriptor.dependsOn).toEqual([
+  it("coreDatabaseDescriptor is degraded, depends on config, event bus, scheduler, and action runtime, has stop", async () => {
+    const { coreDatabaseDescriptor } = await importBootstrap()
+    expect(coreDatabaseDescriptor.id).toBe("core.database")
+    expect(coreDatabaseDescriptor.criticality).toBe("degraded")
+    expect(coreDatabaseDescriptor.dependsOn).toEqual([
       "core.config",
       "core.event-bus",
       "core.task-scheduler",
       "core.action-runtime",
     ])
-    expect(coreDataStoreDescriptor.stop).toBeTypeOf("function")
+    expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
   })
 
   it("coreActionRuntimeDescriptor creates the shared action registry", async () => {
@@ -161,11 +161,11 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(repoMaintenanceDescriptor.dependsOn).toEqual(["repo.watch", "repo.pending-pushes"])
   })
 
-  it("repoPendingPushesDescriptor depends on core.data-store", async () => {
+  it("repoPendingPushesDescriptor depends on core.database", async () => {
     const { repoPendingPushesDescriptor } = await importBootstrap()
     expect(repoPendingPushesDescriptor.id).toBe("repo.pending-pushes")
     expect(repoPendingPushesDescriptor.criticality).toBe("degraded")
-    expect(repoPendingPushesDescriptor.dependsOn).toEqual(["core.data-store"])
+    expect(repoPendingPushesDescriptor.dependsOn).toEqual(["core.database"])
   })
 
   it("coreSideChannelDescriptor is degraded and depends on network/project foundations", async () => {

@@ -14,16 +14,15 @@
     "dev:electron:build": "node scripts/generate-definitions-registry.mjs && node scripts/generate-ipc.mjs && tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:electron:app": "node scripts/dev-electron-app.mjs",
     "icons": "node scripts/build-icons.mjs",
-    "build": "pnpm generate:definitions-registry && pnpm build:renderer && pnpm build:electron && pnpm build:data-store",
+    "build": "pnpm generate:definitions-registry && pnpm build:renderer && pnpm build:electron && pnpm build:database",
     "build:renderer": "vite build",
     "build:electron": "node scripts/generate-ipc.mjs && tsc -p tsconfig.electron.json",
     "generate:definitions-registry": "node scripts/generate-definitions-registry.mjs",
     "generate:ipc": "node scripts/generate-ipc.mjs",
     "check:ipc-codegen": "node scripts/check-ipc-codegen.mjs",
     "check:hard-constraints": "node scripts/check-hard-constraints.mjs",
-    "report:capability-name-migration": "node scripts/report-capability-name-migration.mjs",
-    "build:data-store": "esbuild data-store/cli/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/cli/index.js --format=cjs && esbuild data-store/mcp/index.ts --bundle --platform=node --target=node18 --outfile=dist-data-store/mcp/index.js --format=cjs",
-    "data-store:import-legacy": "node --no-warnings scripts/import-legacy-data-store.mjs",
+    "build:database": "esbuild database/cli/index.ts --bundle --platform=node --target=node18 --outfile=dist-database/cli/index.js --format=cjs && esbuild database/mcp/index.ts --bundle --platform=node --target=node18 --outfile=dist-database/mcp/index.js --format=cjs",
+    "database:import-legacy": "node --no-warnings scripts/import-legacy-database.mjs",
     "package:mac": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",
     "package:win": "pnpm exec electron-builder --win nsis --x64 --publish never",
     "bump:commit:push": "node scripts/bump-version-commit-push.mjs",
@@ -124,8 +123,8 @@
         "to": "templates"
       },
       {
-        "from": "dist-data-store",
-        "to": "data-store"
+        "from": "dist-database",
+        "to": "database"
       }
     ],
     "publish": [

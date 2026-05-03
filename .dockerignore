@@ -16,5 +16,5 @@ dist
 admin-dist
 **/admin-dist
 dist-electron
-dist-data-store
+dist-database
 release

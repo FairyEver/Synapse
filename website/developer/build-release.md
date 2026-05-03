@@ -16,10 +16,10 @@ pnpm --filter @synapse/desktop run build
 pnpm --filter @synapse/desktop run generate:definitions-registry
 pnpm --filter @synapse/desktop run build:renderer
 pnpm --filter @synapse/desktop run build:electron
-pnpm --filter @synapse/desktop run build:data-store
+pnpm --filter @synapse/desktop run build:database
 ```
 
-构建会先生成 definitions registry，再执行 renderer、Electron 和 data-store 构建。`build:renderer` 使用 Vite 构建 renderer。`build:electron` 生成 IPC 代码并编译 Electron TypeScript。`build:data-store` 使用 esbuild 打包 data-store 的 CLI 和 MCP 入口。
+构建会先生成 definitions registry，再执行 renderer、Electron 和 database 构建。`build:renderer` 使用 Vite 构建 renderer。`build:electron` 生成 IPC 代码并编译 Electron TypeScript。`build:database` 使用 esbuild 打包 database 的 CLI 和 MCP 入口。
 
 ## 本地打包
 
@@ -51,7 +51,7 @@ pnpm --filter @synapse/desktop run bump:commit:push
 
 ## 发布流程
 
-`.github/workflows/release.yml` 在 `main` 分支 push 时运行。workflow 使用 pnpm 10.22.0 和 Node.js 22，安装依赖后分别构建 renderer、Electron process 和 data-store bundles。
+`.github/workflows/release.yml` 在 `main` 分支 push 时运行。workflow 使用 pnpm 10.22.0 和 Node.js 22，安装依赖后分别构建 renderer、Electron process 和 database bundles。
 
 发布 workflow 会在 macOS runner 执行 `package:mac`，在 Windows runner 执行 `package:win`，收集 `desktop/release/` 下的 `.dmg`、`.zip`、`.exe`、`.blockmap` 和 `latest*.yml`。
 

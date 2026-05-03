@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { handleDatabaseCommand } from "../../data-store/cli/database"
+import { handleDatabaseCommand } from "../../database/cli/database"
 
 describe("handleDatabaseCommand", () => {
   it("lists tables through the canonical database action", async () => {

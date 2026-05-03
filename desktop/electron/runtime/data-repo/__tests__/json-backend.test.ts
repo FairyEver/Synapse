@@ -19,7 +19,7 @@ const isUser = (value: unknown): value is User => {
 }
 
 async function tempDir(): Promise<string> {
-  return mkdtemp(path.join(tmpdir(), "synapse-data-repo-"))
+  return mkdtemp(path.join(tmpdir(), "synapse-repo-data-"))
 }
 
 describe("atomic-io (T2.2)", () => {

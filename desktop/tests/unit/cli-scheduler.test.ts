@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { handleSchedulerCommand } from "../../data-store/cli/scheduler"
+import { handleSchedulerCommand } from "../../database/cli/scheduler"
 
 describe("handleSchedulerCommand", () => {
   it("lists scheduler tasks", async () => {

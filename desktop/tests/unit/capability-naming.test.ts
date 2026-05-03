@@ -13,7 +13,7 @@ describe("capability naming", () => {
     expect(isCanonicalCapabilityId("database.table.list")).toBe(true)
     expect(isCanonicalCapabilityId("scheduler.action_type.list")).toBe(true)
     expect(isCanonicalCapabilityId("database.table.fetch")).toBe(false)
-    expect(isCanonicalCapabilityId("data-store.table.list")).toBe(false)
+    expect(isCanonicalCapabilityId("database.table")).toBe(false)
     expect(isCanonicalCapabilityId("database.Table.list")).toBe(false)
   })
 

@@ -15,13 +15,13 @@ import { configBackupService } from "../../services/config-backup-service"
 import { configStore } from "../../services/config-store"
 import { createMainLogger, logStore } from "../../services/log-store"
 import { repositoryStore } from "../../services/repository-store"
-import { shutdownDataStore } from "../../data-store"
+import { shutdownDatabase } from "../../database"
 import type { LicenseService } from "../../services/license"
 
 const logger = createMainLogger("ipc.config")
 
 // 重置应用时需要保留的文件前缀
-const PRESERVED_FILE_PREFIXES = ["synapse-data.db"]
+const PRESERVED_FILE_PREFIXES = ["synapse-database.db", "synapse-data.db"]
 
 function shouldPreserveOnReset(entryName: string): boolean {
   return PRESERVED_FILE_PREFIXES.some((prefix) => entryName.startsWith(prefix))
@@ -116,7 +116,7 @@ export const configIpcModule: IpcModule = {
       request: z.void(),
       response: z.void(),
       handler: async (_ctx) => {
-        logger.info("Handling config.resetApp request. Wiping all user data except data-store files.")
+        logger.info("Handling config.resetApp request. Wiping all user data except database files.")
 
         repositoryStore.unwatchAll()
         const licenseService = _ctx.resolve<LicenseService>("core.license")
@@ -126,7 +126,7 @@ export const configIpcModule: IpcModule = {
         } catch (error) {
           logger.warn("Failed to reset license activation before app reset.", { error })
         }
-        await shutdownDataStore()
+        await shutdownDatabase()
         await logStore.dispose()
 
         const userDataPath = app.getPath("userData")

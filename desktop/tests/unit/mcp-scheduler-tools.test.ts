@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { processMcpRequest } from "../../data-store/shared/mcp-rpc"
-import { SYNAPSE_DATA_SERVER_IDENTITY } from "../../data-store/shared/server-identity"
+import { processMcpRequest } from "../../database/shared/mcp-rpc"
+import { SYNAPSE_DATABASE_SERVER_IDENTITY } from "../../database/shared/server-identity"
 import { buildAllMcpTools, MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 
 describe("MCP Scheduler tools", () => {
@@ -52,7 +52,7 @@ describe("MCP Scheduler tools", () => {
         name: "scheduler_task_list",
         arguments: {},
       },
-    }, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
+    }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
 
     expect(response.kind).toBe("result")
     if (response.kind !== "result") return
@@ -78,7 +78,7 @@ describe("MCP Scheduler tools", () => {
         name: "scheduler_run_list",
         arguments: { taskId: "task:1" },
       },
-    }, SYNAPSE_DATA_SERVER_IDENTITY, executeTool)
+    }, SYNAPSE_DATABASE_SERVER_IDENTITY, executeTool)
 
     expect(executeTool).toHaveBeenCalledWith("scheduler_run_list", { taskId: "task:1" })
     expect(response.kind).toBe("result")
@@ -100,7 +100,7 @@ describe("MCP Scheduler tools", () => {
         name: "scheduler_task_delete",
         arguments: { taskId: "task:1" },
       },
-    }, SYNAPSE_DATA_SERVER_IDENTITY, async () => ({ ok: true }))
+    }, SYNAPSE_DATABASE_SERVER_IDENTITY, async () => ({ ok: true }))
 
     expect(response.kind).toBe("result")
     if (response.kind !== "result") return

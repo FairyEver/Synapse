@@ -27,7 +27,7 @@ paths:
 
 ## 路由与导航
 
-- App Shell 管理 tab 状态（rules / skills / prompts / data-store / settings）
+- App Shell 管理 tab 状态（rules / skills / prompts / database / settings）
 - 内容详情通过 Dialog 展示，不走路由跳转
 
 ## hooks 规范
