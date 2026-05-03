@@ -196,7 +196,21 @@ function RepoOnboardingDialog() {
             >
               切换仓库
             </Button>
-          ) : <span />}
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isSubmitting}
+              onClick={() => {
+                logger.info("Remove repository requested from onboarding.", {
+                  repositoryUuid: activeRepository.uuid,
+                })
+                void manager.removeRepository(activeRepository.uuid)
+              }}
+            >
+              移除此目录
+            </Button>
+          )}
           <Button
             type="button"
             disabled={isSubmitting || displayName.trim().length === 0}
