@@ -32,13 +32,13 @@ describe("Data Store operation log", () => {
   it("records mutating dispatcher actions with source and affected count", async () => {
     const { dispatchDataStoreAction } = await import("../../electron/data-store/dispatcher")
 
-    dispatchDataStoreAction("insert", { table: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
+    dispatchDataStoreAction("database.row.create", { tableName: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
 
-    const result = dispatchDataStoreAction("operationLog", { limit: 5 })
+    const result = dispatchDataStoreAction("database.log.list", { limit: 5 })
     expect(result.data).toEqual([
       expect.objectContaining({
         source: "mcp-stdio",
-        action: "insert",
+        action: "database.row.create",
         table: "tasks",
         affected: 1,
         dryRun: false,

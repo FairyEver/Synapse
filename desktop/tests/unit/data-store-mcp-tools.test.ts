@@ -19,28 +19,34 @@ function getPropertyDescription(toolName: string, propertyName: string): string 
   return description
 }
 
-describe("Data Store MCP tool descriptions", () => {
+describe("Database MCP tool descriptions", () => {
   it("guides agents to use table descriptions when choosing a table", () => {
-    expect(getTool("list_tables").description).toContain("Use description to choose")
-    expect(getTool("describe_table").description).toContain("Call this before")
+    expect(getTool("database_table_list").description).toContain("Use description to choose")
+    expect(getTool("database_table_describe").description).toContain("Call this before")
 
-    const tableDescription = getPropertyDescription("query", "table")
-    expect(tableDescription).toContain("call list_tables")
+    const tableDescription = getPropertyDescription("database_row_list", "tableName")
+    expect(tableDescription).toContain("call database_table_list")
     expect(tableDescription).toContain("table.description")
   })
 
   it("exposes the same metadata actions as the canonical service dispatcher", () => {
-    expect(getTool("update_table_description").description).toContain("table description")
-    expect(getTool("get_column_choices_usage").description).toContain("choice")
+    expect(getTool("database_table_update").description).toContain("table description")
+    expect(getTool("database_choice_usage_get").description).toContain("choice")
 
-    expect(MCP_TOOL_ACTIONS.update_table_description).toBe("updateTableDescription")
-    expect(MCP_TOOL_ACTIONS.get_column_choices_usage).toBe("getColumnChoicesUsage")
+    expect(MCP_TOOL_ACTIONS.database_table_update).toBe("database.table.update")
+    expect(MCP_TOOL_ACTIONS.database_choice_usage_get).toBe("database.choice_usage.get")
   })
 
-  it("guides agents toward overview, read_sql, and operation_log before riskier tools", () => {
-    expect(getTool("database_overview").description).toContain("Use this first")
-    expect(getTool("read_sql").description).toContain("Prefer this over raw_sql")
-    expect(getTool("raw_sql").description).toContain("Use raw_sql only")
-    expect(getTool("operation_log").description).toContain("recently changed")
+  it("guides agents toward overview, read SQL, and logs before riskier tools", () => {
+    expect(getTool("database_overview_get").description).toContain("Use this first")
+    expect(getTool("database_sql_read").description).toContain("Prefer this over database_sql_execute")
+    expect(getTool("database_sql_execute").description).toContain("Use only")
+    expect(getTool("database_log_list").description).toContain("recently changed")
+  })
+
+  it("does not expose old Database tool names", () => {
+    const names = buildTools().map((tool) => tool.name)
+    expect(names).not.toContain("list_tables")
+    expect(names).not.toContain("operation_log")
   })
 })

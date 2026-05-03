@@ -6,7 +6,6 @@
 import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
-  getMcpToolDomainId,
 } from "../../synapse-capabilities/shared/registry"
 
 type JsonRpcId = number | string | null
@@ -49,38 +48,38 @@ function isDryRun(data: unknown): boolean {
   return isRecord(data) && data.dryRun === true
 }
 
-function normalizeToolResult(toolName: string, result: unknown): unknown {
+function normalizeToolResult(action: string, result: unknown): unknown {
   if (!isRecord(result) || result.ok !== true) return result
 
-  if (getMcpToolDomainId(toolName) === "scheduler") {
+  if (action.startsWith("scheduler.")) {
     return result.data
   }
 
-  switch (toolName) {
-    case "list_tables":
-    case "describe_table":
-    case "database_overview":
-    case "insert":
-    case "batch_insert":
-    case "count":
-    case "operation_log":
-    case "read_sql":
-    case "raw_sql":
-    case "get_column_choices_usage":
+  switch (action) {
+    case "database.table.list":
+    case "database.table.describe":
+    case "database.overview.get":
+    case "database.row.create":
+    case "database.rows.create":
+    case "database.row.count":
+    case "database.log.list":
+    case "database.sql.read":
+    case "database.sql.execute":
+    case "database.choice_usage.get":
       return result.data
 
-    case "query":
+    case "database.row.list":
       return {
         rows: Array.isArray(result.data) ? result.data : [],
         total: numberOrZero(result.total),
       }
 
-    case "update":
-    case "delete":
+    case "database.row.update":
+    case "database.row.delete":
       return { affected: numberOrZero(result.affected) }
 
-    case "update_where":
-    case "delete_where":
+    case "database.rows.update":
+    case "database.rows.delete":
       return {
         affected: numberOrZero(result.affected),
         ids: idsFromData(result.data),
@@ -147,7 +146,7 @@ async function processMcpRequest(
 
     try {
       const result = await executeTool(toolName, toolArgs)
-      const payload = normalizeToolResult(toolName, result)
+      const payload = normalizeToolResult(MCP_TOOL_ACTIONS[toolName] ?? toolName, result)
       return {
         kind: "result",
         id,

@@ -25,9 +25,9 @@ async function callTool(toolName: string, dispatcherResult: unknown): Promise<un
   return JSON.parse(result.content[0].text)
 }
 
-describe("Data Store MCP RPC", () => {
+describe("Database MCP RPC", () => {
   it("returns list results without the internal dispatcher envelope", async () => {
-    const payload = await callTool("list_tables", {
+    const payload = await callTool("database_table_list", {
       ok: true,
       data: [{ name: "projects", description: "Project tracker" }],
     })
@@ -36,7 +36,7 @@ describe("Data Store MCP RPC", () => {
   })
 
   it("returns query rows and total in the advertised shape", async () => {
-    const payload = await callTool("query", {
+    const payload = await callTool("database_row_list", {
       ok: true,
       data: [{ id: 1, title: "Ship" }],
       total: 1,
@@ -46,7 +46,7 @@ describe("Data Store MCP RPC", () => {
   })
 
   it("returns bulk mutation ids and affected count in the advertised shape", async () => {
-    const payload = await callTool("update_where", {
+    const payload = await callTool("database_rows_update", {
       ok: true,
       data: { ids: [1, 3] },
       affected: 2,

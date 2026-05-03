@@ -4,8 +4,8 @@
 // two surfaces can never drift.
 //
 // Tool schemas are intentionally stateless: they describe capability, never
-// runtime state. Clients discover which tables exist by calling list_tables,
-// and inspect column choices by calling describe_table. This keeps the
+// runtime state. Clients discover which tables exist by calling database_table_list,
+// and inspect column choices by calling database_table_describe. This keeps the
 // schema valid on strict MCP clients (e.g. Codex) that enforce inputSchema
 // allowed values client-side, even after DDL operations.
 
@@ -23,7 +23,7 @@ type McpTool = {
 
 const tableNameProp: Record<string, unknown> = {
   type: "string",
-  description: "Existing table name. If the user did not provide an exact table name, call list_tables first and use table.description to choose the relevant table. Call describe_table before writes or when you need columns, choices, or field meanings.",
+  description: "Existing table name. If the user did not provide an exact table name, call database_table_list first and use table.description to choose the relevant table. Call database_table_describe before writes or when you need columns, choices, or field meanings.",
 }
 
 const columnKindEnum = ["text", "integer", "decimal", "boolean", "date", "timestamp", "single_choice", "multi_choice", "json", "binary"] as const
@@ -82,7 +82,7 @@ function buildTools(): McpTool[] {
   return [
     {
       name: "database_table_list",
-      description: "List all user tables in the data store. Use description to choose the relevant table when the user describes a purpose rather than an exact table name. Returns an array of { name, description, rowCount, createdAt, updatedAt }.",
+      description: "List all user tables in the database. Use description to choose the relevant table when the user describes a purpose rather than an exact table name. Returns an array of { name, description, rowCount, createdAt, updatedAt }.",
       inputSchema: { type: "object", properties: {} },
     },
     {
@@ -91,7 +91,7 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          name: {
+          tableName: {
             type: "string",
             description: "New table name. Must start with a letter, use only letters, digits, or underscores, and not start with _.",
           },
@@ -111,7 +111,7 @@ function buildTools(): McpTool[] {
                 },
                 description: {
                   type: "string",
-                  description: "Recommended one-line description of the column's intent. Stored in metadata and returned by describe_table.",
+                  description: "Recommended one-line description of the column's intent. Stored in metadata and returned by database_table_describe.",
                 },
                 choices: {
                   type: "array",
@@ -125,21 +125,21 @@ function buildTools(): McpTool[] {
           },
           description: {
             type: "string",
-            description: "Optional table description stored in metadata and returned by list_tables and describe_table.",
+            description: "Optional table description stored in metadata and returned by database_table_list and database_table_describe.",
           },
         },
-        required: ["name", "columns"],
+        required: ["tableName", "columns"],
       },
     },
     {
       name: "database_table_delete",
       description: "Drop a user table and all of its rows and metadata. This action is irreversible.",
-      inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
+      inputSchema: { type: "object", properties: { tableName: tableNameProp }, required: ["tableName"] },
     },
     {
       name: "database_table_describe",
       description: "Return table schema and metadata as { name, description, columns, rowCount, createdAt, updatedAt }. Call this before inserts, updates, filters, or schema-sensitive operations. Each column includes { name, kind, choices?, description?, primaryKey?, system? }.",
-      inputSchema: { type: "object", properties: { name: tableNameProp }, required: ["name"] },
+      inputSchema: { type: "object", properties: { tableName: tableNameProp }, required: ["tableName"] },
     },
     {
       name: "database_overview_get",
@@ -148,26 +148,26 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_table_update",
-      description: "Update the stored table description metadata. This keeps list_tables and describe_table useful for agents without changing rows or columns.",
+      description: "Update the stored table description metadata. This keeps database_table_list and database_table_describe useful for agents without changing rows or columns.",
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           description: {
             type: "string",
-            description: "New table description stored in metadata and returned by list_tables and describe_table.",
+            description: "New table description stored in metadata and returned by database_table_list and database_table_describe.",
           },
         },
-        required: ["table", "description"],
+        required: ["tableName", "description"],
       },
     },
     {
       name: "database_column_create",
-      description: `Add one column to an existing table and update table metadata. Use the same kind rules as create_table:\n${kindDescription}\nColumn names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at. Defaults for multi_choice must be arrays, and choice defaults must already appear in choices. Provide a one-line description for the column to capture user intent.`,
+      description: `Add one column to an existing table and update table metadata. Use the same kind rules as database_table_create:\n${kindDescription}\nColumn names must start with a letter, contain only letters, digits, or underscores, cannot start with _, and cannot be id, created_at, or updated_at. Defaults for multi_choice must be arrays, and choice defaults must already appear in choices. Provide a one-line description for the column to capture user intent.`,
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           column: {
             type: "object",
             properties: {
@@ -185,7 +185,7 @@ function buildTools(): McpTool[] {
               },
               description: {
                 type: "string",
-                description: "Recommended one-line description of the column's intent. Stored in metadata and returned by describe_table.",
+                description: "Recommended one-line description of the column's intent. Stored in metadata and returned by database_table_describe.",
               },
               choices: {
                 type: "array",
@@ -196,7 +196,7 @@ function buildTools(): McpTool[] {
             required: ["name", "kind"],
           },
         },
-        required: ["table", "column"],
+        required: ["tableName", "column"],
       },
     },
     {
@@ -205,11 +205,11 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
-          column: { type: "string", description: "User column name" },
+          tableName: tableNameProp,
+          columnName: { type: "string", description: "User column name" },
           description: { type: "string", description: "New description text stored in metadata" },
         },
-        required: ["table", "column", "description"],
+        required: ["tableName", "columnName", "description"],
       },
     },
     {
@@ -218,58 +218,58 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
-          column: { type: "string", description: "single_choice or multi_choice column name" },
+          tableName: tableNameProp,
+          columnName: { type: "string", description: "single_choice or multi_choice column name" },
           choices: {
             type: "array",
             items: { type: "string" },
             description: "Replacement choices list. Must contain at least one string and remain compatible with existing rows.",
           },
         },
-        required: ["table", "column", "choices"],
+        required: ["tableName", "columnName", "choices"],
       },
     },
     {
       name: "database_choice_usage_get",
-      description: "Return usage counts for every configured choice in a single_choice or multi_choice column. Use before update_column_choices when you need to know which choices are currently used by rows.",
+      description: "Return usage counts for every configured choice in a single_choice or multi_choice column. Use before database_choice_update when you need to know which choices are currently used by rows.",
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
-          column: { type: "string", description: "single_choice or multi_choice column name" },
+          tableName: tableNameProp,
+          columnName: { type: "string", description: "single_choice or multi_choice column name" },
         },
-        required: ["table", "column"],
+        required: ["tableName", "columnName"],
       },
     },
     {
       name: "database_row_create",
-      description: "Insert one row and return { id }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call describe_table first if you do not know the column set or choices.",
+      description: "Insert one row and return { id }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call database_table_describe first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           data: {
             type: "object",
             description: "Row object keyed by column name. Omit id, created_at, and updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
           },
         },
-        required: ["table", "data"],
+        required: ["tableName", "data"],
       },
     },
     {
       name: "database_rows_create",
-      description: "Insert multiple rows in one transaction and return { ids }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call describe_table first if you do not know the column set or choices.",
+      description: "Insert multiple rows in one transaction and return { ids }. Do not send system columns id, created_at, or updated_at; boolean values accept true or false; date values expect YYYY-MM-DD; timestamp values expect ISO 8601 (e.g. 2026-04-24T15:30:00); single_choice values must be in the column's choices; multi_choice values expect an array of strings, each in the column's choices; json values accept any object or array. Call database_table_describe first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           rows: {
             type: "array",
             items: { type: "object" },
             description: "Array of row objects keyed by column name. Each row follows the same value rules as insert.",
           },
         },
-        required: ["table", "rows"],
+        required: ["tableName", "rows"],
       },
     },
     {
@@ -278,7 +278,7 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           where: {
             description: "Optional filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
             ...whereClauseSchema,
@@ -300,23 +300,23 @@ function buildTools(): McpTool[] {
           limit: { type: "number", description: "Maximum rows to return. Defaults to 100." },
           offset: { type: "number", description: "Rows to skip before returning results. Defaults to 0." },
         },
-        required: ["table"],
+        required: ["tableName"],
       },
     },
     {
       name: "database_row_update",
-      description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same value rules as insert apply. Call describe_table first if you do not know the column set or choices.",
+      description: "Partially update one row by id and return { affected }. Do not send updated_at; the service writes a fresh ISO timestamp automatically, and the same value rules as insert apply. Call database_table_describe first if you do not know the column set or choices.",
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
-          id: { type: "number", description: "Row id" },
+          tableName: tableNameProp,
+          rowId: { type: "number", description: "Row id" },
           data: {
             type: "object",
             description: "Partial update object keyed by column name. Omit updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
           },
         },
-        required: ["table", "id", "data"],
+        required: ["tableName", "rowId", "data"],
       },
     },
     {
@@ -325,10 +325,10 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
-          id: { type: "number", description: "Row id" },
+          tableName: tableNameProp,
+          rowId: { type: "number", description: "Row id" },
         },
-        required: ["table", "id"],
+        required: ["tableName", "rowId"],
       },
     },
     {
@@ -337,7 +337,7 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           where: {
             description: "Required non-empty filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
             ...whereClauseSchema,
@@ -351,7 +351,7 @@ function buildTools(): McpTool[] {
             description: "When true, return affected ids without modifying rows.",
           },
         },
-        required: ["table", "where", "data"],
+        required: ["tableName", "where", "data"],
       },
     },
     {
@@ -360,7 +360,7 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           where: {
             description: "Required non-empty filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
             ...whereClauseSchema,
@@ -370,7 +370,7 @@ function buildTools(): McpTool[] {
             description: "When true, return affected ids without modifying rows.",
           },
         },
-        required: ["table", "where"],
+        required: ["tableName", "where"],
       },
     },
     {
@@ -379,18 +379,18 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
+          tableName: tableNameProp,
           where: {
             description: "Optional filter. Object form uses equality on each key and ANDs them together; array form uses explicit expressions.",
             ...whereClauseSchema,
           },
         },
-        required: ["table"],
+        required: ["tableName"],
       },
     },
     {
       name: "database_log_list",
-      description: "Return recent Data Store mutation operations. Use this when the user asks what an Agent or CLI recently changed.",
+      description: "Return recent Database mutation operations. Use this when the user asks what an Agent or CLI recently changed.",
       inputSchema: {
         type: "object",
         properties: {
@@ -404,13 +404,13 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          from: { type: "string", description: "Current table name" },
-          to: {
+          fromTableName: { type: "string", description: "Current table name" },
+          toTableName: {
             type: "string",
             description: "New table name. Must start with a letter, use only letters, digits, or underscores, and not start with _.",
           },
         },
-        required: ["from", "to"],
+        required: ["fromTableName", "toTableName"],
       },
     },
     {
@@ -419,14 +419,14 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
-          from: { type: "string", description: "Current user column name" },
-          to: {
+          tableName: tableNameProp,
+          fromColumnName: { type: "string", description: "Current user column name" },
+          toColumnName: {
             type: "string",
             description: "New column name. Must start with a letter, use only letters, digits, or underscores, and not be id, created_at, or updated_at.",
           },
         },
-        required: ["table", "from", "to"],
+        required: ["tableName", "fromColumnName", "toColumnName"],
       },
     },
     {
@@ -435,15 +435,15 @@ function buildTools(): McpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          table: tableNameProp,
-          column: { type: "string", description: "User column name" },
+          tableName: tableNameProp,
+          columnName: { type: "string", description: "User column name" },
         },
-        required: ["table", "column"],
+        required: ["tableName", "columnName"],
       },
     },
     {
       name: "database_sql_read",
-      description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, PRAGMA, and EXPLAIN. Prefer this over raw_sql for inspection and reporting.",
+      description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, PRAGMA, and EXPLAIN. Prefer this over database_sql_execute for inspection and reporting.",
       inputSchema: {
         type: "object",
         properties: {
@@ -466,7 +466,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_sql_execute",
-      description: "Execute raw SQL with optional positional bind params. Prefer read_sql for inspection and structured tools for normal writes. Use raw_sql only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables prefixed with _ and ATTACH or DETACH are blocked.",
+      description: "Execute raw SQL with optional positional bind params. Prefer database_sql_read for inspection and structured tools for normal writes. Use only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables prefixed with _ and ATTACH or DETACH are blocked.",
       inputSchema: {
         type: "object",
         properties: {
@@ -490,9 +490,9 @@ function buildTools(): McpTool[] {
   ]
 }
 
-// Maps MCP tool names (snake_case) to canonical service action names (camelCase)
-// used by the in-process service, the HTTP JSON API (http-server.ts), and the
-// stdio MCP bridge (which forwards to HTTP).
+// Maps MCP tool names (snake_case) to canonical action ids used by the
+// in-process service, the HTTP JSON API (http-server.ts), and the stdio MCP
+// bridge (which forwards to HTTP).
 const DATA_STORE_MCP_TOOL_ACTIONS: Record<string, string> = buildMcpToolActions()
 const MCP_TOOL_ACTIONS: Record<string, string> = DATA_STORE_MCP_TOOL_ACTIONS
 
