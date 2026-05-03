@@ -29,6 +29,16 @@ enum AdminStatus {
   disabled
 }
 
+enum ActivationAttemptOutcome {
+  success
+  invalid_code
+  bound_conflict
+  rate_limited
+  risk_locked
+  device_limit
+  blocked
+}
+
 model Account {
   id        String           @id @default(cuid())
   email     String           @unique
@@ -51,10 +61,20 @@ model ActivationCode {
   redeemedAt     DateTime?
   archivedAt     DateTime?
   license        License?
+  riskLockedAt                DateTime?
+  riskLockedReason            String?
+  riskUnlockedAt              DateTime?
+  riskReviewNote              String?
+  replacedByActivationCodeId  String?
+  replacedByActivationCode    ActivationCode?  @relation("ActivationCodeReplacement", fields: [replacedByActivationCodeId], references: [id])
+  replacedActivationCodes     ActivationCode[] @relation("ActivationCodeReplacement")
+  attempts                    ActivationAttempt[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([boundAccountId])
+  @@index([riskLockedAt])
+  @@index([replacedByActivationCodeId])
 }
 
 model License {
@@ -107,6 +127,28 @@ model Lease {
 
   @@index([licenseId])
   @@index([deviceId])
+}
+
+model ActivationAttempt {
+  id                 String                   @id @default(cuid())
+  activationCodeId   String?
+  activationCode     ActivationCode?          @relation(fields: [activationCodeId], references: [id])
+  activationCodeHash String
+  activationCodeHint String?
+  email              String
+  deviceIdHash       String
+  ipAddress          String
+  userAgent          String
+  outcome            ActivationAttemptOutcome
+  reason             String
+  createdAt          DateTime                 @default(now())
+
+  @@index([createdAt])
+  @@index([activationCodeHash, createdAt])
+  @@index([activationCodeId, createdAt])
+  @@index([email, createdAt])
+  @@index([deviceIdHash, createdAt])
+  @@index([ipAddress, createdAt])
 }
 
 model AdminUser {

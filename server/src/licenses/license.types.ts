@@ -19,3 +19,41 @@ export interface DeviceMetadata {
   readonly platform: string
   readonly appVersion: string
 }
+
+export type ActivationErrorCode =
+  | "ACTIVATION_RATE_LIMITED"
+  | "ACTIVATION_RISK_LOCKED"
+  | "ACTIVATION_INVALID"
+  | "ACTIVATION_BOUND_CONFLICT"
+  | "ACTIVATION_DEVICE_LIMIT"
+
+export type ActivationAttemptOutcome =
+  | "success"
+  | "invalid_code"
+  | "bound_conflict"
+  | "rate_limited"
+  | "risk_locked"
+  | "device_limit"
+  | "blocked"
+
+export interface ActivationRiskSettings {
+  readonly attemptRetentionDays: number
+  readonly rateWindowMinutes: number
+  readonly rateMaxFailuresPerIp: number
+  readonly rateMaxFailuresPerEmail: number
+  readonly rateMaxFailuresPerDevice: number
+  readonly riskWindowMinutes: number
+  readonly riskMaxDistinctIpsPerCode: number
+  readonly riskMaxDistinctEmailsPerCode: number
+  readonly riskMaxDistinctDevicesPerCode: number
+  readonly riskMaxBoundConflictsPerCode: number
+}
+
+export class ActivationError extends Error {
+  constructor(
+    readonly code: ActivationErrorCode,
+    message: string,
+  ) {
+    super(message)
+  }
+}
