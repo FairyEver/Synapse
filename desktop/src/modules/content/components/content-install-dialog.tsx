@@ -130,7 +130,14 @@ function ContentInstallDialog({
       .then((file) => {
         if (!cancelled) setPreloadedContent(file.content)
       })
-      .catch(() => {})
+      .catch((preloadError) => {
+        if (!cancelled) {
+          logger.warn("Failed to preload content for install.", {
+            contentId: item.id,
+            error: preloadError,
+          })
+        }
+      })
 
     return () => { cancelled = true }
   }, [item.id, item.type, open])
@@ -468,8 +475,23 @@ function ContentInstallDialog({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={open} onOpenChange={onOpenChange} data-track="content-install-dialog">
-        <DialogContent className="sm:max-w-lg">
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && isInstalling) return
+          onOpenChange(nextOpen)
+        }}
+        data-track="content-install-dialog"
+      >
+        <DialogContent
+          className="sm:max-w-lg"
+          onEscapeKeyDown={(event) => {
+            if (isInstalling) event.preventDefault()
+          }}
+          onInteractOutside={(event) => {
+            if (isInstalling) event.preventDefault()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>安装到 {editor.label}</DialogTitle>
           </DialogHeader>
