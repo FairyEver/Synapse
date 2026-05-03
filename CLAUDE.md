@@ -46,9 +46,13 @@ dev 端口：desktop 5173 / website 5174，详见 `.claude/rules/workspace-dev-p
 - 错误处理：网络/文件 IO 必须 try/catch；内部纯函数不兜错
 - 路径别名：`@/*` → `./src/*`
 
-## Data Store 快捷指令
+## Synapse MCP 快捷指令
 
-当消息中出现 "sss" 时，使用 synapse-data MCP 工具完成数据操作。sss 是 Synapse Data Store 的缩写。
+当消息中出现 "sss" 时，将其理解为 Synapse Services Shortcut，并使用 `synapse-database` MCP 中与意图匹配的工具。
+
+- 涉及数据库、表、字段、记录、SQL、Data Store、数据增删改查时，使用 Data Store 相关工具。
+- 涉及定时任务、调度、cron/interval、启停、运行记录或 runtime 状态时，使用 scheduler 相关工具。
+- 只出现 "sss" 但领域不明确时，先根据上下文判断；仍不明确就问一句简短澄清。
 
 ## 模块化规则索引
 

@@ -397,8 +397,8 @@ function buildSkillName(tableName: string): string {
 function buildSkillDescription(schema: DataStoreTableSchema): string {
   const tableRef = `\`${schema.name}\``
   const head = schema.description
-    ? `通过 synapse-data MCP 读写 ${tableRef} 表（${schema.description}）。`
-    : `通过 synapse-data MCP 读写 ${tableRef} 表。`
+    ? `通过 synapse-database MCP 读写 ${tableRef} 表（${schema.description}）。`
+    : `通过 synapse-database MCP 读写 ${tableRef} 表。`
   const triggers = `Use when 查询 ${schema.name}、插入 ${schema.name}、更新 ${schema.name}、删除 ${schema.name}、统计 ${schema.name}、操作 ${schema.name} 表、${schema.name} CRUD、按字段筛选 ${schema.name} 数据。`
   return head + triggers
 }

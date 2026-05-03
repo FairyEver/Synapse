@@ -1,8 +1,8 @@
 {
   "id": "data-store-shortcut",
-  "name": "synapse-data-store-shortcut",
-  "title": "Data Store 快捷指令",
-  "description": "当消息包含 \"sss\" 时，优先使用 synapse-database MCP 工具完成数据操作",
+  "name": "synapse-mcp-shortcut",
+  "title": "Synapse MCP 快捷指令",
+  "description": "当消息包含 \"sss\" 时，按意图使用 synapse-database MCP 的数据库或定时任务工具",
   "category": "tooling",
   "icon": "terminal",
   "iconBg": "teal"

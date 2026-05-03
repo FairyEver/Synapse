@@ -17,6 +17,14 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 - shadcn/ui
 - TypeScript
 
+## Synapse MCP shortcut
+
+When the user mentions `sss`, treat it as Synapse Services Shortcut and use the matching `synapse-database` MCP tool by intent:
+
+- Database, table, column, row, SQL, Data Store, or data CRUD requests use Data Store tools.
+- Scheduled task, scheduler, cron/interval, enable/disable, run history, or runtime status requests use scheduler tools.
+- If `sss` appears without a clear domain, infer from context; if still unclear, ask one short clarification.
+
 ## Current UI foundation
 
 - The active shadcn preset is `radix-nova` in `desktop/components.json`.
