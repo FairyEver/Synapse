@@ -37,7 +37,7 @@ const logger = createRendererLogger("settings")
 let sessionAdminMode = false
 
 function SettingsModule() {
-  const { config, error, isReady, updateConfig } = useAppConfig()
+  const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
   const repositories = useRepositoryList()
   const { replaceRepositories } = useRepositoryActions()
@@ -195,7 +195,18 @@ function SettingsModule() {
             {activeRepository.name}
           </p>
         ) : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refreshConfig()}
+            >
+              重试
+            </Button>
+          </div>
+        ) : null}
 
         {!isReady ? (
           <Card>
