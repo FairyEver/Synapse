@@ -38,4 +38,4 @@ Canonical capability ids use `<domain>.<resource>.<action>`.
 | `scheduler.runtime.inspect` | `scheduler_runtime_inspect` | `synapse scheduler runtime inspect` | `schedulerRuntimeInspect` |
 | `scheduler.action_type.list` | `scheduler_action_type_list` | `synapse scheduler action-type list` | `schedulerActionTypeList` |
 
-Legacy public names are intentionally not aliases; only the canonical names in this matrix are supported.
+Only the canonical names in this matrix are supported public names.
