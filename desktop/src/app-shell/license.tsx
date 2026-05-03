@@ -89,8 +89,18 @@ export function useLicense() {
 }
 
 export function formatLicenseErrorMessage(caught: unknown, fallback: string): string {
+  const code = readErrorCode(caught)
+  if (code === "ACTIVATION_RATE_LIMITED") return "尝试过于频繁，请稍后再试。"
+  if (code === "ACTIVATION_RISK_LOCKED") return "激活码暂不可用，请联系管理员。"
+  if (code === "ACTIVATION_INVALID") return "激活失败，请检查信息。"
   if (!(caught instanceof Error)) return fallback
   return stripElectronInvokePrefix(caught.message) || fallback
+}
+
+function readErrorCode(caught: unknown): string | null {
+  if (!caught || typeof caught !== "object" || !("code" in caught)) return null
+  const code = (caught as { code: unknown }).code
+  return typeof code === "string" ? code : null
 }
 
 function stripElectronInvokePrefix(message: string): string {

@@ -104,7 +104,7 @@ export class LicenseClient {
       if (!response.ok) {
         this.recordAudit(url.origin, path, "failed", response.status)
         audited = true
-        throw new LicenseClientRequestError(readErrorMessage(body), response.status)
+        throw new LicenseClientRequestError(readErrorMessage(body), response.status, readErrorCode(body))
       }
       this.recordAudit(url.origin, path, "allowed", response.status)
       audited = true
@@ -142,6 +142,7 @@ export class LicenseClientRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code?: string,
   ) {
     super(message)
   }
@@ -177,4 +178,12 @@ function readErrorMessage(body: unknown): string {
     if (Array.isArray(message)) return message.join("；")
   }
   return "授权服务器请求失败。"
+}
+
+function readErrorCode(body: unknown): string | undefined {
+  if (body && typeof body === "object" && "code" in body) {
+    const code = (body as { code: unknown }).code
+    return typeof code === "string" ? code : undefined
+  }
+  return undefined
 }
