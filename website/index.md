@@ -31,7 +31,7 @@ features:
   - title: 已有内容迁移
     details: 扫描编辑器中已有的 Rule 和 Skill，导入到仓库，或复制到其他编辑器。
   - title: 内置数据库与 MCP
-    details: 使用内置 Data Store 管理本地数据表，并将数据服务注册为 MCP Server。
+    details: 使用内置 Database 管理本地数据表，并将数据服务注册为 MCP Server。
 ---
 
-<!-- Sources: README.md; desktop/README.md; desktop/src/modules/settings/data.ts; website/guide/concepts.md; website/guide/rules.md; website/guide/skills.md; website/guide/editors.md; website/guide/settings.md; website/team/share-review.md; website/advanced/prompts.md; website/advanced/editor-scan.md; website/advanced/data-store.md -->
+<!-- Sources: README.md; desktop/README.md; desktop/src/modules/settings/data.ts; website/guide/concepts.md; website/guide/rules.md; website/guide/skills.md; website/guide/editors.md; website/guide/settings.md; website/team/share-review.md; website/advanced/prompts.md; website/advanced/editor-scan.md; website/advanced/database.md -->
