@@ -31,6 +31,7 @@ export default defineConfig({
       { text: '团队协作', link: '/team/repository-structure' },
       { text: '高级功能', link: '/advanced/' },
       { text: '开发者', link: '/developer/' },
+      { text: '参考', link: '/reference/synapse-mcp-capabilities' },
       { text: '下载', link: '/reference/downloads' }
     ],
 
@@ -71,6 +72,9 @@ export default defineConfig({
         { text: '常见问题', link: '/reference/faq' },
         { text: '排障', link: '/reference/troubleshooting' },
         { text: '术语表', link: '/reference/glossary' },
+        { text: 'MCP 能力', link: '/reference/synapse-mcp-capabilities' },
+        { text: '能力矩阵', link: '/reference/capability-naming-matrix' },
+        { text: '维护指南', link: '/reference/capability-authoring' },
         { text: '下载', link: '/reference/downloads' }
       ]}]
     },
