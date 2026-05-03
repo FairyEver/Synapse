@@ -218,7 +218,17 @@ function AgentModule() {
 
         {chat.error ? (
           <Alert variant="destructive">
-            <AlertDescription>{chat.error}</AlertDescription>
+            <AlertDescription className="flex items-center justify-between gap-2">
+              <span className="min-w-0 break-words">{chat.error}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                onClick={() => void chat.refresh()}
+              >
+                重试
+              </Button>
+            </AlertDescription>
           </Alert>
         ) : null}
 
