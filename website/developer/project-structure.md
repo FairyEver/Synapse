@@ -21,13 +21,13 @@ Synapse 是 pnpm monorepo。`pnpm-workspace.yaml` 注册了 `desktop`、`website
 主要代码边界：
 
 - `desktop/electron/`：Electron 主进程与受权限保护的桌面端逻辑。
-- `desktop/src/`：renderer 代码。
-- `desktop/src/modules/`：renderer 业务模块。
+- `desktop/src/`：渲染进程代码。
+- `desktop/src/modules/`：渲染进程业务模块。
 - `desktop/src/components/`：共享 UI 组件。
 - `desktop/src/components/ui/`：shadcn/ui 基础组件。
 - `desktop/src/app-shell/`：共享 shell 状态与编排。
 - `desktop/src/lib/`：共享纯工具函数。
-- `desktop/src/types/`：renderer 范围共享类型。
+- `desktop/src/types/`：渲染进程范围共享类型。
 
 ## workspace 入口
 

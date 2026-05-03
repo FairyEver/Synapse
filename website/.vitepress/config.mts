@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   lang: 'zh-CN',
   title: 'Synapse',
-  description: 'Where Ideas Connect —— 面向团队的 AI Rules 与 Skills 分享平台',
+  description: 'Where Ideas Connect - 跨编辑器 Rule、Skill 与本地工作流管理工具',
 
   lastUpdated: true,
   cleanUrls: true,

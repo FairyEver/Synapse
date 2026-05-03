@@ -1,6 +1,6 @@
 # @synapse/website
 
-Synapse 产品介绍站，基于 [VitePress](https://vitepress.dev) 构建，面向普通用户介绍 Synapse 能做什么、如何使用。
+Synapse 产品介绍站，基于 [VitePress](https://vitepress.dev) 构建，面向普通用户介绍 Synapse 的功能范围与使用方式。
 
 线上地址：<https://usesynapse.netlify.app>（由 Netlify 自动部署，构建配置见仓库根目录的 `netlify.toml`）。
 
@@ -15,7 +15,7 @@ pnpm --filter @synapse/website run build    # 构建静态站点到 website/.vit
 pnpm --filter @synapse/website run preview  # 本地预览构建产物
 ```
 
-也可以直接在 `website/` 下运行：
+也可在 `website/` 目录下运行：
 
 ```bash
 cd website
@@ -42,4 +42,4 @@ website/
 
 ## 内容定位
 
-站点面向**普通用户**，介绍 Synapse 产品能力与使用方式。不包含开发者视角的实现细节（Electron、React、Git 工作流等）。开发文档见仓库根目录的 `desktop/README.md` 与 `document/`。
+站点面向**普通用户**，介绍 Synapse 产品能力与使用方式。用户页面不包含开发者视角的实现细节（Electron、React、Git 工作流等）。开发文档参见仓库根目录的 `desktop/README.md` 与 `docs/`。

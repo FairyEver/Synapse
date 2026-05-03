@@ -26,7 +26,7 @@ pnpm dev
 pnpm quit
 ```
 
-`pnpm dev` 会启动文档站、桌面端、PostgreSQL、Prisma migration 和后端服务。`pnpm quit` 用于停止本地开发环境。
+`pnpm dev` 启动文档站、桌面端、PostgreSQL、Prisma migration 和后端服务。`pnpm quit` 用于停止本地开发环境。
 
 ## 常用检查
 

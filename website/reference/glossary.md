@@ -4,11 +4,11 @@
 
 ## Rule
 
-Rule 是一段可复用的 Markdown 正文。它没有附件，适合保存行为约束、输出规范、审查清单等文本规则。
+Rule 是一段可复用的 Markdown 正文，不包含附件，适合保存行为约束、输出规范、审查清单等文本规则。
 
 ## Skill
 
-Skill 是由主说明和附件组成的能力包。安装后会写入一个 Skill 目录，目录中包含 `SKILL.md` 和附件。
+Skill 是由主说明和附件组成的能力包。安装后写入一个 Skill 目录，目录中包含 `SKILL.md` 和附件。
 
 ## 仓库
 
@@ -16,7 +16,7 @@ Skill 是由主说明和附件组成的能力包。安装后会写入一个 Skil
 
 ## 项目
 
-项目是 Rule 或 Skill 的项目级安装目标。安装到项目时，Synapse 会根据项目路径确定编辑器安装位置。
+项目是 Rule 或 Skill 的项目级安装目标。安装到项目时，Synapse 根据项目路径确定编辑器安装位置。
 
 ## 全局安装
 
@@ -28,4 +28,4 @@ Skill 是由主说明和附件组成的能力包。安装后会写入一个 Skil
 
 ## 编辑器
 
-编辑器是 Rule 或 Skill 的安装目标。Synapse 当前支持 Cursor、Codex、Claude Code 和 Windsurf。
+编辑器是 Rule 或 Skill 的安装目标。Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。

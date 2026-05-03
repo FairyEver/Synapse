@@ -2,7 +2,7 @@
 
 <!-- Sources: website/.vitepress/config.mts -->
 
-请查看新的文档页面：
+参见新的文档页面：
 
 - [快速开始](/start/install)
 - [用户指南](/guide/rules)

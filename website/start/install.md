@@ -4,7 +4,7 @@
 
 ## 下载
 
-所有版本统一在 GitHub Releases 发布：
+安装包统一在 GitHub Releases 发布：
 
 - [Synapse Releases](https://github.com/FairyEver/SynapseAppRelease/releases)
 
@@ -29,7 +29,7 @@
 2. 按向导完成安装。
 3. 从开始菜单或桌面快捷方式启动。
 
-如遇 SmartScreen 警告，点击“更多信息 → 仍要运行”。
+如遇 SmartScreen 警告，选择“更多信息 → 仍要运行”。
 
 ## 下一步
 
