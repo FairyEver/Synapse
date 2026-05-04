@@ -16,6 +16,7 @@ import { DevicesPage } from "@/pages/devices-page"
 import { LoginPage } from "@/pages/login-page"
 import { SystemPage } from "@/pages/system-page"
 import { adminApi, type AdminSession } from "@/lib/api"
+import { useIdleTimeout } from "@/hooks/use-idle-timeout"
 
 type Route =
   | { name: "activation-codes" }
@@ -89,6 +90,12 @@ export default function App() {
       .catch(() => undefined)
       .finally(() => setSession(null))
   }
+
+  const handleIdleTimeout = React.useCallback(() => {
+    adminApi.logout().catch(() => undefined).finally(() => setSession(null))
+  }, [])
+
+  useIdleTimeout(handleIdleTimeout)
 
   if (session === undefined) {
     return (
