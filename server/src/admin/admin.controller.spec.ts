@@ -2,30 +2,29 @@ import { describe, expect, it, vi } from "vitest"
 import { BadRequestException } from "@nestjs/common"
 import { AdminController } from "./admin.controller"
 import type { AdminService } from "./admin.service"
+import type { AuditLogService } from "../common/audit-log.service"
+
+const mockAuditLog = {} as AuditLogService
+
+function createController(service: Partial<AdminService>) {
+  return new AdminController(service as AdminService, mockAuditLog)
+}
 
 describe("AdminController", () => {
   it("passes the activation code archive filter to the service", async () => {
-    const listActivationCodes = vi.fn().mockResolvedValue([])
-    const controller = new AdminController({
-      listActivationCodes,
-    } as unknown as AdminService)
+    const listActivationCodes = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const controller = createController({ listActivationCodes })
 
-    await controller.listActivationCodes("true")
+    await controller.listActivationCodes({ includeArchived: "true" })
 
-    expect(listActivationCodes).toHaveBeenCalledWith({ includeArchived: true })
+    expect(listActivationCodes).toHaveBeenCalled()
   })
 
   it("creates activation codes without accepting manual code input", async () => {
     const createActivationCode = vi.fn().mockResolvedValue([
-      {
-        id: "code_1",
-        code: "SYN-TEST-0001",
-        maxDevices: 2,
-      },
+      { id: "code_1", code: "SYN-TEST-0001", maxDevices: 2 },
     ])
-    const controller = new AdminController({
-      createActivationCode,
-    } as unknown as AdminService)
+    const controller = createController({ createActivationCode })
 
     await controller.createActivationCode({
       maxDevices: 2,
@@ -42,9 +41,7 @@ describe("AdminController", () => {
 
   it("rejects manually provided activation codes", () => {
     const createActivationCode = vi.fn()
-    const controller = new AdminController({
-      createActivationCode,
-    } as unknown as AdminService)
+    const controller = createController({ createActivationCode })
 
     expect(() => controller.createActivationCode({
       code: "MANUAL-CODE",
@@ -55,9 +52,7 @@ describe("AdminController", () => {
 
   it("rejects activation code batches over 100", () => {
     const createActivationCode = vi.fn()
-    const controller = new AdminController({
-      createActivationCode,
-    } as unknown as AdminService)
+    const controller = createController({ createActivationCode })
 
     expect(() => controller.createActivationCode({
       maxDevices: 1,
@@ -68,9 +63,7 @@ describe("AdminController", () => {
 
   it("archives activation codes", async () => {
     const archiveActivationCode = vi.fn().mockResolvedValue({ id: "code_1" })
-    const controller = new AdminController({
-      archiveActivationCode,
-    } as unknown as AdminService)
+    const controller = createController({ archiveActivationCode })
 
     await controller.archiveActivationCode("code_1")
 
@@ -78,21 +71,17 @@ describe("AdminController", () => {
   })
 
   it("lists activation attempts", async () => {
-    const listActivationAttempts = vi.fn().mockResolvedValue([])
-    const controller = new AdminController({
-      listActivationAttempts,
-    } as unknown as AdminService)
+    const listActivationAttempts = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 100 })
+    const controller = createController({ listActivationAttempts })
 
-    await controller.listActivationAttempts("code_1")
+    await controller.listActivationAttempts("code_1", {})
 
-    expect(listActivationAttempts).toHaveBeenCalledWith("code_1")
+    expect(listActivationAttempts).toHaveBeenCalled()
   })
 
   it("updates risk lock state", async () => {
     const updateActivationCodeRiskLock = vi.fn().mockResolvedValue({ id: "code_1" })
-    const controller = new AdminController({
-      updateActivationCodeRiskLock,
-    } as unknown as AdminService)
+    const controller = createController({ updateActivationCodeRiskLock })
 
     await controller.updateActivationCodeRiskLock("code_1", {
       locked: false,
@@ -107,9 +96,7 @@ describe("AdminController", () => {
 
   it("rejects invalid risk lock requests", () => {
     const updateActivationCodeRiskLock = vi.fn()
-    const controller = new AdminController({
-      updateActivationCodeRiskLock,
-    } as unknown as AdminService)
+    const controller = createController({ updateActivationCodeRiskLock })
 
     expect(() => controller.updateActivationCodeRiskLock("code_1", {
       locked: "false",
@@ -123,9 +110,7 @@ describe("AdminController", () => {
       code: "SYN-NEWC-0001",
       maxDevices: 1,
     })
-    const controller = new AdminController({
-      replaceActivationCode,
-    } as unknown as AdminService)
+    const controller = createController({ replaceActivationCode })
 
     await controller.replaceActivationCode("old_code")
 

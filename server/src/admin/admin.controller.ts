@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common"
 import { z } from "zod"
 import { parsePagination } from "../common/pagination"
+import { AuditLogService } from "../common/audit-log.service"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { AdminService } from "./admin.service"
 
@@ -19,7 +20,10 @@ type RiskLockRequest = z.infer<typeof riskLockSchema>
 @UseGuards(AdminAuthGuard)
 @Controller("/admin/api")
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   @Get("/activation-codes")
   listActivationCodes(@Query() query: Record<string, unknown>) {
@@ -73,6 +77,16 @@ export class AdminController {
   @Get("/devices")
   listDevices(@Query() query: Record<string, unknown>) {
     return this.admin.listDevices(parsePagination(query))
+  }
+
+  @Get("/audit-logs")
+  listAuditLogs(@Query() query: Record<string, unknown>) {
+    return this.auditLog.list({
+      action: typeof query.action === "string" ? query.action : undefined,
+      from: typeof query.from === "string" ? query.from : undefined,
+      to: typeof query.to === "string" ? query.to : undefined,
+      query,
+    })
   }
 
   @Get("/system")

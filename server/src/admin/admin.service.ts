@@ -104,7 +104,7 @@ export class AdminService {
           createdAt: true,
         },
       }),
-      this.prisma.activationCode.count(where ? { where } : {}),
+      this.prisma.activationCode.count(where ? { where } : undefined),
     ])
 
     return {
