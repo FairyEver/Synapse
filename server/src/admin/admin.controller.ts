@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common"
 import { z } from "zod"
+import { parsePagination } from "../common/pagination"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { AdminService } from "./admin.service"
 
@@ -21,10 +22,12 @@ export class AdminController {
   constructor(private readonly admin: AdminService) {}
 
   @Get("/activation-codes")
-  listActivationCodes(@Query("includeArchived") includeArchived?: string) {
-    return this.admin.listActivationCodes({
-      includeArchived: includeArchived === "true",
-    })
+  listActivationCodes(@Query() query: Record<string, unknown>) {
+    const { includeArchived, ...rest } = query as Record<string, unknown> & { includeArchived?: string }
+    return this.admin.listActivationCodes(
+      { includeArchived: includeArchived === "true" },
+      parsePagination(rest),
+    )
   }
 
   @Post("/activation-codes")
@@ -43,8 +46,8 @@ export class AdminController {
   }
 
   @Get("/activation-codes/:id/attempts")
-  listActivationAttempts(@Param("id") id: string) {
-    return this.admin.listActivationAttempts(id)
+  listActivationAttempts(@Param("id") id: string, @Query() query: Record<string, unknown>) {
+    return this.admin.listActivationAttempts(id, parsePagination(query))
   }
 
   @Patch("/activation-codes/:id/risk-lock")
@@ -58,8 +61,8 @@ export class AdminController {
   }
 
   @Get("/accounts")
-  listAccounts() {
-    return this.admin.listAccounts()
+  listAccounts(@Query() query: Record<string, unknown>) {
+    return this.admin.listAccounts(parsePagination(query))
   }
 
   @Get("/accounts/:id")
@@ -68,8 +71,8 @@ export class AdminController {
   }
 
   @Get("/devices")
-  listDevices() {
-    return this.admin.listDevices()
+  listDevices(@Query() query: Record<string, unknown>) {
+    return this.admin.listDevices(parsePagination(query))
   }
 
   @Get("/system")
