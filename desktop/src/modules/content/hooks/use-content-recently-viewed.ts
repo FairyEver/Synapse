@@ -1,7 +1,9 @@
 import { useCallback, useMemo } from "react"
 import { useAppConfig } from "@/app-shell/config"
+import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseContentType } from "@/types/content"
 
+const logger = createRendererLogger("content.recently-viewed")
 const MAX_RECENTLY_VIEWED = 100
 
 export function useContentRecentlyViewed(contentType?: SynapseContentType) {
@@ -26,14 +28,18 @@ export function useContentRecentlyViewed(contentType?: SynapseContentType) {
       const currentIds = recentlyViewed[type] ?? []
       const nextIds = [contentId, ...currentIds.filter((id) => id !== contentId)].slice(0, MAX_RECENTLY_VIEWED)
 
-      await updateConfig({
-        global: {
-          recentlyViewed: {
-            ...recentlyViewed,
-            [type]: nextIds,
+      try {
+        await updateConfig({
+          global: {
+            recentlyViewed: {
+              ...recentlyViewed,
+              [type]: nextIds,
+            },
           },
-        },
-      })
+        })
+      } catch (error) {
+        logger.error("Failed to update recently viewed.", { contentId, contentType: type, error })
+      }
     },
     [recentlyViewed, updateConfig],
   )

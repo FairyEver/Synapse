@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { LoaderCircle } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { subscribeOpenSettingsAbout, subscribeOpenSettingsRepositories } from "@/app-shell/navigation"
@@ -217,8 +218,10 @@ function SettingsModule() {
         {!isReady ? (
           <Card>
             <CardHeader>
-              <CardTitle>加载中</CardTitle>
-              <CardDescription>正在读取设置。</CardDescription>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" />
+                正在读取设置
+              </div>
             </CardHeader>
           </Card>
         ) : null}

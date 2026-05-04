@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Copy } from "lucide-react"
+import { Copy, LoaderCircle } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -279,11 +279,15 @@ function DatabaseSettingsPanel() {
         <CardHeader className="pb-0">
           <CardTitle>CLI</CardTitle>
           <CardAction>
-            <StatusPill
-              active={Boolean(cliStatus?.available)}
-              activeLabel="可用"
-              inactiveLabel={cliStatus?.installed ? "不可用" : "未安装"}
-            />
+            {cliStatus == null ? (
+              <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+            ) : (
+              <StatusPill
+                active={Boolean(cliStatus.available)}
+                activeLabel="可用"
+                inactiveLabel={cliStatus.installed ? "不可用" : "未安装"}
+              />
+            )}
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">

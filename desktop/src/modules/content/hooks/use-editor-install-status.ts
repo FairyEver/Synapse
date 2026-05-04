@@ -68,6 +68,7 @@ function useEditorInstallStatus({
 
     setIsLoading(true)
     setError(null)
+    setEntries([])
     const startedAt = performance.now()
 
     try {

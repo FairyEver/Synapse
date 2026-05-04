@@ -6,6 +6,7 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -57,14 +58,6 @@ type SkillCreateDialogProps = {
 
 type DataTransferItemWithEntry = DataTransferItem & {
   webkitGetAsEntry?: () => FileSystemEntry | null
-}
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) {
-    return null
-  }
-
-  return <p className="text-sm text-destructive">{message}</p>
 }
 
 function isFileSystemFileEntry(entry: FileSystemEntry): entry is FileSystemFileEntry {
@@ -278,7 +271,7 @@ function SkillCreateDialog({
         onChange={(event) => updateField("title", event.target.value)}
         placeholder="API 文档生成助手"
       />
-      <FieldError message={errors.title} />
+      <FieldError>{errors.title}</FieldError>
     </div>
   )
 
@@ -294,7 +287,7 @@ function SkillCreateDialog({
         placeholder="my-skill-name"
       />
       <p className="text-xs text-muted-foreground">小写字母、数字、连字符，3-50 字符。安装到编辑器时用作文件名。</p>
-      <FieldError message={errors.name} />
+      <FieldError>{errors.name}</FieldError>
     </div>
   )
 
@@ -323,7 +316,7 @@ function SkillCreateDialog({
           </SelectGroup>
         </SelectContent>
       </Select>
-      <FieldError message={errors.category} />
+      <FieldError>{errors.category}</FieldError>
     </div>
   )
 
@@ -342,7 +335,7 @@ function SkillCreateDialog({
       <p className="text-xs text-muted-foreground">
         安装到编辑器时，这段简介会作为 skill 描述一并写入。
       </p>
-      <FieldError message={errors.description} />
+      <FieldError>{errors.description}</FieldError>
     </div>
   )
 
@@ -358,7 +351,7 @@ function SkillCreateDialog({
         placeholder="输入 Skill 的主说明。"
         rows={5}
       />
-      <FieldError message={errors.content} />
+      <FieldError>{errors.content}</FieldError>
     </div>
   )
 
@@ -605,7 +598,7 @@ function SkillCreateDialog({
           {attachmentMessage ? (
             <p className="text-sm text-destructive">{attachmentMessage}</p>
           ) : null}
-          <FieldError message={errors.files} />
+          <FieldError>{errors.files}</FieldError>
 
           {form.files.length > 0 ? (
             <div className="overflow-hidden rounded-lg border">

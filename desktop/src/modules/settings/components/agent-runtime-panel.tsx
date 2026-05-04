@@ -69,7 +69,7 @@ function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
 }
 
 function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
-  const { status, loading, refresh } = useAgentRuntimeStatus(projectId)
+  const { status, loading, error, refresh } = useAgentRuntimeStatus(projectId)
   const agents = status?.agents ?? []
 
   return (
@@ -89,12 +89,22 @@ function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {agents.map((item, index) => (
-          <Fragment key={item.id}>
-            {index > 0 ? <Separator /> : null}
-            <AgentRuntimeRow item={item} />
-          </Fragment>
-        ))}
+        {error && agents.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+            {error}
+          </div>
+        ) : agents.length === 0 && !loading ? (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+            未检测到 Agent 运行时
+          </div>
+        ) : (
+          agents.map((item, index) => (
+            <Fragment key={item.id}>
+              {index > 0 ? <Separator /> : null}
+              <AgentRuntimeRow item={item} />
+            </Fragment>
+          ))
+        )}
       </CardContent>
     </Card>
   )

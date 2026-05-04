@@ -274,6 +274,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       await switchActiveRepository(repositoryUuid)
     } catch (error) {
       logger.error("Failed to switch repository from empty state.", error)
+      showError(error instanceof Error ? error.message : "切换仓库失败", { durationMs: 4000 })
     }
   }
 

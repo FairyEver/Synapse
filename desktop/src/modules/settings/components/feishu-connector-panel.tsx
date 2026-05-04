@@ -75,7 +75,7 @@ function FeishuConnectorPanel({
   variant = "config",
   onConnectorChange,
 }: FeishuConnectorPanelProps) {
-  const { promise } = useAppNotifications()
+  const { promise, error: showError } = useAppNotifications()
   const [status, setStatus] = useState<SynapseFeishuConnectorRuntimeStatus | null>(null)
   const [isLoadingStatus, setIsLoadingStatus] = useState(false)
   const [setup, setSetup] = useState<SetupState | null>(null)
@@ -103,10 +103,12 @@ function FeishuConnectorPanel({
     setIsLoadingStatus(true)
     try {
       setStatus(await feishu.getStatus(projectId))
+    } catch {
+      showError("刷新飞书连接状态失败")
     } finally {
       setIsLoadingStatus(false)
     }
-  }, [feishu, projectId])
+  }, [feishu, projectId, showError])
 
   useEffect(() => {
     void refreshStatus()
@@ -122,10 +124,12 @@ function FeishuConnectorPanel({
       ])
       setWorkspaceConfig(config)
       setWorkspaceBindings(bindings)
+    } catch {
+      showError("刷新飞书工作区配置失败")
     } finally {
       setIsLoadingWorkspace(false)
     }
-  }, [feishu, projectId])
+  }, [feishu, projectId, showError])
 
   useEffect(() => {
     void refreshWorkspace()

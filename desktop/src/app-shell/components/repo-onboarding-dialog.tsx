@@ -170,6 +170,7 @@ function RepoOnboardingDialog() {
                 value={displayName}
                 aria-invalid={error ? true : undefined}
                 autoFocus
+                disabled={isSubmitting}
                 onChange={(event) => {
                   setDisplayName(event.target.value)
                   setError(null)

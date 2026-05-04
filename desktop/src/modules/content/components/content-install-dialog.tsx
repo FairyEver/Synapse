@@ -136,6 +136,7 @@ function ContentInstallDialog({
             contentId: item.id,
             error: preloadError,
           })
+          warning("内容预加载失败，安装时将重新读取")
         }
       })
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { File, FolderOpen, LoaderCircle, Trash2 } from "lucide-react"
+import { AlertCircle, File, FolderOpen, LoaderCircle, Trash2 } from "lucide-react"
 import { readDetail } from "@/app-shell/content"
 import {
   createContentOpenRequestId,
@@ -546,7 +546,7 @@ function ScanItemContentArea({
       <Empty className="min-h-[360px] rounded-lg border border-border bg-muted/20">
         <EmptyHeader>
           <EmptyMedia variant="icon">
-            <LoaderCircle />
+            <AlertCircle />
           </EmptyMedia>
           <EmptyTitle>读取失败</EmptyTitle>
           <EmptyDescription>{error}</EmptyDescription>

@@ -81,7 +81,7 @@ function ContentDetailMenubar({
     loadInstallTargets,
     openInstallDialogForEditorId,
   } = useContentDownloadActions({ item, onInstalled })
-  const { warning } = useAppNotifications()
+  const { error: showError, warning } = useAppNotifications()
 
   const definition = getContentTypeDefinition(item.type)
   const primaryAction = definition.listPrimaryAction ?? "download"
@@ -260,7 +260,9 @@ function ContentDetailMenubar({
           className="rounded-sm px-1.5"
           disabled={isRepositoryInitializing}
           onClick={() => {
-            void onToggleFavorite()
+            void onToggleFavorite().catch(() => {
+              showError("收藏操作失败")
+            })
           }}
         >
           {isFavorite ? "取消收藏" : "收藏"}

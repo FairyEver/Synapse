@@ -1,5 +1,5 @@
 import { Fragment } from "react"
-import { FolderPlus } from "lucide-react"
+import { FolderPlus, LoaderCircle } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -66,15 +66,21 @@ function DirectoryRow({ label, dirPath, exists, editorLabel, onOpen, onCreate }:
 
 function useEditorDirectories() {
   const [directories, setDirectories] = useState<SynapseEditorGlobalDirectory[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const { promise } = useAppNotifications()
 
   const loadDirectories = useCallback(() => {
+    setIsLoading(true)
+    setError(null)
     requireSynapseBridge()
       .editor.getGlobalDirectories()
       .then(setDirectories)
-      .catch((error) => {
-        logger.error("Failed to load editor global directories.", error)
+      .catch((err) => {
+        logger.error("Failed to load editor global directories.", err)
+        setError("加载编辑器目录失败")
       })
+      .finally(() => setIsLoading(false))
   }, [])
 
   useEffect(() => {
@@ -104,14 +110,36 @@ function useEditorDirectories() {
     [loadDirectories, promise],
   )
 
-  return { directories, handleOpen, handleCreate }
+  return { directories, isLoading, error, handleOpen, handleCreate, reload: loadDirectories }
 }
 
 function EditorDirectoriesContent() {
-  const { directories, handleOpen, handleCreate } = useEditorDirectories()
+  const { directories, isLoading, error, handleOpen, handleCreate, reload } = useEditorDirectories()
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
+        <LoaderCircle className="size-4 animate-spin" />
+        正在加载编辑器目录
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+        <p>{error}</p>
+        <Button variant="outline" size="sm" onClick={reload}>重试</Button>
+      </div>
+    )
+  }
 
   if (directories.length === 0) {
-    return null
+    return (
+      <div className="px-4 py-3 text-sm text-muted-foreground">
+        未检测到编辑器目录
+      </div>
+    )
   }
 
   return (

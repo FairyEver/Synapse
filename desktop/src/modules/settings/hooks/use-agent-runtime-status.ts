@@ -28,11 +28,13 @@ function createLatestRequestGuard() {
 function useAgentRuntimeStatus(projectId?: string) {
   const [status, setStatus] = useState<SynapseAgentRuntimeStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const requestGuardRef = useRef(createLatestRequestGuard())
 
   const refresh = useCallback(() => {
     const request = requestGuardRef.current.begin()
     setLoading(true)
+    setError(null)
     Promise.resolve()
       .then(() => requireSynapseBridge().agent.getRuntimeStatus({ projectId }))
       .then((nextStatus) => {
@@ -40,10 +42,11 @@ function useAgentRuntimeStatus(projectId?: string) {
           setStatus(nextStatus)
         }
       })
-      .catch((error) => {
+      .catch((err) => {
         if (request.isActive()) {
-          logger.error("Failed to load agent runtime status.", error)
+          logger.error("Failed to load agent runtime status.", err)
           setStatus(null)
+          setError("加载 Agent 运行时状态失败")
         }
       })
       .finally(() => {
@@ -60,7 +63,7 @@ function useAgentRuntimeStatus(projectId?: string) {
     }
   }, [refresh])
 
-  return { status, loading, refresh }
+  return { status, loading, error, refresh }
 }
 
 export { createLatestRequestGuard, useAgentRuntimeStatus }
