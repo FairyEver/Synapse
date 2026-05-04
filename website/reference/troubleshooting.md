@@ -8,7 +8,7 @@ macOS 如遇“无法打开，因为来自身份不明的开发者”提示，�
 
 Windows 如遇 SmartScreen 警告，选择“更多信息 → 仍要运行”。
 
-安装包下载地址参见 [下载](/reference/downloads)。
+安装包下载地址参见 [下载与安装](/start/install)。
 
 ## 无法查看仓库内容
 
