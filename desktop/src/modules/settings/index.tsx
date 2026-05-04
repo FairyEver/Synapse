@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { subscribeOpenSettingsAbout, subscribeOpenSettingsRepositories } from "@/app-shell/navigation"
+import { subscribeOpenSettingsAbout, subscribeOpenSettingsStorage } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
@@ -19,16 +19,13 @@ import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-p
 import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
 import { ToolsPanel } from "@/modules/settings/components/tools-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
-import { LogExportPanel } from "@/modules/settings/components/log-export-panel"
-import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
 import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
-import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
 import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
-import { DatabaseSettingsPanel } from "@/modules/settings/components/database-settings-panel"
-import { DiagnosticsPanel } from "@/modules/settings/components/diagnostics-panel"
-import { McpSettingsPanel } from "@/modules/settings/components/mcp-settings-panel"
+import { ServicesPanel } from "@/modules/settings/components/services-panel"
+import { StoragePanel } from "@/modules/settings/components/storage-panel"
+import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
@@ -68,8 +65,8 @@ function SettingsModule() {
   }, [setActiveCategory])
 
   useEffect(() => {
-    return subscribeOpenSettingsRepositories(() => {
-      setActiveCategory("repositories")
+    return subscribeOpenSettingsStorage(() => {
+      setActiveCategory("storage")
     })
   }, [setActiveCategory])
 
@@ -100,8 +97,6 @@ function SettingsModule() {
   )
 
   const regularItems = categoryItems.filter((item) => item.type !== "list" && activeCategory !== "about")
-  const hasRepositoriesItem = categoryItems.some((item) => item.key === "repositories")
-  const hasProjectsItem = categoryItems.some((item) => item.key === "global.projects")
 
   const applyPatch = useCallback(
     async (patch: Parameters<typeof updateConfig>[0], reset = false) => {
@@ -231,7 +226,7 @@ function SettingsModule() {
             <p className="text-sm text-muted-foreground">请先添加本地目录</p>
             <Button
               variant="outline"
-              onClick={() => setActiveCategory("repositories")}
+              onClick={() => setActiveCategory("storage")}
             >
               前往添加目录
             </Button>
@@ -255,30 +250,22 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
-        {isReady && activeCategory === "tools" ? (
-          <ToolsPanel />
+
+        {isReady && activeCategory === "storage" ? (
+          <StoragePanel
+            projects={config.global.projects}
+            onSaveRepositories={handleSaveRepositories}
+            onSaveProjects={handleSaveProjects}
+          />
         ) : null}
+
+        {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
-        {isReady && activeCategory === "database" ? <DatabaseSettingsPanel /> : null}
-        {isReady && activeCategory === "mcp" ? <McpSettingsPanel /> : null}
-        {isReady && activeCategory === "diagnostics" ? <DiagnosticsPanel /> : null}
-        {isReady && activeCategory === "logs" ? <LogExportPanel /> : null}
+        {isReady && activeCategory === "services" ? <ServicesPanel /> : null}
+        {isReady && activeCategory === "troubleshooting" ? <TroubleshootingPanel /> : null}
 
         {isReady && activeCategory === "admin" && activeRepository ? (
           <RepositoryMaintenancePanel repositoryUuid={activeRepository.uuid} />
-        ) : null}
-
-        {isReady && hasRepositoriesItem ? (
-          <RepositoryListEditor
-            onSave={handleSaveRepositories}
-          />
-        ) : null}
-
-        {isReady && hasProjectsItem ? (
-          <ProjectListEditor
-            projects={config.global.projects}
-            onSave={handleSaveProjects}
-          />
         ) : null}
 
         {isReady && activeCategory === "about" ? (

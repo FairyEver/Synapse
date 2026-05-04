@@ -11,7 +11,7 @@ import { useAppConfig } from "@/app-shell/config"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
 import { createRendererLogger } from "@/app-shell/logging"
-import { publishActiveAppTab, requestOpenSettingsAbout, requestOpenSettingsRepositories, subscribeOpenSettingsTab } from "@/app-shell/navigation"
+import { publishActiveAppTab, requestOpenSettingsAbout, requestOpenSettingsStorage, subscribeOpenSettingsTab } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
@@ -288,7 +288,7 @@ function MainApp() {
             syncStatus={toolbarState.syncStatus}
             onOpenRepositorySettings={() => {
               setActiveTab("settings", "sync-status")
-              requestOpenSettingsRepositories()
+              requestOpenSettingsStorage()
             }}
             onSyncStatusRetry={() => handleManualRepositorySync("sync-status")}
             onRefresh={() => handleManualRepositorySync("refresh")}

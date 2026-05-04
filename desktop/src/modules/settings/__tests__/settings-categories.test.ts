@@ -3,13 +3,34 @@ import { describe, expect, it } from "vitest"
 import { settingsCategories } from "@/modules/settings/data"
 
 describe("settingsCategories", () => {
-  it("keeps MCP as a standalone settings category", () => {
-    const categories = settingsCategories.map((category) => ({
-      id: category.id,
-      label: category.label,
-    }))
+  it("has the expected merged category structure", () => {
+    const ids = settingsCategories.map((c) => c.id)
 
-    expect(categories).toContainEqual({ id: "database", label: "数据库" })
-    expect(categories).toContainEqual({ id: "mcp", label: "MCP" })
+    expect(ids).toEqual([
+      "general",
+      "storage",
+      "tools",
+      "variables",
+      "services",
+      "troubleshooting",
+      "about",
+      "admin",
+    ])
+  })
+
+  it("merges database and mcp into services", () => {
+    const ids = settingsCategories.map((c) => c.id)
+
+    expect(ids).toContain("services")
+    expect(ids).not.toContain("database")
+    expect(ids).not.toContain("mcp")
+  })
+
+  it("merges repositories and projects into storage", () => {
+    const ids = settingsCategories.map((c) => c.id)
+
+    expect(ids).toContain("storage")
+    expect(ids).not.toContain("repositories")
+    expect(ids).not.toContain("projects")
   })
 })

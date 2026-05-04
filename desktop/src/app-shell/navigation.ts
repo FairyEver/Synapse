@@ -1,6 +1,6 @@
 const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
 const OPEN_SETTINGS_ABOUT_EVENT = "synapse:open-settings-about"
-const OPEN_SETTINGS_REPOSITORIES_EVENT = "synapse:open-settings-repositories"
+const OPEN_SETTINGS_STORAGE_EVENT = "synapse:open-settings-storage"
 const APP_TAB_CHANGED_EVENT = "synapse:app-tab-changed"
 let currentAppTab = "rule"
 
@@ -59,19 +59,19 @@ function subscribeOpenSettingsAbout(listener: () => void): () => void {
   }
 }
 
-function requestOpenSettingsRepositories(): void {
-  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_REPOSITORIES_EVENT))
+function requestOpenSettingsStorage(): void {
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_STORAGE_EVENT))
 }
 
-function subscribeOpenSettingsRepositories(listener: () => void): () => void {
+function subscribeOpenSettingsStorage(listener: () => void): () => void {
   const handleEvent = () => {
     listener()
   }
 
-  window.addEventListener(OPEN_SETTINGS_REPOSITORIES_EVENT, handleEvent)
+  window.addEventListener(OPEN_SETTINGS_STORAGE_EVENT, handleEvent)
 
   return () => {
-    window.removeEventListener(OPEN_SETTINGS_REPOSITORIES_EVENT, handleEvent)
+    window.removeEventListener(OPEN_SETTINGS_STORAGE_EVENT, handleEvent)
   }
 }
 
@@ -79,10 +79,10 @@ export {
   publishActiveAppTab,
   readCurrentAppTab,
   requestOpenSettingsAbout,
-  requestOpenSettingsRepositories,
+  requestOpenSettingsStorage,
   requestOpenSettingsTab,
   subscribeActiveAppTab,
   subscribeOpenSettingsAbout,
-  subscribeOpenSettingsRepositories,
+  subscribeOpenSettingsStorage,
   subscribeOpenSettingsTab,
 }
