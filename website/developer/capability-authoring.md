@@ -74,7 +74,7 @@ Routing and transport:
 5. 新增或更新所属领域 dispatcher。
 6. 若需要 CLI 暴露，新增或更新 CLI 命令。
 7. HTTP routing 保持使用规范 action ID。
-8. 更新 [能力矩阵](/reference/capability-naming-matrix)。
+8. 更新 [能力矩阵](/developer/capability-naming-matrix)。
 9. 运行相关单测。
 
 领域行为留在所属领域内。Database 能力不应导入 Scheduler 业务内部实现；Scheduler 能力不应导入 Database 业务内部实现。
@@ -351,7 +351,7 @@ schedulerRunList
 - CLI flag 使用 kebab-case。
 - mutating 与 high-risk metadata 正确。
 - hidden 或 destructive operation 没有被意外暴露。
-- [能力矩阵](/reference/capability-naming-matrix) 已更新。
+- [能力矩阵](/developer/capability-naming-matrix) 已更新。
 - 相关能力测试通过。
 
 相关测试：
