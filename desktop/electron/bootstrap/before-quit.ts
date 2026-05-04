@@ -7,8 +7,9 @@
 
 import { app, dialog } from "electron"
 import { configStore } from "../services/config-store"
+import { contentSubmissionService } from "../services/content-submission-service"
 import { createMainLogger, logStore } from "../services/log-store"
-import type { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
+import { pendingPushesService } from "../services/pending-pushes-service"
 import { updateService } from "../services/update-service"
 import type { ServiceRegistryImpl } from "../runtime/service-registry"
 import type { MainWindowState } from "./main-window"
@@ -68,8 +69,8 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
 
     await logStore.flush()
 
-    const coordinator = deps.registry.get<RepositorySyncCoordinator>("repo.sync-coordinator")
-    const pendingPushCount = await coordinator.countAllPending()
+    const config = await configStore.load()
+    const pendingPushCount = await pendingPushesService.countAll(config.repositories)
 
     if (pendingPushCount === 0) {
       clearTimeout(quitTimeout)
@@ -100,11 +101,28 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
       : await dialog.showMessageBox(messageBoxOptions)
 
     if (result.response === 0) {
-      const config = await configStore.load()
+      const PER_REPO_FLUSH_TIMEOUT_MS = 5_000
 
-      for (const repository of config.repositories) {
-        await coordinator.requestPush(repository, "quit")
-      }
+      await Promise.allSettled(
+        config.repositories.map(async (repository) => {
+          try {
+            await Promise.race([
+              contentSubmissionService.flushPendingPushes(repository),
+              new Promise<never>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("单仓库 flush 超时。")),
+                  PER_REPO_FLUSH_TIMEOUT_MS,
+                ),
+              ),
+            ])
+          } catch (error) {
+            logger.warn("Before-quit flush failed for repository.", {
+              repositoryUuid: repository.uuid,
+              error,
+            })
+          }
+        }),
+      )
     }
 
     clearTimeout(quitTimeout)

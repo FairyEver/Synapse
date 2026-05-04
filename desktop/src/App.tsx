@@ -22,6 +22,7 @@ import {
 } from "@/app-shell/use-repository-manager"
 import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentDetailWindowPage } from "@/modules/content/components/content-detail-window-page"
 import { RulesModule } from "@/modules/rules"
@@ -311,21 +312,43 @@ function MainApp() {
             const dialogHandlers = contentDialogHandlers[definition.id]
 
             return (
-              <ModuleComponent
-                key={definition.id}
-                onCreateDialogOpenChange={dialogHandlers.create}
-                onDetailDialogOpenChange={dialogHandlers.detail}
-                onInstallDialogOpenChange={dialogHandlers.install}
-                pendingContentOpenRequest={pendingContentOpenRequest}
-                onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}
-              />
+              <ErrorBoundary key={definition.id} fallbackTitle={`${definition.tabLabel}模块出现问题`}>
+                <ModuleComponent
+                  key={definition.id}
+                  onCreateDialogOpenChange={dialogHandlers.create}
+                  onDetailDialogOpenChange={dialogHandlers.detail}
+                  onInstallDialogOpenChange={dialogHandlers.install}
+                  pendingContentOpenRequest={pendingContentOpenRequest}
+                  onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}
+                />
+              </ErrorBoundary>
             )
           })}
-          {activeTab === "agent" ? <AgentModule /> : null}
-          {activeTab === "database" ? <DatabaseModule /> : null}
-          {activeTab === "task-scheduler" ? <TaskSchedulerModule /> : null}
-          {activeTab === "editor-scan" ? <EditorScanModule /> : null}
-          {activeTab === "settings" ? <SettingsModule /> : null}
+          {activeTab === "agent" ? (
+            <ErrorBoundary fallbackTitle="Agent 模块出现问题">
+              <AgentModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "database" ? (
+            <ErrorBoundary fallbackTitle="数据库模块出现问题">
+              <DatabaseModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "task-scheduler" ? (
+            <ErrorBoundary fallbackTitle="定时任务模块出现问题">
+              <TaskSchedulerModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "editor-scan" ? (
+            <ErrorBoundary fallbackTitle="IDE 模块出现问题">
+              <EditorScanModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "settings" ? (
+            <ErrorBoundary fallbackTitle="设置模块出现问题">
+              <SettingsModule />
+            </ErrorBoundary>
+          ) : null}
         </div>
       </AppShellLayout>
     </IdentityGate>
@@ -344,7 +367,9 @@ function App() {
     return (
       <LicenseGate>
         <IdentityGate>
-          <ContentDetailWindowPage request={standaloneContentWindowRequest} />
+          <ErrorBoundary fallbackTitle="内容详情出现问题">
+            <ContentDetailWindowPage request={standaloneContentWindowRequest} />
+          </ErrorBoundary>
         </IdentityGate>
       </LicenseGate>
     )

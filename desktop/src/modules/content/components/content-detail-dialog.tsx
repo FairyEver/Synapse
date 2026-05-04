@@ -137,6 +137,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   const [conflictState, setConflictState] = useState<ConflictState<TPayload> | null>(null)
   const [contentReady, setContentReady] = useState(false)
   const [installStatusRefreshSignal, setInstallStatusRefreshSignal] = useState(0)
+  const [isSaving, setIsSaving] = useState(false)
   const [installTargetRequest, setInstallTargetRequest] = useState<ContentInstallTargetRequest | null>(null)
 
   useEffect(() => {
@@ -267,7 +268,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   )
 
   const handleSave = async (payload: TPayload, force = false) => {
-    if (!detail) {
+    if (!detail || isSaving) {
       return
     }
 
@@ -276,8 +277,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
       contentType,
       force,
     })
-    setIsEditOpen(false)
-    onOpenChange(false)
+    setIsSaving(true)
 
     const serializedPayload = serializePayload
       ? await serializePayload(payload)
@@ -321,6 +321,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             return null
           }
 
+          setIsEditOpen(false)
+          onOpenChange(false)
           return result.pendingPushCount > 0 ? "已保存，等待同步。" : "保存成功。"
         },
         error: (err) => err instanceof Error ? err.message : "保存失败。",
@@ -330,6 +332,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
         contentId: detail.id,
         error: err,
       })
+    }).finally(() => {
+      setIsSaving(false)
     })
   }
 
@@ -585,8 +589,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
         open: isEditOpen,
         onOpenChange: setIsEditOpen,
         onSubmit: (payload) => void handleSave(payload),
-        submitDisabled: submitDisabledReason !== null,
-        submitDisabledReason: submitDisabledReason,
+        submitDisabled: isSaving || submitDisabledReason !== null,
+        submitDisabledReason: isSaving ? "正在保存..." : submitDisabledReason,
       }) : null}
     </>
   )

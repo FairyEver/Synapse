@@ -14,7 +14,7 @@ import {
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import { sanitizeTrackRecord, sanitizeTrackValue } from "@/lib/ui-tracking"
 import { DatabaseSidebar } from "./components/database-sidebar"
 import { DataTableView } from "./components/data-table-view"
@@ -345,7 +345,8 @@ function DatabaseModule() {
   )
 
   useEffect(() => {
-    const bridge = requireSynapseBridge()
+    const bridge = getSynapseBridge()
+    if (!bridge) return
     let timer: ReturnType<typeof setTimeout> | null = null
     const runRefresh = () => {
       timer = null

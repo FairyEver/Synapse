@@ -23,6 +23,8 @@ async function resolveGitRootPath(localPath: string): Promise<string | null> {
   }
 }
 
+const GIT_PROBE_TIMEOUT_MS = 15_000
+
 function runGitProbe(cwd: string, args: string[]): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const childProcess = spawn("git", args, {
@@ -37,6 +39,14 @@ function runGitProbe(cwd: string, args: string[]): Promise<string | null> {
 
     let stdout = ""
     let stderr = ""
+    let settled = false
+
+    const timeout = setTimeout(() => {
+      if (settled) return
+      settled = true
+      childProcess.kill("SIGTERM")
+      reject(new Error("Git 探测超时。"))
+    }, GIT_PROBE_TIMEOUT_MS)
 
     childProcess.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8")
@@ -46,9 +56,18 @@ function runGitProbe(cwd: string, args: string[]): Promise<string | null> {
       stderr += chunk.toString("utf8")
     })
 
-    childProcess.on("error", reject)
+    childProcess.on("error", (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      reject(error)
+    })
 
     childProcess.on("close", (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+
       if (code === 0) {
         resolve(stdout.trim() || null)
         return

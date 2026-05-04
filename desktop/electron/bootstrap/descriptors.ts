@@ -37,7 +37,7 @@ import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
-import { contentSubmissionService } from "../services/content-submission-service"
+import { repositoryLockManager } from "../services/repository-lock-manager"
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
@@ -245,9 +245,12 @@ export const repoMaintenanceDescriptor: ServiceDescriptor<typeof repositoryMaint
         const config = await configStore.load()
         for (const repository of config.repositories) {
           try {
-            await contentSubmissionService.runRepositoryGitExclusive(repository.uuid, () =>
-              repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository),
-            )
+            const release = await repositoryLockManager.acquire(repository.uuid, "scheduled-maintenance")
+            try {
+              await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
+            } finally {
+              release()
+            }
           } catch (error) {
             ctx.logger.warn("Scheduled repository maintenance failed.", {
               error,
