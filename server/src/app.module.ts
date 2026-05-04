@@ -1,14 +1,18 @@
 import { Module } from "@nestjs/common"
+import { APP_GUARD } from "@nestjs/core"
 import { ServeStaticModule } from "@nestjs/serve-static"
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { LoggerModule } from "nestjs-pino"
 import { join } from "node:path"
 import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
+import { HealthModule } from "./health/health.module"
 import { LicensesModule } from "./licenses/licenses.module"
 import { PrismaModule } from "./prisma/prisma.module"
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([{ name: "default", ttl: 60000, limit: 60 }]),
     LoggerModule.forRoot({
       pinoHttp: {
         autoLogging: true,
@@ -28,6 +32,8 @@ import { PrismaModule } from "./prisma/prisma.module"
     AdminAuthModule,
     AdminModule,
     LicensesModule,
+    HealthModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}
