@@ -99,6 +99,7 @@ type ContentState = {
   description: string | null
   icon: LucideIcon
   title: string
+  onRetry?: () => void
 }
 
 function normalizeSearchQuery(value: string): string {
@@ -146,6 +147,7 @@ function getContentState(params: {
   categoryItems: SynapseCategoryViewItem[]
   error: Error | null
   filteredItems: SynapseContentMeta[]
+  onRetry?: () => void
   isLoading: boolean
   items: SynapseContentMeta[]
   itemsInActiveCategory: SynapseContentMeta[]
@@ -162,6 +164,7 @@ function getContentState(params: {
     items,
     itemsInActiveCategory,
     normalizedSearchQuery,
+    onRetry,
     repositoryStatus,
     contentType,
   } = params
@@ -189,6 +192,7 @@ function getContentState(params: {
       title: "读取失败",
       description: error.message,
       icon: TriangleAlert,
+      onRetry,
     }
   }
 
@@ -237,7 +241,7 @@ function getContentState(params: {
   return null
 }
 
-function ContentStateView({ description, icon: Icon, title }: ContentState) {
+function ContentStateView({ description, icon: Icon, onRetry, title }: ContentState) {
   return (
     <Empty className="min-h-80 rounded-lg border border-border bg-background">
       <EmptyHeader>
@@ -246,6 +250,11 @@ function ContentStateView({ description, icon: Icon, title }: ContentState) {
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
         {description ? <EmptyDescription>{description}</EmptyDescription> : null}
+        {onRetry ? (
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            重试
+          </Button>
+        ) : null}
       </EmptyHeader>
     </Empty>
   )
@@ -650,6 +659,7 @@ function ContentBrowserPage({
       items,
       itemsInActiveCategory,
       normalizedSearchQuery: deferredSearchQuery,
+      onRetry: refresh,
       repositoryStatus,
       contentType,
     }),
@@ -662,6 +672,7 @@ function ContentBrowserPage({
       items,
       itemsInActiveCategory,
       deferredSearchQuery,
+      refresh,
       repositoryStatus,
       contentType,
     ],

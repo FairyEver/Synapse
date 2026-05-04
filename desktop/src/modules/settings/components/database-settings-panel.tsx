@@ -355,7 +355,6 @@ function DatabaseSettingsPanel() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
-          <Separator />
           <div className="flex items-start gap-4 text-sm">
             <span className="shrink-0 text-muted-foreground">数据库目录</span>
             {status?.dbDirectoryPath ? (

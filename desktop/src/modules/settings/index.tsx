@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { subscribeOpenSettingsAbout } from "@/app-shell/navigation"
+import { subscribeOpenSettingsAbout, subscribeOpenSettingsRepositories } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
@@ -63,6 +63,12 @@ function SettingsModule() {
   useEffect(() => {
     return subscribeOpenSettingsAbout(() => {
       setActiveCategory("about")
+    })
+  }, [setActiveCategory])
+
+  useEffect(() => {
+    return subscribeOpenSettingsRepositories(() => {
+      setActiveCategory("repositories")
     })
   }, [setActiveCategory])
 

@@ -275,7 +275,7 @@ function AgentComposer({
 }) {
   return (
     <form
-      className="mx-auto flex w-full max-w-4xl shrink-0 items-end gap-2 rounded-2xl border border-border bg-background px-3 py-2"
+      className="mx-auto flex w-full max-w-4xl shrink-0 items-center gap-2 rounded-2xl bg-muted/60 p-2 pl-4"
       onSubmit={onSubmit}
     >
       <Textarea
@@ -285,12 +285,12 @@ function AgentComposer({
         placeholder="输入消息"
         disabled={disabled}
         rows={1}
-        className="h-9 min-h-9 flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-2 shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
+        className="h-8 min-h-8 flex-1 resize-none overflow-hidden border-0 bg-transparent px-0 py-1.5 shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
       />
       <Button
         type="submit"
         size="icon"
-        className="shrink-0 rounded-full"
+        className="size-8 shrink-0 rounded-full"
         disabled={!canSend}
         aria-label="发送"
       >
