@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Post, Res, UseGuards } from "@nestjs/common"
+import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard } from "./admin-auth.guard"
@@ -13,6 +14,7 @@ const loginSchema = z.object({
 export class AdminAuthController {
   constructor(private readonly auth: AdminAuthService) {}
 
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/login")
   async login(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const result = loginSchema.safeParse(body)

@@ -9,6 +9,7 @@ import {
   Post,
   Req,
 } from "@nestjs/common"
+import { Throttle } from "@nestjs/throttler"
 import { z } from "zod"
 import { ActivationError } from "./license.types"
 import { LicensesService } from "./licenses.service"
@@ -35,11 +36,13 @@ const renewSchema = z.object({
 export class LicensesController {
   constructor(private readonly licenses: LicensesService) {}
 
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
   @Get("/license/config")
   getConfig() {
     return this.licenses.getPublicConfig()
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post("/activations/redeem")
   async redeem(
     @Body() body: unknown,
@@ -56,6 +59,7 @@ export class LicensesController {
     }
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post("/licenses/renew")
   async renew(@Body() body: unknown) {
     try {
@@ -65,6 +69,7 @@ export class LicensesController {
     }
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post("/licenses/validate")
   async validate(@Body() body: unknown) {
     try {
