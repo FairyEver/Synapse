@@ -17,7 +17,7 @@ type SubTab = "overview" | "models" | "daily" | "agents" | "stats"
 export function TokenUsageModule() {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("overview")
   const [range, setRange] = useState<RangePreset>("all")
-  const { scan, scanning } = useTokenUsageScan()
+  const { scan, scanning, error: scanError } = useTokenUsageScan()
   const { data: graphResult, refresh: refreshGraph } = useGraphResult()
   const { data: models, refresh: refreshModels } = useModelReport()
   const { data: dailyRows, refresh: refreshDaily } = useDailyReport()
@@ -66,7 +66,7 @@ export function TokenUsageModule() {
         </Tabs>
         <div className="flex items-center gap-2">
           <DateRangeFilter value={range} onChange={handleRangeChange} />
-          <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} />
+          <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
         </div>
       </div>
       <ScrollArea className="flex-1">
