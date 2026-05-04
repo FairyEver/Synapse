@@ -76,6 +76,9 @@ async function notifyPendingPushesUpdated(
   })
 }
 
+const BACKGROUND_PUSH_MAX_RETRIES = 3
+const BACKGROUND_PUSH_RETRY_DELAYS = [5_000, 15_000, 45_000]
+
 // Helper to schedule background push
 function scheduleBackgroundPush(eventBus: EventBus, repository: SynapseRepositoryConfig): void {
   const activeState = backgroundPushStates.get(repository.uuid)
@@ -92,6 +95,8 @@ function scheduleBackgroundPush(eventBus: EventBus, repository: SynapseRepositor
   backgroundPushStates.set(repository.uuid, nextState)
 
   void (async () => {
+    let retryCount = 0
+
     try {
       while (true) {
         nextState.rerunRequested = false
@@ -102,7 +107,7 @@ function scheduleBackgroundPush(eventBus: EventBus, repository: SynapseRepositor
           payload: {
             repositoryUuid: repository.uuid,
             operation: "push",
-            statusText: "正在同步...",
+            statusText: retryCount > 0 ? `正在重试同步（第 ${retryCount} 次）...` : "正在同步...",
             percent: 0,
           },
           timestamp: new Date().toISOString(),
@@ -122,8 +127,38 @@ function scheduleBackgroundPush(eventBus: EventBus, repository: SynapseRepositor
               timestamp: new Date().toISOString(),
             })
           })
+
+          retryCount = 0
         } catch (error) {
           const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+          if (retryCount < BACKGROUND_PUSH_MAX_RETRIES) {
+            const delay = BACKGROUND_PUSH_RETRY_DELAYS[retryCount] ?? 45_000
+            retryCount++
+
+            logger.warn("Background push failed, scheduling retry.", {
+              repositoryUuid: repository.uuid,
+              retryCount,
+              delayMs: delay,
+              error: message,
+            })
+
+            eventBus.emit({
+              domain: "repository",
+              type: "repository.updated",
+              payload: {
+                repositoryUuid: repository.uuid,
+                operation: "push",
+                completedAt: new Date().toISOString(),
+                error: `${message} ${delay / 1000}秒后重试...`,
+                message,
+              },
+              timestamp: new Date().toISOString(),
+            })
+
+            await new Promise<void>((resolve) => setTimeout(resolve, delay))
+            continue
+          }
 
           await notifyPendingPushesUpdated(eventBus, repository)
 
