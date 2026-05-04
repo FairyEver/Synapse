@@ -39,6 +39,10 @@ export function verifyLicenseLease(token: string, publicKeyPem: string): License
       throw new Error("授权签名无效。")
     }
 
+    if (new Date(envelope.payload.expiresAt) <= new Date()) {
+      throw new Error("授权已过期。")
+    }
+
     return envelope.payload
   } catch (error) {
     if (error instanceof Error && error.message === "授权签名无效。") {

@@ -107,6 +107,7 @@ function mapLicenseError(error: unknown): Error {
     || error.message === "授权不可用。"
     || error.message === "设备已停用。"
     || error.message === "当前设备与授权不匹配。"
+    || error.message === "授权已过期。"
   ) {
     return new ForbiddenException(error.message)
   }
