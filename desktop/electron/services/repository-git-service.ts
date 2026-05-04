@@ -7,6 +7,7 @@ import type {
 import { runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
+import { repositoryLockManager } from "./repository-lock-manager"
 import { repositoryStore } from "./repository-store"
 
 type ProgressListener = (event: SynapseRepositoryProgressEvent) => void
@@ -158,8 +159,6 @@ async function runRepositoryGitCommand(
 }
 
 class RepositoryGitService {
-  private activeOperations = new Map<string, SynapseRepositoryOperationKind>()
-
   async syncRepository(
     repository: SynapseRepositoryConfig,
     onProgress: ProgressListener,
@@ -191,7 +190,8 @@ class RepositoryGitService {
       }
     }
 
-    return this.runExclusive(repository.uuid, "sync", async () => {
+    const release = await repositoryLockManager.acquire(repository.uuid, "sync")
+    try {
       onProgress({
         repositoryUuid: repository.uuid,
         operation: "sync",
@@ -218,42 +218,24 @@ class RepositoryGitService {
         percent: 100,
       })
 
+      logger.info("Repository sync completed.", {
+        repositoryUuid: repository.uuid,
+        completedAt,
+      })
+
       return {
         operation: "sync" as const,
         repository: nextState,
         completedAt,
       }
-    }).then((result) => {
-      logger.info("Repository sync completed.", {
-        repositoryUuid: repository.uuid,
-        completedAt: result.completedAt,
-      })
-
-      return result
-    }).catch((error) => {
+    } catch (error) {
       logger.error("Repository sync failed.", {
         repositoryUuid: repository.uuid,
         error,
       })
       throw error
-    })
-  }
-
-  private async runExclusive<T>(
-    repositoryUuid: string,
-    operation: SynapseRepositoryOperationKind,
-    callback: () => Promise<T>,
-  ): Promise<T> {
-    if (this.activeOperations.has(repositoryUuid)) {
-      throw new Error("这个仓库已经有一个 Git 操作在进行中，请稍候再试。")
-    }
-
-    this.activeOperations.set(repositoryUuid, operation)
-
-    try {
-      return await callback()
     } finally {
-      this.activeOperations.delete(repositoryUuid)
+      release()
     }
   }
 }

@@ -23,6 +23,7 @@ import { configStore } from "./config-store"
 import { runGitCommand, type GitCommandResult } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
+import { repositoryLockManager } from "./repository-lock-manager"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryMaintenanceService } from "./repository-maintenance-service"
 import { repositoryStore } from "./repository-store"
@@ -234,8 +235,6 @@ async function readReadyRepositoryState(repository: SynapseRepositoryConfig) {
 }
 
 class ContentSubmissionService {
-  private pendingPushChains = new Map<string, Promise<void>>()
-
   async createContent(request: SynapseCreateContentRequest): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
@@ -319,43 +318,44 @@ class ContentSubmissionService {
     repository: SynapseRepositoryConfig,
     onProgress?: PushProgressListener,
   ): Promise<void> {
-    return this.runPushExclusive(repository.uuid, async () => {
-      const repositoryState = await repositoryStore.getRepositoryState(repository)
+    const repositoryState = await repositoryStore.getRepositoryState(repository)
 
-      if (repositoryState.status !== "ready") {
-        throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
-      }
+    if (repositoryState.status !== "ready") {
+      throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
+    }
 
-      if (!repositoryState.isGitRepository) {
-        return
-      }
+    if (!repositoryState.isGitRepository) {
+      return
+    }
 
-      const pendingState = await pendingPushesService.readState(repository)
-      const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
+    const pendingState = await pendingPushesService.readState(repository)
+    const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
 
-      if (pendingState.count === 0) {
-        return
-      }
+    if (pendingState.count === 0) {
+      return
+    }
 
-      try {
+    const release = await repositoryLockManager.acquire(repository.uuid, "push")
+    try {
+      await pushRepository(repository, onProgress)
+      await pendingPushesService.clear(repository, attemptedPendingPushIds)
+      await contentIndexService.syncIndex(repository)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "推送到仓库失败。"
+
+      if (isNonFastForwardError(message)) {
+        await pullWithRebase(repository, onProgress)
         await pushRepository(repository, onProgress)
         await pendingPushesService.clear(repository, attemptedPendingPushIds)
         await contentIndexService.syncIndex(repository)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "推送到仓库失败。"
-
-        if (isNonFastForwardError(message)) {
-          await pullWithRebase(repository, onProgress)
-          await pushRepository(repository, onProgress)
-          await pendingPushesService.clear(repository, attemptedPendingPushIds)
-          await contentIndexService.syncIndex(repository)
-          return
-        }
-
-        await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
-        throw error
+        return
       }
-    })
+
+      await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
+      throw error
+    } finally {
+      release()
+    }
   }
 
   private async updateContentWithConflictCheck(
@@ -640,34 +640,6 @@ class ContentSubmissionService {
     return repository
   }
 
-  private async runPushExclusive<T>(
-    repositoryUuid: string,
-    callback: () => Promise<T>,
-  ): Promise<T> {
-    const previousChain = this.pendingPushChains.get(repositoryUuid) ?? Promise.resolve()
-    let releaseCurrentChain!: () => void
-
-    const currentChain = new Promise<void>((resolve) => {
-      releaseCurrentChain = resolve
-    })
-    const nextChain = previousChain
-      .catch(() => undefined)
-      .then(() => currentChain)
-
-    this.pendingPushChains.set(repositoryUuid, nextChain)
-
-    await previousChain.catch(() => undefined)
-
-    try {
-      return await callback()
-    } finally {
-      releaseCurrentChain()
-
-      if (this.pendingPushChains.get(repositoryUuid) === nextChain) {
-        this.pendingPushChains.delete(repositoryUuid)
-      }
-    }
-  }
 }
 
 const contentSubmissionService = new ContentSubmissionService()
