@@ -3,8 +3,8 @@ import { z } from "zod"
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ADMIN_EMAIL: z.string().email(),
-  ADMIN_PASSWORD: z.string().min(8),
-  ADMIN_JWT_SECRET: z.string().min(16),
+  ADMIN_PASSWORD: z.string().min(12),
+  ADMIN_JWT_SECRET: z.string().min(32),
   LICENSE_PRIVATE_KEY: z.string().min(1),
   LICENSE_PUBLIC_KEY: z.string().min(1),
   LICENSE_KEY_ID: z.string().min(1),
