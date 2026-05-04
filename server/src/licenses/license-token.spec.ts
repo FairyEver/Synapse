@@ -63,6 +63,25 @@ describe("license token", () => {
     expect(() => verifyLicenseLease(tampered, keys.publicKey)).toThrow("授权签名无效。")
   })
 
+  it("rejects an expired token", () => {
+    const keys = keyPair()
+    const payload: LicenseLeasePayload = {
+      tokenId: "lease_1",
+      accountId: "account_1",
+      email: "user@example.com",
+      licenseId: "license_1",
+      deviceIdHash: hashDeviceId("device-1"),
+      issuedAt: "2024-01-01T00:00:00.000Z",
+      expiresAt: "2024-01-08T00:00:00.000Z",
+      maxDevices: 1,
+      licenseStatus: "active",
+      keyId: "test-key",
+    }
+
+    const token = signLicenseLease(payload, keys.privateKey)
+    expect(() => verifyLicenseLease(token, keys.publicKey)).toThrow("授权已过期。")
+  })
+
   it("normalizes activation code hashes", () => {
     expect(hashActivationCode(" ABCD-1234 ")).toBe(hashActivationCode("abcd-1234"))
   })

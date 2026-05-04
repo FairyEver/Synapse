@@ -6,8 +6,8 @@ describe("loadEnv", () => {
     const env = loadEnv({
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me",
-      ADMIN_JWT_SECRET: "a-secret-with-enough-length",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       LICENSE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----",
       LICENSE_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----\nkey\n-----END PUBLIC KEY-----",
       LICENSE_KEY_ID: "local-dev-key",
@@ -29,8 +29,8 @@ describe("loadEnv", () => {
     const env = loadEnv({
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me",
-      ADMIN_JWT_SECRET: "a-secret-with-enough-length",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       LICENSE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----",
       LICENSE_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----\\nkey\\n-----END PUBLIC KEY-----",
       LICENSE_KEY_ID: "local-dev-key",
@@ -52,8 +52,8 @@ describe("loadEnv", () => {
     const env = loadEnv({
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me",
-      ADMIN_JWT_SECRET: "a-secret-with-enough-length",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       LICENSE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----",
       LICENSE_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----\\nkey\\n-----END PUBLIC KEY-----",
       LICENSE_KEY_ID: "local-dev-key",
