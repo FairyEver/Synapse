@@ -780,3 +780,19 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
     service.stop()
   },
 }
+
+/**
+ * core.token-usage — registers IPC handlers for the token usage monitor.
+ *
+ * Status: degraded — token usage is non-critical.
+ */
+export const coreTokenUsageDescriptor: ServiceDescriptor<{ initialized: true }> = {
+  id: "core.token-usage",
+  criticality: "degraded",
+  dependsOn: [],
+  async create() {
+    const { registerTokenUsageHandlers } = await import("../token-usage/ipc-handlers")
+    registerTokenUsageHandlers()
+    return { initialized: true }
+  },
+}

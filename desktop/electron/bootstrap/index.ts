@@ -16,6 +16,7 @@ export {
   coreDatabaseDescriptor,
   coreLoggingDescriptor,
   coreTaskSchedulerDescriptor,
+  coreTokenUsageDescriptor,
   coreUpdateDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,

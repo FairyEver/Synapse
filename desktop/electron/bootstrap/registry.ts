@@ -39,6 +39,7 @@ import {
   coreRelayDescriptor,
   coreSideChannelDescriptor,
   coreTaskSchedulerDescriptor,
+  coreTokenUsageDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
   createUiTrayDescriptor,
@@ -82,6 +83,7 @@ export function buildServiceRegistry(
   registry.register(coreTaskSchedulerDescriptor)
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDatabaseDescriptor)
+  registry.register(coreTokenUsageDescriptor)
   registry.register(coreDiagnosticsDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)

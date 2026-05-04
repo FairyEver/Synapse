@@ -170,6 +170,14 @@ const IPC_CHANNELS = {
     "activate": "synapse:license:activate",
     "renew": "synapse:license:renew",
   },
+  "token-usage": {
+    "scan": "synapse:token-usage:scan",
+    "getGraphResult": "synapse:token-usage:graph-result",
+    "getModelReport": "synapse:token-usage:model-report",
+    "getDailyReport": "synapse:token-usage:daily-report",
+    "getDetectedAgents": "synapse:token-usage:detected-agents",
+    "clearData": "synapse:token-usage:clear-data",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -548,6 +556,15 @@ const synapseBridge: SynapseBridge = {
     relayUnbind: (id) => invoke(IPC_CHANNELS.ops.relayUnbind)({ id }),
     compressGet: (projectId) => invoke(IPC_CHANNELS.ops.compressGet)({ projectId }),
     compressUpdate: (payload) => invoke(IPC_CHANNELS.ops.compressUpdate)(payload),
+  },
+  tokenUsage: {
+    scan: invoke(IPC_CHANNELS["token-usage"].scan),
+    getGraphResult: (options?: { since?: string; until?: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].getGraphResult)(options),
+    getModelReport: invoke(IPC_CHANNELS["token-usage"].getModelReport),
+    getDailyReport: invoke(IPC_CHANNELS["token-usage"].getDailyReport),
+    getDetectedAgents: invoke(IPC_CHANNELS["token-usage"].getDetectedAgents),
+    clearData: invoke(IPC_CHANNELS["token-usage"].clearData),
   },
 }
 

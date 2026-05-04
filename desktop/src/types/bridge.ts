@@ -501,4 +501,43 @@ export type SynapseBridge = {
       minGapMins?: number
     }) => Promise<SynapseOpsRecord>
   }
+  tokenUsage: {
+    scan: () => Promise<{
+      totalClients: number
+      scannedClients: number
+      totalFiles: number
+      parsedFiles: number
+      newMessages: number
+      elapsedMs: number
+    }>
+    getGraphResult: (options?: { since?: string; until?: string }) => Promise<{
+      meta: { generatedAt: string; processingTimeMs: number }
+      summary: {
+        totalTokens: number; totalCost: number
+        totalDays: number; activeDays: number
+        averagePerDay: number; maxCostInSingleDay: number
+        clients: string[]; models: string[]
+      }
+      years: { year: string; totalTokens: number; totalCost: number }[]
+      contributions: {
+        date: string
+        totals: { tokens: number; cost: number; messages: number }
+        intensity: 0 | 1 | 2 | 3 | 4
+        tokenBreakdown: { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number }
+        clients: {
+          client: string; modelId: string; providerId: string
+          tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number }
+          cost: number; messages: number
+        }[]
+      }[]
+    }>
+    getModelReport: () => Promise<{
+      client: string; model: string; provider: string
+      input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number
+      messageCount: number; cost: number
+    }[]>
+    getDailyReport: () => Promise<Record<string, unknown>[]>
+    getDetectedAgents: () => Promise<{ id: string; name: string; fileCount: number }[]>
+    clearData: () => Promise<void>
+  }
 }

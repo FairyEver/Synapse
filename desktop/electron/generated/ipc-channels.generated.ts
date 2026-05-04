@@ -158,6 +158,14 @@ export const IPC_CHANNELS = {
     "activate": "synapse:license:activate",
     "renew": "synapse:license:renew",
   },
+  "token-usage": {
+    "scan": "synapse:token-usage:scan",
+    "getGraphResult": "synapse:token-usage:graph-result",
+    "getModelReport": "synapse:token-usage:model-report",
+    "getDailyReport": "synapse:token-usage:daily-report",
+    "getDetectedAgents": "synapse:token-usage:detected-agents",
+    "clearData": "synapse:token-usage:clear-data",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS
