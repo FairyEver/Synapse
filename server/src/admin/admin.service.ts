@@ -2,6 +2,8 @@ import { BadRequestException, Inject, Injectable, InternalServerErrorException, 
 import { Prisma } from "@prisma/client"
 import { randomBytes } from "node:crypto"
 import { z } from "zod"
+import type { PaginatedResponse, PaginationQuery } from "../common/pagination"
+import { parsePagination, toPrismaArgs } from "../common/pagination"
 import { ActivationRiskService } from "../licenses/activation-risk.service"
 import { hashActivationCode, normalizeActivationCode } from "../licenses/hash"
 import { PrismaService } from "../prisma/prisma.service"
@@ -69,34 +71,48 @@ export class AdminService {
     return generateActivationCode()
   }
 
-  listActivationCodes(options: { readonly includeArchived?: boolean } = {}) {
+  async listActivationCodes(
+    options: { readonly includeArchived?: boolean } = {},
+    pagination?: PaginationQuery,
+  ): Promise<PaginatedResponse<unknown>> {
     const where = options.includeArchived ? undefined : { archivedAt: null }
+    const prismaArgs = pagination ? toPrismaArgs(pagination) : { skip: 0, take: 20, orderBy: { createdAt: "desc" as const } }
 
-    return this.prisma.activationCode.findMany({
-      orderBy: { createdAt: "desc" },
-      ...(where ? { where } : {}),
-      select: {
-        id: true,
-        codeHint: true,
-        status: true,
-        maxDevices: true,
-        expiresAt: true,
-        boundAccountId: true,
-        boundAccount: {
-          select: {
-            email: true,
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.activationCode.findMany({
+        ...prismaArgs,
+        ...(where ? { where } : {}),
+        select: {
+          id: true,
+          codeHint: true,
+          status: true,
+          maxDevices: true,
+          expiresAt: true,
+          boundAccountId: true,
+          boundAccount: {
+            select: {
+              email: true,
+            },
           },
+          redeemedAt: true,
+          archivedAt: true,
+          riskLockedAt: true,
+          riskLockedReason: true,
+          riskUnlockedAt: true,
+          riskReviewNote: true,
+          replacedByActivationCodeId: true,
+          createdAt: true,
         },
-        redeemedAt: true,
-        archivedAt: true,
-        riskLockedAt: true,
-        riskLockedReason: true,
-        riskUnlockedAt: true,
-        riskReviewNote: true,
-        replacedByActivationCodeId: true,
-        createdAt: true,
-      },
-    })
+      }),
+      this.prisma.activationCode.count(where ? { where } : undefined),
+    ])
+
+    return {
+      data,
+      total,
+      page: pagination?.page ?? 1,
+      pageSize: pagination?.pageSize ?? 20,
+    }
   }
 
   async updateActivationCode(id: string, body: unknown) {
@@ -115,12 +131,21 @@ export class AdminService {
     })
   }
 
-  listActivationAttempts(id: string) {
-    return this.prisma.activationAttempt.findMany({
-      where: { activationCodeId: id },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    })
+  async listActivationAttempts(id: string, pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
+    const where = { activationCodeId: id }
+    const prismaArgs = pagination ? toPrismaArgs(pagination) : { skip: 0, take: 100, orderBy: { createdAt: "desc" as const } }
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.activationAttempt.findMany({ where, ...prismaArgs }),
+      this.prisma.activationAttempt.count({ where }),
+    ])
+
+    return {
+      data,
+      total,
+      page: pagination?.page ?? 1,
+      pageSize: pagination?.pageSize ?? 100,
+    }
   }
 
   updateActivationCodeRiskLock(
@@ -172,11 +197,23 @@ export class AdminService {
     })
   }
 
-  listAccounts() {
-    return this.prisma.account.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { licenses: { include: { devices: true } } },
-    })
+  async listAccounts(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
+    const prismaArgs = pagination ? toPrismaArgs(pagination) : { skip: 0, take: 20, orderBy: { createdAt: "desc" as const } }
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.account.findMany({
+        ...prismaArgs,
+        include: { licenses: { include: { devices: true } } },
+      }),
+      this.prisma.account.count(),
+    ])
+
+    return {
+      data,
+      total,
+      page: pagination?.page ?? 1,
+      pageSize: pagination?.pageSize ?? 20,
+    }
   }
 
   getAccount(id: string) {
@@ -193,23 +230,35 @@ export class AdminService {
     })
   }
 
-  listDevices() {
-    return this.prisma.device.findMany({
-      orderBy: { lastSeenAt: "desc" },
-      include: {
-        license: {
-          include: {
-            account: true,
-            activationCode: {
-              select: {
-                id: true,
-                codeHint: true,
+  async listDevices(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
+    const prismaArgs = pagination ? toPrismaArgs(pagination) : { skip: 0, take: 20, orderBy: { lastSeenAt: "desc" as const } }
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.device.findMany({
+        ...prismaArgs,
+        include: {
+          license: {
+            include: {
+              account: true,
+              activationCode: {
+                select: {
+                  id: true,
+                  codeHint: true,
+                },
               },
             },
           },
         },
-      },
-    })
+      }),
+      this.prisma.device.count(),
+    ])
+
+    return {
+      data,
+      total,
+      page: pagination?.page ?? 1,
+      pageSize: pagination?.pageSize ?? 20,
+    }
   }
 
   async getSystemOverview() {
@@ -251,6 +300,55 @@ export class AdminService {
     }
   }
 
+  async listLicenses(options: {
+    readonly status?: string
+    readonly accountId?: string
+    readonly query?: Record<string, unknown>
+  }): Promise<PaginatedResponse<unknown>> {
+    const pagination = parsePagination(options.query ?? {})
+    const where: Record<string, unknown> = {}
+    if (options.status) where.status = options.status
+    if (options.accountId) where.accountId = options.accountId
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.license.findMany({
+        where,
+        ...toPrismaArgs(pagination),
+        include: {
+          account: { select: { id: true, email: true } },
+          devices: true,
+          activationCode: { select: { id: true, codeHint: true } },
+        },
+      }),
+      this.prisma.license.count({ where }),
+    ])
+
+    return { data, total, page: pagination.page, pageSize: pagination.pageSize }
+  }
+
+  getLicense(id: string) {
+    return this.prisma.license.findUniqueOrThrow({
+      where: { id },
+      include: {
+        account: { select: { id: true, email: true } },
+        devices: true,
+        leases: { orderBy: { createdAt: "desc" }, take: 20 },
+        activationCode: { select: { id: true, codeHint: true } },
+      },
+    })
+  }
+
+  async updateAccountStatus(id: string, body: unknown) {
+    const result = z.object({ status: z.enum(["active", "disabled"]) }).safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("账号状态无效。")
+    }
+    return this.prisma.account.update({
+      where: { id },
+      data: { status: result.data.status },
+    })
+  }
+
   async updateLicense(id: string, body: unknown) {
     const result = z.object({ status: managedStatusSchema }).safeParse(body)
     if (!result.success) {
@@ -267,6 +365,58 @@ export class AdminService {
     }
     const request = result.data
     return this.prisma.device.update({ where: { id }, data: { status: request.status } })
+  }
+
+  async batchUpdateActivationCodes(input: {
+    ids: string[]
+    action: "archive" | "updateStatus"
+    status?: string
+  }) {
+    if (input.ids.length > 50) {
+      throw new BadRequestException("批量操作上限 50 条。")
+    }
+
+    if (input.action === "archive") {
+      await this.prisma.activationCode.updateMany({
+        where: { id: { in: input.ids } },
+        data: { archivedAt: new Date() },
+      })
+      return { updated: input.ids.length }
+    }
+
+    if (input.action === "updateStatus" && input.status) {
+      const result = managedStatusSchema.safeParse(input.status)
+      if (!result.success) {
+        throw new BadRequestException("激活码状态无效。")
+      }
+      await this.prisma.activationCode.updateMany({
+        where: { id: { in: input.ids } },
+        data: { status: result.data },
+      })
+      return { updated: input.ids.length }
+    }
+
+    throw new BadRequestException("批量操作参数无效。")
+  }
+
+  async batchUpdateDevices(input: {
+    ids: string[]
+    action: "updateStatus"
+    status?: string
+  }) {
+    if (input.ids.length > 50) {
+      throw new BadRequestException("批量操作上限 50 条。")
+    }
+
+    const result = deviceStatusSchema.safeParse(input.status)
+    if (!result.success) {
+      throw new BadRequestException("设备状态无效。")
+    }
+    await this.prisma.device.updateMany({
+      where: { id: { in: input.ids } },
+      data: { status: result.data },
+    })
+    return { updated: input.ids.length }
   }
 }
 

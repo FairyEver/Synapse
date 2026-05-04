@@ -161,6 +161,8 @@ export function ActivationCodesPage() {
     () => adminApi.listActivationCodes({ includeArchived }),
     [includeArchived]
   )
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const [batchBusy, setBatchBusy] = React.useState(false)
   const [open, setOpen] = React.useState(false)
   const [maxDevices, setMaxDevices] = React.useState("1")
   const [quantity, setQuantity] = React.useState("1")
@@ -243,6 +245,48 @@ export function ActivationCodesPage() {
   async function archiveActivationCode(id: string) {
     await adminApi.archiveActivationCode(id)
     reload()
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (!data) return
+    if (selectedIds.size === data.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(data.map((item) => item.id)))
+    }
+  }
+
+  async function batchArchive() {
+    if (selectedIds.size === 0) return
+    setBatchBusy(true)
+    try {
+      await adminApi.batchUpdateActivationCodes({ ids: [...selectedIds], action: "archive" })
+      setSelectedIds(new Set())
+      reload()
+    } finally {
+      setBatchBusy(false)
+    }
+  }
+
+  async function batchUpdateStatus(status: ManagedStatus) {
+    if (selectedIds.size === 0) return
+    setBatchBusy(true)
+    try {
+      await adminApi.batchUpdateActivationCodes({ ids: [...selectedIds], action: "updateStatus", status })
+      setSelectedIds(new Set())
+      reload()
+    } finally {
+      setBatchBusy(false)
+    }
   }
 
   async function openAttempts(item: ActivationCode) {
@@ -475,9 +519,34 @@ export function ActivationCodesPage() {
       {error ? <PageState>{error}</PageState> : null}
       {!loading && !error && data?.length === 0 ? <PageState>暂无激活码</PageState> : null}
       {data && data.length > 0 ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
+        <>
+          {selectedIds.size > 0 ? (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+              <span>已选 {selectedIds.size} 项</span>
+              <Button variant="outline" size="sm" disabled={batchBusy} onClick={batchArchive}>
+                批量归档
+              </Button>
+              <Button variant="outline" size="sm" disabled={batchBusy} onClick={() => batchUpdateStatus("disabled")}>
+                批量禁用
+              </Button>
+              <Button variant="outline" size="sm" disabled={batchBusy} onClick={() => batchUpdateStatus("revoked")}>
+                批量撤销
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                取消
+              </Button>
+            </div>
+          ) : null}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={data.length > 0 && selectedIds.size === data.length}
+                    onCheckedChange={toggleAll}
+                    aria-label="全选"
+                  />
+                </TableHead>
               <TableHead>状态</TableHead>
               <TableHead>风控</TableHead>
               <TableHead>激活码标识</TableHead>
@@ -492,6 +561,13 @@ export function ActivationCodesPage() {
           <TableBody>
             {data.map((item) => (
               <TableRow key={item.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selectedIds.has(item.id)}
+                    onCheckedChange={() => toggleSelected(item.id)}
+                    aria-label={`选择 ${item.codeHint ?? item.id}`}
+                  />
+                </TableCell>
                 <TableCell>
                   <StatusBadge status={item.status} />
                 </TableCell>
@@ -549,6 +625,7 @@ export function ActivationCodesPage() {
             ))}
           </TableBody>
         </Table>
+        </>
       ) : null}
     </div>
   )

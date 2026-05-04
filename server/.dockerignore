@@ -1,5 +1,11 @@
 node_modules
+.git
+*.spec.ts
+.env
+.env.*
+coverage
 dist
 admin-dist
+*.md
 .DS_Store
 *.log

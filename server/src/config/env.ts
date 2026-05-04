@@ -3,8 +3,8 @@ import { z } from "zod"
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ADMIN_EMAIL: z.string().email(),
-  ADMIN_PASSWORD: z.string().min(8),
-  ADMIN_JWT_SECRET: z.string().min(16),
+  ADMIN_PASSWORD: z.string().min(12),
+  ADMIN_JWT_SECRET: z.string().min(32),
   LICENSE_PRIVATE_KEY: z.string().min(1),
   LICENSE_PUBLIC_KEY: z.string().min(1),
   LICENSE_KEY_ID: z.string().min(1),
@@ -19,6 +19,7 @@ const envSchema = z.object({
   ACTIVATION_RISK_MAX_DISTINCT_EMAILS_PER_CODE: z.coerce.number().int().positive().default(4),
   ACTIVATION_RISK_MAX_DISTINCT_DEVICES_PER_CODE: z.coerce.number().int().positive().default(4),
   ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE: z.coerce.number().int().positive().default(3),
+  DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   PORT: z.coerce.number().int().positive().default(3000),
 })
 
@@ -41,6 +42,7 @@ export interface ServerEnv {
   readonly activationRiskMaxDistinctEmailsPerCode: number
   readonly activationRiskMaxDistinctDevicesPerCode: number
   readonly activationRiskMaxBoundConflictsPerCode: number
+  readonly databasePoolSize: number
   readonly port: number
 }
 
@@ -70,6 +72,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     activationRiskMaxDistinctEmailsPerCode: result.data.ACTIVATION_RISK_MAX_DISTINCT_EMAILS_PER_CODE,
     activationRiskMaxDistinctDevicesPerCode: result.data.ACTIVATION_RISK_MAX_DISTINCT_DEVICES_PER_CODE,
     activationRiskMaxBoundConflictsPerCode: result.data.ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE,
+    databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,
   }
 }

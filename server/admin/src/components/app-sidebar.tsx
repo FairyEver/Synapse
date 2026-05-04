@@ -17,6 +17,7 @@ import {
   ActivityIcon,
   KeyRoundIcon,
   MonitorIcon,
+  ScrollTextIcon,
   UsersIcon,
 } from "lucide-react"
 
@@ -50,6 +51,14 @@ const data = {
       url: "#/devices",
       icon: (
         <MonitorIcon
+        />
+      ),
+    },
+    {
+      title: "审计日志",
+      url: "#/audit-logs",
+      icon: (
+        <ScrollTextIcon
         />
       ),
     },
