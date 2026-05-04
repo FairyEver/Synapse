@@ -271,6 +271,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     resolvedItem.createdByDisplayName,
   )
 
+  const [isSaving, setIsSaving] = useState(false)
+
   const handleSave = async (payload: TPayload, force = false) => {
     if (!detail) {
       return
@@ -281,8 +283,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
       contentType,
       force,
     })
-    setIsEditOpen(false)
-    onOpenChange(false)
+
+    setIsSaving(true)
 
     const serializedPayload = serializePayload
       ? await serializePayload(payload)
@@ -330,6 +332,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             return null
           }
 
+          setIsEditOpen(false)
+          onOpenChange(false)
           return result.pendingPushCount > 0 ? "已保存并同步。" : "保存成功。"
         },
         error: (err) => err instanceof Error ? err.message : "保存失败。",
@@ -339,6 +343,8 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
         contentId: detail.id,
         error: err,
       })
+    }).finally(() => {
+      setIsSaving(false)
     })
   }
 
