@@ -5,6 +5,8 @@ import type { SynapseBridge } from "@/types/bridge"
 type GraphResult = Awaited<ReturnType<SynapseBridge["tokenUsage"]["getGraphResult"]>>
 type ModelRow = Awaited<ReturnType<SynapseBridge["tokenUsage"]["getModelReport"]>>[number]
 type AgentRow = Awaited<ReturnType<SynapseBridge["tokenUsage"]["getAgentReport"]>>[number]
+type HourlyRow = Awaited<ReturnType<SynapseBridge["tokenUsage"]["getHourlyReport"]>>[number]
+type HourlyProfile = Awaited<ReturnType<SynapseBridge["tokenUsage"]["getHourlyProfile"]>>
 type ScanResult = Awaited<ReturnType<SynapseBridge["tokenUsage"]["scan"]>>
 
 function toLoadError(error: unknown): Error {
@@ -65,7 +67,7 @@ export function useModelReport() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
-  const refresh = useCallback(async (options?: DateRange) => {
+  const refresh = useCallback(async (options?: DateRange & { groupBy?: string }) => {
     setLoading(true)
     try {
       const result = await requireSynapseBridge().tokenUsage.getModelReport(options)
@@ -138,6 +140,58 @@ export function useAgentReport() {
   return { data, loading, error, refresh }
 }
 
+export function useHourlyReport() {
+  const [data, setData] = useState<HourlyRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  const refresh = useCallback(async (options?: DateRange) => {
+    setLoading(true)
+    try {
+      const result = await requireSynapseBridge().tokenUsage.getHourlyReport(options)
+      setData(result)
+      setError(null)
+    } catch (e) {
+      setData([])
+      setError(toLoadError(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  return { data, loading, error, refresh }
+}
+
+export function useHourlyProfile() {
+  const [data, setData] = useState<HourlyProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  const refresh = useCallback(async (options?: DateRange) => {
+    setLoading(true)
+    try {
+      const result = await requireSynapseBridge().tokenUsage.getHourlyProfile(options)
+      setData(result)
+      setError(null)
+    } catch (e) {
+      setData(null)
+      setError(toLoadError(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  return { data, loading, error, refresh }
+}
+
 export function useDetectedAgents() {
   const [agents, setAgents] = useState<{ id: string; name: string; fileCount: number }[]>([])
   const [loading, setLoading] = useState(true)
@@ -161,4 +215,4 @@ export function useDetectedAgents() {
   return { agents, loading, refresh }
 }
 
-export type { GraphResult, ModelRow, AgentRow, ScanResult }
+export type { GraphResult, ModelRow, AgentRow, HourlyRow, HourlyProfile, ScanResult }

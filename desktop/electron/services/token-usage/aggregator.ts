@@ -2,7 +2,7 @@ import type {
   GraphResult, DataSummary, DailyContribution, ModelUsage,
   TokenBreakdown, ClientContribution,
 } from "./parsers/types"
-import { queryDailyRowsFiltered } from "./db"
+import { queryDailyRowsFiltered, queryHourlyRowsFiltered } from "./db"
 import { estimateCost } from "./pricing"
 
 interface DailyRow {
@@ -124,12 +124,24 @@ export function getGraphResult(options?: { since?: string; until?: string }): Gr
   }
 }
 
-export function getModelReport(options?: { since?: string; until?: string }): ModelUsage[] {
+export type GroupByMode = "model" | "clientModel" | "clientProviderModel" | "workspaceModel"
+
+function groupKey(r: DailyRow, groupBy: GroupByMode): string {
+  switch (groupBy) {
+    case "model": return r.model_id
+    case "clientModel": return `${r.client}:${r.model_id}`
+    case "clientProviderModel": return `${r.client}:${r.provider_id}:${r.model_id}`
+    case "workspaceModel": return `${r.client}:${r.model_id}`
+  }
+}
+
+export function getModelReport(options?: { since?: string; until?: string; groupBy?: GroupByMode }): ModelUsage[] {
   const rows = queryDailyRowsFiltered(options?.since, options?.until) as unknown as DailyRow[]
+  const mode = options?.groupBy || "clientModel"
 
   const modelMap = new Map<string, ModelUsage>()
   for (const r of rows) {
-    const key = `${r.client}:${r.model_id}:${r.provider_id}`
+    const key = groupKey(r, mode)
     const cost = rowCost(r)
     const existing = modelMap.get(key)
     if (existing) {
@@ -140,6 +152,12 @@ export function getModelReport(options?: { since?: string; until?: string }): Mo
       existing.reasoning += r.reasoning_tokens
       existing.messageCount += r.message_count
       existing.cost += cost
+      if (mode === "model" && !existing.client.includes(r.client)) {
+        existing.client = existing.client ? `${existing.client}, ${r.client}` : r.client
+      }
+      if (mode === "model" && !existing.provider.includes(r.provider_id)) {
+        existing.provider = existing.provider ? `${existing.provider}, ${r.provider_id}` : r.provider_id
+      }
     } else {
       modelMap.set(key, {
         client: r.client, model: r.model_id, provider: r.provider_id,
@@ -257,4 +275,135 @@ export function getDailyReport(options?: { since?: string; until?: string }): Re
   return [...dayMap.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([date, d]) => ({ date, ...d }))
+}
+
+interface HourlyRow {
+  hour: string
+  client: string
+  model_id: string
+  provider_id: string
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  reasoning_tokens: number
+  message_count: number
+  turn_count: number
+  cost_usd: number
+}
+
+export interface HourlyReportRow {
+  hour: string
+  client: string
+  model: string
+  provider: string
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  cost: number
+  messages: number
+  turns: number
+}
+
+export function getHourlyReport(options?: { since?: string; until?: string }): HourlyReportRow[] {
+  const rows = queryHourlyRowsFiltered(options?.since, options?.until) as unknown as HourlyRow[]
+
+  const hourMap = new Map<string, HourlyReportRow>()
+  for (const r of rows) {
+    const key = `${r.hour}:${r.client}:${r.model_id}`
+    const cost = r.cost_usd > 0 ? r.cost_usd : estimateCost(r.model_id, {
+      input: r.input_tokens, output: r.output_tokens,
+      cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
+    })
+    const existing = hourMap.get(key)
+    if (existing) {
+      existing.input += r.input_tokens
+      existing.output += r.output_tokens
+      existing.cacheRead += r.cache_read_tokens
+      existing.cacheWrite += r.cache_write_tokens
+      existing.reasoning += r.reasoning_tokens
+      existing.messages += r.message_count
+      existing.turns += r.turn_count
+      existing.cost += cost
+    } else {
+      hourMap.set(key, {
+        hour: r.hour, client: r.client, model: r.model_id, provider: r.provider_id,
+        input: r.input_tokens, output: r.output_tokens,
+        cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
+        reasoning: r.reasoning_tokens, messages: r.message_count, turns: r.turn_count, cost,
+      })
+    }
+  }
+
+  return [...hourMap.values()].sort((a, b) => b.hour.localeCompare(a.hour))
+}
+
+export interface HourlyProfile {
+  periods: { name: string; startHour: number; endHour: number; tokens: number; cost: number; messages: number }[]
+  weekdays: { day: string; tokens: number; cost: number }[]
+  peakHour: number
+  peakHourTokens: number
+}
+
+export function getHourlyProfile(options?: { since?: string; until?: string }): HourlyProfile {
+  const rows = queryHourlyRowsFiltered(options?.since, options?.until) as unknown as HourlyRow[]
+
+  const hourBuckets = new Array(24).fill(0).map(() => ({ tokens: 0, cost: 0, messages: 0 }))
+  const dayBuckets: Record<string, { tokens: number; cost: number }> = {}
+  for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
+    dayBuckets[d] = { tokens: 0, cost: 0 }
+  }
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+  for (const r of rows) {
+    const hourNum = parseInt(r.hour.slice(-2), 10)
+    const tokens = r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens + r.reasoning_tokens
+    const cost = r.cost_usd > 0 ? r.cost_usd : estimateCost(r.model_id, {
+      input: r.input_tokens, output: r.output_tokens,
+      cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
+    })
+
+    hourBuckets[hourNum].tokens += tokens
+    hourBuckets[hourNum].cost += cost
+    hourBuckets[hourNum].messages += r.message_count
+
+    const dateStr = r.hour.slice(0, 10)
+    const dayOfWeek = dayNames[new Date(dateStr + "T00:00:00").getDay()]
+    dayBuckets[dayOfWeek].tokens += tokens
+    dayBuckets[dayOfWeek].cost += cost
+  }
+
+  const periods = [
+    { name: "Morning", startHour: 5, endHour: 12, tokens: 0, cost: 0, messages: 0 },
+    { name: "Daytime", startHour: 12, endHour: 17, tokens: 0, cost: 0, messages: 0 },
+    { name: "Evening", startHour: 17, endHour: 22, tokens: 0, cost: 0, messages: 0 },
+    { name: "Night", startHour: 22, endHour: 5, tokens: 0, cost: 0, messages: 0 },
+  ]
+  for (let h = 0; h < 24; h++) {
+    let period: typeof periods[number]
+    if (h >= 5 && h < 12) period = periods[0]
+    else if (h >= 12 && h < 17) period = periods[1]
+    else if (h >= 17 && h < 22) period = periods[2]
+    else period = periods[3]
+    period.tokens += hourBuckets[h].tokens
+    period.cost += hourBuckets[h].cost
+    period.messages += hourBuckets[h].messages
+  }
+
+  let peakHour = 0
+  let peakTokens = 0
+  for (let h = 0; h < 24; h++) {
+    if (hourBuckets[h].tokens > peakTokens) {
+      peakTokens = hourBuckets[h].tokens
+      peakHour = h
+    }
+  }
+
+  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => ({
+    day, ...dayBuckets[day],
+  }))
+
+  return { periods, weekdays, peakHour, peakHourTokens: peakTokens }
 }

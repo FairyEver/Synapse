@@ -1,18 +1,22 @@
+import { useState } from "react"
 import { StackedBarChart } from "./stacked-bar-chart"
 import { formatTokens, formatCost, formatPercent, formatCacheRatio } from "../lib/format"
 import { getProviderColor } from "../lib/colors"
-import type { GraphResult } from "../hooks/use-token-usage"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { GraphResult, HourlyRow } from "../hooks/use-token-usage"
 
 interface OverviewViewProps {
   graphResult: GraphResult
+  hourlyRows?: HourlyRow[]
 }
 
-export function OverviewView({ graphResult }: OverviewViewProps) {
+export function OverviewView({ graphResult, hourlyRows = [] }: OverviewViewProps) {
   const { summary, contributions } = graphResult
+  const [granularity, setGranularity] = useState<"daily" | "hourly">("daily")
 
   if (summary.totalTokens === 0) {
     return (
-      <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
         No usage data yet. Click Refresh to scan.
       </div>
     )
@@ -45,26 +49,39 @@ export function OverviewView({ graphResult }: OverviewViewProps) {
     { label: "Cache ratio", value: formatCacheRatio(totalCacheRead, totalInput, totalCacheWrite) },
   ]
 
+  const hourlyContributions = hourlyRows.length > 0 ? buildHourlyContributions(hourlyRows) : []
+  const chartContributions = granularity === "hourly" && hourlyContributions.length > 0
+    ? hourlyContributions
+    : contributions
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">{s.label}</div>
+            <div className="text-muted-foreground text-xs">{s.label}</div>
             <div className="text-lg font-medium">{s.value}</div>
           </div>
         ))}
       </div>
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Tokens per Day</h3>
+        <h3 className="text-sm font-medium">
+          Tokens per {granularity === "daily" ? "Day" : "Hour"}
+        </h3>
+        <Tabs value={granularity} onValueChange={(v) => setGranularity(v as "daily" | "hourly")}>
+          <TabsList className="h-7">
+            <TabsTrigger value="daily" className="text-xs">Daily</TabsTrigger>
+            <TabsTrigger value="hourly" className="text-xs">Hourly</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
-      <StackedBarChart contributions={contributions} />
+      <StackedBarChart contributions={chartContributions} />
       <div>
         <h3 className="mb-2 text-sm font-medium">Top Models</h3>
         <div className="space-y-1">
           {topModels.map(([modelId, info], i) => (
             <div key={modelId} className="flex items-center gap-2 text-sm">
-              <span className="w-5 text-right text-muted-foreground">{i + 1}</span>
+              <span className="text-muted-foreground w-5 text-right">{i + 1}</span>
               <span
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: getProviderColor(info.providerId) }}
@@ -72,11 +89,44 @@ export function OverviewView({ graphResult }: OverviewViewProps) {
               <span className="flex-1 truncate">{modelId}</span>
               <span className="text-muted-foreground">{formatPercent(info.tokens, summary.totalTokens)}</span>
               <span className="w-20 text-right">{formatTokens(info.tokens)}</span>
-              <span className="w-16 text-right text-muted-foreground">{formatCost(info.cost)}</span>
+              <span className="text-muted-foreground w-16 text-right">{formatCost(info.cost)}</span>
             </div>
           ))}
         </div>
       </div>
     </div>
   )
+}
+
+function buildHourlyContributions(rows: HourlyRow[]): GraphResult["contributions"] {
+  const byHour = new Map<string, GraphResult["contributions"][number]>()
+  for (const r of rows) {
+    const existing = byHour.get(r.hour)
+    const tokens = r.input + r.output + r.cacheRead + r.cacheWrite + r.reasoning
+    const client = {
+      client: r.client, modelId: r.model, providerId: r.provider,
+      tokens: { input: r.input, output: r.output, cacheRead: r.cacheRead, cacheWrite: r.cacheWrite, reasoning: r.reasoning },
+      cost: r.cost, messages: r.messages,
+    }
+    if (existing) {
+      existing.totals.tokens += tokens
+      existing.totals.cost += r.cost
+      existing.totals.messages += r.messages
+      existing.tokenBreakdown.input += r.input
+      existing.tokenBreakdown.output += r.output
+      existing.tokenBreakdown.cacheRead += r.cacheRead
+      existing.tokenBreakdown.cacheWrite += r.cacheWrite
+      existing.tokenBreakdown.reasoning += r.reasoning
+      existing.clients.push(client)
+    } else {
+      byHour.set(r.hour, {
+        date: r.hour,
+        totals: { tokens, cost: r.cost, messages: r.messages },
+        intensity: 0 as 0 | 1 | 2 | 3 | 4,
+        tokenBreakdown: { input: r.input, output: r.output, cacheRead: r.cacheRead, cacheWrite: r.cacheWrite, reasoning: r.reasoning },
+        clients: [client],
+      })
+    }
+  }
+  return [...byHour.values()].sort((a, b) => a.date.localeCompare(b.date))
 }

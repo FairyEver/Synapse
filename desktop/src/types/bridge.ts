@@ -531,12 +531,23 @@ export type SynapseBridge = {
         }[]
       }[]
     }>
-    getModelReport: (options?: { since?: string; until?: string }) => Promise<{
+    getModelReport: (options?: { since?: string; until?: string; groupBy?: string }) => Promise<{
       client: string; model: string; provider: string
       input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number
       messageCount: number; cost: number
     }[]>
     getDailyReport: (options?: { since?: string; until?: string }) => Promise<Record<string, unknown>[]>
+    getHourlyReport: (options?: { since?: string; until?: string }) => Promise<{
+      hour: string; client: string; model: string; provider: string
+      input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number
+      cost: number; messages: number; turns: number
+    }[]>
+    getHourlyProfile: (options?: { since?: string; until?: string }) => Promise<{
+      periods: { name: string; startHour: number; endHour: number; tokens: number; cost: number; messages: number }[]
+      weekdays: { day: string; tokens: number; cost: number }[]
+      peakHour: number
+      peakHourTokens: number
+    }>
     getAgentReport: (options?: { since?: string; until?: string }) => Promise<{
       client: string; models: string[]; providers: string[]
       input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number

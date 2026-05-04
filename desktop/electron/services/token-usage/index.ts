@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import { scanAllClients } from "./scanner"
-import { getFingerprint, upsertFingerprint, upsertDailyUsage, clearDailyUsageForClient, clearFingerprintsForClient, clearAllData, setScanMeta } from "./db"
-import { getGraphResult, getModelReport, getDailyReport, getAgentReport } from "./aggregator"
+import { getFingerprint, upsertFingerprint, upsertDailyUsage, upsertHourlyUsage, clearDailyUsageForClient, clearHourlyUsageForClient, clearFingerprintsForClient, clearAllData, setScanMeta } from "./db"
+import { getGraphResult, getModelReport, getDailyReport, getAgentReport, getHourlyReport, getHourlyProfile } from "./aggregator"
 import { claudeParser } from "./parsers/claude"
 import { codexParser } from "./parsers/codex"
 import { piParser, qwenParser, kimiParser, antigravityParser } from "./parsers/generic-agents"
@@ -81,12 +81,14 @@ export async function scanTokenUsage(): Promise<ScanProgress> {
 
         if (fp && (stat.size < fp.size || (stat.size === fp.size && stat.mtimeMs !== fp.mtimeMs))) {
           clearDailyUsageForClient(result.clientId)
+          clearHourlyUsageForClient(result.clientId)
           clearFingerprintsForClient(result.clientId)
         }
 
         const messages = await parser.parseFile(filePath)
         if (messages.length > 0) {
           upsertDailyUsage(messages)
+          upsertHourlyUsage(messages)
           progress.newMessages += messages.length
         }
 
@@ -120,4 +122,4 @@ export async function scanTokenUsage(): Promise<ScanProgress> {
   return progress
 }
 
-export { getGraphResult, getModelReport, getDailyReport, getAgentReport, clearAllData }
+export { getGraphResult, getModelReport, getDailyReport, getAgentReport, getHourlyReport, getHourlyProfile, clearAllData }

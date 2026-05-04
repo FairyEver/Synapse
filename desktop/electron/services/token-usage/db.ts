@@ -44,6 +44,23 @@ function initSchema(database: DatabaseSync): void {
     )
   `)
   database.exec(`
+    CREATE TABLE IF NOT EXISTS usage_hourly (
+      hour TEXT NOT NULL,
+      client TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+      message_count INTEGER NOT NULL DEFAULT 0,
+      turn_count INTEGER NOT NULL DEFAULT 0,
+      cost_usd REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (hour, client, model_id)
+    )
+  `)
+  database.exec(`
     CREATE TABLE IF NOT EXISTS scan_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -107,9 +124,49 @@ export function clearFingerprintsForClient(clientId: string): void {
   getDb().prepare("DELETE FROM file_fingerprints WHERE client_id = ?").run(clientId)
 }
 
+export function upsertHourlyUsage(messages: UnifiedMessage[]): void {
+  const database = getDb()
+  const stmt = database.prepare(
+    `INSERT INTO usage_hourly (hour, client, model_id, provider_id, input_tokens, output_tokens,
+       cache_read_tokens, cache_write_tokens, reasoning_tokens, message_count, turn_count, cost_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(hour, client, model_id) DO UPDATE SET
+       input_tokens = input_tokens + excluded.input_tokens,
+       output_tokens = output_tokens + excluded.output_tokens,
+       cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+       cache_write_tokens = cache_write_tokens + excluded.cache_write_tokens,
+       reasoning_tokens = reasoning_tokens + excluded.reasoning_tokens,
+       message_count = message_count + excluded.message_count,
+       turn_count = turn_count + excluded.turn_count,
+       cost_usd = cost_usd + excluded.cost_usd`,
+  )
+  for (const msg of messages) {
+    const hour = new Date(msg.timestamp).toISOString().slice(0, 13).replace("T", " ")
+    stmt.run(hour, msg.client, msg.modelId, msg.providerId,
+      msg.tokens.input, msg.tokens.output, msg.tokens.cacheRead, msg.tokens.cacheWrite,
+      msg.tokens.reasoning, msg.messageCount, msg.isTurnStart ? 1 : 0, msg.cost)
+  }
+}
+
+export function clearHourlyUsageForClient(clientId: string): void {
+  getDb().prepare("DELETE FROM usage_hourly WHERE client = ?").run(clientId)
+}
+
+export function queryHourlyRowsFiltered(since?: string, until?: string): Record<string, unknown>[] {
+  let query = "SELECT * FROM usage_hourly"
+  const conditions: string[] = []
+  const params: string[] = []
+  if (since) { conditions.push("hour >= ?"); params.push(since) }
+  if (until) { conditions.push("hour <= ?"); params.push(until + " 23") }
+  if (conditions.length > 0) query += " WHERE " + conditions.join(" AND ")
+  query += " ORDER BY hour ASC"
+  return getDb().prepare(query).all(...params) as Record<string, unknown>[]
+}
+
 export function clearAllData(): void {
   const database = getDb()
   database.exec("DELETE FROM usage_daily")
+  database.exec("DELETE FROM usage_hourly")
   database.exec("DELETE FROM file_fingerprints")
   database.exec("DELETE FROM scan_meta")
 }

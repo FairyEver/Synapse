@@ -12,7 +12,7 @@ export function ScanButton({ scanning, onScan, lastScanInfo, error }: ScanButton
   return (
     <div className="flex items-center gap-2">
       {error && !scanning ? (
-        <span className="text-xs text-destructive">Scan failed</span>
+        <span className="text-xs text-destructive" title={error.message}>Scan failed: {error.message}</span>
       ) : lastScanInfo && !scanning ? (
         <span className="text-xs text-muted-foreground">
           {lastScanInfo.newMessages > 0

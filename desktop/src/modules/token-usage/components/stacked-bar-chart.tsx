@@ -1,4 +1,5 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+import { useState, useCallback } from "react"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { formatTokens } from "../lib/format"
 import { getProviderColor } from "../lib/colors"
 import type { GraphResult } from "../hooks/use-token-usage"
@@ -10,6 +11,8 @@ interface StackedBarChartProps {
 }
 
 export function StackedBarChart({ contributions }: StackedBarChartProps) {
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
+
   const modelTotals = new Map<string, { total: number; providerId: string }>()
   for (const c of contributions) {
     for (const cl of c.clients) {
@@ -41,14 +44,33 @@ export function StackedBarChart({ contributions }: StackedBarChartProps) {
 
   const barKeys = [...topModels, ...(sorted.length > 8 ? ["other"] : [])]
 
+  const handleLegendClick = useCallback((dataKey: string) => {
+    setHiddenKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(dataKey)) next.delete(dataKey)
+      else next.add(dataKey)
+      return next
+    })
+  }, [])
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={chartData}>
         <XAxis dataKey="date" tick={{ fontSize: 11 }} />
         <YAxis tickFormatter={formatTokens} tick={{ fontSize: 11 }} />
         <Tooltip formatter={(value) => formatTokens(Number(value))} />
+        <Legend
+          onClick={(e) => handleLegendClick(String(e.dataKey))}
+          wrapperStyle={{ cursor: "pointer" }}
+        />
         {barKeys.map((key) => (
-          <Bar key={key} dataKey={key} stackId="tokens" fill={modelColors.get(key) || "#888"} />
+          <Bar
+            key={key}
+            dataKey={key}
+            stackId="tokens"
+            fill={modelColors.get(key) || "#888"}
+            hide={hiddenKeys.has(key)}
+          />
         ))}
       </BarChart>
     </ResponsiveContainer>

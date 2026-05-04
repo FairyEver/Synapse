@@ -163,6 +163,8 @@ export const IPC_CHANNELS = {
     "getGraphResult": "synapse:token-usage:graph-result",
     "getModelReport": "synapse:token-usage:model-report",
     "getDailyReport": "synapse:token-usage:daily-report",
+    "getHourlyReport": "synapse:token-usage:hourly-report",
+    "getHourlyProfile": "synapse:token-usage:hourly-profile",
     "getAgentReport": "synapse:token-usage:agent-report",
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",

@@ -58,6 +58,15 @@ const MODULE_SOURCES = [
   { id: "license", importPath: "../electron/modules/license/ipc.ts" },
 ]
 
+/**
+ * Standalone channel maps that don't use the IpcModule pattern.
+ * Each entry maps a module id to a source file exporting a `const` object
+ * whose values are channel strings.
+ */
+const EXTRA_CHANNEL_SOURCES = [
+  { id: "token-usage", importPath: "../electron/token-usage/channels.ts", exportName: "TOKEN_USAGE_CHANNELS" },
+]
+
 const OUTPUT_PATH = path.resolve(
   __dirname,
   "..",
@@ -165,6 +174,44 @@ function getPropertyName(name, sourceFile) {
   return name.getText(sourceFile)
 }
 
+async function loadExtraChannels(entry) {
+  const resolved = path.resolve(__dirname, entry.importPath)
+  const source = await readFile(resolved, "utf8")
+  const sourceFile = ts.createSourceFile(resolved, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+
+  let target = null
+  function visit(node) {
+    if (ts.isVariableStatement(node)) {
+      for (const decl of node.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === entry.exportName && decl.initializer) {
+          let init = decl.initializer
+          while (ts.isAsExpression(init) || ts.isTypeAssertionExpression(init) || ts.isSatisfiesExpression(init)) {
+            init = init.expression
+          }
+          if (ts.isObjectLiteralExpression(init)) {
+            target = init
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+
+  if (!target) {
+    throw new Error(`No export "${entry.exportName}" found in ${entry.importPath}`)
+  }
+
+  const channels = {}
+  for (const prop of target.properties) {
+    if (ts.isPropertyAssignment(prop) && ts.isStringLiteral(prop.initializer)) {
+      const name = getPropertyName(prop.name, sourceFile)
+      channels[name] = prop.initializer.text
+    }
+  }
+  return { id: entry.id, channels }
+}
+
 async function generate() {
   const descriptors = []
   for (const entry of MODULE_SOURCES) {
@@ -175,6 +222,11 @@ async function generate() {
       )
     }
     descriptors.push(descriptor)
+  }
+
+  const extras = []
+  for (const entry of EXTRA_CHANNEL_SOURCES) {
+    extras.push(await loadExtraChannels(entry))
   }
 
   const out = []
@@ -200,6 +252,13 @@ async function generate() {
     }
     for (const [eventName, event] of Object.entries(descriptor.events)) {
       out.push(`    ${quote(eventName)}: ${quote(event.channel)},`)
+    }
+    out.push("  },")
+  }
+  for (const extra of extras) {
+    out.push(`  ${quote(extra.id)}: {`)
+    for (const [name, channel] of Object.entries(extra.channels)) {
+      out.push(`    ${quote(name)}: ${quote(channel)},`)
     }
     out.push("  },")
   }

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react"
-import { useTokenUsageScan, useGraphResult, useModelReport, useDailyReport, useAgentReport } from "./hooks/use-token-usage"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { useTokenUsageScan, useGraphResult, useModelReport, useDailyReport, useAgentReport, useHourlyReport, useHourlyProfile } from "./hooks/use-token-usage"
 import type { ScanResult } from "./hooks/use-token-usage"
 import { ScanButton } from "./components/scan-button"
 import { OverviewView } from "./components/overview-view"
@@ -7,30 +7,49 @@ import { ModelsView } from "./components/models-view"
 import { DailyView } from "./components/daily-view"
 import { AgentsView } from "./components/agents-view"
 import { StatsView } from "./components/stats-view"
+import { HourlyView } from "./components/hourly-view"
 import { DateRangeFilter, dateRangeToOptions } from "./components/date-range-filter"
 import type { RangePreset } from "./components/date-range-filter"
+import { SourcePicker } from "./components/source-picker"
+import { GroupByPicker } from "./components/group-by-picker"
+import type { GroupByMode } from "./components/group-by-picker"
+import { ExportButton } from "./components/export-button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-type SubTab = "overview" | "models" | "daily" | "agents" | "stats"
+type SubTab = "overview" | "models" | "daily" | "hourly" | "agents" | "stats"
 
 export function TokenUsageModule() {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("overview")
   const [range, setRange] = useState<RangePreset>("all")
+  const [groupBy, setGroupBy] = useState<GroupByMode>("clientModel")
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const { scan, scanning, error: scanError } = useTokenUsageScan()
   const { data: graphResult, refresh: refreshGraph } = useGraphResult()
   const { data: models, refresh: refreshModels } = useModelReport()
   const { data: dailyRows, refresh: refreshDaily } = useDailyReport()
   const { data: agentRows, refresh: refreshAgents } = useAgentReport()
+  const { data: hourlyRows, refresh: refreshHourly } = useHourlyReport()
+  const { data: hourlyProfile, refresh: refreshHourlyProfile } = useHourlyProfile()
   const [lastScanInfo, setLastScanInfo] = useState<Pick<ScanResult, "elapsedMs" | "newMessages"> | null>(null)
   const [hasScanned, setHasScanned] = useState(false)
 
+  const allClients = useMemo(() => graphResult?.summary.clients ?? [], [graphResult])
+
+  useEffect(() => {
+    if (allClients.length > 0 && selectedSources.size === 0) {
+      setSelectedSources(new Set(allClients))
+    }
+  }, [allClients, selectedSources.size])
+
   const refreshAll = useCallback((options?: { since?: string; until?: string }) => {
     void refreshGraph(options)
-    void refreshModels(options)
+    void refreshModels({ ...options, groupBy })
     void refreshDaily(options)
     void refreshAgents(options)
-  }, [refreshGraph, refreshModels, refreshDaily, refreshAgents])
+    void refreshHourly(options)
+    void refreshHourlyProfile(options)
+  }, [refreshGraph, refreshModels, refreshDaily, refreshAgents, refreshHourly, refreshHourlyProfile, groupBy])
 
   const handleScan = useCallback(async () => {
     const result = await scan()
@@ -45,6 +64,11 @@ export function TokenUsageModule() {
     refreshAll(dateRangeToOptions(preset))
   }, [refreshAll])
 
+  const handleGroupByChange = useCallback((mode: GroupByMode) => {
+    setGroupBy(mode)
+    void refreshModels({ ...dateRangeToOptions(range), groupBy: mode })
+  }, [refreshModels, range])
+
   useEffect(() => {
     if (!hasScanned) {
       setHasScanned(true)
@@ -52,35 +76,59 @@ export function TokenUsageModule() {
     }
   }, [hasScanned, handleScan])
 
+  const sourceFilter = useCallback((client: string) => selectedSources.has(client), [selectedSources])
+  const isFiltering = selectedSources.size > 0 && selectedSources.size < allClients.length
+
+  const filteredModels = useMemo(() =>
+    isFiltering ? models.filter((m) => sourceFilter(m.client)) : models,
+  [models, isFiltering, sourceFilter])
+
+  const filteredHourlyRows = useMemo(() =>
+    isFiltering ? hourlyRows.filter((r) => sourceFilter(r.client)) : hourlyRows,
+  [hourlyRows, isFiltering, sourceFilter])
+
+  const filteredAgentRows = useMemo(() =>
+    isFiltering ? agentRows.filter((a) => sourceFilter(a.client)) : agentRows,
+  [agentRows, isFiltering, sourceFilter])
+
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4 overflow-hidden p-4">
       <div className="flex items-center justify-between">
         <Tabs value={activeSubTab} onValueChange={(v) => setActiveSubTab(v as SubTab)}>
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="models">Models</TabsTrigger>
             <TabsTrigger value="daily">Daily</TabsTrigger>
+            <TabsTrigger value="hourly">Hourly</TabsTrigger>
             <TabsTrigger value="agents">Agents</TabsTrigger>
             <TabsTrigger value="stats">Stats</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="flex items-center gap-2">
+          {activeSubTab === "models" && (
+            <GroupByPicker value={groupBy} onChange={handleGroupByChange} />
+          )}
+          <SourcePicker clients={allClients} selected={selectedSources} onChange={setSelectedSources} />
           <DateRangeFilter value={range} onChange={handleRangeChange} />
+          <ExportButton models={filteredModels} agents={filteredAgentRows} dailyRows={dailyRows} graphResult={graphResult} />
           <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
         </div>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         {activeSubTab === "overview" && graphResult ? (
-          <OverviewView graphResult={graphResult} />
+          <OverviewView graphResult={graphResult} hourlyRows={filteredHourlyRows} />
         ) : null}
         {activeSubTab === "models" ? (
-          <ModelsView models={models} />
+          <ModelsView models={filteredModels} />
         ) : null}
         {activeSubTab === "daily" ? (
           <DailyView rows={dailyRows as { date: string; turns: number; messages: number; input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number; cost: number }[]} />
         ) : null}
+        {activeSubTab === "hourly" ? (
+          <HourlyView rows={filteredHourlyRows} profile={hourlyProfile} />
+        ) : null}
         {activeSubTab === "agents" ? (
-          <AgentsView agents={agentRows} />
+          <AgentsView agents={filteredAgentRows} />
         ) : null}
         {activeSubTab === "stats" && graphResult ? (
           <StatsView graphResult={graphResult} />

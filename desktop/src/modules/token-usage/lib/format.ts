@@ -14,9 +14,9 @@ export function formatCost(n: number): string {
 }
 
 export function formatCacheRatio(cacheRead: number, input: number, cacheWrite: number): string {
-  const denominator = input + cacheWrite
-  if (denominator === 0) return "0.0x"
-  return `${(cacheRead / denominator).toFixed(1)}x`
+  const paid = input + cacheWrite
+  if (paid === 0) return cacheRead > 0 ? "∞" : "—"
+  return `${(cacheRead / paid).toFixed(1)}x`
 }
 
 export function formatPercent(value: number, total: number): string {

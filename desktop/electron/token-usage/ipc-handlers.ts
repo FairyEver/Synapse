@@ -1,6 +1,7 @@
 import { TOKEN_USAGE_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
-import { scanTokenUsage, getGraphResult, getModelReport, getDailyReport, getAgentReport, clearAllData } from "../services/token-usage"
+import { scanTokenUsage, getGraphResult, getModelReport, getDailyReport, getAgentReport, getHourlyReport, getHourlyProfile, clearAllData } from "../services/token-usage"
+import type { GroupByMode } from "../services/token-usage/aggregator"
 import { scanAllClients } from "../services/token-usage/scanner"
 import { CLIENT_DEFS } from "../services/token-usage/clients"
 
@@ -17,8 +18,8 @@ export function registerTokenUsageHandlers(): void {
     return getGraphResult(options)
   })
 
-  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getModelReport, async (_event, options?: { since?: string; until?: string }) => {
-    return getModelReport(options)
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getModelReport, async (_event, options?: { since?: string; until?: string; groupBy?: string }) => {
+    return getModelReport(options ? { ...options, groupBy: options.groupBy as GroupByMode | undefined } : undefined)
   })
 
   handleValidatedIpc(TOKEN_USAGE_CHANNELS.getDailyReport, async (_event, options?: { since?: string; until?: string }) => {
@@ -27,6 +28,14 @@ export function registerTokenUsageHandlers(): void {
 
   handleValidatedIpc(TOKEN_USAGE_CHANNELS.getAgentReport, async (_event, options?: { since?: string; until?: string }) => {
     return getAgentReport(options)
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getHourlyReport, async (_event, options?: { since?: string; until?: string }) => {
+    return getHourlyReport(options)
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getHourlyProfile, async (_event, options?: { since?: string; until?: string }) => {
+    return getHourlyProfile(options)
   })
 
   handleValidatedIpc(TOKEN_USAGE_CHANNELS.getDetectedAgents, async () => {

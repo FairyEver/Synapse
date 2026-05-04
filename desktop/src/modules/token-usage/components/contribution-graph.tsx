@@ -9,6 +9,8 @@ interface ContributionDay {
 
 interface ContributionGraphProps {
   contributions: ContributionDay[]
+  selectedDate?: string | null
+  onDateClick?: (date: string | null) => void
 }
 
 const INTENSITY_CLASSES = [
@@ -19,7 +21,7 @@ const INTENSITY_CLASSES = [
   "bg-emerald-700 dark:bg-emerald-300",
 ]
 
-export function ContributionGraph({ contributions }: ContributionGraphProps) {
+export function ContributionGraph({ contributions, selectedDate, onDateClick }: ContributionGraphProps) {
   const today = new Date()
   const grid: (ContributionDay | null)[][] = []
   const contribMap = new Map(contributions.map((c) => [c.date, c]))
@@ -49,11 +51,13 @@ export function ContributionGraph({ contributions }: ContributionGraphProps) {
           <div key={wi} className="flex flex-col gap-0.5">
             {week.map((day, di) => {
               if (!day) return <div key={di} className="h-2.5 w-2.5" />
+              const isSelected = selectedDate === day.date
               return (
                 <Tooltip key={di}>
                   <TooltipTrigger asChild>
                     <div
-                      className={`h-2.5 w-2.5 rounded-[2px] ${INTENSITY_CLASSES[day.intensity]}`}
+                      className={`h-2.5 w-2.5 rounded-[2px] ${INTENSITY_CLASSES[day.intensity]} ${onDateClick ? "cursor-pointer" : ""} ${isSelected ? "ring-primary ring-1" : ""}`}
+                      onClick={() => onDateClick?.(isSelected ? null : day.date)}
                     />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">

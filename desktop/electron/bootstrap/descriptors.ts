@@ -791,7 +791,7 @@ export const coreTokenUsageDescriptor: ServiceDescriptor<{ initialized: true }> 
   criticality: "degraded",
   dependsOn: [],
   async create() {
-    const { registerTokenUsageHandlers } = await import("../token-usage/ipc-handlers")
+    const { registerTokenUsageHandlers } = await import("../token-usage/ipc-handlers.js")
     registerTokenUsageHandlers()
     return { initialized: true }
   },

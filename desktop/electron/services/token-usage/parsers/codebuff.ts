@@ -2,7 +2,9 @@ import fs from "node:fs"
 import type { AgentParser, UnifiedMessage } from "./types"
 import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
 
-function extractUsageFromObj(obj: Record<string, unknown>): Record<string, number> {
+interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number }
+
+function extractUsageFromObj(obj: Record<string, unknown>): TokenUsage {
   return {
     input: extractI64(obj.inputTokens ?? obj.input_tokens ?? obj.promptTokens ?? obj.prompt_tokens),
     output: extractI64(obj.outputTokens ?? obj.output_tokens ?? obj.completionTokens ?? obj.completion_tokens),
@@ -12,7 +14,7 @@ function extractUsageFromObj(obj: Record<string, unknown>): Record<string, numbe
   }
 }
 
-function mergeUsage(base: Record<string, number>, fallback: Record<string, number>): Record<string, number> {
+function mergeUsage(base: TokenUsage, fallback: TokenUsage): TokenUsage {
   return {
     input: base.input || fallback.input,
     output: base.output || fallback.output,
