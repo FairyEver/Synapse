@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client"
 import { randomBytes } from "node:crypto"
 import { z } from "zod"
 import type { PaginatedResponse, PaginationQuery } from "../common/pagination"
-import { toPrismaArgs } from "../common/pagination"
+import { parsePagination, toPrismaArgs } from "../common/pagination"
 import { ActivationRiskService } from "../licenses/activation-risk.service"
 import { hashActivationCode, normalizeActivationCode } from "../licenses/hash"
 import { PrismaService } from "../prisma/prisma.service"
@@ -298,6 +298,55 @@ export class AdminService {
         leases,
       },
     }
+  }
+
+  async listLicenses(options: {
+    readonly status?: string
+    readonly accountId?: string
+    readonly query?: Record<string, unknown>
+  }): Promise<PaginatedResponse<unknown>> {
+    const pagination = parsePagination(options.query ?? {})
+    const where: Record<string, unknown> = {}
+    if (options.status) where.status = options.status
+    if (options.accountId) where.accountId = options.accountId
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.license.findMany({
+        where,
+        ...toPrismaArgs(pagination),
+        include: {
+          account: { select: { id: true, email: true } },
+          devices: true,
+          activationCode: { select: { id: true, codeHint: true } },
+        },
+      }),
+      this.prisma.license.count({ where }),
+    ])
+
+    return { data, total, page: pagination.page, pageSize: pagination.pageSize }
+  }
+
+  getLicense(id: string) {
+    return this.prisma.license.findUniqueOrThrow({
+      where: { id },
+      include: {
+        account: { select: { id: true, email: true } },
+        devices: true,
+        leases: { orderBy: { createdAt: "desc" }, take: 20 },
+        activationCode: { select: { id: true, codeHint: true } },
+      },
+    })
+  }
+
+  async updateAccountStatus(id: string, body: unknown) {
+    const result = z.object({ status: z.enum(["active", "disabled"]) }).safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("账号状态无效。")
+    }
+    return this.prisma.account.update({
+      where: { id },
+      data: { status: result.data.status },
+    })
   }
 
   async updateLicense(id: string, body: unknown) {

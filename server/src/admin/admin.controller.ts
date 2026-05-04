@@ -80,6 +80,25 @@ export class AdminController {
     return this.admin.getSystemOverview()
   }
 
+  @Get("/licenses")
+  listLicenses(@Query() query: Record<string, unknown>) {
+    return this.admin.listLicenses({
+      status: typeof query.status === "string" ? query.status : undefined,
+      accountId: typeof query.accountId === "string" ? query.accountId : undefined,
+      query,
+    })
+  }
+
+  @Get("/licenses/:id")
+  getLicense(@Param("id") id: string) {
+    return this.admin.getLicense(id)
+  }
+
+  @Patch("/accounts/:id/status")
+  updateAccountStatus(@Param("id") id: string, @Body() body: unknown) {
+    return this.admin.updateAccountStatus(id, body)
+  }
+
   @Patch("/licenses/:id")
   updateLicense(@Param("id") id: string, @Body() body: unknown) {
     return this.admin.updateLicense(id, body)
