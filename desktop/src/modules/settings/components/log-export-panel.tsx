@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseLogFileInfo } from "@/types/log"
 import { Badge } from "@/components/ui/badge"
 import type { SynapseOpsDiagnostics } from "@/types/bridge"
@@ -71,7 +71,7 @@ function LogExportPanel() {
   const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false)
 
   useEffect(() => {
-    requireSynapseBridge().log.listFiles().then((files) => {
+    getSynapseBridge()?.log.listFiles().then((files) => {
       setTotalLogSize(files.reduce((sum, f) => sum + f.sizeBytes, 0))
     }).catch(() => undefined)
     void loadDiagnostics()

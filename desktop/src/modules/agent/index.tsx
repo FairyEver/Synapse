@@ -20,7 +20,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
@@ -135,7 +135,7 @@ function AgentModule() {
   const openReference = (reference: string) => {
     const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId) return
-    void requireSynapseBridge().agent.openReference({ projectId, reference })
+    void getSynapseBridge()?.agent.openReference({ projectId, reference })
   }
   const sidebar = (
     <AgentSessionSidebar

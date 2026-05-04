@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import {
   appendAgentTimelineEvent,
   localUserTimelineItem,
@@ -508,7 +508,8 @@ function useAgentChat(
 
   useEffect(() => {
     if (projectIdsRef.current.length === 0) return undefined
-    const bridge = requireSynapseBridge()
+    const bridge = getSynapseBridge()
+    if (!bridge) return undefined
     return bridge.agent.onEvent((domainEvent) => {
       if (!projectIdsRef.current.includes(domainEvent.payload.projectId)) {
         logger.info("Agent event ignored for untracked project.", {

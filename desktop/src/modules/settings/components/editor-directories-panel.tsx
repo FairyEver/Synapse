@@ -6,7 +6,7 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { EditorIcon } from "@/components/editor-icon"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseEditorGlobalDirectory } from "@/types/editor"
 
 const logger = createRendererLogger("settings.editors")
@@ -69,8 +69,9 @@ function useEditorDirectories() {
   const { promise } = useAppNotifications()
 
   const loadDirectories = useCallback(() => {
-    requireSynapseBridge()
-      .editor.getGlobalDirectories()
+    const bridge = getSynapseBridge()
+    if (!bridge) return
+    bridge.editor.getGlobalDirectories()
       .then(setDirectories)
       .catch((error) => {
         logger.error("Failed to load editor global directories.", error)
