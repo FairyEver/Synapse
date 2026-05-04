@@ -16,6 +16,7 @@ describe("loadEnv", () => {
     })
 
     expect(env.port).toBe(3000)
+    expect(env.databasePoolSize).toBe(10)
     expect(env.licenseLeaseDays).toBe(7)
     expect(env.adminEmail).toBe("admin@d2.com")
     expect(env.licensePrivateKey).toContain("\n")

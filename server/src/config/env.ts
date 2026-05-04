@@ -19,6 +19,7 @@ const envSchema = z.object({
   ACTIVATION_RISK_MAX_DISTINCT_EMAILS_PER_CODE: z.coerce.number().int().positive().default(4),
   ACTIVATION_RISK_MAX_DISTINCT_DEVICES_PER_CODE: z.coerce.number().int().positive().default(4),
   ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE: z.coerce.number().int().positive().default(3),
+  DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   PORT: z.coerce.number().int().positive().default(3000),
 })
 
@@ -41,6 +42,7 @@ export interface ServerEnv {
   readonly activationRiskMaxDistinctEmailsPerCode: number
   readonly activationRiskMaxDistinctDevicesPerCode: number
   readonly activationRiskMaxBoundConflictsPerCode: number
+  readonly databasePoolSize: number
   readonly port: number
 }
 
@@ -70,6 +72,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     activationRiskMaxDistinctEmailsPerCode: result.data.ACTIVATION_RISK_MAX_DISTINCT_EMAILS_PER_CODE,
     activationRiskMaxDistinctDevicesPerCode: result.data.ACTIVATION_RISK_MAX_DISTINCT_DEVICES_PER_CODE,
     activationRiskMaxBoundConflictsPerCode: result.data.ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE,
+    databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,
   }
 }
