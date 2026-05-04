@@ -366,6 +366,58 @@ export class AdminService {
     const request = result.data
     return this.prisma.device.update({ where: { id }, data: { status: request.status } })
   }
+
+  async batchUpdateActivationCodes(input: {
+    ids: string[]
+    action: "archive" | "updateStatus"
+    status?: string
+  }) {
+    if (input.ids.length > 50) {
+      throw new BadRequestException("批量操作上限 50 条。")
+    }
+
+    if (input.action === "archive") {
+      await this.prisma.activationCode.updateMany({
+        where: { id: { in: input.ids } },
+        data: { archivedAt: new Date() },
+      })
+      return { updated: input.ids.length }
+    }
+
+    if (input.action === "updateStatus" && input.status) {
+      const result = managedStatusSchema.safeParse(input.status)
+      if (!result.success) {
+        throw new BadRequestException("激活码状态无效。")
+      }
+      await this.prisma.activationCode.updateMany({
+        where: { id: { in: input.ids } },
+        data: { status: result.data },
+      })
+      return { updated: input.ids.length }
+    }
+
+    throw new BadRequestException("批量操作参数无效。")
+  }
+
+  async batchUpdateDevices(input: {
+    ids: string[]
+    action: "updateStatus"
+    status?: string
+  }) {
+    if (input.ids.length > 50) {
+      throw new BadRequestException("批量操作上限 50 条。")
+    }
+
+    const result = deviceStatusSchema.safeParse(input.status)
+    if (!result.success) {
+      throw new BadRequestException("设备状态无效。")
+    }
+    await this.prisma.device.updateMany({
+      where: { id: { in: input.ids } },
+      data: { status: result.data },
+    })
+    return { updated: input.ids.length }
+  }
 }
 
 function randomCodeSegment(length: number): string {

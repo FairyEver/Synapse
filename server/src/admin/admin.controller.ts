@@ -1,6 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common"
+import type { Response } from "express"
 import { z } from "zod"
 import { parsePagination } from "../common/pagination"
+import { toCsv } from "../common/csv-export"
 import { AuditLogService } from "../common/audit-log.service"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { AdminService } from "./admin.service"
@@ -16,6 +18,16 @@ const riskLockSchema = z.object({
   note: z.string().trim().max(500).nullable().optional(),
 }).strict()
 type RiskLockRequest = z.infer<typeof riskLockSchema>
+const batchSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(50),
+  action: z.enum(["archive", "updateStatus"]),
+  status: z.string().optional(),
+}).strict()
+const deviceBatchSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(50),
+  action: z.literal("updateStatus"),
+  status: z.string(),
+}).strict()
 
 @UseGuards(AdminAuthGuard)
 @Controller("/admin/api")
@@ -121,6 +133,60 @@ export class AdminController {
   @Patch("/devices/:id")
   updateDevice(@Param("id") id: string, @Body() body: unknown) {
     return this.admin.updateDevice(id, body)
+  }
+
+  @Post("/activation-codes/batch")
+  batchUpdateActivationCodes(@Body() body: unknown) {
+    const result = batchSchema.safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("批量操作请求无效。")
+    }
+    return this.admin.batchUpdateActivationCodes(result.data)
+  }
+
+  @Post("/devices/batch")
+  batchUpdateDevices(@Body() body: unknown) {
+    const result = deviceBatchSchema.safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("批量操作请求无效。")
+    }
+    return this.admin.batchUpdateDevices(result.data)
+  }
+
+  @Get("/activation-codes/export")
+  async exportActivationCodes(
+    @Query() query: Record<string, unknown>,
+    @Res() response: Response,
+  ) {
+    const result = await this.admin.listActivationCodes(
+      { includeArchived: query.includeArchived === "true" },
+      parsePagination({ ...query, pageSize: "10000" }),
+    )
+    const csv = toCsv(result.data as Record<string, unknown>[], [
+      "id", "codeHint", "status", "maxDevices", "expiresAt", "createdAt",
+    ])
+    response.setHeader("Content-Type", "text/csv; charset=utf-8")
+    response.setHeader("Content-Disposition", "attachment; filename=activation-codes.csv")
+    response.send(csv)
+  }
+
+  @Get("/audit-logs/export")
+  async exportAuditLogs(
+    @Query() query: Record<string, unknown>,
+    @Res() response: Response,
+  ) {
+    const result = await this.auditLog.list({
+      action: typeof query.action === "string" ? query.action : undefined,
+      from: typeof query.from === "string" ? query.from : undefined,
+      to: typeof query.to === "string" ? query.to : undefined,
+      query: { ...query, pageSize: "10000" },
+    })
+    const csv = toCsv(result.data as Record<string, unknown>[], [
+      "id", "adminEmail", "action", "targetType", "targetId", "ipAddress", "createdAt",
+    ])
+    response.setHeader("Content-Type", "text/csv; charset=utf-8")
+    response.setHeader("Content-Disposition", "attachment; filename=audit-logs.csv")
+    response.send(csv)
   }
 }
 
