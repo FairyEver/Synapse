@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react"
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react"
 import {
   getRepositoryManager,
   resetRepositoryManager,
@@ -6,6 +6,8 @@ import {
   type RepositoryOperationState,
 } from "@/app-shell/repository-manager"
 import { createRendererLogger } from "@/app-shell/logging"
+import { Button } from "@/components/ui/button"
+import { LoaderCircle } from "lucide-react"
 
 const logger = createRendererLogger("app.repository")
 
@@ -14,38 +16,53 @@ const RepositoryManagerContext = createContext<RepositoryManager | null>(null)
 function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const [manager] = useState(() => getRepositoryManager())
   const [isReady, setIsReady] = useState(false)
+  const [initError, setInitError] = useState<string | null>(null)
+  const [isRetrying, setIsRetrying] = useState(false)
 
-  useEffect(() => {
-    let isDisposed = false
-
-    logger.info("Initializing RepositoryManager.")
+  const initialize = useCallback(() => {
+    setInitError(null)
+    setIsRetrying(true)
 
     void manager
       .initialize()
       .then(() => {
-        if (isDisposed) {
-          return
-        }
-
         setIsReady(true)
         logger.info("RepositoryManager initialized.")
       })
       .catch((error) => {
-        if (isDisposed) {
-          return
-        }
-
         logger.error("Failed to initialize RepositoryManager.", error)
+        setInitError(error instanceof Error ? error.message : "初始化失败。")
       })
-
-    return () => {
-      isDisposed = true
-      resetRepositoryManager()
-    }
+      .finally(() => {
+        setIsRetrying(false)
+      })
   }, [manager])
 
+  useEffect(() => {
+    logger.info("Initializing RepositoryManager.")
+    initialize()
+
+    return () => {
+      resetRepositoryManager()
+    }
+  }, [initialize])
+
+  if (initError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
+        <div className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-card p-6">
+          <h1 className="text-lg font-medium text-foreground">无法初始化</h1>
+          <p className="text-sm text-muted-foreground">{initError}</p>
+          <Button variant="outline" disabled={isRetrying} onClick={initialize}>
+            {isRetrying ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : null}
+            重试
+          </Button>
+        </div>
+      </main>
+    )
+  }
+
   if (!isReady) {
-    // 可以在这里显示 loading 状态，或者让子组件处理未就绪状态
     return (
       <RepositoryManagerContext.Provider value={manager}>
         {children}
