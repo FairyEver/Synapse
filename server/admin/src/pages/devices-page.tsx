@@ -6,6 +6,8 @@ import {
   TableActionCell,
   TableActionHead,
 } from "@/components/table-actions"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table,
   TableBody,
@@ -44,6 +46,8 @@ export function DevicesPage() {
   const [statusFilter, setStatusFilter] = React.useState<DeviceStatusFilter>("all")
   const [versionSearch, setVersionSearch] = React.useState("")
   const [nameSearch, setNameSearch] = React.useState("")
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const [batchBusy, setBatchBusy] = React.useState(false)
   const devices = data ?? []
   const filteredDevices = React.useMemo(
     () => devices.filter((device) => (
@@ -59,6 +63,35 @@ export function DevicesPage() {
   async function updateDevice(id: string, status: DeviceStatus) {
     await adminApi.updateDevice(id, status)
     reload()
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllFiltered() {
+    if (selectedIds.size === filteredDevices.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredDevices.map((d) => d.id)))
+    }
+  }
+
+  async function batchUpdateDeviceStatus(status: DeviceStatus) {
+    if (selectedIds.size === 0) return
+    setBatchBusy(true)
+    try {
+      await adminApi.batchUpdateDevices({ ids: [...selectedIds], action: "updateStatus", status })
+      setSelectedIds(new Set())
+      reload()
+    } finally {
+      setBatchBusy(false)
+    }
   }
 
   const hasDevices = devices.length > 0
@@ -127,9 +160,31 @@ export function DevicesPage() {
         <PageState>无匹配设备</PageState>
       ) : null}
       {filteredDevices.length > 0 ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
+        <>
+          {selectedIds.size > 0 ? (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+              <span>已选 {selectedIds.size} 项</span>
+              <Button variant="outline" size="sm" disabled={batchBusy} onClick={() => batchUpdateDeviceStatus("active")}>
+                批量启用
+              </Button>
+              <Button variant="outline" size="sm" disabled={batchBusy} onClick={() => batchUpdateDeviceStatus("revoked")}>
+                批量撤销
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                取消
+              </Button>
+            </div>
+          ) : null}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={filteredDevices.length > 0 && selectedIds.size === filteredDevices.length}
+                    onCheckedChange={toggleAllFiltered}
+                    aria-label="全选"
+                  />
+                </TableHead>
               <TableHead>名称</TableHead>
               <TableHead>账号</TableHead>
               <TableHead>激活码</TableHead>
@@ -143,6 +198,13 @@ export function DevicesPage() {
           <TableBody>
             {filteredDevices.map((device) => (
               <TableRow key={device.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selectedIds.has(device.id)}
+                    onCheckedChange={() => toggleSelected(device.id)}
+                    aria-label={`选择 ${device.name}`}
+                  />
+                </TableCell>
                 <TableCell>{device.name}</TableCell>
                 <TableCell>{device.license.account.email}</TableCell>
                 <TableCell>{device.license.activationCode.codeHint ?? device.license.id}</TableCell>
@@ -162,6 +224,7 @@ export function DevicesPage() {
             ))}
           </TableBody>
         </Table>
+        </>
       ) : null}
     </div>
   )

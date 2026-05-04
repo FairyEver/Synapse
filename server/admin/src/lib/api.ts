@@ -124,6 +124,24 @@ export interface SystemOverview {
   }
 }
 
+export interface PaginatedResponse<T> {
+  readonly data: T[]
+  readonly total: number
+  readonly page: number
+  readonly pageSize: number
+}
+
+export interface AuditLog {
+  readonly id: string
+  readonly adminEmail: string
+  readonly action: string
+  readonly targetType: string
+  readonly targetId: string
+  readonly detail: unknown
+  readonly ipAddress: string
+  readonly createdAt: string
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -224,4 +242,56 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+  batchUpdateActivationCodes: (input: {
+    ids: string[]
+    action: "archive" | "updateStatus"
+    status?: string
+  }) =>
+    request<{ updated: number }>("/admin/api/activation-codes/batch", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  batchUpdateDevices: (input: {
+    ids: string[]
+    action: "updateStatus"
+    status: string
+  }) =>
+    request<{ updated: number }>("/admin/api/devices/batch", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  listAuditLogs: (options: {
+    readonly action?: string
+    readonly from?: string
+    readonly to?: string
+    readonly page?: number
+    readonly pageSize?: number
+  } = {}) => {
+    const query = new URLSearchParams()
+    if (options.action) query.set("action", options.action)
+    if (options.from) query.set("from", options.from)
+    if (options.to) query.set("to", options.to)
+    if (options.page) query.set("page", String(options.page))
+    if (options.pageSize) query.set("pageSize", String(options.pageSize))
+    const suffix = query.size > 0 ? `?${query.toString()}` : ""
+    return request<PaginatedResponse<AuditLog>>(`/admin/api/audit-logs${suffix}`)
+  },
+  exportAuditLogs: (options: {
+    readonly action?: string
+    readonly from?: string
+    readonly to?: string
+  } = {}) => {
+    const query = new URLSearchParams()
+    if (options.action) query.set("action", options.action)
+    if (options.from) query.set("from", options.from)
+    if (options.to) query.set("to", options.to)
+    const suffix = query.size > 0 ? `?${query.toString()}` : ""
+    window.open(`/admin/api/audit-logs/export${suffix}`, "_blank")
+  },
+  exportActivationCodes: (options: { readonly includeArchived?: boolean } = {}) => {
+    const query = new URLSearchParams()
+    if (options.includeArchived) query.set("includeArchived", "true")
+    const suffix = query.size > 0 ? `?${query.toString()}` : ""
+    window.open(`/admin/api/activation-codes/export${suffix}`, "_blank")
+  },
 }
