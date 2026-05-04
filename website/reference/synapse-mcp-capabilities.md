@@ -1,6 +1,6 @@
 # Synapse MCP 能力
 
-<!-- Sources: docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: docs/developer/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/capabilities/action-router.ts -->
 
 这里的“能力”指一项可被 MCP、CLI 或本地 HTTP API 调用的操作，例如列出数据库表、创建数据行、启用定时任务。
 
@@ -28,7 +28,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到不同
 - `desktop/synapse-capabilities/shared/naming.ts`
 - `desktop/electron/capabilities/action-router.ts`
 
-[能力矩阵](/reference/capability-naming-matrix) 记录当前公开名称。若矩阵与代码不一致，应修正文档或实现，使两者重新对齐。
+[能力矩阵](/developer/capability-naming-matrix) 记录当前公开名称。若矩阵与代码不一致，应修正文档或实现，使两者重新对齐。
 
 ## 规范能力 ID
 
@@ -109,13 +109,13 @@ scheduler.action_type.list -> schedulerActionTypeList
 
 ## 当前矩阵
 
-完整当前列表见 [能力矩阵](/reference/capability-naming-matrix)。
+完整当前列表见 [能力矩阵](/developer/capability-naming-matrix)。
 
 矩阵只记录当前规范公开名称，不能成为代码能力清单之外的第二套事实来源。
 
 ## 新增或修改能力
 
-新增同领域能力或未来领域时，使用 [MCP 能力维护指南](/reference/capability-authoring)。
+新增同领域能力或未来领域时，使用 [MCP 能力维护指南](/developer/capability-authoring)。
 
 每次能力变更至少检查：
 
