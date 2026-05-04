@@ -1,4 +1,5 @@
 import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import { isFileNotFoundError, pathExists } from "./fs-utils"
@@ -283,11 +284,15 @@ function writeMaintenanceMetaValue(repositoryUuid: string, key: string, value: s
   })
 }
 
+const MAINTENANCE_LOCAL_TIMEOUT_MS = 30_000
+const MAINTENANCE_REMOTE_TIMEOUT_MS = 60_000
+
 function runMaintenanceGitCommand(
   cwd: string,
   args: string[],
   fallbackMessage: string,
   onOutput?: (line: string) => void,
+  options?: { timeoutMs?: number; timeoutMessage?: string },
 ): Promise<GitCommandResult> {
   return runGitCommand({
     args,
@@ -297,6 +302,8 @@ function runMaintenanceGitCommand(
     onLine: (line) => {
       onOutput?.(line)
     },
+    timeoutMs: options?.timeoutMs ?? MAINTENANCE_LOCAL_TIMEOUT_MS,
+    timeoutMessage: options?.timeoutMessage ?? fallbackMessage,
   })
 }
 
@@ -313,19 +320,45 @@ async function ensureBotIdentity(gitRootPath: string): Promise<void> {
   )
 }
 
+async function abortRebaseIfNeeded(localPath: string): Promise<void> {
+  try {
+    const rebaseDir = path.join(localPath, ".git", "rebase-merge")
+    const rebaseApplyDir = path.join(localPath, ".git", "rebase-apply")
+    if (!existsSync(rebaseDir) && !existsSync(rebaseApplyDir)) return
+
+    logger.warn("Rebase in progress detected during maintenance. Aborting.", { localPath })
+    await runMaintenanceGitCommand(
+      localPath,
+      ["rebase", "--abort"],
+      "无法中止 rebase，请手动检查仓库状态。",
+    )
+  } catch {
+    logger.error("Failed to abort rebase during maintenance recovery.", { localPath })
+  }
+}
+
 async function pullWithRebase(
   repository: SynapseRepositoryConfig,
   onProgress?: MaintenanceProgressListener,
 ): Promise<void> {
   onProgress?.("正在拉取最新内容...")
-  await runMaintenanceGitCommand(
-    repository.localPath,
-    ["pull", "--rebase"],
-    "同步仓库失败，请检查网络或仓库状态后重试。",
-    (line) => {
-      onProgress?.(line)
-    },
-  )
+  try {
+    await runMaintenanceGitCommand(
+      repository.localPath,
+      ["pull", "--rebase"],
+      "同步仓库失败，请检查网络或仓库状态后重试。",
+      (line) => {
+        onProgress?.(line)
+      },
+      {
+        timeoutMs: MAINTENANCE_REMOTE_TIMEOUT_MS,
+        timeoutMessage: "同步仓库超时，请检查网络后重试。",
+      },
+    )
+  } catch (error) {
+    await abortRebaseIfNeeded(repository.localPath)
+    throw error
+  }
 }
 
 async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
@@ -378,6 +411,10 @@ async function pushRepository(
     "推送到仓库失败。",
     (line) => {
       onProgress?.(line)
+    },
+    {
+      timeoutMs: MAINTENANCE_REMOTE_TIMEOUT_MS,
+      timeoutMessage: "推送到仓库超时，请检查网络后重试。",
     },
   )
 }
