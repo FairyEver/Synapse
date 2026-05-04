@@ -55,6 +55,14 @@ function IdentityGate({ children }: { children: ReactNode }) {
         <div className="flex flex-col gap-3">
           <h1 className="text-lg font-medium text-foreground">无法读取身份信息</h1>
           <p className="text-sm text-muted-foreground">{error}</p>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => window.location.reload()}
+            >
+              重试
+            </Button>
+          </div>
         </div>
       </IdentityScreenShell>
     )
