@@ -27,12 +27,11 @@ export default defineConfig({
     nav: [
       { text: '首页', link: '/' },
       { text: '快速开始', link: '/start/install' },
-      { text: '用户指南', link: '/guide/rules' },
+      { text: '用户指南', link: '/guide/concepts' },
       { text: '团队协作', link: '/team/repository-structure' },
       { text: '高级功能', link: '/advanced/' },
       { text: '开发者', link: '/developer/' },
-      { text: '参考', link: '/reference/synapse-mcp-capabilities' },
-      { text: '下载', link: '/reference/downloads' }
+      { text: '参考', link: '/reference/synapse-mcp-capabilities' }
     ],
 
     sidebar: {
@@ -42,11 +41,11 @@ export default defineConfig({
         { text: '安装第一个内容', link: '/start/first-install' }
       ]}],
       '/guide/': [{ text: '用户指南', items: [
+        { text: '核心概念', link: '/guide/concepts' },
         { text: 'Rule', link: '/guide/rules' },
         { text: 'Skill', link: '/guide/skills' },
         { text: '编辑器安装', link: '/guide/editors' },
-        { text: '设置', link: '/guide/settings' },
-        { text: '核心概念', link: '/guide/concepts' }
+        { text: '设置', link: '/guide/settings' }
       ]}],
       '/team/': [{ text: '团队协作', items: [
         { text: '仓库结构', link: '/team/repository-structure' },
@@ -66,16 +65,15 @@ export default defineConfig({
         { text: '总览', link: '/developer/' },
         { text: '本地开发', link: '/developer/local-development' },
         { text: '项目结构', link: '/developer/project-structure' },
-        { text: '构建与发布', link: '/developer/build-release' }
+        { text: '构建与发布', link: '/developer/build-release' },
+        { text: '能力矩阵', link: '/developer/capability-naming-matrix' },
+        { text: '能力维护', link: '/developer/capability-authoring' }
       ]}],
       '/reference/': [{ text: '参考', items: [
         { text: '常见问题', link: '/reference/faq' },
         { text: '排障', link: '/reference/troubleshooting' },
         { text: '术语表', link: '/reference/glossary' },
-        { text: 'MCP 能力', link: '/reference/synapse-mcp-capabilities' },
-        { text: '能力矩阵', link: '/reference/capability-naming-matrix' },
-        { text: '能力维护', link: '/reference/capability-authoring' },
-        { text: '下载', link: '/reference/downloads' }
+        { text: 'MCP 能力', link: '/reference/synapse-mcp-capabilities' }
       ]}]
     },
 
