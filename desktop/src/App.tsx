@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentDetailWindowPage } from "@/modules/content/components/content-detail-window-page"
@@ -420,20 +421,38 @@ function MainApp() {
             const dialogHandlers = contentDialogHandlers[definition.id]
 
             return (
-              <ModuleComponent
-                key={definition.id}
-                onCreateDialogOpenChange={dialogHandlers.create}
-                onDetailDialogOpenChange={dialogHandlers.detail}
-                onInstallDialogOpenChange={dialogHandlers.install}
-                pendingContentOpenRequest={pendingContentOpenRequest}
-                onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}
-              />
+              <ErrorBoundary key={definition.id} fallbackTitle={`${definition.tabLabel}模块出现问题`}>
+                <ModuleComponent
+                  key={definition.id}
+                  onCreateDialogOpenChange={dialogHandlers.create}
+                  onDetailDialogOpenChange={dialogHandlers.detail}
+                  onInstallDialogOpenChange={dialogHandlers.install}
+                  pendingContentOpenRequest={pendingContentOpenRequest}
+                  onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}
+                />
+              </ErrorBoundary>
             )
           })}
-          {activeTab === "agent" ? <AgentModule /> : null}
-          {activeTab === "data-store" ? <DataStoreModule /> : null}
-          {activeTab === "editor-scan" ? <EditorScanModule /> : null}
-          {activeTab === "settings" ? <SettingsModule /> : null}
+          {activeTab === "agent" ? (
+            <ErrorBoundary fallbackTitle="Agent 模块出现问题">
+              <AgentModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "data-store" ? (
+            <ErrorBoundary fallbackTitle="数据库模块出现问题">
+              <DataStoreModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "editor-scan" ? (
+            <ErrorBoundary fallbackTitle="IDE 模块出现问题">
+              <EditorScanModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "settings" ? (
+            <ErrorBoundary fallbackTitle="设置模块出现问题">
+              <SettingsModule />
+            </ErrorBoundary>
+          ) : null}
         </div>
       </AppShellLayout>
     </IdentityGate>
@@ -450,9 +469,11 @@ function App() {
 
   if (standaloneContentWindowRequest) {
     return (
-      <IdentityGate>
-        <ContentDetailWindowPage request={standaloneContentWindowRequest} />
-      </IdentityGate>
+      <ErrorBoundary fallbackTitle="内容详情出现问题" onReset={() => window.location.reload()}>
+        <IdentityGate>
+          <ContentDetailWindowPage request={standaloneContentWindowRequest} />
+        </IdentityGate>
+      </ErrorBoundary>
     )
   }
 

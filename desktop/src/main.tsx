@@ -7,6 +7,7 @@ import { IdentityProvider } from "@/app-shell/identity-context"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
 import { AppNotificationsProvider } from "@/app-shell/notifications"
 import { RepositoryManagerProvider } from "@/app-shell/repository"
+import { ErrorBoundary } from "@/components/error-boundary"
 import "@/styles/globals.css"
 
 const bootstrapLogger = createRendererLogger("renderer.bootstrap")
@@ -16,16 +17,18 @@ installRendererLogForwarding()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AppConfigProvider>
-      <RepositoryManagerProvider>
-        <IdentityProvider>
-          <AppNotificationsProvider>
-            <ActiveRepositorySwitchProvider>
-              <App />
-            </ActiveRepositorySwitchProvider>
-          </AppNotificationsProvider>
-        </IdentityProvider>
-      </RepositoryManagerProvider>
-    </AppConfigProvider>
+    <ErrorBoundary fallbackTitle="应用出现问题" onReset={() => window.location.reload()}>
+      <AppConfigProvider>
+        <RepositoryManagerProvider>
+          <IdentityProvider>
+            <AppNotificationsProvider>
+              <ActiveRepositorySwitchProvider>
+                <App />
+              </ActiveRepositorySwitchProvider>
+            </AppNotificationsProvider>
+          </IdentityProvider>
+        </RepositoryManagerProvider>
+      </AppConfigProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )
