@@ -11,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AccountDetailPage } from "@/pages/account-detail-page"
 import { AccountsPage } from "@/pages/accounts-page"
 import { ActivationCodesPage } from "@/pages/activation-codes-page"
+import { AuditLogsPage } from "@/pages/audit-logs-page"
 import { DevicesPage } from "@/pages/devices-page"
 import { LoginPage } from "@/pages/login-page"
 import { SystemPage } from "@/pages/system-page"
@@ -21,6 +22,7 @@ type Route =
   | { name: "accounts" }
   | { name: "account-detail"; accountId: string }
   | { name: "devices" }
+  | { name: "audit-logs" }
   | { name: "system" }
 
 function routeFromHash(): Route {
@@ -29,6 +31,7 @@ function routeFromHash(): Route {
   if (section === "accounts" && id) return { name: "account-detail", accountId: id }
   if (section === "accounts") return { name: "accounts" }
   if (section === "devices") return { name: "devices" }
+  if (section === "audit-logs") return { name: "audit-logs" }
   if (section === "system") return { name: "system" }
   return { name: "activation-codes" }
 }
@@ -51,6 +54,8 @@ function titleForRoute(route: Route): string {
       return "账号"
     case "devices":
       return "设备"
+    case "audit-logs":
+      return "审计日志"
     case "system":
       return "系统"
     case "activation-codes":
@@ -124,6 +129,7 @@ export default function App() {
               <AccountDetailPage accountId={route.accountId} />
             ) : null}
             {route.name === "devices" ? <DevicesPage /> : null}
+            {route.name === "audit-logs" ? <AuditLogsPage /> : null}
             {route.name === "system" ? <SystemPage /> : null}
           </main>
         </SidebarInset>
