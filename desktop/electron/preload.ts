@@ -175,6 +175,7 @@ const IPC_CHANNELS = {
     "getGraphResult": "synapse:token-usage:graph-result",
     "getModelReport": "synapse:token-usage:model-report",
     "getDailyReport": "synapse:token-usage:daily-report",
+    "getAgentReport": "synapse:token-usage:agent-report",
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",
   },
@@ -561,8 +562,12 @@ const synapseBridge: SynapseBridge = {
     scan: invoke(IPC_CHANNELS["token-usage"].scan),
     getGraphResult: (options?: { since?: string; until?: string }) =>
       invoke(IPC_CHANNELS["token-usage"].getGraphResult)(options),
-    getModelReport: invoke(IPC_CHANNELS["token-usage"].getModelReport),
-    getDailyReport: invoke(IPC_CHANNELS["token-usage"].getDailyReport),
+    getModelReport: (options?: { since?: string; until?: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].getModelReport)(options),
+    getDailyReport: (options?: { since?: string; until?: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].getDailyReport)(options),
+    getAgentReport: (options?: { since?: string; until?: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].getAgentReport)(options),
     getDetectedAgents: invoke(IPC_CHANNELS["token-usage"].getDetectedAgents),
     clearData: invoke(IPC_CHANNELS["token-usage"].clearData),
   },

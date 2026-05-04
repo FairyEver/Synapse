@@ -1,9 +1,23 @@
 import fs from "node:fs"
 import { scanAllClients } from "./scanner"
 import { getFingerprint, upsertFingerprint, upsertDailyUsage, clearDailyUsageForClient, clearFingerprintsForClient, clearAllData, setScanMeta } from "./db"
-import { getGraphResult, getModelReport, getDailyReport } from "./aggregator"
+import { getGraphResult, getModelReport, getDailyReport, getAgentReport } from "./aggregator"
 import { claudeParser } from "./parsers/claude"
 import { codexParser } from "./parsers/codex"
+import { piParser, qwenParser, kimiParser, antigravityParser } from "./parsers/generic-agents"
+import { copilotParser } from "./parsers/copilot"
+import { geminiParser } from "./parsers/gemini"
+import { ampParser } from "./parsers/amp"
+import { roocodeParser, kilocodeParser } from "./parsers/roocode"
+import { muxParser } from "./parsers/mux"
+import { openclawParser } from "./parsers/openclaw"
+import { droidParser } from "./parsers/droid"
+import { codebuffParser } from "./parsers/codebuff"
+import { hermesParser } from "./parsers/hermes"
+import { gooseParser } from "./parsers/goose"
+import { opencodeParser, kiloDbParser } from "./parsers/opencode"
+import { crushParser } from "./parsers/crush"
+import { cursorParser } from "./parsers/cursor"
 import type { AgentParser, ScanProgress } from "./parsers/types"
 import { createMainLogger } from "../log-store"
 
@@ -12,6 +26,25 @@ const logger = createMainLogger("token-usage")
 const PARSERS: Record<string, AgentParser> = {
   claude: claudeParser,
   codex: codexParser,
+  pi: piParser,
+  qwen: qwenParser,
+  kimi: kimiParser,
+  antigravity: antigravityParser,
+  copilot: copilotParser,
+  gemini: geminiParser,
+  amp: ampParser,
+  roocode: roocodeParser,
+  kilocode: kilocodeParser,
+  mux: muxParser,
+  openclaw: openclawParser,
+  droid: droidParser,
+  codebuff: codebuffParser,
+  hermes: hermesParser,
+  goose: gooseParser,
+  opencode: opencodeParser,
+  kilo: kiloDbParser,
+  crush: crushParser,
+  cursor: cursorParser,
 }
 
 function getParser(clientId: string): AgentParser | null {
@@ -87,4 +120,4 @@ export async function scanTokenUsage(): Promise<ScanProgress> {
   return progress
 }
 
-export { getGraphResult, getModelReport, getDailyReport, clearAllData }
+export { getGraphResult, getModelReport, getDailyReport, getAgentReport, clearAllData }

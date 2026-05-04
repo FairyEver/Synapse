@@ -531,12 +531,18 @@ export type SynapseBridge = {
         }[]
       }[]
     }>
-    getModelReport: () => Promise<{
+    getModelReport: (options?: { since?: string; until?: string }) => Promise<{
       client: string; model: string; provider: string
       input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number
       messageCount: number; cost: number
     }[]>
-    getDailyReport: () => Promise<Record<string, unknown>[]>
+    getDailyReport: (options?: { since?: string; until?: string }) => Promise<Record<string, unknown>[]>
+    getAgentReport: (options?: { since?: string; until?: string }) => Promise<{
+      client: string; models: string[]; providers: string[]
+      input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number
+      messageCount: number; cost: number; activeDays: number
+      firstSeen: string; lastSeen: string
+    }[]>
     getDetectedAgents: () => Promise<{ id: string; name: string; fileCount: number }[]>
     clearData: () => Promise<void>
   }

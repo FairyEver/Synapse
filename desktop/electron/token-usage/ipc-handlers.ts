@@ -1,6 +1,6 @@
 import { TOKEN_USAGE_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
-import { scanTokenUsage, getGraphResult, getModelReport, getDailyReport, clearAllData } from "../services/token-usage"
+import { scanTokenUsage, getGraphResult, getModelReport, getDailyReport, getAgentReport, clearAllData } from "../services/token-usage"
 import { scanAllClients } from "../services/token-usage/scanner"
 import { CLIENT_DEFS } from "../services/token-usage/clients"
 
@@ -17,12 +17,16 @@ export function registerTokenUsageHandlers(): void {
     return getGraphResult(options)
   })
 
-  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getModelReport, async () => {
-    return getModelReport()
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getModelReport, async (_event, options?: { since?: string; until?: string }) => {
+    return getModelReport(options)
   })
 
-  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getDailyReport, async () => {
-    return getDailyReport()
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getDailyReport, async (_event, options?: { since?: string; until?: string }) => {
+    return getDailyReport(options)
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.getAgentReport, async (_event, options?: { since?: string; until?: string }) => {
+    return getAgentReport(options)
   })
 
   handleValidatedIpc(TOKEN_USAGE_CHANNELS.getDetectedAgents, async () => {

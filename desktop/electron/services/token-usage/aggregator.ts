@@ -3,6 +3,7 @@ import type {
   TokenBreakdown, ClientContribution,
 } from "./parsers/types"
 import { queryDailyRowsFiltered } from "./db"
+import { estimateCost } from "./pricing"
 
 interface DailyRow {
   date: string
@@ -17,6 +18,14 @@ interface DailyRow {
   message_count: number
   turn_count: number
   cost_usd: number
+}
+
+function rowCost(r: DailyRow): number {
+  if (r.cost_usd > 0) return r.cost_usd
+  return estimateCost(r.model_id, {
+    input: r.input_tokens, output: r.output_tokens,
+    cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
+  })
 }
 
 export function getGraphResult(options?: { since?: string; until?: string }): GraphResult {
@@ -48,7 +57,8 @@ export function getGraphResult(options?: { since?: string; until?: string }): Gr
     for (const r of dateRows) {
       const rowTokens = r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens + r.reasoning_tokens
       dayTokens += rowTokens
-      dayCost += r.cost_usd
+      const cost = rowCost(r)
+      dayCost += cost
       dayMessages += r.message_count
       breakdown.input += r.input_tokens
       breakdown.output += r.output_tokens
@@ -60,7 +70,7 @@ export function getGraphResult(options?: { since?: string; until?: string }): Gr
       clients.push({
         client: r.client, modelId: r.model_id, providerId: r.provider_id,
         tokens: { input: r.input_tokens, output: r.output_tokens, cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens, reasoning: r.reasoning_tokens },
-        cost: r.cost_usd, messages: r.message_count,
+        cost, messages: r.message_count,
       })
     }
 
@@ -114,12 +124,13 @@ export function getGraphResult(options?: { since?: string; until?: string }): Gr
   }
 }
 
-export function getModelReport(): ModelUsage[] {
-  const rows = queryDailyRowsFiltered() as unknown as DailyRow[]
+export function getModelReport(options?: { since?: string; until?: string }): ModelUsage[] {
+  const rows = queryDailyRowsFiltered(options?.since, options?.until) as unknown as DailyRow[]
 
   const modelMap = new Map<string, ModelUsage>()
   for (const r of rows) {
     const key = `${r.client}:${r.model_id}:${r.provider_id}`
+    const cost = rowCost(r)
     const existing = modelMap.get(key)
     if (existing) {
       existing.input += r.input_tokens
@@ -128,13 +139,13 @@ export function getModelReport(): ModelUsage[] {
       existing.cacheWrite += r.cache_write_tokens
       existing.reasoning += r.reasoning_tokens
       existing.messageCount += r.message_count
-      existing.cost += r.cost_usd
+      existing.cost += cost
     } else {
       modelMap.set(key, {
         client: r.client, model: r.model_id, provider: r.provider_id,
         input: r.input_tokens, output: r.output_tokens,
         cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
-        reasoning: r.reasoning_tokens, messageCount: r.message_count, cost: r.cost_usd,
+        reasoning: r.reasoning_tokens, messageCount: r.message_count, cost,
       })
     }
   }
@@ -146,11 +157,83 @@ export function getModelReport(): ModelUsage[] {
   })
 }
 
-export function getDailyReport(): Record<string, unknown>[] {
-  const rows = queryDailyRowsFiltered() as unknown as DailyRow[]
+export interface AgentUsage {
+  client: string
+  models: string[]
+  providers: string[]
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  messageCount: number
+  cost: number
+  activeDays: number
+  firstSeen: string
+  lastSeen: string
+}
+
+export function getAgentReport(options?: { since?: string; until?: string }): AgentUsage[] {
+  const rows = queryDailyRowsFiltered(options?.since, options?.until) as unknown as DailyRow[]
+
+  const agentMap = new Map<string, {
+    models: Set<string>; providers: Set<string>; dates: Set<string>
+    input: number; output: number; cacheRead: number; cacheWrite: number
+    reasoning: number; messageCount: number; cost: number
+    firstSeen: string; lastSeen: string
+  }>()
+
+  for (const r of rows) {
+    const cost = rowCost(r)
+    const existing = agentMap.get(r.client)
+    if (existing) {
+      existing.models.add(r.model_id)
+      existing.providers.add(r.provider_id)
+      existing.dates.add(r.date)
+      existing.input += r.input_tokens
+      existing.output += r.output_tokens
+      existing.cacheRead += r.cache_read_tokens
+      existing.cacheWrite += r.cache_write_tokens
+      existing.reasoning += r.reasoning_tokens
+      existing.messageCount += r.message_count
+      existing.cost += cost
+      if (r.date < existing.firstSeen) existing.firstSeen = r.date
+      if (r.date > existing.lastSeen) existing.lastSeen = r.date
+    } else {
+      agentMap.set(r.client, {
+        models: new Set([r.model_id]), providers: new Set([r.provider_id]),
+        dates: new Set([r.date]),
+        input: r.input_tokens, output: r.output_tokens,
+        cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
+        reasoning: r.reasoning_tokens, messageCount: r.message_count, cost,
+        firstSeen: r.date, lastSeen: r.date,
+      })
+    }
+  }
+
+  return [...agentMap.entries()]
+    .map(([client, a]) => ({
+      client,
+      models: [...a.models],
+      providers: [...a.providers],
+      input: a.input, output: a.output, cacheRead: a.cacheRead,
+      cacheWrite: a.cacheWrite, reasoning: a.reasoning,
+      messageCount: a.messageCount, cost: a.cost,
+      activeDays: a.dates.size, firstSeen: a.firstSeen, lastSeen: a.lastSeen,
+    }))
+    .sort((a, b) => {
+      const totalA = a.input + a.output + a.cacheRead + a.cacheWrite + a.reasoning
+      const totalB = b.input + b.output + b.cacheRead + b.cacheWrite + b.reasoning
+      return totalB - totalA
+    })
+}
+
+export function getDailyReport(options?: { since?: string; until?: string }): Record<string, unknown>[] {
+  const rows = queryDailyRowsFiltered(options?.since, options?.until) as unknown as DailyRow[]
 
   const dayMap = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number; messages: number; turns: number; cost: number }>()
   for (const r of rows) {
+    const cost = rowCost(r)
     const existing = dayMap.get(r.date)
     if (existing) {
       existing.input += r.input_tokens
@@ -160,13 +243,13 @@ export function getDailyReport(): Record<string, unknown>[] {
       existing.reasoning += r.reasoning_tokens
       existing.messages += r.message_count
       existing.turns += r.turn_count
-      existing.cost += r.cost_usd
+      existing.cost += cost
     } else {
       dayMap.set(r.date, {
         input: r.input_tokens, output: r.output_tokens,
         cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
         reasoning: r.reasoning_tokens, messages: r.message_count,
-        turns: r.turn_count, cost: r.cost_usd,
+        turns: r.turn_count, cost,
       })
     }
   }
