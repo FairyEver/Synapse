@@ -1,6 +1,7 @@
 import "reflect-metadata"
 import { NestFactory } from "@nestjs/core"
 import cookieParser from "cookie-parser"
+import helmet from "helmet"
 import { Logger, PinoLogger } from "nestjs-pino"
 import { AppModule } from "./app.module"
 import { AllExceptionsFilter } from "./common/all-exceptions.filter"
@@ -12,6 +13,15 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(Logger))
   app.useGlobalFilters(new AllExceptionsFilter(app.get(PinoLogger)))
   app.use(cookieParser())
+  app.use(
+    helmet({
+      contentSecurityPolicy: process.env.NODE_ENV === "production",
+    }),
+  )
+  app.enableCors({
+    origin: process.env.NODE_ENV === "production" ? false : true,
+    credentials: true,
+  })
   app.enableShutdownHooks()
   await app.listen(env.port)
 }
