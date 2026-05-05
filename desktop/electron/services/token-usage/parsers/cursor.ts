@@ -2,7 +2,7 @@ import fs from "node:fs"
 import readline from "node:readline"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, timestampToLocalDate } from "./utils"
+import { extractI64, inferProvider, timestampToLocalDate } from "./utils"
 
 type CsvFormat = "v1" | "v2" | "v3"
 
@@ -22,16 +22,20 @@ function colIndex(format: CsvFormat) {
 
 function parseCsvCost(raw: string): number {
   const s = raw.trim().replace(/^\$/, "").replace(/,/g, "")
-  if (!s || s === "NaN" || s === "Included" || s === "-") return 0
+  if (!s || s.toLowerCase() === "nan" || s === "Included" || s === "-") return 0
   const n = parseFloat(s)
   return Number.isNaN(n) ? 0 : n
 }
 
 function parseCsvDate(raw: string): number {
-  const d = new Date(raw.trim())
+  const trimmed = raw.trim()
+  // Date-only strings (e.g. "2025-02-05") → noon UTC to avoid timezone drift
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const d = new Date(trimmed + "T12:00:00Z")
+    return Number.isNaN(d.getTime()) ? 0 : d.getTime()
+  }
+  const d = new Date(trimmed)
   if (!Number.isNaN(d.getTime())) return d.getTime()
-  const dateOnly = new Date(raw.trim() + "T12:00:00Z")
-  if (!Number.isNaN(dateOnly.getTime())) return dateOnly.getTime()
   return 0
 }
 
@@ -46,15 +50,6 @@ function parseCsvLine(line: string): string[] {
   }
   fields.push(current)
   return fields
-}
-
-function inferProvider(model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "cursor"
 }
 
 export const cursorParser: AgentParser = {
@@ -111,7 +106,7 @@ export const cursorParser: AgentParser = {
       messages.push({
         client: "cursor",
         modelId: model,
-        providerId: inferProvider(model),
+        providerId: inferProvider(model, "cursor"),
         sessionId: `cursor-${accountId}-${dateStr}`,
         timestamp: ts,
         date: timestampToLocalDate(ts),

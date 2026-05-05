@@ -2,7 +2,7 @@ import fs from "node:fs"
 import readline from "node:readline"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate, normalizeWorkspaceKey, workspaceLabelFromKey } from "./utils"
 
 interface CodexTotals {
   input: number
@@ -63,6 +63,17 @@ function extractModelFromInfo(info: Record<string, unknown>): string | null {
   return null
 }
 
+function extractModelFromHeadlessLine(obj: Record<string, unknown>): string | null {
+  if (typeof obj.model === "string" && obj.model) return obj.model
+  if (typeof obj.model_name === "string" && obj.model_name) return obj.model_name
+  const data = obj.data as Record<string, unknown> | undefined
+  if (data && typeof data.model === "string" && data.model) return data.model
+  if (data && typeof data.model_name === "string" && data.model_name) return data.model_name
+  const response = obj.response as Record<string, unknown> | undefined
+  if (response && typeof response.model === "string" && response.model) return response.model
+  return null
+}
+
 function tryExtractHeadlessUsage(
   obj: Record<string, unknown>, sessionId: string, ts: number,
   currentModel: string | null, provider: string | null,
@@ -71,18 +82,20 @@ function tryExtractHeadlessUsage(
 ): UnifiedMessage | null {
   const usage = findNestedUsage(obj)
   if (!usage) return null
-  const input = Math.max(0, extractI64(usage.input_tokens))
-  const output = Math.max(0, extractI64(usage.output_tokens))
+  const input = Math.max(0, extractI64(usage.input_tokens) || extractI64(usage.prompt_tokens) || extractI64(usage.input))
+  const output = Math.max(0, extractI64(usage.output_tokens) || extractI64(usage.completion_tokens) || extractI64(usage.output))
   const cached = Math.max(
     Math.max(0, extractI64(usage.cached_input_tokens)),
     Math.max(0, extractI64(usage.cache_read_input_tokens)),
+    Math.max(0, extractI64(usage.cached_tokens)),
   )
   const reasoning = Math.max(0, extractI64(usage.reasoning_output_tokens))
   if (input + output + cached + reasoning === 0) return null
   const clampedCached = Math.min(cached, input)
   const netInput = Math.max(0, input - clampedCached)
+  const lineModel = extractModelFromHeadlessLine(obj)
   return {
-    client: "codex", modelId: currentModel || "unknown",
+    client: "codex", modelId: lineModel || currentModel || "unknown",
     providerId: provider || "openai", sessionId,
     workspaceKey, workspaceLabel,
     timestamp: ts, date: timestampToLocalDate(ts),
@@ -127,22 +140,21 @@ export const codexParser: AgentParser = {
       try {
         const obj = JSON.parse(line)
         const payload = obj.payload as Record<string, unknown> | undefined
-        if (!payload) continue
         const ts = parseTimestamp(obj.timestamp) || fallbackTs
 
-        if (payload.type === "session_meta" || obj.type === "session_meta") {
+        if (payload && (payload.type === "session_meta" || obj.type === "session_meta")) {
           sessionProvider = (payload.model_provider as string) || null
           sessionAgent = (payload.agent_nickname as string) || null
           if (payload.source === "exec") sessionIsHeadless = true
           const cwd = payload.cwd as string | undefined
           if (cwd) {
-            sessionWorkspaceKey = cwd
-            sessionWorkspaceLabel = path.basename(cwd)
+            sessionWorkspaceKey = normalizeWorkspaceKey(cwd) ?? cwd
+            sessionWorkspaceLabel = workspaceLabelFromKey(sessionWorkspaceKey) ?? sessionWorkspaceKey
           }
           continue
         }
 
-        if (obj.type === "turn_context" || payload.type === "turn_context") {
+        if (payload && (obj.type === "turn_context" || payload.type === "turn_context")) {
           const model = extractModel(payload)
           if (model) {
             currentModel = model
@@ -155,7 +167,7 @@ export const codexParser: AgentParser = {
           continue
         }
 
-        if (payload.type !== "token_count") {
+        if (!payload || payload.type !== "token_count") {
           // Headless fallback: try to extract usage from any line with usage data
           const headlessMsg = tryExtractHeadlessUsage(obj, sessionId, ts, currentModel, sessionProvider, sessionWorkspaceKey, sessionWorkspaceLabel, sessionIsHeadless ? "headless" : sessionAgent || undefined)
           if (headlessMsg) messages.push(headlessMsg)
@@ -166,7 +178,14 @@ export const codexParser: AgentParser = {
 
         // Extract model from token_count event if available
         const tcModel = extractModel(payload) || extractModelFromInfo(info)
-        if (tcModel && !currentModel) currentModel = tcModel
+        if (tcModel) {
+          currentModel = tcModel
+          for (const pending of pendingModelMessages) {
+            pending.modelId = tcModel
+          }
+          messages.push(...pendingModelMessages)
+          pendingModelMessages.length = 0
+        }
 
         const totalUsageRaw = info.total_token_usage as Record<string, unknown> | undefined
         const lastUsageRaw = info.last_token_usage as Record<string, unknown> | undefined

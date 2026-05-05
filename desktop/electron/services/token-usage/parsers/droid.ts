@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, inferProvider, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
 
 function normalizeModel(raw: string): string {
   let m = raw.replace(/^custom:/, "")
@@ -20,15 +20,6 @@ function getDefaultModelFromProvider(provider: string): string {
   if (p === "google") return "gemini-unknown"
   if (p === "xai") return "grok-unknown"
   return `${p || "unknown"}-unknown`
-}
-
-function inferProvider(model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "unknown"
 }
 
 export const droidParser: AgentParser = {

@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, inferProvider, canonicalProvider, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
 
 export const hermesParser: AgentParser = {
   async parseFile(filePath: string): Promise<UnifiedMessage[]> {
@@ -62,15 +62,6 @@ export const hermesParser: AgentParser = {
 }
 
 function canonicalizeProvider(provider: string | undefined, model: string | undefined): string {
-  if (provider && provider.trim()) return provider.trim().toLowerCase()
-  return inferProvider(model || "")
-}
-
-function inferProvider(model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "hermes"
+  if (provider && provider.trim()) return canonicalProvider(provider) || inferProvider(model || "", "hermes")
+  return inferProvider(model || "", "hermes")
 }

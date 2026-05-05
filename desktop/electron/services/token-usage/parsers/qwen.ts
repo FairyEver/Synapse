@@ -2,7 +2,7 @@ import fs from "node:fs"
 import readline from "node:readline"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate, normalizeWorkspaceKey, workspaceLabelFromKey } from "./utils"
 
 function extractSessionIdWithFallback(filePath: string, jsonSessionId: string | undefined): string {
   if (jsonSessionId && jsonSessionId.trim()) return jsonSessionId.trim()
@@ -15,8 +15,9 @@ function qwenWorkspaceFromPath(filePath: string): { key?: string; label?: string
   const segments = filePath.split(path.sep)
   for (let i = segments.length - 1; i >= 3; i--) {
     if (segments[i - 2] === "projects" && segments[i] === "chats" && segments[i - 1]) {
-      const key = segments[i - 1]
-      const label = key.split(/[/\\]/).pop() || key
+      const rawKey = segments[i - 1]
+      const key = normalizeWorkspaceKey(rawKey) ?? rawKey
+      const label = workspaceLabelFromKey(key) ?? key
       return { key, label }
     }
   }

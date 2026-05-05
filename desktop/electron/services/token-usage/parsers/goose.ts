@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, inferProvider, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
 
 export const gooseParser: AgentParser = {
   async parseFile(filePath: string): Promise<UnifiedMessage[]> {
@@ -38,7 +38,7 @@ export const gooseParser: AgentParser = {
           const reasoning = total > input + output ? total - input - output : 0
 
           const providerRaw = (row.provider_name as string) || ""
-          const provider = providerRaw.trim() ? providerRaw.trim().toLowerCase() : inferProvider(model)
+          const provider = providerRaw.trim() ? providerRaw.trim().toLowerCase() : inferProvider(model, "goose")
           const ts = parseTimestamp(row.created_at) || fallbackTs
           const sessionId = String(row.id || "")
 
@@ -69,13 +69,4 @@ export const gooseParser: AgentParser = {
 
     return messages
   },
-}
-
-function inferProvider(model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "goose"
 }

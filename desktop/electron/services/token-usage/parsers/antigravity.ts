@@ -1,16 +1,7 @@
 import fs from "node:fs"
 import readline from "node:readline"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, timestampToLocalDate } from "./utils"
-
-function inferProvider(model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude") || m.includes("anthropic")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "antigravity"
-}
+import { extractI64, timestampToLocalDate, inferProvider } from "./utils"
 
 export const antigravityParser: AgentParser = {
   async parseFile(filePath: string): Promise<UnifiedMessage[]> {
@@ -43,7 +34,7 @@ export const antigravityParser: AgentParser = {
         if (timestamp <= 0) continue
 
         const modelId = (obj.modelId as string)?.trim() || (sessionModel?.trim()) || "unknown"
-        const providerId = ((obj.providerId as string)?.trim()) || inferProvider(modelId)
+        const providerId = ((obj.providerId as string)?.trim()) || inferProvider(modelId, "antigravity")
 
         const input = Math.max(0, extractI64(obj.input))
         const output = Math.max(0, extractI64(obj.output))

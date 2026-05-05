@@ -3,7 +3,7 @@ import path from "node:path"
 import type { ClientDef, PathRoot } from "./parsers/types"
 
 export const CLIENT_DEFS: ClientDef[] = [
-  { id: "opencode", name: "OpenCode", root: "xdgData", relativePath: "opencode/storage", filePattern: "opencode*.db|*.json", parseLocal: true },
+  { id: "opencode", name: "OpenCode", root: "xdgData", relativePath: "opencode/storage/message", filePattern: "*.json", parseLocal: true },
   { id: "claude", name: "Claude Code", root: "home", relativePath: ".claude/projects", filePattern: "*.jsonl", parseLocal: true },
   { id: "codex", name: "Codex", root: "envVar", envVar: "CODEX_HOME", fallbackRelative: ".codex", relativePath: "sessions", filePattern: "*.jsonl", parseLocal: true },
   { id: "cursor", name: "Cursor", root: "home", relativePath: ".config/tokscale/cursor-cache", filePattern: "usage*.csv", parseLocal: false },

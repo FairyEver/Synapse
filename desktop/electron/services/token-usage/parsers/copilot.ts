@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import readline from "node:readline"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, inferProvider, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
 
 function attrStr(attrs: Record<string, unknown>, key: string): string {
   const v = attrs[key]
@@ -12,15 +12,6 @@ function attrStr(attrs: Record<string, unknown>, key: string): string {
 
 function attrI64(attrs: Record<string, unknown>, key: string): number {
   return extractI64(attrs[key])
-}
-
-function inferProvider(model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude") || m.includes("anthropic")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "github-copilot"
 }
 
 export const copilotParser: AgentParser = {
@@ -77,7 +68,7 @@ export const copilotParser: AgentParser = {
         messages.push({
           client: "copilot",
           modelId: model,
-          providerId: inferProvider(model),
+          providerId: inferProvider(model, "github-copilot"),
           sessionId,
           timestamp: ts,
           date: timestampToLocalDate(ts),

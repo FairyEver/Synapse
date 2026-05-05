@@ -62,15 +62,16 @@ const PRICING_TABLE: ModelPricing[] = [
 
 export function estimateCost(
   modelId: string,
-  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number },
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning?: number },
 ): number {
   const pricing = PRICING_TABLE.find((p) => p.pattern.test(modelId))
   if (!pricing) return 0
 
-  const inputCost = (tokens.input / 1_000_000) * pricing.inputPer1M
-  const outputCost = (tokens.output / 1_000_000) * pricing.outputPer1M
-  const cacheReadCost = (tokens.cacheRead / 1_000_000) * (pricing.cacheReadPer1M ?? pricing.inputPer1M * 0.1)
-  const cacheWriteCost = (tokens.cacheWrite / 1_000_000) * (pricing.cacheWritePer1M ?? pricing.inputPer1M * 1.25)
+  const inputCost = (Math.max(0, tokens.input) / 1_000_000) * pricing.inputPer1M
+  const effectiveOutput = Math.max(0, tokens.output) + Math.max(0, tokens.reasoning ?? 0)
+  const outputCost = (effectiveOutput / 1_000_000) * pricing.outputPer1M
+  const cacheReadCost = (Math.max(0, tokens.cacheRead) / 1_000_000) * (pricing.cacheReadPer1M ?? pricing.inputPer1M * 0.1)
+  const cacheWriteCost = (Math.max(0, tokens.cacheWrite) / 1_000_000) * (pricing.cacheWritePer1M ?? pricing.inputPer1M * 1.25)
 
   return inputCost + outputCost + cacheReadCost + cacheWriteCost
 }

@@ -2,9 +2,9 @@ import { DatabaseSync } from "node:sqlite"
 import fs from "node:fs"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate, inferProvider, normalizeWorkspaceKey, workspaceLabelFromKey } from "./utils"
 
-function parseDataJson(data: string, fallbackTs: number, clientId: string): UnifiedMessage | null {
+function parseDataJson(data: string, fallbackTs: number, clientId: string, workspaceRoot?: string): UnifiedMessage | null {
   try {
     const obj = JSON.parse(data)
     if (obj.role !== "assistant") return null
@@ -27,6 +27,11 @@ function parseDataJson(data: string, fallbackTs: number, clientId: string): Unif
     const cost = Math.max(0, typeof obj.cost === "number" ? obj.cost : 0)
 
     const providerId = (obj.providerID as string) || inferProvider(modelId, clientId)
+    const agent = (obj.mode as string) || (obj.agent as string) || undefined
+
+    const pathRoot = workspaceRoot || (obj.path as Record<string, unknown>)?.root as string | undefined
+    const workspaceKey = pathRoot ? normalizeWorkspaceKey(pathRoot) : null
+    const workspaceLabel = workspaceLabelFromKey(workspaceKey)
 
     return {
       client: clientId,
@@ -39,18 +44,13 @@ function parseDataJson(data: string, fallbackTs: number, clientId: string): Unif
       cost,
       messageCount: 1,
       isTurnStart: false,
+      agent,
+      workspaceKey: workspaceKey ?? undefined,
+      workspaceLabel: workspaceLabel ?? undefined,
     }
   } catch { return null }
 }
 
-function inferProvider(model: string, clientId: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return clientId
-}
 
 function createSqliteMessageParser(clientId: string): AgentParser {
   return {
@@ -65,16 +65,47 @@ function createSqliteMessageParser(clientId: string): AgentParser {
       try {
         const db = new DatabaseSync(filePath, { open: true, readOnly: true })
         try {
-          const rows = db.prepare(`
-            SELECT m.id, m.data
-            FROM message m
-            WHERE json_extract(m.data, '$.role') = 'assistant'
-              AND json_extract(m.data, '$.tokens') IS NOT NULL
-          `).all() as Record<string, unknown>[]
+          let hasSessionTable = false
+          try {
+            const check = db.prepare(`SELECT count(*) as cnt FROM sqlite_master WHERE type='table' AND name='session'`).get() as Record<string, unknown>
+            hasSessionTable = (check?.cnt as number) > 0
+          } catch { /* no session table */ }
 
+          const query = hasSessionTable
+            ? `SELECT m.id, m.session_id, m.data, s.directory as workspace_root
+               FROM message m
+               LEFT JOIN session s ON m.session_id = s.id
+               WHERE json_extract(m.data, '$.role') = 'assistant'
+                 AND json_extract(m.data, '$.tokens') IS NOT NULL
+               ORDER BY m.id, m.session_id`
+            : `SELECT m.id, m.session_id, m.data
+               FROM message m
+               WHERE json_extract(m.data, '$.role') = 'assistant'
+                 AND json_extract(m.data, '$.tokens') IS NOT NULL
+               ORDER BY m.id, m.session_id`
+
+          const rows = db.prepare(query).all() as Record<string, unknown>[]
+
+          const seen = new Map<string, number>()
           for (const row of rows) {
-            const msg = parseDataJson(row.data as string, fallbackTs, clientId)
-            if (msg) messages.push(msg)
+            const msg = parseDataJson(row.data as string, fallbackTs, clientId, row.workspace_root as string | undefined)
+            if (!msg) continue
+
+            if (row.session_id) msg.sessionId = row.session_id as string
+            const dedupKey = (msg as { dedupKey?: string }).dedupKey || (row.id as string)
+
+            const fingerprint = `${msg.timestamp}|${msg.modelId}|${msg.tokens.input}|${msg.tokens.output}|${msg.agent || ""}`
+            const existing = seen.get(fingerprint)
+            if (existing !== undefined) {
+              if (msg.workspaceKey && !messages[existing].workspaceKey) {
+                messages[existing].workspaceKey = msg.workspaceKey
+                messages[existing].workspaceLabel = msg.workspaceLabel
+              }
+              continue
+            }
+            seen.set(fingerprint, messages.length)
+            msg.dedupKey = dedupKey
+            messages.push(msg)
           }
         } finally {
           db.close()

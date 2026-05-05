@@ -2,7 +2,7 @@ import fs from "node:fs"
 import readline from "node:readline"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate, normalizeAgentName, normalizeWorkspaceKey, workspaceLabelFromKey } from "./utils"
 
 interface DedupEntry {
   msg: UnifiedMessage
@@ -35,15 +35,15 @@ function extractWorkspace(filePath: string): { key?: string; label?: string } {
   const segments = filePath.split(path.sep)
   for (let i = 0; i < segments.length - 2; i++) {
     if (segments[i] === ".claude" && segments[i + 1] === "projects") {
-      const key = segments[i + 2]
-      if (key) return { key, label: key.split("/").pop() || key }
+      const rawKey = segments[i + 2]
+      if (rawKey) {
+        const key = normalizeWorkspaceKey(rawKey) ?? rawKey
+        const label = workspaceLabelFromKey(key) ?? key
+        return { key, label }
+      }
     }
   }
   return {}
-}
-
-function normalizeAgentName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
 }
 
 function sidechainAgentIdFromStem(stem: string): string | null {
@@ -252,7 +252,7 @@ export const claudeParser: AgentParser = {
           if (completed) pushToDedup(dedup, completed)
           headlessState = newHeadlessState()
           headlessState.model = (obj.model as string) || ((obj.message as Record<string, unknown>)?.model as string) || null
-          headlessState.timestampMs = parseTimestamp(obj.timestamp) || null
+          headlessState.timestampMs = parseTimestamp(obj.timestamp ?? obj.created_at ?? (obj.message as Record<string, unknown>)?.created_at) || null
           const usage = ((obj.message as Record<string, unknown>)?.usage || obj.usage) as Record<string, unknown> | undefined
           if (usage) updateHeadlessUsage(headlessState, usage)
           continue
@@ -284,7 +284,6 @@ export const claudeParser: AgentParser = {
         const output = Math.max(0, extractI64(usage.output_tokens))
         const cacheRead = Math.max(0, extractI64(usage.cache_read_input_tokens))
         const cacheWrite = Math.max(0, extractI64(usage.cache_creation_input_tokens))
-        if (input + output + cacheRead + cacheWrite === 0) continue
 
         const messageId = (msg.id as string) || ""
         const requestId = (obj.requestId as string) || ""
@@ -337,9 +336,23 @@ function parseHeadlessJson(filePath: string): UnifiedMessage[] {
   const fallbackTs = fileModifiedMs(filePath)
   const workspace = extractWorkspace(filePath)
   const sessionId = path.basename(filePath, ".json")
+  const content = fs.readFileSync(filePath, "utf-8")
   try {
-    const obj = JSON.parse(fs.readFileSync(filePath, "utf-8"))
+    const obj = JSON.parse(content)
     const msg = extractHeadlessMessage(obj, sessionId, fallbackTs, workspace)
     return msg ? [msg] : []
-  } catch { return [] }
+  } catch {
+    // Fall through to JSONL parsing
+    const results: UnifiedMessage[] = []
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        const obj = JSON.parse(trimmed)
+        const msg = extractHeadlessMessage(obj, sessionId, fallbackTs, workspace)
+        if (msg) results.push(msg)
+      } catch { /* skip */ }
+    }
+    return results
+  }
 }

@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate, inferProvider } from "./utils"
 
 const DEFAULT_MODEL = "codebuff-unknown"
 
@@ -152,15 +152,6 @@ function deriveDedupKey(sessionId: string, ts: number, model: string, usage: Ass
   return `codebuff:${sessionId}:${ts}:${model}:${ordinal}:${Math.max(0, usage.input)}:${Math.max(0, usage.output)}:${Math.max(0, usage.cacheRead)}:${Math.max(0, usage.cacheWrite)}`
 }
 
-function inferProvider(model: string): string {
-  if (!model) return "unknown"
-  const m = model.toLowerCase()
-  if (m.includes("claude")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "unknown"
-}
 
 export const codebuffParser: AgentParser = {
   async parseFile(filePath: string): Promise<UnifiedMessage[]> {

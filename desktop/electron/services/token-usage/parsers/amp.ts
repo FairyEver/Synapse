@@ -1,6 +1,6 @@
 import fs from "node:fs"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, inferProvider, parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
 
 interface UsageRecord {
   model: string
@@ -10,15 +10,6 @@ interface UsageRecord {
   ledgerToMessageId: number | null
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number }
   cost: number
-}
-
-function inferProvider(model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes("claude") || m.includes("anthropic")) return "anthropic"
-  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
-  if (m.includes("gemini")) return "google"
-  if (m.includes("deepseek")) return "deepseek"
-  return "anthropic"
 }
 
 function parseLedgerRecords(data: Record<string, unknown>, threadCreatedMs: number, fileMtimeMs: number): UsageRecord[] {
@@ -120,7 +111,7 @@ function toUnified(rec: UsageRecord, threadId: string): UnifiedMessage {
   return {
     client: "amp",
     modelId: rec.model,
-    providerId: inferProvider(rec.model),
+    providerId: inferProvider(rec.model, "anthropic"),
     sessionId: threadId,
     timestamp: rec.timestamp,
     date: timestampToLocalDate(rec.timestamp),
