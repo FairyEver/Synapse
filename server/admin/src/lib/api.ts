@@ -13,7 +13,7 @@ export interface ActivationCode {
   readonly maxDevices: number
   readonly expiresAt: string | null
   readonly boundAccountId: string | null
-  readonly boundAccount: { readonly email: string } | null
+  readonly boundAccount: { readonly email: string; readonly note: string | null } | null
   readonly redeemedAt: string | null
   readonly archivedAt: string | null
   readonly riskLockedAt: string | null
@@ -61,6 +61,7 @@ export interface Account {
   readonly id: string
   readonly email: string
   readonly status: AccountStatus
+  readonly note: string | null
   readonly createdAt: string
   readonly licenses: License[]
 }
@@ -74,7 +75,7 @@ export interface Device {
   readonly firstSeenAt: string
   readonly lastSeenAt: string
   readonly license: License & {
-    readonly account: Pick<Account, "id" | "email" | "status">
+    readonly account: Pick<Account, "id" | "email" | "status" | "note">
     readonly activationCode: LicenseActivationCode
   }
 }
@@ -240,6 +241,11 @@ export const adminApi = {
     return result.data
   },
   getAccount: (id: string) => request<Account>(`/admin/api/accounts/${id}`),
+  updateAccountNote: (id: string, note: string | null) =>
+    request<Account>(`/admin/api/accounts/${id}/note`, {
+      method: "PATCH",
+      body: JSON.stringify({ note }),
+    }),
   listDevices: async () => {
     const result = await request<PaginatedResponse<Device>>("/admin/api/devices")
     return result.data

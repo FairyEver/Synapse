@@ -142,6 +142,7 @@ function createDevice(input: {
         id: `account_${input.id}`,
         email: input.accountEmail,
         status: "active",
+        note: null,
       },
     },
   }

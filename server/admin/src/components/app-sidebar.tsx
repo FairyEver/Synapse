@@ -26,7 +26,7 @@ const data = {
     {
       name: "Synapse",
       logo: synapseLogo,
-      plan: "License",
+      plan: "Dashboard",
     },
   ],
   navMain: [

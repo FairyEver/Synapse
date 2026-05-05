@@ -108,6 +108,7 @@ export class AdminService {
           boundAccount: {
             select: {
               email: true,
+              note: true,
             },
           },
           redeemedAt: true,
@@ -193,6 +194,7 @@ export class AdminService {
           expiresAt: oldCode.expiresAt,
           boundAccountId: oldCode.boundAccountId,
           redeemedAt: oldCode.redeemedAt ?? new Date(),
+          reservedEmail: oldCode.reservedEmail,
         },
       })
 
@@ -362,6 +364,17 @@ export class AdminService {
     return this.prisma.account.update({
       where: { id },
       data: { status: result.data.status },
+    })
+  }
+
+  async updateAccountNote(id: string, body: unknown) {
+    const result = z.object({ note: z.string().max(100).nullable() }).safeParse(body)
+    if (!result.success) {
+      throw new BadRequestException("备注内容无效。")
+    }
+    return this.prisma.account.update({
+      where: { id },
+      data: { note: result.data.note },
     })
   }
 

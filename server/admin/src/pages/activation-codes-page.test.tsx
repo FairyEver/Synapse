@@ -51,7 +51,7 @@ describe("ActivationCodesPage", () => {
   it("renders activation codes returned by the admin api", async () => {
     const activationCode = activationCodeFixture({
       boundAccountId: "account_1",
-      boundAccount: { email: "user@example.com" },
+      boundAccount: { email: "user@example.com", note: null },
     })
     vi.mocked(adminApi.listActivationCodes).mockResolvedValue([activationCode])
 
@@ -158,7 +158,7 @@ describe("ActivationCodesPage", () => {
   it("renders risk state and opens activation attempt records", async () => {
     const activationCode = activationCodeFixture({
       boundAccountId: "account_1",
-      boundAccount: { email: "user@example.com" },
+      boundAccount: { email: "user@example.com", note: null },
       riskLockedAt: "2026-05-03T00:00:00.000Z",
       riskLockedReason: "激活码来源异常。",
     })
@@ -205,7 +205,7 @@ describe("ActivationCodesPage", () => {
   it("unlocks risk locked activation codes", async () => {
     const activationCode = activationCodeFixture({
       boundAccountId: "account_1",
-      boundAccount: { email: "user@example.com" },
+      boundAccount: { email: "user@example.com", note: null },
       riskLockedAt: "2026-05-03T00:00:00.000Z",
       riskLockedReason: "激活码来源异常。",
     })
@@ -244,7 +244,7 @@ describe("ActivationCodesPage", () => {
     })
     const activationCode = activationCodeFixture({
       boundAccountId: "account_1",
-      boundAccount: { email: "user@example.com" },
+      boundAccount: { email: "user@example.com", note: null },
       riskLockedAt: "2026-05-03T00:00:00.000Z",
       riskLockedReason: "激活码来源异常。",
     })

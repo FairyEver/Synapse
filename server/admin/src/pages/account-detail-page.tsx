@@ -1,3 +1,4 @@
+import { InlineNote } from "@/components/inline-note"
 import { PageState } from "@/components/page-state"
 import { StatusBadge } from "@/components/status-badge"
 import {
@@ -44,7 +45,11 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="grid gap-1">
           <div className="text-base font-medium">{data.email}</div>
-          <div className="text-sm text-muted-foreground">{formatDate(data.createdAt)}</div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>{formatDate(data.createdAt)}</span>
+            <span>·</span>
+            <InlineNote accountId={data.id} value={data.note} onSaved={() => reload()} />
+          </div>
         </div>
         <Button asChild variant="outline">
           <a href="#/accounts">返回</a>

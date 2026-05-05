@@ -1,5 +1,6 @@
 import * as React from "react"
 import { CopyIcon, PlusIcon } from "lucide-react"
+import { InlineNote } from "@/components/inline-note"
 import { PageState } from "@/components/page-state"
 import { StatusBadge } from "@/components/status-badge"
 import {
@@ -620,6 +621,7 @@ export function ActivationCodesPage() {
               <TableHead className="text-right">设备数</TableHead>
               <TableHead>到期</TableHead>
               <TableHead>邮箱</TableHead>
+              <TableHead>备注</TableHead>
               <TableHead>预绑定</TableHead>
               <TableHead>兑换</TableHead>
               <TableHead>创建</TableHead>
@@ -644,6 +646,15 @@ export function ActivationCodesPage() {
                 <TableCell className="text-right">{item.maxDevices}</TableCell>
                 <TableCell>{formatDate(item.expiresAt)}</TableCell>
                 <TableCell>{item.boundAccount?.email ?? "无"}</TableCell>
+                <TableCell>
+                  {item.boundAccountId && item.boundAccount ? (
+                    <InlineNote
+                      accountId={item.boundAccountId}
+                      value={item.boundAccount.note}
+                      onSaved={() => reload()}
+                    />
+                  ) : "—"}
+                </TableCell>
                 <TableCell>{item.reservedEmail ?? "—"}</TableCell>
                 <TableCell>{formatDate(item.redeemedAt)}</TableCell>
                 <TableCell>{formatDate(item.createdAt)}</TableCell>

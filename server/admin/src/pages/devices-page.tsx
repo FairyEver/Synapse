@@ -1,4 +1,5 @@
 import * as React from "react"
+import { InlineNote } from "@/components/inline-note"
 import { PageState } from "@/components/page-state"
 import { StatusBadge } from "@/components/status-badge"
 import {
@@ -187,6 +188,7 @@ export function DevicesPage() {
                 </TableHead>
               <TableHead>名称</TableHead>
               <TableHead>账号</TableHead>
+              <TableHead>备注</TableHead>
               <TableHead>激活码</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>平台</TableHead>
@@ -207,6 +209,13 @@ export function DevicesPage() {
                 </TableCell>
                 <TableCell>{device.name}</TableCell>
                 <TableCell>{device.license.account.email}</TableCell>
+                <TableCell>
+                  <InlineNote
+                    accountId={device.license.account.id}
+                    value={device.license.account.note}
+                    onSaved={() => reload()}
+                  />
+                </TableCell>
                 <TableCell>{device.license.activationCode.codeHint ?? device.license.id}</TableCell>
                 <TableCell>
                   <StatusBadge status={device.status} />

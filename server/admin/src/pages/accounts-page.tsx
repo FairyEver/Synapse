@@ -1,4 +1,5 @@
 import * as React from "react"
+import { InlineNote } from "@/components/inline-note"
 import { PageState } from "@/components/page-state"
 import { StatusBadge } from "@/components/status-badge"
 import {
@@ -24,7 +25,7 @@ import { formatDate } from "@/lib/format"
 const filterControlClassName = "w-32 shrink-0"
 
 export function AccountsPage() {
-  const { data, error, loading } = useApiResource(adminApi.listAccounts)
+  const { data, error, loading, reload } = useApiResource(adminApi.listAccounts)
   const [emailSearch, setEmailSearch] = React.useState("")
   const accounts = data ?? []
   const filteredAccounts = React.useMemo(
@@ -57,6 +58,7 @@ export function AccountsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>邮箱</TableHead>
+              <TableHead>备注</TableHead>
               <TableHead>状态</TableHead>
               <TableHead className="text-right">授权</TableHead>
               <TableHead className="text-right">设备</TableHead>
@@ -73,6 +75,13 @@ export function AccountsPage() {
               return (
                 <TableRow key={account.id}>
                   <TableCell>{account.email}</TableCell>
+                  <TableCell>
+                    <InlineNote
+                      accountId={account.id}
+                      value={account.note}
+                      onSaved={() => reload()}
+                    />
+                  </TableCell>
                   <TableCell>
                     <StatusBadge status={account.status} />
                   </TableCell>

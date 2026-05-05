@@ -130,6 +130,11 @@ export class AdminController {
     return this.admin.updateAccountStatus(id, body)
   }
 
+  @Patch("/accounts/:id/note")
+  updateAccountNote(@Param("id") id: string, @Body() body: unknown) {
+    return this.admin.updateAccountNote(id, body)
+  }
+
   @Patch("/licenses/:id")
   updateLicense(@Param("id") id: string, @Body() body: unknown) {
     return this.admin.updateLicense(id, body)
