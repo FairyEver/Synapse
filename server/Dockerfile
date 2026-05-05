@@ -17,6 +17,7 @@ RUN pnpm --filter @synapse/server build
 
 FROM base AS production
 ENV NODE_ENV=production
+RUN apk add --no-cache postgresql16-client
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/node_modules ./server/node_modules
 COPY --from=build /app/server/dist ./server/dist

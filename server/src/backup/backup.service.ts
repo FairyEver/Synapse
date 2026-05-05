@@ -112,30 +112,35 @@ export class BackupService {
   async listBackups(): Promise<BackupItem[]> {
     if (!this.cos) return []
 
-    return new Promise((resolve, reject) => {
-      this.cos!.getBucket(
-        {
-          Bucket: this.bucket,
-          Region: this.region,
-          Prefix: this.prefix,
-        },
-        (err, data) => {
-          if (err) {
-            this.logger.error({ error: err.message }, "Failed to list backups")
-            reject(err)
-            return
-          }
-          const items: BackupItem[] = (data.Contents ?? [])
-            .filter((obj) => obj.Key !== this.prefix)
-            .map((obj) => ({
-              filename: obj.Key.replace(this.prefix, ""),
-              size: Number(obj.Size),
-              lastModified: obj.LastModified,
-            }))
-          resolve(items)
-        },
-      )
-    })
+    try {
+      return await new Promise((resolve, reject) => {
+        this.cos!.getBucket(
+          {
+            Bucket: this.bucket,
+            Region: this.region,
+            Prefix: this.prefix,
+          },
+          (err, data) => {
+            if (err) {
+              reject(err)
+              return
+            }
+            const items: BackupItem[] = (data.Contents ?? [])
+              .filter((obj) => obj.Key !== this.prefix)
+              .map((obj) => ({
+                filename: obj.Key.replace(this.prefix, ""),
+                size: Number(obj.Size),
+                lastModified: obj.LastModified,
+              }))
+            resolve(items)
+          },
+        )
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error({ error: message }, "Failed to list backups")
+      return []
+    }
   }
 
   private async dumpDatabase(): Promise<string> {
@@ -143,7 +148,7 @@ export class BackupService {
     const dumpFile = path.join(tmpDir, `synapse-dump-${Date.now()}.sql`)
     const gzFile = `${dumpFile}.gz`
 
-    await execFileAsync("pg_dump", [this.env.databaseUrl, "-f", dumpFile])
+    await execFileAsync("pg_dump", ["--dbname", this.env.databaseUrl, "-f", dumpFile])
 
     const readStream = fs.createReadStream(dumpFile)
     const writeStream = fs.createWriteStream(gzFile)
