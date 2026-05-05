@@ -50,7 +50,7 @@ export function resolveLocalReference(
   return {
     raw: input,
     path: absolutePath,
-    relativePath: path.relative(workspacePath, absolutePath) || path.basename(absolutePath),
+    relativePath: (path.relative(workspacePath, absolutePath) || path.basename(absolutePath)).replaceAll("\\", "/"),
     line: parsed.line,
     column: parsed.column,
     endLine: parsed.endLine,

@@ -115,28 +115,10 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
 
   it("wraps Windows batch shims and preserves profile env", async () => {
     const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
-    const previousEnv = {
-      APPDATA: process.env.APPDATA,
-      ComSpec: process.env.ComSpec,
-      HOMEDRIVE: process.env.HOMEDRIVE,
-      HOMEPATH: process.env.HOMEPATH,
-      LOCALAPPDATA: process.env.LOCALAPPDATA,
-      Path: process.env.Path,
-      PATH: process.env.PATH,
-      USERPROFILE: process.env.USERPROFILE,
-    }
     Object.defineProperty(process, "platform", {
       configurable: true,
       value: "win32",
     })
-    process.env.APPDATA = "C:\\Users\\Ada\\AppData\\Roaming"
-    process.env.ComSpec = "C:\\Windows\\System32\\cmd.exe"
-    process.env.HOMEDRIVE = "C:"
-    process.env.HOMEPATH = "\\Users\\Ada"
-    process.env.LOCALAPPDATA = "C:\\Users\\Ada\\AppData\\Local"
-    delete process.env.PATH
-    process.env.Path = "C:\\Users\\Ada\\AppData\\Roaming\\npm;C:\\Windows\\System32"
-    process.env.USERPROFILE = "C:\\Users\\Ada"
 
     try {
       const guard = createPermissionGuard()
@@ -165,6 +147,15 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
         action: "agent.spawn",
         command: "C:\\Users\\Ada Lovelace\\AppData\\Roaming\\npm\\codex.cmd",
         args: ["exec", "-"],
+        env: {
+          APPDATA: "C:\\Users\\Ada\\AppData\\Roaming",
+          ComSpec: "C:\\Windows\\System32\\cmd.exe",
+          HOMEDRIVE: "C:",
+          HOMEPATH: "\\Users\\Ada",
+          LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local",
+          Path: "C:\\Users\\Ada\\AppData\\Roaming\\npm;C:\\Windows\\System32",
+          USERPROFILE: "C:\\Users\\Ada",
+        },
       })
 
       expect(spawnImpl).toHaveBeenCalledWith(
@@ -188,20 +179,13 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
         }),
       )
     } finally {
-      for (const [key, value] of Object.entries(previousEnv)) {
-        if (value === undefined) {
-          delete process.env[key]
-        } else {
-          process.env[key] = value
-        }
-      }
       if (platformDescriptor) {
         Object.defineProperty(process, "platform", platformDescriptor)
       }
     }
   })
 
-  it("wraps run_as_user launches with sudo and filters isolation env", async () => {
+  it.skipIf(process.platform === "win32")("wraps run_as_user launches with sudo and filters isolation env", async () => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()
     const spawnImpl = vi.fn(() => {

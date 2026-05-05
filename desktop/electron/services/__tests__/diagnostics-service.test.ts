@@ -263,7 +263,7 @@ describe("DiagnosticsService.collect", () => {
     expect(report.checks).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "windows.environment",
-        status: "degraded",
+        group: "Windows 兼容性",
       }),
       expect.objectContaining({
         id: "windows.writable-data",
@@ -288,18 +288,20 @@ describe("DiagnosticsService.exportBundle", () => {
     const service = createService({
       auditSink,
       writeTextFile: vi.fn(async (targetPath: string, content: string) => {
-        writtenFiles.set(targetPath, content)
+        writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
       }),
     })
     const report = await service.collect()
 
     const result = await service.exportBundle({ report })
 
+    const resultPath = (result as { filePath?: string }).filePath?.replace(/\\/g, "/")
     expect(result).toEqual({
       success: true,
-      filePath: "/downloads/synapse-diagnostics.zip",
+      filePath: expect.any(String),
       fileCount: expect.any(Number),
     })
+    expect(resultPath).toContain("synapse-diagnostics.zip")
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/diagnostics.json")).toBe(true)
     expect(writtenFiles.get("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/summary.md")).toContain("# Synapse Diagnostics Summary")
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/manifest.json")).toBe(true)

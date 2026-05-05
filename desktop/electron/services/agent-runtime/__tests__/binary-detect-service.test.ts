@@ -83,7 +83,7 @@ describe("whichBin", () => {
     process.env.APPDATA = "C:\\Users\\Ada\\AppData\\Roaming"
     process.env.LOCALAPPDATA = "C:\\Users\\Ada\\AppData\\Local"
     accessMock.mockImplementation(async (filePath: string) => {
-      if (filePath.endsWith("AppData\\Roaming/npm/claude.cmd")) return
+      if (filePath.replace(/\\/g, "/").endsWith("AppData/Roaming/npm/claude.cmd")) return
       throw new Error("missing")
     })
 

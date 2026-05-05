@@ -88,9 +88,10 @@ describe("LogRotator (T6.1)", () => {
   })
 
   it("nextFilePath produces a timestamped filename in logDir", () => {
-    const rotator = new LogRotator({ logDir: "/tmp/x", baseName: "synapse" })
+    const logDir = path.join(tmpdir(), "synapse-rotator-test")
+    const rotator = new LogRotator({ logDir, baseName: "synapse" })
     const next = rotator.nextFilePath()
-    expect(next.startsWith("/tmp/x/synapse-")).toBe(true)
+    expect(next.startsWith(path.join(logDir, "synapse-"))).toBe(true)
     expect(next.endsWith(".log")).toBe(true)
   })
 })
