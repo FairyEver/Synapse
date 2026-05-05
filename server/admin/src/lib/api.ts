@@ -21,6 +21,7 @@ export interface ActivationCode {
   readonly riskUnlockedAt: string | null
   readonly riskReviewNote: string | null
   readonly replacedByActivationCodeId: string | null
+  readonly reservedEmail: string | null
   readonly createdAt: string
 }
 
@@ -90,6 +91,7 @@ export type ActivationAttemptOutcome =
   | "success"
   | "invalid_code"
   | "bound_conflict"
+  | "reserved_mismatch"
   | "rate_limited"
   | "risk_locked"
   | "device_limit"
@@ -201,6 +203,8 @@ export const adminApi = {
     maxDevices: number
     expiresAt: string | null
     quantity: number
+    reservedEmail?: string | null
+    reservedEmails?: string[] | null
   }) =>
     request<CreatedActivationCode[]>("/admin/api/activation-codes", {
       method: "POST",
