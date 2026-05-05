@@ -69,7 +69,7 @@ describe("LicensesService", () => {
     })).rejects.toThrow("激活码已绑定其他账号。")
   })
 
-  it("rejects a second device when maxDevices is one", async () => {
+  it("replaces old device when maxDevices is one and a new device activates", async () => {
     const pair = keys()
     const service = LicensesService.createInMemory({
       privateKey: pair.privateKey,
@@ -86,12 +86,15 @@ describe("LicensesService", () => {
       ...requestSource,
     })
 
-    await expect(service.redeem({
+    const result = await service.redeem({
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-2", name: "ThinkPad", platform: "win32", appVersion: "0.2.54" },
       ...requestSource,
-    })).rejects.toThrow("设备数量已达上限。")
+    })
+
+    expect(result.email).toBe("user@example.com")
+    expect(result.deviceIdHash).toBe(hashDeviceId("device-2"))
   })
 
   it("rejects redeeming a revoked device under the same license", async () => {
@@ -246,6 +249,64 @@ describe("LicensesService", () => {
       email: "user@example.com",
       deviceIdHash: hashDeviceId("device-1"),
     })
+  })
+
+  it("redeems a reserved-email activation code when the email matches", async () => {
+    const pair = keys()
+    const service = LicensesService.createInMemory({
+      privateKey: pair.privateKey,
+      publicKey: pair.publicKey,
+      keyId: "test",
+      leaseDays: 7,
+    })
+    service.seedActivationCode({
+      codeHash: hashActivationCode("ABCD-1234"),
+      maxDevices: 1,
+      reservedEmail: "allowed@example.com",
+    })
+
+    const result = await service.redeem({
+      email: "ALLOWED@example.com",
+      activationCode: "ABCD-1234",
+      device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
+    })
+
+    expect(result.email).toBe("allowed@example.com")
+  })
+
+  it("rejects redemption when email does not match reservedEmail", async () => {
+    const pair = keys()
+    const risk = {
+      assertNotRateLimited: vi.fn(),
+      recordAttempt: vi.fn(),
+      evaluateCodeRisk: vi.fn(),
+    }
+    const service = LicensesService.createInMemory({
+      privateKey: pair.privateKey,
+      publicKey: pair.publicKey,
+      keyId: "test",
+      leaseDays: 7,
+    }, risk as never)
+    service.seedActivationCode({
+      codeHash: hashActivationCode("ABCD-1234"),
+      maxDevices: 1,
+      reservedEmail: "allowed@example.com",
+    })
+
+    await expect(service.redeem({
+      email: "other@example.com",
+      activationCode: "ABCD-1234",
+      device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.54" },
+      ...requestSource,
+    })).rejects.toMatchObject({
+      code: "ACTIVATION_RESERVED_MISMATCH",
+    })
+
+    expect(risk.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "reserved_mismatch",
+    }))
+    expect(risk.evaluateCodeRisk).toHaveBeenCalled()
   })
 })
 

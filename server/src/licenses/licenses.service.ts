@@ -28,6 +28,7 @@ interface ActivationRecord {
   readonly maxDevices: number
   boundAccountId: string | null
   readonly expiresAt?: Date | null
+  readonly reservedEmail?: string | null
   riskLockedAt?: Date | null
 }
 
@@ -92,6 +93,7 @@ interface LicenseRepository {
   findOrCreateLicense(accountId: string, activation: ActivationRecord): Promise<LicenseRecord>
   findDevicesByLicense(licenseId: string): Promise<DeviceRecord[]>
   createDevice(license: LicenseRecord, metadata: DeviceMetadata, deviceIdHash: string): Promise<DeviceRecord>
+  revokeOldestDevices(licenseId: string, count: number): Promise<void>
   updateDeviceMetadata(deviceId: string, metadata: DeviceMetadata): Promise<void>
   createLease(input: {
     licenseId: string
@@ -135,7 +137,7 @@ export class LicensesService {
     return new LicensesService(settings, new PrismaLicenseRepository(prisma), risk)
   }
 
-  seedActivationCode(input: { codeHash: string; maxDevices: number; riskLockedAt?: Date | null }): void {
+  seedActivationCode(input: { codeHash: string; maxDevices: number; riskLockedAt?: Date | null; reservedEmail?: string | null }): void {
     if (!(this.repository instanceof InMemoryLicenseRepository)) {
       throw new Error("seedActivationCode 仅可用于内存测试。")
     }
@@ -178,6 +180,12 @@ export class LicensesService {
       throw new ActivationError("ACTIVATION_INVALID", "激活失败，请检查信息。")
     }
 
+    if (activation.reservedEmail && normalizeEmail(request.email) !== activation.reservedEmail) {
+      await this.recordRedeemAttempt(request, activation, "reserved_mismatch", "此激活码已分配给特定用户。")
+      await this.evaluateActivationRisk(activation, codeHash)
+      throw new ActivationError("ACTIVATION_RESERVED_MISMATCH", "此激活码已分配给特定用户。")
+    }
+
     const account = await this.repository.findOrCreateAccount(email)
     if (account.status !== "active") {
       await this.recordRedeemAttempt(request, activation, "blocked", "账号已停用。")
@@ -215,17 +223,7 @@ export class LicensesService {
       }
     }
 
-    let device: DeviceRecord
-    try {
-      device = await this.findOrCreateDevice(license, request.device)
-    } catch (error) {
-      if (error instanceof Error && error.message === "设备数量已达上限。") {
-        await this.recordRedeemAttempt(request, activation, "device_limit", error.message)
-        await this.evaluateActivationRisk(activation, codeHash)
-        throw new ActivationError("ACTIVATION_DEVICE_LIMIT", error.message)
-      }
-      throw error
-    }
+    const device = await this.findOrCreateDevice(license, request.device)
     await this.recordRedeemAttempt(request, activation, "success", "激活成功。")
     const leaseToken = await this.issueLease(account, license, device)
 
@@ -297,9 +295,12 @@ export class LicensesService {
       return existing
     }
 
-    const activeCount = devices.filter((device) => device.status === "active").length
-    if (activeCount >= license.maxDevices) {
-      throw new Error("设备数量已达上限。")
+    const activeDevices = devices.filter((device) => device.status === "active")
+    if (activeDevices.length >= license.maxDevices) {
+      await this.repository.revokeOldestDevices(
+        license.id,
+        activeDevices.length - license.maxDevices + 1,
+      )
     }
 
     return this.repository.createDevice(license, metadata, deviceIdHash)
@@ -382,7 +383,7 @@ class InMemoryLicenseRepository implements LicenseRepository {
   private readonly licenses = new Map<string, LicenseRecord>()
   private readonly devices = new Map<string, DeviceRecord>()
 
-  seedActivationCode(input: { codeHash: string; maxDevices: number; riskLockedAt?: Date | null }): void {
+  seedActivationCode(input: { codeHash: string; maxDevices: number; riskLockedAt?: Date | null; reservedEmail?: string | null }): void {
     this.activations.set(input.codeHash, {
       id: randomUUID(),
       codeHash: input.codeHash,
@@ -390,6 +391,7 @@ class InMemoryLicenseRepository implements LicenseRepository {
       maxDevices: input.maxDevices,
       boundAccountId: null,
       riskLockedAt: input.riskLockedAt ?? null,
+      reservedEmail: input.reservedEmail ?? null,
     })
   }
 
@@ -456,6 +458,14 @@ class InMemoryLicenseRepository implements LicenseRepository {
       device.name = metadata.name
       device.platform = metadata.platform
       device.appVersion = metadata.appVersion
+    }
+  }
+
+  async revokeOldestDevices(licenseId: string, count: number): Promise<void> {
+    const devices = [...this.devices.values()]
+      .filter((d) => d.licenseId === licenseId && d.status === "active")
+    for (const d of devices.slice(0, count)) {
+      this.devices.set(d.id, { ...d, status: "revoked" })
     }
   }
 
@@ -556,6 +566,21 @@ class PrismaLicenseRepository implements LicenseRepository {
         lastSeenAt: new Date(),
       },
     })
+  }
+
+  async revokeOldestDevices(licenseId: string, count: number): Promise<void> {
+    const oldest = await this.prisma.device.findMany({
+      where: { licenseId, status: "active" },
+      orderBy: { createdAt: "asc" },
+      take: count,
+      select: { id: true },
+    })
+    if (oldest.length > 0) {
+      await this.prisma.device.updateMany({
+        where: { id: { in: oldest.map((d) => d.id) } },
+        data: { status: "revoked" },
+      })
+    }
   }
 
   async createLease(input: {
