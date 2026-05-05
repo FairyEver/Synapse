@@ -1,12 +1,10 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from "react"
+import { type FormEvent, type ReactNode, useState } from "react"
 import { KeyRound, LoaderCircle } from "lucide-react"
 import { formatLicenseErrorMessage, useLicense } from "@/app-shell/license"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-
-const DEFAULT_LICENSE_SERVER_URL = "http://localhost:3000"
 
 function LicenseScreenShell({ children }: { readonly children: ReactNode }) {
   return (
@@ -20,17 +18,11 @@ function LicenseScreenShell({ children }: { readonly children: ReactNode }) {
 
 export function LicenseGate({ children }: { readonly children: ReactNode }) {
   const { activate, error, isReady, renew, status } = useLicense()
-  const [serverUrl, setServerUrl] = useState(DEFAULT_LICENSE_SERVER_URL)
   const [email, setEmail] = useState("")
   const [activationCode, setActivationCode] = useState("")
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isRenewing, setIsRenewing] = useState(false)
-
-  useEffect(() => {
-    if (status?.serverUrl) setServerUrl(status.serverUrl)
-    if (status?.email) setEmail(status.email)
-  }, [status?.email, status?.serverUrl])
 
   if (!isReady) {
     return (
@@ -52,7 +44,7 @@ export function LicenseGate({ children }: { readonly children: ReactNode }) {
     setIsSubmitting(true)
     setFormError(null)
     try {
-      const result = await activate({ serverUrl, email, activationCode })
+      const result = await activate({ email, activationCode })
       if (result.status !== "active") {
         setFormError(result.message ?? "授权未生效。")
       }
@@ -88,15 +80,6 @@ export function LicenseGate({ children }: { readonly children: ReactNode }) {
       </CardHeader>
       <CardContent>
         <form className="grid gap-4" onSubmit={handleSubmit}>
-          <div className="grid gap-2">
-            <Label htmlFor="license-server-url">服务器</Label>
-            <Input
-              id="license-server-url"
-              value={serverUrl}
-              onChange={(event) => setServerUrl(event.target.value)}
-              required
-            />
-          </div>
           <div className="grid gap-2">
             <Label htmlFor="license-email">邮箱</Label>
             <Input

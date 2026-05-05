@@ -11,7 +11,6 @@ export interface SynapseLicenseStatus {
 }
 
 export interface SynapseLicenseActivationRequest {
-  readonly serverUrl: string
   readonly email: string
   readonly activationCode: string
 }
