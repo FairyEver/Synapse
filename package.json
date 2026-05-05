@@ -12,6 +12,7 @@
     "dev:server": "node scripts/run-with-server-env.mjs --filter @synapse/server run dev",
     "quit": "node scripts/quit.mjs",
     "quit:docker": "docker compose -f server/compose.yml down",
-    "quit:processes": "node scripts/quit-processes.mjs"
+    "quit:processes": "node scripts/quit-processes.mjs",
+    "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push"
   }
 }
