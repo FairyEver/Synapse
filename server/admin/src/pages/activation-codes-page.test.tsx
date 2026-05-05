@@ -32,6 +32,7 @@ function activationCodeFixture(overrides: Partial<ActivationCode> = {}): Activat
     riskUnlockedAt: null,
     riskReviewNote: null,
     replacedByActivationCodeId: null,
+    reservedEmail: null,
     createdAt: "2026-04-29T00:00:00.000Z",
     ...overrides,
   }

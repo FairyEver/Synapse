@@ -33,6 +33,7 @@ enum ActivationAttemptOutcome {
   success
   invalid_code
   bound_conflict
+  reserved_mismatch
   rate_limited
   risk_locked
   device_limit
