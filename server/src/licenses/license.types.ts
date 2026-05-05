@@ -25,12 +25,14 @@ export type ActivationErrorCode =
   | "ACTIVATION_RISK_LOCKED"
   | "ACTIVATION_INVALID"
   | "ACTIVATION_BOUND_CONFLICT"
+  | "ACTIVATION_RESERVED_MISMATCH"
   | "ACTIVATION_DEVICE_LIMIT"
 
 export type ActivationAttemptOutcome =
   | "success"
   | "invalid_code"
   | "bound_conflict"
+  | "reserved_mismatch"
   | "rate_limited"
   | "risk_locked"
   | "device_limit"
