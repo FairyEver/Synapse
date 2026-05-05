@@ -11,7 +11,12 @@ const createActivationCodeSchema = z.object({
   maxDevices: z.number().int().positive().default(1),
   expiresAt: z.string().nullable().optional(),
   quantity: z.number().int().positive().max(100).default(1),
-}).strict()
+  reservedEmail: z.string().email().nullable().optional(),
+  reservedEmails: z.array(z.string().email()).max(100).nullable().optional(),
+}).strict().refine(
+  (data) => !(data.reservedEmail && data.reservedEmails),
+  { message: "reservedEmail 和 reservedEmails 不能同时使用。" },
+)
 type CreateActivationCodeRequest = z.infer<typeof createActivationCodeSchema>
 const riskLockSchema = z.object({
   locked: z.boolean(),
