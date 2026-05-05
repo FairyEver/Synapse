@@ -21,10 +21,25 @@ import { PrismaModule } from "./prisma/prisma.module"
       pinoHttp: {
         autoLogging: true,
         redact: ["req.headers.cookie", "req.headers.authorization"],
-        transport:
-          process.env.NODE_ENV !== "production"
-            ? { target: "pino-pretty", options: { colorize: true } }
-            : undefined,
+        transport: {
+          targets: [
+            ...(process.env.NODE_ENV !== "production"
+              ? [{ target: "pino-pretty", level: "info" as const, options: { colorize: true } }]
+              : []),
+            {
+              target: "pino-roll",
+              level: "debug" as const,
+              options: {
+                file: join(process.cwd(), "logs", "server"),
+                frequency: "daily",
+                size: "50m",
+                extension: ".log",
+                limit: { count: 30 },
+                mkdir: true,
+              },
+            },
+          ],
+        },
       },
     }),
     ServeStaticModule.forRoot({
