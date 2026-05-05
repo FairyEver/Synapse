@@ -5,7 +5,7 @@
  * Phase 0.3 (T3.12) replaces this with WindowManager.
  */
 
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
 import { managedBrowserWindow, type WindowManager } from "../runtime/window"
@@ -85,6 +85,11 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
 }
 
 export function showOrCreateMainWindow(deps: MainWindowDeps): void {
+  if (deps.isAppQuitting()) {
+    app.relaunch()
+    app.exit(0)
+    return
+  }
   const existing = deps.state.current
   if (existing && !existing.isDestroyed()) {
     existing.show()
