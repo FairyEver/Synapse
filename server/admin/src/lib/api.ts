@@ -145,6 +145,20 @@ export interface AuditLog {
   readonly createdAt: string
 }
 
+export interface LogFileInfo {
+  name: string;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface LogEntry {
+  time: string;
+  level: string;
+  msg: string;
+  req?: { method: string; url: string };
+  err?: { message: string; stack: string };
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -312,5 +326,22 @@ export const adminApi = {
     if (options.includeArchived) query.set("includeArchived", "true")
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
     window.open(`/admin/api/activation-codes/export${suffix}`, "_blank")
+  },
+  async listLogFiles(): Promise<LogFileInfo[]> {
+    return request<LogFileInfo[]>("/admin/api/logs/files");
+  },
+  async fetchRecentLogs(opts?: { level?: string; limit?: number }): Promise<LogEntry[]> {
+    const params = new URLSearchParams();
+    if (opts?.level) params.set("level", opts.level);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return request<LogEntry[]>(`/admin/api/logs/recent${qs ? `?${qs}` : ""}`);
+  },
+  downloadLogs(opts?: { from?: string; to?: string }) {
+    const params = new URLSearchParams();
+    if (opts?.from) params.set("from", opts.from);
+    if (opts?.to) params.set("to", opts.to);
+    const qs = params.toString();
+    window.open(`/admin/api/logs/download${qs ? `?${qs}` : ""}`, "_blank");
   },
 }
