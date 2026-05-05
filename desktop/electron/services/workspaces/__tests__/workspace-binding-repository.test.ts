@@ -31,12 +31,12 @@ describe("WorkspaceBindingRepository", () => {
     await expect(repo.lookupEffective("project-1", "feishu:oc_group"))
       .resolves.toEqual(expect.objectContaining({
         scope: "project",
-        binding: expect.objectContaining({ workspacePath: "/project" }),
+        binding: expect.objectContaining({ workspacePath: path.resolve("/project") }),
       }))
     await expect(repo.lookupEffective("project-2", "feishu:oc_group"))
       .resolves.toEqual(expect.objectContaining({
         scope: "shared",
-        binding: expect.objectContaining({ workspacePath: "/shared" }),
+        binding: expect.objectContaining({ workspacePath: path.resolve("/shared") }),
       }))
   })
 

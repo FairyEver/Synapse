@@ -92,6 +92,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.relay",
         "core.side-channel",
         "core.task-scheduler",
+        "core.token-usage",
         "core.update",
         "core.window-manager",
         "repo.maintenance",

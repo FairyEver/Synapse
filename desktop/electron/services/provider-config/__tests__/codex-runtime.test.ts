@@ -107,7 +107,9 @@ describe("Codex runtime helpers", () => {
       OPENAI_API_KEY: "sk-secret",
       auth_mode: "apikey",
     })
-    expect((await stat(join(tempDir, "auth.json"))).mode & 0o777).toBe(0o600)
+    if (process.platform !== "win32") {
+      expect((await stat(join(tempDir, "auth.json"))).mode & 0o777).toBe(0o600)
+    }
     expect(auditSink.list().filter((event) => event.action === "fs.write")).toHaveLength(2)
 
     expect(buildCodexExecArgs({
