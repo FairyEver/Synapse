@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   ActivityIcon,
+  FileTextIcon,
   HardDriveIcon,
   KeyRoundIcon,
   MonitorIcon,
@@ -76,6 +77,14 @@ const data = {
       url: "#/backup",
       icon: (
         <HardDriveIcon
+        />
+      ),
+    },
+    {
+      title: "系统日志",
+      url: "#/logs",
+      icon: (
+        <FileTextIcon
         />
       ),
     },

@@ -16,6 +16,7 @@ import { BackupPage } from "@/pages/backup-page"
 import { DevicesPage } from "@/pages/devices-page"
 import { LoginPage } from "@/pages/login-page"
 import { SystemPage } from "@/pages/system-page"
+import { LogsPage } from "@/pages/logs-page"
 import { adminApi, type AdminSession } from "@/lib/api"
 import { useIdleTimeout } from "@/hooks/use-idle-timeout"
 
@@ -27,6 +28,7 @@ type Route =
   | { name: "audit-logs" }
   | { name: "system" }
   | { name: "backup" }
+  | { name: "logs" }
 
 function routeFromHash(): Route {
   const route = window.location.hash.replace(/^#\/?/, "") || "activation-codes"
@@ -37,6 +39,7 @@ function routeFromHash(): Route {
   if (section === "audit-logs") return { name: "audit-logs" }
   if (section === "system") return { name: "system" }
   if (section === "backup") return { name: "backup" }
+  if (section === "logs") return { name: "logs" }
   return { name: "activation-codes" }
 }
 
@@ -64,6 +67,8 @@ function titleForRoute(route: Route): string {
       return "系统"
     case "backup":
       return "备份管理"
+    case "logs":
+      return "系统日志"
     case "activation-codes":
     default:
       return "激活码"
@@ -144,6 +149,7 @@ export default function App() {
             {route.name === "audit-logs" ? <AuditLogsPage /> : null}
             {route.name === "system" ? <SystemPage /> : null}
             {route.name === "backup" ? <BackupPage /> : null}
+            {route.name === "logs" ? <LogsPage /> : null}
           </main>
         </SidebarInset>
       </SidebarProvider>
