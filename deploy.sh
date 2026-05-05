@@ -5,7 +5,7 @@ set -e
 
 SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse"
-TOTAL_STEPS=5
+TOTAL_STEPS=7
 LOG_FILE=$(mktemp)
 TOTAL_START=$(date +%s)
 VERBOSE=false
@@ -73,19 +73,27 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   exit 0
 fi
 
-# [3/5] 构建 Docker 镜像
+# [3/7] 构建 Docker 镜像
 step 3 "构建 Docker 镜像" \
-  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env up -d --build"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env build"
 
-# [4/5] 等待服务启动
-step 4 "等待服务启动" \
+# [4/7] 停止旧服务
+step 4 "停止旧服务" \
+  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env down"
+
+# [5/7] 启动新服务
+step 5 "启动新服务" \
+  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env up -d"
+
+# [6/7] 等待服务就绪
+step 6 "等待服务就绪" \
   sleep 5
 
-# [5/5] 健康检查
+# [7/7] 健康检查
 if ssh "$SERVER" "curl -sf http://127.0.0.1:3000/healthz" > /dev/null 2>&1; then
-  printf "[%d/%d] 健康检查 .......... passed\n" 5 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... passed\n" 7 "$TOTAL_STEPS"
 else
-  printf "[%d/%d] 健康检查 .......... FAILED\n" 5 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... FAILED\n" 7 "$TOTAL_STEPS"
   echo ""
   echo "  服务未就绪，查看日志:"
   echo "  ssh $SERVER \"cd $REMOTE_DIR/server && docker compose logs server\""
