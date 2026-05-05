@@ -21,7 +21,7 @@ defaults:
     shell: bash
 
 jobs:
-  build-installers:
+  build-and-publish:
     name: Build ${{ matrix.label }} installer
     runs-on: ${{ matrix.os }}
     strategy:
@@ -30,12 +30,12 @@ jobs:
         include:
           - label: macOS
             os: macos-latest
-            artifact_name: release-macos
             package_script: package:mac
           - label: Windows
             os: windows-latest
-            artifact_name: release-windows
             package_script: package:win
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -90,7 +90,17 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
 
-      - name: Collect release artifacts
+      - name: Read package version
+        id: version
+        run: |
+          VERSION="$(node -p "require('./desktop/package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Collect and publish release artifacts
+        env:
+          RELEASE_NAME: Synapse v${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           mkdir -p release-artifacts
           shopt -s nullglob
@@ -102,55 +112,24 @@ jobs:
           ls -la release-artifacts
           test -n "$(ls -A release-artifacts)"
 
-      - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: release-artifacts/*
-          if-no-files-found: error
-          retention-days: 1
+          if gh release view "$RELEASE_TAG" --repo "$RELEASE_REPO" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-artifacts/* --clobber --repo "$RELEASE_REPO"
+          else
+            gh release create "$RELEASE_TAG" release-artifacts/* --title "$RELEASE_NAME" --generate-notes --repo "$RELEASE_REPO"
+          fi
 
-  publish-release:
-    name: Publish GitHub Release
+  notify:
+    name: Notify package completion
     runs-on: ubuntu-latest
-    needs: build-installers
-    env:
-      GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+    needs: build-and-publish
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      - name: Download packaged artifacts
-        uses: actions/download-artifact@v7
         with:
-          path: release-artifacts
+          sparse-checkout: desktop/package.json
+          sparse-checkout-cone-mode: false
 
-      - name: Read package version
-        id: version
-        run: |
-          VERSION="$(node -p "require('./desktop/package.json').version")"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Create or update GitHub Release
-        env:
-          RELEASE_NAME: Synapse v${{ steps.version.outputs.version }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          mapfile -t files < <(find release-artifacts -type f | sort)
-
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No release artifacts found."
-            exit 1
-          fi
-
-          if gh release view "$RELEASE_TAG" --repo "$RELEASE_REPO" > /dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber --repo "$RELEASE_REPO"
-          else
-            gh release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_NAME" --generate-notes --repo "$RELEASE_REPO"
-          fi
-
-      - name: Notify package completion
+      - name: Send notification
         env:
           BARK_PUSH_URL: https://api.day.app/B3H8T6rF2p5Mj6z6oha82K
         run: |
