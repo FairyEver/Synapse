@@ -188,13 +188,14 @@ export const adminApi = {
     request<{ ok: true }>("/admin/logout", {
       method: "POST",
     }),
-  listActivationCodes: (options: { readonly includeArchived?: boolean } = {}) => {
+  listActivationCodes: async (options: { readonly includeArchived?: boolean } = {}) => {
     const query = new URLSearchParams()
     if (options.includeArchived) {
       query.set("includeArchived", "true")
     }
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
-    return request<ActivationCode[]>(`/admin/api/activation-codes${suffix}`)
+    const result = await request<PaginatedResponse<ActivationCode>>(`/admin/api/activation-codes${suffix}`)
+    return result.data
   },
   createActivationCode: (input: {
     maxDevices: number
@@ -214,8 +215,10 @@ export const adminApi = {
     request<ActivationCode>(`/admin/api/activation-codes/${id}/archive`, {
       method: "PATCH",
     }),
-  listActivationAttempts: (id: string) =>
-    request<ActivationAttempt[]>(`/admin/api/activation-codes/${id}/attempts`),
+  listActivationAttempts: async (id: string) => {
+    const result = await request<PaginatedResponse<ActivationAttempt>>(`/admin/api/activation-codes/${id}/attempts`)
+    return result.data
+  },
   updateActivationCodeRiskLock: (
     id: string,
     input: { readonly locked: boolean; readonly note: string | null },
@@ -228,9 +231,15 @@ export const adminApi = {
     request<CreatedActivationCode>(`/admin/api/activation-codes/${id}/replace`, {
       method: "POST",
     }),
-  listAccounts: () => request<Account[]>("/admin/api/accounts"),
+  listAccounts: async () => {
+    const result = await request<PaginatedResponse<Account>>("/admin/api/accounts")
+    return result.data
+  },
   getAccount: (id: string) => request<Account>(`/admin/api/accounts/${id}`),
-  listDevices: () => request<Device[]>("/admin/api/devices"),
+  listDevices: async () => {
+    const result = await request<PaginatedResponse<Device>>("/admin/api/devices")
+    return result.data
+  },
   getSystemOverview: () => request<SystemOverview>("/admin/api/system"),
   updateLicense: (id: string, status: ManagedStatus) =>
     request<License>(`/admin/api/licenses/${id}`, {

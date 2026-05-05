@@ -51,6 +51,10 @@ pnpm quit                    # 停止本地开发环境
 更完整的开发、打包、发布、编辑器集成说明见 [`desktop/README.md`](./desktop/README.md)。
 授权服务说明见 [`server/README.md`](./server/README.md)。
 
+## 正式环境
+
+- 管理面板：<https://synapse.d2.pub/admin>
+
 ## 下载
 
 - 官网：<https://usesynapse.netlify.app>
