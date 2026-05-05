@@ -1,7 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { readdir, stat, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import archiver from "archiver";
+
+export const LOG_DIR_TOKEN = "LOG_DIR";
 
 const PINO_LEVELS: Record<string, number> = {
   debug: 20,
@@ -29,7 +31,7 @@ export interface LogEntry {
 export class LogFileService {
   private readonly logDir: string;
 
-  constructor(logDir?: string) {
+  constructor(@Optional() @Inject(LOG_DIR_TOKEN) logDir?: string) {
     this.logDir = logDir ?? join(process.cwd(), "logs");
   }
 
