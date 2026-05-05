@@ -1,4 +1,4 @@
-# Agent
+# Agent（智能体）
 
 <!-- Sources: desktop/src/modules/agent/index.tsx; desktop/src/modules/agent/hooks/use-agent-chat.ts; desktop/src/modules/agent/components/agent-session-sidebar.tsx; desktop/src/modules/agent/components/agent-permission-panel.tsx; desktop/src/modules/agent/components/agent-timeline.tsx; desktop/src/modules/agent/live-sync.ts; desktop/src/modules/agent/project-resolution.ts; desktop/electron/modules/agent/ipc.ts -->
 

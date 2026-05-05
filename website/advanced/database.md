@@ -1,4 +1,4 @@
-# Database
+# Database（数据库）
 
 <!-- Sources: desktop/src/modules/database/index.tsx; desktop/src/modules/database/hooks/use-database.ts; desktop/src/modules/database/components/create-table-dialog.tsx; desktop/src/modules/database/components/data-table-view.tsx; desktop/src/modules/database/components/table-schema-sheet.tsx; desktop/src/modules/database/components/database-column-types.ts; desktop/electron/database/service.ts; desktop/electron/database/types.ts -->
 

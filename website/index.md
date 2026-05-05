@@ -31,6 +31,8 @@ features:
     details: 使用内置 Database 管理本地数据表，并将数据服务注册为 MCP Server。
   - title: 定时任务调度
     details: 通过 cron 或 interval 表达式调度任务，支持启停控制和运行记录查看。
+  - title: Token Usage（用量统计）
+    details: 扫描本地 AI 编辑器日志，汇总 token 消耗与费用估算，支持按模型、日期、Agent 多维度查看。
   - title: 诊断工具
     details: 检查编辑器配置状态和内容安装情况，快速定位问题。
 ---

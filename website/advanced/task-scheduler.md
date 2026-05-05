@@ -1,4 +1,4 @@
-# Task Scheduler
+# Task Scheduler（定时任务）
 
 <!-- Sources: desktop/src/modules/task-scheduler/index.tsx; desktop/src/modules/task-scheduler/types.ts; desktop/src/modules/task-scheduler/utils.ts; desktop/src/modules/task-scheduler/hooks/use-task-scheduler.ts; desktop/src/modules/task-scheduler/components/task-form-dialog.tsx; desktop/src/modules/task-scheduler/components/task-runs-dialog.tsx; desktop/src/types/task-scheduler.ts; desktop/electron/modules/task-scheduler/ipc.ts; desktop/electron/services/task-scheduler/types.ts; desktop/electron/services/task-scheduler/task-scheduler-service.ts; desktop/electron/services/task-scheduler/schedule-calculator.ts; desktop/electron/services/task-scheduler/execution-service.ts; desktop/electron/services/task-scheduler/shell-action.ts -->
 

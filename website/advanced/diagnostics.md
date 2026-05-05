@@ -1,4 +1,4 @@
-# Diagnostics
+# Diagnostics（诊断工具）
 
 <!-- Sources: desktop/src/modules/settings/components/diagnostics-panel.tsx; desktop/src/types/diagnostics.ts; desktop/src/lib/diagnostics-summary.ts; desktop/electron/services/diagnostics-service.ts -->
 

@@ -1,4 +1,4 @@
-# Editor Scan
+# Editor Scan（编辑器扫描）
 
 <!-- Sources: desktop/src/modules/editor-scan/index.tsx; desktop/src/modules/editor-scan/components/editor-scan-sidebar.tsx; desktop/src/modules/editor-scan/components/global-overview.tsx; desktop/src/modules/editor-scan/components/project-overview.tsx; desktop/src/modules/editor-scan/components/scan-item-detail-dialog.tsx; desktop/src/modules/editor-scan/components/editor-copy-dialog.tsx; desktop/src/modules/editor-scan/lib/quick-publish.ts; desktop/src/types/editor-scan.ts; desktop/src/lib/editor-registry.ts; desktop/electron/services/editor-scan-service.ts -->
 

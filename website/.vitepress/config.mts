@@ -58,6 +58,7 @@ export default defineConfig({
         { text: 'Prompts', link: '/advanced/prompts' },
         { text: 'Database', link: '/advanced/database' },
         { text: 'Task Scheduler', link: '/advanced/task-scheduler' },
+        { text: 'Token Usage', link: '/advanced/token-usage' },
         { text: 'Editor Scan', link: '/advanced/editor-scan' },
         { text: 'Diagnostics', link: '/advanced/diagnostics' }
       ]}],

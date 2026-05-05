@@ -1,4 +1,4 @@
-# Prompts
+# Prompts（提示词）
 
 <!-- Sources: desktop/src/modules/prompts/index.tsx; desktop/src/modules/prompts/components/prompt-create-dialog.tsx; desktop/src/modules/prompts/components/prompt-detail-dialog.tsx; desktop/src/modules/prompts/components/prompt-version-view.tsx -->
 

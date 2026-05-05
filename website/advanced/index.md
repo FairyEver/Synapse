@@ -8,5 +8,6 @@
 - [Prompts](/advanced/prompts)
 - [Database](/advanced/database)
 - [Task Scheduler](/advanced/task-scheduler)
+- [Token Usage](/advanced/token-usage)
 - [Editor Scan](/advanced/editor-scan)
 - [Diagnostics](/advanced/diagnostics)
