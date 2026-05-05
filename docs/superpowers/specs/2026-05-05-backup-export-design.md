@@ -57,6 +57,56 @@ Docker 重置或 volume 丢失会导致 PostgreSQL 中的激活码、License、�
 
 COS 相关变量全部留空时，自动备份不启用，管理后台备份功能隐藏。
 
+**后期启用**：SSH 编辑 `server/.env` 补上 COS 变量，重启服务即可。BackupService 每次 cron 触发时动态检查环境变量是否完整，完整则执行，缺失则跳过。无需改代码或重新部署。
+
+## 腾讯云 COS 配置指南
+
+### 1. 创建存储桶
+
+1. 登录 [腾讯云对象存储控制台](https://console.cloud.tencent.com/cos/bucket)
+2. 点击「创建存储桶」
+3. 填写：
+   - 名称：`synapse-backup`（系统会自动追加 APPID，最终形如 `synapse-backup-1250000000`）
+   - 地域：选择离服务器最近的区域（如 `ap-guangzhou`）
+   - 访问权限：**私有读写**
+4. 创建完成后，记录完整的存储桶名称（含 APPID 后缀）和地域
+
+### 2. 获取 API 密钥
+
+1. 进入 [API 密钥管理](https://console.cloud.tencent.com/cam/capi)
+2. 推荐使用子账号密钥（更安全）：
+   - 进入 [用户列表](https://console.cloud.tencent.com/cam)
+   - 创建子用户，勾选「编程访问」
+   - 仅授予 `QcloudCOSDataFullControl`（COS 数据读写）权限
+   - 创建完成后记录 `SecretId` 和 `SecretKey`
+3. 如果用主账号密钥（快速但不推荐生产环境）：
+   - 直接在 API 密钥管理页面新建密钥
+   - 记录 `SecretId` 和 `SecretKey`
+
+### 3. 设置生命周期规则（可选）
+
+作为双重保障，可在 COS 侧也配置过期清理：
+
+1. 进入存储桶 → 基础配置 → 生命周期
+2. 添加规则：
+   - 前缀：`backups/`
+   - 过期删除：35 天（比应用侧 30 天多留几天余量）
+
+### 4. 填入环境变量
+
+```bash
+# server/.env 追加
+COS_SECRET_ID=AKIDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+COS_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+COS_BUCKET=synapse-backup-1250000000
+COS_REGION=ap-guangzhou
+BACKUP_ENCRYPT_KEY=（setup.sh 自动生成，或手动执行 openssl rand -hex 32）
+```
+
+### 5. 验证
+
+重启服务后，在管理后台点击「立即备份」，确认备份文件出现在 COS 控制台的 `backups/` 目录下。
+
 ## 配置方式
 
 通过 `setup.sh` 初始化脚本交互式收集，写入 `server/.env`：
