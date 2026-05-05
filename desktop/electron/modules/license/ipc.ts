@@ -13,7 +13,6 @@ const licenseStatusSchema = z.object({
 })
 
 const activationRequestSchema = z.object({
-  serverUrl: z.string().min(1),
   email: z.string().email(),
   activationCode: z.string().min(1),
 })
