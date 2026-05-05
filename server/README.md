@@ -40,7 +40,31 @@ docker compose version
 
 ---
 
-### 第二步：拉取代码
+### 第二步：配置 SSH 免密登录
+
+在本机配置 SSH 密钥，避免每次部署都输入密码。
+
+```bash
+# 1. 检查是否已有密钥
+ls ~/.ssh/id_*
+
+# 2. 如果没有，生成一对密钥（一路回车，不用设密码短语）
+ssh-keygen -t ed25519
+
+# 3. 把公钥传到服务器（需要输入最后一次服务器密码）
+ssh-copy-id root@你的服务器IP
+```
+
+之后所有 ssh/rsync/scp 到这台服务器都不再需要密码。
+
+注意：
+- 同一个公钥可以放到多台服务器，每台执行一次 `ssh-copy-id` 即可
+- 不要重复执行 `ssh-keygen`，会覆盖旧密钥，导致已配置的服务器失效
+- 如果已有密钥，跳过第 2 步，直接执行第 3 步
+
+---
+
+### 第三步：拉取代码
 
 ```bash
 cd /www/wwwroot
@@ -57,7 +81,7 @@ git clone https://YOUR_TOKEN@github.com/你的用户名/Synapse.git synapse
 
 ---
 
-### 第三步：生成密钥
+### 第四步：生成密钥
 
 在服务器上执行以下命令，把输出结果记下来，后面要用。
 
@@ -80,7 +104,7 @@ cat public.pem
 
 ---
 
-### 第四步：创建环境变量文件
+### 第五步：创建环境变量文件
 
 ```bash
 cd /www/wwwroot/synapse/server
@@ -139,7 +163,7 @@ LICENSE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIHxxxxxxxx
 
 ---
 
-### 第五步：构建并启动
+### 第六步：构建并启动
 
 ```bash
 cd /www/wwwroot/synapse/server
@@ -175,7 +199,7 @@ docker compose logs server
 
 ---
 
-### 第六步：域名解析
+### 第七步：域名解析
 
 在你的域名服务商（阿里云/腾讯云/Cloudflare 等）添加一条 DNS 记录：
 
@@ -192,7 +216,7 @@ ping api.yourdomain.com
 
 ---
 
-### 第七步：配置 Nginx 反向代理
+### 第八步：配置 Nginx 反向代理
 
 1. 打开宝塔面板
 2. 左侧点击「网站」
@@ -212,9 +236,9 @@ ping api.yourdomain.com
 
 ---
 
-### 第八步：配置 SSL（HTTPS）
+### 第九步：配置 SSL（HTTPS）
 
-前提：第六步的域名解析已经生效（ping 能通）。
+前提：第七步的域名解析已经生效（ping 能通）。
 
 1. 在站点设置中，左侧点击「SSL」
 2. 选择「Let's Encrypt」
@@ -224,7 +248,7 @@ ping api.yourdomain.com
 
 ---
 
-### 第九步：验证
+### 第十步：验证
 
 ```bash
 # 在服务器上测试 API

@@ -11,7 +11,7 @@ async function bootstrap(): Promise<void> {
   const env = loadEnv(process.env)
   const app = await NestFactory.create(AppModule, { bufferLogs: true })
   app.useLogger(app.get(Logger))
-  app.useGlobalFilters(new AllExceptionsFilter(app.get(PinoLogger)))
+  app.useGlobalFilters(new AllExceptionsFilter(await app.resolve(PinoLogger)))
   app.use(cookieParser())
   app.use(
     helmet({
