@@ -47,17 +47,17 @@ export function DailyView({ rows }: DailyViewProps) {
     <Table>
       <TableHeader>
         <TableRow>
-          <SortableHeader<DailySortRow> label="Date" sortKey="date" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          {hasTurns && <SortableHeader<DailySortRow> label="Turns" sortKey="turns" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
-          <SortableHeader<DailySortRow> label="Msgs" sortKey="messages" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<DailySortRow> label="Input" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<DailySortRow> label="Output" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<DailySortRow> label="Cache R" sortKey="cacheRead" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<DailySortRow> label="Cache W" sortKey="cacheWrite" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<DailySortRow> label="Cache %" sortKey="cacheHitRate" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          {hasReasoning && <SortableHeader<DailySortRow> label="Reasoning" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
-          <SortableHeader<DailySortRow> label="Total" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<DailySortRow> label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<DailySortRow> label="日期" sortKey="date" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          {hasTurns && <SortableHeader<DailySortRow> label="轮次" sortKey="turns" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
+          <SortableHeader<DailySortRow> label="消息" sortKey="messages" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<DailySortRow> label="输入" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<DailySortRow> label="输出" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<DailySortRow> label="缓存读" sortKey="cacheRead" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<DailySortRow> label="缓存写" sortKey="cacheWrite" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<DailySortRow> label="缓存率" sortKey="cacheHitRate" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          {hasReasoning && <SortableHeader<DailySortRow> label="推理" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
+          <SortableHeader<DailySortRow> label="合计" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<DailySortRow> label="费用" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
         </TableRow>
       </TableHeader>
       <TableBody>

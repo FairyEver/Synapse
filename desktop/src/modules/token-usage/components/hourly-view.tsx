@@ -2,7 +2,6 @@ import { useState, useMemo } from "react"
 import {
   Table, TableBody, TableCell, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { formatTokens, formatCost, formatCacheRatio } from "../lib/format"
@@ -24,8 +23,8 @@ export function HourlyView({ rows, profile }: HourlyViewProps) {
     <div className="space-y-4">
       <Tabs value={mode} onValueChange={(v) => setMode(v as ViewMode)}>
         <TabsList>
-          <TabsTrigger value="table">Table</TabsTrigger>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="table">表格</TabsTrigger>
+          <TabsTrigger value="profile">画像</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -61,18 +60,18 @@ function HourlyTable({ rows }: { rows: HourlyRow[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <SortableHeader<HourlySortRow> label="Hour" sortKey="hour" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          <SortableHeader<HourlySortRow> label="Source" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          {hasTurns && <SortableHeader<HourlySortRow> label="Turns" sortKey="turns" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
-          <SortableHeader<HourlySortRow> label="Input" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<HourlySortRow> label="Output" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<HourlySortRow> label="Cache R" sortKey="cacheRead" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<HourlySortRow> label="Cache W" sortKey="cacheWrite" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<HourlySortRow> label="Cache %" sortKey="cacheHitRate" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          {hasReasoning && <SortableHeader<HourlySortRow> label="Reasoning" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
-          <SortableHeader<HourlySortRow> label="Total" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<HourlySortRow> label="Msgs" sortKey="messages" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<HourlySortRow> label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<HourlySortRow> label="时段" sortKey="hour" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          <SortableHeader<HourlySortRow> label="来源" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          {hasTurns && <SortableHeader<HourlySortRow> label="轮次" sortKey="turns" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
+          <SortableHeader<HourlySortRow> label="输入" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<HourlySortRow> label="输出" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<HourlySortRow> label="缓存读" sortKey="cacheRead" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<HourlySortRow> label="缓存写" sortKey="cacheWrite" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<HourlySortRow> label="缓存率" sortKey="cacheHitRate" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          {hasReasoning && <SortableHeader<HourlySortRow> label="推理" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
+          <SortableHeader<HourlySortRow> label="合计" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<HourlySortRow> label="消息" sortKey="messages" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<HourlySortRow> label="费用" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -97,65 +96,66 @@ function HourlyTable({ rows }: { rows: HourlyRow[] }) {
   )
 }
 
-const PERIOD_ICONS: Record<string, string> = {
-  Morning: "🌅",
-  Daytime: "☀️",
-  Evening: "🌆",
-  Night: "🌙",
+const PERIOD_NAME_MAP: Record<string, string> = {
+  Morning: "上午",
+  Daytime: "下午",
+  Evening: "傍晚",
+  Night: "夜间",
 }
 
 function HourlyProfileView({ profile }: { profile: HourlyProfile | null }) {
-  if (!profile) return <p className="text-muted-foreground text-sm">No hourly data available</p>
+  if (!profile) return <p className="text-muted-foreground text-sm">暂无时段数据</p>
 
   const maxPeriodTokens = Math.max(...profile.periods.map((p) => p.tokens))
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-3 text-sm font-medium">When You Work Most</h3>
+        <h3 className="mb-3 text-sm font-medium">工作时段分布</h3>
         <div className="grid grid-cols-4 gap-3">
-          {profile.periods.map((p) => (
-            <Card key={p.name} className={p.tokens === maxPeriodTokens && p.tokens > 0 ? "border-primary" : ""}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">
-                  {PERIOD_ICONS[p.name]} {p.name}
-                  <span className="text-muted-foreground ml-1 text-xs">
+          {profile.periods.map((p) => {
+            const isPeak = p.tokens === maxPeriodTokens && p.tokens > 0
+            return (
+              <div key={p.name} className="rounded-lg bg-muted p-4 space-y-3">
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-sm font-medium ${isPeak ? "text-primary" : ""}`}>
+                    {PERIOD_NAME_MAP[p.name] || p.name}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
                     {String(p.startHour).padStart(2, "0")}:00–{String(p.endHour % 24).padStart(2, "0")}:00
                   </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm">
-                <div>{formatTokens(p.tokens)} tokens</div>
-                <div className="text-muted-foreground">{formatCost(p.cost)}</div>
-                <div className="text-muted-foreground">{p.messages.toLocaleString()} msgs</div>
-              </CardContent>
-            </Card>
-          ))}
+                </div>
+                <div className="space-y-0.5">
+                  <div className={`text-lg font-semibold tabular-nums ${isPeak ? "text-primary" : ""}`}>
+                    {formatTokens(p.tokens)} Token
+                  </div>
+                  <div className="text-muted-foreground text-sm">{formatCost(p.cost)}</div>
+                  <div className="text-muted-foreground text-sm">{p.messages.toLocaleString()} 条消息</div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
       <div>
-        <h3 className="mb-3 text-sm font-medium">Most Productive Day</h3>
-        <ResponsiveContainer width="100%" height={200}>
+        <h3 className="mb-3 text-sm font-medium">每周用量分布</h3>
+        <ResponsiveContainer width="100%" height={280}>
           <BarChart data={profile.weekdays} layout="vertical">
             <XAxis type="number" tickFormatter={(v: number) => formatTokens(v)} />
-            <YAxis type="category" dataKey="day" width={40} />
-            <Tooltip formatter={(value) => [formatTokens(Number(value)), "Tokens"]} />
+            <YAxis type="category" dataKey="day" width={36} interval={0} />
+            <Tooltip formatter={(value) => [formatTokens(Number(value)), "Token"]} />
             <Bar dataKey="tokens" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <Card>
-        <CardContent className="py-3">
-          <p className="text-sm">
-            Peak hour: <span className="font-medium">{profile.peakHour}:00</span>
-            {profile.peakHourTokens > 0 && (
-              <span className="text-muted-foreground"> — {formatTokens(profile.peakHourTokens)} tokens</span>
-            )}
-          </p>
-        </CardContent>
-      </Card>
+      <p className="text-sm text-muted-foreground">
+        高峰时段：<span className="font-medium text-foreground">{profile.peakHour}:00</span>
+        {profile.peakHourTokens > 0 && (
+          <span> — {formatTokens(profile.peakHourTokens)} Token</span>
+        )}
+      </p>
     </div>
   )
 }

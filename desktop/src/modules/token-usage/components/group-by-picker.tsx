@@ -3,10 +3,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export type GroupByMode = "model" | "clientModel" | "clientProviderModel" | "workspaceModel"
 
 const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
-  { value: "model", label: "Model" },
-  { value: "clientModel", label: "Client + Model" },
-  { value: "clientProviderModel", label: "Client + Provider + Model" },
-  { value: "workspaceModel", label: "Workspace + Model" },
+  { value: "model", label: "模型" },
+  { value: "clientModel", label: "客户端 + 模型" },
+  { value: "clientProviderModel", label: "客户端 + 供应商 + 模型" },
+  { value: "workspaceModel", label: "工作区 + 模型" },
 ]
 
 interface GroupByPickerProps {

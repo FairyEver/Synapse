@@ -351,11 +351,6 @@ export function getHourlyProfile(options?: { since?: string; until?: string }): 
   const rows = queryHourlyRowsFiltered(options?.since, options?.until) as unknown as HourlyRow[]
 
   const hourBuckets = new Array(24).fill(0).map(() => ({ tokens: 0, cost: 0, messages: 0 }))
-  const dayBuckets: Record<string, { tokens: number; cost: number }> = {}
-  for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
-    dayBuckets[d] = { tokens: 0, cost: 0 }
-  }
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
   for (const r of rows) {
     const hourNum = parseInt(r.hour.slice(-2), 10)
@@ -368,9 +363,18 @@ export function getHourlyProfile(options?: { since?: string; until?: string }): 
     hourBuckets[hourNum].tokens += tokens
     hourBuckets[hourNum].cost += cost
     hourBuckets[hourNum].messages += r.message_count
+  }
 
-    const dateStr = r.hour.slice(0, 10)
-    const dayOfWeek = dayNames[new Date(dateStr + "T00:00:00").getDay()]
+  const dayBuckets: Record<string, { tokens: number; cost: number }> = {}
+  for (const d of ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]) {
+    dayBuckets[d] = { tokens: 0, cost: 0 }
+  }
+  const dayNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+  const dailyRows = queryDailyRowsFiltered(options?.since, options?.until) as unknown as DailyRow[]
+  for (const r of dailyRows) {
+    const tokens = r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens + r.reasoning_tokens
+    const cost = rowCost(r)
+    const dayOfWeek = dayNames[new Date(r.date + "T00:00:00").getDay()]
     dayBuckets[dayOfWeek].tokens += tokens
     dayBuckets[dayOfWeek].cost += cost
   }
@@ -401,7 +405,7 @@ export function getHourlyProfile(options?: { since?: string; until?: string }): 
     }
   }
 
-  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => ({
+  const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((day) => ({
     day, ...dayBuckets[day],
   }))
 

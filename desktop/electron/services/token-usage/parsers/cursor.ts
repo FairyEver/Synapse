@@ -2,7 +2,7 @@ import fs from "node:fs"
 import readline from "node:readline"
 import path from "node:path"
 import type { AgentParser, UnifiedMessage } from "./types"
-import { extractI64, fileModifiedMs, timestampToLocalDate } from "./utils"
+import { extractI64, timestampToLocalDate } from "./utils"
 
 type CsvFormat = "v1" | "v2" | "v3"
 
@@ -60,11 +60,15 @@ function inferProvider(model: string): string {
 export const cursorParser: AgentParser = {
   async parseFile(filePath: string): Promise<UnifiedMessage[]> {
     const messages: UnifiedMessage[] = []
-    const fallbackTs = fileModifiedMs(filePath)
 
     const basename = path.basename(filePath)
-    const accountMatch = basename.match(/^usage\.(.+)\.csv$/)
-    const accountId = accountMatch ? accountMatch[1] : "active"
+    let accountId: string
+    if (basename === "usage.csv") {
+      accountId = "active"
+    } else {
+      const accountMatch = basename.match(/^usage\.(.+)\.csv$/)
+      accountId = accountMatch ? accountMatch[1] : "unknown"
+    }
 
     const rl = readline.createInterface({
       input: fs.createReadStream(filePath),
@@ -76,6 +80,7 @@ export const cursorParser: AgentParser = {
 
     for await (const line of rl) {
       if (!format) {
+        if (!line.includes("Date") || !line.includes("Model")) return messages
         format = detectFormat(line)
         cols = colIndex(format)
         continue
@@ -88,19 +93,20 @@ export const cursorParser: AgentParser = {
       const dateStr = fields[0]?.trim()
       if (!dateStr) continue
 
-      const model = fields[cols.model]?.trim() || "unknown"
-      const inputWithCW = extractI64(fields[cols.inputCW]?.trim())
-      const inputNoCW = extractI64(fields[cols.inputNoCW]?.trim())
-      const cacheRead = extractI64(fields[cols.cacheRead]?.trim())
-      const output = extractI64(fields[cols.output]?.trim())
-      const cost = parseCsvCost(fields[cols.cost] || "")
+      const model = fields[cols.model]?.trim() || ""
+      if (!model) continue
+
+      const inputWithCW = Math.max(0, extractI64(fields[cols.inputCW]?.trim()))
+      const inputNoCW = Math.max(0, extractI64(fields[cols.inputNoCW]?.trim()))
+      const cacheRead = Math.max(0, extractI64(fields[cols.cacheRead]?.trim()))
+      const output = Math.max(0, extractI64(fields[cols.output]?.trim()))
+      const cost = Math.max(0, parseCsvCost(fields[cols.cost] || ""))
 
       const input = inputNoCW
       const cacheWrite = inputWithCW > inputNoCW ? inputWithCW - inputNoCW : 0
 
-      if (input + output === 0 && cost === 0) continue
-
-      const ts = parseCsvDate(dateStr) || fallbackTs
+      const ts = parseCsvDate(dateStr)
+      if (ts === 0) continue
 
       messages.push({
         client: "cursor",

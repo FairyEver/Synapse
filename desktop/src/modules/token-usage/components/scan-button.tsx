@@ -12,17 +12,17 @@ export function ScanButton({ scanning, onScan, lastScanInfo, error }: ScanButton
   return (
     <div className="flex items-center gap-2">
       {error && !scanning ? (
-        <span className="text-xs text-destructive" title={error.message}>Scan failed: {error.message}</span>
+        <span className="text-xs text-destructive" title={error.message}>扫描失败：{error.message}</span>
       ) : lastScanInfo && !scanning ? (
         <span className="text-xs text-muted-foreground">
           {lastScanInfo.newMessages > 0
-            ? `${lastScanInfo.newMessages} new in ${(lastScanInfo.elapsedMs / 1000).toFixed(1)}s`
-            : `Up to date (${(lastScanInfo.elapsedMs / 1000).toFixed(1)}s)`}
+            ? `${lastScanInfo.newMessages} 条新数据，耗时 ${(lastScanInfo.elapsedMs / 1000).toFixed(1)}s`
+            : `已是最新（${(lastScanInfo.elapsedMs / 1000).toFixed(1)}s）`}
         </span>
       ) : null}
       <Button variant="outline" size="sm" onClick={onScan} disabled={scanning}>
         <RefreshCw className={`h-3.5 w-3.5 ${scanning ? "animate-spin" : ""}`} />
-        {scanning ? "Scanning..." : "Refresh"}
+        {scanning ? "扫描中…" : "刷新"}
       </Button>
     </div>
   )

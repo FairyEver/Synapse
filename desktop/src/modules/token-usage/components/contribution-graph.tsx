@@ -62,7 +62,7 @@ export function ContributionGraph({ contributions, selectedDate, onDateClick }: 
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">
                     <p>{day.date}</p>
-                    <p>{formatTokens(day.tokens)} tokens</p>
+                    <p>{formatTokens(day.tokens)} Token</p>
                   </TooltipContent>
                 </Tooltip>
               )

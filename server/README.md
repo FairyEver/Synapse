@@ -1,445 +1,448 @@
-# Synapse Server 启动说明
+# Synapse Server
 
-后端在 monorepo 的 `server/` 包里，包名是 `@synapse/server`。
+License 管理后端服务，包含 API 和 Admin 管理后台。
 
-所有命令默认在仓库根目录执行：
+## 技术栈
 
-```bash
-cd /Users/liyang/Documents/code/github/Synapse
-```
+- NestJS 11 + TypeScript
+- PostgreSQL 16 + Prisma ORM
+- Admin 后台：React 19 + Vite + shadcn/ui
 
-## 先看结论
-
-日常改后端或管理后台代码，用一个命令启动数据库、执行迁移、进入 Nest watch，并启动管理后台 Vite 热更新：
+## 本地开发
 
 ```bash
+# 在项目根目录
 pnpm dev
 ```
 
-改 `server/src/**` 后会自动重启；改 `server/admin/src/**` 后会通过 Vite HMR 更新页面，不需要重新 build。
+自动启动 Postgres 容器、运行迁移、启动 API 和 Admin 开发服务器。
 
-只有验证生产镜像时才用：
+---
 
-```bash
-docker compose --env-file server/.env -f server/compose.yml up --build
-```
+## 生产部署（Docker + 宝塔面板）
 
-这个命令会重新构建 Docker 镜像，所以慢是正常的。
+以下所有命令在宝塔面板的「终端」中执行。
 
-## 环境要求
+---
 
-- Node.js 22 或兼容版本
-- pnpm 10.22.0
-- Docker / Docker Compose
+### 第一步：安装 Docker
 
-首次安装依赖：
+宝塔面板 → 左侧「Docker」→ 点击「安装」。
+
+安装完成后在终端验证：
 
 ```bash
-pnpm install --frozen-lockfile
+docker --version
+docker compose version
 ```
 
-## 第一次准备 `.env`
+两条命令都能输出版本号就说明安装成功。
 
-复制示例文件：
+---
+
+### 第二步：拉取代码
 
 ```bash
-cp server/.env.example server/.env
+cd /www/wwwroot
+git clone https://github.com/你的用户名/Synapse.git synapse
+cd synapse/server
 ```
 
-生成授权签名密钥：
+如果是私有仓库，先配置 SSH key 或使用 token：
 
 ```bash
-node -e "const {generateKeyPairSync}=require('crypto'); const {privateKey,publicKey}=generateKeyPairSync('ed25519'); console.log('LICENSE_PRIVATE_KEY='+JSON.stringify(privateKey.export({type:'pkcs8',format:'pem'}))); console.log('LICENSE_PUBLIC_KEY='+JSON.stringify(publicKey.export({type:'spki',format:'pem'})));"
+# 用 token 方式（把 YOUR_TOKEN 替换成你的 GitHub Personal Access Token）
+git clone https://YOUR_TOKEN@github.com/你的用户名/Synapse.git synapse
 ```
 
-把输出的 `LICENSE_PRIVATE_KEY=...` 和 `LICENSE_PUBLIC_KEY=...` 粘贴到 `server/.env`，替换示例里的占位值。
+---
 
-不要反复执行 `cp server/.env.example server/.env`，它会覆盖已经生成好的本地密钥。
+### 第三步：生成密钥
 
-## 如果本机 5432 已被 PostgreSQL 占用
+在服务器上执行以下命令，把输出结果记下来，后面要用。
 
-如果启动时报：
+```bash
+cd /www/wwwroot/synapse/server
 
-```text
-Ports are not available: exposing port TCP 0.0.0.0:5432
+# 1. 生成 JWT Secret（复制输出的那串字符）
+openssl rand -hex 32
+
+# 2. 生成 License 密钥对
+openssl genpkey -algorithm Ed25519 -out private.pem
+openssl pkey -in private.pem -pubout -out public.pem
+
+# 3. 查看私钥内容（复制全部输出，包括 BEGIN/END 行）
+cat private.pem
+
+# 4. 查看公钥内容（复制全部输出，包括 BEGIN/END 行）
+cat public.pem
 ```
 
-说明本机已有 PostgreSQL 占用 `5432`。把 `server/.env` 改成：
+---
+
+### 第四步：创建环境变量文件
+
+```bash
+cd /www/wwwroot/synapse/server
+cp .env.example .env
+```
+
+用 vi 编辑（或宝塔面板的文件管理器打开编辑）：
+
+```bash
+vi .env
+```
+
+vi 基本操作：按 `i` 进入编辑模式，改完后按 `Esc`，输入 `:wq` 回车保存退出。
+
+把文件内容改成下面这样（替换所有中文提示部分）：
 
 ```env
-DATABASE_URL=postgresql://synapse:synapse@localhost:5433/synapse
-POSTGRES_HOST_PORT=5433
+# 数据库密码（compose.yml 会读取这个值作为 Postgres 和连接字符串的密码）
+POSTGRES_PASSWORD=Abc123456789
+
+# 管理员账号（密码至少 12 位）
+ADMIN_EMAIL=你的邮箱@example.com
+ADMIN_PASSWORD=设一个至少12位的密码
+
+# JWT 密钥（至少 32 位，粘贴第三步生成的 hex 字符）
+ADMIN_JWT_SECRET=粘贴第三步生成的那串hex字符
+
+# License 密钥对
+LICENSE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n第三步私钥内容，把换行替换成\n\n-----END PRIVATE KEY-----"
+LICENSE_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n第三步公钥内容，把换行替换成\n\n-----END PUBLIC KEY-----"
+LICENSE_KEY_ID=prod-key-001
+LICENSE_LEASE_DAYS=7
 ```
 
-含义：
+关于 LICENSE_PRIVATE_KEY 的格式说明：假设 `cat private.pem` 输出是：
 
-- `POSTGRES_HOST_PORT=5433`：Docker 里的 PostgreSQL 映射到本机 `5433`
-- `DATABASE_URL=...localhost:5433...`：本机运行的后端连接 Docker 数据库
+```
+-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIHxxxxxxxxxxxxxxxxxxxxxx
+-----END PRIVATE KEY-----
+```
 
-Docker 容器内部仍然使用 `postgres:5432`，不需要改 `server/compose.yml`。
+那么 .env 里写成一行：
 
-## 日常开发启动
+```
+LICENSE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIHxxxxxxxxxxxxxxxxxxxxxx\n-----END PRIVATE KEY-----"
+```
+
+公钥同理。
+
+常见配置错误（启动时会报 "服务端环境变量无效"）：
+- `ADMIN_PASSWORD` 少于 12 位
+- `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
+- `ADMIN_EMAIL` 不是合法邮箱格式
+- `LICENSE_PRIVATE_KEY` 或 `LICENSE_PUBLIC_KEY` 格式不对（缺少引号或 `\n`）
+
+---
+
+### 第五步：构建并启动
 
 ```bash
-pnpm dev
+cd /www/wwwroot/synapse/server
+docker compose --env-file .env up -d --build
 ```
 
-这个命令会依次执行：
+首次构建大约需要 3-5 分钟。看到类似下面的输出就是成功了：
 
-- `docker compose --env-file server/.env -f server/compose.yml up -d postgres`
-- `pnpm --filter @synapse/server run prisma:migrate`
-- `pnpm --filter @synapse/server run dev`
+```
+✔ Container server-postgres-1  Healthy
+✔ Container server-server-1    Started
+```
 
-开发模式下 `localhost:3000` 由 Vite 提供管理后台页面并代理 API，Nest API 运行在 `localhost:3001`。
-
-如果数据库已经启动、迁移也已经跑过，只想单独启动 API watch：
+查看是否正常运行：
 
 ```bash
-set -a; . server/.env; set +a; PORT=${SYNAPSE_SERVER_API_PORT:-3001} pnpm --filter @synapse/server run dev:api
+docker compose ps
 ```
 
-访问：
+应该看到两个容器状态都是 `Up`：
 
-```text
-http://localhost:3000/admin/
+```
+NAME                   STATUS
+server-postgres-1      Up (healthy)
+server-server-1        Up
 ```
 
-默认管理员账号来自 `server/.env`：
-
-```text
-admin@d2.com
-admin@pwd
-```
-
-后台新建激活码时只填写设备数和到期日。激活码必须由服务端生成，创建成功后页面会显示生成结果。
-
-## 激活风控配置
-
-授权服务会记录激活尝试，并按 IP、邮箱、设备和激活码做短窗口风控。默认配置适合自部署的平衡档：
-
-- 尝试记录默认保留 90 天。
-- 单来源短时失败过多会临时拒绝激活。
-- 同一激活码在短时间内出现多个邮箱、设备或 IP 会进入风控锁定。
-- 风控锁定只拦截新激活，不影响已激活设备续租。
-
-可通过 `ACTIVATION_*` 环境变量调整阈值。
-
-检查 API：
+如果 server 容器状态是 `Restarting` 或 `Exit`，查看日志排查：
 
 ```bash
-curl http://localhost:3000/v1/license/config
+docker compose logs server
 ```
 
-停止开发服务：在 `pnpm dev` 的终端按 `Ctrl+C`，或执行 `pnpm quit`。
+---
 
-停止数据库：
+### 第六步：域名解析
+
+在你的域名服务商（阿里云/腾讯云/Cloudflare 等）添加一条 DNS 记录：
+
+- 记录类型：`A`
+- 主机记录：`api`（如果你想用 `api.yourdomain.com`）
+- 记录值：你的服务器公网 IP
+
+添加后等待 1-5 分钟生效。验证：
 
 ```bash
-docker compose -f server/compose.yml down
+ping api.yourdomain.com
+# 应该显示你的服务器 IP
 ```
 
-## 生产镜像验证
+---
 
-完整 Docker 启动：
+### 第七步：配置 Nginx 反向代理
+
+1. 打开宝塔面板
+2. 左侧点击「网站」
+3. 点击「添加站点」
+4. 域名填写你的域名（比如 `api.yourdomain.com`）
+5. PHP 版本选「纯静态」
+6. 点击「提交」
+
+创建完成后：
+
+1. 点击刚创建的站点名称，进入设置
+2. 左侧点击「反向代理」
+3. 点击「添加反向代理」
+4. 代理名称填 `synapse`
+5. 目标 URL 填 `http://127.0.0.1:3000`
+6. 点击「提交」
+
+---
+
+### 第八步：配置 SSL（HTTPS）
+
+前提：第六步的域名解析已经生效（ping 能通）。
+
+1. 在站点设置中，左侧点击「SSL」
+2. 选择「Let's Encrypt」
+3. 勾选你的域名
+4. 点击「申请」
+5. 申请成功后，打开「强制 HTTPS」开关
+
+---
+
+### 第九步：验证
 
 ```bash
-docker compose --env-file server/.env -f server/compose.yml up --build
+# 在服务器上测试 API
+curl http://127.0.0.1:3000/healthz
 ```
 
-这个命令会：
+应该返回 `{"status":"ok"}`。
 
-- 读取 `server/.env`
-- 构建后端 API
-- 构建管理后台
-- 构建 Docker 镜像
-- 启动 PostgreSQL 和 server 容器
-- 在容器里执行 Prisma 迁移
+然后浏览器访问：
+- API：`https://api.yourdomain.com/healthz`
+- 管理后台：`https://api.yourdomain.com/admin`
 
-适合发版前验证，不适合每次改代码后使用。
+用第四步设置的 ADMIN_EMAIL 和 ADMIN_PASSWORD 登录。
 
-停止：
+---
+
+## 日常运维
+
+### 查看日志
 
 ```bash
-docker compose -f server/compose.yml down
+cd /www/wwwroot/synapse/server
+
+# 查看 API 实时日志（Ctrl+C 退出）
+docker compose logs -f server
+
+# 查看数据库日志
+docker compose logs -f postgres
+
+# 只看最近 100 行
+docker compose logs --tail 100 server
 ```
 
-删除本地数据库 volume：
+### 更新代码并重新部署
 
 ```bash
-docker compose -f server/compose.yml down -v
+cd /www/wwwroot/synapse
+git pull
+cd server
+docker compose --env-file .env up -d --build
 ```
 
-## 常用命令
+数据库迁移会在启动时自动执行。
 
-后端测试：
+### 重启服务（不重新构建）
 
 ```bash
-pnpm --filter @synapse/server run test
+cd /www/wwwroot/synapse/server
+docker compose restart server
 ```
 
-类型检查：
+### 停止服务
 
 ```bash
-pnpm --filter @synapse/server run typecheck
+cd /www/wwwroot/synapse/server
+
+# 停止（数据保留）
+docker compose down
+
+# 停止并删除数据库数据（谨慎！不可恢复）
+docker compose down -v
 ```
 
-完整构建：
+### 数据库备份
 
 ```bash
-pnpm --filter @synapse/server run build
+cd /www/wwwroot/synapse/server
+
+# 备份到当前目录
+docker compose exec postgres pg_dump -U synapse synapse > backup_$(date +%Y%m%d).sql
+
+# 查看备份文件
+ls -la backup_*.sql
 ```
 
-只构建 API：
+### 从备份恢复数据库
 
 ```bash
-pnpm --filter @synapse/server run build:api
+cd /www/wwwroot/synapse/server
+
+# 恢复（把文件名换成你的备份文件）
+docker compose exec -T postgres psql -U synapse synapse < backup_20260505.sql
 ```
 
-只构建管理后台：
+### 查看磁盘占用
 
 ```bash
-pnpm --filter @synapse/server run build:admin
+# Docker 整体占用
+docker system df
+
+# 清理无用的旧镜像（释放空间）
+docker image prune -f
 ```
 
-查看容器状态：
+### 本地与服务器数据库同步
+
+本地开发环境和生产服务器使用相同的数据库 schema，数据可以双向同步。典型场景：本地创建的激活码同步到生产环境使用，或者从生产环境拉取数据到本地调试。
+
+#### 本地 → 服务器（把本地数据推到生产）
 
 ```bash
-docker compose -f server/compose.yml ps
+# 1. 在本地电脑导出数据库（本地 Postgres 跑在 Docker 里）
+cd /Users/liyang/Documents/code/github/Synapse/server
+docker compose exec postgres pg_dump -U synapse --data-only synapse > local_data.sql
+
+# 2. 把文件传到服务器
+scp local_data.sql root@你的服务器IP:/www/wwwroot/synapse/server/
+
+# 3. SSH 登录服务器，导入数据
+ssh root@你的服务器IP
+cd /www/wwwroot/synapse/server
+docker compose exec -T postgres psql -U synapse synapse < local_data.sql
 ```
 
-查看服务日志：
+如果只想同步某张表（比如只同步激活码）：
 
 ```bash
-docker compose -f server/compose.yml logs -f server
+# 1. 本地只导出指定表（注意表名是 PascalCase 带双引号）
+docker compose exec postgres pg_dump -U synapse --data-only -t '"ActivationCode"' synapse > local_codes.sql
+
+# 2. 传到服务器
+scp local_codes.sql root@你的服务器IP:/www/wwwroot/synapse/server/
+
+# 3. 服务器上导入
+ssh root@你的服务器IP
+cd /www/wwwroot/synapse/server
+docker compose exec -T postgres psql -U synapse synapse < local_codes.sql
 ```
 
-查看数据库日志：
+#### 服务器 → 本地（把生产数据拉到本地）
 
 ```bash
-docker compose -f server/compose.yml logs -f postgres
+# 1. 从服务器导出
+ssh root@你的服务器IP
+cd /www/wwwroot/synapse/server
+docker compose exec postgres pg_dump -U synapse --data-only synapse > server_data.sql
+exit
+
+# 2. 把文件拉到本地
+scp root@你的服务器IP:/www/wwwroot/synapse/server/server_data.sql ./
+
+# 3. 在本地导入（先清空本地数据再导入，避免主键冲突）
+cd /Users/liyang/Documents/code/github/Synapse/server
+docker compose exec -T postgres psql -U synapse synapse -c 'TRUNCATE "ActivationCode", "Account", "License", "Device", "Lease", "ActivationAttempt", "AuditLog" CASCADE;'
+docker compose exec -T postgres psql -U synapse synapse < server_data.sql
 ```
 
-检查端口：
+#### 注意事项
 
-```bash
-lsof -nP -iTCP:3000 -sTCP:LISTEN
-lsof -nP -iTCP:5432 -sTCP:LISTEN
-lsof -nP -iTCP:5433 -sTCP:LISTEN
-```
+- `--data-only` 只导出数据，不导出表结构（两边 schema 通过 prisma migrate 保持一致）
+- 导入前确保两边的数据库 schema 版本一致（都跑过最新的 migration）
+- 如果遇到主键冲突，加 `TRUNCATE ... CASCADE` 先清空目标表
+- 密码类字段（如 admin 密码）是 bcrypt 哈希，同步过去可以直接用
+- 密钥对不同不影响数据同步，客户端激活时会从当前服务器重新获取公钥
 
-## Prisma
-
-开发新 schema 时创建迁移：
-
-```bash
-set -a
-. server/.env
-set +a
-pnpm --filter @synapse/server prisma:dev
-```
-
-重新生成 Prisma Client：
-
-```bash
-pnpm --filter @synapse/server prisma:generate
-```
-
-检查 schema：
-
-```bash
-set -a
-. server/.env
-set +a
-pnpm --filter @synapse/server exec prisma validate
-```
-
-## 发布镜像
-
-从仓库根目录构建：
-
-```bash
-docker build -f server/Dockerfile -t synapse-server:latest .
-```
-
-打版本标签：
-
-```bash
-docker tag synapse-server:latest registry.example.com/synapse-server:0.1.0
-```
-
-推送：
-
-```bash
-docker push registry.example.com/synapse-server:0.1.0
-```
-
-镜像内包含：
-
-- API 构建产物 `server/dist`
-- 管理后台构建产物 `server/admin-dist`
-- Prisma schema 和 migrations
-- workspace 运行依赖
-
-生产启动时需要先执行迁移，再启动服务：
-
-```bash
-pnpm --filter @synapse/server prisma:migrate
-pnpm --filter @synapse/server start
-```
-
-## 生产部署示例
-
-最小部署需要 PostgreSQL 和 Synapse server。
-
-```yaml
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: synapse
-      POSTGRES_PASSWORD: change-this-password
-      POSTGRES_DB: synapse
-    volumes:
-      - synapse-postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  server:
-    image: registry.example.com/synapse-server:0.1.0
-    environment:
-      DATABASE_URL: postgresql://synapse:change-this-password@postgres:5432/synapse
-      ADMIN_EMAIL: admin@d2.com
-      ADMIN_PASSWORD: admin@pwd
-      ADMIN_JWT_SECRET: qwer1234asdf5678
-      LICENSE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-      LICENSE_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-      LICENSE_KEY_ID: production-key-2026-04
-      LICENSE_LEASE_DAYS: "7"
-      PORT: "3000"
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: sh -c "pnpm --filter @synapse/server prisma:migrate && pnpm --filter @synapse/server start"
-
-volumes:
-  synapse-postgres:
-```
-
-反向代理到容器的 `3000` 端口即可。
-
-健康检查：
-
-```bash
-curl http://localhost:3000/v1/license/config
-```
-
-## 备份和恢复
-
-导出 Docker 本地数据库：
-
-```bash
-docker compose -f server/compose.yml exec postgres \
-  pg_dump -U synapse -d synapse -Fc -f /tmp/synapse.dump
-
-docker compose -f server/compose.yml cp \
-  postgres:/tmp/synapse.dump ./synapse.dump
-```
-
-使用 `DATABASE_URL` 导出：
-
-```bash
-pg_dump "$DATABASE_URL" -Fc -f ./synapse.dump
-```
-
-恢复：
-
-```bash
-pg_restore --clean --if-exists --no-owner \
-  --dbname "$DATABASE_URL" ./synapse.dump
-```
+---
 
 ## 常见问题
 
-### 改代码后要重新 build 吗
+### 构建失败：内存不足
 
-日常开发不用。使用：
-
-```bash
-pnpm dev
-```
-
-`pnpm dev` 会启动 Vite HMR。只有生产镜像验证才需要 build。
-
-### `Cannot find module '/app/server/dist/main.js'`
-
-说明 Docker 镜像里的 API 构建产物路径不对。当前构建配置应输出：
-
-```text
-server/dist/main.js
-```
-
-先跑：
+如果服务器内存小于 2GB，构建时可能 OOM。解决方案：
 
 ```bash
-pnpm --filter @synapse/server build:api
-test -f server/dist/main.js && echo ok
+# 创建 2GB swap
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+
+# 永久生效
+echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
 ```
 
-### `/admin/` 打开是白屏
+然后重新执行构建命令。
 
-先看页面里的资源路径：
+### 端口 3000 被占用
 
 ```bash
-curl http://localhost:3000/admin/
+# 查看谁占用了 3000 端口
+lsof -i :3000
+
+# 如果要换端口，修改 .env 中的 PORT 和 compose.yml 中的 ports 映射
+# 比如改成 3001，同时更新宝塔反向代理的目标 URL
 ```
 
-构建后的 JS/CSS 应该是 `/admin/assets/...`：
-
-```html
-<script type="module" crossorigin src="/admin/assets/..."></script>
-<link rel="stylesheet" crossorigin href="/admin/assets/...">
-```
-
-如果看到 `/assets/...`，说明管理后台 Vite base 配置不对，浏览器会请求不存在的根路径资源并白屏。
-
-### `DATABASE_URL` 连不上
-
-如果本机用 Docker 数据库且 `POSTGRES_HOST_PORT=5433`，`server/.env` 也要用 `localhost:5433`：
-
-```env
-DATABASE_URL=postgresql://synapse:synapse@localhost:5433/synapse
-POSTGRES_HOST_PORT=5433
-```
-
-### `5432` 端口被占用
-
-查看是谁占用：
+### 容器一直重启
 
 ```bash
-lsof -nP -iTCP:5432 -sTCP:LISTEN
+# 查看详细错误日志
+docker compose logs server
+
+# 常见原因：
+# 1. .env 配置有误（密码不够长、密钥格式不对）
+# 2. 数据库连接失败（检查 DATABASE_URL）
+# 3. 端口冲突
 ```
 
-不建议为了 Synapse 直接停掉本机 PostgreSQL。优先把 Docker 数据库映射到 `5433`。
+### 如何进入容器内部调试
 
-## 敏感信息
+```bash
+# 进入 server 容器
+docker compose exec server sh
 
-不要提交：
+# 进入数据库容器
+docker compose exec postgres psql -U synapse synapse
+```
 
-- `server/.env`
-- 数据库 dump
-- 私钥
-- 生产管理员密码
-- 生产数据库连接串
+---
 
-已忽略：
+## 目录结构
 
-```text
-server/.env
-server/.env.local
-*.env.local
+```
+server/
+├── src/              # NestJS API 源码
+├── prisma/           # 数据库 Schema 和迁移文件
+├── admin/            # Admin 管理后台前端源码
+├── compose.yml       # Docker Compose 编排文件
+├── Dockerfile        # Docker 多阶段构建文件
+└── .env.example      # 环境变量模板
 ```

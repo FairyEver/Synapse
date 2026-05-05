@@ -6,8 +6,20 @@ import { extractI64, parseTimestamp, fileModifiedMs, timestampToLocalDate } from
 function normalizeModel(raw: string): string {
   let m = raw.replace(/^custom:/, "")
   m = m.replace(/\[.*?\]/g, "")
-  m = m.toLowerCase().replace(/\./g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+  m = m.replace(/-+$/, "")
+  m = m.toLowerCase()
+  m = m.replace(/\./g, "-")
+  m = m.replace(/-+/g, "-")
   return m || "unknown"
+}
+
+function getDefaultModelFromProvider(provider: string): string {
+  const p = provider.toLowerCase()
+  if (p === "anthropic") return "claude-unknown"
+  if (p === "openai") return "gpt-unknown"
+  if (p === "google") return "gemini-unknown"
+  if (p === "xai") return "grok-unknown"
+  return `${p || "unknown"}-unknown`
 }
 
 function inferProvider(model: string): string {
@@ -30,17 +42,27 @@ export const droidParser: AgentParser = {
 
       const input = extractI64(usage.inputTokens)
       const output = extractI64(usage.outputTokens)
-      if (input + output === 0) return []
+      const cacheRead = extractI64(usage.cacheReadTokens)
+      const cacheWrite = extractI64(usage.cacheCreationTokens)
+      const reasoning = extractI64(usage.thinkingTokens)
+      if (input + output + cacheRead + cacheWrite + reasoning === 0) return []
+
+      const provider = (data.providerLock as string) || inferProvider((data.model as string) || "")
 
       let model = (data.model as string) || ""
       if (!model) {
         const jsonlPath = filePath.replace(/\.settings\.json$/, ".jsonl")
         model = scanJsonlForModel(jsonlPath)
       }
-      model = normalizeModel(model)
+      if (model) {
+        model = normalizeModel(model)
+      } else {
+        model = getDefaultModelFromProvider(provider)
+      }
 
-      const provider = (data.providerLock as string) || inferProvider(model)
       const ts = parseTimestamp(data.providerLockTimestamp) || fallbackTs
+      if (ts === 0) return []
+
       const sessionId = path.basename(filePath).replace(/\.settings\.json$/, "")
 
       return [{
@@ -51,11 +73,11 @@ export const droidParser: AgentParser = {
         timestamp: ts,
         date: timestampToLocalDate(ts),
         tokens: {
-          input,
-          output,
-          cacheRead: extractI64(usage.cacheReadTokens),
-          cacheWrite: extractI64(usage.cacheCreationTokens),
-          reasoning: extractI64(usage.thinkingTokens),
+          input: Math.max(0, input),
+          output: Math.max(0, output),
+          cacheRead: Math.max(0, cacheRead),
+          cacheWrite: Math.max(0, cacheWrite),
+          reasoning: Math.max(0, reasoning),
         },
         cost: 0,
         messageCount: 1,

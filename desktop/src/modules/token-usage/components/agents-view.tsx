@@ -31,7 +31,7 @@ export function AgentsView({ agents }: AgentsViewProps) {
   if (agents.length === 0) {
     return (
       <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-        No agent data available.
+        暂无智能体数据
       </div>
     )
   }
@@ -41,16 +41,16 @@ export function AgentsView({ agents }: AgentsViewProps) {
       <TableHeader>
         <TableRow>
           <SortableHeader<AgentSortRow> label="#" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="w-8" />
-          <SortableHeader<AgentSortRow> label="Agent" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          <SortableHeader<AgentSortRow> label="Providers" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          <SortableHeader<AgentSortRow> label="Models" sortKey="modelCount" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<AgentSortRow> label="Days" sortKey="activeDays" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<AgentSortRow> label="Messages" sortKey="messageCount" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<AgentSortRow> label="Input" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<AgentSortRow> label="Output" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          {hasReasoning && <SortableHeader<AgentSortRow> label="Reasoning" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
-          <SortableHeader<AgentSortRow> label="Total" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<AgentSortRow> label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<AgentSortRow> label="智能体" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          <SortableHeader<AgentSortRow> label="供应商" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          <SortableHeader<AgentSortRow> label="模型" sortKey="modelCount" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<AgentSortRow> label="天数" sortKey="activeDays" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<AgentSortRow> label="消息" sortKey="messageCount" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<AgentSortRow> label="输入" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<AgentSortRow> label="输出" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          {hasReasoning && <SortableHeader<AgentSortRow> label="推理" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
+          <SortableHeader<AgentSortRow> label="合计" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<AgentSortRow> label="费用" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
         </TableRow>
       </TableHeader>
       <TableBody>

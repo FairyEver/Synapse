@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button"
 export type RangePreset = "7d" | "30d" | "90d" | "all"
 
 const PRESETS: { value: RangePreset; label: string }[] = [
-  { value: "7d", label: "7d" },
-  { value: "30d", label: "30d" },
-  { value: "90d", label: "90d" },
-  { value: "all", label: "All" },
+  { value: "7d", label: "7天" },
+  { value: "30d", label: "30天" },
+  { value: "90d", label: "90天" },
+  { value: "all", label: "全部" },
 ]
 
 interface DateRangeFilterProps {
@@ -17,7 +17,7 @@ interface DateRangeFilterProps {
 export function dateRangeToOptions(preset: RangePreset): { since?: string; until?: string } {
   if (preset === "all") return {}
   const now = new Date()
-  const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 90
+  const days = preset === "7d" ? 6 : preset === "30d" ? 29 : 89
   const since = new Date(now.getTime() - days * 86_400_000)
   const year = since.getFullYear()
   const month = String(since.getMonth() + 1).padStart(2, "0")

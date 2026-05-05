@@ -69,22 +69,3 @@ export const kimiParser: AgentParser = createGenericJsonlParser({
     return ts
   },
 })
-
-export const antigravityParser: AgentParser = createGenericJsonlParser({
-  clientId: "antigravity",
-  providerId: "anthropic",
-  lineFilter: "usage",
-  extractModel: (obj) => (obj.modelId as string) || "unknown",
-  extractUsage: (obj) => {
-    if (obj.type !== "usage") return null
-    return {
-      input: extractI64(obj.input),
-      output: extractI64(obj.output),
-      cacheRead: extractI64(obj.cacheRead),
-      cacheWrite: extractI64(obj.cacheWrite),
-      reasoning: extractI64(obj.reasoning),
-    }
-  },
-  extractTimestamp: (obj) => obj.timestamp,
-  extractSessionId: (obj) => (obj.sessionId as string) || "",
-})

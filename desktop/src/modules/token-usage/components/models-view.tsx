@@ -33,7 +33,7 @@ export function ModelsView({ models }: ModelsViewProps) {
   if (models.length === 0) {
     return (
       <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-        No model data available.
+        暂无模型数据
       </div>
     )
   }
@@ -43,17 +43,17 @@ export function ModelsView({ models }: ModelsViewProps) {
       <TableHeader>
         <TableRow>
           <SortableHeader<ModelSortRow> label="#" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="w-8" />
-          <SortableHeader<ModelSortRow> label="Model" sortKey="model" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          <SortableHeader<ModelSortRow> label="Provider" sortKey="provider" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          <SortableHeader<ModelSortRow> label="Source" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
-          <SortableHeader<ModelSortRow> label="Input" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<ModelSortRow> label="Output" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<ModelSortRow> label="Cache R" sortKey="cacheRead" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<ModelSortRow> label="Cache W" sortKey="cacheWrite" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<ModelSortRow> label="Cache %" sortKey="cacheHitRate" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          {hasReasoning && <SortableHeader<ModelSortRow> label="Reasoning" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
-          <SortableHeader<ModelSortRow> label="Total" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
-          <SortableHeader<ModelSortRow> label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<ModelSortRow> label="模型" sortKey="model" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          <SortableHeader<ModelSortRow> label="供应商" sortKey="provider" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          <SortableHeader<ModelSortRow> label="来源" sortKey="client" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} />
+          <SortableHeader<ModelSortRow> label="输入" sortKey="input" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<ModelSortRow> label="输出" sortKey="output" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<ModelSortRow> label="缓存读" sortKey="cacheRead" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<ModelSortRow> label="缓存写" sortKey="cacheWrite" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<ModelSortRow> label="缓存率" sortKey="cacheHitRate" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          {hasReasoning && <SortableHeader<ModelSortRow> label="推理" sortKey="reasoning" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />}
+          <SortableHeader<ModelSortRow> label="合计" sortKey="total" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
+          <SortableHeader<ModelSortRow> label="费用" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onToggle={toggleSort} className="text-right" />
         </TableRow>
       </TableHeader>
       <TableBody>

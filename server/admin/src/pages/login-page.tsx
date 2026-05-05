@@ -45,7 +45,9 @@ export function LoginPage({
               <Label htmlFor="admin-email">邮箱</Label>
               <Input
                 id="admin-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
@@ -55,7 +57,9 @@ export function LoginPage({
               <Label htmlFor="admin-password">密码</Label>
               <Input
                 id="admin-password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required

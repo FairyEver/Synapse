@@ -35,7 +35,7 @@ export function SourcePicker({ clients, selected, onChange }: SourcePickerProps)
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5">
           <Filter className="h-3.5 w-3.5" />
-          Sources
+          来源
           {selected.size < clients.length && (
             <span className="bg-primary text-primary-foreground ml-0.5 rounded-full px-1.5 text-xs">
               {selected.size}
@@ -49,7 +49,7 @@ export function SourcePicker({ clients, selected, onChange }: SourcePickerProps)
           className="text-muted-foreground hover:text-foreground mb-1 w-full px-2 py-1 text-left text-xs"
           onClick={toggleAll}
         >
-          Select all
+          全选
         </button>
         {clients.map((client) => (
           <label

@@ -19,27 +19,35 @@ export const gooseParser: AgentParser = {
         `).all() as Record<string, unknown>[]
 
         for (const row of rows) {
-          const input = extractI64(row.accumulated_input_tokens) || extractI64(row.input_tokens)
-          const output = extractI64(row.accumulated_output_tokens) || extractI64(row.output_tokens)
-          if (input + output === 0) continue
-
-          let model = "unknown"
+          let model = ""
           try {
             const config = JSON.parse(row.model_config_json as string)
-            model = (config.model_name as string) || "unknown"
+            model = ((config.model_name as string) || "").trim()
           } catch { /* skip */ }
+          if (!model) continue
 
-          const total = extractI64(row.accumulated_total_tokens) || extractI64(row.total_tokens)
+          const accInput = row.accumulated_input_tokens
+          const accOutput = row.accumulated_output_tokens
+          const accTotal = row.accumulated_total_tokens
+          const input = Math.max(0, accInput != null ? extractI64(accInput) : extractI64(row.input_tokens))
+          const output = Math.max(0, accOutput != null ? extractI64(accOutput) : extractI64(row.output_tokens))
+          const total = Math.max(0, accTotal != null ? extractI64(accTotal) : extractI64(row.total_tokens))
+
+          if (input === 0 && output === 0 && total === 0) continue
+
           const reasoning = total > input + output ? total - input - output : 0
 
-          const provider = (row.provider_name as string)?.toLowerCase() || inferProvider(model)
+          const providerRaw = (row.provider_name as string) || ""
+          const provider = providerRaw.trim() ? providerRaw.trim().toLowerCase() : inferProvider(model)
           const ts = parseTimestamp(row.created_at) || fallbackTs
+          const sessionId = String(row.id || "")
 
           messages.push({
             client: "goose",
             modelId: model,
             providerId: provider || "goose",
-            sessionId: String(row.id || ""),
+            sessionId,
+            dedupKey: sessionId,
             timestamp: ts,
             date: timestampToLocalDate(ts),
             tokens: {

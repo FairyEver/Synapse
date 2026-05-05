@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useTokenUsageScan, useGraphResult, useModelReport, useDailyReport, useAgentReport, useHourlyReport, useHourlyProfile } from "./hooks/use-token-usage"
 import type { ScanResult } from "./hooks/use-token-usage"
 import { ScanButton } from "./components/scan-button"
@@ -32,7 +32,7 @@ export function TokenUsageModule() {
   const { data: hourlyRows, refresh: refreshHourly } = useHourlyReport()
   const { data: hourlyProfile, refresh: refreshHourlyProfile } = useHourlyProfile()
   const [lastScanInfo, setLastScanInfo] = useState<Pick<ScanResult, "elapsedMs" | "newMessages"> | null>(null)
-  const [hasScanned, setHasScanned] = useState(false)
+  const initialScanDone = useRef(false)
 
   const allClients = useMemo(() => graphResult?.summary.clients ?? [], [graphResult])
 
@@ -70,11 +70,11 @@ export function TokenUsageModule() {
   }, [refreshModels, range])
 
   useEffect(() => {
-    if (!hasScanned) {
-      setHasScanned(true)
+    if (!initialScanDone.current) {
+      initialScanDone.current = true
       void handleScan()
     }
-  }, [hasScanned, handleScan])
+  }, [])
 
   const sourceFilter = useCallback((client: string) => selectedSources.has(client), [selectedSources])
   const isFiltering = selectedSources.size > 0 && selectedSources.size < allClients.length
@@ -92,29 +92,30 @@ export function TokenUsageModule() {
   [agentRows, isFiltering, sourceFilter])
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-hidden p-4">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="border-b px-4 pt-3 pb-2">
         <Tabs value={activeSubTab} onValueChange={(v) => setActiveSubTab(v as SubTab)}>
           <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="models">Models</TabsTrigger>
-            <TabsTrigger value="daily">Daily</TabsTrigger>
-            <TabsTrigger value="hourly">Hourly</TabsTrigger>
-            <TabsTrigger value="agents">Agents</TabsTrigger>
-            <TabsTrigger value="stats">Stats</TabsTrigger>
+            <TabsTrigger value="overview">概览</TabsTrigger>
+            <TabsTrigger value="models">模型</TabsTrigger>
+            <TabsTrigger value="daily">日报</TabsTrigger>
+            <TabsTrigger value="hourly">时段</TabsTrigger>
+            <TabsTrigger value="agents">智能体</TabsTrigger>
+            <TabsTrigger value="stats">统计</TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className="flex items-center gap-2">
-          {activeSubTab === "models" && (
-            <GroupByPicker value={groupBy} onChange={handleGroupByChange} />
-          )}
-          <SourcePicker clients={allClients} selected={selectedSources} onChange={setSelectedSources} />
-          <DateRangeFilter value={range} onChange={handleRangeChange} />
-          <ExportButton models={filteredModels} agents={filteredAgentRows} dailyRows={dailyRows} graphResult={graphResult} />
-          <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
-        </div>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="flex items-center gap-2 px-4 py-2">
+        {activeSubTab === "models" && (
+          <GroupByPicker value={groupBy} onChange={handleGroupByChange} />
+        )}
+        <div className="flex-1" />
+        <SourcePicker clients={allClients} selected={selectedSources} onChange={setSelectedSources} />
+        <DateRangeFilter value={range} onChange={handleRangeChange} />
+        <ExportButton models={filteredModels} agents={filteredAgentRows} dailyRows={dailyRows} graphResult={graphResult} />
+        <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
+      </div>
+      <ScrollArea className="min-h-0 flex-1 px-4 pb-4">
         {activeSubTab === "overview" && graphResult ? (
           <OverviewView graphResult={graphResult} hourlyRows={filteredHourlyRows} />
         ) : null}

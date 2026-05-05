@@ -24,8 +24,10 @@ function collectFiles(dir: string, pattern: string, result: string[], maxDepth =
     for (const entry of entries) {
       const full = path.join(dir, entry.name)
       if (entry.isDirectory()) {
+        if (entry.name.toLowerCase() === "archive") continue
         collectFiles(full, pattern, result, maxDepth - 1)
       } else if (matchesPattern(entry.name, pattern)) {
+        if (entry.name.startsWith("usage.backup")) continue
         result.push(full)
       }
     }

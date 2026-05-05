@@ -3,7 +3,7 @@ import path from "node:path"
 import type { ClientDef, PathRoot } from "./parsers/types"
 
 export const CLIENT_DEFS: ClientDef[] = [
-  { id: "opencode", name: "OpenCode", root: "xdgData", relativePath: "opencode/storage/message", filePattern: "*.json", parseLocal: true },
+  { id: "opencode", name: "OpenCode", root: "xdgData", relativePath: "opencode/storage", filePattern: "opencode*.db|*.json", parseLocal: true },
   { id: "claude", name: "Claude Code", root: "home", relativePath: ".claude/projects", filePattern: "*.jsonl", parseLocal: true },
   { id: "codex", name: "Codex", root: "envVar", envVar: "CODEX_HOME", fallbackRelative: ".codex", relativePath: "sessions", filePattern: "*.jsonl", parseLocal: true },
   { id: "cursor", name: "Cursor", root: "home", relativePath: ".config/tokscale/cursor-cache", filePattern: "usage*.csv", parseLocal: false },
@@ -24,6 +24,7 @@ export const CLIENT_DEFS: ClientDef[] = [
   { id: "goose", name: "Goose", root: "xdgData", relativePath: "goose/sessions/sessions.db", filePattern: "sessions.db", parseLocal: true },
   { id: "codebuff", name: "Codebuff", root: "envVar", envVar: "CODEBUFF_DATA_DIR", fallbackRelative: ".config/manicode", relativePath: "projects", filePattern: "chat-messages.json", parseLocal: true },
   { id: "antigravity", name: "Antigravity", root: "config", relativePath: "antigravity-cache/sessions", filePattern: "*.jsonl", parseLocal: true },
+  { id: "synthetic", name: "Synthetic", root: "xdgData", relativePath: "octofriend/sqlite.db", filePattern: "sqlite.db", parseLocal: true },
 ]
 
 export function resolvePathRoot(root: PathRoot, def: ClientDef): string {
@@ -53,6 +54,12 @@ export function getExtraScanPaths(def: ClientDef): string[] {
     case "codex": {
       const codexHome = process.env.CODEX_HOME || path.join(home, ".codex")
       extras.push(path.join(codexHome, "archived_sessions"))
+      // Headless capture paths
+      const configRoot = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
+      extras.push(path.join(configRoot, "tokscale", "headless", "codex"))
+      if (process.platform === "darwin") {
+        extras.push(path.join(home, "Library", "Application Support", "tokscale", "headless", "codex"))
+      }
       break
     }
     case "openclaw":
@@ -82,6 +89,18 @@ export function getExtraScanPaths(def: ClientDef): string[] {
         path.join(path.dirname(base), "manicode-dev", "projects"),
         path.join(path.dirname(base), "manicode-staging", "projects"),
       )
+      break
+    }
+    case "goose": {
+      const gooseRoot = process.env.GOOSE_PATH_ROOT
+      if (gooseRoot) {
+        extras.push(path.join(gooseRoot.trim(), "data", "sessions"))
+      }
+      if (process.platform === "darwin") {
+        extras.push(path.join(home, "Library", "Application Support", "goose", "sessions"))
+        extras.push(path.join(home, "Library", "Application Support", "Block", "goose", "sessions"))
+      }
+      extras.push(path.join(home, ".local", "share", "Block", "goose", "sessions"))
       break
     }
   }

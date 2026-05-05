@@ -4,7 +4,9 @@ import { getFingerprint, upsertFingerprint, upsertDailyUsage, upsertHourlyUsage,
 import { getGraphResult, getModelReport, getDailyReport, getAgentReport, getHourlyReport, getHourlyProfile } from "./aggregator"
 import { claudeParser } from "./parsers/claude"
 import { codexParser } from "./parsers/codex"
-import { piParser, qwenParser, kimiParser, antigravityParser } from "./parsers/generic-agents"
+import { piParser } from "./parsers/pi"
+import { qwenParser } from "./parsers/qwen"
+import { kimiParser } from "./parsers/kimi"
 import { copilotParser } from "./parsers/copilot"
 import { geminiParser } from "./parsers/gemini"
 import { ampParser } from "./parsers/amp"
@@ -18,6 +20,8 @@ import { gooseParser } from "./parsers/goose"
 import { opencodeParser, kiloDbParser } from "./parsers/opencode"
 import { crushParser } from "./parsers/crush"
 import { cursorParser } from "./parsers/cursor"
+import { syntheticParser } from "./parsers/synthetic"
+import { antigravityParser } from "./parsers/antigravity"
 import type { AgentParser, ScanProgress } from "./parsers/types"
 import { createMainLogger } from "../log-store"
 
@@ -45,13 +49,28 @@ const PARSERS: Record<string, AgentParser> = {
   kilo: kiloDbParser,
   crush: crushParser,
   cursor: cursorParser,
+  synthetic: syntheticParser,
 }
 
 function getParser(clientId: string): AgentParser | null {
   return PARSERS[clientId] || null
 }
 
+let scanInProgress = false
+
 export async function scanTokenUsage(): Promise<ScanProgress> {
+  if (scanInProgress) {
+    return { totalClients: 0, scannedClients: 0, totalFiles: 0, parsedFiles: 0, newMessages: 0, elapsedMs: 0 }
+  }
+  scanInProgress = true
+  try {
+    return await doScan()
+  } finally {
+    scanInProgress = false
+  }
+}
+
+async function doScan(): Promise<ScanProgress> {
   const start = Date.now()
   const scanResults = scanAllClients()
   const progress: ScanProgress = {
@@ -70,6 +89,7 @@ export async function scanTokenUsage(): Promise<ScanProgress> {
       continue
     }
 
+    let clientDirty = false
     for (const filePath of result.files) {
       try {
         const stat = fs.statSync(filePath)
@@ -79,12 +99,26 @@ export async function scanTokenUsage(): Promise<ScanProgress> {
           continue
         }
 
-        if (fp && (stat.size < fp.size || (stat.size === fp.size && stat.mtimeMs !== fp.mtimeMs))) {
+        if (!clientDirty) {
           clearDailyUsageForClient(result.clientId)
           clearHourlyUsageForClient(result.clientId)
           clearFingerprintsForClient(result.clientId)
+          clientDirty = true
         }
+        break
+      } catch (error) {
+        logger.error("Failed to stat file", { filePath, error: String(error) })
+      }
+    }
 
+    if (!clientDirty) {
+      progress.scannedClients++
+      continue
+    }
+
+    for (const filePath of result.files) {
+      try {
+        const stat = fs.statSync(filePath)
         const messages = await parser.parseFile(filePath)
         if (messages.length > 0) {
           upsertDailyUsage(messages)

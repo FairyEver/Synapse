@@ -48,7 +48,7 @@ export function ExportButton({ models, agents, dailyRows, graphResult }: ExportB
   return (
     <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
       <Download className="h-3.5 w-3.5" />
-      {exported ? "Exported" : "Export"}
+      {exported ? "已导出" : "导出"}
     </Button>
   )
 }

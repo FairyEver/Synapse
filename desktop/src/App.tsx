@@ -118,7 +118,7 @@ function MainApp() {
       { id: "database" as const, label: "数据库" },
       { id: "task-scheduler" as const, label: "定时任务" },
       { id: "editor-scan" as const, label: "IDE" },
-      { id: "token-usage" as const, label: "Token Usage" },
+      { id: "token-usage" as const, label: "用量" },
       { id: "settings" as const, label: "设置" },
     ],
     [],

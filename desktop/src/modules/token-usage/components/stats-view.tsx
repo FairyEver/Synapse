@@ -69,15 +69,15 @@ export function StatsView({ graphResult }: StatsViewProps) {
   }, [selectedDate, contributions])
 
   const stats = [
-    { label: "Active days", value: String(summary.activeDays) },
-    { label: "Current streak", value: `${streaks.current} days` },
-    { label: "Longest streak", value: `${streaks.longest} days` },
-    { label: "Total tokens", value: formatTokens(summary.totalTokens) },
-    { label: "Total cost", value: formatCost(summary.totalCost) },
-    { label: "Avg per day", value: formatTokens(summary.averagePerDay) },
-    { label: "Models used", value: String(summary.models.length) },
-    { label: "Favorite model", value: favoriteModel },
-    { label: "Best day", value: bestDay ? bestDay.date : "—", subValue: bestDay ? formatCost(bestDay.cost) : undefined },
+    { label: "活跃天数", value: String(summary.activeDays) },
+    { label: "当前连续", value: `${streaks.current} 天` },
+    { label: "最长连续", value: `${streaks.longest} 天` },
+    { label: "总 Token", value: formatTokens(summary.totalTokens) },
+    { label: "总费用", value: formatCost(summary.totalCost) },
+    { label: "日均用量", value: formatTokens(summary.averagePerDay) },
+    { label: "使用模型数", value: String(summary.models.length) },
+    { label: "最常用模型", value: favoriteModel },
+    { label: "用量最高日", value: bestDay ? bestDay.date : "—", subValue: bestDay ? formatCost(bestDay.cost) : undefined },
   ]
 
   return (
@@ -93,7 +93,7 @@ export function StatsView({ graphResult }: StatsViewProps) {
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">{selectedDayData.date}</span>
             <span className="text-muted-foreground text-sm">
-              {formatTokens(selectedDayData.totals.tokens)} tokens · {formatCost(selectedDayData.totals.cost)}
+              {formatTokens(selectedDayData.totals.tokens)} Token · {formatCost(selectedDayData.totals.cost)}
             </span>
           </div>
           <div className="space-y-1">

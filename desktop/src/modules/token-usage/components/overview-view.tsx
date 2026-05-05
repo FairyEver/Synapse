@@ -17,7 +17,7 @@ export function OverviewView({ graphResult, hourlyRows = [] }: OverviewViewProps
   if (summary.totalTokens === 0) {
     return (
       <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-        No usage data yet. Click Refresh to scan.
+        暂无用量数据，点击刷新扫描
       </div>
     )
   }
@@ -43,10 +43,10 @@ export function OverviewView({ graphResult, hourlyRows = [] }: OverviewViewProps
     .slice(0, 10)
 
   const stats = [
-    { label: "Total tokens", value: formatTokens(summary.totalTokens) },
-    { label: "Total cost", value: formatCost(summary.totalCost) },
-    { label: "Active days", value: String(summary.activeDays) },
-    { label: "Cache ratio", value: formatCacheRatio(totalCacheRead, totalInput, totalCacheWrite) },
+    { label: "总 Token", value: formatTokens(summary.totalTokens) },
+    { label: "总费用", value: formatCost(summary.totalCost) },
+    { label: "活跃天数", value: String(summary.activeDays) },
+    { label: "缓存命中率", value: formatCacheRatio(totalCacheRead, totalInput, totalCacheWrite) },
   ]
 
   const hourlyContributions = hourlyRows.length > 0 ? buildHourlyContributions(hourlyRows) : []
@@ -66,18 +66,18 @@ export function OverviewView({ graphResult, hourlyRows = [] }: OverviewViewProps
       </div>
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">
-          Tokens per {granularity === "daily" ? "Day" : "Hour"}
+          Token 趋势（{granularity === "daily" ? "按天" : "按小时"}）
         </h3>
         <Tabs value={granularity} onValueChange={(v) => setGranularity(v as "daily" | "hourly")}>
           <TabsList className="h-7">
-            <TabsTrigger value="daily" className="text-xs">Daily</TabsTrigger>
-            <TabsTrigger value="hourly" className="text-xs">Hourly</TabsTrigger>
+            <TabsTrigger value="daily" className="text-xs">按天</TabsTrigger>
+            <TabsTrigger value="hourly" className="text-xs">按小时</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
       <StackedBarChart contributions={chartContributions} />
       <div>
-        <h3 className="mb-2 text-sm font-medium">Top Models</h3>
+        <h3 className="mb-2 text-sm font-medium">热门模型</h3>
         <div className="space-y-1">
           {topModels.map(([modelId, info], i) => (
             <div key={modelId} className="flex items-center gap-2 text-sm">

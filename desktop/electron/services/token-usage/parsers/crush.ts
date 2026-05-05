@@ -2,6 +2,12 @@ import { DatabaseSync } from "node:sqlite"
 import type { AgentParser, UnifiedMessage } from "./types"
 import { parseTimestamp, fileModifiedMs, timestampToLocalDate } from "./utils"
 
+function normalizeCrushTimestampMs(raw: number): number | null {
+  if (raw <= 0) return null
+  if (raw >= 100_000_000_000) return raw
+  return raw * 1000
+}
+
 export const crushParser: AgentParser = {
   async parseFile(filePath: string): Promise<UnifiedMessage[]> {
     const messages: UnifiedMessage[] = []
@@ -32,27 +38,34 @@ export const crushParser: AgentParser = {
           ORDER BY st.root_session_id ASC, m.created_at ASC
         `).all() as Record<string, unknown>[]
 
-        const bucketsBySession = new Map<string, Map<string, number>>()
+        const bucketsBySession = new Map<string, Map<string, { count: number; earliestTs: number }>>()
         for (const b of buckets) {
           const rootId = String(b.root_session_id)
-          let rawTs = b.created_at as number
-          if (rawTs >= 100_000_000_000) rawTs = rawTs
-          else rawTs = rawTs * 1000
-          const date = timestampToLocalDate(rawTs)
+          const rawTs = b.created_at as number
+          const ts = normalizeCrushTimestampMs(rawTs)
+          if (ts === null) continue
+
+          const date = timestampToLocalDate(ts)
 
           if (!bucketsBySession.has(rootId)) bucketsBySession.set(rootId, new Map())
           const dayMap = bucketsBySession.get(rootId)!
-          dayMap.set(date, (dayMap.get(date) || 0) + 1)
+          const existing = dayMap.get(date)
+          if (existing) {
+            existing.count += 1
+            existing.earliestTs = Math.min(existing.earliestTs, ts)
+          } else {
+            dayMap.set(date, { count: 1, earliestTs: ts })
+          }
         }
 
         for (const session of sessions) {
           const sessionId = String(session.id)
-          const cost = typeof session.cost === "number" ? session.cost : 0
-          if (cost === 0) continue
+          const cost = Math.max(0, typeof session.cost === "number" ? session.cost : 0)
 
           const dayMap = bucketsBySession.get(sessionId)
           if (!dayMap || dayMap.size === 0) {
-            const ts = parseTimestamp(session.updated_at ?? session.created_at) || fallbackTs
+            const ts = fallbackSessionTimestamp(session.updated_at, session.created_at)
+            if (ts === null) continue
             messages.push({
               client: "crush",
               modelId: "session-total",
@@ -62,33 +75,32 @@ export const crushParser: AgentParser = {
               date: timestampToLocalDate(ts),
               tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
               cost,
-              messageCount: 1,
+              messageCount: 0,
               isTurnStart: false,
             })
             continue
           }
 
-          const totalMsgs = Array.from(dayMap.values()).reduce((a, b) => a + b, 0)
+          const totalMsgs = Array.from(dayMap.values()).reduce((a, b) => a + b.count, 0)
           const days = Array.from(dayMap.entries())
           let allocated = 0
 
           for (let i = 0; i < days.length; i++) {
-            const [date, count] = days[i]
+            const [date, bucket] = days[i]
             const isLast = i === days.length - 1
-            const dayCost = isLast ? cost - allocated : (cost * count) / totalMsgs
+            const dayCost = isLast ? Math.max(0, cost - allocated) : (cost * bucket.count) / totalMsgs
             allocated += dayCost
 
-            const ts = new Date(date + "T12:00:00").getTime()
             messages.push({
               client: "crush",
               modelId: "session-total",
               providerId: "crush",
               sessionId: `${filePath}:${sessionId}`,
-              timestamp: ts,
+              timestamp: bucket.earliestTs,
               date,
               tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
               cost: dayCost,
-              messageCount: count,
+              messageCount: bucket.count,
               isTurnStart: false,
             })
           }
@@ -100,4 +112,18 @@ export const crushParser: AgentParser = {
 
     return messages
   },
+}
+
+function fallbackSessionTimestamp(updatedAt: unknown, createdAt: unknown): number | null {
+  const updated = parseTimestamp(updatedAt)
+  if (updated) {
+    const normalized = normalizeCrushTimestampMs(updated)
+    if (normalized !== null) return normalized
+  }
+  const created = parseTimestamp(createdAt)
+  if (created) {
+    const normalized = normalizeCrushTimestampMs(created)
+    if (normalized !== null) return normalized
+  }
+  return null
 }

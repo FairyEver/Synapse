@@ -14,6 +14,15 @@ function attrI64(attrs: Record<string, unknown>, key: string): number {
   return extractI64(attrs[key])
 }
 
+function inferProvider(model: string): string {
+  const m = model.toLowerCase()
+  if (m.includes("claude") || m.includes("anthropic")) return "anthropic"
+  if (m.includes("gpt") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "openai"
+  if (m.includes("gemini")) return "google"
+  if (m.includes("deepseek")) return "deepseek"
+  return "github-copilot"
+}
+
 export const copilotParser: AgentParser = {
   async parseFile(filePath: string): Promise<UnifiedMessage[]> {
     const messages: UnifiedMessage[] = []
@@ -29,20 +38,31 @@ export const copilotParser: AgentParser = {
       if (!line.includes("gen_ai")) continue
       try {
         const obj = JSON.parse(line)
+        if (obj.type !== "span") continue
         const attrs = (obj.attributes || {}) as Record<string, unknown>
         const opName = attrStr(attrs, "gen_ai.operation.name")
         const name = (obj.name as string) || ""
         if (opName !== "chat" && !name.startsWith("chat ")) continue
 
-        const input = attrI64(attrs, "gen_ai.usage.input_tokens")
-        const output = attrI64(attrs, "gen_ai.usage.output_tokens")
-        if (input + output === 0) continue
+        const traceId = (obj.traceId as string) || "unknown-trace"
+        const spanId = (obj.spanId as string) || "unknown-span"
+        const dedupKey = `${traceId}:${spanId}`
+        if (seen.has(dedupKey)) continue
+        seen.add(dedupKey)
+
+        const rawInput = Math.max(0, attrI64(attrs, "gen_ai.usage.input_tokens"))
+        const output = Math.max(0, attrI64(attrs, "gen_ai.usage.output_tokens"))
+        const cacheRead = Math.max(0, attrI64(attrs, "gen_ai.usage.cache_read.input_tokens"))
+        const cacheWrite = Math.max(0, attrI64(attrs, "gen_ai.usage.cache_write.input_tokens"))
+        const reasoning = Math.max(0, attrI64(attrs, "gen_ai.usage.reasoning.output_tokens"))
+
+        const cacheReadForInput = Math.min(cacheRead, rawInput)
+        const input = Math.max(0, rawInput - cacheReadForInput)
+
+        if (input + output + cacheRead + cacheWrite + reasoning === 0) continue
 
         const model = attrStr(attrs, "gen_ai.response.model") || attrStr(attrs, "gen_ai.request.model") || "unknown"
-        const convId = attrStr(attrs, "gen_ai.conversation.id") || attrStr(attrs, "github.copilot.interaction_id") || attrStr(attrs, "gen_ai.response.id")
-
-        if (convId && seen.has(convId)) continue
-        if (convId) seen.add(convId)
+        const sessionId = attrStr(attrs, "gen_ai.conversation.id") || attrStr(attrs, "github.copilot.interaction_id") || attrStr(attrs, "gen_ai.response.id") || traceId
 
         let ts = fallbackTs
         const endTime = obj.endTime as [number, number] | undefined
@@ -57,17 +77,11 @@ export const copilotParser: AgentParser = {
         messages.push({
           client: "copilot",
           modelId: model,
-          providerId: "github",
-          sessionId: convId,
+          providerId: inferProvider(model),
+          sessionId,
           timestamp: ts,
           date: timestampToLocalDate(ts),
-          tokens: {
-            input,
-            output,
-            cacheRead: attrI64(attrs, "gen_ai.usage.cache_read.input_tokens"),
-            cacheWrite: attrI64(attrs, "gen_ai.usage.cache_write.input_tokens"),
-            reasoning: attrI64(attrs, "gen_ai.usage.reasoning.output_tokens"),
-          },
+          tokens: { input, output, cacheRead, cacheWrite, reasoning },
           cost: 0,
           messageCount: 1,
           isTurnStart: false,

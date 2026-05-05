@@ -1,22 +1,21 @@
 export function formatTokens(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}亿`
+  if (n >= 10_000) return `${(n / 10_000).toFixed(1)}万`
   if (n >= 1_000) return `${Math.round(n / 1_000)}K`
   return n.toLocaleString()
 }
 
 export function formatCost(n: number): string {
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`
-  if (n >= 1) return `$${n.toFixed(2)}`
+  if (n >= 1) return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   if (n >= 0.01) return `$${n.toFixed(2)}`
   if (n > 0) return `$${n.toFixed(4)}`
   return "$0.00"
 }
 
 export function formatCacheRatio(cacheRead: number, input: number, cacheWrite: number): string {
-  const paid = input + cacheWrite
-  if (paid === 0) return cacheRead > 0 ? "∞" : "—"
-  return `${(cacheRead / paid).toFixed(1)}x`
+  const total = cacheRead + input + cacheWrite
+  if (total === 0) return "—"
+  return `${((cacheRead / total) * 100).toFixed(1)}%`
 }
 
 export function formatPercent(value: number, total: number): string {

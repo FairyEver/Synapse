@@ -3,10 +3,10 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: synapse
-      POSTGRES_PASSWORD: synapse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synapse}
       POSTGRES_DB: synapse
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - synapse-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -20,17 +20,17 @@ services:
       context: ..
       dockerfile: server/Dockerfile
     environment:
-      DATABASE_URL: postgresql://synapse:synapse@postgres:5432/synapse
+      DATABASE_URL: postgresql://synapse:${POSTGRES_PASSWORD:-synapse}@postgres:5432/synapse
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
       LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY}
       LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY}
-      LICENSE_KEY_ID: local-dev-key
-      LICENSE_LEASE_DAYS: "7"
+      LICENSE_KEY_ID: ${LICENSE_KEY_ID:-local-dev-key}
+      LICENSE_LEASE_DAYS: ${LICENSE_LEASE_DAYS:-7}
       PORT: "3000"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       postgres:
         condition: service_healthy

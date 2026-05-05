@@ -19,32 +19,36 @@ export const hermesParser: AgentParser = {
           WHERE model IS NOT NULL AND TRIM(model) != ''
             AND (COALESCE(input_tokens, 0) > 0 OR COALESCE(output_tokens, 0) > 0
               OR COALESCE(cache_read_tokens, 0) > 0 OR COALESCE(cache_write_tokens, 0) > 0
-              OR COALESCE(reasoning_tokens, 0) > 0 OR COALESCE(actual_cost_usd, 0) > 0)
+              OR COALESCE(reasoning_tokens, 0) > 0
+              OR COALESCE(actual_cost_usd, estimated_cost_usd, 0) > 0)
         `).all() as Record<string, unknown>[]
 
         for (const row of rows) {
-          const input = extractI64(row.input_tokens)
-          const output = extractI64(row.output_tokens)
-          const cost = typeof row.actual_cost_usd === "number" ? row.actual_cost_usd
+          const input = Math.max(0, extractI64(row.input_tokens))
+          const output = Math.max(0, extractI64(row.output_tokens))
+          const rawCost = typeof row.actual_cost_usd === "number" ? row.actual_cost_usd
             : typeof row.estimated_cost_usd === "number" ? row.estimated_cost_usd : 0
+          const cost = Math.max(0, rawCost)
           const ts = parseTimestamp(row.started_at) || fallbackTs
+          const sessionId = String(row.id || "")
 
           messages.push({
             client: "hermes",
             modelId: (row.model as string) || "unknown",
             providerId: canonicalizeProvider(row.billing_provider as string, row.model as string),
-            sessionId: String(row.id || ""),
+            sessionId,
             timestamp: ts,
             date: timestampToLocalDate(ts),
             tokens: {
               input,
               output,
-              cacheRead: extractI64(row.cache_read_tokens),
-              cacheWrite: extractI64(row.cache_write_tokens),
-              reasoning: extractI64(row.reasoning_tokens),
+              cacheRead: Math.max(0, extractI64(row.cache_read_tokens)),
+              cacheWrite: Math.max(0, extractI64(row.cache_write_tokens)),
+              reasoning: Math.max(0, extractI64(row.reasoning_tokens)),
             },
             cost,
-            messageCount: extractI64(row.message_count) || 1,
+            dedupKey: sessionId,
+            messageCount: Math.max(0, extractI64(row.message_count)),
             isTurnStart: false,
           })
         }
