@@ -6,13 +6,16 @@ import { AuditLogService } from "../common/audit-log.service"
 import { LicensesModule } from "../licenses/licenses.module"
 import { AdminController } from "./admin.controller"
 import { AdminService } from "./admin.service"
+import { LogFileController } from "./log-file.controller"
+import { LogFileService } from "./log-file.service"
 
 @Module({
   imports: [AdminAuthModule, LicensesModule],
-  controllers: [AdminController],
+  controllers: [AdminController, LogFileController],
   providers: [
     AdminService,
     AuditLogService,
+    LogFileService,
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
   exports: [AuditLogService],
