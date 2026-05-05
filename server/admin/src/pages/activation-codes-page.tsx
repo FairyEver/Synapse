@@ -180,6 +180,9 @@ export function ActivationCodesPage() {
   const [selectedCodeHint, setSelectedCodeHint] = React.useState<string | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
+  const [reservedEmailMode, setReservedEmailMode] = React.useState<"none" | "single" | "list">("none")
+  const [reservedEmail, setReservedEmail] = React.useState("")
+  const [reservedEmailList, setReservedEmailList] = React.useState("")
 
   async function createActivationCode(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -211,6 +214,16 @@ export function ActivationCodesPage() {
       return
     }
 
+    const reservedEmailPayload: { reservedEmail?: string; reservedEmails?: string[] } = {}
+    if (reservedEmailMode === "single" && reservedEmail.trim()) {
+      reservedEmailPayload.reservedEmail = reservedEmail.trim()
+    } else if (reservedEmailMode === "list" && reservedEmailList.trim()) {
+      reservedEmailPayload.reservedEmails = reservedEmailList
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+    }
+
     setSubmitting(true)
     setFormError(null)
     try {
@@ -218,6 +231,7 @@ export function ActivationCodesPage() {
         maxDevices: deviceCount,
         expiresAt: requestExpiresAt,
         quantity: activationCodeQuantity,
+        ...reservedEmailPayload,
       })
       setGeneratedCodes(result.map((item) => item.code))
       setGeneratedCodesOpen(true)
@@ -228,6 +242,9 @@ export function ActivationCodesPage() {
       setExpirationMode("duration")
       setDurationAmount("1")
       setDurationUnit("months")
+      setReservedEmailMode("none")
+      setReservedEmail("")
+      setReservedEmailList("")
       setOpen(false)
       reload()
     } catch (caught) {
@@ -359,14 +376,16 @@ export function ActivationCodesPage() {
                 sliderMax={maxDevicesSliderValue}
                 onChange={setMaxDevices}
               />
-              <SliderNumberField
-                id="activation-code-quantity"
-                label="数量"
-                value={quantity}
-                inputMax={maxActivationCodeQuantity}
-                sliderMax={maxQuantitySliderValue}
-                onChange={setQuantity}
-              />
+              <div className={reservedEmailMode === "list" ? "opacity-50 pointer-events-none" : undefined}>
+                <SliderNumberField
+                  id="activation-code-quantity"
+                  label="数量"
+                  value={quantity}
+                  inputMax={maxActivationCodeQuantity}
+                  sliderMax={maxQuantitySliderValue}
+                  onChange={setQuantity}
+                />
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="expiration-mode">到期方式</Label>
                 <Select
@@ -426,6 +445,54 @@ export function ActivationCodesPage() {
                   </div>
                 </div>
               )}
+              <div className="grid gap-2">
+                <Label htmlFor="reserved-email-mode">预绑定邮箱</Label>
+                <Select
+                  value={reservedEmailMode}
+                  onValueChange={(value) => setReservedEmailMode(value as "none" | "single" | "list")}
+                >
+                  <SelectTrigger id="reserved-email-mode" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="none">不绑定</SelectItem>
+                      <SelectItem value="single">统一邮箱</SelectItem>
+                      <SelectItem value="list">邮箱列表</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              {reservedEmailMode === "single" ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="reserved-email">邮箱</Label>
+                  <Input
+                    id="reserved-email"
+                    type="email"
+                    placeholder="user@example.com"
+                    value={reservedEmail}
+                    onChange={(event) => setReservedEmail(event.target.value)}
+                    required
+                  />
+                </div>
+              ) : null}
+              {reservedEmailMode === "list" ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="reserved-email-list">邮箱列表（每行一个）</Label>
+                  <textarea
+                    id="reserved-email-list"
+                    className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder={"user1@example.com\nuser2@example.com"}
+                    value={reservedEmailList}
+                    onChange={(event) => {
+                      setReservedEmailList(event.target.value)
+                      const lines = event.target.value.split("\n").filter((line) => line.trim())
+                      if (lines.length > 0) setQuantity(String(lines.length))
+                    }}
+                    required
+                  />
+                </div>
+              ) : null}
               {formError ? (
                 <div className="text-sm text-destructive">{formError}</div>
               ) : null}
@@ -553,6 +620,7 @@ export function ActivationCodesPage() {
               <TableHead className="text-right">设备数</TableHead>
               <TableHead>到期</TableHead>
               <TableHead>邮箱</TableHead>
+              <TableHead>预绑定</TableHead>
               <TableHead>兑换</TableHead>
               <TableHead>创建</TableHead>
               <TableActionHead />
@@ -576,6 +644,7 @@ export function ActivationCodesPage() {
                 <TableCell className="text-right">{item.maxDevices}</TableCell>
                 <TableCell>{formatDate(item.expiresAt)}</TableCell>
                 <TableCell>{item.boundAccount?.email ?? "无"}</TableCell>
+                <TableCell>{item.reservedEmail ?? "—"}</TableCell>
                 <TableCell>{formatDate(item.redeemedAt)}</TableCell>
                 <TableCell>{formatDate(item.createdAt)}</TableCell>
                 <TableActionCell>
