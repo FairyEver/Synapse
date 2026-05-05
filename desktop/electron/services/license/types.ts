@@ -12,7 +12,6 @@ export interface DesktopLicenseStatus {
 }
 
 export interface DesktopLicenseActivationRequest {
-  readonly serverUrl: string
   readonly email: string
   readonly activationCode: string
 }

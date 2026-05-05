@@ -1,5 +1,5 @@
 import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi, afterEach } from "vitest"
 import type {
   CoreLicenseV1,
   DataChangeListener,
@@ -11,6 +11,7 @@ import { LicenseService } from "../license/license-service"
 import type { LicenseLeasePayload } from "../license/types"
 
 describe("LicenseService", () => {
+  afterEach(() => { vi.unstubAllEnvs() })
   it("accepts a stored signed lease without network", async () => {
     const keys = createKeys()
     const deviceId = "device-1"
@@ -61,6 +62,7 @@ describe("LicenseService", () => {
   })
 
   it("stores activation response as an offline lease", async () => {
+    vi.stubEnv("SYNAPSE_LICENSE_SERVER_URL", "http://localhost:3000")
     const keys = createKeys()
     const deviceId = "device-1"
     const leaseToken = signLease({
@@ -100,7 +102,6 @@ describe("LicenseService", () => {
     })
 
     await expect(service.activate({
-      serverUrl: "http://localhost:3000",
       email: "USER@EXAMPLE.COM",
       activationCode: "ABCD-1234",
     })).resolves.toMatchObject({
@@ -242,6 +243,81 @@ describe("LicenseService", () => {
     } finally {
       service.stop()
     }
+  })
+
+  it("rejects activation when keyId is not in pinned keys (production mode)", async () => {
+    vi.stubEnv("SYNAPSE_LICENSE_SERVER_URL", "")
+    const keys = createKeys()
+    const store = new MemoryNamespace<CoreLicenseV1>(null)
+    const client = {
+      getConfig: vi.fn().mockResolvedValue({
+        keyId: "unknown-key-999",
+        leaseDays: 30,
+        serverTime: "2026-04-29T00:00:00.000Z",
+        publicKey: keys.publicKey,
+      }),
+      redeem: vi.fn(),
+      renew: vi.fn(),
+    } as unknown as LicenseClient
+
+    const service = new LicenseService({
+      store,
+      client,
+      appVersion: "0.0.0",
+      idFactory: () => "device-1",
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+    })
+
+    await expect(service.activate({
+      email: "user@example.com",
+      activationCode: "ABCD-1234",
+    })).rejects.toThrow("不受信任的授权密钥。")
+  })
+
+  it("allows any server key in dev mode", async () => {
+    vi.stubEnv("SYNAPSE_LICENSE_SERVER_URL", "http://localhost:3000")
+    const keys = createKeys()
+    const deviceId = "device-1"
+    const leaseToken = signLease({
+      tokenId: "token-1",
+      accountId: "account-1",
+      email: "user@example.com",
+      licenseId: "license-1",
+      deviceIdHash: hashDeviceId(deviceId),
+      issuedAt: "2026-04-29T00:00:00.000Z",
+      expiresAt: "2026-05-29T00:00:00.000Z",
+      maxDevices: 1,
+      licenseStatus: "active",
+      keyId: "dev-local-key",
+    }, keys.privateKey)
+    const store = new MemoryNamespace<CoreLicenseV1>(null)
+    const client = {
+      getConfig: vi.fn().mockResolvedValue({
+        keyId: "dev-local-key",
+        leaseDays: 7,
+        serverTime: "2026-04-29T00:00:00.000Z",
+        publicKey: keys.publicKey,
+      }),
+      redeem: vi.fn().mockResolvedValue({
+        email: "user@example.com",
+        deviceIdHash: hashDeviceId(deviceId),
+        leaseToken,
+      }),
+      renew: vi.fn(),
+    } as unknown as LicenseClient
+
+    const service = new LicenseService({
+      store,
+      client,
+      appVersion: "0.0.0",
+      idFactory: () => deviceId,
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+    })
+
+    await expect(service.activate({
+      email: "user@example.com",
+      activationCode: "ABCD-1234",
+    })).resolves.toMatchObject({ status: "active" })
   })
 })
 

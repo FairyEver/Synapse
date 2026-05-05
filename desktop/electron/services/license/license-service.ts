@@ -1,8 +1,10 @@
 import type { CoreLicenseV1, DataNamespace } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import { getLicenseServerUrl, isDevLicenseServer } from "./constants"
 import { createDeviceId, createDeviceMetadata, hashDeviceId } from "./device-id"
 import { LicenseClient, normalizeLicenseServerUrl } from "./license-client"
 import { verifyLicenseLease } from "./license-token"
+import { findPinnedKey } from "./pinned-keys"
 import type {
   DesktopLicenseActivationRequest,
   DesktopLicenseStatus,
@@ -57,20 +59,21 @@ export class LicenseService {
 
   async activate(input: DesktopLicenseActivationRequest): Promise<DesktopLicenseStatus> {
     const state = await this.ensureState()
-    const serverUrl = normalizeLicenseServerUrl(input.serverUrl)
+    const serverUrl = normalizeLicenseServerUrl(getLicenseServerUrl())
     const config = await this.deps.client.getConfig(serverUrl)
+    const publicKey = this.resolvePublicKey(config.keyId, config.publicKey)
     const device = createDeviceMetadata(state.deviceId, this.deps.appVersion)
     const response = await this.deps.client.redeem(serverUrl, {
       email: input.email.trim().toLowerCase(),
       activationCode: input.activationCode,
       device,
     })
-    const payload = verifyLeaseForDevice(response.leaseToken, config.publicKey, state.deviceId)
+    const payload = verifyLeaseForDevice(response.leaseToken, publicKey, state.deviceId)
     const nextState: CoreLicenseV1 = {
       ...state,
       serverUrl,
       email: response.email,
-      publicKey: config.publicKey,
+      publicKey,
       keyId: config.keyId,
       leaseToken: response.leaseToken,
       leaseExpiresAt: payload.expiresAt,
@@ -120,15 +123,16 @@ export class LicenseService {
   private async renewState(state: CoreLicenseV1): Promise<CoreLicenseV1> {
     if (!state.serverUrl || !state.leaseToken) return state
     const config = await this.deps.client.getConfig(state.serverUrl)
+    const publicKey = this.resolvePublicKey(config.keyId, config.publicKey)
     const response = await this.deps.client.renew(state.serverUrl, {
       leaseToken: state.leaseToken,
       device: createDeviceMetadata(state.deviceId, this.deps.appVersion),
     })
-    const payload = verifyLeaseForDevice(response.leaseToken, config.publicKey, state.deviceId)
+    const payload = verifyLeaseForDevice(response.leaseToken, publicKey, state.deviceId)
     const nextState: CoreLicenseV1 = {
       ...state,
       email: response.email,
-      publicKey: config.publicKey,
+      publicKey,
       keyId: config.keyId,
       leaseToken: response.leaseToken,
       leaseExpiresAt: payload.expiresAt,
@@ -137,6 +141,17 @@ export class LicenseService {
     }
     await this.deps.store.setSingleton(nextState)
     return nextState
+  }
+
+  private resolvePublicKey(keyId: string, serverPublicKey: string): string {
+    if (isDevLicenseServer()) {
+      return serverPublicKey
+    }
+    const pinned = findPinnedKey(keyId)
+    if (!pinned) {
+      throw new Error("不受信任的授权密钥。")
+    }
+    return pinned.publicKey
   }
 
   private async syncWithServer(): Promise<void> {
@@ -209,7 +224,9 @@ export class LicenseService {
 
     let payload: LicenseLeasePayload
     try {
-      payload = verifyLeaseForDevice(state.leaseToken, state.publicKey, state.deviceId)
+      const pinnedKey = state.keyId ? findPinnedKey(state.keyId) : null
+      const verifyKey = pinnedKey ? pinnedKey.publicKey : state.publicKey
+      payload = verifyLeaseForDevice(state.leaseToken, verifyKey, state.deviceId)
     } catch {
       return {
         status: "invalid",
