@@ -1,54 +1,18 @@
 #!/bin/bash
 # 本机运行：打包代码并上传到服务器
-# 用法: bash deploy.sh [--verbose]
 set -e
 
 SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse"
 TOTAL_STEPS=7
-LOG_FILE=$(mktemp)
 TOTAL_START=$(date +%s)
-VERBOSE=false
-
-[[ "$1" == "--verbose" || "$1" == "-v" ]] && VERBOSE=true
-
-cleanup() { rm -f "$LOG_FILE"; }
-trap cleanup EXIT
 
 step() {
   local num=$1 desc=$2
   shift 2
-  local start=$(date +%s)
-
-  if $VERBOSE; then
-    printf "[%d/%d] %s\n" "$num" "$TOTAL_STEPS" "$desc"
-    if "$@"; then
-      local elapsed=$(( $(date +%s) - start ))
-      printf "[%d/%d] %s .......... done (%ds)\n\n" "$num" "$TOTAL_STEPS" "$desc" "$elapsed"
-      return 0
-    else
-      printf "[%d/%d] %s .......... FAILED\n" "$num" "$TOTAL_STEPS" "$desc"
-      return 1
-    fi
-  else
-    printf "[%d/%d] %s " "$num" "$TOTAL_STEPS" "$desc"
-    if "$@" > "$LOG_FILE" 2>&1; then
-      local elapsed=$(( $(date +%s) - start ))
-      if [ "$elapsed" -gt 0 ]; then
-        printf ".......... done (%ds)\n" "$elapsed"
-      else
-        printf ".......... done\n"
-      fi
-      return 0
-    else
-      printf ".......... FAILED\n"
-      echo ""
-      echo "  最后输出:"
-      tail -10 "$LOG_FILE" | sed 's/^/  /'
-      echo ""
-      return 1
-    fi
-  fi
+  printf "\n[%d/%d] %s\n" "$num" "$TOTAL_STEPS" "$desc"
+  "$@" 2>&1 | sed 's/^/  /'
+  printf "[%d/%d] done\n" "$num" "$TOTAL_STEPS"
 }
 
 echo ""
