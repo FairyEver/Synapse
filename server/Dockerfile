@@ -26,4 +26,4 @@ COPY server/prisma ./server/prisma
 COPY server/package.json ./server/package.json
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 EXPOSE 3000
-CMD ["node", "server/dist/main.js"]
+CMD ["sh", "-c", "cd server && npx prisma migrate deploy && cd .. && node server/dist/main.js"]
