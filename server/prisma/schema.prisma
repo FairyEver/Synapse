@@ -58,6 +58,7 @@ model ActivationCode {
   expiresAt      DateTime?
   boundAccountId String?
   boundAccount   Account?      @relation(fields: [boundAccountId], references: [id])
+  reservedEmail  String?
   redeemedAt     DateTime?
   archivedAt     DateTime?
   license        License?
