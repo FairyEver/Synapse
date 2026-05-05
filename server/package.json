@@ -55,6 +55,7 @@
     "@nestjs/cli": "^11.0.12",
     "@nestjs/testing": "^11.1.9",
     "@tailwindcss/vite": "4.2.2",
+    "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.5",
