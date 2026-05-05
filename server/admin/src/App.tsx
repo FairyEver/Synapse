@@ -12,6 +12,7 @@ import { AccountDetailPage } from "@/pages/account-detail-page"
 import { AccountsPage } from "@/pages/accounts-page"
 import { ActivationCodesPage } from "@/pages/activation-codes-page"
 import { AuditLogsPage } from "@/pages/audit-logs-page"
+import { BackupPage } from "@/pages/backup-page"
 import { DevicesPage } from "@/pages/devices-page"
 import { LoginPage } from "@/pages/login-page"
 import { SystemPage } from "@/pages/system-page"
@@ -25,6 +26,7 @@ type Route =
   | { name: "devices" }
   | { name: "audit-logs" }
   | { name: "system" }
+  | { name: "backup" }
 
 function routeFromHash(): Route {
   const route = window.location.hash.replace(/^#\/?/, "") || "activation-codes"
@@ -34,6 +36,7 @@ function routeFromHash(): Route {
   if (section === "devices") return { name: "devices" }
   if (section === "audit-logs") return { name: "audit-logs" }
   if (section === "system") return { name: "system" }
+  if (section === "backup") return { name: "backup" }
   return { name: "activation-codes" }
 }
 
@@ -59,6 +62,8 @@ function titleForRoute(route: Route): string {
       return "审计日志"
     case "system":
       return "系统"
+    case "backup":
+      return "备份管理"
     case "activation-codes":
     default:
       return "激活码"
@@ -138,6 +143,7 @@ export default function App() {
             {route.name === "devices" ? <DevicesPage /> : null}
             {route.name === "audit-logs" ? <AuditLogsPage /> : null}
             {route.name === "system" ? <SystemPage /> : null}
+            {route.name === "backup" ? <BackupPage /> : null}
           </main>
         </SidebarInset>
       </SidebarProvider>

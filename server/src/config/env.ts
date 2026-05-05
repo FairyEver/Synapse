@@ -21,6 +21,11 @@ const envSchema = z.object({
   ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE: z.coerce.number().int().positive().default(3),
   DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   PORT: z.coerce.number().int().positive().default(3000),
+  COS_SECRET_ID: z.string().optional(),
+  COS_SECRET_KEY: z.string().optional(),
+  COS_BUCKET: z.string().optional(),
+  COS_REGION: z.string().optional(),
+  BACKUP_ENCRYPT_KEY: z.string().length(64).regex(/^[0-9a-fA-F]+$/).optional(),
 })
 
 export interface ServerEnv {
@@ -44,6 +49,11 @@ export interface ServerEnv {
   readonly activationRiskMaxBoundConflictsPerCode: number
   readonly databasePoolSize: number
   readonly port: number
+  readonly cosSecretId?: string
+  readonly cosSecretKey?: string
+  readonly cosBucket?: string
+  readonly cosRegion?: string
+  readonly backupEncryptKey?: string
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
@@ -74,9 +84,18 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     activationRiskMaxBoundConflictsPerCode: result.data.ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE,
     databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,
+    cosSecretId: result.data.COS_SECRET_ID,
+    cosSecretKey: result.data.COS_SECRET_KEY,
+    cosBucket: result.data.COS_BUCKET,
+    cosRegion: result.data.COS_REGION,
+    backupEncryptKey: result.data.BACKUP_ENCRYPT_KEY,
   }
 }
 
 function normalizePem(value: string): string {
   return value.replace(/\\n/g, "\n")
+}
+
+export function isBackupConfigured(env: ServerEnv): boolean {
+  return !!(env.cosSecretId && env.cosSecretKey && env.cosBucket && env.cosRegion)
 }

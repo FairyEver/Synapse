@@ -89,6 +89,20 @@ if [ -z "$DB_PASSWORD" ]; then
 fi
 
 echo ""
+echo ">>> 备份配置（可选，回车跳过）"
+echo "  配置腾讯云 COS 后将启用自动备份功能"
+echo "  参考文档: docs/superpowers/specs/2026-05-05-backup-export-design.md"
+echo ""
+read -p "腾讯云 COS SecretId (回车跳过): " COS_SECRET_ID
+if [ -n "$COS_SECRET_ID" ]; then
+  read -p "腾讯云 COS SecretKey: " COS_SECRET_KEY
+  read -p "COS 存储桶名称 (如 synapse-backup-1250000000): " COS_BUCKET
+  read -p "COS 地域 (如 ap-guangzhou): " COS_REGION
+  BACKUP_ENCRYPT_KEY=$(openssl rand -hex 32)
+  echo "  备份加密密钥已自动生成"
+fi
+
+echo ""
 
 # 写入 .env 文件
 cat > .env << EOF
@@ -118,6 +132,17 @@ ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE=3
 DATABASE_POOL_SIZE=10
 PORT=3000
 EOF
+
+if [ -n "$COS_SECRET_ID" ]; then
+cat >> .env << EOF
+
+COS_SECRET_ID=$COS_SECRET_ID
+COS_SECRET_KEY=$COS_SECRET_KEY
+COS_BUCKET=$COS_BUCKET
+COS_REGION=$COS_REGION
+BACKUP_ENCRYPT_KEY=$BACKUP_ENCRYPT_KEY
+EOF
+fi
 
 echo ">>> .env 文件已生成"
 echo ""
