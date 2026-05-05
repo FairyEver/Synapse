@@ -186,6 +186,50 @@ export interface DesktopLicenseActivationRequest {
 | 开发者本地调试 | 环境变量覆盖 URL，跳过 pinning，使用 server 返回的公钥 |
 | 密钥轮换 | 新 key 加入 pinned list，发版，旧 key 保留过渡期 |
 
+### 8. setup.sh 优化 — 拆分重置选项
+
+**文件：** `setup.sh`
+
+当前「重置」会同时清数据库和重新生成密钥，改为三个选项：
+
+```
+1) 重置数据库（保留密钥和配置）
+2) 完全重置（清除所有数据，重新生成密钥）
+3) 退出
+```
+
+选项 1 的行为：
+- `docker compose down -v` 清除数据库
+- 重新 `docker compose up -d --build`
+- 保留 `.env` 不动（密钥、管理员账号、端口等全部保留）
+
+选项 2 保持现有行为不变。
+
+### 9. 打包自动化 — 构建前同步公钥
+
+**新增文件：** `desktop/scripts/sync-license-keys.mjs`
+
+脚本逻辑：
+1. 请求 `https://synapse.d2.pub/v1/license/config`
+2. 提取 `keyId` 和 `publicKey`
+3. 读取 `desktop/electron/services/license/pinned-keys.ts`
+4. 如果该 `keyId` 已存在，检查公钥是否一致（不一致则报错提醒人工确认）
+5. 如果该 `keyId` 不存在，追加到 `PINNED_KEYS` 数组
+6. 写回文件
+
+**集成到构建流程：**
+
+`desktop/package.json` 的 `build` 脚本前置执行：
+
+```json
+"build": "node scripts/sync-license-keys.mjs && pnpm generate:definitions-registry && pnpm build:renderer && pnpm build:electron && pnpm build:database"
+```
+
+**安全保障：**
+- 脚本只在构建时运行（开发者机器上），不在用户端运行
+- 如果生产 server 不可达，脚本报错中断构建（不会用过期的 key 打包）
+- 如果 keyId 相同但公钥不同，说明 server 被篡改或配置错误，报错中断
+
 ## 测试
 
 - 更新 `license-service.test.ts`：activate 不再传 serverUrl
