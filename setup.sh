@@ -12,15 +12,34 @@ echo ""
 
 if [ -f .env ]; then
   echo "检测到已有配置，请选择操作："
-  echo "  1) 重置（清除所有数据，重新初始化）"
-  echo "  2) 退出"
-  read -p "输入选项 [1/2]: " CHOICE
+  echo "  1) 重置数据库（保留密钥和配置）"
+  echo "  2) 完全重置（清除所有数据，重新生成密钥）"
+  echo "  3) 退出"
+  read -p "输入选项 [1/2/3]: " CHOICE
 
   case $CHOICE in
     1)
       echo ""
+      echo "⚠️  这将删除数据库所有数据，但保留密钥和管理员配置"
+      read -p "确认重置数据库？[y/N]: " CONFIRM
+      if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+        echo "已取消"
+        exit 0
+      fi
+      echo ""
+      echo ">>> 重建数据库容器..."
+      docker compose down -v 2>/dev/null || true
+      docker compose --env-file .env up -d --build
+      echo ""
+      echo ">>> 等待服务启动..."
+      sleep 8
+      curl -sf http://127.0.0.1:3000/healthz && echo " ✅ 服务正常" || echo " ❌ 服务未就绪，查看日志: docker compose logs server"
+      exit 0
+      ;;
+    2)
+      echo ""
       echo "⚠️  这将删除数据库所有数据并重新生成密钥"
-      read -p "确认重置？[y/N]: " CONFIRM
+      read -p "确认完全重置？[y/N]: " CONFIRM
       if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
         echo "已取消"
         exit 0
