@@ -93,6 +93,7 @@ const nodemon = spawn(pnpmCommand, ["exec", "nodemon"], {
   env: {
     ...process.env,
     VITE_DEV_SERVER_URL: devServerUrl,
+    SYNAPSE_LICENSE_SERVER_URL: process.env.SYNAPSE_LICENSE_SERVER_URL ?? "http://localhost:3000",
   },
 })
 
