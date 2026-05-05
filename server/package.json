@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "commonjs",
   "scripts": {
-    "dev": "PORT=${SYNAPSE_SERVER_API_PORT:-3001} pnpm run dev:api & pnpm run dev:admin & wait",
+    "dev": "prisma migrate deploy && prisma generate && PORT=${SYNAPSE_SERVER_API_PORT:-3001} pnpm run dev:api & pnpm run dev:admin & wait",
     "dev:api": "nest start --watch",
     "dev:admin": "vite --config admin/vite.config.ts --host 0.0.0.0",
     "build": "pnpm build:api && pnpm build:admin",
