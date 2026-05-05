@@ -29,12 +29,25 @@ export class AdminService {
     maxDevices: number
     expiresAt?: string | null
     quantity?: number
+    reservedEmail?: string | null
+    reservedEmails?: string[] | null
   }) {
+    if (input.reservedEmail && input.reservedEmails) {
+      throw new BadRequestException("reservedEmail 和 reservedEmails 不能同时使用。")
+    }
+
+    if (input.reservedEmails && input.quantity && input.quantity !== input.reservedEmails.length) {
+      throw new BadRequestException("reservedEmails 长度必须等于 quantity。")
+    }
+
+    const quantity = input.reservedEmails?.length ?? input.quantity ?? 1
     const results: Array<{ id: string; code: string; maxDevices: number }> = []
-    const quantity = input.quantity ?? 1
 
     for (let index = 0; index < quantity; index += 1) {
-      results.push(await this.createSingleActivationCode(input))
+      const email = input.reservedEmails
+        ? input.reservedEmails[index]!.trim().toLowerCase()
+        : input.reservedEmail?.trim().toLowerCase() ?? null
+      results.push(await this.createSingleActivationCode({ ...input, reservedEmail: email }))
     }
 
     return results
@@ -43,6 +56,7 @@ export class AdminService {
   private async createSingleActivationCode(input: {
     maxDevices: number
     expiresAt?: string | null
+    reservedEmail?: string | null
   }) {
     for (let attempt = 0; attempt < activationCodeCreateAttempts; attempt += 1) {
       const code = normalizeActivationCode(this.createActivationCodeValue())
@@ -53,6 +67,7 @@ export class AdminService {
             codeHash: hashActivationCode(code),
             maxDevices: input.maxDevices,
             expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+            reservedEmail: input.reservedEmail ?? null,
           },
         })
         return { id: activationCode.id, code, maxDevices: activationCode.maxDevices }
@@ -88,6 +103,7 @@ export class AdminService {
           status: true,
           maxDevices: true,
           expiresAt: true,
+          reservedEmail: true,
           boundAccountId: true,
           boundAccount: {
             select: {
