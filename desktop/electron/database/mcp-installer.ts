@@ -131,7 +131,7 @@ function registerJsonMcp(settingsPath: string, mcpUrl: string): void {
   const settings = readJsonSettings(settingsPath)
   const servers = isRecord(settings.mcpServers) ? settings.mcpServers : {}
 
-  servers[SYNAPSE_MCP_SERVER_NAME] = { url: mcpUrl }
+  servers[SYNAPSE_MCP_SERVER_NAME] = { type: "http", url: mcpUrl }
   settings.mcpServers = servers
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
 }
