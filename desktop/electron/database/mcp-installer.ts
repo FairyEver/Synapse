@@ -319,6 +319,7 @@ function unregisterMcp(target: McpTarget, serverName: string): { success: boolea
 
 function cleanupLegacyMcpNames(): void {
   if (SYNAPSE_MCP_LEGACY_SERVER_NAMES.length === 0) return
+  logger.info("Cleaning up legacy MCP names.", { legacyNames: SYNAPSE_MCP_LEGACY_SERVER_NAMES })
   for (const legacy of SYNAPSE_MCP_LEGACY_SERVER_NAMES) {
     if (legacy === SYNAPSE_MCP_SERVER_NAME) continue
     for (const target of MCP_TARGETS) {
@@ -327,39 +328,6 @@ function cleanupLegacyMcpNames(): void {
         logger.info("Legacy MCP entry removed.", { target, name: legacy })
       }
     }
-  }
-  cleanupLegacyFromClaudeUserConfig()
-}
-
-function cleanupLegacyFromClaudeUserConfig(): void {
-  const configPath = path.join(homedir(), ".claude.json")
-  if (!existsSync(configPath)) return
-
-  try {
-    const raw = readFileSync(configPath, "utf-8")
-    if (!raw.trim()) return
-    const parsed = JSON.parse(raw) as unknown
-    if (!isRecord(parsed)) return
-    const servers = parsed.mcpServers
-    if (!isRecord(servers)) return
-
-    let modified = false
-    for (const legacy of SYNAPSE_MCP_LEGACY_SERVER_NAMES) {
-      if (legacy === SYNAPSE_MCP_SERVER_NAME) continue
-      if (legacy in servers) {
-        delete servers[legacy]
-        modified = true
-        logger.info("Legacy MCP entry removed from ~/.claude.json.", { name: legacy })
-      }
-    }
-
-    if (modified) {
-      writeFileSync(configPath, JSON.stringify(parsed, null, 2), "utf-8")
-    }
-  } catch (error) {
-    logger.warn("Failed to clean legacy MCP from ~/.claude.json (non-fatal).", {
-      error: error instanceof Error ? error.message : String(error),
-    })
   }
 }
 
@@ -424,6 +392,7 @@ async function openMcpSettings(target: McpTarget): Promise<{ success: boolean; e
 }
 
 function autoRegisterMcp(mcpPort: number): void {
+  logger.info("MCP auto-registration started.", { port: mcpPort, targets: MCP_TARGETS.map((d) => d) })
   cleanupLegacyMcpNames()
   const mcpUrl = getMcpUrl(mcpPort)
 
@@ -433,7 +402,10 @@ function autoRegisterMcp(mcpPort: number): void {
       assertSupportedSettingsFormat(definition)
       const settingsPath = getSettingsPath(definition)
       const settingsDir = path.dirname(settingsPath)
-      if (!existsSync(settingsDir)) continue
+      if (!existsSync(settingsDir)) {
+        logger.info("MCP target skipped: settings directory not found.", { target, settingsDir })
+        continue
+      }
 
       const settingsFileExists = existsSync(settingsPath)
       let detection: { registered: boolean; mode: McpRegistrationMode; url: string | null } = { registered: false, mode: null, url: null }
@@ -446,14 +418,18 @@ function autoRegisterMcp(mcpPort: number): void {
         }
       }
 
-      if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) continue
+      if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) {
+        logger.info("MCP target already registered with correct URL.", { target, settingsPath })
+        continue
+      }
 
       registerMcp(target, mcpPort)
-      logger.info("MCP auto-registered.", { target, previousMode: detection.mode })
+      logger.info("MCP auto-registered.", { target, settingsPath, previousMode: detection.mode, previousUrl: detection.url })
     } catch (error) {
       logger.warn("MCP auto-registration failed (non-fatal).", { target, error: error instanceof Error ? error.message : String(error) })
     }
   }
+  logger.info("MCP auto-registration completed.")
 }
 
 export { autoRegisterMcp, registerMcp, getMcpServers, getMcpStatus, openMcpSettings }

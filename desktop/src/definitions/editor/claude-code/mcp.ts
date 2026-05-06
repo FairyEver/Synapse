@@ -4,6 +4,6 @@ export const mcpDefinition = {
   target: "claude",
   label: "Claude Code",
   order: 10,
-  settingsPathSegments: [".claude", "settings.json"],
+  settingsPathSegments: [".claude.json"],
   settingsFormat: "json-mcp-servers",
 } as const satisfies SynapseMcpDefinition
