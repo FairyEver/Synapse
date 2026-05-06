@@ -36,6 +36,7 @@ type TimelineTarget = {
 
 type UseAgentChatState = {
   sessions: SynapseAgentSessionSummary[]
+  archivedSessions: SynapseAgentSessionSummary[]
   timeline: SynapseAgentTimelineItem[]
   pendingPermissions: SynapseAgentPendingPermission[]
   status: SynapseAgentStatus | null
@@ -54,6 +55,7 @@ type UseAgentChatState = {
   createSession: (projectId: string, agentType: string) => Promise<void>
   selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
+  renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
   sendMessage: (content: string) => Promise<void>
   respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
@@ -64,6 +66,7 @@ function useAgentChat(
   options: { readonly inputDirty?: boolean } = {},
 ): UseAgentChatState {
   const [sessions, setSessions] = useState<SynapseAgentSessionSummary[]>([])
+  const [archivedSessions, setArchivedSessions] = useState<SynapseAgentSessionSummary[]>([])
   const [timeline, setTimeline] = useState<SynapseAgentTimelineItem[]>([])
   const [pendingPermissions, setPendingPermissions] = useState<SynapseAgentPendingPermission[]>([])
   const [status, setStatus] = useState<SynapseAgentStatus | null>(null)
@@ -75,7 +78,7 @@ function useAgentChat(
   const [selectedConversationId, setSelectedConversationIdRaw] = useState<string | undefined>()
   const [selectedSessionKey, setSelectedSessionKeyRaw] = useState(DEFAULT_LOCAL_SESSION_KEY)
   const [loading, setLoading] = useState(false)
-  const [activeSendCount, setActiveSendCount] = useState(0)
+  const [sendingConversationIds, setSendingConversationIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const followFeishuRef = useRef(followFeishu)
   const inputDirtyRef = useRef(options.inputDirty ?? false)
@@ -168,6 +171,19 @@ function useAgentChat(
     return sortSessions(groups.flat())
   }, [])
 
+  const loadArchivedSessions = useCallback(async () => {
+    const bridge = getSynapseBridge()
+    if (!bridge) return
+    try {
+      const allSessions = await bridge.agent.listAllSessions()
+      const currentProjectIds = new Set(projectIdsRef.current)
+      const orphans = allSessions.filter((session) => !currentProjectIds.has(session.projectId))
+      setArchivedSessions(orphans)
+    } catch {
+      setArchivedSessions([])
+    }
+  }, [])
+
   const refreshPendingPermissions = useCallback(async () => {
     if (projectIdsRef.current.length === 0) {
       setPendingPermissions([])
@@ -253,6 +269,7 @@ function useAgentChat(
       await Promise.all([
         refreshPendingPermissions(),
         refreshProjectMeta(nextProjectId),
+        loadArchivedSessions(),
       ])
       logger.info("Agent refresh loaded sessions.", {
         projectIds: projectIdsRef.current,
@@ -286,6 +303,7 @@ function useAgentChat(
   }, [
     clearTimeline,
     getDefaultProjectId,
+    loadArchivedSessions,
     loadSessionsForProjects,
     loadTimeline,
     refreshPendingPermissions,
@@ -382,6 +400,7 @@ function useAgentChat(
     )
     const projectId = selected?.projectId ?? getDefaultProjectId()
     if (!projectId) return
+    const conversationId = selected?.id
     const bridge = requireSynapseBridge()
     const sessionKey = selected?.sessionKey ?? selectedSessionKeyRef.current
     const now = new Date().toISOString()
@@ -389,7 +408,9 @@ function useAgentChat(
       ...current,
       localUserTimelineItem(trimmed, now, current.length),
     ])
-    setActiveSendCount((count) => count + 1)
+    if (conversationId) {
+      setSendingConversationIds((current) => new Set([...current, conversationId]))
+    }
     setError(null)
     try {
       await bridge.agent.send({
@@ -397,15 +418,20 @@ function useAgentChat(
         sessionKey,
         content: trimmed,
       })
-      await refresh()
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "发送失败"
       logger.error("Agent send failed.", rawError)
       setError(message)
     } finally {
-      setActiveSendCount((count) => Math.max(0, count - 1))
+      if (conversationId) {
+        setSendingConversationIds((current) => {
+          const next = new Set(current)
+          next.delete(conversationId)
+          return next
+        })
+      }
     }
-  }, [getDefaultProjectId, refresh, sessions, updateTimeline])
+  }, [getDefaultProjectId, sessions, updateTimeline])
 
   const deleteSession = useCallback(async (target: SynapseAgentSessionSummary) => {
     const requestId = selectRequestIdRef.current + 1
@@ -448,8 +474,8 @@ function useAgentChat(
           clearTimeline()
         }
       }
+      setSessions((current) => current.filter((session) => !isSameSession(session, target)))
       toast("会话已删除")
-      await refresh()
     } catch (rawError) {
       if (requestId !== selectRequestIdRef.current) {
         return
@@ -467,6 +493,25 @@ function useAgentChat(
     sessions,
     setSelectedSession,
   ])
+
+  const renameSession = useCallback(async (target: SynapseAgentSessionSummary, name: string) => {
+    const bridge = requireSynapseBridge()
+    setError(null)
+    try {
+      await bridge.agent.renameSession({
+        projectId: target.projectId,
+        conversationId: target.id,
+        name,
+      })
+      setSessions((current) => current.map((session) =>
+        isSameSession(session, target) ? { ...session, name } : session))
+      toast("已重命名")
+    } catch (rawError) {
+      const message = rawError instanceof Error ? rawError.message : "重命名失败"
+      logger.error("Agent session rename failed.", rawError)
+      setError(message)
+    }
+  }, [])
 
   const respondPermission = useCallback(async (
     requestId: string,
@@ -500,11 +545,12 @@ function useAgentChat(
       setSelectedSession(undefined)
       setError(null)
       setLoading(false)
-      setActiveSendCount(0)
+      setSendingConversationIds(new Set())
+      void loadArchivedSessions()
       return
     }
     void refresh()
-  }, [clearTimeline, projectIdsKey, refresh, setSelectedSession])
+  }, [clearTimeline, loadArchivedSessions, projectIdsKey, refresh, setSelectedSession])
 
   useEffect(() => {
     if (projectIdsRef.current.length === 0) return undefined
@@ -629,6 +675,7 @@ function useAgentChat(
 
   return {
     sessions,
+    archivedSessions,
     timeline,
     pendingPermissions,
     status,
@@ -642,11 +689,12 @@ function useAgentChat(
     selectedSessionKey,
     activeProjectId,
     loading,
-    sending: activeSendCount > 0,
+    sending: selectedConversationId ? sendingConversationIds.has(selectedConversationId) : false,
     error,
     createSession,
     selectSession,
     deleteSession,
+    renameSession,
     refresh,
     sendMessage,
     respondPermission,
