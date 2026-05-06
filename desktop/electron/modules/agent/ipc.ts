@@ -12,6 +12,7 @@ import {
 } from "../../services/agent-runtime"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
 import { whichBin } from "../../services/agent-runtime/binary-detect-service"
+import { AgentAvailabilityService } from "../../services/agent-runtime/agent-availability-service"
 import {
   ProviderConfigService,
   PROVIDER_CONFIG_SERVICE_ID,
@@ -37,6 +38,7 @@ const timelineRequestSchema = projectRequestSchema.extend({
 const createSessionRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   name: z.string().optional(),
+  agentType: z.string().optional(),
 })
 
 const switchSessionRequestSchema = projectRequestSchema.extend({
@@ -404,6 +406,7 @@ export const agentIpcModule: IpcModule = {
           sessionKey,
           platform: LOCAL_RENDERER_PLATFORM,
           name: request.name?.trim() || undefined,
+          agentType: request.agentType?.trim() || undefined,
         })
         return sessionSummary(session)
       },
@@ -567,6 +570,28 @@ export const agentIpcModule: IpcModule = {
           projectId: request.projectId,
           agents,
         }
+      },
+    },
+    getAvailableAgents: {
+      kind: "invoke",
+      channel: "synapse:agent:get-available-agents",
+      request: z.object({}),
+      response: z.array(z.object({
+        agentType: z.string(),
+        label: z.string(),
+        available: z.boolean(),
+        binaryPath: z.string().optional(),
+      })),
+      handler: async () => {
+        const service = new AgentAvailabilityService({
+          whichBin,
+          definitions: agentRuntimeDefinitions.map((def) => ({
+            id: def.id,
+            label: def.label,
+            runtime: def.runtime,
+          })),
+        })
+        return await service.detectAll()
       },
     },
     listCommands: {

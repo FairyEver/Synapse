@@ -411,7 +411,7 @@ export type SynapseBridge = {
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
     createSession: (
-      args: { projectId: string; sessionKey?: string; name?: string },
+      args: { projectId: string; sessionKey?: string; name?: string; agentType?: string },
     ) => Promise<SynapseAgentSessionSummary>
     switchSession: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
@@ -430,6 +430,12 @@ export type SynapseBridge = {
     getRuntimeStatus: (
       request: { projectId?: string },
     ) => Promise<SynapseAgentRuntimeStatus>
+    getAvailableAgents: () => Promise<Array<{
+      agentType: string
+      label: string
+      available: boolean
+      binaryPath?: string
+    }>>
     listCommands: (projectId: string) => Promise<SynapseAgentPublishedCommand[]>
     openReference: (args: { projectId: string; reference: string }) => Promise<{ ok: true; path: string }>
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void
