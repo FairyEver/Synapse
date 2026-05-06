@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowUp, Command as CommandIcon, Copy } from "lucide-react"
+import { Command as CommandIcon, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -15,10 +15,9 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
 } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Textarea } from "@/components/ui/textarea"
+import { AgentComposer } from "./components/agent-composer"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
@@ -174,6 +173,7 @@ function AgentModule() {
   const sidebar = (
     <AgentSessionSidebar
       sessions={chat.sessions}
+      archivedSessions={chat.archivedSessions}
       projects={projectOptions}
       availableAgents={availableAgents}
       selectedProjectId={chat.selectedProjectId}
@@ -183,13 +183,14 @@ function AgentModule() {
       onCreateSession={(projectId, agentType) => void chat.createSession(projectId, agentType)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
+      onRename={(session, name) => void chat.renameSession(session, name)}
       onFollowFeishuChange={chat.setFollowFeishu}
     />
   )
 
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
-      <div className="flex h-full min-h-0 flex-col gap-0 bg-background">
+      <div className="relative flex h-full min-h-0 flex-col gap-0 bg-background">
         <div className="flex items-center justify-between gap-3 px-0 py-0">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-medium">Agent</h2>
@@ -230,14 +231,13 @@ function AgentModule() {
                   <CommandList>
                     <CommandEmpty>无命令</CommandEmpty>
                     <CommandGroup>
-                      {chat.commands.map((command) => (
+                      {(selectedAgentDefinition?.commands ?? []).map((command) => (
                         <CommandItem
-                          key={`${command.source}:${command.name}`}
+                          key={command.name}
                           value={`/${command.name}`}
                           onSelect={() => handleCommandSelect(command.name)}
                         >
                           <span className="truncate">/{command.name}</span>
-                          <CommandShortcut>{command.kind}</CommandShortcut>
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -285,48 +285,6 @@ function AgentModule() {
         )}
       </div>
     </SidebarContentLayout>
-  )
-}
-
-function AgentComposer({
-  draft,
-  disabled,
-  canSend,
-  onDraftChange,
-  onInputKeyDown,
-  onSubmit,
-}: {
-  readonly draft: string
-  readonly disabled: boolean
-  readonly canSend: boolean
-  readonly onDraftChange: (value: string) => void
-  readonly onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
-  readonly onSubmit: (event: FormEvent) => void
-}) {
-  return (
-    <form
-      className="mx-auto flex w-full max-w-4xl shrink-0 items-end gap-2 rounded-2xl border border-border bg-background px-3 py-2"
-      onSubmit={onSubmit}
-    >
-      <Textarea
-        value={draft}
-        onChange={(event) => onDraftChange(event.target.value)}
-        onKeyDown={onInputKeyDown}
-        placeholder="输入消息"
-        disabled={disabled}
-        rows={1}
-        className="h-9 min-h-9 flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-2 shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
-      />
-      <Button
-        type="submit"
-        size="icon"
-        className="shrink-0 rounded-full"
-        disabled={!canSend}
-        aria-label="发送"
-      >
-        <ArrowUp data-icon="inline-start" />
-      </Button>
-    </form>
   )
 }
 
