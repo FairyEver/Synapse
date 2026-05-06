@@ -219,6 +219,7 @@ export type SynapseBridge = {
     electron: string
     node: string
   }
+  isPackaged: boolean
   content: {
     list: <T extends SynapseContentType>(
       args: { contentType: T },

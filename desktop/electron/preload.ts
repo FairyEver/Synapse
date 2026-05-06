@@ -300,6 +300,7 @@ const synapseBridge: SynapseBridge = {
     electron: process.versions.electron,
     node: process.versions.node,
   },
+  isPackaged: !process.env.VITE_DEV_SERVER_URL,
   content: {
     list: invoke(IPC_CHANNELS.content.list),
     getContent: invoke(IPC_CHANNELS.content.getContent),
