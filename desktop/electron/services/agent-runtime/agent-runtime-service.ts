@@ -191,7 +191,7 @@ export class AgentRuntimeService {
       return commandResult
     }
 
-    const state = this.stateFor(message)
+    const state = this.stateForConversation(conversation.id, message)
     if (state.busy && state.queue.length >= this.queueLimit()) {
       return this.finishWithError(message, conversation.id, "Session queue is full")
     }
@@ -242,7 +242,7 @@ export class AgentRuntimeService {
       return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
     }
 
-    const state = this.stateFor(message, conversation.id)
+    const state = this.stateForConversation(conversation.id, message)
     if (state.busy && state.queue.length >= this.queueLimit()) {
       return this.finishWithError(message, conversation.id, "Session queue is full")
     }
@@ -288,7 +288,7 @@ export class AgentRuntimeService {
       },
       resumePolicy: "fresh",
     })
-    const state = this.stateFor(message, conversation.id)
+    const state = this.stateForConversation(conversation.id, message)
     if (state.busy) {
       return {
         ...this.finishWithError(message, conversation.id, "Relay session is busy"),
@@ -438,12 +438,7 @@ export class AgentRuntimeService {
     }
 
     this.pendingPermissions.delete(request.requestId)
-    const state = this.states.get(runtimeKey(
-      pending.sessionKey,
-      pending.projectId,
-      pending.workspaceKey,
-    ))
-    const pendingState = this.states.get(pending.stateKey) ?? state
+    const pendingState = this.states.get(pending.stateKey)
     if (pendingState?.pending?.requestId === request.requestId) {
       pendingState.pending = undefined
     }
@@ -465,14 +460,17 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const state = this.states.get(runtimeKey(sessionKey, this.deps.projectId, workspaceKey))
-    if (state?.pending) {
-      this.pendingPermissions.delete(state.pending.requestId)
-      state.pending = undefined
-    }
-    if (state?.liveSession) {
-      await state.liveSession.close()
-      state.liveSession = undefined
+    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
+    if (conversation) {
+      const state = this.states.get(conversation.id)
+      if (state?.pending) {
+        this.pendingPermissions.delete(state.pending.requestId)
+        state.pending = undefined
+      }
+      if (state?.liveSession) {
+        await state.liveSession.close()
+        state.liveSession = undefined
+      }
     }
     return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
   }
@@ -486,7 +484,7 @@ export class AgentRuntimeService {
       readonly workspacePath?: string
     },
   ): Promise<ConversationEntryV1> {
-    await this.closeIdleStateForSession(input.sessionKey, input.workspaceKey)
+    await this.closeIdleStateForConversation(input.sessionKey, input.platform, input.workspaceKey)
     return this.repository.createSession({
       sessionKey: input.sessionKey,
       platform: input.platform,
@@ -510,7 +508,7 @@ export class AgentRuntimeService {
     const effectiveWorkspaceKey = workspaceKey ?? target.workspaceKey
     const active = await this.repository.getActive(sessionKey, platform, effectiveWorkspaceKey)
     if (active?.id !== target.id) {
-      await this.closeIdleStateForSession(sessionKey, effectiveWorkspaceKey)
+      await this.closeIdleStateForConversation(sessionKey, platform, effectiveWorkspaceKey)
     }
     return this.repository.setActiveSession(sessionKey, conversationIdValue, platform, effectiveWorkspaceKey)
   }
@@ -537,14 +535,20 @@ export class AgentRuntimeService {
   async deleteSession(conversationIdValue: string): Promise<boolean> {
     const conversation = await this.repository.get(conversationIdValue)
     if (!conversation) return false
-    if (conversation.active) {
-      const key = runtimeKey(
-        conversation.sessionKey,
-        this.deps.projectId,
-        conversation.workspaceKey,
-      )
-      await this.closeIdleStateForSession(conversation.sessionKey, conversation.workspaceKey)
-      this.states.delete(key)
+    const state = this.states.get(conversationIdValue)
+    if (state) {
+      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
+        throw new Error("Session is busy.")
+      }
+      if (state.pending) {
+        this.pendingPermissions.delete(state.pending.requestId)
+        state.pending = undefined
+      }
+      if (state.liveSession) {
+        await state.liveSession.close()
+        state.liveSession = undefined
+      }
+      this.states.delete(conversationIdValue)
     }
     await this.repository.deleteSession(conversationIdValue)
     return true
@@ -1203,38 +1207,37 @@ export class AgentRuntimeService {
     })
   }
 
-  private stateFor(message: AgentMessage, sideSessionId?: string): RuntimeSessionState {
-    const key = runtimeKey(
-      message.sessionKey,
-      message.projectId,
-      message.workspaceKey,
-      sideSessionId,
-    )
-    const existing = this.states.get(key)
+  private stateForConversation(conversationIdValue: string, message?: AgentMessage): RuntimeSessionState {
+    const existing = this.states.get(conversationIdValue)
     if (existing) {
-      existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
-      existing.workspacePath = message.workspacePath ?? existing.workspacePath
+      if (message) {
+        existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
+        existing.workspacePath = message.workspacePath ?? existing.workspacePath
+      }
       existing.lastActivity = Date.now()
       return existing
     }
     const state: RuntimeSessionState = {
-      key,
-      workspaceKey: message.workspaceKey,
-      workspacePath: message.workspacePath,
+      key: conversationIdValue,
+      workspaceKey: message?.workspaceKey,
+      workspacePath: message?.workspacePath,
       queue: [],
       busy: false,
       activeTurns: 0,
       lastActivity: Date.now(),
     }
-    this.states.set(key, state)
+    this.states.set(conversationIdValue, state)
     return state
   }
 
-  private async closeIdleStateForSession(
+  private async closeIdleStateForConversation(
     sessionKey: string,
+    platform?: string,
     workspaceKey?: string,
   ): Promise<void> {
-    const state = this.states.get(runtimeKey(sessionKey, this.deps.projectId, workspaceKey))
+    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
+    if (!conversation) return
+    const state = this.states.get(conversation.id)
     if (!state) return
     if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
       throw new Error("Session is busy.")
@@ -1359,7 +1362,7 @@ export class AgentRuntimeService {
     message: AgentMessage,
     conversation: ConversationEntryV1,
   ): Promise<AgentRuntimeTurnResult> {
-    const state = this.stateFor(message)
+    const state = this.stateForConversation(conversation.id, message)
     if (state.busy) {
       return runtimeCommandResult(conversation.id, "Session is busy.", true, conversation.agentSessionId)
     }
@@ -1606,15 +1609,6 @@ function reusableAgentSessionId(
   if (conversation.resumePolicy === "fresh") return undefined
   if (conversation.agentType && conversation.agentType !== agentType) return undefined
   return conversation.agentSessionId
-}
-
-function runtimeKey(
-  sessionKey: string,
-  projectId: string,
-  workspaceKey?: string,
-  sideSessionId?: string,
-): string {
-  return `${projectId}:${workspaceKey ?? "default"}:${sideSessionId ?? "active"}:${sessionKey}`
 }
 
 function isLiveStartupFailure(error: unknown): boolean {
