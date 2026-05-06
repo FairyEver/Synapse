@@ -51,7 +51,7 @@ type UseAgentChatState = {
   loading: boolean
   sending: boolean
   error: string | null
-  createSession: () => Promise<void>
+  createSession: (projectId: string, agentType: string) => Promise<void>
   selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   refresh: () => Promise<void>
@@ -293,9 +293,8 @@ function useAgentChat(
     setSelectedSession,
   ])
 
-  const createSession = useCallback(async () => {
-    const projectId = getDefaultProjectId()
-    if (!projectId) return
+  const createSession = useCallback(async (projectId: string, agentType: string) => {
+    if (!projectId || !agentType) return
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
@@ -305,6 +304,7 @@ function useAgentChat(
         projectId,
         sessionKey: DEFAULT_LOCAL_SESSION_KEY,
         name: `新会话 ${formatSessionNameTime(new Date())}`,
+        agentType,
       })
       const session = normalizeSessionProject(created, projectId)
       if (requestId !== selectRequestIdRef.current) {
@@ -334,7 +334,7 @@ function useAgentChat(
       logger.error("Agent session create failed.", rawError)
       setError(message)
     }
-  }, [clearTimeline, getDefaultProjectId, refresh, setSelectedSession])
+  }, [clearTimeline, refresh, setSelectedSession])
 
   const selectSession = useCallback(async (target: SynapseAgentSessionSummary) => {
     const bridge = requireSynapseBridge()

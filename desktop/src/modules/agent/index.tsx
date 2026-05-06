@@ -22,11 +22,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
-import type { SynapseAgentDisplayProfile } from "@/types/agent"
+import type { SynapseAgentAvailability, SynapseAgentDisplayProfile } from "@/types/agent"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
+import { CreateSessionDialog, type ProjectOption } from "./components/create-session-dialog"
 import { useAgentChat } from "./hooks/use-agent-chat"
 import { resolveAgentProjectScope } from "./project-resolution"
 import {
@@ -64,9 +65,26 @@ function AgentModule() {
     return runtimeStatus.agents.some((agent) => agent.cli.installed)
   }, [runtimeStatus])
   const [draft, setDraft] = useState("")
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [availableAgents, setAvailableAgents] = useState<SynapseAgentAvailability[]>([])
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
   const timelineBottomRef = useRef<HTMLDivElement | null>(null)
+
+  const projectOptions: ProjectOption[] = useMemo(() =>
+    config.global.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      path: project.path,
+    })),
+  [config.global.projects])
+
+  useEffect(() => {
+    if (!createDialogOpen) return
+    const bridge = getSynapseBridge()
+    if (!bridge) return
+    void bridge.agent.getAvailableAgents().then(setAvailableAgents)
+  }, [createDialogOpen])
 
   const latestEntry = chat.timeline.at(-1)
 
@@ -165,7 +183,7 @@ function AgentModule() {
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
       onRefresh={() => void chat.refresh()}
-      onCreate={() => void chat.createSession()}
+      onCreate={() => setCreateDialogOpen(true)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onFollowFeishuChange={chat.setFollowFeishu}
@@ -261,6 +279,17 @@ function AgentModule() {
           onSubmit={handleSubmit}
         />
       </div>
+      <CreateSessionDialog
+        open={createDialogOpen}
+        projects={projectOptions}
+        agents={availableAgents}
+        defaultProjectId={chat.activeProjectId}
+        onConfirm={(projectId, agentType) => {
+          setCreateDialogOpen(false)
+          void chat.createSession(projectId, agentType)
+        }}
+        onOpenChange={setCreateDialogOpen}
+      />
     </SidebarContentLayout>
   )
 }
