@@ -232,6 +232,64 @@ describe("AgentRuntimeService — per-conversation adapter resolution", () => {
     expect(factoryCalls).toEqual(["codex"])
     expect(providerConfig.getActiveAgentType).toHaveBeenCalled()
   })
+
+  it("lazily writes back resolved agentType to legacy conversation record", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const adapter = new BlockingAdapter()
+
+    const factoryCalls: string[] = []
+    const adapterFactory = vi.fn((view: { agentType: string }) => {
+      factoryCalls.push(view.agentType)
+      return adapter
+    })
+
+    const providerConfig = {
+      getActiveAgentType: vi.fn().mockResolvedValue("codex"),
+      resolveRuntimeConfig: vi.fn((_projectId: string, agentType: string) =>
+        Promise.resolve({
+          projectId: "project-1",
+          agentType,
+          providers: [],
+          env: {},
+          envAllowlist: [],
+        }),
+      ),
+    }
+
+    // Pre-seed a legacy conversation WITHOUT agentType
+    const convId = "conv-legacy-writeback"
+    await conversations.upsert({
+      id: convId,
+      schemaVersion: 1,
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local",
+      history: [],
+      active: true,
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    } as ConversationEntryV1)
+
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      agentType: "codex",
+      providerConfig: providerConfig as never,
+      adapterFactory,
+      now: fixedNow,
+    })
+
+    const p = service.send(baseMessage("hello"))
+    await tick()
+    adapter.resolveNext("reply", "thread-1")
+    await p
+
+    // After the turn, the conversation record should have agentType written back
+    const updated = await conversations.get(convId)
+    expect(updated!.agentType).toBe("codex")
+  })
 })
 
 // --- Helpers ---

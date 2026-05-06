@@ -633,6 +633,12 @@ export class AgentRuntimeService {
       }
 
       const adapter = await this.resolveAdapter(conversation.agentType)
+      if (!conversation.agentType && adapter.agentType) {
+        conversation = await this.repository.saveAgentSession({
+          conversationId: conversation.id,
+          agentType: adapter.agentType,
+        })
+      }
       if (adapter.startSession) {
         try {
           return await this.processLiveTurn(state, message, conversation, adapter, workDir)
