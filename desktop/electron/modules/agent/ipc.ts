@@ -3,7 +3,7 @@ import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
-import type { ConversationEntryV1 } from "../../runtime/data-repo"
+import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import {
   AgentRuntimeService,
@@ -48,6 +48,11 @@ const switchSessionRequestSchema = projectRequestSchema.extend({
 
 const deleteSessionRequestSchema = projectRequestSchema.extend({
   conversationId: z.string().min(1),
+})
+
+const renameSessionRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  name: z.string().min(1),
 })
 
 const sendRequestSchema = projectRequestSchema.extend({
@@ -333,6 +338,10 @@ const deleteSessionResultSchema = z.object({
   ok: z.boolean(),
 })
 
+const renameSessionResultSchema = z.object({
+  ok: z.boolean(),
+})
+
 const openReferenceResultSchema = z.object({
   ok: z.literal(true),
   path: z.string(),
@@ -344,6 +353,7 @@ type TimelineRequest = z.infer<typeof timelineRequestSchema>
 type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
 type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
 type DeleteSessionRequest = z.infer<typeof deleteSessionRequestSchema>
+type RenameSessionRequest = z.infer<typeof renameSessionRequestSchema>
 type SendRequest = z.infer<typeof sendRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
 type OpenReferenceRequest = z.infer<typeof openReferenceRequestSchema>
@@ -376,6 +386,20 @@ export const agentIpcModule: IpcModule = {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         const sessions = await agent.listSessions()
         return sessions.map((session) => sessionSummary(session))
+      },
+    },
+    listAllSessions: {
+      kind: "invoke",
+      channel: "synapse:agent:list-all-sessions",
+      request: z.object({}),
+      response: z.array(sessionSummarySchema),
+      handler: async (ctx) => {
+        const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
+        const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+        const allSessions = await conversations.list()
+        return allSessions
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .map((session) => sessionSummary(session))
       },
     },
     getTimeline: {
@@ -435,6 +459,16 @@ export const agentIpcModule: IpcModule = {
       handler: async (ctx, request: DeleteSessionRequest) => {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         return { ok: await agent.deleteSession(request.conversationId) }
+      },
+    },
+    renameSession: {
+      kind: "invoke",
+      channel: "synapse:agent:rename-session",
+      request: renameSessionRequestSchema,
+      response: renameSessionResultSchema,
+      handler: async (ctx, request: RenameSessionRequest) => {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        return { ok: await agent.renameSession(request.conversationId, request.name) }
       },
     },
     send: {

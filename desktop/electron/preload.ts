@@ -107,10 +107,12 @@ const IPC_CHANNELS = {
   "agent": {
     "status": "synapse:agent:status",
     "listSessions": "synapse:agent:list-sessions",
+    "listAllSessions": "synapse:agent:list-all-sessions",
     "getTimeline": "synapse:agent:get-timeline",
     "createSession": "synapse:agent:create-session",
     "switchSession": "synapse:agent:switch-session",
     "deleteSession": "synapse:agent:delete-session",
+    "renameSession": "synapse:agent:rename-session",
     "send": "synapse:agent:send",
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",
@@ -118,6 +120,7 @@ const IPC_CHANNELS = {
     "getRuntimeStatus": "synapse:agent:get-runtime-status",
     "listCommands": "synapse:agent:list-commands",
     "openReference": "synapse:agent:open-reference",
+    "getAvailableAgents": "synapse:agent:get-available-agents",
     "event": "synapse:events:agent",
   },
   "connectors": {
@@ -501,10 +504,12 @@ const synapseBridge: SynapseBridge = {
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
     listSessions: (projectId) => invoke(IPC_CHANNELS.agent.listSessions)({ projectId }),
+    listAllSessions: () => invoke(IPC_CHANNELS.agent.listAllSessions)({}),
     getTimeline: (args) => invoke(IPC_CHANNELS.agent.getTimeline)(args),
     createSession: (args) => invoke(IPC_CHANNELS.agent.createSession)(args),
     switchSession: (args) => invoke(IPC_CHANNELS.agent.switchSession)(args),
     deleteSession: (args) => invoke(IPC_CHANNELS.agent.deleteSession)(args),
+    renameSession: (args) => invoke(IPC_CHANNELS.agent.renameSession)(args),
     send: (args) => invoke(IPC_CHANNELS.agent.send)(args),
     listPendingPermissions: (projectId) =>
       invoke(IPC_CHANNELS.agent.listPendingPermissions)({ projectId }),
@@ -513,6 +518,7 @@ const synapseBridge: SynapseBridge = {
     getRuntimeStatus: invoke(IPC_CHANNELS.agent.getRuntimeStatus),
     listCommands: (projectId) => invoke(IPC_CHANNELS.agent.listCommands)({ projectId }),
     openReference: (args) => invoke(IPC_CHANNELS.agent.openReference)(args),
+    getAvailableAgents: () => invoke(IPC_CHANNELS.agent.getAvailableAgents)({}),
     onEvent: createRawPayloadSubscription<SynapseAgentDomainEvent>(
       subscribe,
       EVENT_CHANNELS.agent.event,

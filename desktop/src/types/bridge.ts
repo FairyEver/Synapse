@@ -407,6 +407,7 @@ export type SynapseBridge = {
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
+    listAllSessions: () => Promise<SynapseAgentSessionSummary[]>
     getTimeline: (
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
@@ -418,6 +419,9 @@ export type SynapseBridge = {
     ) => Promise<SynapseAgentSessionSummary>
     deleteSession: (
       args: { projectId: string; conversationId: string },
+    ) => Promise<{ ok: boolean }>
+    renameSession: (
+      args: { projectId: string; conversationId: string; name: string },
     ) => Promise<{ ok: boolean }>
     send: (
       args: { projectId: string; sessionKey?: string; content: string },
