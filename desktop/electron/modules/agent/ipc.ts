@@ -408,13 +408,34 @@ export const agentIpcModule: IpcModule = {
       request: timelineRequestSchema,
       response: timelineResultSchema,
       handler: async (ctx, request: TimelineRequest) => {
-        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
-        const session = await resolveTimelineSession(agent, request)
-        return {
-          projectId: request.projectId,
-          sessionKey: request.sessionKey ?? session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
-          conversationId: session?.id,
-          entries: session ? historyEntries(session, request.limit) : [],
+        try {
+          const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+          const session = await resolveTimelineSession(agent, request)
+          return {
+            projectId: request.projectId,
+            sessionKey: request.sessionKey ?? session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
+            conversationId: session?.id,
+            entries: session ? historyEntries(session, request.limit) : [],
+          }
+        } catch {
+          if (!request.conversationId) throw new Error("找不到当前项目。")
+          const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
+          const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+          const session = await conversations.get(request.conversationId)
+          if (!session) {
+            return {
+              projectId: request.projectId,
+              sessionKey: request.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
+              conversationId: request.conversationId,
+              entries: [],
+            }
+          }
+          return {
+            projectId: request.projectId,
+            sessionKey: session.sessionKey,
+            conversationId: session.id,
+            entries: historyEntries(session, request.limit),
+          }
         }
       },
     },
@@ -441,14 +462,22 @@ export const agentIpcModule: IpcModule = {
       request: switchSessionRequestSchema,
       response: sessionSummarySchema,
       handler: async (ctx, request: SwitchSessionRequest) => {
-        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
-        const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
-        const session = await agent.switchSession(
-          sessionKey,
-          request.conversationId,
-          LOCAL_RENDERER_PLATFORM,
-        )
-        return sessionSummary(session)
+        try {
+          const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+          const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
+          const session = await agent.switchSession(
+            sessionKey,
+            request.conversationId,
+            LOCAL_RENDERER_PLATFORM,
+          )
+          return sessionSummary(session)
+        } catch {
+          const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
+          const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+          const session = await conversations.get(request.conversationId)
+          if (!session) throw new Error("会话不存在。")
+          return sessionSummary(session)
+        }
       },
     },
     deleteSession: {
