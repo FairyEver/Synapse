@@ -86,13 +86,27 @@ describe("Phase 0.3 integration (T3.16)", () => {
   })
 
   it("the runtime hard-rule: only the runtime/network/ports.ts file calls net.createServer", async () => {
-    const { execSync } = await import("node:child_process")
+    const fs = await import("node:fs")
     const pathMod = await import("node:path")
-    const cwd = pathMod.resolve(__dirname, "..", "..")
-    const result = execSync(
-      `rg -l "net\\\\.createServer" electron/ --glob '!electron/runtime/network/**' || true`,
-      { cwd, encoding: "utf8" },
-    )
-    expect(result.trim()).toBe("")
+    const electronDir = pathMod.resolve(__dirname, "..", "..", "electron")
+
+    const violations: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = pathMod.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          const rel = pathMod.relative(electronDir, full).replace(/\\/g, "/")
+          if (rel.startsWith("runtime/network")) continue
+          walk(full)
+        } else if (entry.isFile() && /\.[tj]sx?$/.test(entry.name)) {
+          const content = fs.readFileSync(full, "utf8")
+          if (/net\.createServer/.test(content)) {
+            violations.push(pathMod.relative(electronDir, full))
+          }
+        }
+      }
+    }
+    walk(electronDir)
+    expect(violations).toEqual([])
   })
 })
