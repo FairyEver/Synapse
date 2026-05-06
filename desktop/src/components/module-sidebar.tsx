@@ -225,7 +225,7 @@ function ModuleSidebarItem({
       }}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "group/item flex w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
         description ? "min-h-11 py-1.5" : "h-8",
         "hover:bg-muted/60 hover:text-foreground",
         "focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50",
