@@ -129,11 +129,14 @@ interface PendingPermissionState extends AgentPendingPermission {
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
 
 export class AgentRuntimeService {
+  private static readonly IDLE_TIMEOUT_MS = 10 * 60 * 1000
+
   private readonly deps: AgentRuntimeServiceDeps
   private readonly repository: AgentSessionRepository
   private readonly commandRouter: AgentCommandRouter | undefined
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
+  private reclaimInterval?: ReturnType<typeof setInterval>
 
   constructor(deps: AgentRuntimeServiceDeps) {
     this.deps = deps
@@ -322,6 +325,31 @@ export class AgentRuntimeService {
       busySessions: states.filter((state) => state.busy).length,
       queuedTurns: states.reduce((count, state) => count + state.queue.length, 0),
       pendingPermissions: this.pendingPermissions.size,
+    }
+  }
+
+  async reclaimIdleSessions(): Promise<void> {
+    const now = Date.now()
+    for (const [key, state] of this.states) {
+      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
+      if (!state.liveSession) continue
+      if (now - state.lastActivity < AgentRuntimeService.IDLE_TIMEOUT_MS) continue
+      await state.liveSession.close()
+      state.liveSession = undefined
+      this.deps.logger?.info("Reclaimed idle agent session.", { conversationId: key })
+    }
+  }
+
+  startIdleReclaim(): void {
+    this.reclaimInterval = setInterval(() => {
+      void this.reclaimIdleSessions()
+    }, 60_000)
+  }
+
+  stopIdleReclaim(): void {
+    if (this.reclaimInterval) {
+      clearInterval(this.reclaimInterval)
+      this.reclaimInterval = undefined
     }
   }
 

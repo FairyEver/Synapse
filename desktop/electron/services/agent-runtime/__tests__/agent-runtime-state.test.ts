@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
   ConversationEntryV1,
@@ -356,3 +356,105 @@ function baseMessage(content: string, workspaceKey?: string): AgentMessage {
 async function tick(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
+
+describe("AgentRuntimeService — idle session reclaim", () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  function createService() {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const adapter = new BlockingAdapter()
+    const logger = { info: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      adapter,
+      logger: logger as never,
+      now: fixedNow,
+    })
+    return { service, adapter, conversations, logger }
+  }
+
+  function mockLiveSession() {
+    return {
+      agentType: "codex",
+      close: vi.fn().mockResolvedValue(undefined),
+      alive: vi.fn().mockReturnValue(true),
+      send: vi.fn(),
+      nextEvent: vi.fn(),
+      respondPermission: vi.fn(),
+      currentSessionId: vi.fn().mockReturnValue("session-1"),
+    }
+  }
+
+  it("closes liveSession after 10 minutes of inactivity", async () => {
+    const { service, adapter, logger } = createService()
+
+    // Create a conversation by sending a message
+    const p = service.send(baseMessage("hello"))
+    await vi.advanceTimersByTimeAsync(0)
+    adapter.resolveNext("done", "thread-1")
+    await p
+
+    // Inject a mock liveSession into the state
+    const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states
+    const stateEntry = [...states.values()][0]!
+    const session = mockLiveSession()
+    stateEntry.liveSession = session
+    // Set lastActivity to 11 minutes ago
+    stateEntry.lastActivity = Date.now() - 11 * 60 * 1000
+
+    await service.reclaimIdleSessions()
+
+    expect(session.close).toHaveBeenCalledOnce()
+    expect(stateEntry.liveSession).toBeUndefined()
+    expect(logger.info).toHaveBeenCalledWith(
+      "Reclaimed idle agent session.",
+      expect.objectContaining({ conversationId: expect.any(String) }),
+    )
+  })
+
+  it("does NOT close liveSession if activity is recent", async () => {
+    const { service, adapter } = createService()
+
+    const p = service.send(baseMessage("hello"))
+    await vi.advanceTimersByTimeAsync(0)
+    adapter.resolveNext("done", "thread-1")
+    await p
+
+    const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states
+    const stateEntry = [...states.values()][0]!
+    const session = mockLiveSession()
+    stateEntry.liveSession = session
+    // Set lastActivity to 5 minutes ago (within threshold)
+    stateEntry.lastActivity = Date.now() - 5 * 60 * 1000
+
+    await service.reclaimIdleSessions()
+
+    expect(session.close).not.toHaveBeenCalled()
+    expect(stateEntry.liveSession).toBe(session)
+  })
+
+  it("does NOT close liveSession if session is busy", async () => {
+    const { service, adapter } = createService()
+
+    const p = service.send(baseMessage("hello"))
+    await vi.advanceTimersByTimeAsync(0)
+    adapter.resolveNext("done", "thread-1")
+    await p
+
+    const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states
+    const stateEntry = [...states.values()][0]!
+    const session = mockLiveSession()
+    stateEntry.liveSession = session
+    // Set lastActivity to 11 minutes ago but mark as busy
+    stateEntry.lastActivity = Date.now() - 11 * 60 * 1000
+    stateEntry.busy = true
+
+    await service.reclaimIdleSessions()
+
+    expect(session.close).not.toHaveBeenCalled()
+    expect(stateEntry.liveSession).toBe(session)
+  })
+})
