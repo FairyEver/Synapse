@@ -556,5 +556,12 @@ export type SynapseBridge = {
     }[]>
     getDetectedAgents: () => Promise<{ id: string; name: string; fileCount: number }[]>
     clearData: () => Promise<void>
+    cursorAddAccount: (params: { sessionToken: string; label?: string }) => Promise<{ accountId: string; error?: string }>
+    cursorRemoveAccount: (params: { accountId: string }) => Promise<void>
+    cursorListAccounts: () => Promise<{ id: string; label?: string; userId?: string; active: boolean; createdAt: string; lastSyncAt?: string }[]>
+    cursorSetActive: (params: { accountId: string }) => Promise<void>
+    cursorSync: () => Promise<{ synced: boolean; rows: number; error?: string }>
+    cursorValidate: (params: { sessionToken: string }) => Promise<{ valid: boolean; membershipType?: string; error?: string }>
+    cursorLogin: () => Promise<{ sessionToken: string | null; cancelled: boolean }>
   }
 }
