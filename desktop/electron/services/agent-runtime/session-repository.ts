@@ -22,6 +22,7 @@ export interface CreateAgentSessionInput {
   readonly name?: string
   readonly userMeta?: ConversationEntryV1["userMeta"]
   readonly resumePolicy?: ConversationResumePolicyV1
+  readonly agentType?: string
 }
 
 export interface SaveAgentSessionInput {
@@ -113,6 +114,7 @@ export class AgentSessionRepository {
       channelKey: input.channelKey,
       workspaceKey: input.workspaceKey,
       workspacePath: input.workspacePath,
+      agentType: input.agentType,
       history: [],
       userMeta: input.userMeta,
       active: true,

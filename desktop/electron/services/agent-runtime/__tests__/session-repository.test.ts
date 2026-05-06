@@ -101,6 +101,44 @@ describe("AgentSessionRepository", () => {
     expect((await repository.getActive("s1", "local"))?.id).toBe(second.id)
   })
 
+  it("stores agentType when provided at creation", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+
+    const session = await repository.createSession({
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      name: "Test Session",
+      agentType: "claude-code",
+    })
+
+    expect(session.agentType).toBe("claude-code")
+
+    const retrieved = await conversations.get(session.id)
+    expect(retrieved?.agentType).toBe("claude-code")
+  })
+
+  it("stores agentType as undefined when not provided", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+
+    const session = await repository.createSession({
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      name: "No Agent",
+    })
+
+    expect(session.agentType).toBeUndefined()
+  })
+
   it("keeps active conversations isolated by workspace key", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
