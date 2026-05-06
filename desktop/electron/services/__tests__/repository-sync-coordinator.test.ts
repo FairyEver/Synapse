@@ -71,6 +71,12 @@ vi.mock("../repository-maintenance-service", () => ({
   repositoryMaintenanceService: serviceMocks.repositoryMaintenanceService,
 }))
 
+vi.mock("../repository-lock-manager", () => ({
+  repositoryLockManager: {
+    acquire: vi.fn(async () => vi.fn()),
+  },
+}))
+
 vi.mock("../repository-store", () => ({
   repositoryStore: serviceMocks.repositoryStore,
 }))
