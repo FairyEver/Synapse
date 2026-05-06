@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises"
+import path from "node:path"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseRepositoryOperationKind,
@@ -158,6 +160,64 @@ async function runRepositoryGitCommand(
   })
 }
 
+function isNonFastForwardError(message: string): boolean {
+  const lowered = message.toLowerCase()
+
+  return (
+    lowered.includes("not possible to fast-forward")
+    || lowered.includes("non-fast-forward")
+    || lowered.includes("[rejected]")
+    || lowered.includes("fetch first")
+  )
+}
+
+async function getAheadCount(cwd: string): Promise<number> {
+  try {
+    const result = await runGitCommand({
+      args: ["rev-list", "@{u}..HEAD", "--count"],
+      cwd,
+      fallbackMessage: "",
+      formatFailureMessage: () => "",
+    })
+
+    return parseInt(result.stdout.trim(), 10) || 0
+  } catch {
+    return 0
+  }
+}
+
+async function isRebaseInProgress(localPath: string): Promise<boolean> {
+  const gitDir = path.join(localPath, ".git")
+
+  try {
+    await access(path.join(gitDir, "rebase-merge"))
+    return true
+  } catch {
+    // not in rebase-merge
+  }
+
+  try {
+    await access(path.join(gitDir, "rebase-apply"))
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function abortRebaseIfNeeded(localPath: string): Promise<void> {
+  if (!(await isRebaseInProgress(localPath))) {
+    return
+  }
+
+  logger.warn("Rebase in progress detected during sync. Aborting rebase.", { localPath })
+  await runGitCommand({
+    args: ["rebase", "--abort"],
+    cwd: localPath,
+    fallbackMessage: "无法中止 rebase。",
+    formatFailureMessage: formatGitFailureMessage,
+  })
+}
+
 class RepositoryGitService {
   async syncRepository(
     repository: SynapseRepositoryConfig,
@@ -199,14 +259,91 @@ class RepositoryGitService {
         percent: 0,
       })
 
-      await runRepositoryGitCommand(repository.uuid, "sync", [
-        "pull",
-        "--ff-only",
-        "--progress",
-      ], {
-        cwd: repository.localPath,
-        onProgress,
-      })
+      let pullSucceeded = false
+
+      try {
+        await runRepositoryGitCommand(repository.uuid, "sync", [
+          "pull",
+          "--ff-only",
+          "--progress",
+        ], {
+          cwd: repository.localPath,
+          onProgress,
+        })
+        pullSucceeded = true
+      } catch (pullError) {
+        const message = pullError instanceof Error ? pullError.message : ""
+
+        if (!isNonFastForwardError(message)) {
+          throw pullError
+        }
+
+        logger.info("Pull --ff-only failed due to diverged state. Attempting pull --rebase.", {
+          repositoryUuid: repository.uuid,
+        })
+
+        onProgress({
+          repositoryUuid: repository.uuid,
+          operation: "sync",
+          statusText: "正在变基合并远程更新...",
+          percent: null,
+        })
+
+        try {
+          await runRepositoryGitCommand(repository.uuid, "sync", [
+            "pull",
+            "--rebase",
+            "--progress",
+          ], {
+            cwd: repository.localPath,
+            onProgress,
+          })
+        } catch (rebaseError) {
+          await abortRebaseIfNeeded(repository.localPath)
+          throw rebaseError
+        }
+
+        onProgress({
+          repositoryUuid: repository.uuid,
+          operation: "sync",
+          statusText: "正在推送本地提交...",
+          percent: null,
+        })
+
+        await runRepositoryGitCommand(repository.uuid, "sync", [
+          "push",
+          "--progress",
+        ], {
+          cwd: repository.localPath,
+          onProgress,
+        })
+      }
+
+      if (pullSucceeded) {
+        const aheadCount = await getAheadCount(repository.localPath)
+
+        if (aheadCount > 0) {
+          logger.info("Local branch is ahead after pull. Pushing automatically.", {
+            repositoryUuid: repository.uuid,
+            aheadCount,
+          })
+
+          onProgress({
+            repositoryUuid: repository.uuid,
+            operation: "sync",
+            statusText: "正在推送本地提交...",
+            percent: null,
+          })
+
+          await runRepositoryGitCommand(repository.uuid, "sync", [
+            "push",
+            "--progress",
+          ], {
+            cwd: repository.localPath,
+            onProgress,
+          })
+        }
+      }
 
       const nextState = await repositoryStore.getRepositoryState(repository)
       const completedAt = new Date().toISOString()

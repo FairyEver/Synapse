@@ -5,7 +5,7 @@ export const skillContentTypeDefinition: ContentTypeDefinition = {
   id: "skill",
   singularLabel: "技能",
   pluralLabel: "技能",
-  tabLabel: "技能",
+  tabLabel: "Skill",
   emptyStateNoun: "技能",
   capabilities: {
     hasAttachments: true,

@@ -54,6 +54,7 @@ export function classifyGitFailure(output: string, fallbackMessage: string): Git
     || loweredOutput.includes("could not read username")
     || loweredOutput.includes("permission denied (publickey)")
     || loweredOutput.includes("permission denied")
+    || loweredOutput.includes("access denied")
     || loweredOutput.includes("fatal: could not read from remote repository")
   ) {
     return {

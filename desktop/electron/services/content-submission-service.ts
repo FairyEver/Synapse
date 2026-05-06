@@ -150,18 +150,16 @@ async function pullWithRebase(
   onProgress?.("正在拉取最新内容...")
 
   try {
-    await runRepositoryGitCommand(
-      repository.localPath,
-      ["pull", "--rebase"],
-      "同步仓库失败，请检查网络或仓库状态后重试。",
-      (line) => {
+    await runGitCommand({
+      args: ["pull", "--rebase"],
+      cwd: repository.localPath,
+      fallbackMessage: "同步仓库失败，请检查网络或仓库状态后重试。",
+      onLine: (line) => {
         onProgress?.(line)
       },
-      {
-        timeoutMessage: "同步仓库超时，请检查网络后重试。",
-        timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
-      },
-    )
+      timeoutMessage: "同步仓库超时，请检查网络后重试。",
+      timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+    })
   } catch (error) {
     await abortRebaseIfNeeded(repository.localPath)
     throw error
@@ -210,18 +208,16 @@ async function pushRepository(
   onProgress?: PushProgressListener,
 ): Promise<void> {
   onProgress?.("正在推送到仓库...")
-  await runRepositoryGitCommand(
-    repository.localPath,
-    ["push"],
-    "推送到仓库失败。",
-    (line) => {
+  await runGitCommand({
+    args: ["push"],
+    cwd: repository.localPath,
+    fallbackMessage: "推送到仓库失败。",
+    onLine: (line) => {
       onProgress?.(line)
     },
-    {
-      timeoutMessage: "同步变更超时，请检查网络后重试。",
-      timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
-    },
-  )
+    timeoutMessage: "同步变更超时，请检查网络后重试。",
+    timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+  })
 }
 
 async function readReadyRepositoryState(repository: SynapseRepositoryConfig) {
