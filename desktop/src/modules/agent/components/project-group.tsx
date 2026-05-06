@@ -51,7 +51,7 @@ function ProjectGroup({
         </AgentPickerPopover>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="flex flex-col">
+        <div className="flex flex-col pl-3">
           {sessions.map((session) => {
             const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
             const active = session.projectId === selectedProjectId
