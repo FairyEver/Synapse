@@ -22,6 +22,7 @@ import {
 } from "@/app-shell/use-repository-manager"
 import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { DevOverlay } from "@/components/dev-overlay"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentDetailWindowPage } from "@/modules/content/components/content-detail-window-page"
@@ -328,7 +329,9 @@ function MainApp() {
           })}
           {activeTab === "agent" ? (
             <ErrorBoundary fallbackTitle="Agent 模块出现问题">
-              <AgentModule />
+              <DevOverlay>
+                <AgentModule />
+              </DevOverlay>
             </ErrorBoundary>
           ) : null}
           {activeTab === "database" ? (
@@ -338,7 +341,9 @@ function MainApp() {
           ) : null}
           {activeTab === "task-scheduler" ? (
             <ErrorBoundary fallbackTitle="定时任务模块出现问题">
-              <TaskSchedulerModule />
+              <DevOverlay>
+                <TaskSchedulerModule />
+              </DevOverlay>
             </ErrorBoundary>
           ) : null}
           {activeTab === "editor-scan" ? (
