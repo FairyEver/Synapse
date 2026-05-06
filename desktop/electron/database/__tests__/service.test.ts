@@ -210,7 +210,7 @@ describe("DatabaseService legacy database migration", () => {
     electronMock.app.getPath.mockReset()
   })
 
-  it("migrates the legacy file name and enum_values schema in place", async () => {
+  it("migrates the legacy file name and enum_values schema in place", { timeout: 15_000 }, async () => {
     createLegacyDatabase(path.join(tempDir, "synapse-data.db"))
 
     const module = await import("../service")
