@@ -345,7 +345,7 @@ async function pullWithRebase(
   try {
     await runMaintenanceGitCommand(
       repository.localPath,
-      ["pull", "--rebase"],
+      ["pull", "--rebase", "-X", "theirs"],
       "同步仓库失败，请检查网络或仓库状态后重试。",
       (line) => {
         onProgress?.(line)

@@ -257,7 +257,7 @@ class RepositorySyncCoordinator {
             phase: "running",
             message: event.statusText,
           })
-        })
+        }, { skipLock: true })
         release()
         await this.refreshSnapshot(repository)
         return result

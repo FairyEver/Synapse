@@ -151,7 +151,7 @@ async function pullWithRebase(
 
   try {
     await runGitCommand({
-      args: ["pull", "--rebase"],
+      args: ["pull", "--rebase", "-X", "theirs"],
       cwd: repository.localPath,
       fallbackMessage: "同步仓库失败，请检查网络或仓库状态后重试。",
       onLine: (line) => {

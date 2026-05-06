@@ -222,6 +222,7 @@ class RepositoryGitService {
   async syncRepository(
     repository: SynapseRepositoryConfig,
     onProgress: ProgressListener,
+    options?: { skipLock?: boolean },
   ): Promise<SynapseRepositoryOperationResult> {
     logger.info("Starting repository sync.", {
       repositoryUuid: repository.uuid,
@@ -250,7 +251,9 @@ class RepositoryGitService {
       }
     }
 
-    const release = await repositoryLockManager.acquire(repository.uuid, "sync")
+    const release = options?.skipLock
+      ? () => {}
+      : await repositoryLockManager.acquire(repository.uuid, "sync")
     try {
       onProgress({
         repositoryUuid: repository.uuid,
@@ -293,6 +296,7 @@ class RepositoryGitService {
           await runRepositoryGitCommand(repository.uuid, "sync", [
             "pull",
             "--rebase",
+            "-X", "theirs",
             "--progress",
           ], {
             cwd: repository.localPath,
