@@ -70,18 +70,18 @@ export function CursorConnectBadge({ onConnected }: { onConnected?: () => void }
           <Badge variant="secondary" className="cursor-pointer gap-1">
             Cursor
             {activeAccount?.userId && (
-              <span className="text-muted-foreground font-normal">· {activeAccount.userId}</span>
+              <span className="text-muted-foreground max-w-[120px] truncate font-normal">· {activeAccount.userId}</span>
             )}
           </Badge>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-3" align="end">
           <div className="space-y-2">
             {accounts.map((account) => (
-              <div key={account.id} className="flex items-center justify-between text-sm">
-                <span className={account.active ? "font-medium" : "text-muted-foreground"}>
+              <div key={account.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className={`truncate ${account.active ? "font-medium" : "text-muted-foreground"}`}>
                   {account.userId ?? account.label ?? account.id.slice(0, 8)}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1">
                   {!account.active && accounts.length > 1 && (
                     <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs" onClick={() => setActive(account.id)}>
                       激活
