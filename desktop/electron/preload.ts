@@ -186,7 +186,6 @@ const IPC_CHANNELS = {
     "cursorSetActive": "synapse:token-usage:cursor:set-active",
     "cursorSync": "synapse:token-usage:cursor:sync",
     "cursorValidate": "synapse:token-usage:cursor:validate",
-    "cursorLogin": "synapse:token-usage:cursor:login",
   },
 } as const satisfies IpcChannelMap
 
@@ -594,7 +593,6 @@ const synapseBridge: SynapseBridge = {
     cursorSync: invoke(IPC_CHANNELS["token-usage"].cursorSync),
     cursorValidate: (params: { sessionToken: string }) =>
       invoke(IPC_CHANNELS["token-usage"].cursorValidate)(params),
-    cursorLogin: invoke(IPC_CHANNELS["token-usage"].cursorLogin),
   },
 }
 

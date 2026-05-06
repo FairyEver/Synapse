@@ -563,6 +563,5 @@ export type SynapseBridge = {
     cursorSetActive: (params: { accountId: string }) => Promise<void>
     cursorSync: () => Promise<{ synced: boolean; rows: number; error?: string }>
     cursorValidate: (params: { sessionToken: string }) => Promise<{ valid: boolean; membershipType?: string; error?: string }>
-    cursorLogin: () => Promise<{ sessionToken: string | null; cancelled: boolean }>
   }
 }

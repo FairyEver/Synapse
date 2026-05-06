@@ -80,10 +80,5 @@ export function registerTokenUsageHandlers(): void {
     return cursorSyncService.validate(params.sessionToken)
   })
 
-  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorLogin, async (event) => {
-    const parentWindow = BrowserWindow.fromWebContents(event.sender)
-    return openCursorLoginWindow(parentWindow)
-  })
-
   handlersRegistered = true
 }
