@@ -328,6 +328,39 @@ function cleanupLegacyMcpNames(): void {
       }
     }
   }
+  cleanupLegacyFromClaudeUserConfig()
+}
+
+function cleanupLegacyFromClaudeUserConfig(): void {
+  const configPath = path.join(homedir(), ".claude.json")
+  if (!existsSync(configPath)) return
+
+  try {
+    const raw = readFileSync(configPath, "utf-8")
+    if (!raw.trim()) return
+    const parsed = JSON.parse(raw) as unknown
+    if (!isRecord(parsed)) return
+    const servers = parsed.mcpServers
+    if (!isRecord(servers)) return
+
+    let modified = false
+    for (const legacy of SYNAPSE_MCP_LEGACY_SERVER_NAMES) {
+      if (legacy === SYNAPSE_MCP_SERVER_NAME) continue
+      if (legacy in servers) {
+        delete servers[legacy]
+        modified = true
+        logger.info("Legacy MCP entry removed from ~/.claude.json.", { name: legacy })
+      }
+    }
+
+    if (modified) {
+      writeFileSync(configPath, JSON.stringify(parsed, null, 2), "utf-8")
+    }
+  } catch (error) {
+    logger.warn("Failed to clean legacy MCP from ~/.claude.json (non-fatal).", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 function getMcpServers(): McpServerInfo[] {
