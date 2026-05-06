@@ -604,7 +604,7 @@ export class AgentRuntimeService {
         return this.finishWithError(message, conversation.id, "Project workspace path is required")
       }
 
-      const adapter = await this.resolveAdapter()
+      const adapter = await this.resolveAdapter(conversation.agentType)
       if (adapter.startSession) {
         try {
           return await this.processLiveTurn(state, message, conversation, adapter, workDir)
@@ -648,7 +648,7 @@ export class AgentRuntimeService {
           timedOut: false,
         }
       }
-      const adapter = await this.resolveAdapter()
+      const adapter = await this.resolveAdapter(savedConversation.agentType)
       if (adapter.startSession) {
         return this.processLiveSideSessionWithTimeout(
           state,
@@ -1372,7 +1372,7 @@ export class AgentRuntimeService {
     }
     state.busy = true
     try {
-      const adapter = await this.resolveAdapter()
+      const adapter = await this.resolveAdapter(conversation.agentType)
       if (!adapter.compressionCommand || !adapter.startSession) {
         await this.markCompressionState(adapter.agentType, "unsupported", "Compression is unsupported.")
         return runtimeCommandResult(
@@ -1571,11 +1571,11 @@ export class AgentRuntimeService {
     return this.deps.pendingQueueLimit ?? DEFAULT_PENDING_QUEUE_LIMIT
   }
 
-  private async resolveAdapter(): Promise<AgentAdapter> {
+  private async resolveAdapter(agentTypeOverride?: string): Promise<AgentAdapter> {
     if (!this.deps.providerConfig || !this.deps.adapterFactory) {
       return this.deps.adapter
     }
-    const agentType = await this.getActiveAgentType()
+    const agentType = agentTypeOverride ?? await this.getActiveAgentType()
     const view = await this.deps.providerConfig.resolveRuntimeConfig(
       this.deps.projectId,
       agentType,
