@@ -178,10 +178,8 @@ function AgentModule() {
       availableAgents={availableAgents}
       selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
-      loading={chat.loading}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
-      onRefresh={() => void chat.refresh()}
       onCreateSession={(projectId, agentType) => void chat.createSession(projectId, agentType)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}

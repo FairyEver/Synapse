@@ -33,23 +33,23 @@ function ProjectGroup({
 }: ProjectGroupProps) {
   return (
     <Collapsible defaultOpen data-track="agent-project-group">
-      <div className="flex items-center justify-between px-1 py-0.5">
-        <CollapsibleTrigger className="flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-sm font-medium hover:bg-muted/60">
-          <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+      <CollapsibleTrigger className="flex h-8 w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
+        <span className="flex min-w-0 items-center gap-2 text-left">
+          <FolderOpen className="size-4 shrink-0" />
           <span className="truncate">{project.name}</span>
-        </CollapsibleTrigger>
+        </span>
         <AgentPickerPopover agents={availableAgents} onSelect={onCreateSession}>
           <button
             type="button"
-            className="rounded p-0.5 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
             title="新建会话"
             onClick={(e) => e.stopPropagation()}
           >
-            <Plus className="size-4" />
+            <Plus className="size-3.5" />
             <span className="sr-only">新建会话</span>
           </button>
         </AgentPickerPopover>
-      </div>
+      </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="flex flex-col">
           {sessions.map((session) => {

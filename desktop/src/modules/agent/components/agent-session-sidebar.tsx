@@ -1,5 +1,3 @@
-import { RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -21,10 +19,8 @@ type AgentSessionSidebarProps = {
   availableAgents: SynapseAgentAvailability[]
   selectedProjectId?: string
   selectedConversationId?: string
-  loading: boolean
   followFeishu: boolean
   unreadByConversationId: Record<string, number>
-  onRefresh: () => void
   onCreateSession: (projectId: string, agentType: string) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
@@ -37,10 +33,8 @@ function AgentSessionSidebar({
   availableAgents,
   selectedProjectId,
   selectedConversationId,
-  loading,
   followFeishu,
   unreadByConversationId,
-  onRefresh,
   onCreateSession,
   onSelect,
   onDelete,
@@ -50,23 +44,7 @@ function AgentSessionSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <div className="flex items-center justify-between px-1">
-        <h2 className="text-sm font-semibold">项目</h2>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={loading}
-            data-track="agent-session-refresh"
-            onClick={onRefresh}
-            title="刷新"
-          >
-            <RefreshCw />
-            <span className="sr-only">刷新</span>
-          </Button>
-        </div>
-      </div>
-      <div className="flex items-center justify-between px-1">
+      <div className="flex items-center justify-between px-3">
         <Label htmlFor="agent-follow-feishu" className="text-xs text-muted-foreground">
           跟随飞书
         </Label>
