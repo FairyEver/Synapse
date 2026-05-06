@@ -4,6 +4,9 @@ import { scanTokenUsage, getGraphResult, getModelReport, getDailyReport, getAgen
 import type { GroupByMode } from "../services/token-usage/aggregator"
 import { scanAllClients } from "../services/token-usage/scanner"
 import { CLIENT_DEFS } from "../services/token-usage/clients"
+import { cursorSyncService } from "../services/token-usage/cursor-sync"
+import { openCursorLoginWindow } from "../services/token-usage/cursor-sync/login-window"
+import { BrowserWindow } from "electron"
 
 let handlersRegistered = false
 
@@ -40,14 +43,48 @@ export function registerTokenUsageHandlers(): void {
 
   handleValidatedIpc(TOKEN_USAGE_CHANNELS.getDetectedAgents, async () => {
     const results = scanAllClients()
-    return results.map((r) => {
+    const cursorFiles = cursorSyncService.getCsvFiles()
+    const agents = results.map((r) => {
       const def = CLIENT_DEFS.find((d) => d.id === r.clientId)
       return { id: r.clientId, name: def?.name || r.clientId, fileCount: r.files.length }
     })
+    if (cursorFiles.length > 0) {
+      agents.push({ id: "cursor", name: "Cursor", fileCount: cursorFiles.length })
+    }
+    return agents
   })
 
   handleValidatedIpc(TOKEN_USAGE_CHANNELS.clearData, async () => {
     clearAllData()
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorAddAccount, async (_event, params: { sessionToken: string; label?: string }) => {
+    return cursorSyncService.addAccount(params.sessionToken, params.label)
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorRemoveAccount, async (_event, params: { accountId: string }) => {
+    cursorSyncService.removeAccount(params.accountId)
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorListAccounts, async () => {
+    return cursorSyncService.getStatus()
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorSetActive, async (_event, params: { accountId: string }) => {
+    cursorSyncService.setActiveAccount(params.accountId)
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorSync, async () => {
+    return cursorSyncService.syncAll()
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorValidate, async (_event, params: { sessionToken: string }) => {
+    return cursorSyncService.validate(params.sessionToken)
+  })
+
+  handleValidatedIpc(TOKEN_USAGE_CHANNELS.cursorLogin, async (event) => {
+    const parentWindow = BrowserWindow.fromWebContents(event.sender)
+    return openCursorLoginWindow(parentWindow)
   })
 
   handlersRegistered = true

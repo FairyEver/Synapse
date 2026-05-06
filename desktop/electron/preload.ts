@@ -180,6 +180,13 @@ const IPC_CHANNELS = {
     "getAgentReport": "synapse:token-usage:agent-report",
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",
+    "cursorAddAccount": "synapse:token-usage:cursor:add-account",
+    "cursorRemoveAccount": "synapse:token-usage:cursor:remove-account",
+    "cursorListAccounts": "synapse:token-usage:cursor:list-accounts",
+    "cursorSetActive": "synapse:token-usage:cursor:set-active",
+    "cursorSync": "synapse:token-usage:cursor:sync",
+    "cursorValidate": "synapse:token-usage:cursor:validate",
+    "cursorLogin": "synapse:token-usage:cursor:login",
   },
 } as const satisfies IpcChannelMap
 
@@ -576,6 +583,17 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["token-usage"].getAgentReport)(options),
     getDetectedAgents: invoke(IPC_CHANNELS["token-usage"].getDetectedAgents),
     clearData: invoke(IPC_CHANNELS["token-usage"].clearData),
+    cursorAddAccount: (params: { sessionToken: string; label?: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].cursorAddAccount)(params),
+    cursorRemoveAccount: (params: { accountId: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].cursorRemoveAccount)(params),
+    cursorListAccounts: invoke(IPC_CHANNELS["token-usage"].cursorListAccounts),
+    cursorSetActive: (params: { accountId: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].cursorSetActive)(params),
+    cursorSync: invoke(IPC_CHANNELS["token-usage"].cursorSync),
+    cursorValidate: (params: { sessionToken: string }) =>
+      invoke(IPC_CHANNELS["token-usage"].cursorValidate)(params),
+    cursorLogin: invoke(IPC_CHANNELS["token-usage"].cursorLogin),
   },
 }
 
