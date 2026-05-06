@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react"
 import { Folder, Plug } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -48,6 +58,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [connectorDialog, setConnectorDialog] = useState<ConnectorDialogState | null>(null)
   const [connectorRefreshToken, setConnectorRefreshToken] = useState(0)
+  const [deleteTarget, setDeleteTarget] = useState<{ project: SynapseProjectConfig; sessionCount: number } | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const resetForm = () => {
@@ -265,13 +276,22 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    void onSave(projects.filter((itemValue) => itemValue.id !== project.id))
-                      .then(() => {
-                        logger.info("Project removed.", { projectId: project.id })
-                      })
-                      .catch((err) => {
-                        logger.error("Failed to remove project.", { projectId: project.id, error: err })
-                      })
+                    const bridge = window.synapse?.agent
+                    if (!bridge) {
+                      void onSave(projects.filter((item) => item.id !== project.id))
+                      return
+                    }
+                    void bridge.listSessions(project.id).then((sessions) => {
+                      if (sessions.length > 0) {
+                        setDeleteTarget({ project, sessionCount: sessions.length })
+                      } else {
+                        void onSave(projects.filter((item) => item.id !== project.id))
+                          .then(() => logger.info("Project removed.", { projectId: project.id }))
+                          .catch((err) => logger.error("Failed to remove project.", { projectId: project.id, error: err }))
+                      }
+                    }).catch(() => {
+                      void onSave(projects.filter((item) => item.id !== project.id))
+                    })
                   }}
                 >
                   删除
@@ -421,6 +441,33 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除项目</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{deleteTarget?.project.name}」下有 {deleteTarget?.sessionCount} 条 Agent 对话，删除项目后这些对话将移入「已归档」分组，不会被删除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (!deleteTarget) return
+                const targetId = deleteTarget.project.id
+                setDeleteTarget(null)
+                void onSave(projects.filter((item) => item.id !== targetId))
+                  .then(() => logger.info("Project removed.", { projectId: targetId }))
+                  .catch((err) => logger.error("Failed to remove project.", { projectId: targetId, error: err }))
+              }}
+            >
+              删除项目
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
