@@ -6,10 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import { RefreshCw, Plus, Unlink, Copy } from "lucide-react"
+import { RefreshCw, Plus, Unlink } from "lucide-react"
 import { useCursorAccounts } from "../hooks/use-cursor-accounts"
-
-const EXTRACT_SCRIPT = `document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('WorkosCursorSessionToken='))?.split('=').slice(1).join('=')`
 
 export function CursorConnectBadge({ onConnected }: { onConnected?: () => void }) {
   const { accounts, loading, syncing, addWithToken, remove, setActive, sync } = useCursorAccounts()
@@ -39,11 +37,6 @@ export function CursorConnectBadge({ onConnected }: { onConnected?: () => void }
     }
   }
 
-  function handleCopyScript() {
-    navigator.clipboard.writeText(EXTRACT_SCRIPT)
-    toast.success("已复制到剪贴板")
-  }
-
   if (loading) return null
 
   if (!connected) {
@@ -62,7 +55,6 @@ export function CursorConnectBadge({ onConnected }: { onConnected?: () => void }
           tokenInput={tokenInput}
           onTokenChange={setTokenInput}
           onSubmit={handleSubmitToken}
-          onCopyScript={handleCopyScript}
           submitting={submitting}
         />
       </>
@@ -121,7 +113,6 @@ export function CursorConnectBadge({ onConnected }: { onConnected?: () => void }
         tokenInput={tokenInput}
         onTokenChange={setTokenInput}
         onSubmit={handleSubmitToken}
-        onCopyScript={handleCopyScript}
         submitting={submitting}
       />
     </>
@@ -129,14 +120,13 @@ export function CursorConnectBadge({ onConnected }: { onConnected?: () => void }
 }
 
 function CursorConnectDialog({
-  open, onOpenChange, tokenInput, onTokenChange, onSubmit, onCopyScript, submitting,
+  open, onOpenChange, tokenInput, onTokenChange, onSubmit, submitting,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   tokenInput: string
   onTokenChange: (value: string) => void
   onSubmit: () => void
-  onCopyScript: () => void
   submitting: boolean
 }) {
   return (
@@ -144,25 +134,18 @@ function CursorConnectDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>连接 Cursor 账号</DialogTitle>
-          <DialogDescription>通过浏览器控制台获取登录凭证</DialogDescription>
+          <DialogDescription>从浏览器开发者工具中获取登录凭证</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <ol className="text-sm space-y-2 list-decimal list-inside">
             <li>在浏览器中打开 <code className="bg-muted rounded px-1 py-0.5 text-xs">cursor.com/settings</code>（确保已登录）</li>
-            <li>按 F12 打开开发者工具，切换到 Console 标签</li>
-            <li>
-              粘贴以下代码并回车运行：
-              <div className="bg-muted mt-1.5 flex items-start gap-2 rounded-md p-2">
-                <code className="flex-1 break-all text-xs">{EXTRACT_SCRIPT}</code>
-                <Button variant="ghost" size="sm" className="h-6 w-6 shrink-0 p-0" onClick={onCopyScript}>
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            </li>
-            <li>复制输出结果，粘贴到下方输入框</li>
+            <li>按 F12 打开开发者工具</li>
+            <li>切换到 <strong>Application</strong> 标签 → 左侧 <strong>Cookies</strong> → 选择 <code className="bg-muted rounded px-1 py-0.5 text-xs">https://www.cursor.com</code></li>
+            <li>找到名为 <code className="bg-muted rounded px-1 py-0.5 text-xs">WorkosCursorSessionToken</code> 的条目，双击 Value 列复制其值</li>
+            <li>粘贴到下方输入框</li>
           </ol>
           <Textarea
-            placeholder="粘贴 token 值..."
+            placeholder="粘贴 WorkosCursorSessionToken 值..."
             value={tokenInput}
             onChange={(e) => onTokenChange(e.target.value)}
             rows={3}
