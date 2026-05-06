@@ -17,6 +17,16 @@ export const agentBaseDefinition = {
     { key: "bypassPermissions", label: "Bypass Permissions" },
     { key: "dontAsk", label: "Don't Ask" },
   ],
+  commands: [
+    { name: "model", description: "Switch model" },
+    { name: "mode", description: "Switch mode" },
+    { name: "new", description: "Start a new session" },
+    { name: "status", description: "Show agent status" },
+    { name: "show", description: "Show a workspace reference" },
+    { name: "compress", description: "Compact the current agent context" },
+    { name: "commands", description: "Manage commands" },
+    { name: "skills", description: "List skills" },
+  ],
   capabilities: {
     chat: true,
     projectContext: true,

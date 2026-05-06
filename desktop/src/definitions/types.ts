@@ -45,6 +45,11 @@ export type SynapseInstallFormDefinition = {
   RuleProjectInstallForm: ComponentType<SynapseRuleProjectInstallFormProps>
 }
 
+export type SynapseAgentCommandOption = {
+  name: string
+  description: string
+}
+
 export type SynapseAgentModeOption = {
   key: string
   label: string
@@ -69,6 +74,7 @@ export type SynapseAgentBaseDefinition = {
   relatedEditorId?: string
   runtime: SynapseAgentRuntimeRequirement
   modes: readonly SynapseAgentModeOption[]
+  commands: readonly SynapseAgentCommandOption[]
   capabilities: SynapseAgentCapabilities
   displayProfile: SynapseAgentDisplayProfile
 }

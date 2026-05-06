@@ -19,6 +19,8 @@ describe("Claude Code adapter", () => {
       effort: "high",
       mode: "acceptEdits",
     })).toEqual([
+      "--print",
+      "--verbose",
       "--input-format",
       "stream-json",
       "--output-format",

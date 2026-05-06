@@ -15,6 +15,11 @@ export const agentBaseDefinition = {
     { key: "full-auto", label: "Full Auto" },
     { key: "yolo", label: "YOLO" },
   ],
+  commands: [
+    { name: "model", description: "Switch model" },
+    { name: "mode", description: "Switch mode" },
+    { name: "new", description: "Start a new session" },
+  ],
   capabilities: {
     chat: true,
     projectContext: true,

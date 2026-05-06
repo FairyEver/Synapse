@@ -56,8 +56,8 @@ export function TokenUsageModule() {
     const result = await scan()
     if (result) {
       setLastScanInfo({ elapsedMs: result.elapsedMs, newMessages: result.newMessages })
-      refreshAll(dateRangeToOptions(range))
     }
+    refreshAll(dateRangeToOptions(range))
   }, [scan, refreshAll, range])
 
   const handleRangeChange = useCallback((preset: RangePreset) => {

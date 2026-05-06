@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
-import { AgentComposer } from "../index"
+import { AgentComposer } from "../components/agent-composer"
 
 describe("AgentComposer", () => {
-  it("renders a light input dock with an icon-only send button", () => {
+  it("renders a ChatGPT-style input with an icon-only send button", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
         draft="你好"
@@ -16,16 +16,28 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html).toContain("rounded-2xl border border-border bg-background")
-    expect(html).toContain("px-3 py-2")
-    expect(html).toContain("border-0")
-    expect(html).toContain("bg-transparent")
-    expect(html).toContain("focus-visible:ring-0")
-    expect(html).toContain("aria-label=\"发送\"")
-    expect(html).toContain("data-size=\"icon\"")
-    expect(html).toContain("rounded-full")
-    expect(html).toContain("lucide-arrow-up")
-    expect(html).not.toContain("gap-2 rounded-md border border-border bg-background px-2 py-1.5")
+    expect(html).toContain("agent-composer")
+    expect(html).toContain("agent-composer__container")
+    expect(html).toContain("agent-composer__input")
+    expect(html).toContain("agent-composer__send")
+    expect(html).toContain('aria-label="发送"')
+    expect(html).toContain('placeholder="输入消息"')
+    expect(html).toContain("你好")
     expect(html).not.toContain(">发送</button>")
+  })
+
+  it("disables send button when canSend is false", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("disabled")
   })
 })

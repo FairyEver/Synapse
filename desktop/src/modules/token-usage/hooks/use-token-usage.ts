@@ -53,10 +53,6 @@ export function useGraphResult() {
     }
   }, [])
 
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
   return { data, loading, error, refresh }
 }
 
@@ -81,10 +77,6 @@ export function useModelReport() {
     }
   }, [])
 
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
   return { data, loading, error, refresh }
 }
 
@@ -106,10 +98,6 @@ export function useDailyReport() {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
 
   return { data, loading, error, refresh }
 }
@@ -133,10 +121,6 @@ export function useAgentReport() {
     }
   }, [])
 
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
   return { data, loading, error, refresh }
 }
 
@@ -159,10 +143,6 @@ export function useHourlyReport() {
     }
   }, [])
 
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
   return { data, loading, error, refresh }
 }
 
@@ -184,10 +164,6 @@ export function useHourlyProfile() {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
 
   return { data, loading, error, refresh }
 }

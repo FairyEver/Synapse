@@ -329,9 +329,7 @@ function MainApp() {
           })}
           {activeTab === "agent" ? (
             <ErrorBoundary fallbackTitle="Agent 模块出现问题">
-              <DevOverlay>
-                <AgentModule />
-              </DevOverlay>
+              <AgentModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "database" ? (

@@ -225,7 +225,7 @@ function AgentModule() {
                   命令
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 p-0">
+              <PopoverContent align="end" className="w-40 p-0">
                 <Command>
                   <CommandInput placeholder="搜索命令" />
                   <CommandList>

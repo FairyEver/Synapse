@@ -248,6 +248,16 @@ export class AgentSessionRepository {
     await this.conversations.remove(conversation.id)
   }
 
+  async renameSession(conversationIdValue: string, name: string): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      name,
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
   private async requireConversation(conversationIdValue: string): Promise<ConversationEntryV1> {
     const conversation = await this.get(conversationIdValue)
     if (!conversation) {

@@ -508,15 +508,16 @@ export class AgentRuntimeService {
       readonly sessionKey: string
       readonly platform?: string
       readonly name?: string
+      readonly agentType?: string
       readonly workspaceKey?: string
       readonly workspacePath?: string
     },
   ): Promise<ConversationEntryV1> {
-    await this.closeIdleStateForConversation(input.sessionKey, input.platform, input.workspaceKey)
     return this.repository.createSession({
       sessionKey: input.sessionKey,
       platform: input.platform,
       name: input.name,
+      agentType: input.agentType,
       workspaceKey: input.workspaceKey,
       workspacePath: input.workspacePath,
       resumePolicy: "resume",
@@ -534,10 +535,6 @@ export class AgentRuntimeService {
       throw new Error(`Conversation "${conversationIdValue}" is not available for this session key`)
     }
     const effectiveWorkspaceKey = workspaceKey ?? target.workspaceKey
-    const active = await this.repository.getActive(sessionKey, platform, effectiveWorkspaceKey)
-    if (active?.id !== target.id) {
-      await this.closeIdleStateForConversation(sessionKey, platform, effectiveWorkspaceKey)
-    }
     return this.repository.setActiveSession(sessionKey, conversationIdValue, platform, effectiveWorkspaceKey)
   }
 
@@ -560,14 +557,16 @@ export class AgentRuntimeService {
     return reaped
   }
 
+  async renameSession(conversationIdValue: string, name: string): Promise<boolean> {
+    await this.repository.renameSession(conversationIdValue, name)
+    return true
+  }
+
   async deleteSession(conversationIdValue: string): Promise<boolean> {
     const conversation = await this.repository.get(conversationIdValue)
     if (!conversation) return false
     const state = this.states.get(conversationIdValue)
     if (state) {
-      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
-        throw new Error("Session is busy.")
-      }
       if (state.pending) {
         this.pendingPermissions.delete(state.pending.requestId)
         state.pending = undefined
@@ -576,6 +575,7 @@ export class AgentRuntimeService {
         await state.liveSession.close()
         state.liveSession = undefined
       }
+      state.queue.length = 0
       this.states.delete(conversationIdValue)
     }
     await this.repository.deleteSession(conversationIdValue)

@@ -122,6 +122,8 @@ function mergeEnvAllowlist(
 
 export function buildClaudeCodeArgs(options: ClaudeCodeArgsOptions = {}): string[] {
   const args = [
+    "--print",
+    "--verbose",
     "--input-format",
     "stream-json",
     "--output-format",
