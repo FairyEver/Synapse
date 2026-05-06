@@ -289,6 +289,11 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   agentType?: string
   agentSessionId?: string
   pastAgentSessionIds?: string[]
+  agentConfig?: {
+    model?: string
+    mode?: string
+    env?: Record<string, string>
+  }
   resumePolicy?: ConversationResumePolicyV1
   history: ConversationHistoryEntryV1[]
   userMeta?: ConversationUserMetaV1
