@@ -1,4 +1,5 @@
 import { Plus, RefreshCw, Trash2 } from "lucide-react"
+import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -130,7 +131,10 @@ function AgentSessionSidebar({
                   if (sessions.length > 0) onSelect(session)
                 }}
               >
-                {sessionLabel(session)}
+                <span className="flex items-center gap-1.5">
+                  {agentIconFor(session.agentType)}
+                  <span className="truncate">{sessionLabel(session)}</span>
+                </span>
               </ModuleSidebarItem>
               {canDelete ? (
                 <AlertDialog>
@@ -174,6 +178,13 @@ function AgentSessionSidebar({
 
 function sessionItemKey(session: Pick<SynapseAgentSessionSummary, "projectId" | "id">): string {
   return `${session.projectId}:${session.id}`
+}
+
+function agentIconFor(agentType?: string) {
+  if (!agentType) return null
+  const def = agentDefinitions.find((d) => d.id === agentType)
+  if (!def?.icon) return null
+  return <img src={def.icon} alt="" className="h-3.5 w-3.5 shrink-0" />
 }
 
 function isSelectedSession(
