@@ -3,10 +3,10 @@ import type { ContentTypeDefinition } from "./types"
 
 export const promptContentTypeDefinition: ContentTypeDefinition = {
   id: "prompt",
-  singularLabel: "提示词",
-  pluralLabel: "提示词",
-  tabLabel: "提示词",
-  emptyStateNoun: "提示词",
+  singularLabel: "Prompt",
+  pluralLabel: "Prompts",
+  tabLabel: "Prompt",
+  emptyStateNoun: "prompt",
   capabilities: {
     hasAttachments: false,
     canInstallToEditor: false,

@@ -23,6 +23,7 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
+import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
 import { AgentSessionSidebar } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
@@ -57,6 +58,11 @@ function AgentModule() {
   const projectScope = useMemo(() =>
     resolveAgentProjectScope(activeRepository, config.global.projects, platform),
   [activeRepository, config.global.projects, platform])
+  const { status: runtimeStatus, loading: runtimeLoading } = useAgentRuntimeStatus()
+  const hasAvailableCli = useMemo(() => {
+    if (!runtimeStatus) return null
+    return runtimeStatus.agents.some((agent) => agent.cli.installed)
+  }, [runtimeStatus])
   const [draft, setDraft] = useState("")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -139,6 +145,17 @@ function AgentModule() {
     if (!projectId) return
     void getSynapseBridge()?.agent.openReference({ projectId, reference })
   }
+
+  if (!runtimeLoading && hasAvailableCli === false) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-muted-foreground">
+          未检测到可用的 Agent CLI，请在设置中确认安装状态
+        </p>
+      </div>
+    )
+  }
+
   const sidebar = (
     <AgentSessionSidebar
       sessions={chat.sessions}

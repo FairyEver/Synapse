@@ -70,9 +70,30 @@ export async function scanTokenUsage(): Promise<ScanProgress> {
   }
 }
 
+async function syncCursorAndGetFiles(): Promise<string[]> {
+  try {
+    const { cursorSyncService } = await import("./cursor-sync/index.js")
+    const files = cursorSyncService.getCsvFiles()
+    if (cursorSyncService.hasAccounts()) {
+      await cursorSyncService.syncAll()
+      return cursorSyncService.getCsvFiles()
+    }
+    return files
+  } catch (error) {
+    logger.warn("Cursor sync skipped", { error: String(error) })
+    return []
+  }
+}
+
 async function doScan(): Promise<ScanProgress> {
   const start = Date.now()
   const scanResults = scanAllClients()
+
+  const cursorFiles = await syncCursorAndGetFiles()
+  if (cursorFiles.length > 0) {
+    scanResults.push({ clientId: "cursor", files: cursorFiles })
+  }
+
   const progress: ScanProgress = {
     totalClients: scanResults.length,
     scannedClients: 0,

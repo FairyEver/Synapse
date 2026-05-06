@@ -14,5 +14,4 @@ export const TOKEN_USAGE_CHANNELS = {
   cursorSetActive: "synapse:token-usage:cursor:set-active",
   cursorSync: "synapse:token-usage:cursor:sync",
   cursorValidate: "synapse:token-usage:cursor:validate",
-  cursorLogin: "synapse:token-usage:cursor:login",
 } as const

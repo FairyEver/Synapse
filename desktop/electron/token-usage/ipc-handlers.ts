@@ -5,8 +5,6 @@ import type { GroupByMode } from "../services/token-usage/aggregator"
 import { scanAllClients } from "../services/token-usage/scanner"
 import { CLIENT_DEFS } from "../services/token-usage/clients"
 import { cursorSyncService } from "../services/token-usage/cursor-sync"
-import { openCursorLoginWindow } from "../services/token-usage/cursor-sync/login-window"
-import { BrowserWindow } from "electron"
 
 let handlersRegistered = false
 

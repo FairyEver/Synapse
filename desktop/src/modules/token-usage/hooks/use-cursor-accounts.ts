@@ -15,7 +15,7 @@ interface UseCursorAccountsReturn {
   loading: boolean
   syncing: boolean
   refresh: () => Promise<void>
-  login: () => Promise<{ success: boolean; error?: string }>
+  addWithToken: (token: string) => Promise<{ success: boolean; error?: string }>
   remove: (accountId: string) => Promise<void>
   setActive: (accountId: string) => Promise<void>
   sync: () => Promise<{ synced: boolean; rows: number; error?: string }>
@@ -41,18 +41,14 @@ export function useCursorAccounts(): UseCursorAccountsReturn {
     void refresh()
   }, [refresh])
 
-  const login = useCallback(async () => {
+  const addWithToken = useCallback(async (sessionToken: string) => {
     const bridge = requireSynapseBridge().tokenUsage
-    const loginResult = await bridge.cursorLogin()
-    if (loginResult.cancelled || !loginResult.sessionToken) {
-      return { success: false }
-    }
-    const validation = await bridge.cursorValidate({ sessionToken: loginResult.sessionToken })
+    const validation = await bridge.cursorValidate({ sessionToken })
     if (!validation.valid) {
-      return { success: false, error: validation.error }
+      return { success: false, error: validation.error || "Token 无效或已过期" }
     }
     const addResult = await bridge.cursorAddAccount({
-      sessionToken: loginResult.sessionToken,
+      sessionToken,
       label: validation.membershipType,
     })
     if (addResult.error) {
@@ -83,5 +79,5 @@ export function useCursorAccounts(): UseCursorAccountsReturn {
     }
   }, [refresh])
 
-  return { accounts, loading, syncing, refresh, login, remove, setActive, sync }
+  return { accounts, loading, syncing, refresh, addWithToken, remove, setActive, sync }
 }
