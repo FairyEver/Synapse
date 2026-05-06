@@ -156,7 +156,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       const skills = new SkillRegistry({
         workspacePath: ctx.projectMeta.workspacePath,
       })
-      return new AgentRuntimeService({
+      const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
@@ -183,6 +183,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         skills,
         commandRunner: runner,
       })
+      service.startIdleReclaim()
+      return service
     },
   }
 }
