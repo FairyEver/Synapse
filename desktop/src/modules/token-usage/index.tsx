@@ -22,7 +22,7 @@ type SubTab = "overview" | "models" | "daily" | "hourly" | "agents" | "stats"
 
 export function TokenUsageModule() {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("overview")
-  const [range, setRange] = useState<RangePreset>("all")
+  const [range, setRange] = useState<RangePreset>("30d")
   const [groupBy, setGroupBy] = useState<GroupByMode>("clientModel")
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const { scan, scanning, error: scanError } = useTokenUsageScan()

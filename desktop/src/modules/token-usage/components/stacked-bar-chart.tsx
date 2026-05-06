@@ -13,8 +13,10 @@ interface StackedBarChartProps {
 export function StackedBarChart({ contributions }: StackedBarChartProps) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
 
+  const nonEmpty = contributions.filter((c) => c.totals.tokens > 0)
+
   const modelTotals = new Map<string, { total: number; providerId: string }>()
-  for (const c of contributions) {
+  for (const c of nonEmpty) {
     for (const cl of c.clients) {
       const total = cl.tokens.input + cl.tokens.output + cl.tokens.cacheRead + cl.tokens.cacheWrite + cl.tokens.reasoning
       const existing = modelTotals.get(cl.modelId) || { total: 0, providerId: cl.providerId }
@@ -26,7 +28,7 @@ export function StackedBarChart({ contributions }: StackedBarChartProps) {
   const sorted = [...modelTotals.entries()].sort((a, b) => b[1].total - a[1].total)
   const topModels = sorted.slice(0, 8).map(([id]) => id)
 
-  const chartData = contributions.map((c) => {
+  const chartData = nonEmpty.map((c) => {
     const entry: Record<string, unknown> = { date: c.date.slice(5) }
     for (const cl of c.clients) {
       const total = cl.tokens.input + cl.tokens.output + cl.tokens.cacheRead + cl.tokens.cacheWrite + cl.tokens.reasoning

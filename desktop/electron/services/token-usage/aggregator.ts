@@ -74,6 +74,8 @@ export function getGraphResult(options?: { since?: string; until?: string }): Gr
       })
     }
 
+    if (dayTokens === 0 && dayCost === 0) continue
+
     totalTokens += dayTokens
     totalCost += dayCost
     maxDayCost = Math.max(maxDayCost, dayCost)

@@ -100,6 +100,8 @@ export const cursorParser: AgentParser = {
       const input = inputNoCW
       const cacheWrite = inputWithCW > inputNoCW ? inputWithCW - inputNoCW : 0
 
+      if (input === 0 && output === 0 && cacheRead === 0 && cacheWrite === 0) continue
+
       const ts = parseCsvDate(dateStr)
       if (ts === 0) continue
 
