@@ -1,42 +1,31 @@
-import { Plus, RefreshCw, Trash2 } from "lucide-react"
-import { agentDefinitions } from "@/definitions/generated/renderer-registry"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
+import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
   ModuleSidebar,
-  ModuleSidebarItem,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
-import type { SynapseAgentSessionSummary } from "@/types/agent"
-import {
-  DEFAULT_LOCAL_SESSION_KEY,
-  formatEntryTime,
-  sessionLabel,
-} from "../utils"
-import { conversationUnreadKey } from "../live-sync"
+import type { SynapseAgentAvailability, SynapseAgentSessionSummary } from "@/types/agent"
+import { ProjectGroup } from "./project-group"
+
+type ProjectOption = {
+  id: string
+  name: string
+  path: string
+}
 
 type AgentSessionSidebarProps = {
   sessions: SynapseAgentSessionSummary[]
+  projects: ProjectOption[]
+  availableAgents: SynapseAgentAvailability[]
   selectedProjectId?: string
   selectedConversationId?: string
   loading: boolean
   followFeishu: boolean
   unreadByConversationId: Record<string, number>
   onRefresh: () => void
-  onCreate: () => void
+  onCreateSession: (projectId: string, agentType: string) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onFollowFeishuChange: (follow: boolean) => void
@@ -44,46 +33,26 @@ type AgentSessionSidebarProps = {
 
 function AgentSessionSidebar({
   sessions,
+  projects,
+  availableAgents,
   selectedProjectId,
   selectedConversationId,
   loading,
   followFeishu,
   unreadByConversationId,
   onRefresh,
-  onCreate,
+  onCreateSession,
   onSelect,
   onDelete,
   onFollowFeishuChange,
 }: AgentSessionSidebarProps) {
-  const items = sessions.length > 0
-    ? sessions
-    : [{
-      projectId: "",
-      id: DEFAULT_LOCAL_SESSION_KEY,
-      sessionKey: DEFAULT_LOCAL_SESSION_KEY,
-      name: "本地会话",
-      active: true,
-      historyCount: 0,
-      createdAt: "",
-      updatedAt: "",
-    } satisfies SynapseAgentSessionSummary]
+  const sessionsByProject = groupSessionsByProject(sessions)
 
   return (
     <ModuleSidebar variant="bare">
       <div className="flex items-center justify-between px-1">
-        <h2 className="text-sm font-semibold">会话</h2>
+        <h2 className="text-sm font-semibold">项目</h2>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={loading}
-            data-track="agent-session-create"
-            onClick={onCreate}
-            title="新建会话"
-          >
-            <Plus />
-            <span className="sr-only">新建会话</span>
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -110,116 +79,38 @@ function AgentSessionSidebar({
         />
       </div>
       <ModuleSidebarList data-track="agent-session-list">
-        {items.map((session) => {
-          const canDelete = sessions.length > 0
-          const unread = session.projectId
-            ? unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
-            : 0
-          const trailing = (
-            <SessionTrailing updatedAt={session.updatedAt} unread={unread} />
-          )
-          return (
-            <div key={sessionItemKey(session)} className="flex items-center gap-1">
-              <ModuleSidebarItem
-                active={isSelectedSession(session, selectedProjectId, selectedConversationId)
-                  || (!selectedConversationId && session.active)}
-                className="min-w-0 flex-1"
-                trailing={trailing}
-                data-track="agent-session-select"
-                trackValue={sessionItemKey(session)}
-                onClick={() => {
-                  if (sessions.length > 0) onSelect(session)
-                }}
-              >
-                <span className="flex items-center gap-1.5">
-                  {agentIconFor(session.agentType)}
-                  <span className="truncate">{sessionLabel(session)}</span>
-                </span>
-              </ModuleSidebarItem>
-              {canDelete ? (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={loading}
-                      data-track="agent-session-delete-open"
-                      title="删除会话"
-                    >
-                      <Trash2 />
-                      <span className="sr-only">删除会话</span>
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>删除此会话？</AlertDialogTitle>
-                      <AlertDialogDescription>会话记录将被删除。</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>取消</AlertDialogCancel>
-                      <AlertDialogAction
-                        data-track="agent-session-delete-confirm"
-                        onClick={() => onDelete(session)}
-                      >
-                        删除
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              ) : null}
-            </div>
-          )
-        })}
+        {projects.map((project) => (
+          <ProjectGroup
+            key={project.id}
+            project={project}
+            sessions={sessionsByProject.get(project.id) ?? []}
+            availableAgents={availableAgents}
+            selectedProjectId={selectedProjectId}
+            selectedConversationId={selectedConversationId}
+            unreadByConversationId={unreadByConversationId}
+            onCreateSession={(agentType) => onCreateSession(project.id, agentType)}
+            onSelect={onSelect}
+            onDelete={onDelete}
+          />
+        ))}
       </ModuleSidebarList>
     </ModuleSidebar>
   )
 }
 
-function sessionItemKey(session: Pick<SynapseAgentSessionSummary, "projectId" | "id">): string {
-  return `${session.projectId}:${session.id}`
-}
-
-function agentIconFor(agentType?: string) {
-  if (!agentType) return null
-  const def = agentDefinitions.find((d) => d.id === agentType)
-  if (!def?.icon) return null
-  return <img src={def.icon} alt="" className="h-3.5 w-3.5 shrink-0" />
-}
-
-function isSelectedSession(
-  session: Pick<SynapseAgentSessionSummary, "projectId" | "id">,
-  selectedProjectId: string | undefined,
-  selectedConversationId: string | undefined,
-): boolean {
-  return session.projectId === selectedProjectId && session.id === selectedConversationId
-}
-
-function SessionTrailing({
-  updatedAt,
-  unread,
-}: {
-  readonly updatedAt?: string
-  readonly unread: number
-}) {
-  if (!updatedAt && unread <= 0) {
-    return null
+function groupSessionsByProject(
+  sessions: SynapseAgentSessionSummary[],
+): Map<string, SynapseAgentSessionSummary[]> {
+  const map = new Map<string, SynapseAgentSessionSummary[]>()
+  for (const session of sessions) {
+    const list = map.get(session.projectId)
+    if (list) {
+      list.push(session)
+    } else {
+      map.set(session.projectId, [session])
+    }
   }
-  return (
-    <span className="flex items-center gap-1">
-      {unread > 0 ? (
-        <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-          {unread}
-          <span className="sr-only"> 条未读</span>
-        </Badge>
-      ) : null}
-      {updatedAt ? (
-        <span className="text-xs text-muted-foreground">
-          {formatEntryTime(updatedAt)}
-        </span>
-      ) : null}
-    </span>
-  )
+  return map
 }
 
-export { AgentSessionSidebar }
+export { AgentSessionSidebar, type ProjectOption }

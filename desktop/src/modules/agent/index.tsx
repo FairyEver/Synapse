@@ -25,9 +25,8 @@ import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { SynapseAgentAvailability, SynapseAgentDisplayProfile } from "@/types/agent"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import { AgentPermissionPanel } from "./components/agent-permission-panel"
-import { AgentSessionSidebar } from "./components/agent-session-sidebar"
+import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
-import { CreateSessionDialog, type ProjectOption } from "./components/create-session-dialog"
 import { useAgentChat } from "./hooks/use-agent-chat"
 import { resolveAgentProjectScope } from "./project-resolution"
 import {
@@ -65,7 +64,6 @@ function AgentModule() {
     return runtimeStatus.agents.some((agent) => agent.cli.installed)
   }, [runtimeStatus])
   const [draft, setDraft] = useState("")
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [availableAgents, setAvailableAgents] = useState<SynapseAgentAvailability[]>([])
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -80,11 +78,10 @@ function AgentModule() {
   [config.global.projects])
 
   useEffect(() => {
-    if (!createDialogOpen) return
     const bridge = getSynapseBridge()
     if (!bridge) return
     void bridge.agent.getAvailableAgents().then(setAvailableAgents)
-  }, [createDialogOpen])
+  }, [])
 
   const latestEntry = chat.timeline.at(-1)
 
@@ -177,13 +174,15 @@ function AgentModule() {
   const sidebar = (
     <AgentSessionSidebar
       sessions={chat.sessions}
+      projects={projectOptions}
+      availableAgents={availableAgents}
       selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
-      loading={chat.loading || chat.sending}
+      loading={chat.loading}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
       onRefresh={() => void chat.refresh()}
-      onCreate={() => setCreateDialogOpen(true)}
+      onCreateSession={(projectId, agentType) => void chat.createSession(projectId, agentType)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onFollowFeishuChange={chat.setFollowFeishu}
@@ -251,45 +250,42 @@ function AgentModule() {
           </div>
         </div>
 
-        {chat.error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{chat.error}</AlertDescription>
-          </Alert>
-        ) : null}
+        {!selectedSession && chat.sessions.length === 0 && !chat.loading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="text-sm text-muted-foreground">请创建新的会话</p>
+          </div>
+        ) : (
+          <>
+            {chat.error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{chat.error}</AlertDescription>
+              </Alert>
+            ) : null}
 
-        <AgentPermissionPanel
-          pendingPermissions={chat.pendingPermissions}
-          onRespond={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
-        />
+            <AgentPermissionPanel
+              pendingPermissions={chat.pendingPermissions}
+              onRespond={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
+            />
 
-        <AgentTimeline
-          items={chat.timeline}
-          profile={selectedDisplayProfile}
-          sending={chat.sending}
-          onOpenReference={openReference}
-          bottomRef={timelineBottomRef}
-        />
+            <AgentTimeline
+              items={chat.timeline}
+              profile={selectedDisplayProfile}
+              sending={chat.sending}
+              onOpenReference={openReference}
+              bottomRef={timelineBottomRef}
+            />
 
-        <AgentComposer
-          draft={draft}
-          disabled={!chat.activeProjectId}
-          canSend={Boolean(draft.trim() && chat.activeProjectId)}
-          onDraftChange={setDraft}
-          onInputKeyDown={handleInputKeyDown}
-          onSubmit={handleSubmit}
-        />
+            <AgentComposer
+              draft={draft}
+              disabled={!chat.activeProjectId}
+              canSend={Boolean(draft.trim() && chat.activeProjectId)}
+              onDraftChange={setDraft}
+              onInputKeyDown={handleInputKeyDown}
+              onSubmit={handleSubmit}
+            />
+          </>
+        )}
       </div>
-      <CreateSessionDialog
-        open={createDialogOpen}
-        projects={projectOptions}
-        agents={availableAgents}
-        defaultProjectId={chat.activeProjectId}
-        onConfirm={(projectId, agentType) => {
-          setCreateDialogOpen(false)
-          void chat.createSession(projectId, agentType)
-        }}
-        onOpenChange={setCreateDialogOpen}
-      />
     </SidebarContentLayout>
   )
 }
