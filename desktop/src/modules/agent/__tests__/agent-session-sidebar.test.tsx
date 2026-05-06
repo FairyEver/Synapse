@@ -18,16 +18,18 @@ describe("AgentSessionSidebar", () => {
           createdAt: "2026-04-27T00:00:00.000Z",
           updatedAt: "2026-04-27T01:00:00.000Z",
         }]}
+        archivedSessions={[]}
+        projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
+        availableAgents={[]}
         selectedProjectId="project-local"
         selectedConversationId="local-conv"
-        loading={false}
         followFeishu={true}
         unreadByConversationId={{ "project-1:feishu-conv": 2 }}
-        onFollowFeishuChange={vi.fn()}
-        onRefresh={vi.fn()}
-        onCreate={vi.fn()}
+        onCreateSession={vi.fn()}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onFollowFeishuChange={vi.fn()}
       />,
     )
 
