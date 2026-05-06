@@ -35,9 +35,15 @@ export function openCursorLoginWindow(parentWindow?: BrowserWindow | null): Prom
     win.setMenuBarVisibility(false)
     let resolved = false
 
+    const timeout = setTimeout(() => {
+      logger.info("Cursor login window timed out")
+      finish(null, true)
+    }, 5 * 60 * 1000)
+
     function finish(token: string | null, cancelled: boolean) {
       if (resolved) return
       resolved = true
+      clearTimeout(timeout)
       resolve({ sessionToken: token, cancelled })
       if (!win.isDestroyed()) win.close()
     }

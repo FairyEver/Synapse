@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -17,7 +18,13 @@ export function CursorConnectBadge({ onConnected }: { onConnected?: () => void }
     setLoginInProgress(true)
     try {
       const result = await login()
-      if (result.success) onConnected?.()
+      if (result.success) {
+        onConnected?.()
+      } else if (result.error) {
+        toast.error(result.error)
+      }
+    } catch {
+      toast.error("连接失败，请重试")
     } finally {
       setLoginInProgress(false)
     }
