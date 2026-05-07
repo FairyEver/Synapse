@@ -2,6 +2,8 @@ import { editorDefinition as claudeCodeEditorDefinition } from "../editor/claude
 import { editorDefinition as codexEditorDefinition } from "../editor/codex/editor"
 import { editorDefinition as cursorEditorDefinition } from "../editor/cursor/editor"
 import { editorDefinition as windsurfEditorDefinition } from "../editor/windsurf/editor"
+import { editorDefinition as antigravityEditorDefinition } from "../editor/antigravity/editor"
+import { mcpDefinition as antigravityMcpDefinition } from "../editor/antigravity/mcp"
 import { agentDefinition as claudeCodeAgentDefinition } from "../agent/claude-code/agent"
 import { agentDefinition as codexAgentDefinition } from "../agent/codex/agent"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../editor/claude-code/mcp"
@@ -23,6 +25,7 @@ export const editorDefinitions = [
   codexEditorDefinition,
   cursorEditorDefinition,
   windsurfEditorDefinition,
+  antigravityEditorDefinition,
 ].sort((left, right) => left.order - right.order) satisfies SynapseEditorDefinition[]
 
 export const agentDefinitions = [
@@ -35,6 +38,7 @@ export const mcpDefinitions = [
   { ...codexMcpDefinition, icon: codexEditorDefinition.icon },
   { ...cursorMcpDefinition, icon: cursorEditorDefinition.icon },
   { ...windsurfMcpDefinition, icon: windsurfEditorDefinition.icon },
+  { ...antigravityMcpDefinition, icon: antigravityEditorDefinition.icon },
 ].sort((left, right) => left.order - right.order) satisfies SynapseRendererMcpDefinition[]
 
 export const installFormDefinitionByEditorId = new Map<string, SynapseInstallFormDefinition>([
