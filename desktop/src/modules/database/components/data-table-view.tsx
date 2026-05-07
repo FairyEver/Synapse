@@ -397,8 +397,8 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   )
 
   return (
-    <div className="flex h-full flex-col gap-2.5 px-2 py-2.5">
-      <div className="flex items-center justify-between rounded-lg bg-background px-3 py-2">
+    <div className="flex h-full flex-col gap-2.5">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">{tableName}</h2>
           <Button
