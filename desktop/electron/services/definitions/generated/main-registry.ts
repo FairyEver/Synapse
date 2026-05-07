@@ -1,21 +1,21 @@
+import { editorAdapter as antigravityEditorAdapter } from "../../../../src/definitions/editor/antigravity/adapter"
 import { editorAdapter as claudeCodeEditorAdapter } from "../../../../src/definitions/editor/claude-code/adapter"
 import { editorAdapter as codexEditorAdapter } from "../../../../src/definitions/editor/codex/adapter"
 import { editorAdapter as cursorEditorAdapter } from "../../../../src/definitions/editor/cursor/adapter"
 import { editorAdapter as windsurfEditorAdapter } from "../../../../src/definitions/editor/windsurf/adapter"
-import { editorAdapter as antigravityEditorAdapter } from "../../../../src/definitions/editor/antigravity/adapter"
-import { mcpDefinition as antigravityMcpDefinition } from "../../../../src/definitions/editor/antigravity/mcp"
-import { installStrategy as antigravityInstallStrategy } from "../../../../src/definitions/editor/antigravity/install"
-import { scanStrategy as antigravityScanStrategy } from "../../../../src/definitions/editor/antigravity/scan"
 import { agentRuntimeDefinition as claudeCodeAgentRuntimeDefinition } from "../../../../src/definitions/agent/claude-code/agent-main"
 import { agentRuntimeDefinition as codexAgentRuntimeDefinition } from "../../../../src/definitions/agent/codex/agent-main"
+import { mcpDefinition as antigravityMcpDefinition } from "../../../../src/definitions/editor/antigravity/mcp"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../../../../src/definitions/editor/claude-code/mcp"
 import { mcpDefinition as codexMcpDefinition } from "../../../../src/definitions/editor/codex/mcp"
 import { mcpDefinition as cursorMcpDefinition } from "../../../../src/definitions/editor/cursor/mcp"
 import { mcpDefinition as windsurfMcpDefinition } from "../../../../src/definitions/editor/windsurf/mcp"
+import { installStrategy as antigravityInstallStrategy } from "../../../../src/definitions/editor/antigravity/install"
 import { installStrategy as claudeCodeInstallStrategy } from "../../../../src/definitions/editor/claude-code/install"
 import { installStrategy as codexInstallStrategy } from "../../../../src/definitions/editor/codex/install"
 import { installStrategy as cursorInstallStrategy } from "../../../../src/definitions/editor/cursor/install"
 import { installStrategy as windsurfInstallStrategy } from "../../../../src/definitions/editor/windsurf/install"
+import { scanStrategy as antigravityScanStrategy } from "../../../../src/definitions/editor/antigravity/scan"
 import { scanStrategy as claudeCodeScanStrategy } from "../../../../src/definitions/editor/claude-code/scan"
 import { scanStrategy as codexScanStrategy } from "../../../../src/definitions/editor/codex/scan"
 import { scanStrategy as cursorScanStrategy } from "../../../../src/definitions/editor/cursor/scan"
@@ -50,25 +50,25 @@ export const agentRuntimeDefinitionById = new Map<string, AgentRuntimeDefinition
 )
 
 export const mcpDefinitions = [
+  antigravityMcpDefinition,
   claudeCodeMcpDefinition,
   codexMcpDefinition,
   cursorMcpDefinition,
   windsurfMcpDefinition,
-  antigravityMcpDefinition,
 ].sort((left, right) => left.order - right.order) satisfies SynapseMcpDefinition[]
 
 export const editorInstallStrategyById = new Map<string, EditorInstallStrategy>([
+  [antigravityEditorAdapter.id, antigravityInstallStrategy],
   [claudeCodeEditorAdapter.id, claudeCodeInstallStrategy],
   [codexEditorAdapter.id, codexInstallStrategy],
   [cursorEditorAdapter.id, cursorInstallStrategy],
   [windsurfEditorAdapter.id, windsurfInstallStrategy],
-  [antigravityEditorAdapter.id, antigravityInstallStrategy],
 ])
 
 export const editorScanStrategyById = new Map<string, EditorScanStrategy>([
+  [antigravityEditorAdapter.id, antigravityScanStrategy],
   [claudeCodeEditorAdapter.id, claudeCodeScanStrategy],
   [codexEditorAdapter.id, codexScanStrategy],
   [cursorEditorAdapter.id, cursorScanStrategy],
   [windsurfEditorAdapter.id, windsurfScanStrategy],
-  [antigravityEditorAdapter.id, antigravityScanStrategy],
 ])

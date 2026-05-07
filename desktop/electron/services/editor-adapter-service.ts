@@ -1,10 +1,21 @@
+import { access } from "node:fs/promises"
 import type {
   SynapseEditorAdapterSummary,
+  SynapseEditorGlobalDirectory,
   SynapseEditorResolvedTarget,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
 import { editorAdapterById, editorAdapters } from "./editor-adapters"
 import { createUnavailableTarget, createUnsupportedTarget } from "./editor-adapters/utils"
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await access(targetPath)
+    return true
+  } catch {
+    return false
+  }
+}
 
 class EditorAdapterService {
   listAdapters(): SynapseEditorAdapterSummary[] {
@@ -14,6 +25,29 @@ class EditorAdapterService {
       supportsGlobal: adapter.supportsGlobal,
       supportsProject: adapter.supportsProject,
       supportedContentTypes: adapter.supportedContentTypes,
+    }))
+  }
+
+  async getGlobalDirectories(): Promise<SynapseEditorGlobalDirectory[]> {
+    const entries = editorAdapters.map((adapter) => {
+      const paths = adapter.resolveGlobalDirectoryPaths()
+      return { adapter, paths }
+    })
+
+    const checks = entries.flatMap(({ paths }) => [
+      paths.rulesPath ? pathExists(paths.rulesPath) : Promise.resolve(false),
+      paths.skillsPath ? pathExists(paths.skillsPath) : Promise.resolve(false),
+    ])
+
+    const results = await Promise.all(checks)
+
+    return entries.map(({ adapter, paths }, index) => ({
+      editorId: adapter.id,
+      label: adapter.label,
+      rulesPath: paths.rulesPath,
+      rulesExists: results[index * 2],
+      skillsPath: paths.skillsPath,
+      skillsExists: results[index * 2 + 1],
     }))
   }
 
