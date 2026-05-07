@@ -67,6 +67,8 @@ export interface ProjectQuota {
 
 export interface ProjectContainerRegistry {
   open(projectId: string, metadata?: Partial<ProjectMetadata>): Promise<ProjectContainer>
+  /** Synchronously return an already-opened container, or undefined if not open. */
+  peek(projectId: string): ProjectContainer | undefined
   close(projectId: string): Promise<void>
   list(): ReadonlyArray<{ projectId: string; openedAt: string }>
   registerService(service: ProjectScopedService): void

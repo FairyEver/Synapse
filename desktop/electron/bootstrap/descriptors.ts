@@ -41,7 +41,7 @@ import { repositoryLockManager } from "../services/repository-lock-manager"
 import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
-import { createAgentRuntimeProjectService } from "../services/agent-runtime"
+import { createAgentRuntimeProjectService, AgentRuntimeService, AGENT_RUNTIME_SERVICE_ID } from "../services/agent-runtime"
 import { createProviderConfigProjectService } from "../services/provider-config"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { FeishuConnectorService } from "../services/connectors"
@@ -144,6 +144,12 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     return createBuiltinMainActionRegistry({
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      getAgentRuntime: (projectId) => {
+        const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
+        const container = containers.peek(projectId)
+        if (!container) return undefined
+        return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+      },
     })
   },
 }

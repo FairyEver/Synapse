@@ -46,6 +46,10 @@ export class ProjectContainerRegistryImpl implements ProjectContainerRegistry {
     this.serviceTemplates.push(service)
   }
 
+  peek(projectId: string): ProjectContainer | undefined {
+    return this.containers.get(projectId)?.container
+  }
+
   async open(projectId: string, metadata: Partial<ProjectMetadata> = {}): Promise<ProjectContainer> {
     const existing = this.containers.get(projectId)
     if (existing) return existing.container
