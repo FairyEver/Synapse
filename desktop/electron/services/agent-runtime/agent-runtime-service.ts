@@ -42,6 +42,11 @@ import {
   AgentSessionRepository,
   conversationId,
 } from "./session-repository"
+import { SessionLifecycleManager } from "./session-lifecycle"
+import type {
+  RuntimeSessionState,
+  PendingPermissionState,
+} from "./session-lifecycle"
 import type {
   AgentAdapter,
   AgentEvent,
@@ -99,18 +104,6 @@ interface QueuedTurn {
   resolve(result: AgentRuntimeTurnResult): void
 }
 
-interface RuntimeSessionState {
-  key: string
-  workspaceKey?: string
-  workspacePath?: string
-  readonly queue: QueuedTurn[]
-  busy: boolean
-  activeTurns: number
-  lastActivity: number
-  liveSession?: AgentLiveSession
-  pending?: PendingPermissionState
-}
-
 export interface AgentRuntimeStatus {
   readonly projectId: string
   readonly agentType: string
@@ -120,23 +113,15 @@ export interface AgentRuntimeStatus {
   readonly pendingPermissions: number
 }
 
-interface PendingPermissionState extends AgentPendingPermission {
-  readonly stateKey: string
-  readonly liveSession: AgentLiveSession
-  resolve(): void
-}
-
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
 
 export class AgentRuntimeService {
-  private static readonly IDLE_TIMEOUT_MS = 10 * 60 * 1000
-
   private readonly deps: AgentRuntimeServiceDeps
   private readonly repository: AgentSessionRepository
   private readonly commandRouter: AgentCommandRouter | undefined
+  private readonly sessionLifecycle: SessionLifecycleManager
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
-  private reclaimInterval?: ReturnType<typeof setInterval>
 
   constructor(deps: AgentRuntimeServiceDeps) {
     this.deps = deps
@@ -144,6 +129,14 @@ export class AgentRuntimeService {
       projectId: deps.projectId,
       conversations: deps.conversations,
       now: deps.now,
+    })
+    this.sessionLifecycle = new SessionLifecycleManager({
+      projectId: deps.projectId,
+      repository: this.repository,
+      states: this.states,
+      pendingPermissions: this.pendingPermissions,
+      logger: deps.logger,
+      getActiveAgentType: () => this.getActiveAgentType(),
     })
     this.commandRouter = deps.providerConfig
       ? new AgentCommandRouter({
@@ -329,28 +322,15 @@ export class AgentRuntimeService {
   }
 
   async reclaimIdleSessions(): Promise<void> {
-    const now = Date.now()
-    for (const [key, state] of this.states) {
-      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
-      if (!state.liveSession) continue
-      if (now - state.lastActivity < AgentRuntimeService.IDLE_TIMEOUT_MS) continue
-      await state.liveSession.close()
-      state.liveSession = undefined
-      this.deps.logger?.info("Reclaimed idle agent session.", { conversationId: key })
-    }
+    return this.sessionLifecycle.reclaimIdleSessions()
   }
 
   startIdleReclaim(): void {
-    this.reclaimInterval = setInterval(() => {
-      void this.reclaimIdleSessions()
-    }, 60_000)
+    this.sessionLifecycle.startIdleReclaim()
   }
 
   stopIdleReclaim(): void {
-    if (this.reclaimInterval) {
-      clearInterval(this.reclaimInterval)
-      this.reclaimInterval = undefined
-    }
+    this.sessionLifecycle.stopIdleReclaim()
   }
 
   async getActiveAgentType(): Promise<string> {
@@ -359,11 +339,11 @@ export class AgentRuntimeService {
   }
 
   async listSessions(): Promise<readonly ConversationEntryV1[]> {
-    return this.repository.listSessions()
+    return this.sessionLifecycle.listSessions()
   }
 
   async getSession(conversationIdValue: string): Promise<ConversationEntryV1 | null> {
-    return this.repository.get(conversationIdValue)
+    return this.sessionLifecycle.getSession(conversationIdValue)
   }
 
   async listPublishedCommands(platform = "local-renderer"): Promise<readonly PublishedAgentCommand[]> {
@@ -478,9 +458,7 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
-    if (!conversation) return null
-    return this.repository.clearCurrentAgentSessionId(conversation.id, await this.getActiveAgentType())
+    return this.sessionLifecycle.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
   }
 
   async resetSession(
@@ -488,19 +466,7 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
-    if (conversation) {
-      const state = this.states.get(conversation.id)
-      if (state?.pending) {
-        this.pendingPermissions.delete(state.pending.requestId)
-        state.pending = undefined
-      }
-      if (state?.liveSession) {
-        await state.liveSession.close()
-        state.liveSession = undefined
-      }
-    }
-    return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
+    return this.sessionLifecycle.resetSession(sessionKey, platform, workspaceKey)
   }
 
   async createSession(
@@ -513,15 +479,7 @@ export class AgentRuntimeService {
       readonly workspacePath?: string
     },
   ): Promise<ConversationEntryV1> {
-    return this.repository.createSession({
-      sessionKey: input.sessionKey,
-      platform: input.platform,
-      name: input.name,
-      agentType: input.agentType,
-      workspaceKey: input.workspaceKey,
-      workspacePath: input.workspacePath,
-      resumePolicy: "resume",
-    })
+    return this.sessionLifecycle.createSession(input)
   }
 
   async switchSession(
@@ -530,56 +488,22 @@ export class AgentRuntimeService {
     platform?: string,
     workspaceKey?: string,
   ): Promise<ConversationEntryV1> {
-    const target = await this.repository.get(conversationIdValue)
-    if (!target || target.sessionKey !== sessionKey) {
-      throw new Error(`Conversation "${conversationIdValue}" is not available for this session key`)
-    }
-    const effectiveWorkspaceKey = workspaceKey ?? target.workspaceKey
-    return this.repository.setActiveSession(sessionKey, conversationIdValue, platform, effectiveWorkspaceKey)
+    return this.sessionLifecycle.switchSession(sessionKey, conversationIdValue, platform, workspaceKey)
   }
 
   async reapIdleWorkspaceRuntimes(
     idleTimeoutMs: number,
     nowMs = Date.now(),
   ): Promise<readonly string[]> {
-    const cutoff = nowMs - idleTimeoutMs
-    const reaped: string[] = []
-    for (const [key, state] of this.states) {
-      if (!state.workspaceKey || !state.workspacePath) continue
-      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
-      if (state.lastActivity >= cutoff) continue
-      if (state.liveSession?.alive()) {
-        await state.liveSession.close()
-      }
-      reaped.push(state.workspacePath)
-      this.states.delete(key)
-    }
-    return reaped
+    return this.sessionLifecycle.reapIdleWorkspaceRuntimes(idleTimeoutMs, nowMs)
   }
 
   async renameSession(conversationIdValue: string, name: string): Promise<boolean> {
-    await this.repository.renameSession(conversationIdValue, name)
-    return true
+    return this.sessionLifecycle.renameSession(conversationIdValue, name)
   }
 
   async deleteSession(conversationIdValue: string): Promise<boolean> {
-    const conversation = await this.repository.get(conversationIdValue)
-    if (!conversation) return false
-    const state = this.states.get(conversationIdValue)
-    if (state) {
-      if (state.pending) {
-        this.pendingPermissions.delete(state.pending.requestId)
-        state.pending = undefined
-      }
-      if (state.liveSession) {
-        await state.liveSession.close()
-        state.liveSession = undefined
-      }
-      state.queue.length = 0
-      this.states.delete(conversationIdValue)
-    }
-    await this.repository.deleteSession(conversationIdValue)
-    return true
+    return this.sessionLifecycle.deleteSession(conversationIdValue)
   }
 
   private async processQueue(state: RuntimeSessionState): Promise<void> {
@@ -1242,26 +1166,7 @@ export class AgentRuntimeService {
   }
 
   private stateForConversation(conversationIdValue: string, message?: AgentMessage): RuntimeSessionState {
-    const existing = this.states.get(conversationIdValue)
-    if (existing) {
-      if (message) {
-        existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
-        existing.workspacePath = message.workspacePath ?? existing.workspacePath
-      }
-      existing.lastActivity = Date.now()
-      return existing
-    }
-    const state: RuntimeSessionState = {
-      key: conversationIdValue,
-      workspaceKey: message?.workspaceKey,
-      workspacePath: message?.workspacePath,
-      queue: [],
-      busy: false,
-      activeTurns: 0,
-      lastActivity: Date.now(),
-    }
-    this.states.set(conversationIdValue, state)
-    return state
+    return this.sessionLifecycle.stateForConversation(conversationIdValue, message)
   }
 
   private async closeIdleStateForConversation(
@@ -1269,21 +1174,7 @@ export class AgentRuntimeService {
     platform?: string,
     workspaceKey?: string,
   ): Promise<void> {
-    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
-    if (!conversation) return
-    const state = this.states.get(conversation.id)
-    if (!state) return
-    if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
-      throw new Error("Session is busy.")
-    }
-    if (state.pending) {
-      this.pendingPermissions.delete(state.pending.requestId)
-      state.pending = undefined
-    }
-    if (state.liveSession) {
-      await state.liveSession.close()
-      state.liveSession = undefined
-    }
+    return this.sessionLifecycle.closeIdleStateForConversation(sessionKey, platform, workspaceKey)
   }
 
   private resetMessageSession(message: AgentMessage): Promise<ConversationEntryV1 | null> {
