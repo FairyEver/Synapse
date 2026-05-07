@@ -192,7 +192,7 @@ function DatabaseSidebar({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          {folders.length > 0 && (
+          {folders.length > 0 ? (
             <ContextMenuSub>
               <ContextMenuSubTrigger>移动到文件夹</ContextMenuSubTrigger>
               <ContextMenuSubContent>
@@ -204,13 +204,15 @@ function DatabaseSidebar({
                     {folder.name}
                   </ContextMenuItem>
                 ))}
-                {folderMemberSet.has(table.name) && (
-                  <ContextMenuItem onClick={() => onMoveTable(table.name, null)}>
-                    移出文件夹
-                  </ContextMenuItem>
-                )}
               </ContextMenuSubContent>
             </ContextMenuSub>
+          ) : (
+            <ContextMenuItem disabled>移动到文件夹</ContextMenuItem>
+          )}
+          {folderMemberSet.has(table.name) && (
+            <ContextMenuItem onClick={() => onMoveTable(table.name, null)}>
+              移出文件夹
+            </ContextMenuItem>
           )}
         </ContextMenuContent>
       </ContextMenu>
@@ -251,7 +253,7 @@ function DatabaseSidebar({
       />
       <ModuleSidebarList data-track="database-table-list">
         {creatingFolder && (
-          <div className="px-3 py-1">
+          <div className="px-1.5 py-0.5">
             <Input
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
@@ -261,7 +263,7 @@ function DatabaseSidebar({
               }}
               onBlur={handleCreateFolderConfirm}
               placeholder="文件夹名称"
-              className="h-7 text-sm"
+              className="h-8 text-sm"
               autoFocus
             />
           </div>
@@ -270,7 +272,7 @@ function DatabaseSidebar({
         {!isSearching && folders.map((folder) => {
           if (renamingFolderId === folder.id) {
             return (
-              <div key={folder.id} className="px-3 py-1">
+              <div key={folder.id} className="px-1.5 py-0.5">
                 <Input
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
@@ -279,7 +281,7 @@ function DatabaseSidebar({
                     if (e.key === "Escape") setRenamingFolderId(null)
                   }}
                   onBlur={handleRenameFolderConfirm}
-                  className="h-7 text-sm"
+                  className="h-8 text-sm"
                   autoFocus
                 />
               </div>

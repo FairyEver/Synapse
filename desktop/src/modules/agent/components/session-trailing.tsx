@@ -1,15 +1,5 @@
-import { Trash2 } from "lucide-react"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { useEffect, useRef, useState } from "react"
+import { Check, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 function formatRelativeTime(timestamp: string): string {
@@ -46,6 +36,25 @@ function SessionTrailing({
   readonly canDelete: boolean
   readonly onDelete: () => void
 }) {
+  const [armed, setArmed] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!armed) return undefined
+    timerRef.current = setTimeout(() => setArmed(false), 3000)
+    const handleClickOutside = (event: MouseEvent) => {
+      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
+        setArmed(false)
+      }
+    }
+    document.addEventListener("pointerdown", handleClickOutside, true)
+    return () => {
+      clearTimeout(timerRef.current)
+      document.removeEventListener("pointerdown", handleClickOutside, true)
+    }
+  }, [armed])
+
   return (
     <span className="flex items-center gap-1">
       {unread > 0 ? (
@@ -60,35 +69,24 @@ function SessionTrailing({
         </span>
       ) : null}
       {canDelete ? (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button
-              type="button"
-              data-track="agent-session-delete-open"
-              title="删除会话"
-              className="hidden rounded p-0.5 text-muted-foreground hover:text-destructive group-hover/item:block"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <Trash2 className="size-3.5" />
-              <span className="sr-only">删除会话</span>
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>删除此会话？</AlertDialogTitle>
-              <AlertDialogDescription>会话记录将被删除。</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>取消</AlertDialogCancel>
-              <AlertDialogAction
-                data-track="agent-session-delete-confirm"
-                onClick={onDelete}
-              >
-                删除
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <button
+          ref={buttonRef}
+          type="button"
+          title={armed ? "确认删除" : "删除会话"}
+          className={`hidden rounded p-0.5 group-hover/item:block ${armed ? "text-destructive" : "text-muted-foreground hover:text-destructive"}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            if (armed) {
+              setArmed(false)
+              onDelete()
+            } else {
+              setArmed(true)
+            }
+          }}
+        >
+          {armed ? <Check className="size-3.5" /> : <Trash2 className="size-3.5" />}
+          <span className="sr-only">{armed ? "确认删除" : "删除会话"}</span>
+        </button>
       ) : null}
     </span>
   )

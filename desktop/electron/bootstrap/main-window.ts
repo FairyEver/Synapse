@@ -38,7 +38,7 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
     minWidth,
     minHeight,
     show: false,
-    title: "Synapse",
+    title: `Synapse ${app.getVersion()}`,
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, "..", "preload.js"),

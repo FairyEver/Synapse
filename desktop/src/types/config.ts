@@ -17,6 +17,7 @@ export type SynapseProjectConfig = {
   id: string
   name: string
   path: string
+  defaultAgentId?: string
 }
 
 export type SynapseFavorites = {

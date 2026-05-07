@@ -12,8 +12,6 @@ describe("task scheduler utils", () => {
     const payload = buildTaskCreateInput({
       ...DEFAULT_TASK_FORM_STATE,
       name: "Backup",
-      scopeType: "project",
-      projectId: "project-1",
       actionType: "builtin.command",
       actionConfig: {
         command: "echo ok",
@@ -25,7 +23,7 @@ describe("task scheduler utils", () => {
 
     expect(payload).toMatchObject({
       name: "Backup",
-      scope: { type: "project", projectId: "project-1" },
+      scope: { type: "global" },
       trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
       action: {
         type: "builtin.command",
@@ -107,5 +105,22 @@ describe("task scheduler utils", () => {
 
   it("defaults new tasks to command actions", () => {
     expect(createTaskFormState().actionType).toBe("builtin.command")
+  })
+
+  it("derives project scope from agent action config", () => {
+    const payload = buildTaskCreateInput({
+      ...DEFAULT_TASK_FORM_STATE,
+      name: "Agent Task",
+      actionType: "builtin.agent",
+      actionConfig: {
+        projectId: "project-1",
+        agentType: "claude-code",
+        mode: "auto",
+        prompt: "hello",
+        sessionPolicy: "fresh",
+      },
+    })
+
+    expect(payload.scope).toEqual({ type: "project", projectId: "project-1" })
   })
 })

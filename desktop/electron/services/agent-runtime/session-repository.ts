@@ -139,6 +139,7 @@ export class AgentSessionRepository {
       channelKey: input.channelKey,
       workspaceKey: input.workspaceKey,
       workspacePath: input.workspacePath,
+      agentType: input.agentType,
       history: [],
       userMeta: input.userMeta,
       active: false,

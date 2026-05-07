@@ -29,6 +29,7 @@ export interface AgentMessage {
   readonly attachments?: readonly AgentAttachment[]
   readonly replyCtx?: unknown
   readonly modeOverride?: string
+  readonly agentType?: string
 }
 
 interface AgentEventBase {

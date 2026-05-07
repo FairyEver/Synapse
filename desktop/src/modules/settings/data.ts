@@ -3,6 +3,7 @@ import {
   Blocks,
   Braces,
   FolderGit2,
+  FolderOpen,
   Info,
   Server,
   Settings2,
@@ -22,10 +23,16 @@ const settingsCategories: SettingsCategory[] = [
     description: "身份和外观。",
   },
   {
-    id: "storage",
+    id: "repositories",
     icon: FolderGit2,
-    label: "存储",
-    description: "仓库和项目。",
+    label: "仓库",
+    description: "本地仓库目录。",
+  },
+  {
+    id: "projects",
+    icon: FolderOpen,
+    label: "项目",
+    description: "项目与 Agent 配置。",
   },
   {
     id: "tools",
@@ -86,7 +93,7 @@ const settingsItems: SettingItem[] = [
   {
     key: "repositories",
     label: "本地仓库目录",
-    category: "storage",
+    category: "repositories",
     type: "list",
     defaultValue: [],
     scope: "global",
@@ -94,7 +101,7 @@ const settingsItems: SettingItem[] = [
   {
     key: "global.projects",
     label: "本地项目",
-    category: "storage",
+    category: "projects",
     type: "list",
     defaultValue: DEFAULT_GLOBAL_CONFIG.projects,
     scope: "global",

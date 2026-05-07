@@ -127,6 +127,38 @@ export class MessageRouter {
     })
   }
 
+  async sendToConversation(
+    message: AgentMessage,
+    conversationId: string,
+  ): Promise<AgentRuntimeTurnResult> {
+    if (message.projectId !== this.deps.projectId) {
+      throw new Error(
+        `AgentRuntime project mismatch: expected "${this.deps.projectId}", got "${message.projectId}"`,
+      )
+    }
+
+    const conversation = await this.repository.get(conversationId)
+    if (!conversation) {
+      throw new Error(`Conversation "${conversationId}" not found`)
+    }
+
+    const state = this.callbacks.stateForConversation(conversation.id, message)
+    if (state.busy && state.queue.length >= this.queueLimit()) {
+      return this.finishWithError(message, conversation.id, "Session queue is full")
+    }
+
+    return new Promise<AgentRuntimeTurnResult>((resolve) => {
+      state.queue.push({
+        message,
+        conversationId: conversation.id,
+        resolve,
+      })
+      if (!state.busy) {
+        void this.processQueue(state)
+      }
+    })
+  }
+
   async sendNewSession(
     message: AgentMessage,
     name: string,
@@ -143,6 +175,7 @@ export class MessageRouter {
       channelKey: message.channelKey,
       workspaceKey: message.workspaceKey,
       workspacePath: message.workspacePath,
+      agentType: message.agentType,
       name,
       userMeta: {
         userId: message.userId,

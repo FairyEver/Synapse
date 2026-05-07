@@ -210,7 +210,7 @@ function TaskSchedulerModule() {
           ) : null}
 
           {tasks.length > 0 ? (
-            <div className="rounded-lg bg-background">
+            <div className="overflow-x-auto rounded-lg bg-background">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -220,9 +220,9 @@ function TaskSchedulerModule() {
                     <TableHead>动作</TableHead>
                     <TableHead>上次</TableHead>
                     <TableHead>下次</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>启用</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
+                    <TableHead className="sticky right-48 w-16 bg-background after:absolute after:inset-y-0 after:-left-px after:w-px after:bg-border">状态</TableHead>
+                    <TableHead className="sticky right-36 w-12 bg-background">启用</TableHead>
+                    <TableHead className="sticky right-0 w-36 bg-background text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -234,10 +234,10 @@ function TaskSchedulerModule() {
                       <TableCell>{formatTaskAction(task)}</TableCell>
                       <TableCell>{formatTaskDate(task.lastRunAt, "未运行")}</TableCell>
                       <TableCell>{formatTaskDate(task.nextRunAt, "未排期")}</TableCell>
-                      <TableCell>
+                      <TableCell className="sticky right-48 w-16 bg-background after:absolute after:inset-y-0 after:-left-px after:w-px after:bg-border">
                         <StatusBadge status={task.lastStatus} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="sticky right-36 w-12 bg-background">
                         <Switch
                           checked={task.enabled}
                           disabled={busy}
@@ -254,7 +254,7 @@ function TaskSchedulerModule() {
                           }}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="sticky right-0 w-36 bg-background">
                         <div className="flex justify-end gap-1">
                           <IconButton
                             disabled={busy}

@@ -8,7 +8,8 @@ describe("settingsCategories", () => {
 
     expect(ids).toEqual([
       "general",
-      "storage",
+      "repositories",
+      "projects",
       "tools",
       "variables",
       "services",
@@ -26,11 +27,10 @@ describe("settingsCategories", () => {
     expect(ids).not.toContain("mcp")
   })
 
-  it("merges repositories and projects into storage", () => {
+  it("has separate repositories and projects categories", () => {
     const ids = settingsCategories.map((c) => c.id)
 
-    expect(ids).toContain("storage")
-    expect(ids).not.toContain("repositories")
-    expect(ids).not.toContain("projects")
+    expect(ids).toContain("repositories")
+    expect(ids).toContain("projects")
   })
 })

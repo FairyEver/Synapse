@@ -1,6 +1,6 @@
 import { FileInput, FolderPlus, AlignLeft, Type, Text } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type DisplayMode = "title+desc" | "title" | "desc"
 
@@ -38,6 +38,7 @@ function DatabaseSidebarToolbar({
   }
 
   return (
+    <TooltipProvider>
     <div className="flex items-center gap-0.5 px-1">
       <Tooltip>
         <TooltipTrigger asChild>
@@ -85,6 +86,7 @@ function DatabaseSidebarToolbar({
         <TooltipContent>{DISPLAY_MODE_LABELS[displayMode]}</TooltipContent>
       </Tooltip>
     </div>
+    </TooltipProvider>
   )
 }
 

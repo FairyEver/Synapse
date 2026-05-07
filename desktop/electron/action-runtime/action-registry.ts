@@ -25,6 +25,7 @@ export type ActionPermissionInput<TConfig extends ActionConfig = ActionConfig> =
 export type ActionExecutionInput<TConfig extends ActionConfig = ActionConfig> = {
   readonly config: TConfig
   readonly context: ActionRuntimeContext
+  readonly previousOutputs?: Record<string, unknown>
 }
 
 export type MainActionDefinition<TConfig extends ActionConfig = ActionConfig> = {

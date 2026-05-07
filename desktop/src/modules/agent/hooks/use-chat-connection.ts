@@ -349,9 +349,27 @@ function useChatConnection(
         return
       }
       logger.error("Agent session switch failed.", rawError)
+      const isNotFound = rawError instanceof Error && rawError.message.includes("不存在")
+      if (isNotFound) {
+        const remaining = state.sessions.filter((item) => !isSameSession(item, target))
+        dispatch({ type: "UPDATE_SESSIONS", updater: () => remaining })
+        const next = remaining[0]
+        if (next) {
+          setSelectedSession(next)
+          await loadTimeline({
+            projectId: next.projectId,
+            sessionKey: next.sessionKey,
+            conversationId: next.id,
+          })
+        } else {
+          setSelectedSession(undefined)
+          clearTimeline()
+        }
+        return
+      }
       dispatch({ type: "SET_ERROR", error: rawError instanceof Error ? rawError.message : "切换失败" })
     }
-  }, [dispatch, loadTimeline, refreshProjectMeta, selectRequestIdRef, setSelectedSession])
+  }, [clearTimeline, dispatch, loadTimeline, refreshProjectMeta, selectRequestIdRef, setSelectedSession, state.sessions])
 
   const sendMessage = useCallback(async (content: string) => {
     const trimmed = content.trim()
@@ -405,12 +423,8 @@ function useChatConnection(
       if (requestId !== selectRequestIdRef.current) {
         if (result.ok) {
           dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
+          dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
           toast("会话已删除")
-          void refreshConversationSnapshot({
-            projectId: target.projectId,
-            sessionKey: target.sessionKey,
-            conversationId: target.id,
-          })
         }
         return
       }
@@ -419,21 +433,37 @@ function useChatConnection(
         return
       }
       dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
       if (selectedProjectIdRef.current === target.projectId && selectedConversationIdRef.current === target.id) {
         const next = state.sessions.find((session) => !isSameSession(session, target))
-        setSelectedSession(next)
         if (next) {
-          await loadTimeline({
-            projectId: next.projectId,
-            sessionKey: next.sessionKey,
-            conversationId: next.id,
-          })
-          await refreshProjectMeta(next.projectId)
+          try {
+            const switched = await bridge.agent.switchSession({
+              projectId: next.projectId,
+              sessionKey: next.sessionKey,
+              conversationId: next.id,
+            })
+            const session = normalizeSessionProject(switched, next.projectId)
+            setSelectedSession(session)
+            await loadTimeline({
+              projectId: session.projectId,
+              sessionKey: session.sessionKey,
+              conversationId: session.id,
+            })
+            await refreshProjectMeta(session.projectId)
+          } catch {
+            setSelectedSession(next)
+            await loadTimeline({
+              projectId: next.projectId,
+              sessionKey: next.sessionKey,
+              conversationId: next.id,
+            })
+          }
         } else {
+          setSelectedSession(undefined)
           clearTimeline()
         }
       }
-      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
       toast("会话已删除")
     } catch (rawError) {
       if (requestId !== selectRequestIdRef.current) {
@@ -447,7 +477,6 @@ function useChatConnection(
     clearTimeline,
     dispatch,
     loadTimeline,
-    refreshConversationSnapshot,
     refreshProjectMeta,
     selectRequestIdRef,
     selectedConversationIdRef,

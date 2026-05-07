@@ -24,7 +24,8 @@ import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
 import { ServicesPanel } from "@/modules/settings/components/services-panel"
-import { StoragePanel } from "@/modules/settings/components/storage-panel"
+import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
+import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
@@ -66,7 +67,7 @@ function SettingsModule() {
 
   useEffect(() => {
     return subscribeOpenSettingsStorage(() => {
-      setActiveCategory("storage")
+      setActiveCategory("repositories")
     })
   }, [setActiveCategory])
 
@@ -226,7 +227,7 @@ function SettingsModule() {
             <p className="text-sm text-muted-foreground">请先添加本地目录</p>
             <Button
               variant="outline"
-              onClick={() => setActiveCategory("storage")}
+              onClick={() => setActiveCategory("repositories")}
             >
               前往添加目录
             </Button>
@@ -251,12 +252,12 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
 
-        {isReady && activeCategory === "storage" ? (
-          <StoragePanel
-            projects={config.global.projects}
-            onSaveRepositories={handleSaveRepositories}
-            onSaveProjects={handleSaveProjects}
-          />
+        {isReady && activeCategory === "repositories" ? (
+          <RepositoryListEditor onSave={handleSaveRepositories} />
+        ) : null}
+
+        {isReady && activeCategory === "projects" ? (
+          <ProjectListEditor projects={config.global.projects} onSave={handleSaveProjects} />
         ) : null}
 
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}

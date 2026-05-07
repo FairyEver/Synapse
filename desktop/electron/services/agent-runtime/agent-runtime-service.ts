@@ -185,6 +185,13 @@ export class AgentRuntimeService {
     return this.messageRouter.send(message)
   }
 
+  async sendToConversation(
+    message: AgentMessage,
+    conversationId: string,
+  ): Promise<AgentRuntimeTurnResult> {
+    return this.messageRouter.sendToConversation(message, conversationId)
+  }
+
   async sendNewSession(
     message: AgentMessage,
     name: string,
@@ -209,6 +216,7 @@ export class AgentRuntimeService {
       platform: "scheduled",
       content: input.prompt,
       modeOverride: input.mode,
+      agentType: input.agentType,
     }
 
     const ac = new AbortController()
@@ -231,11 +239,11 @@ export class AgentRuntimeService {
     try {
       let result: AgentRuntimeTurnResult
 
-      if (input.sessionPolicy === "fresh") {
+      if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
         const name = `scheduled-${new Date().toISOString().slice(0, 16)}`
         result = await this.sendNewSession(message, name)
       } else {
-        result = await this.send(message)
+        result = await this.sendToConversation(message, input.lastConversationId)
       }
 
       const timedOut = ac.signal.aborted && !externalSignal?.aborted

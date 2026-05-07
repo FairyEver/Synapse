@@ -6,13 +6,10 @@ import type {
 import type { ActionConfig } from "../../../action-packages/types"
 
 type TaskFormTriggerType = "cron" | "interval"
-type TaskFormScopeType = "global" | "project"
 
 type TaskFormState = {
   name: string
   description: string
-  scopeType: TaskFormScopeType
-  projectId: string
   cwd: string
   enabled: boolean
   triggerType: TaskFormTriggerType
@@ -36,7 +33,6 @@ export type {
   TaskFormDialogState,
   TaskFormMode,
   TaskFormPayload,
-  TaskFormScopeType,
   TaskFormState,
   TaskFormTriggerType,
 }

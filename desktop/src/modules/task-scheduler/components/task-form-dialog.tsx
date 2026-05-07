@@ -130,8 +130,7 @@ function TaskFormDialog({
   const ActionConfigForm = selectedAction.ConfigForm
   const canSubmit = Boolean(
     form.name.trim()
-    && selectedAction.manifest.configSchema.safeParse(form.actionConfig).success
-    && (form.scopeType === "global" || form.projectId),
+    && selectedAction.manifest.configSchema.safeParse(form.actionConfig).success,
   )
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -200,7 +199,7 @@ function TaskFormDialog({
       >
         <div
           data-layout="task-form-dialog-layout"
-          className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 md:grid-cols-[9rem_minmax(0,1fr)] md:grid-rows-1 md:gap-5"
+          className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1 md:grid-cols-[9rem_minmax(0,1fr)] md:grid-rows-1 md:gap-1"
         >
           <aside
             data-layout="task-form-section-sidebar"
@@ -215,7 +214,7 @@ function TaskFormDialog({
           <div
             ref={formScrollRef}
             data-layout="task-form-section-scroll"
-            className="min-h-0 overflow-y-auto pr-1"
+            className="min-h-0 overflow-y-auto pl-[3px] pr-1"
           >
             <FieldGroup data-layout="task-form-section-fields" className="gap-5">
               <TaskFormSection
@@ -225,10 +224,10 @@ function TaskFormDialog({
               >
                 <div
                   data-layout="task-form-basic-grid"
-                  className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(9rem,1fr)_minmax(0,2fr)]"
+                  className="grid gap-3 md:grid-cols-3"
                 >
                   <TaskField
-                    className={form.scopeType === "project" ? undefined : "md:col-span-2"}
+                    className="md:col-span-3"
                     label="名称"
                     htmlFor="task-form-name"
                   >
@@ -238,47 +237,6 @@ function TaskFormDialog({
                       onChange={(event) => updateField("name", event.target.value)}
                     />
                   </TaskField>
-                  <TaskField label="作用域" htmlFor="task-form-scope-global">
-                    <ToggleGroup
-                      aria-label="作用域"
-                      className="w-full"
-                      data-track="task-form-scope"
-                      type="single"
-                      value={form.scopeType}
-                      variant="outline"
-                      onValueChange={(value) => {
-                        if (value) updateField("scopeType", value as TaskFormState["scopeType"])
-                      }}
-                    >
-                      <ToggleGroupItem id="task-form-scope-global" className="flex-1" value="global">
-                        全局
-                      </ToggleGroupItem>
-                      <ToggleGroupItem id="task-form-scope-project" className="flex-1" value="project">
-                        项目
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                  </TaskField>
-                  {form.scopeType === "project" ? (
-                    <TaskField label="项目" htmlFor="task-form-project">
-                      <Select
-                        value={form.projectId}
-                        onValueChange={(value) => updateField("projectId", value)}
-                      >
-                        <SelectTrigger id="task-form-project" className="w-full">
-                          <SelectValue placeholder="选择项目" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {projects.map((project) => (
-                              <SelectItem key={project.id} value={project.id}>
-                                {project.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </TaskField>
-                  ) : null}
 
                   <TaskField className="md:col-span-3" label="描述" htmlFor="task-form-description">
                     <Input
@@ -400,10 +358,13 @@ function TaskFormDialog({
                       <Select
                         value={(form.actionConfig as Record<string, unknown>).projectId as string ?? ""}
                         onValueChange={(projectId) => {
-                          updateField("actionConfig", {
-                            ...form.actionConfig,
-                            projectId,
-                          })
+                          const project = projects.find((p) => p.id === projectId)
+                          const currentConfig = form.actionConfig as Record<string, unknown>
+                          const patch: Record<string, unknown> = { ...currentConfig, projectId }
+                          if (project?.defaultAgentId) {
+                            patch.agentType = project.defaultAgentId
+                          }
+                          updateField("actionConfig", patch)
                         }}
                       >
                         <SelectTrigger id="task-form-agent-project" className="w-full">

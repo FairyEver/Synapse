@@ -34,6 +34,10 @@ export function createAgentAction(deps: {
         }
       }
 
+      const lastConversationId = typeof input.previousOutputs?.conversationId === "string"
+        ? input.previousOutputs.conversationId
+        : undefined
+
       const result = await runtime.sendScheduled({
         projectId: input.config.projectId,
         agentType: input.config.agentType,
@@ -41,6 +45,7 @@ export function createAgentAction(deps: {
         prompt: input.config.prompt,
         sessionPolicy: input.config.sessionPolicy,
         timeoutMs: (input.config.timeoutMins ?? 30) * 60_000,
+        lastConversationId,
         abortSignal: input.context.abortSignal,
       })
 

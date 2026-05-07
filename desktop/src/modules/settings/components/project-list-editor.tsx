@@ -24,9 +24,17 @@ import {
 import { Field, FieldError, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getProjectNameFromPath } from "@/lib/path-utils"
 import { getRendererPlatform } from "@/lib/runtime-platform"
+import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import { FeishuConnectorPanel } from "@/modules/settings/components/feishu-connector-panel"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseFeishuConnectorRuntimeStatus } from "@/types/connectors"
@@ -46,14 +54,17 @@ type ConnectorDialogState = {
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const platform = getRendererPlatform()
+  const { status: agentStatus } = useAgentRuntimeStatus()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [draftName, setDraftName] = useState("")
   const [draftPath, setDraftPath] = useState("")
+  const [draftAgentId, setDraftAgentId] = useState("")
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingProject, setEditingProject] = useState<SynapseProjectConfig | null>(null)
   const [editName, setEditName] = useState("")
   const [editPath, setEditPath] = useState("")
+  const [editAgentId, setEditAgentId] = useState("")
   const [editError, setEditError] = useState<string | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [connectorDialog, setConnectorDialog] = useState<ConnectorDialogState | null>(null)
@@ -64,6 +75,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const resetForm = () => {
     setDraftName("")
     setDraftPath("")
+    setDraftAgentId("")
     setFormError(null)
   }
 
@@ -100,6 +112,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           id: crypto.randomUUID(),
           name: nextName,
           path: nextPath,
+          ...(draftAgentId ? { defaultAgentId: draftAgentId } : {}),
         },
       ])
       logger.info("Project added.", { name: nextName, path: nextPath })
@@ -138,6 +151,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     setEditingProject(project)
     setEditName(project.name)
     setEditPath(project.path)
+    setEditAgentId(project.defaultAgentId ?? "")
     setEditError(null)
   }
 
@@ -167,6 +181,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     setEditingProject(null)
     setEditName("")
     setEditPath("")
+    setEditAgentId("")
     setEditError(null)
   }
 
@@ -223,6 +238,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         ...editingProject,
         name: trimmedName,
         path: trimmedPath,
+        ...(editAgentId ? { defaultAgentId: editAgentId } : { defaultAgentId: undefined }),
       }
 
       const nextProjects = projects.map((project) =>
@@ -234,6 +250,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       setEditingProject(null)
       setEditName("")
       setEditPath("")
+      setEditAgentId("")
     } catch (error) {
       logger.error("Failed to update project.", { error, projectId: editingProject.id })
       setEditError(error instanceof Error ? error.message : "保存失败。")
@@ -254,10 +271,15 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   <span className="min-w-0 truncate">{project.name}</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-1">
                 <p className="text-sm text-muted-foreground break-all">
                   {project.path}
                 </p>
+                {project.defaultAgentId ? (
+                  <p className="text-xs text-muted-foreground">
+                    默认 Agent：{agentStatus?.agents.find((a) => a.id === project.defaultAgentId)?.label ?? project.defaultAgentId}
+                  </p>
+                ) : null}
               </CardContent>
               <CardFooter className="justify-end gap-2">
                 <ProjectConnectorButton
@@ -344,6 +366,30 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                 ) : null}
               </div>
             </Field>
+            <Field>
+              <Label htmlFor="dialog-project-agent">默认 Agent</Label>
+              <Select
+                value={draftAgentId || "__none__"}
+                onValueChange={(v) => setDraftAgentId(v === "__none__" ? "" : v)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="dialog-project-agent">
+                  <SelectValue placeholder="不指定" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">不指定</SelectItem>
+                  {agentStatus?.agents.map((agent) => (
+                    <SelectItem
+                      key={agent.id}
+                      value={agent.id}
+                      disabled={!agent.cli.installed}
+                    >
+                      {agent.label}{!agent.cli.installed ? "（未安装）" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
             <FieldError>{formError}</FieldError>
           </FieldGroup>
           <DialogFooter>
@@ -402,6 +448,30 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   </Button>
                 ) : null}
               </div>
+            </Field>
+            <Field>
+              <Label htmlFor="edit-project-agent">默认 Agent</Label>
+              <Select
+                value={editAgentId || "__none__"}
+                onValueChange={(v) => setEditAgentId(v === "__none__" ? "" : v)}
+                disabled={isSavingEdit}
+              >
+                <SelectTrigger id="edit-project-agent">
+                  <SelectValue placeholder="不指定" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">不指定</SelectItem>
+                  {agentStatus?.agents.map((agent) => (
+                    <SelectItem
+                      key={agent.id}
+                      value={agent.id}
+                      disabled={!agent.cli.installed}
+                    >
+                      {agent.label}{!agent.cli.installed ? "（未安装）" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <FieldError>{editError}</FieldError>
           </FieldGroup>

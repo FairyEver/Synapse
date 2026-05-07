@@ -14,8 +14,6 @@ const DEFAULT_ACTION_TYPE = "builtin.command"
 const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   name: "",
   description: "",
-  scopeType: "global",
-  projectId: "",
   cwd: "",
   enabled: true,
   triggerType: "cron",
@@ -29,21 +27,16 @@ const DEFAULT_TASK_FORM_STATE: TaskFormState = {
 
 function createTaskFormState(
   task?: ScheduledTask,
-  defaultProjectId = "",
+  _defaultProjectId = "",
   _platform?: string,
 ): TaskFormState {
   if (!task) {
-    return {
-      ...DEFAULT_TASK_FORM_STATE,
-      projectId: defaultProjectId,
-    }
+    return { ...DEFAULT_TASK_FORM_STATE }
   }
 
   return {
     name: task.name,
     description: task.description ?? "",
-    scopeType: task.scope.type,
-    projectId: task.scope.type === "project" ? task.scope.projectId : defaultProjectId,
     cwd: task.cwd ?? "",
     enabled: task.enabled,
     triggerType: task.trigger.type === "builtin.cron" ? "cron" : "interval",
@@ -75,12 +68,15 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
   const cwd = optionalTrimmed(form.cwd)
   const actionConfig = rendererActionRegistry.parseConfig(form.actionType, form.actionConfig)
 
+  const projectId = (actionConfig as Record<string, unknown>).projectId
+  const scope = typeof projectId === "string" && projectId.trim()
+    ? { type: "project" as const, projectId: projectId.trim() }
+    : { type: "global" as const }
+
   return {
     name,
     description,
-    scope: form.scopeType === "global"
-      ? { type: "global" }
-      : { type: "project", projectId: requireTrimmed(form.projectId, "项目") },
+    scope,
     cwd,
     trigger: form.triggerType === "cron"
       ? { type: "builtin.cron", config: { expr: requireTrimmed(form.cronExpr, "Cron") } }
@@ -101,10 +97,10 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
 }
 
 function formatTaskScope(task: ScheduledTask, projects: readonly SynapseProjectConfig[]): string {
-  if (task.scope.type === "global") {
-    return "全局"
-  }
-  const { projectId } = task.scope
+  const projectId = task.scope.type === "project"
+    ? task.scope.projectId
+    : (task.action.config as Record<string, unknown>).projectId as string | undefined
+  if (!projectId) return "全局"
   return projects.find((project) => project.id === projectId)?.name ?? projectId
 }
 

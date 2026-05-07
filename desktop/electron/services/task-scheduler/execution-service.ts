@@ -10,7 +10,7 @@ import type {
 
 export interface TaskSchedulerExecutionServiceDeps {
   readonly tasks: Pick<ScheduledTaskRepository, "markRunResult">
-  readonly runs: Pick<ScheduledTaskRunRepository, "start" | "finish">
+  readonly runs: Pick<ScheduledTaskRunRepository, "start" | "finish" | "listByTask">
   readonly actions: MainActionRegistry
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
@@ -72,7 +72,8 @@ export class TaskSchedulerExecutionService {
           triggeredBy,
         },
       })
-      const result = await action.execute({ config, context })
+      const previousOutputs = await this.getLastSuccessOutputs(task.id)
+      const result = await action.execute({ config, context, previousOutputs })
       if (result.status !== "success") {
         this.deps.auditSink.record({
           action: permissionRequest.action,
@@ -121,6 +122,12 @@ export class TaskSchedulerExecutionService {
     if (!controller) return false
     controller.abort()
     return true
+  }
+
+  private async getLastSuccessOutputs(taskId: string): Promise<Record<string, unknown> | undefined> {
+    const runs = await this.deps.runs.listByTask(taskId, { limit: 10 })
+    const lastSuccess = runs.find((r) => r.status === "success" && r.result?.outputs)
+    return lastSuccess?.result?.outputs
   }
 }
 
