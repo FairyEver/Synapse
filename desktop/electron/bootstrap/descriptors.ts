@@ -144,10 +144,22 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     return createBuiltinMainActionRegistry({
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-      getAgentRuntime: (projectId) => {
+      getAgentRuntime: async (projectId) => {
         const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
-        const container = containers.peek(projectId)
-        if (!container) return undefined
+        const existing = containers.peek(projectId)
+        if (existing) {
+          return existing.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+        }
+        const config = await configStore.load()
+        const repo = config.repositories.find((r) => r.uuid === projectId)
+        const proj = !repo ? config.global.projects.find((p) => p.id === projectId) : undefined
+        const meta = repo
+          ? { name: repo.name, workspacePath: repo.localPath }
+          : proj
+            ? { name: proj.name, workspacePath: proj.path }
+            : undefined
+        if (!meta) return undefined
+        const container = await containers.open(projectId, meta)
         return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
       },
     })

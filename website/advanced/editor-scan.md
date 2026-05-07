@@ -22,7 +22,7 @@ Editor Scan 扫描已注册编辑器的全局和项目级 Skill / Rule，并按�
 
 ## 注意事项
 
-Skill 主文件优先按 `SKILL.md`、`skill.md`、`README.md`、`readme.md`、`index.md` 查找。目录中带 `.synapse.json` 且包含内容 ID 的 Skill 标记为 Synapse 来源，否则标记为外部来源。
+Skill 主文件优先按 `SKILL.md`、`skill.md`、`README.md`、`readme.md`、`index.md` 查找。目录中带 `.synapse.json` 且包含内容 ID 的 Skill 标记为 Synapse AI Studio 来源，否则标记为外部来源。
 
 Quick Publish 读取 Skill 附件时跳过隐藏文件、主说明文件、`.synapse.json` 和符号链接。单个附件超过 10MB、附件总大小超过 50MB、附件数量超过 200 个，或附件名属于敏感密钥文件时，导入草稿将失败。
 

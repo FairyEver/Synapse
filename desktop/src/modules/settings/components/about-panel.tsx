@@ -247,14 +247,14 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
         <img
           src={synapseLogo}
-          alt="Synapse"
+          alt="Synapse AI Studio"
           draggable={false}
           onClick={handleLogoClick}
           className="size-24 shrink-0 cursor-pointer object-contain select-none"
           title={isAdminMode ? "管理员模式已开启" : undefined}
         />
         <div className="flex flex-col items-center gap-0.5">
-          <h1 className="text-lg font-semibold tracking-tight">Synapse</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Synapse AI Studio</h1>
           <p className="text-xs tracking-wide text-muted-foreground/70">Where Ideas Connect.</p>
         </div>
       </div>

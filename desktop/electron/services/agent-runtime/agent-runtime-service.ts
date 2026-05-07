@@ -243,7 +243,15 @@ export class AgentRuntimeService {
         const name = `scheduled-${new Date().toISOString().slice(0, 16)}`
         result = await this.sendNewSession(message, name)
       } else {
-        result = await this.sendToConversation(message, input.lastConversationId)
+        try {
+          result = await this.sendToConversation(message, input.lastConversationId)
+        } catch (resumeError) {
+          const isNotFound = resumeError instanceof Error
+            && resumeError.message.includes("not found")
+          if (!isNotFound) throw resumeError
+          const name = `scheduled-${new Date().toISOString().slice(0, 16)}`
+          result = await this.sendNewSession(message, name)
+        }
       }
 
       const timedOut = ac.signal.aborted && !externalSignal?.aborted

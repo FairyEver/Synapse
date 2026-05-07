@@ -10,7 +10,7 @@ export function createBuiltinMainActionRegistry(deps: {
   readonly processRunner: Pick<ControlledProcessRunner, "run">
   readonly platform?: NodeJS.Platform
   readonly baseEnv?: NodeJS.ProcessEnv
-  readonly getAgentRuntime?: (projectId: string) => AgentRuntimeService | undefined
+  readonly getAgentRuntime?: (projectId: string) => Promise<AgentRuntimeService | undefined>
 }): MainActionRegistry {
   const registry = new MainActionRegistry()
   registry.register(createCommandAction(deps))

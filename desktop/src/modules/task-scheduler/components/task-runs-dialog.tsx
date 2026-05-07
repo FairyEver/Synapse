@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Square } from "lucide-react"
+import { Clock, Play, RotateCcw, Square } from "lucide-react"
 
 import { ActionResultView } from "@/action-runtime/action-result-view"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
 import type { ScheduledTask, ScheduledTaskRun } from "@/types/task-scheduler"
 import { formatRunStatus, formatTaskDate } from "../utils"
 import { listRuns } from "../hooks/use-task-scheduler"
@@ -76,14 +77,14 @@ function TaskRunsDialog({
 
   return (
     <Dialog data-track="task-scheduler-runs-dialog" open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden sm:max-w-3xl">
+      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{task?.name ?? "运行历史"}</DialogTitle>
-          <DialogDescription>最近 100 次运行。</DialogDescription>
+          <DialogDescription>最近 100 次运行记录</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="min-h-0">
-          <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-3 pr-3">
+          <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-2 pr-3">
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
             {!loading && runs.length === 0 ? (
@@ -91,42 +92,7 @@ function TaskRunsDialog({
             ) : null}
 
             {runs.map((run) => (
-              <div key={run.id} className="grid gap-3 rounded-lg border border-border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid gap-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"}>
-                        {formatRunStatus(run)}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {run.triggeredBy === "manual" ? "手动" : run.triggeredBy === "missed_run" ? "补跑" : "计划"}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {formatTaskDate(run.startedAt, "未开始")}
-                      {run.finishedAt ? ` - ${formatTaskDate(run.finishedAt, "")}` : ""}
-                    </p>
-                  </div>
-                  {run.status === "running" ? (
-                    <Button
-                      disabled={busy}
-                      size="icon-sm"
-                      variant="outline"
-                      onClick={() => {
-                        void handleStop(run.id)
-                      }}
-                    >
-                      <Square />
-                      <span className="sr-only">停止</span>
-                    </Button>
-                  ) : null}
-                </div>
-
-                {run.result ? (
-                  <RunResult task={task} result={run.result} />
-                ) : null}
-                {run.error && !run.result?.error ? <OutputBlock label="错误" value={run.error} /> : null}
-              </div>
+              <RunItem key={run.id} run={run} task={task} busy={busy} onStop={handleStop} />
             ))}
           </div>
         </ScrollArea>
@@ -134,6 +100,76 @@ function TaskRunsDialog({
         <DialogFooter showCloseButton />
       </DialogContent>
     </Dialog>
+  )
+}
+
+function RunItem({
+  run,
+  task,
+  busy,
+  onStop,
+}: {
+  readonly run: ScheduledTaskRun
+  readonly task: ScheduledTask | null
+  readonly busy: boolean
+  readonly onStop: (runId: string) => void
+}) {
+  const hasOutput = run.result || (run.error && !run.result?.error)
+  const statusVariant = run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"
+  const triggerIcon = run.triggeredBy === "manual"
+    ? <Play className="size-3" />
+    : run.triggeredBy === "missed_run"
+      ? <RotateCcw className="size-3" />
+      : <Clock className="size-3" />
+  const triggerLabel = run.triggeredBy === "manual" ? "手动" : run.triggeredBy === "missed_run" ? "补跑" : "计划"
+
+  return (
+    <div className="min-w-0 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge variant={statusVariant}>{formatRunStatus(run)}</Badge>
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            {triggerIcon}
+            {triggerLabel}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {run.result?.metrics?.durationMs !== undefined ? (
+            <span className="text-xs text-muted-foreground">
+              {formatDuration(run.result.metrics.durationMs)}
+            </span>
+          ) : null}
+          {run.status === "running" ? (
+            <Button
+              disabled={busy}
+              size="icon-sm"
+              variant="outline"
+              onClick={() => { onStop(run.id) }}
+            >
+              <Square />
+              <span className="sr-only">停止</span>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="mt-1 text-xs text-muted-foreground">
+        {formatTaskDate(run.startedAt, "未开始")}
+        {run.finishedAt ? ` → ${formatTaskDate(run.finishedAt, "")}` : ""}
+      </p>
+
+      {hasOutput ? (
+        <>
+          <Separator className="my-2" />
+          <div className="min-w-0 overflow-hidden">
+            {run.result ? (
+              <RunResult task={task} result={run.result} />
+            ) : null}
+            {run.error && !run.result?.error ? <OutputBlock value={run.error} /> : null}
+          </div>
+        </>
+      ) : null}
+    </div>
   )
 }
 
@@ -156,13 +192,20 @@ function RunResult({
   return <ActionResultView result={result} />
 }
 
-function OutputBlock({ label, value }: { label: string; value: string }) {
+function OutputBlock({ value }: { readonly value: string }) {
   return (
-    <div className="grid gap-2">
-      <p className="text-sm font-medium">{label}</p>
-      <pre className="max-h-48 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap">{value}</pre>
-    </div>
+    <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2.5 text-xs break-all whitespace-pre-wrap">
+      {value}
+    </pre>
   )
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  const mins = Math.floor(ms / 60_000)
+  const secs = Math.round((ms % 60_000) / 1000)
+  return secs > 0 ? `${mins}m${secs}s` : `${mins}m`
 }
 
 export { TaskRunsDialog }

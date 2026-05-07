@@ -40,7 +40,7 @@ Skill 支持下载到本地。下载时打开保存对话框，默认文件名�
 
 Skill 支持安装到编辑器。安装流程需先选择编辑器，再选择全局或项目范围；项目范围可从已配置项目中选择，也可浏览其他目录。
 
-安装时，Synapse 写入一个 Skill 目录。目录中包含 `SKILL.md`、Synapse 记录用的 ID 文件和全部附件。`SKILL.md` 包含 Skill 名称和简介的 frontmatter，以及主说明正文。
+安装时，Synapse AI Studio 写入一个 Skill 目录。目录中包含 `SKILL.md`、Synapse AI Studio 记录用的 ID 文件和全部附件。`SKILL.md` 包含 Skill 名称和简介的 frontmatter，以及主说明正文。
 
 不同编辑器的目标目录由当前编辑器定义决定：
 

@@ -4,7 +4,7 @@ import { agentActionManifest } from "./manifest"
 import type { AgentActionConfig } from "./schema"
 
 export function createAgentAction(deps: {
-  readonly getAgentRuntime: (projectId: string) => AgentRuntimeService | undefined
+  readonly getAgentRuntime: (projectId: string) => Promise<AgentRuntimeService | undefined>
 }): MainActionDefinition<AgentActionConfig> {
   return {
     manifest: agentActionManifest,
@@ -25,7 +25,7 @@ export function createAgentAction(deps: {
       },
     }),
     async execute(input) {
-      const runtime = deps.getAgentRuntime(input.config.projectId)
+      const runtime = await deps.getAgentRuntime(input.config.projectId)
       if (!runtime) {
         return {
           status: "failed",

@@ -292,7 +292,6 @@ function useChatConnection(
         dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.some((item) => isSameSession(item, session))
           ? current
           : sortSessions([{ ...session, active: false }, ...current]) })
-        toast("新会话已创建")
         return
       }
       setSelectedSession(session)
@@ -305,7 +304,6 @@ function useChatConnection(
       ]) })
       dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, session.projectId, session.id) })
       clearTimeline()
-      toast("新会话已创建")
       await refresh()
     } catch (rawError) {
       if (requestId !== selectRequestIdRef.current) {

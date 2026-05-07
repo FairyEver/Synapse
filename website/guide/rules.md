@@ -41,7 +41,7 @@ Rule 支持安装到编辑器。安装流程需先选择编辑器，再选择全
 | Cursor | 不支持全局 Rule 安装 | `{projectPath}/.cursor/rules/{name}.mdc` |
 | Windsurf | `~/.codeium/windsurf/memories/global_rules.md` | `{projectPath}/.windsurf/rules/{name}.md` |
 
-Codex 和 Windsurf 的全局 Rule 写入同一规则文件中的 Synapse 标记区块。Claude Code、Cursor 和 Windsurf 的项目 Rule 写入独立文件。
+Codex 和 Windsurf 的全局 Rule 写入同一规则文件中的 Synapse AI Studio 标记区块。Claude Code、Cursor 和 Windsurf 的项目 Rule 写入独立文件。
 
 项目安装时，部分编辑器要求填写规则元数据：Claude Code 可填写 `paths`，Cursor 可填写 `description`、`globs` 和 `alwaysApply`，Windsurf 可选择 `trigger` 并按模式填写 `description` 或 `globs`。
 

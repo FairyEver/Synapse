@@ -262,7 +262,7 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
         closeButton
         containerAriaLabel="消息提示"
         duration={DEFAULT_NOTIFICATION_DURATION_MS}
-        position="top-right"
+        position="bottom-center"
         visibleToasts={4}
       />
     </AppNotificationsContext.Provider>

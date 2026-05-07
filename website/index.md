@@ -2,12 +2,12 @@
 layout: home
 
 hero:
-  name: Synapse
+  name: Synapse AI Studio
   text: 跨编辑器 AI 能力管理工具
   tagline: 集中管理 Rule、Skill 与 Prompt，一键安装到 Claude Code、Cursor、Codex 等编辑器。
   image:
     src: /icon.png
-    alt: Synapse
+    alt: Synapse AI Studio
   actions:
     - theme: brand
       text: 快速开始

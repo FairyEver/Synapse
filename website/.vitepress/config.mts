@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   lang: 'zh-CN',
-  title: 'Synapse',
+  title: 'Synapse AI Studio',
   description: 'Where Ideas Connect - 跨编辑器 Rule、Skill 与本地工作流管理工具',
 
   lastUpdated: true,
@@ -84,7 +84,7 @@ export default defineConfig({
 
     footer: {
       message: 'Where Ideas Connect',
-      copyright: `Copyright © ${new Date().getFullYear()} Synapse`
+      copyright: `Copyright © ${new Date().getFullYear()} Synapse AI Studio`
     },
 
     outline: {

@@ -6,7 +6,7 @@
 
 安装包统一在 GitHub Releases 发布：
 
-- [Synapse Releases](https://github.com/FairyEver/SynapseAppRelease/releases)
+- [Synapse AI Studio Releases](https://github.com/FairyEver/SynapseAppRelease/releases)
 
 选择最新版本，根据操作系统下载对应安装包：
 
@@ -18,7 +18,7 @@
 ## macOS
 
 1. 双击 `.dmg` 文件。
-2. 将 Synapse 拖入 Applications 文件夹。
+2. 将 Synapse AI Studio 拖入 Applications 文件夹。
 3. 从 Launchpad 或 Applications 启动。
 
 如遇“无法打开，因为来自身份不明的开发者”提示，前往 **系统设置 → 隐私与安全性** 选择“仍要打开”。

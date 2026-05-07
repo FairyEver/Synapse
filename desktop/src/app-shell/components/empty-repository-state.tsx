@@ -374,10 +374,10 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
         >
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
-              <img src={appIcon} alt="Synapse" className="size-16 object-contain select-none" draggable={false} />
+              <img src={appIcon} alt="Synapse AI Studio" className="size-16 object-contain select-none" draggable={false} />
             </div>
             <h1 className="text-xl font-semibold tracking-tight">
-              {isFirstTime ? "欢迎使用 Synapse" : "当前仓库不可用"}
+              {isFirstTime ? "欢迎使用 Synapse AI Studio" : "当前仓库不可用"}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               {isFirstTime
