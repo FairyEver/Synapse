@@ -1,13 +1,9 @@
 import { useState, type ReactNode } from "react"
 import {
   Download,
-  History,
   LoaderCircle,
-  Pencil,
-  Play,
   Plus,
   RefreshCw,
-  Trash2,
   Upload,
 } from "lucide-react"
 
@@ -15,7 +11,6 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { getRendererPlatform } from "@/lib/runtime-platform"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -28,23 +23,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import { Switch } from "@/components/ui/switch"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -53,9 +31,9 @@ import {
 import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
-  ScheduledTaskStatus,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
+import { TaskCardGrid } from "./components/task-card-grid"
 import { TaskFormDialog } from "./components/task-form-dialog"
 import { TaskExportDialog } from "./components/task-export-dialog"
 import { TaskImportDialog } from "./components/task-import-dialog"
@@ -73,11 +51,6 @@ import {
   useTaskSchedulerTasks,
 } from "./hooks/use-task-scheduler"
 import {
-  formatTaskAction,
-  formatTaskDate,
-  formatTaskScope,
-  formatTaskStatus,
-  formatTaskTrigger,
   parseTaskImportFile,
   serializeTasksForExport,
 } from "./utils"
@@ -266,117 +239,43 @@ function TaskSchedulerModule() {
               加载中
             </div>
           ) : null}
-          {!loading && tasks.length === 0 ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <History />
-                </EmptyMedia>
-                <EmptyTitle>暂无任务</EmptyTitle>
-                <EmptyDescription>新建任务后会按计划执行。</EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button
-                  onClick={() => {
-                    setFormState({ mode: "create" })
-                    setIsFormOpen(true)
-                  }}
-                >
-                  <Plus />
-                  新建任务
-                </Button>
-              </EmptyContent>
-            </Empty>
-          ) : null}
-
-          {tasks.length > 0 ? (
-            <div className="overflow-x-auto rounded-lg bg-background">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>名称</TableHead>
-                    <TableHead>作用域</TableHead>
-                    <TableHead>触发</TableHead>
-                    <TableHead>动作</TableHead>
-                    <TableHead>上次</TableHead>
-                    <TableHead>下次</TableHead>
-                    <TableHead className="sticky right-48 w-16 bg-background after:absolute after:inset-y-0 after:-left-px after:w-px after:bg-border">状态</TableHead>
-                    <TableHead className="sticky right-36 w-12 bg-background">启用</TableHead>
-                    <TableHead className="sticky right-0 w-36 bg-background text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tasks.map((task) => (
-                    <TableRow key={task.id}>
-                      <TableCell className="font-medium">{task.name}</TableCell>
-                      <TableCell>{formatTaskScope(task, config.global.projects)}</TableCell>
-                      <TableCell>{formatTaskTrigger(task)}</TableCell>
-                      <TableCell>{formatTaskAction(task)}</TableCell>
-                      <TableCell>{formatTaskDate(task.lastRunAt, "未运行")}</TableCell>
-                      <TableCell>{formatTaskDate(task.nextRunAt, "未排期")}</TableCell>
-                      <TableCell className="sticky right-48 w-16 bg-background after:absolute after:inset-y-0 after:-left-px after:w-px after:bg-border">
-                        <StatusBadge status={task.lastStatus} />
-                      </TableCell>
-                      <TableCell className="sticky right-36 w-12 bg-background">
-                        <Switch
-                          checked={task.enabled}
-                          disabled={busy}
-                          size="sm"
-                          onCheckedChange={(enabled) => {
-                            void runMutation(
-                              () => setTaskEnabled(task.id, enabled),
-                              {
-                                loading: enabled ? "正在启用任务..." : "正在停用任务...",
-                                success: enabled ? "任务已启用。" : "任务已停用。",
-                                error: "更新任务失败。",
-                              },
-                            )
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell className="sticky right-0 w-36 bg-background">
-                        <div className="flex justify-end gap-1">
-                          <IconButton
-                            disabled={busy}
-                            label="运行"
-                            onClick={() => {
-                              void runMutation(
-                                () => runTask(task.id),
-                                { loading: "正在启动任务...", success: "任务已启动。", error: "启动任务失败。" },
-                              )
-                            }}
-                          >
-                            <Play />
-                          </IconButton>
-                          <IconButton
-                            label="历史"
-                            onClick={() => setHistoryTask(task)}
-                          >
-                            <History />
-                          </IconButton>
-                          <IconButton
-                            label="编辑"
-                            onClick={() => {
-                              setFormState({ mode: "edit", task })
-                              setIsFormOpen(true)
-                            }}
-                          >
-                            <Pencil />
-                          </IconButton>
-                          <IconButton
-                            disabled={busy}
-                            label="删除"
-                            onClick={() => setDeleteTarget(task)}
-                          >
-                            <Trash2 />
-                          </IconButton>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+          {!loading && !error ? (
+            <TaskCardGrid
+              busy={busy}
+              tasks={tasks}
+              onCreateNew={() => {
+                setFormState({ mode: "create" })
+                setIsFormOpen(true)
+              }}
+              onDelete={(task) => setDeleteTarget(task)}
+              onEdit={(task) => {
+                setFormState({ mode: "edit", task })
+                setIsFormOpen(true)
+              }}
+              onHistory={(task) => setHistoryTask(task)}
+              onRun={(task) => {
+                void runMutation(
+                  () => runTask(task.id),
+                  { loading: "正在启动任务...", success: "任务已启动。", error: "启动任务失败。" },
+                )
+              }}
+              onStop={(task) => {
+                void runMutation(
+                  () => stopRun(task.id),
+                  { loading: "正在停止运行...", success: "运行已停止。", error: "停止运行失败。" },
+                )
+              }}
+              onToggleEnabled={(task, enabled) => {
+                void runMutation(
+                  () => setTaskEnabled(task.id, enabled),
+                  {
+                    loading: enabled ? "正在启用任务..." : "正在停用任务...",
+                    success: enabled ? "任务已启用。" : "任务已停用。",
+                    error: "更新任务失败。",
+                  },
+                )
+              }}
+            />
           ) : null}
         </div>
 
@@ -446,16 +345,6 @@ function TaskSchedulerModule() {
       </div>
     </TooltipProvider>
   )
-}
-
-function StatusBadge({ status }: { status: ScheduledTaskStatus | undefined }) {
-  if (status === "failed" || status === "timeout") {
-    return <Badge variant="destructive">{formatTaskStatus(status)}</Badge>
-  }
-  if (status === "success") {
-    return <Badge>{formatTaskStatus(status)}</Badge>
-  }
-  return <Badge variant="secondary">{formatTaskStatus(status)}</Badge>
 }
 
 function IconButton({
