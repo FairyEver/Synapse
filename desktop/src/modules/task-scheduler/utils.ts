@@ -7,7 +7,7 @@ import type {
 } from "@/types/task-scheduler"
 import type { SynapseProjectConfig } from "@/types/config"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
-import type { TaskFormState } from "./types"
+import type { TaskExportFile, TaskFormState } from "./types"
 
 const DEFAULT_ACTION_TYPE = "builtin.command"
 
@@ -104,7 +104,7 @@ function formatTaskScope(task: ScheduledTask, projects: readonly SynapseProjectC
   return projects.find((project) => project.id === projectId)?.name ?? projectId
 }
 
-function formatTaskTrigger(task: ScheduledTask): string {
+function formatTaskTrigger(task: Pick<ScheduledTask, "trigger">): string {
   if (task.trigger.type === "builtin.cron") {
     return `Cron · ${task.trigger.config.expr}`
   }
@@ -170,6 +170,36 @@ function readPositiveInteger(value: string, label: string): number {
   return numberValue
 }
 
+function serializeTasksForExport(tasks: ScheduledTask[]): TaskExportFile {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    tasks: tasks.map((task) => ({
+      name: task.name,
+      description: task.description,
+      scope: task.scope,
+      cwd: task.cwd,
+      trigger: task.trigger,
+      action: task.action,
+      missedRunPolicy: task.missedRunPolicy,
+    })),
+  }
+}
+
+function parseTaskImportFile(content: string): TaskExportFile {
+  const data = JSON.parse(content) as unknown
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("version" in data) ||
+    !("tasks" in data) ||
+    !Array.isArray((data as { tasks: unknown }).tasks)
+  ) {
+    throw new Error("文件格式无效")
+  }
+  return data as TaskExportFile
+}
+
 export {
   DEFAULT_TASK_FORM_STATE,
   buildTaskCreateInput,
@@ -181,4 +211,6 @@ export {
   formatTaskScope,
   formatTaskStatus,
   formatTaskTrigger,
+  parseTaskImportFile,
+  serializeTasksForExport,
 }

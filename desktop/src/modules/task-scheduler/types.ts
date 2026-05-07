@@ -1,6 +1,9 @@
 import type {
   ScheduledTask,
+  ScheduledTaskActionRef,
   ScheduledTaskCreateInput,
+  ScheduledTaskScope,
+  ScheduledTaskTrigger,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 import type { ActionConfig } from "../../../action-packages/types"
@@ -29,7 +32,25 @@ type TaskFormDialogState =
   | { mode: "create"; task?: undefined }
   | { mode: "edit"; task: ScheduledTask }
 
+type TaskExportEntry = {
+  name: string
+  description?: string
+  scope: ScheduledTaskScope
+  cwd?: string
+  trigger: ScheduledTaskTrigger
+  action: ScheduledTaskActionRef
+  missedRunPolicy: "skip" | "run_once"
+}
+
+type TaskExportFile = {
+  version: 1
+  exportedAt: string
+  tasks: TaskExportEntry[]
+}
+
 export type {
+  TaskExportEntry,
+  TaskExportFile,
   TaskFormDialogState,
   TaskFormMode,
   TaskFormPayload,
