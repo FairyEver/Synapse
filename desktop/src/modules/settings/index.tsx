@@ -181,7 +181,7 @@ function SettingsModule() {
 
   return (
     <SidebarContentLayout
-      contentClassName="bg-muted/30 p-4"
+      contentClassName="bg-surface p-4"
       sidebar={
         <SettingsCategorySidebar
           categories={visibleCategories}

@@ -188,7 +188,7 @@ function TaskSchedulerModule() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full min-h-0 flex-col gap-2.5 bg-muted/30 px-2 py-2.5">
+      <div className="flex h-full min-h-0 flex-col gap-2.5 bg-surface px-2 py-2.5">
         <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-2">
             <IconButton
@@ -224,7 +224,7 @@ function TaskSchedulerModule() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto p-0.5">
           {error ? (
             <div className="flex items-center gap-3 p-4">
               <p className="text-sm text-destructive">{error}</p>

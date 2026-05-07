@@ -348,7 +348,7 @@ function ContentBrowserPage({
   return (
     <>
       <SidebarContentLayout
-        contentClassName="bg-muted/30"
+        contentClassName="bg-surface"
         sidebar={
           <ContentFilterSidebar
             activeCategoryId={activeCategoryId}

@@ -413,7 +413,7 @@ function DatabaseModule() {
   }
 
   return (
-    <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
+    <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
       {loadError ? (
         <div className="flex h-full flex-col">
           <div className="flex flex-1 items-center justify-center">

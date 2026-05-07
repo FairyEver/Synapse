@@ -163,7 +163,7 @@ function EditorScanModule() {
   }
 
   return (
-    <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
+    <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
       <div className="flex h-full flex-col gap-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
