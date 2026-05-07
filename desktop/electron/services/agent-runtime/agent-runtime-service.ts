@@ -55,6 +55,8 @@ import type {
   AgentPermissionResponseRequest,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
+  ScheduledAgentSendInput,
+  ScheduledAgentSendResult,
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
 
@@ -196,6 +198,77 @@ export class AgentRuntimeService {
     timeoutMs: number,
   ): Promise<AgentRuntimeRelayResult> {
     return this.messageRouter.sendSideSessionWithTimeout(message, name, timeoutMs)
+  }
+
+  async sendScheduled(input: ScheduledAgentSendInput): Promise<ScheduledAgentSendResult> {
+    const startMs = Date.now()
+    const sessionKey = `scheduled:${input.projectId}:${Date.now()}`
+    const message: AgentMessage = {
+      projectId: input.projectId,
+      sessionKey,
+      platform: "scheduled",
+      content: input.prompt,
+      modeOverride: input.mode,
+    }
+
+    const ac = new AbortController()
+    const externalSignal = input.abortSignal
+
+    if (externalSignal?.aborted) {
+      return {
+        conversationId: "",
+        status: "error",
+        error: "Aborted before execution",
+        durationMs: Date.now() - startMs,
+      }
+    }
+
+    const onExternalAbort = () => ac.abort()
+    externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
+
+    const timeout = setTimeout(() => ac.abort(), input.timeoutMs)
+
+    try {
+      let result: AgentRuntimeTurnResult
+
+      if (input.sessionPolicy === "fresh") {
+        const name = `scheduled-${new Date().toISOString().slice(0, 16)}`
+        result = await this.sendNewSession(message, name)
+      } else {
+        result = await this.send(message)
+      }
+
+      const timedOut = ac.signal.aborted && !externalSignal?.aborted
+      if (timedOut) {
+        return {
+          conversationId: result.conversationId,
+          status: "timeout",
+          error: `Execution exceeded ${input.timeoutMs}ms timeout`,
+          durationMs: Date.now() - startMs,
+        }
+      }
+
+      return {
+        conversationId: result.conversationId,
+        status: result.error ? "error" : "success",
+        summary: result.resultText || undefined,
+        error: result.error,
+        durationMs: Date.now() - startMs,
+      }
+    } catch (error) {
+      const isTimeout = ac.signal.aborted && !externalSignal?.aborted
+      return {
+        conversationId: "",
+        status: isTimeout ? "timeout" : "error",
+        error: isTimeout
+          ? `Execution exceeded ${input.timeoutMs}ms timeout`
+          : error instanceof Error ? error.message : String(error),
+        durationMs: Date.now() - startMs,
+      }
+    } finally {
+      clearTimeout(timeout)
+      externalSignal?.removeEventListener("abort", onExternalAbort)
+    }
   }
 
   listPendingPermissions(): readonly AgentPendingPermission[] {

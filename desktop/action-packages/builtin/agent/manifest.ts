@@ -4,7 +4,7 @@ import { agentActionConfigSchema, type AgentActionConfig } from "./schema"
 export const agentActionManifest = {
   id: "builtin.agent",
   title: "Agent",
-  permissions: ["agent.execute"],
+  permissions: ["agent.spawn"],
   defaultConfig: {
     projectId: "",
     agentType: "claude-code",

@@ -202,3 +202,22 @@ export interface AgentRuntimeRelayResult extends AgentRuntimeTurnResult {
   readonly timedOut: boolean
   readonly partialText?: string
 }
+
+export type ScheduledAgentSendInput = {
+  readonly projectId: string
+  readonly agentType: string
+  readonly mode: string
+  readonly prompt: string
+  readonly sessionPolicy: "fresh" | "resume"
+  readonly timeoutMs: number
+  readonly lastConversationId?: string
+  readonly abortSignal?: AbortSignal
+}
+
+export type ScheduledAgentSendResult = {
+  readonly conversationId: string
+  readonly status: "success" | "error" | "timeout"
+  readonly summary?: string
+  readonly error?: string
+  readonly durationMs: number
+}
