@@ -114,7 +114,7 @@ function RunItem({
   readonly busy: boolean
   readonly onStop: (runId: string) => void
 }) {
-  const hasOutput = run.result || (run.error && !run.result?.error)
+  const hasOutput = run.result || run.error
   const statusVariant = run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"
   const triggerIcon = run.triggeredBy === "manual"
     ? <Play className="size-3" />

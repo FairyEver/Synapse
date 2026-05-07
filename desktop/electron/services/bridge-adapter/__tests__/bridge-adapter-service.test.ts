@@ -500,6 +500,7 @@ function fakeProjectContainers(agent: FakeAgentRuntime) {
       inspect: () => [],
       dispose: async () => {},
     }),
+    peek: () => undefined,
     close: async () => {},
     list: () => [],
     registerService: () => {},

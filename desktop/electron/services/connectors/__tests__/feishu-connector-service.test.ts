@@ -438,6 +438,7 @@ function fakeProjectContainers(agent: FakeAgentRuntime): ProjectContainerRegistr
   }
   return {
     open: async () => container,
+    peek: () => undefined,
     close: async () => {},
     list: () => [],
     registerService: () => {},

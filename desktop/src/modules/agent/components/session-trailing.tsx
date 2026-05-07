@@ -37,7 +37,7 @@ function SessionTrailing({
   readonly onDelete: () => void
 }) {
   const [armed, setArmed] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {

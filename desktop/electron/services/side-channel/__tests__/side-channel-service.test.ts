@@ -203,6 +203,7 @@ function fakeProjectContainers() {
       dispose: async () => {},
       projectId: "project-1",
     }),
+    peek: () => undefined,
     close: async () => {},
     list: () => [],
     registerService: () => {},
