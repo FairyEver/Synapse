@@ -25,11 +25,26 @@ import {
   isChoiceKind,
   isColumnKind,
   isDateKind,
-  isJsonSerializedKind,
   isMultiChoiceKind,
   isTimestampKind,
   kindToAffinity,
 } from "./column-kind"
+import {
+  type ColumnMetaMap,
+  convertWriteValue,
+  getBooleanColumns,
+  getChoiceColumns,
+  getDateColumns,
+  getJsonColumns,
+  getMultiChoiceColumns,
+  getNumericColumns,
+  getTimestampColumns,
+  parseReadRow,
+  toBooleanInt,
+  toSqlValue,
+  validateDateString,
+  validateTimestampString,
+} from "./type-coercion"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("database.service")
@@ -38,8 +53,6 @@ const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 const RESERVED_PREFIX = "_"
 const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"])
 const VALID_ORDER_DIRS = new Set(["ASC", "DESC"])
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/
 const TABLE_EXPORT_FORMAT = "synapse-table-sql"
 const TABLE_EXPORT_VERSION = 1
 const TABLE_EXPORT_BEGIN_MARKER = "-- synapse-table-export-b64"
@@ -356,43 +369,6 @@ function assertTableExportPayload(value: unknown): TableExportPayload {
   return value as TableExportPayload
 }
 
-function toSqlValue(v: unknown): SQLInputValue {
-  if (v === null || v === undefined) return null
-  if (typeof v === "number" || typeof v === "bigint" || typeof v === "string") return v
-  if (ArrayBuffer.isView(v)) return v as NodeJS.ArrayBufferView
-  return String(v)
-}
-
-const INTEGER_WRITE_PATTERN = /^-?\d+$/
-const DECIMAL_WRITE_PATTERN = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i
-
-function toIntegerSqlValue(column: string, value: unknown): SQLInputValue {
-  if (typeof value === "bigint") return value
-  if (typeof value === "number" && Number.isFinite(value) && Number.isInteger(value)) return value
-  if (typeof value === "string") {
-    const trimmed = value.trim()
-    if (INTEGER_WRITE_PATTERN.test(trimmed)) {
-      const numeric = Number(trimmed)
-      return Number.isSafeInteger(numeric) ? numeric : BigInt(trimmed)
-    }
-  }
-
-  throw new Error(`Column "${column}" expects an integer value`)
-}
-
-function toDecimalSqlValue(column: string, value: unknown): SQLInputValue {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value === "string") {
-    const trimmed = value.trim()
-    if (DECIMAL_WRITE_PATTERN.test(trimmed)) {
-      const numeric = Number(trimmed)
-      if (Number.isFinite(numeric)) return numeric
-    }
-  }
-
-  throw new Error(`Column "${column}" expects a decimal value`)
-}
-
 function toNumber(v: number | bigint): number {
   return typeof v === "bigint" ? Number(v) : v
 }
@@ -404,39 +380,10 @@ function formatSqlDefault(v: SQLInputValue): string {
   throw new Error("Default value for binary columns is not supported")
 }
 
-function toBooleanInt(v: unknown): number {
-  if (v === true) return 1
-  if (v === false) return 0
-  throw new Error(`Invalid boolean value: ${JSON.stringify(v)}. Expected true or false`)
-}
-
-function validateDateString(v: unknown): string {
-  if (v === null || v === undefined) return ""
-  const s = String(v)
-  if (!DATE_PATTERN.test(s)) {
-    throw new Error(`Invalid date format: "${s}". Expected YYYY-MM-DD`)
-  }
-  const [y, m, d] = s.split("-").map(Number)
-  const date = new Date(y, m - 1, d)
-  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
-    throw new Error(`Invalid date: "${s}"`)
-  }
-  return s
-}
-
-function validateTimestampString(v: unknown): string {
-  if (v === null || v === undefined) return ""
-  const s = String(v)
-  if (!TIMESTAMP_PATTERN.test(s) || Number.isNaN(Date.parse(s))) {
-    throw new Error(`Invalid timestamp format: "${s}". Expected ISO 8601`)
-  }
-  return s
-}
-
 class DatabaseService {
   private db: DatabaseSync | null = null
   private dbPath: string = ""
-  private columnMeta: Map<string, Map<string, { kind: ColumnKind; choices?: string[] }>> = new Map()
+  private columnMeta: Map<string, ColumnMetaMap> = new Map()
 
   open(): { corrupted: boolean } {
     const userDataPath = app.getPath("userData")
@@ -930,54 +877,36 @@ class DatabaseService {
     }
   }
 
-  private getColumnMetaForTable(table: string): Map<string, { kind: ColumnKind; choices?: string[] }> {
+  private getColumnMetaForTable(table: string): ColumnMetaMap {
     return this.columnMeta.get(table) ?? new Map()
   }
 
-  private getColumnsForTable(table: string, predicate: (kind: ColumnKind) => boolean): Set<string> {
-    const result = new Set<string>()
-    for (const [name, meta] of this.getColumnMetaForTable(table)) {
-      if (predicate(meta.kind)) result.add(name)
-    }
-    return result
-  }
-
   private getJsonColumnsForTable(table: string): Set<string> {
-    return this.getColumnsForTable(table, isJsonSerializedKind)
+    return getJsonColumns(this.getColumnMetaForTable(table))
   }
 
   private getBooleanColumnsForTable(table: string): Set<string> {
-    return this.getColumnsForTable(table, isBooleanKind)
+    return getBooleanColumns(this.getColumnMetaForTable(table))
   }
 
   private getDateColumnsForTable(table: string): Set<string> {
-    return this.getColumnsForTable(table, isDateKind)
+    return getDateColumns(this.getColumnMetaForTable(table))
   }
 
   private getTimestampColumnsForTable(table: string): Set<string> {
-    return this.getColumnsForTable(table, isTimestampKind)
+    return getTimestampColumns(this.getColumnMetaForTable(table))
   }
 
   private getChoiceColumnsForTable(table: string): Map<string, string[]> {
-    const result = new Map<string, string[]>()
-    for (const [name, meta] of this.getColumnMetaForTable(table)) {
-      if (isChoiceKind(meta.kind) && meta.choices) result.set(name, meta.choices)
-    }
-    return result
+    return getChoiceColumns(this.getColumnMetaForTable(table))
   }
 
   private getMultiChoiceColumnsForTable(table: string): Set<string> {
-    return this.getColumnsForTable(table, isMultiChoiceKind)
+    return getMultiChoiceColumns(this.getColumnMetaForTable(table))
   }
 
   private getNumericColumnsForTable(table: string): Map<string, "integer" | "decimal"> {
-    const result = new Map<string, "integer" | "decimal">()
-    for (const [name, meta] of this.getColumnMetaForTable(table)) {
-      if (meta.kind === "integer" || meta.kind === "decimal") {
-        result.set(name, meta.kind)
-      }
-    }
-    return result
+    return getNumericColumns(this.getColumnMetaForTable(table))
   }
 
   private validateSingleChoiceValue(key: string, value: unknown, choiceCols: Map<string, string[]>): void {
@@ -1003,32 +932,6 @@ class DatabaseService {
         throw new Error(`Invalid value "${s}" for multi_choice column "${key}". Allowed: ${allowed.join(", ")}`)
       }
     }
-  }
-
-  private convertWriteValue(
-    key: string,
-    value: unknown,
-    jsonCols: Set<string>,
-    boolCols: Set<string>,
-    dateCols: Set<string>,
-    timestampCols: Set<string>,
-    multiChoiceCols?: Set<string>,
-    numericCols?: Map<string, "integer" | "decimal">,
-  ): SQLInputValue {
-    if (value === null || value === undefined) return null
-    if (multiChoiceCols?.has(key)) return toSqlValue(JSON.stringify(value))
-    if (jsonCols.has(key)) return toSqlValue(JSON.stringify(value))
-    if (boolCols.has(key)) return toBooleanInt(value)
-    if (dateCols.has(key) && value !== null && value !== undefined && value !== "") {
-      return validateDateString(value)
-    }
-    if (timestampCols.has(key) && value !== null && value !== undefined && value !== "") {
-      return validateTimestampString(value)
-    }
-    const numericKind = numericCols?.get(key)
-    if (numericKind === "integer") return toIntegerSqlValue(key, value)
-    if (numericKind === "decimal") return toDecimalSqlValue(key, value)
-    return toSqlValue(value)
   }
 
   private assertTableExists(name: string): void {
@@ -1438,7 +1341,7 @@ class DatabaseService {
         }
       }
     }
-    const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
+    const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
     const placeholders = keys.map(() => "?").join(", ")
     const columnList = keys.map(q).join(", ")
 
@@ -1478,7 +1381,7 @@ class DatabaseService {
             }
           }
         }
-        const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : this.convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
+        const values = keys.map((k) => k === "created_at" || k === "updated_at" ? withTimestamps[k] as string : convertWriteValue(k, withTimestamps[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
         const placeholders = keys.map(() => "?").join(", ")
         const columnList = keys.map(q).join(", ")
 
@@ -1514,21 +1417,7 @@ class DatabaseService {
     const countRow = db.prepare(countSQL).get(...whereParams) as { total: number }
 
     for (const row of rows) {
-      for (const col of jsonCols) {
-        if (col in row && typeof row[col] === "string") {
-          try { row[col] = JSON.parse(row[col] as string) } catch { /* keep as string */ }
-        }
-      }
-      for (const col of boolCols) {
-        if (col in row) {
-          row[col] = row[col] === 1 || row[col] === true
-        }
-      }
-      for (const col of multiChoiceCols) {
-        if (col in row && typeof row[col] === "string") {
-          try { row[col] = JSON.parse(row[col] as string) } catch { /* keep as string */ }
-        }
-      }
+      parseReadRow(row, jsonCols, boolCols, multiChoiceCols)
     }
 
     return { rows, total: countRow.total }
@@ -1562,7 +1451,7 @@ class DatabaseService {
     }
 
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
-    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
+    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
 
     const result = db.prepare(`UPDATE ${q(table)} SET ${setClauses} WHERE "id" = ?`).run(...values, id)
     return { affected: toNumber(result.changes) }
@@ -1613,7 +1502,7 @@ class DatabaseService {
 
     const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
-    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : this.convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
+    const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
 
     db.exec("BEGIN")
     try {
