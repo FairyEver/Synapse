@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { getContentIconOption } from "@/lib/content-appearance"
 import { cn } from "@/lib/utils"
 import { ContentIconBadge } from "@/modules/content/components/content-icon-badge"
 import type { SynapseContentIconType, SynapseContentType } from "@/types/content"
+
+const logger = createRendererLogger("content.icon")
 
 const iconImageCache = new Map<string, string>()
 
@@ -60,7 +63,9 @@ function ContentItemIcon({
           setImageDataUrl(dataUrl)
         }
       })
-      .catch(() => {})
+      .catch((error) => {
+        logger.warn("Failed to load icon image.", { contentType, contentId, error })
+      })
 
     return () => {
       canceled = true

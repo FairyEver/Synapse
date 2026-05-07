@@ -42,7 +42,9 @@ function useEditorScan() {
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true
-      void scan().catch(() => {})
+      void scan().catch((error) => {
+        logger.warn("Initial editor scan failed.", { error })
+      })
     }
   }, [scan])
 

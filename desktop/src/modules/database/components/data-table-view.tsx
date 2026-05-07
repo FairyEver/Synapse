@@ -407,7 +407,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             className="size-7"
             data-track="database-schema-open"
             onClick={() => {
-              void handleShowSchema().catch(() => {})
+              void handleShowSchema().catch((error) => {
+                logger.warn("Show schema failed.", { error })
+              })
             }}
           >
             <SlidersHorizontal className="size-4" />
@@ -418,7 +420,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             className="size-7"
             data-track="database-filter-open"
             onClick={() => {
-              void handleOpenFilterDialog().catch(() => {})
+              void handleOpenFilterDialog().catch((error) => {
+                logger.warn("Open filter dialog failed.", { error })
+              })
             }}
           >
             <Funnel className="size-4" />
@@ -535,7 +539,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             className="rounded-sm px-1.5"
             data-track="database-row-add-start"
             onClick={() => {
-              void handleStartAdding().catch(() => {})
+              void handleStartAdding().catch((error) => {
+                logger.warn("Start adding row failed.", { error })
+              })
             }}
             disabled={isAdding}
           >
@@ -652,7 +658,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                       key={col.name}
                       className={`${DATA_TABLE_COLUMN_CLASS} truncate`}
                       onDoubleClick={() => {
-                        void beginRowEdit(rowId, col.name, "cell").catch(() => {})
+                        void beginRowEdit(rowId, col.name, "cell").catch((error) => {
+                          logger.warn("Begin row edit (cell) failed.", { error })
+                        })
                       }}
                     >
                       {formatCellValue(row[col.name], col.kind, col.name)}
@@ -674,7 +682,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         className="rounded-sm"
                         data-track="database-row-edit-start"
                         onClick={() => {
-                          void beginRowEdit(rowId, editableColumns[0]?.name ?? null, "button").catch(() => {})
+                          void beginRowEdit(rowId, editableColumns[0]?.name ?? null, "button").catch((error) => {
+                            logger.warn("Begin row edit (button) failed.", { error })
+                          })
                         }}
                       >
                         <Pencil className="size-3" />
@@ -721,7 +731,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           disabled={page <= 1}
           data-track="database-page-prev"
           onClick={() => {
-            void handlePageChange(page - 1).catch(() => {})
+            void handlePageChange(page - 1).catch((error) => {
+              logger.warn("Page change failed.", { error })
+            })
           }}
         >
           ◂
@@ -733,7 +745,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           disabled={page >= totalPages}
           data-track="database-page-next"
           onClick={() => {
-            void handlePageChange(page + 1).catch(() => {})
+            void handlePageChange(page + 1).catch((error) => {
+              logger.warn("Page change failed.", { error })
+            })
           }}
         >
           ▸

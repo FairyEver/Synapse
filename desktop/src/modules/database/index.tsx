@@ -369,10 +369,14 @@ function DatabaseModule() {
       tables={tables}
       activeTable={selectedTable}
       onTableSelect={(name) => {
-        void handleTableSelect(name).catch(() => {})
+        void handleTableSelect(name).catch((error) => {
+          logger.warn("Table select failed.", { error })
+        })
       }}
       onCreateTable={() => {
-        void handleOpenCreateDialog().catch(() => {})
+        void handleOpenCreateDialog().catch((error) => {
+          logger.warn("Open create dialog failed.", { error })
+        })
       }}
       onImportTable={() => {
         void handleChooseImportTable()
@@ -448,7 +452,9 @@ function DatabaseModule() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  void handleOpenCreateDialog().catch(() => {})
+                  void handleOpenCreateDialog().catch((error) => {
+                    logger.warn("Open create dialog failed.", { error })
+                  })
                 }}
               >
                 新建表
