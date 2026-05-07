@@ -6,7 +6,6 @@ import type {
   Column,
   ColumnKind,
   DatabaseBulkMutationResult,
-  DatabaseOrderBy,
   DatabaseOperationLogEntry,
   DatabaseOperationSource,
   DatabaseOverview,
@@ -16,7 +15,6 @@ import type {
   DatabaseTableImportInspection,
   DatabaseTableSchema,
   DatabaseWhereClause,
-  DatabaseWhereCondition,
 } from "./types"
 import {
   COLUMN_KINDS,
@@ -46,13 +44,12 @@ import {
   validateTimestampString,
 } from "./type-coercion"
 import { createMainLogger } from "../services/log-store"
+import { buildWhere, buildOrderBy } from "./query-builder"
 
 const logger = createMainLogger("database.service")
 
 const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 const RESERVED_PREFIX = "_"
-const VALID_WHERE_OPS = new Set(["=", "!=", ">", "<", ">=", "<=", "LIKE", "CONTAINS"])
-const VALID_ORDER_DIRS = new Set(["ASC", "DESC"])
 const TABLE_EXPORT_FORMAT = "synapse-table-sql"
 const TABLE_EXPORT_VERSION = 1
 const TABLE_EXPORT_BEGIN_MARKER = "-- synapse-table-export-b64"
@@ -99,14 +96,6 @@ type TableExportPayload = {
 }
 
 type BulkMutationOptions = { dryRun?: boolean }
-
-function isWhereGroup(where: DatabaseWhereClause): where is { combinator: "all" | "any"; conditions: DatabaseWhereCondition[] } {
-  return typeof where === "object"
-    && where !== null
-    && "combinator" in where
-    && "conditions" in where
-    && Array.isArray(where.conditions)
-}
 
 function validateName(name: string, kind: "table" | "column"): void {
   if (!NAME_PATTERN.test(name)) {
@@ -1402,11 +1391,12 @@ class DatabaseService {
     this.assertTableExists(params.table)
 
     const db = this.getDb()
-    const jsonCols = this.getJsonColumnsForTable(params.table)
-    const boolCols = this.getBooleanColumnsForTable(params.table)
-    const multiChoiceCols = this.getMultiChoiceColumnsForTable(params.table)
-    const { whereSQL, whereParams } = this.buildWhere(params.where, jsonCols, boolCols, multiChoiceCols)
-    const orderSQL = this.buildOrderBy(params.orderBy)
+    const tableMeta = this.getColumnMetaForTable(params.table)
+    const jsonCols = getJsonColumns(tableMeta)
+    const boolCols = getBooleanColumns(tableMeta)
+    const multiChoiceCols = getMultiChoiceColumns(tableMeta)
+    const { whereSQL, whereParams } = buildWhere(params.where, tableMeta)
+    const orderSQL = buildOrderBy(params.orderBy)
     const limit = params.limit ?? 100
     const offset = params.offset ?? 0
 
@@ -1477,13 +1467,14 @@ class DatabaseService {
     }
 
     const db = this.getDb()
-    const jsonCols = this.getJsonColumnsForTable(table)
-    const boolCols = this.getBooleanColumnsForTable(table)
-    const dateCols = this.getDateColumnsForTable(table)
-    const timestampCols = this.getTimestampColumnsForTable(table)
-    const choiceCols = this.getChoiceColumnsForTable(table)
-    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
-    const numericCols = this.getNumericColumnsForTable(table)
+    const tableMeta = this.getColumnMetaForTable(table)
+    const jsonCols = getJsonColumns(tableMeta)
+    const boolCols = getBooleanColumns(tableMeta)
+    const dateCols = getDateColumns(tableMeta)
+    const timestampCols = getTimestampColumns(tableMeta)
+    const choiceCols = getChoiceColumns(tableMeta)
+    const multiChoiceCols = getMultiChoiceColumns(tableMeta)
+    const numericCols = getNumericColumns(tableMeta)
 
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
     const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
@@ -1500,7 +1491,7 @@ class DatabaseService {
       }
     }
 
-    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
+    const { whereSQL, whereParams } = buildWhere(where, tableMeta)
     const setClauses = keys.map((k) => `${q(k)} = ?`).join(", ")
     const values = keys.map((k) => k === "updated_at" ? withTimestamp[k] as string : convertWriteValue(k, withTimestamp[k], jsonCols, boolCols, dateCols, timestampCols, multiChoiceCols, numericCols))
 
@@ -1537,10 +1528,8 @@ class DatabaseService {
     }
 
     const db = this.getDb()
-    const jsonCols = this.getJsonColumnsForTable(table)
-    const boolCols = this.getBooleanColumnsForTable(table)
-    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
-    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
+    const tableMeta = this.getColumnMetaForTable(table)
+    const { whereSQL, whereParams } = buildWhere(where, tableMeta)
 
     db.exec("BEGIN")
     try {
@@ -1664,10 +1653,8 @@ class DatabaseService {
     this.assertTableExists(table)
 
     const db = this.getDb()
-    const jsonCols = this.getJsonColumnsForTable(table)
-    const boolCols = this.getBooleanColumnsForTable(table)
-    const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
-    const { whereSQL, whereParams } = this.buildWhere(where, jsonCols, boolCols, multiChoiceCols)
+    const tableMeta = this.getColumnMetaForTable(table)
+    const { whereSQL, whereParams } = buildWhere(where, tableMeta)
     const row = db.prepare(`SELECT COUNT(*) as count FROM ${q(table)}${whereSQL}`).get(...whereParams) as { count: number | bigint }
     return { count: toNumber(row.count) }
   }
@@ -2055,95 +2042,6 @@ class DatabaseService {
 
   getDbPath(): string {
     return this.dbPath
-  }
-
-  private buildWhere(where?: DatabaseWhereClause, jsonCols?: Set<string>, boolCols?: Set<string>, multiChoiceCols?: Set<string>): { whereSQL: string; whereParams: SQLInputValue[] } {
-    if (!where) return { whereSQL: "", whereParams: [] }
-
-    const conditions: string[] = []
-    const params: SQLInputValue[] = []
-    const jCols = jsonCols ?? new Set<string>()
-    const bCols = boolCols ?? new Set<string>()
-    const mCols = multiChoiceCols ?? new Set<string>()
-
-    const appendCondition = (cond: DatabaseWhereCondition) => {
-      validateName(cond.field, "column")
-      if (!VALID_WHERE_OPS.has(cond.op)) {
-        throw new Error(`Invalid where operator "${cond.op}": must be one of =, !=, >, <, >=, <=, LIKE, CONTAINS`)
-      }
-      if (cond.op === "CONTAINS") {
-        if (!mCols.has(cond.field)) {
-          throw new Error(`CONTAINS operator is only supported on multi_choice columns. Column "${cond.field}" is not multi_choice.`)
-        }
-        if (cond.value === null || cond.value === undefined) {
-          throw new Error(`CONTAINS operator requires a non-null scalar value for column "${cond.field}".`)
-        }
-        if (typeof cond.value === "object") {
-          throw new Error(`CONTAINS operator requires a scalar value (string, number, or boolean) for column "${cond.field}". Got ${Array.isArray(cond.value) ? "array" : "object"}. Example: { field: "${cond.field}", op: "CONTAINS", value: "<single item>" }`)
-        }
-        conditions.push(`EXISTS (SELECT 1 FROM json_each(${q(cond.field)}) WHERE value = ?)`)
-        params.push(toSqlValue(cond.value))
-        return
-      }
-      conditions.push(`${q(cond.field)} ${cond.op} ?`)
-      if (bCols.has(cond.field)) {
-        params.push(toBooleanInt(cond.value))
-      } else if (mCols.has(cond.field)) {
-        params.push(toSqlValue(JSON.stringify(cond.value)))
-      } else {
-        const val = jCols.has(cond.field) && cond.value != null && typeof cond.value === "object"
-          ? JSON.stringify(cond.value)
-          : cond.value
-        params.push(toSqlValue(val))
-      }
-    }
-
-    if (Array.isArray(where)) {
-      for (const cond of where as DatabaseWhereCondition[]) {
-        appendCondition(cond)
-      }
-    } else if (isWhereGroup(where)) {
-      if (where.combinator !== "all" && where.combinator !== "any") {
-        throw new Error(`Invalid where combinator "${where.combinator}": must be "all" or "any"`)
-      }
-      for (const cond of where.conditions) {
-        appendCondition(cond)
-      }
-      if (conditions.length === 0) return { whereSQL: "", whereParams: [] }
-      return { whereSQL: ` WHERE ${conditions.join(where.combinator === "all" ? " AND " : " OR ")}`, whereParams: params }
-    } else {
-      for (const [key, value] of Object.entries(where)) {
-        validateName(key, "column")
-        conditions.push(`${q(key)} = ?`)
-        if (bCols.has(key)) {
-          params.push(toBooleanInt(value))
-        } else if (mCols.has(key)) {
-          params.push(toSqlValue(JSON.stringify(value)))
-        } else {
-          const val = jCols.has(key) && value != null && typeof value === "object"
-            ? JSON.stringify(value)
-            : value
-          params.push(toSqlValue(val))
-        }
-      }
-    }
-
-    if (conditions.length === 0) return { whereSQL: "", whereParams: [] }
-    return { whereSQL: ` WHERE ${conditions.join(" AND ")}`, whereParams: params }
-  }
-
-  private buildOrderBy(orderBy?: DatabaseOrderBy): string {
-    if (!orderBy) return ""
-    if (typeof orderBy === "string") {
-      validateName(orderBy, "column")
-      return ` ORDER BY ${q(orderBy)} ASC`
-    }
-    validateName(orderBy.field, "column")
-    const dir = orderBy.dir.toUpperCase()
-    if (!VALID_ORDER_DIRS.has(dir)) {
-      throw new Error(`Invalid order direction "${orderBy.dir}": must be "asc" or "desc"`)
-    }
-    return ` ORDER BY ${q(orderBy.field)} ${dir}`
   }
 }
 
