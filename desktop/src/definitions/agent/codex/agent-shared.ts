@@ -12,8 +12,8 @@ export const agentBaseDefinition = {
   modes: [
     { key: "suggest", label: "Suggest" },
     { key: "auto-edit", label: "Auto Edit" },
-    { key: "full-auto", label: "Full Auto" },
-    { key: "yolo", label: "YOLO" },
+    { key: "full-auto", label: "Full Auto", unattended: true },
+    { key: "yolo", label: "YOLO", unattended: true },
   ],
   commands: [
     { name: "model", description: "Switch model" },

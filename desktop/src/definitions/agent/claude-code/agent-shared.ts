@@ -13,9 +13,9 @@ export const agentBaseDefinition = {
     { key: "default", label: "Default" },
     { key: "acceptEdits", label: "Accept Edits" },
     { key: "plan", label: "Plan" },
-    { key: "auto", label: "Auto" },
-    { key: "bypassPermissions", label: "Bypass Permissions" },
-    { key: "dontAsk", label: "Don't Ask" },
+    { key: "auto", label: "Auto", unattended: true },
+    { key: "bypassPermissions", label: "Bypass Permissions", unattended: true },
+    { key: "dontAsk", label: "Don't Ask", unattended: true },
   ],
   commands: [
     { name: "model", description: "Switch model" },

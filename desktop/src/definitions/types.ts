@@ -53,6 +53,7 @@ export type SynapseAgentCommandOption = {
 export type SynapseAgentModeOption = {
   key: string
   label: string
+  unattended?: boolean
 }
 
 export type SynapseAgentRuntimeRequirement = {
