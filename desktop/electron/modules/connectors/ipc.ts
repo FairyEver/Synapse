@@ -1,11 +1,8 @@
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
+import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { FeishuConnectorService } from "../../services/connectors"
-
-const projectRequestSchema = z.object({
-  projectId: z.string().min(1),
-})
 
 const setupPollRequestSchema = z.object({
   setupId: z.string().min(1),

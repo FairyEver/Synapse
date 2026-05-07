@@ -2,6 +2,7 @@ import { shell } from "electron"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
+import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
@@ -20,10 +21,6 @@ import {
 import { configStore } from "../../services/config-store"
 import { agentRuntimeDefinitions } from "../../services/definitions/generated/main-registry"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
-
-const projectRequestSchema = z.object({
-  projectId: z.string().min(1),
-})
 
 const sessionsRequestSchema = projectRequestSchema.extend({
   historyLimit: z.number().int().positive().max(200).optional(),

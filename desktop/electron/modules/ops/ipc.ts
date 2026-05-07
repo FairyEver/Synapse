@@ -2,6 +2,7 @@ import { shell } from "electron"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
+import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import {
@@ -72,10 +73,6 @@ const diagnosticsBundleExportResultSchema = z.object({
 const opsPingResultSchema = z.object({
   ok: z.literal(true),
   receivedAt: z.string(),
-})
-
-const projectRequestSchema = z.object({
-  projectId: z.string().min(1),
 })
 
 const runAsUpdateSchema = projectRequestSchema.extend({
