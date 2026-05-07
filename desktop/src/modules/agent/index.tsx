@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { Command as CommandIcon, Copy } from "lucide-react"
+import { Clock, Command as CommandIcon, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -195,7 +195,12 @@ function AgentModule() {
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-medium">Agent</h2>
             {selectedCliLabel ? (
-              <Badge variant="outline">{selectedCliLabel}</Badge>
+              <Badge variant="outline" className="flex items-center gap-1">
+                {selectedCliLabel}
+                {selectedSession?.platform === "scheduled" && (
+                  <Clock className="size-3 text-muted-foreground" />
+                )}
+              </Badge>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
