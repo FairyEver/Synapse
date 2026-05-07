@@ -97,7 +97,7 @@ describe("LicensesService", () => {
     expect(result.deviceIdHash).toBe(hashDeviceId("device-2"))
   })
 
-  it("rejects redeeming a revoked device under the same license", async () => {
+  it("reactivates a revoked device when redeeming again", async () => {
     const pair = keys()
     const service = LicensesService.createInMemory({
       privateKey: pair.privateKey,
@@ -119,12 +119,14 @@ describe("LicensesService", () => {
     if (!device) throw new Error("Redeemed device is missing")
     device.status = "revoked"
 
-    await expect(service.redeem({
+    const result = await service.redeem({
       email: "user@example.com",
       activationCode: "ABCD-1234",
       device: { deviceId: "device-1", name: "MacBook", platform: "darwin", appVersion: "0.2.55" },
       ...requestSource,
-    })).rejects.toThrow("设备已停用。")
+    })
+    expect(result.email).toBe("user@example.com")
+    expect(result.leaseToken).toBeTruthy()
   })
 
   it("renews a valid lease for the same active device", async () => {

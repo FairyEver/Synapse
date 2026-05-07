@@ -94,6 +94,7 @@ interface LicenseRepository {
   findDevicesByLicense(licenseId: string): Promise<DeviceRecord[]>
   createDevice(license: LicenseRecord, metadata: DeviceMetadata, deviceIdHash: string): Promise<DeviceRecord>
   revokeOldestDevices(licenseId: string, count: number): Promise<void>
+  reactivateDevice(deviceId: string, metadata: DeviceMetadata): Promise<void>
   updateDeviceMetadata(deviceId: string, metadata: DeviceMetadata): Promise<void>
   createLease(input: {
     licenseId: string
@@ -289,10 +290,21 @@ export class LicensesService {
     const devices = await this.repository.findDevicesByLicense(license.id)
     const existing = devices.find((device) => device.deviceIdHash === deviceIdHash)
     if (existing) {
-      if (existing.status !== "active") {
-        throw new Error("设备已停用。")
+      if (existing.status === "active") {
+        return existing
       }
-      return existing
+      if (existing.status === "revoked") {
+        const activeDevices = devices.filter((device) => device.status === "active")
+        if (activeDevices.length >= license.maxDevices) {
+          await this.repository.revokeOldestDevices(
+            license.id,
+            activeDevices.length - license.maxDevices + 1,
+          )
+        }
+        await this.repository.reactivateDevice(existing.id, metadata)
+        return { ...existing, status: "active" }
+      }
+      throw new Error("设备已停用。")
     }
 
     const activeDevices = devices.filter((device) => device.status === "active")
@@ -469,6 +481,19 @@ class InMemoryLicenseRepository implements LicenseRepository {
     }
   }
 
+  async reactivateDevice(deviceId: string, metadata: DeviceMetadata): Promise<void> {
+    const device = this.devices.get(deviceId)
+    if (device) {
+      this.devices.set(deviceId, {
+        ...device,
+        status: "active",
+        name: metadata.name,
+        platform: metadata.platform,
+        appVersion: metadata.appVersion,
+      })
+    }
+  }
+
   async createLease(): Promise<void> {
     return undefined
   }
@@ -581,6 +606,19 @@ class PrismaLicenseRepository implements LicenseRepository {
         data: { status: "revoked" },
       })
     }
+  }
+
+  async reactivateDevice(deviceId: string, metadata: DeviceMetadata): Promise<void> {
+    await this.prisma.device.update({
+      where: { id: deviceId },
+      data: {
+        status: "active",
+        name: metadata.name,
+        platform: metadata.platform,
+        appVersion: metadata.appVersion,
+        lastSeenAt: new Date(),
+      },
+    })
   }
 
   async createLease(input: {
