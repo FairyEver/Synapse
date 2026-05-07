@@ -45,11 +45,17 @@ import type { DatabaseTableImportInspection } from "@/types/database"
 
 const logger = createRendererLogger("database")
 
+function getStoredDisplayMode(): DisplayMode {
+  const stored = localStorage.getItem("synapse:database:displayMode")
+  if (stored === "title" || stored === "desc" || stored === "title+desc") return stored
+  return "title+desc"
+}
+
 function DatabaseModule() {
   const { tables, loading: tablesLoading, error: tablesError, refresh: refreshTables } = useDatabaseTables()
   const { error: showError, success: showSuccess, promise } = useAppNotifications()
   const { folders, createFolder, renameFolder, deleteFolder, moveTable } = useDatabaseFolders()
-  const [displayMode, setDisplayMode] = useState<DisplayMode>("title+desc")
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(getStoredDisplayMode)
 
   const [activeTable, setActiveTable] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -92,6 +98,11 @@ function DatabaseModule() {
     setFilter(nextFilter)
     setPage(1)
   }, [selectedTable])
+
+  const handleDisplayModeChange = useCallback((mode: DisplayMode) => {
+    setDisplayMode(mode)
+    localStorage.setItem("synapse:database:displayMode", mode)
+  }, [])
 
   const handleOpenCreateDialog = useCallback(async () => {
     await dataTableViewRef.current?.commitPendingChanges()
@@ -374,7 +385,7 @@ function DatabaseModule() {
       folders={folders}
       activeTable={selectedTable}
       displayMode={displayMode}
-      onDisplayModeChange={setDisplayMode}
+      onDisplayModeChange={handleDisplayModeChange}
       onTableSelect={(name) => {
         void handleTableSelect(name).catch((error) => {
           logger.warn("Table select failed.", { error })
