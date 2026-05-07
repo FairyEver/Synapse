@@ -2,6 +2,7 @@ import type { RefObject } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
   SynapseAgentDisplayProfile,
+  SynapseAgentPendingPermission,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 import { AgentRunStatus } from "./agent-run-status"
@@ -11,13 +12,17 @@ function AgentTimeline({
   items,
   profile,
   sending,
+  pendingPermissions,
   onOpenReference,
+  onRespondPermission,
   bottomRef,
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
   readonly profile: SynapseAgentDisplayProfile
   readonly sending: boolean
+  readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
+  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void
   readonly bottomRef: RefObject<HTMLDivElement | null>
 }) {
   return (
@@ -30,7 +35,9 @@ function AgentTimeline({
             key={item.id}
             item={item}
             profile={profile}
+            pendingPermissions={pendingPermissions}
             onOpenReference={onOpenReference}
+            onRespondPermission={onRespondPermission}
           />
         ))}
         {sending ? <AgentRunStatus label={`${profile.agentLabel} 正在处理`} /> : null}

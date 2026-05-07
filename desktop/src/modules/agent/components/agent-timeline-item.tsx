@@ -5,20 +5,26 @@ import {
 } from "@/components/ui/alert"
 import type {
   SynapseAgentDisplayProfile,
+  SynapseAgentPendingPermission,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 import { AgentMessageEvent } from "./agent-message-event"
+import { AgentPermissionCard } from "./agent-permission-card"
 import { AgentThinkingEvent } from "./agent-thinking-event"
 import { AgentToolEvent } from "./agent-tool-event"
 
 function AgentTimelineItem({
   item,
   profile,
+  pendingPermissions,
   onOpenReference,
+  onRespondPermission,
 }: {
   readonly item: SynapseAgentTimelineItem
   readonly profile: SynapseAgentDisplayProfile
+  readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
+  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void
 }) {
   switch (item.kind) {
     case "message":
@@ -27,8 +33,17 @@ function AgentTimelineItem({
       return <AgentThinkingEvent item={item} profile={profile} />
     case "toolCall":
     case "toolResult":
-    case "permissionRequest":
       return <AgentToolEvent item={item} profile={profile} />
+    case "permissionRequest": {
+      const isPending = pendingPermissions.some((p) => p.requestId === item.requestId)
+      return (
+        <AgentPermissionCard
+          item={item}
+          pending={isPending}
+          onRespond={onRespondPermission}
+        />
+      )
+    }
     case "error":
       return (
         <Alert variant="destructive">

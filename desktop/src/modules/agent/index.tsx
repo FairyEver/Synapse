@@ -23,7 +23,7 @@ import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { SynapseAgentAvailability, SynapseAgentDisplayProfile } from "@/types/agent"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
-import { AgentPermissionPanel } from "./components/agent-permission-panel"
+
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
 import { useAgentChat } from "./hooks/use-agent-chat"
@@ -265,16 +265,13 @@ function AgentModule() {
               </Alert>
             ) : null}
 
-            <AgentPermissionPanel
-              pendingPermissions={chat.pendingPermissions}
-              onRespond={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
-            />
-
             <AgentTimeline
               items={chat.timeline}
               profile={selectedDisplayProfile}
               sending={chat.sending}
+              pendingPermissions={chat.pendingPermissions}
               onOpenReference={openReference}
+              onRespondPermission={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
               bottomRef={timelineBottomRef}
             />
 

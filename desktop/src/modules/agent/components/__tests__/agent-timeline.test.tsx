@@ -27,7 +27,9 @@ describe("AgentTimeline", () => {
         items={[]}
         profile={profile}
         sending={false}
+        pendingPermissions={[]}
         onOpenReference={vi.fn()}
+        onRespondPermission={vi.fn()}
         bottomRef={createRef<HTMLDivElement>()}
       />,
     )
