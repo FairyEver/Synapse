@@ -2,6 +2,10 @@ import { editorAdapter as claudeCodeEditorAdapter } from "../../../../src/defini
 import { editorAdapter as codexEditorAdapter } from "../../../../src/definitions/editor/codex/adapter"
 import { editorAdapter as cursorEditorAdapter } from "../../../../src/definitions/editor/cursor/adapter"
 import { editorAdapter as windsurfEditorAdapter } from "../../../../src/definitions/editor/windsurf/adapter"
+import { editorAdapter as antigravityEditorAdapter } from "../../../../src/definitions/editor/antigravity/adapter"
+import { mcpDefinition as antigravityMcpDefinition } from "../../../../src/definitions/editor/antigravity/mcp"
+import { installStrategy as antigravityInstallStrategy } from "../../../../src/definitions/editor/antigravity/install"
+import { scanStrategy as antigravityScanStrategy } from "../../../../src/definitions/editor/antigravity/scan"
 import { agentRuntimeDefinition as claudeCodeAgentRuntimeDefinition } from "../../../../src/definitions/agent/claude-code/agent-main"
 import { agentRuntimeDefinition as codexAgentRuntimeDefinition } from "../../../../src/definitions/agent/codex/agent-main"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../../../../src/definitions/editor/claude-code/mcp"
@@ -29,6 +33,7 @@ export const editorAdapters = [
   codexEditorAdapter,
   cursorEditorAdapter,
   windsurfEditorAdapter,
+  antigravityEditorAdapter,
 ] satisfies EditorAdapter[]
 
 export const editorAdapterById = new Map(
@@ -49,6 +54,7 @@ export const mcpDefinitions = [
   codexMcpDefinition,
   cursorMcpDefinition,
   windsurfMcpDefinition,
+  antigravityMcpDefinition,
 ].sort((left, right) => left.order - right.order) satisfies SynapseMcpDefinition[]
 
 export const editorInstallStrategyById = new Map<string, EditorInstallStrategy>([
@@ -56,6 +62,7 @@ export const editorInstallStrategyById = new Map<string, EditorInstallStrategy>(
   [codexEditorAdapter.id, codexInstallStrategy],
   [cursorEditorAdapter.id, cursorInstallStrategy],
   [windsurfEditorAdapter.id, windsurfInstallStrategy],
+  [antigravityEditorAdapter.id, antigravityInstallStrategy],
 ])
 
 export const editorScanStrategyById = new Map<string, EditorScanStrategy>([
@@ -63,4 +70,5 @@ export const editorScanStrategyById = new Map<string, EditorScanStrategy>([
   [codexEditorAdapter.id, codexScanStrategy],
   [cursorEditorAdapter.id, cursorScanStrategy],
   [windsurfEditorAdapter.id, windsurfScanStrategy],
+  [antigravityEditorAdapter.id, antigravityScanStrategy],
 ])
