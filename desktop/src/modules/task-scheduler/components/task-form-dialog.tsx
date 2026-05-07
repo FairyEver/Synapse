@@ -395,24 +395,51 @@ function TaskFormDialog({
                       </SelectContent>
                     </Select>
                   </TaskField>
-                  <TaskField label="工作目录" htmlFor="task-form-cwd">
-                    <InputGroup>
-                      <InputGroupInput
-                        id="task-form-cwd"
-                        value={form.cwd}
-                        onChange={(event) => updateField("cwd", event.target.value)}
-                      />
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupButton
-                          type="button"
-                          disabled={busy}
-                          onClick={handleChooseCwd}
-                        >
-                          选择
-                        </InputGroupButton>
-                      </InputGroupAddon>
-                    </InputGroup>
-                  </TaskField>
+                  {form.actionType === "builtin.agent" ? (
+                    <TaskField label="项目" htmlFor="task-form-agent-project">
+                      <Select
+                        value={(form.actionConfig as Record<string, unknown>).projectId as string ?? ""}
+                        onValueChange={(projectId) => {
+                          updateField("actionConfig", {
+                            ...form.actionConfig,
+                            projectId,
+                          })
+                        }}
+                      >
+                        <SelectTrigger id="task-form-agent-project" className="w-full">
+                          <SelectValue placeholder="选择项目" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {projects.map((project) => (
+                              <SelectItem key={project.id} value={project.id}>
+                                {project.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </TaskField>
+                  ) : (
+                    <TaskField label="工作目录" htmlFor="task-form-cwd">
+                      <InputGroup>
+                        <InputGroupInput
+                          id="task-form-cwd"
+                          value={form.cwd}
+                          onChange={(event) => updateField("cwd", event.target.value)}
+                        />
+                        <InputGroupAddon align="inline-end">
+                          <InputGroupButton
+                            type="button"
+                            disabled={busy}
+                            onClick={handleChooseCwd}
+                          >
+                            选择
+                          </InputGroupButton>
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </TaskField>
+                  )}
                 </div>
 
                 {ActionConfigForm ? (
@@ -428,7 +455,7 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-run-settings")}
                 title="运行设置"
               >
-                <div data-layout="task-form-run-settings-list" className="grid gap-2">
+                <div data-layout="task-form-run-settings-list" className="grid grid-cols-2 gap-3">
                   <ToggleField
                     checked={form.enabled}
                     id="task-form-enabled"
@@ -538,13 +565,11 @@ function ToggleField({
 }) {
   return (
     <Field className="min-h-12 justify-center rounded-lg border border-border px-3 py-2">
-      <div data-layout="task-form-run-setting-row" className="flex w-full items-center gap-3">
-        <div data-layout="task-form-run-setting-primary" className="flex items-center gap-2">
-          <FieldLabel htmlFor={id} className="shrink-0">
-            {label}
-          </FieldLabel>
-          <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
-        </div>
+      <div data-layout="task-form-run-setting-row" className="flex w-full items-center justify-between">
+        <FieldLabel htmlFor={id} className="shrink-0">
+          {label}
+        </FieldLabel>
+        <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
       </div>
     </Field>
   )

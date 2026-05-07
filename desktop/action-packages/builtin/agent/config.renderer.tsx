@@ -7,13 +7,6 @@ import {
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { Textarea } from "../../../src/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../src/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { agentBaseDefinition as claudeCodeDef } from "../../../src/definitions/agent/claude-code/agent-shared"
 import { agentBaseDefinition as codexDef } from "../../../src/definitions/agent/codex/agent-shared"
@@ -68,21 +61,22 @@ export function AgentConfigForm({
       <Field>
         <FieldLabel htmlFor="task-action-agent-mode">执行模式</FieldLabel>
         <FieldContent>
-          <Select
+          <ToggleGroup
+            aria-label="执行模式"
+            className="w-full"
+            type="single"
             value={value.mode}
-            onValueChange={(mode) => onChange({ ...value, mode })}
+            variant="outline"
+            onValueChange={(mode) => {
+              if (mode) onChange({ ...value, mode })
+            }}
           >
-            <SelectTrigger id="task-action-agent-mode">
-              <SelectValue placeholder="选择模式" />
-            </SelectTrigger>
-            <SelectContent>
-              {unattendedModes.map((mode) => (
-                <SelectItem key={mode.key} value={mode.key}>
-                  {mode.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {unattendedModes.map((mode) => (
+              <ToggleGroupItem key={mode.key} className="flex-1" value={mode.key}>
+                {mode.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </FieldContent>
       </Field>
 
@@ -99,47 +93,49 @@ export function AgentConfigForm({
         </FieldContent>
       </Field>
 
-      <Field>
-        <FieldLabel htmlFor="task-action-agent-session-policy">会话策略</FieldLabel>
-        <FieldContent>
-          <ToggleGroup
-            aria-label="Session policy"
-            className="w-full"
-            type="single"
-            value={value.sessionPolicy}
-            variant="outline"
-            onValueChange={(policy) => {
-              if (policy) onChange({ ...value, sessionPolicy: policy as "fresh" | "resume" })
-            }}
-          >
-            <ToggleGroupItem className="flex-1" value="fresh">
-              每次新建
-            </ToggleGroupItem>
-            <ToggleGroupItem className="flex-1" value="resume">
-              复用上次
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </FieldContent>
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field>
+          <FieldLabel htmlFor="task-action-agent-session-policy">会话策略</FieldLabel>
+          <FieldContent>
+            <ToggleGroup
+              aria-label="Session policy"
+              className="w-full"
+              type="single"
+              value={value.sessionPolicy}
+              variant="outline"
+              onValueChange={(policy) => {
+                if (policy) onChange({ ...value, sessionPolicy: policy as "fresh" | "resume" })
+              }}
+            >
+              <ToggleGroupItem className="flex-1" value="fresh">
+                每次新建
+              </ToggleGroupItem>
+              <ToggleGroupItem className="flex-1" value="resume">
+                复用上次
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </FieldContent>
+        </Field>
 
-      <Field>
-        <FieldLabel htmlFor="task-action-agent-timeout">超时分钟</FieldLabel>
-        <FieldContent>
-          <Input
-            id="task-action-agent-timeout"
-            type="number"
-            min={1}
-            max={120}
-            value={value.timeoutMins ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...value,
-                timeoutMins: e.target.value ? Number(e.target.value) : null,
-              })
-            }
-          />
-        </FieldContent>
-      </Field>
+        <Field>
+          <FieldLabel htmlFor="task-action-agent-timeout">超时分钟</FieldLabel>
+          <FieldContent>
+            <Input
+              id="task-action-agent-timeout"
+              type="number"
+              min={1}
+              max={120}
+              value={value.timeoutMins ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  timeoutMins: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            />
+          </FieldContent>
+        </Field>
+      </div>
     </FieldGroup>
   )
 }
