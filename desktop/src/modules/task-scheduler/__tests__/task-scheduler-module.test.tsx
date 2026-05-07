@@ -41,8 +41,16 @@ vi.mock("../components/task-runs-dialog", () => ({
   TaskRunsDialog: () => null,
 }))
 
+vi.mock("../components/task-export-dialog", () => ({
+  TaskExportDialog: () => null,
+}))
+
+vi.mock("../components/task-import-dialog", () => ({
+  TaskImportDialog: () => null,
+}))
+
 describe("TaskSchedulerModule", () => {
-  it("does not render a duplicate module heading", () => {
+  it("renders empty state when there are no tasks", () => {
     useTaskSchedulerTasksMock.mockReturnValue({
       tasks: [],
       loading: false,
@@ -52,12 +60,12 @@ describe("TaskSchedulerModule", () => {
 
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
-    expect(html).not.toContain(">定时任务</h2>")
+    expect(html).toContain("暂无任务")
   })
 
-  it("does not render a pause action when tasks already have an enable switch", () => {
+  it("renders task names in cards", () => {
     useTaskSchedulerTasksMock.mockReturnValue({
-      tasks: [createTask({ enabled: true })],
+      tasks: [createTask({ name: "Backup" })],
       loading: false,
       error: null,
       refresh: vi.fn(),
@@ -65,11 +73,10 @@ describe("TaskSchedulerModule", () => {
 
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
-    expect(html).not.toContain(">暂停</span>")
-    expect(html).not.toContain("lucide-pause")
+    expect(html).toContain("Backup")
   })
 
-  it("renders action summaries", () => {
+  it("renders trigger info for interval tasks", () => {
     useTaskSchedulerTasksMock.mockReturnValue({
       tasks: [createTask()],
       loading: false,
@@ -79,7 +86,7 @@ describe("TaskSchedulerModule", () => {
 
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
-    expect(html).toContain("命令 · echo ok")
+    expect(html).toContain("每 1 分钟")
   })
 })
 
