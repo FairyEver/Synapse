@@ -21,12 +21,17 @@ echo ""
 step 1 "确保远程目录存在" \
   ssh "$SERVER" "mkdir -p $REMOTE_DIR"
 
-# [2/5] 同步代码
+# [2/5] 同步代码（只传后端需要的文件）
 step 2 "同步代码到服务器" \
   rsync -avz --delete \
-    --exclude=node_modules \
-    --exclude=.git \
-    --exclude=server/.env \
+    --exclude='server/node_modules' \
+    --exclude='server/.env' \
+    --exclude='server/dist' \
+    --include='/server/***' \
+    --include='/pnpm-lock.yaml' \
+    --include='/pnpm-workspace.yaml' \
+    --include='/package.json' \
+    --exclude='*' \
     ./ "$SERVER:$REMOTE_DIR/"
 
 # 检查是否首次部署
