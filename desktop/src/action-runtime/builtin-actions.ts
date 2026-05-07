@@ -5,6 +5,7 @@ import { HttpRequestConfigForm } from "../../action-packages/builtin/http-reques
 import { scriptActionManifest, type ScriptActionConfig } from "../../action-packages/builtin/script"
 import { ScriptConfigForm } from "../../action-packages/builtin/script/config.renderer"
 import { agentActionManifest, type AgentActionConfig } from "../../action-packages/builtin/agent"
+import { AgentConfigForm } from "../../action-packages/builtin/agent/config.renderer"
 import { ActionResultView } from "./action-result-view"
 import {
   RendererActionRegistry,
@@ -38,6 +39,7 @@ const agentRendererAction: RendererActionDefinition<AgentActionConfig> = {
     const agentLabel = config.agentType === "claude-code" ? "Claude Code" : "Codex"
     return `${agentLabel} · ${config.mode}`
   },
+  ConfigForm: AgentConfigForm,
   ResultView: ActionResultView,
 }
 
