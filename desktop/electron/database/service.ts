@@ -527,6 +527,23 @@ class DatabaseService {
         "created_at" TEXT NOT NULL
       )
     `)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS "_table_folders" (
+        "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+        "name" TEXT NOT NULL UNIQUE,
+        "sort_order" INTEGER NOT NULL DEFAULT 0,
+        "created_at" TEXT NOT NULL
+      )
+    `)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS "_table_folder_members" (
+        "folder_id" INTEGER NOT NULL,
+        "table_name" TEXT NOT NULL UNIQUE,
+        "sort_order" INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY ("folder_id", "table_name"),
+        FOREIGN KEY ("folder_id") REFERENCES "_table_folders"("id") ON DELETE CASCADE
+      )
+    `)
     this.ensureSystemMetaColumnShape()
   }
 
