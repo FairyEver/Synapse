@@ -240,6 +240,13 @@ const DATABASE_CHANNELS = {
   databaseMcpServersGet: "synapse:database:mcp-servers:get",
   databaseMcpSettingsOpen: "synapse:database:mcp-settings:open",
   databaseMcpRegister: "synapse:database:mcp:register",
+  databaseFolderList: "synapse:database:folder:list",
+  databaseFolderCreate: "synapse:database:folder:create",
+  databaseFolderRename: "synapse:database:folder:rename",
+  databaseFolderDelete: "synapse:database:folder:delete",
+  databaseFolderMoveTable: "synapse:database:folder:move-table",
+  databaseFolderReorder: "synapse:database:folder:reorder",
+  databaseFolderReorderFolders: "synapse:database:folder:reorder-folders",
 } as const
 
 type RawSubscribe = (channel: string) => (listener: (payload: unknown) => void) => Unsubscribe
@@ -479,6 +486,13 @@ const synapseBridge: SynapseBridge = {
     databaseMcpSettingsOpen: (target) =>
       invoke(DATABASE_CHANNELS.databaseMcpSettingsOpen)(target),
     databaseMcpRegister: (target) => invoke(DATABASE_CHANNELS.databaseMcpRegister)(target),
+    databaseFolderList: invoke(DATABASE_CHANNELS.databaseFolderList),
+    databaseFolderCreate: (params) => invoke(DATABASE_CHANNELS.databaseFolderCreate)(params),
+    databaseFolderRename: (params) => invoke(DATABASE_CHANNELS.databaseFolderRename)(params),
+    databaseFolderDelete: (params) => invoke(DATABASE_CHANNELS.databaseFolderDelete)(params),
+    databaseFolderMoveTable: (params) => invoke(DATABASE_CHANNELS.databaseFolderMoveTable)(params),
+    databaseFolderReorder: (params) => invoke(DATABASE_CHANNELS.databaseFolderReorder)(params),
+    databaseFolderReorderFolders: (params) => invoke(DATABASE_CHANNELS.databaseFolderReorderFolders)(params),
     onChanged: createDomainEventPayloadSubscription<DatabaseChangeEvent>(
       subscribe,
       "database",
