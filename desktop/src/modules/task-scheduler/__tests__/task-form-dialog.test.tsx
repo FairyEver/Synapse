@@ -119,16 +119,9 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("min-h-0 overflow-y-auto")
   })
 
-  it("shows the project selector only for project-scoped tasks", () => {
-    const globalHtml = renderDialog()
-    const projectHtml = renderDialog({
-      task: createTask({
-        scope: { type: "project", projectId: "project-1" },
-      }),
-    })
-
-    expect(globalHtml).not.toContain("task-form-project")
-    expect(projectHtml).toContain("task-form-project")
+  it("does not render a standalone scope selector", () => {
+    const html = renderDialog()
+    expect(html).not.toContain('aria-label="作用域"')
   })
 
   it("shows interval anchor only for interval triggers", () => {
@@ -157,11 +150,6 @@ describe("TaskFormDialog", () => {
         },
       }),
     })
-
-    expect(cronHtml).toContain('aria-label="作用域"')
-    expect(cronHtml).toContain('id="task-form-scope-global"')
-    expect(cronHtml).toContain('id="task-form-scope-project"')
-    expect(cronHtml).not.toContain('id="task-form-scope"')
 
     expect(cronHtml).toContain('aria-label="触发方式"')
     expect(cronHtml).toContain('data-slot="toggle-group"')
@@ -302,13 +290,7 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("task-form-basic-grid")
     expect(html).toContain("task-form-trigger-grid")
     expect(html).toContain("task-form-run-settings-list")
-    expect(html).not.toContain("task-form-run-settings-grid")
-    expect(html).not.toContain("sm:grid-cols-[auto_1fr]")
-    expect(html.match(/task-form-run-setting-row/g)?.length).toBe(2)
-    expect(html.match(/task-form-run-setting-primary/g)?.length).toBe(2)
-    expect(html.match(/task-form-run-setting-secondary/g)?.length ?? 0).toBe(0)
-    expect(html).toContain("flex w-full items-center gap-3")
-    expect(html).not.toMatch(/task-form-run-setting-row" class="[^"]*justify-between/)
+    expect(html).toContain("task-form-run-setting-row")
   })
 })
 

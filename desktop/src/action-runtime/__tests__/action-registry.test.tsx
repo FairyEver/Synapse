@@ -8,6 +8,7 @@ describe("renderer action registry", () => {
       "builtin.command",
       "builtin.script",
       "builtin.http-request",
+      "builtin.agent",
     ])
   })
 
