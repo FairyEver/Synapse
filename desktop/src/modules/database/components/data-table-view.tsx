@@ -147,10 +147,10 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   const columnWidths = useMemo(() => {
     const widths: Record<string, number> = {}
     for (const col of visibleColumns) {
-      widths[col.name] = resizedColumnWidths[col.name] ?? getDefaultColumnWidth(col, rows)
+      widths[col.name] = resizedColumnWidths[col.name] ?? getDefaultColumnWidth(col)
     }
     return widths
-  }, [resizedColumnWidths, rows, visibleColumns])
+  }, [resizedColumnWidths, visibleColumns])
   const tableWidth = useMemo(
     () => visibleColumns.reduce(
       (width, col) => width + columnWidths[col.name],

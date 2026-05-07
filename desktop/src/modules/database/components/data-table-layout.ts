@@ -4,10 +4,8 @@ import type { Column } from "@/types/database"
 const DATA_TABLE_ID_COLUMN_WIDTH = 56
 const DATA_TABLE_ACTION_COLUMN_WIDTH = 72
 const DATA_TABLE_MIN_VALUE_COLUMN_WIDTH = 72
-const DATA_TABLE_MAX_VALUE_COLUMN_WIDTH = 360
 const DATA_TABLE_SYSTEM_TIME_COLUMN_WIDTH = 164
 const DATA_TABLE_HEADER_EXTRA_WIDTH = 32
-const DATA_TABLE_CELL_EXTRA_WIDTH = 28
 
 const DATA_TABLE_COLUMN_CLASS = "overflow-hidden"
 const DATA_TABLE_STICKY_ACTION_COLUMN_CLASS = `${DATA_TABLE_COLUMN_CLASS} sticky right-0 z-10 bg-background`
@@ -33,10 +31,6 @@ function measureTableTextWidth(text: string): number {
 
   columnMeasureContext.font = getTableTextFont()
   return columnMeasureContext.measureText(text).width
-}
-
-function clampColumnWidth(width: number): number {
-  return Math.min(DATA_TABLE_MAX_VALUE_COLUMN_WIDTH, Math.max(DATA_TABLE_MIN_VALUE_COLUMN_WIDTH, Math.ceil(width)))
 }
 
 function formatCellValue(value: unknown, type?: string, columnName?: string): string {
@@ -75,19 +69,13 @@ function padDatePart(value: number): string {
 
 function getDefaultColumnWidth(
   column: Column,
-  rows: Record<string, unknown>[],
 ): number {
   if (column.system && !column.primaryKey) {
     return DATA_TABLE_SYSTEM_TIME_COLUMN_WIDTH
   }
 
   const headerWidth = measureTableTextWidth(column.name) + DATA_TABLE_HEADER_EXTRA_WIDTH
-  const contentWidth = rows.reduce((maxWidth, row) => {
-    const valueText = formatCellValue(row[column.name], column.kind, column.name)
-    return Math.max(maxWidth, measureTableTextWidth(valueText) + DATA_TABLE_CELL_EXTRA_WIDTH)
-  }, 0)
-
-  return clampColumnWidth(Math.max(headerWidth, contentWidth))
+  return Math.max(DATA_TABLE_MIN_VALUE_COLUMN_WIDTH, Math.ceil(headerWidth))
 }
 
 function getColumnWidthStyle(width: number): CSSProperties {
