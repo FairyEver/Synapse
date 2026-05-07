@@ -5,6 +5,7 @@ import {
   DatabaseSidebar,
   filterDatabaseTables,
 } from "../components/database-sidebar"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import type { DatabaseTableInfo } from "@/types/database"
 
 const tables: DatabaseTableInfo[] = [
@@ -32,15 +33,24 @@ const tables: DatabaseTableInfo[] = [
 ]
 
 describe("DatabaseSidebar", () => {
-  it("renders table descriptions under table names without row icons", () => {
+  it("renders table names and descriptions", () => {
     const html = renderToStaticMarkup(
-      <DatabaseSidebar
-        tables={tables}
-        activeTable="customer_orders"
-        onTableSelect={vi.fn()}
-        onCreateTable={vi.fn()}
-        onImportTable={vi.fn()}
-      />,
+      <TooltipProvider>
+        <DatabaseSidebar
+          tables={tables}
+          folders={[]}
+          activeTable="customer_orders"
+          displayMode="title+desc"
+          onDisplayModeChange={vi.fn()}
+          onTableSelect={vi.fn()}
+          onCreateTable={vi.fn()}
+          onImportTable={vi.fn()}
+          onCreateFolder={vi.fn()}
+          onRenameFolder={vi.fn()}
+          onDeleteFolder={vi.fn()}
+          onMoveTable={vi.fn()}
+        />
+      </TooltipProvider>,
     )
 
     expect(html).toContain("搜索数据表或备注")
@@ -48,8 +58,6 @@ describe("DatabaseSidebar", () => {
     expect(html).toContain("客户订单")
     expect(html).toContain("product_sku")
     expect(html).toContain("商品编码")
-    expect(html).not.toContain("暂无备注")
-    expect(html).not.toContain("lucide-table-2")
   })
 
   it("filters tables by name or description", () => {

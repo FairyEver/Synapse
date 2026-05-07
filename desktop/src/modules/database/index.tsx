@@ -21,6 +21,8 @@ import { DataTableView } from "./components/data-table-view"
 import type { DataTableViewHandle } from "./components/data-table-view"
 import { CreateTableDialog } from "./components/create-table-dialog"
 import { TableSchemaSheet } from "./components/table-schema-sheet"
+import { useDatabaseFolders } from "./hooks/use-database-folders"
+import type { DisplayMode } from "./components/database-sidebar-toolbar"
 import {
   databaseColumnCreate,
   databaseTableCreate,
@@ -46,6 +48,8 @@ const logger = createRendererLogger("database")
 function DatabaseModule() {
   const { tables, loading: tablesLoading, error: tablesError, refresh: refreshTables } = useDatabaseTables()
   const { error: showError, success: showSuccess, promise } = useAppNotifications()
+  const { folders, createFolder, renameFolder, deleteFolder, moveTable } = useDatabaseFolders()
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("title+desc")
 
   const [activeTable, setActiveTable] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -367,7 +371,10 @@ function DatabaseModule() {
   const sidebar = (
     <DatabaseSidebar
       tables={tables}
+      folders={folders}
       activeTable={selectedTable}
+      displayMode={displayMode}
+      onDisplayModeChange={setDisplayMode}
       onTableSelect={(name) => {
         void handleTableSelect(name).catch((error) => {
           logger.warn("Table select failed.", { error })
@@ -381,6 +388,10 @@ function DatabaseModule() {
       onImportTable={() => {
         void handleChooseImportTable()
       }}
+      onCreateFolder={createFolder}
+      onRenameFolder={renameFolder}
+      onDeleteFolder={deleteFolder}
+      onMoveTable={moveTable}
     />
   )
 
