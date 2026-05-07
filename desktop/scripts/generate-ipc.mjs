@@ -92,8 +92,8 @@ async function loadModuleDescriptor(importPath) {
 
   return {
     id,
-    methods: extractChannels(methods, sourceFile),
-    events: extractChannels(events, sourceFile),
+    methods: extractChannels(methods, sourceFile, resolved),
+    events: extractChannels(events, sourceFile, resolved),
   }
 }
 
@@ -145,10 +145,16 @@ function findObjectProperty(objectLiteral, propertyName, sourceFile) {
   })
 }
 
-function extractChannels(objectLiteral, sourceFile) {
+function extractChannels(objectLiteral, sourceFile, resolvedFilePath) {
   const channels = {}
 
   for (const property of objectLiteral.properties) {
+    if (ts.isSpreadAssignment(property)) {
+      const spreadChannels = resolveSpreadChannels(property, sourceFile, resolvedFilePath)
+      Object.assign(channels, spreadChannels)
+      continue
+    }
+
     if (!ts.isPropertyAssignment(property) || !ts.isObjectLiteralExpression(property.initializer)) {
       continue
     }
@@ -164,6 +170,83 @@ function extractChannels(objectLiteral, sourceFile) {
   }
 
   return channels
+}
+
+function resolveSpreadChannels(spreadAssignment, sourceFile, resolvedFilePath) {
+  const expr = spreadAssignment.expression
+  if (!ts.isIdentifier(expr)) return {}
+
+  const identifierName = expr.text
+  const importSource = findImportSource(sourceFile, identifierName)
+  if (!importSource) return {}
+
+  const importedFilePath = resolveImportPath(importSource, resolvedFilePath)
+  if (!importedFilePath) return {}
+
+  const importedSource = ts.sys.readFile(importedFilePath)
+  if (!importedSource) return {}
+
+  const importedSourceFile = ts.createSourceFile(
+    importedFilePath,
+    importedSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  )
+
+  const objectLiteral = findExportedVariable(importedSourceFile, identifierName)
+  if (!objectLiteral) return {}
+
+  return extractChannels(objectLiteral, importedSourceFile, importedFilePath)
+}
+
+function findImportSource(sourceFile, identifierName) {
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) continue
+    const clause = statement.importClause
+    if (!clause?.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue
+    for (const specifier of clause.namedBindings.elements) {
+      if (specifier.name.text === identifierName) {
+        return statement.moduleSpecifier.text
+      }
+    }
+  }
+  return null
+}
+
+function resolveImportPath(importSource, fromFilePath) {
+  if (!importSource.startsWith(".")) return null
+  const dir = path.dirname(fromFilePath)
+  let resolved = path.resolve(dir, importSource)
+  const extensions = [".ts", ".tsx", "/index.ts", "/index.tsx"]
+  for (const ext of extensions) {
+    const candidate = resolved + ext
+    if (ts.sys.fileExists(candidate)) return candidate
+  }
+  if (ts.sys.fileExists(resolved)) return resolved
+  return null
+}
+
+function findExportedVariable(sourceFile, variableName) {
+  let result = null
+  function visit(node) {
+    if (ts.isVariableStatement(node)) {
+      for (const decl of node.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === variableName && decl.initializer) {
+          let init = decl.initializer
+          while (ts.isAsExpression(init) || ts.isTypeAssertionExpression(init) || ts.isSatisfiesExpression(init)) {
+            init = init.expression
+          }
+          if (ts.isObjectLiteralExpression(init)) {
+            result = init
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return result
 }
 
 function getPropertyName(name, sourceFile) {

@@ -4,6 +4,7 @@ import type {
   DataNamespace,
 } from "../../runtime/data-repo"
 import type { ScopedEventBus } from "../../runtime/project-container"
+import type { ControlledProcessIsolationOptions } from "../../runtime/process"
 import type { AuditSink } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService } from "../reply-target"
@@ -49,7 +50,7 @@ export interface MessageRouterDeps {
 export interface MessageRouterCallbacks {
   readonly stateForConversation: (conversationId: string, message?: AgentMessage) => RuntimeSessionState
   readonly resolveAdapter: (agentTypeOverride?: string) => Promise<AgentAdapter>
-  readonly resolveProcessIsolation: (message: AgentMessage) => Promise<unknown>
+  readonly resolveProcessIsolation: (message: AgentMessage) => Promise<ControlledProcessIsolationOptions | undefined>
   readonly workDirFor: (message: AgentMessage) => string | undefined
   readonly getOrCreateCompressionState: (agentType: string) => Promise<AgentCompressStateEntryV1>
   readonly markCompressionState: (
