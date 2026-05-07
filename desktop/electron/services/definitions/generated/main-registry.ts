@@ -29,11 +29,11 @@ import type {
 import type { SynapseMcpDefinition } from "../../../../src/definitions/types"
 
 export const editorAdapters = [
+  antigravityEditorAdapter,
   claudeCodeEditorAdapter,
   codexEditorAdapter,
   cursorEditorAdapter,
   windsurfEditorAdapter,
-  antigravityEditorAdapter,
 ] satisfies EditorAdapter[]
 
 export const editorAdapterById = new Map(

@@ -1,8 +1,9 @@
 import * as React from "react"
+import { type VariantProps } from "class-variance-authority"
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { track, mergeRefs } from "@/lib/ui-tracking"
 
 const AlertDialogTrackContext = React.createContext<React.MutableRefObject<string | undefined> | null>(null)
@@ -131,14 +132,19 @@ function AlertDialogDescription({
 
 function AlertDialogAction({
   className,
+  variant,
+  size,
   "data-track": dataTrack,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action> & {
-  "data-track"?: string
-}) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Action> &
+  VariantProps<typeof buttonVariants> & {
+    "data-track"?: string
+  }) {
   return (
     <AlertDialogPrimitive.Action asChild>
       <Button
+        variant={variant}
+        size={size}
         className={className}
         data-track={dataTrack}
         {...props}
