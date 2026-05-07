@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react"
 import {
+  Download,
   History,
   LoaderCircle,
   Pencil,
@@ -7,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Upload,
 } from "lucide-react"
 
 import { useAppConfig } from "@/app-shell/config"
@@ -55,11 +57,15 @@ import type {
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 import { TaskFormDialog } from "./components/task-form-dialog"
+import { TaskExportDialog } from "./components/task-export-dialog"
+import { TaskImportDialog } from "./components/task-import-dialog"
 import { TaskRunsDialog } from "./components/task-runs-dialog"
-import type { TaskFormDialogState } from "./types"
+import type { TaskExportEntry, TaskFormDialogState } from "./types"
 import {
   createTask,
   deleteTask,
+  exportTasksToFile,
+  importTasksFromFile,
   runTask,
   setTaskEnabled,
   stopRun,
@@ -72,6 +78,8 @@ import {
   formatTaskScope,
   formatTaskStatus,
   formatTaskTrigger,
+  parseTaskImportFile,
+  serializeTasksForExport,
 } from "./utils"
 
 const logger = createRendererLogger("task-scheduler")
@@ -86,6 +94,8 @@ function TaskSchedulerModule() {
   const [historyTask, setHistoryTask] = useState<ScheduledTask | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ScheduledTask | null>(null)
   const [busy, setBusy] = useState(false)
+  const [isExportOpen, setIsExportOpen] = useState(false)
+  const [importEntries, setImportEntries] = useState<TaskExportEntry[] | null>(null)
 
   async function runMutation<T>(
     operation: () => Promise<T>,
@@ -146,6 +156,63 @@ function TaskSchedulerModule() {
     setDeleteTarget(null)
   }
 
+  async function handleExport(selectedIds: string[]) {
+    const selectedTasks = tasks.filter((t) => selectedIds.includes(t.id))
+    const exportData = serializeTasksForExport(selectedTasks)
+    const json = JSON.stringify(exportData, null, 2)
+    const result = await exportTasksToFile(json)
+    if (result.success) {
+      setIsExportOpen(false)
+    }
+  }
+
+  async function handleImportStart() {
+    const result = await importTasksFromFile()
+    if (!result.success || !result.content) return
+    try {
+      const parsed = parseTaskImportFile(result.content)
+      setImportEntries(parsed.tasks)
+    } catch {
+      void promise(
+        () => Promise.reject(new Error("文件格式无效")),
+        { loading: "", success: "", error: "文件格式无效" },
+      )
+    }
+  }
+
+  async function handleImport(indices: number[]) {
+    if (!importEntries) return
+    const selected = indices.map((i) => importEntries[i])
+    let successCount = 0
+    let failCount = 0
+    for (const entry of selected) {
+      try {
+        await createTask({
+          name: entry.name,
+          description: entry.description,
+          scope: entry.scope,
+          cwd: entry.cwd,
+          trigger: entry.trigger,
+          action: entry.action,
+          enabled: false,
+          missedRunPolicy: entry.missedRunPolicy,
+        })
+        successCount++
+      } catch {
+        failCount++
+      }
+    }
+    setImportEntries(null)
+    await refresh()
+    const msg = failCount > 0
+      ? `已导入 ${successCount} 个任务，${failCount} 个失败`
+      : `已导入 ${successCount} 个任务`
+    void promise(
+      () => Promise.resolve(null),
+      { loading: "", success: msg, error: "" },
+    )
+  }
+
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col gap-2.5 bg-muted/30 px-2 py-2.5">
@@ -158,6 +225,19 @@ function TaskSchedulerModule() {
               }}
             >
               <RefreshCw />
+            </IconButton>
+            <IconButton
+              label="导入"
+              onClick={() => void handleImportStart()}
+            >
+              <Upload />
+            </IconButton>
+            <IconButton
+              label="导出"
+              disabled={tasks.length === 0}
+              onClick={() => setIsExportOpen(true)}
+            >
+              <Download />
             </IconButton>
             <Button
               onClick={() => {
@@ -348,6 +428,21 @@ function TaskSchedulerModule() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <TaskExportDialog
+          open={isExportOpen}
+          onOpenChange={setIsExportOpen}
+          tasks={tasks}
+          onExport={(ids) => void handleExport(ids)}
+        />
+        {importEntries ? (
+          <TaskImportDialog
+            open={true}
+            onOpenChange={(open) => { if (!open) setImportEntries(null) }}
+            entries={importEntries}
+            onImport={(indices) => void handleImport(indices)}
+          />
+        ) : null}
       </div>
     </TooltipProvider>
   )

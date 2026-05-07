@@ -66,9 +66,19 @@ async function listRuns(taskId: string, limit = 100): Promise<ScheduledTaskRun[]
   return requireSynapseBridge().taskScheduler.listRuns(taskId, { limit })
 }
 
+async function exportTasksToFile(json: string): Promise<{ success: boolean; path?: string }> {
+  return requireSynapseBridge().taskScheduler.exportTasksToFile(json)
+}
+
+async function importTasksFromFile(): Promise<{ success: boolean; content?: string }> {
+  return requireSynapseBridge().taskScheduler.importTasksFromFile()
+}
+
 export {
   createTask,
   deleteTask,
+  exportTasksToFile,
+  importTasksFromFile,
   listRuns,
   runTask,
   setTaskEnabled,
