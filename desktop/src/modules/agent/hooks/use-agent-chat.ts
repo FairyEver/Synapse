@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useReducer, useRef } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
@@ -25,6 +25,7 @@ import {
   shouldAutoFollowConversation,
   type UnreadState,
 } from "../live-sync"
+import { chatReducer, initialChatState } from "./use-chat-reducer"
 
 const logger = createRendererLogger("agent")
 
@@ -65,21 +66,24 @@ function useAgentChat(
   projectScope: AgentProjectScope,
   options: { readonly inputDirty?: boolean } = {},
 ): UseAgentChatState {
-  const [sessions, setSessions] = useState<SynapseAgentSessionSummary[]>([])
-  const [archivedSessions, setArchivedSessions] = useState<SynapseAgentSessionSummary[]>([])
-  const [timeline, setTimeline] = useState<SynapseAgentTimelineItem[]>([])
-  const [pendingPermissions, setPendingPermissions] = useState<SynapseAgentPendingPermission[]>([])
-  const [status, setStatus] = useState<SynapseAgentStatus | null>(null)
-  const [providers, setProviders] = useState<SynapseAgentProviderState | null>(null)
-  const [commands, setCommands] = useState<SynapseAgentPublishedCommand[]>([])
-  const [followFeishu, setFollowFeishuRaw] = useState(false)
-  const [unreadByConversationId, setUnreadByConversationId] = useState<UnreadState>({})
-  const [selectedProjectId, setSelectedProjectIdRaw] = useState<string | undefined>()
-  const [selectedConversationId, setSelectedConversationIdRaw] = useState<string | undefined>()
-  const [selectedSessionKey, setSelectedSessionKeyRaw] = useState(DEFAULT_LOCAL_SESSION_KEY)
-  const [loading, setLoading] = useState(false)
-  const [sendingConversationIds, setSendingConversationIds] = useState<Set<string>>(new Set())
-  const [error, setError] = useState<string | null>(null)
+  const [state, dispatch] = useReducer(chatReducer, initialChatState)
+  const {
+    sessions,
+    archivedSessions,
+    timeline,
+    pendingPermissions,
+    status,
+    providers,
+    commands,
+    followFeishu,
+    unreadByConversationId,
+    selectedProjectId,
+    selectedConversationId,
+    selectedSessionKey,
+    loading,
+    sendingConversationIds,
+    error,
+  } = state
   const followFeishuRef = useRef(followFeishu)
   const inputDirtyRef = useRef(options.inputDirty ?? false)
   const projectIdsRef = useRef(projectScope.projectIds)
@@ -100,7 +104,7 @@ function useAgentChat(
 
   const setFollowFeishu = useCallback((follow: boolean) => {
     followFeishuRef.current = follow
-    setFollowFeishuRaw(follow)
+    dispatch({ type: "SET_FOLLOW_FEISHU", followFeishu: follow })
     logger.info("Agent follow Feishu changed.", {
       followFeishu: follow,
       selectedProjectId: selectedProjectIdRef.current,
@@ -111,14 +115,14 @@ function useAgentChat(
 
   const replaceTimeline = useCallback((entries: SynapseAgentTimelineItem[]) => {
     timelineVersionRef.current += 1
-    setTimeline(entries)
+    dispatch({ type: "SET_TIMELINE", timeline: entries })
   }, [])
 
   const updateTimeline = useCallback((
     updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[],
   ) => {
     timelineVersionRef.current += 1
-    setTimeline(updater)
+    dispatch({ type: "UPDATE_TIMELINE", updater })
   }, [])
 
   const clearTimeline = useCallback(() => {
@@ -135,9 +139,9 @@ function useAgentChat(
     selectedProjectIdRef.current = session?.projectId
     selectedConversationIdRef.current = session?.id
     selectedSessionKeyRef.current = session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY
-    setSelectedProjectIdRaw(session?.projectId)
-    setSelectedConversationIdRaw(session?.id)
-    setSelectedSessionKeyRaw(session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY)
+    dispatch({ type: "SET_SELECTED_PROJECT_ID", selectedProjectId: session?.projectId })
+    dispatch({ type: "SET_SELECTED_CONVERSATION_ID", selectedConversationId: session?.id })
+    dispatch({ type: "SET_SELECTED_SESSION_KEY", selectedSessionKey: session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY })
   }, [])
 
   const loadTimeline = useCallback(async (target: TimelineTarget) => {
@@ -178,28 +182,28 @@ function useAgentChat(
       const allSessions = await bridge.agent.listAllSessions()
       const currentProjectIds = new Set(projectIdsRef.current)
       const orphans = allSessions.filter((session) => !currentProjectIds.has(session.projectId))
-      setArchivedSessions(orphans)
+      dispatch({ type: "SET_ARCHIVED_SESSIONS", archivedSessions: orphans })
     } catch {
-      setArchivedSessions([])
+      dispatch({ type: "SET_ARCHIVED_SESSIONS", archivedSessions: [] })
     }
   }, [])
 
   const refreshPendingPermissions = useCallback(async () => {
     if (projectIdsRef.current.length === 0) {
-      setPendingPermissions([])
+      dispatch({ type: "SET_PENDING_PERMISSIONS", pendingPermissions: [] })
       return
     }
     const bridge = requireSynapseBridge()
     const groups = await Promise.all(projectIdsRef.current.map((projectId) =>
       bridge.agent.listPendingPermissions(projectId)))
-    setPendingPermissions(groups.flat())
+    dispatch({ type: "SET_PENDING_PERMISSIONS", pendingPermissions: groups.flat() })
   }, [])
 
   const refreshProjectMeta = useCallback(async (projectId: string | undefined) => {
     if (!projectId) {
-      setStatus(null)
-      setProviders(null)
-      setCommands([])
+      dispatch({ type: "SET_STATUS", status: null })
+      dispatch({ type: "SET_PROVIDERS", providers: null })
+      dispatch({ type: "SET_COMMANDS", commands: [] })
       return
     }
     const bridge = requireSynapseBridge()
@@ -208,9 +212,9 @@ function useAgentChat(
       bridge.agent.getProviders(projectId),
       bridge.agent.listCommands(projectId),
     ])
-    setStatus(nextStatus)
-    setProviders(nextProviders)
-    setCommands(nextCommands)
+    dispatch({ type: "SET_STATUS", status: nextStatus })
+    dispatch({ type: "SET_PROVIDERS", providers: nextProviders })
+    dispatch({ type: "SET_COMMANDS", commands: nextCommands })
   }, [])
 
   const refreshConversationSnapshot = useCallback(async (target: TimelineTarget) => {
@@ -222,14 +226,14 @@ function useAgentChat(
       ])
       const normalizedSessions = nextSessions.map((session) =>
         normalizeSessionProject(session, target.projectId))
-      setSessions((current) => sortSessions([
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => sortSessions([
         ...current.filter((session) => session.projectId !== target.projectId),
         ...normalizedSessions,
-      ]))
-      setPendingPermissions((current) => [
+      ]) })
+      dispatch({ type: "UPDATE_PENDING_PERMISSIONS", updater: (current) => [
         ...current.filter((permission) => permission.projectId !== target.projectId),
         ...nextPending,
-      ])
+      ] })
       logger.info("Agent conversation snapshot refreshed.", {
         projectId: target.projectId,
         targetConversationId: target.conversationId,
@@ -241,7 +245,7 @@ function useAgentChat(
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "刷新会话失败"
       logger.error("Agent conversation refresh failed.", rawError)
-      setError(message)
+      dispatch({ type: "SET_ERROR", error: message })
     }
   }, [])
 
@@ -251,8 +255,8 @@ function useAgentChat(
     }
     selectRequestIdRef.current += 1
     const requestId = selectRequestIdRef.current
-    setLoading(true)
-    setError(null)
+    dispatch({ type: "SET_LOADING", loading: true })
+    dispatch({ type: "SET_ERROR", error: null })
     try {
       const nextSessions = await loadSessionsForProjects()
       const retained = findSessionByRef(
@@ -265,7 +269,7 @@ function useAgentChat(
         ?? nextSessions[0]
       const nextProjectId = nextSession?.projectId ?? getDefaultProjectId()
       const nextSessionKey = nextSession?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY
-      setSessions(nextSessions)
+      dispatch({ type: "SET_SESSIONS", sessions: nextSessions })
       await Promise.all([
         refreshPendingPermissions(),
         refreshProjectMeta(nextProjectId),
@@ -296,9 +300,9 @@ function useAgentChat(
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "加载失败"
       logger.error("Agent refresh failed.", rawError)
-      setError(message)
+      dispatch({ type: "SET_ERROR", error: message })
     } finally {
-      setLoading(false)
+      dispatch({ type: "SET_LOADING", loading: false })
     }
   }, [
     clearTimeline,
@@ -316,7 +320,7 @@ function useAgentChat(
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
-    setError(null)
+    dispatch({ type: "SET_ERROR", error: null })
     try {
       const created = await bridge.agent.createSession({
         projectId,
@@ -326,21 +330,21 @@ function useAgentChat(
       })
       const session = normalizeSessionProject(created, projectId)
       if (requestId !== selectRequestIdRef.current) {
-        setSessions((current) => current.some((item) => isSameSession(item, session))
+        dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.some((item) => isSameSession(item, session))
           ? current
-          : sortSessions([{ ...session, active: false }, ...current]))
+          : sortSessions([{ ...session, active: false }, ...current]) })
         toast("新会话已创建")
         return
       }
       setSelectedSession(session)
-      setSessions((current) => sortSessions([
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => sortSessions([
         session,
         ...current.map((item) => ({
           ...item,
           active: item.projectId === session.projectId ? false : item.active,
         })).filter((item) => !isSameSession(item, session)),
-      ]))
-      setUnreadByConversationId((current) => clearConversationUnread(current, session.projectId, session.id))
+      ]) })
+      dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, session.projectId, session.id) })
       clearTimeline()
       toast("新会话已创建")
       await refresh()
@@ -350,7 +354,7 @@ function useAgentChat(
       }
       const message = rawError instanceof Error ? rawError.message : "创建失败"
       logger.error("Agent session create failed.", rawError)
-      setError(message)
+      dispatch({ type: "SET_ERROR", error: message })
     }
   }, [clearTimeline, refresh, setSelectedSession])
 
@@ -358,7 +362,7 @@ function useAgentChat(
     const bridge = requireSynapseBridge()
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
-    setError(null)
+    dispatch({ type: "SET_ERROR", error: null })
     try {
       const switched = await bridge.agent.switchSession({
         projectId: target.projectId,
@@ -370,11 +374,11 @@ function useAgentChat(
       }
       const session = normalizeSessionProject(switched, target.projectId)
       setSelectedSession(session)
-      setUnreadByConversationId((current) => clearConversationUnread(current, session.projectId, session.id))
-      setSessions((current) => current.map((item) => ({
+      dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, session.projectId, session.id) })
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.map((item) => ({
         ...item,
         active: item.projectId === session.projectId && item.id === session.id,
-      })))
+      })) })
       await refreshProjectMeta(session.projectId)
       await loadTimeline({
         projectId: session.projectId,
@@ -386,7 +390,7 @@ function useAgentChat(
         return
       }
       logger.error("Agent session switch failed.", rawError)
-      setError(rawError instanceof Error ? rawError.message : "切换失败")
+      dispatch({ type: "SET_ERROR", error: rawError instanceof Error ? rawError.message : "切换失败" })
     }
   }, [loadTimeline, refreshProjectMeta, setSelectedSession])
 
@@ -409,9 +413,9 @@ function useAgentChat(
       localUserTimelineItem(trimmed, now, current.length),
     ])
     if (conversationId) {
-      setSendingConversationIds((current) => new Set([...current, conversationId]))
+      dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId })
     }
-    setError(null)
+    dispatch({ type: "SET_ERROR", error: null })
     try {
       await bridge.agent.send({
         projectId,
@@ -421,14 +425,10 @@ function useAgentChat(
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "发送失败"
       logger.error("Agent send failed.", rawError)
-      setError(message)
+      dispatch({ type: "SET_ERROR", error: message })
     } finally {
       if (conversationId) {
-        setSendingConversationIds((current) => {
-          const next = new Set(current)
-          next.delete(conversationId)
-          return next
-        })
+        dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId })
       }
     }
   }, [getDefaultProjectId, sessions, updateTimeline])
@@ -437,7 +437,7 @@ function useAgentChat(
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
-    setError(null)
+    dispatch({ type: "SET_ERROR", error: null })
     try {
       const result = await bridge.agent.deleteSession({
         projectId: target.projectId,
@@ -445,7 +445,7 @@ function useAgentChat(
       })
       if (requestId !== selectRequestIdRef.current) {
         if (result.ok) {
-          setUnreadByConversationId((current) => clearConversationUnread(current, target.projectId, target.id))
+          dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
           toast("会话已删除")
           void refreshConversationSnapshot({
             projectId: target.projectId,
@@ -456,10 +456,10 @@ function useAgentChat(
         return
       }
       if (!result.ok) {
-        setError("会话不存在")
+        dispatch({ type: "SET_ERROR", error: "会话不存在" })
         return
       }
-      setUnreadByConversationId((current) => clearConversationUnread(current, target.projectId, target.id))
+      dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
       if (selectedProjectIdRef.current === target.projectId && selectedConversationIdRef.current === target.id) {
         const next = sessions.find((session) => !isSameSession(session, target))
         setSelectedSession(next)
@@ -474,7 +474,7 @@ function useAgentChat(
           clearTimeline()
         }
       }
-      setSessions((current) => current.filter((session) => !isSameSession(session, target)))
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
       toast("会话已删除")
     } catch (rawError) {
       if (requestId !== selectRequestIdRef.current) {
@@ -482,7 +482,7 @@ function useAgentChat(
       }
       const message = rawError instanceof Error ? rawError.message : "删除失败"
       logger.error("Agent session delete failed.", rawError)
-      setError(message)
+      dispatch({ type: "SET_ERROR", error: message })
     }
   }, [
     clearTimeline,
@@ -496,20 +496,20 @@ function useAgentChat(
 
   const renameSession = useCallback(async (target: SynapseAgentSessionSummary, name: string) => {
     const bridge = requireSynapseBridge()
-    setError(null)
+    dispatch({ type: "SET_ERROR", error: null })
     try {
       await bridge.agent.renameSession({
         projectId: target.projectId,
         conversationId: target.id,
         name,
       })
-      setSessions((current) => current.map((session) =>
-        isSameSession(session, target) ? { ...session, name } : session))
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.map((session) =>
+        isSameSession(session, target) ? { ...session, name } : session) })
       toast("已重命名")
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "重命名失败"
       logger.error("Agent session rename failed.", rawError)
-      setError(message)
+      dispatch({ type: "SET_ERROR", error: message })
     }
   }, [])
 
@@ -521,31 +521,23 @@ function useAgentChat(
       ?? getDefaultProjectId()
     if (!projectId) return
     const bridge = requireSynapseBridge()
-    setError(null)
+    dispatch({ type: "SET_ERROR", error: null })
     try {
       await bridge.agent.respondPermission({ projectId, requestId, behavior })
       await refreshPendingPermissions()
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "处理失败"
       logger.error("Agent permission response failed.", rawError)
-      setError(message)
+      dispatch({ type: "SET_ERROR", error: message })
     }
   }, [getDefaultProjectId, pendingPermissions, refreshPendingPermissions])
 
   useEffect(() => {
     if (projectIdsRef.current.length === 0) {
       selectRequestIdRef.current += 1
-      setSessions([])
+      dispatch({ type: "RESET" })
       clearTimeline()
-      setPendingPermissions([])
-      setStatus(null)
-      setProviders(null)
-      setCommands([])
-      setUnreadByConversationId({})
       setSelectedSession(undefined)
-      setError(null)
-      setLoading(false)
-      setSendingConversationIds(new Set())
       void loadArchivedSessions()
       return
     }
@@ -605,27 +597,27 @@ function useAgentChat(
             selectedProjectIdRef.current = domainEvent.payload.projectId
             selectedConversationIdRef.current = domainEvent.payload.conversationId
             selectedSessionKeyRef.current = domainEvent.payload.sessionKey
-            setSelectedProjectIdRaw(domainEvent.payload.projectId)
-            setSelectedConversationIdRaw(domainEvent.payload.conversationId)
-            setSelectedSessionKeyRaw(domainEvent.payload.sessionKey)
+            dispatch({ type: "SET_SELECTED_PROJECT_ID", selectedProjectId: domainEvent.payload.projectId })
+            dispatch({ type: "SET_SELECTED_CONVERSATION_ID", selectedConversationId: domainEvent.payload.conversationId })
+            dispatch({ type: "SET_SELECTED_SESSION_KEY", selectedSessionKey: domainEvent.payload.sessionKey })
           }
-          setUnreadByConversationId((current) => clearConversationUnread(
+          dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(
             current,
             domainEvent.payload.projectId,
             domainEvent.payload.conversationId,
-          ))
+          ) })
           void loadTimeline(domainEvent.payload).catch((rawError: unknown) => {
             const message = rawError instanceof Error ? rawError.message : "加载会话失败"
             logger.error("Agent live timeline refresh failed.", rawError)
-            setError(message)
+            dispatch({ type: "SET_ERROR", error: message })
           })
           return
         }
-        setUnreadByConversationId((current) => incrementUnreadForConversation(
+        dispatch({ type: "UPDATE_UNREAD", updater: (current) => incrementUnreadForConversation(
           current,
           domainEvent.payload,
           selected,
-        ))
+        ) })
         return
       }
       if (!matchesSelectedEvent(domainEvent, {
