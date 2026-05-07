@@ -693,7 +693,9 @@ class DatabaseService {
   }
 
   databaseTableList(): DatabaseTableInfo[] {
-    return this.getSchemaManager().databaseTableList()
+    const tables = this.getSchemaManager().databaseTableList()
+    this.folderCleanupOrphans(tables.map((t) => t.name))
+    return tables
   }
 
   databaseOverviewGet(): DatabaseOverview {
@@ -1089,6 +1091,8 @@ class DatabaseService {
 
   databaseTableRename(from: string, to: string): void {
     this.getSchemaManager().databaseTableRename(from, to)
+    const db = this.getDb()
+    db.prepare(`UPDATE "_table_folder_members" SET table_name = ? WHERE table_name = ?`).run(to, from)
   }
 
   databaseColumnRename(table: string, from: string, to: string): void {
@@ -1209,6 +1213,105 @@ class DatabaseService {
 
   getDbPath(): string {
     return this.dbPath
+  }
+
+  // ── Folder methods ──────────────────────────────────────────────────────────
+
+  folderList(): { id: number; name: string; sortOrder: number; members: { tableName: string; sortOrder: number }[] }[] {
+    const db = this.getDb()
+    const folders = db.prepare(`SELECT id, name, sort_order FROM "_table_folders" ORDER BY sort_order, id`).all() as {
+      id: number | bigint
+      name: string
+      sort_order: number | bigint
+    }[]
+    const members = db.prepare(`SELECT folder_id, table_name, sort_order FROM "_table_folder_members" ORDER BY sort_order`).all() as {
+      folder_id: number | bigint
+      table_name: string
+      sort_order: number | bigint
+    }[]
+    const membersByFolder = new Map<number, { tableName: string; sortOrder: number }[]>()
+    for (const m of members) {
+      const fid = toNumber(m.folder_id)
+      const list = membersByFolder.get(fid) ?? []
+      list.push({ tableName: m.table_name, sortOrder: toNumber(m.sort_order) })
+      membersByFolder.set(fid, list)
+    }
+    return folders.map((f) => ({
+      id: toNumber(f.id),
+      name: f.name,
+      sortOrder: toNumber(f.sort_order),
+      members: membersByFolder.get(toNumber(f.id)) ?? [],
+    }))
+  }
+
+  folderCreate(name: string): { id: number } {
+    const db = this.getDb()
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error("Folder name cannot be empty")
+    const maxOrder = db.prepare(`SELECT MAX(sort_order) as m FROM "_table_folders"`).get() as { m: number | bigint | null }
+    const sortOrder = (maxOrder?.m != null ? toNumber(maxOrder.m) : -1) + 1
+    const now = new Date().toISOString()
+    const result = db.prepare(
+      `INSERT INTO "_table_folders" ("name", "sort_order", "created_at") VALUES (?, ?, ?)`
+    ).run(trimmed, sortOrder, now)
+    return { id: toNumber(result.lastInsertRowid) }
+  }
+
+  folderRename(id: number, name: string): void {
+    const db = this.getDb()
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error("Folder name cannot be empty")
+    const result = db.prepare(`UPDATE "_table_folders" SET name = ? WHERE id = ?`).run(trimmed, id)
+    if (result.changes === 0) throw new Error(`Folder not found: ${id}`)
+  }
+
+  folderDelete(id: number): void {
+    const db = this.getDb()
+    db.exec("PRAGMA foreign_keys=ON")
+    const result = db.prepare(`DELETE FROM "_table_folders" WHERE id = ?`).run(id)
+    if (result.changes === 0) throw new Error(`Folder not found: ${id}`)
+  }
+
+  folderMoveTable(tableName: string, folderId: number | null): void {
+    const db = this.getDb()
+    db.prepare(`DELETE FROM "_table_folder_members" WHERE table_name = ?`).run(tableName)
+    if (folderId !== null) {
+      const maxOrder = db.prepare(
+        `SELECT MAX(sort_order) as m FROM "_table_folder_members" WHERE folder_id = ?`
+      ).get(folderId) as { m: number | bigint | null }
+      const sortOrder = (maxOrder?.m != null ? toNumber(maxOrder.m) : -1) + 1
+      db.prepare(
+        `INSERT INTO "_table_folder_members" ("folder_id", "table_name", "sort_order") VALUES (?, ?, ?)`
+      ).run(folderId, tableName, sortOrder)
+    }
+  }
+
+  folderReorder(folderId: number, tableNames: string[]): void {
+    const db = this.getDb()
+    const update = db.prepare(`UPDATE "_table_folder_members" SET sort_order = ? WHERE folder_id = ? AND table_name = ?`)
+    for (let i = 0; i < tableNames.length; i++) {
+      update.run(i, folderId, tableNames[i])
+    }
+  }
+
+  folderReorderFolders(folderIds: number[]): void {
+    const db = this.getDb()
+    const update = db.prepare(`UPDATE "_table_folders" SET sort_order = ? WHERE id = ?`)
+    for (let i = 0; i < folderIds.length; i++) {
+      update.run(i, folderIds[i])
+    }
+  }
+
+  folderCleanupOrphans(existingTableNames: string[]): void {
+    const db = this.getDb()
+    if (existingTableNames.length === 0) {
+      db.exec(`DELETE FROM "_table_folder_members"`)
+      return
+    }
+    const placeholders = existingTableNames.map(() => "?").join(",")
+    db.prepare(
+      `DELETE FROM "_table_folder_members" WHERE table_name NOT IN (${placeholders})`
+    ).run(...existingTableNames)
   }
 }
 
