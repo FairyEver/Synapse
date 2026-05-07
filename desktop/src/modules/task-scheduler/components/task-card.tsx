@@ -12,6 +12,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
@@ -67,17 +68,17 @@ function TaskCard({
       {/* Info area */}
       <div className="mt-3 space-y-1 text-xs text-muted-foreground">
         <div className="flex justify-between">
-          <span>Trigger</span>
+          <span>触发</span>
           <span className="text-foreground">{formatTaskTrigger(task)}</span>
         </div>
         <div className="flex justify-between">
-          <span>Last Run</span>
+          <span>上次</span>
           <span className="text-foreground">
             {formatTaskDate(task.lastRunAt, "—")}
           </span>
         </div>
         <div className="flex justify-between">
-          <span>Next Run</span>
+          <span>下次</span>
           <span className="text-foreground">
             {disabled ? "—" : formatTaskDate(task.nextRunAt, "—")}
           </span>
@@ -132,6 +133,7 @@ function TaskCard({
               <History className="size-4" />
               历史
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onDelete} variant="destructive">
               <Trash2 className="size-4" />
               删除
