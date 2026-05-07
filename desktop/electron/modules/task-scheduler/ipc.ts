@@ -1,3 +1,5 @@
+import { BrowserWindow, dialog } from "electron"
+import { readFile, writeFile } from "node:fs/promises"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
@@ -193,6 +195,49 @@ export const taskSchedulerIpcModule: IpcModule = {
       response: z.array(runSchema),
       handler: async (ctx, request: ListRunsRequest) =>
         ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerRunList(request.taskId, { limit: request.limit }),
+    },
+    exportTasksToFile: {
+      channel: "synapse:task-scheduler:tasks:export-to-file",
+      kind: "invoke",
+      request: z.object({ json: z.string() }),
+      response: z.object({ success: z.boolean(), path: z.string().optional() }),
+      handler: async (_ctx, request: { json: string }) => {
+        const parentWindow = BrowserWindow.getFocusedWindow()
+          ?? BrowserWindow.getAllWindows().find(w => w.isVisible() && !w.isDestroyed())
+          ?? undefined
+        const defaultName = `synapse-tasks-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.json`
+        const result = await dialog.showSaveDialog(parentWindow as unknown as Electron.BaseWindow, {
+          title: "导出任务",
+          defaultPath: defaultName,
+          filters: [{ name: "JSON", extensions: ["json"] }],
+        })
+        if (result.canceled || !result.filePath) {
+          return { success: false }
+        }
+        await writeFile(result.filePath, request.json, "utf-8")
+        return { success: true, path: result.filePath }
+      },
+    },
+    importTasksFromFile: {
+      channel: "synapse:task-scheduler:tasks:import-from-file",
+      kind: "invoke",
+      request: z.void().optional(),
+      response: z.object({ success: z.boolean(), content: z.string().optional() }),
+      handler: async () => {
+        const parentWindow = BrowserWindow.getFocusedWindow()
+          ?? BrowserWindow.getAllWindows().find(w => w.isVisible() && !w.isDestroyed())
+          ?? undefined
+        const result = await dialog.showOpenDialog(parentWindow as unknown as Electron.BaseWindow, {
+          title: "导入任务",
+          filters: [{ name: "JSON", extensions: ["json"] }],
+          properties: ["openFile"],
+        })
+        if (result.canceled || result.filePaths.length === 0) {
+          return { success: false }
+        }
+        const content = await readFile(result.filePaths[0], "utf-8")
+        return { success: true, content }
+      },
     },
   },
   events: {},

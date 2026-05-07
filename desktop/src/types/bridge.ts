@@ -411,6 +411,8 @@ export type SynapseBridge = {
     runTask: (id: string) => Promise<ScheduledTaskRun | null>
     stopRun: (runId: string) => Promise<{ stopped: boolean }>
     listRuns: (taskId: string, options?: { limit?: number }) => Promise<ScheduledTaskRun[]>
+    exportTasksToFile: (json: string) => Promise<{ success: boolean; path?: string }>
+    importTasksFromFile: () => Promise<{ success: boolean; content?: string }>
   }
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>

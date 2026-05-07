@@ -148,6 +148,8 @@ const IPC_CHANNELS = {
     "runTask": "synapse:task-scheduler:tasks:run",
     "stopRun": "synapse:task-scheduler:runs:stop",
     "listRuns": "synapse:task-scheduler:runs:list",
+    "exportTasksToFile": "synapse:task-scheduler:tasks:export-to-file",
+    "importTasksFromFile": "synapse:task-scheduler:tasks:import-from-file",
   },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",
@@ -514,6 +516,8 @@ const synapseBridge: SynapseBridge = {
     stopRun: (runId) => invoke(IPC_CHANNELS["task-scheduler"].stopRun)({ runId }),
     listRuns: (taskId, options) =>
       invoke(IPC_CHANNELS["task-scheduler"].listRuns)({ taskId, limit: options?.limit }),
+    exportTasksToFile: (json) => invoke(IPC_CHANNELS["task-scheduler"].exportTasksToFile)({ json }),
+    importTasksFromFile: () => invoke(IPC_CHANNELS["task-scheduler"].importTasksFromFile)(),
   },
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
