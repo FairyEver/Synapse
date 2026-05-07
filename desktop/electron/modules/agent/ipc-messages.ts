@@ -1,0 +1,171 @@
+import { z } from "zod"
+
+import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
+import { projectRequestSchema } from "../../runtime/ipc/schemas"
+import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
+import type { AgentEvent } from "../../services/agent-runtime"
+import {
+  DEFAULT_LOCAL_SESSION_KEY,
+  LOCAL_RENDERER_PLATFORM,
+  timelineRequestSchema,
+  timelineItemSchema,
+  agentEventSchema,
+  resolveProjectAgent,
+  resolveTimelineSession,
+  historyEntries,
+} from "./ipc-shared"
+
+// ─── Request schemas ──────────────────────────────────────────────────────────
+
+const sendRequestSchema = projectRequestSchema.extend({
+  sessionKey: z.string().optional(),
+  content: z.string().min(1),
+})
+
+const respondPermissionRequestSchema = projectRequestSchema.extend({
+  requestId: z.string().min(1),
+  behavior: z.enum(["allow", "deny"]),
+  message: z.string().optional(),
+})
+
+// ─── Response schemas ─────────────────────────────────────────────────────────
+
+const sendResultSchema = z.object({
+  projectId: z.string(),
+  sessionKey: z.string(),
+  conversationId: z.string(),
+  resultText: z.string(),
+  events: z.array(agentEventSchema),
+  agentSessionId: z.string().optional(),
+  threadId: z.string().optional(),
+  error: z.string().optional(),
+})
+
+const timelineResultSchema = z.object({
+  projectId: z.string(),
+  sessionKey: z.string(),
+  conversationId: z.string().optional(),
+  entries: z.array(timelineItemSchema),
+})
+
+const pendingPermissionSchema = z.object({
+  requestId: z.string(),
+  projectId: z.string(),
+  sessionKey: z.string(),
+  conversationId: z.string(),
+  toolName: z.string(),
+  toolInput: z.string().optional(),
+  toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  createdAt: z.string(),
+})
+
+const respondPermissionResultSchema = z.object({
+  ok: z.literal(true),
+})
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ProjectRequest = z.infer<typeof projectRequestSchema>
+type SendRequest = z.infer<typeof sendRequestSchema>
+type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
+
+// ─── Message method descriptors ───────────────────────────────────────────────
+
+export const messageMethods: Record<string, IpcMethodDescriptor> = {
+  getTimeline: {
+    kind: "invoke",
+    channel: "synapse:agent:get-timeline",
+    request: timelineRequestSchema,
+    response: timelineResultSchema,
+    handler: async (ctx, request: z.infer<typeof timelineRequestSchema>) => {
+      try {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const session = await resolveTimelineSession(agent, request)
+        return {
+          projectId: request.projectId,
+          sessionKey: request.sessionKey ?? session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
+          conversationId: session?.id,
+          entries: session ? historyEntries(session, request.limit) : [],
+        }
+      } catch {
+        if (!request.conversationId) throw new Error("找不到当前项目。")
+        const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
+        const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+        const session = await conversations.get(request.conversationId)
+        if (!session) {
+          return {
+            projectId: request.projectId,
+            sessionKey: request.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
+            conversationId: request.conversationId,
+            entries: [],
+          }
+        }
+        return {
+          projectId: request.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          entries: historyEntries(session, request.limit),
+        }
+      }
+    },
+  },
+  send: {
+    kind: "invoke",
+    channel: "synapse:agent:send",
+    request: sendRequestSchema,
+    response: sendResultSchema,
+    handler: async (ctx, request: SendRequest) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
+      const result = await agent.send({
+        projectId: request.projectId,
+        sessionKey,
+        platform: LOCAL_RENDERER_PLATFORM,
+        userId: "renderer",
+        userName: "Renderer",
+        content: request.content,
+        replyCtx: {
+          kind: LOCAL_RENDERER_PLATFORM,
+          projectId: request.projectId,
+          sessionKey,
+        },
+      })
+      return {
+        projectId: request.projectId,
+        sessionKey,
+        conversationId: result.conversationId,
+        resultText: result.resultText,
+        events: result.events as AgentEvent[],
+        agentSessionId: result.agentSessionId,
+        threadId: result.threadId,
+        error: result.error,
+      }
+    },
+  },
+  listPendingPermissions: {
+    kind: "invoke",
+    channel: "synapse:agent:list-pending-permissions",
+    request: projectRequestSchema,
+    response: z.array(pendingPermissionSchema),
+    handler: async (ctx, request: ProjectRequest) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return agent.listPendingPermissions()
+    },
+  },
+  respondPermission: {
+    kind: "invoke",
+    channel: "synapse:agent:respond-permission",
+    request: respondPermissionRequestSchema,
+    response: respondPermissionResultSchema,
+    handler: async (ctx, request: RespondPermissionRequest) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      await agent.respondPermission({
+        requestId: request.requestId,
+        behavior: request.behavior,
+        message: request.message,
+        actor: { kind: "user" },
+      })
+      return { ok: true }
+    },
+  },
+}
