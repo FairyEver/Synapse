@@ -280,6 +280,49 @@ function registerDatabaseHandlers(): void {
     return registerMcp(target, getMcpServerPort())
   })
 
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderList, async () => {
+    return databaseService.folderList()
+  })
+
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderCreate, async (_event, params: {
+    name: string
+  }) => {
+    return databaseService.folderCreate(params.name)
+  })
+
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderRename, async (_event, params: {
+    id: number
+    name: string
+  }) => {
+    databaseService.folderRename(params.id, params.name)
+  })
+
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderDelete, async (_event, params: {
+    id: number
+  }) => {
+    databaseService.folderDelete(params.id)
+  })
+
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderMoveTable, async (_event, params: {
+    tableName: string
+    folderId: number | null
+  }) => {
+    databaseService.folderMoveTable(params.tableName, params.folderId)
+  })
+
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderReorder, async (_event, params: {
+    folderId: number
+    tableNames: string[]
+  }) => {
+    databaseService.folderReorder(params.folderId, params.tableNames)
+  })
+
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderReorderFolders, async (_event, params: {
+    folderIds: number[]
+  }) => {
+    databaseService.folderReorderFolders(params.folderIds)
+  })
+
   handlersRegistered = true
   logger.info("Database IPC handlers registered.")
 }

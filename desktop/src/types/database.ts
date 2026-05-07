@@ -72,6 +72,13 @@ type DatabaseStatus = {
   dbDirectoryPath: string
 }
 
+type DatabaseFolder = {
+  id: number
+  name: string
+  sortOrder: number
+  members: { tableName: string; sortOrder: number }[]
+}
+
 type DatabaseTableImportInspection = {
   tableName: string
   exists: boolean
@@ -145,6 +152,7 @@ export type {
   DatabaseChangeEvent,
   DatabaseCliDebugInfo,
   DatabaseCliStatus,
+  DatabaseFolder,
   DatabaseMcpHttpStatus,
   DatabaseMcpServerInfo,
   DatabaseMcpStatus,

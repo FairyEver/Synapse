@@ -2,6 +2,7 @@ import type {
   DatabaseChangeEvent,
   DatabaseCliDebugInfo,
   DatabaseCliStatus,
+  DatabaseFolder,
   DatabaseMcpHttpStatus,
   DatabaseMcpServerInfo,
   DatabaseMcpStatus,
@@ -392,6 +393,13 @@ export type SynapseBridge = {
     databaseMcpSettingsOpen: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }>
     databaseMcpRegister: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }>
     onChanged: (listener: (event: DatabaseChangeEvent) => void) => () => void
+    databaseFolderList: () => Promise<DatabaseFolder[]>
+    databaseFolderCreate: (params: { name: string }) => Promise<{ id: number }>
+    databaseFolderRename: (params: { id: number; name: string }) => Promise<void>
+    databaseFolderDelete: (params: { id: number }) => Promise<void>
+    databaseFolderMoveTable: (params: { tableName: string; folderId: number | null }) => Promise<void>
+    databaseFolderReorder: (params: { folderId: number; tableNames: string[] }) => Promise<void>
+    databaseFolderReorderFolders: (params: { folderIds: number[] }) => Promise<void>
   }
   taskScheduler: {
     listTasks: () => Promise<ScheduledTask[]>

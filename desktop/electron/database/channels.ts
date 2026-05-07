@@ -35,4 +35,11 @@ export const DATABASE_IPC_CHANNELS = {
   databaseMcpSettingsOpen: "synapse:database:mcp-settings:open",
   databaseMcpRegister: "synapse:database:mcp:register",
   databaseChanged: "synapse:database:changed",
+  databaseFolderList: "synapse:database:folder:list",
+  databaseFolderCreate: "synapse:database:folder:create",
+  databaseFolderRename: "synapse:database:folder:rename",
+  databaseFolderDelete: "synapse:database:folder:delete",
+  databaseFolderMoveTable: "synapse:database:folder:move-table",
+  databaseFolderReorder: "synapse:database:folder:reorder",
+  databaseFolderReorderFolders: "synapse:database:folder:reorder-folders",
 } as const
