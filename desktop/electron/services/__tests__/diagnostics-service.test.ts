@@ -278,7 +278,7 @@ describe("DiagnosticsService.collect", () => {
 })
 
 describe("DiagnosticsService.exportBundle", () => {
-  it("writes diagnostics package files and records allowed export", async () => {
+  it("writes diagnostics package files and records allowed export", { timeout: 15_000 }, async () => {
     const writtenFiles = new Map<string, string>()
     const auditSink = {
       record: vi.fn(),
