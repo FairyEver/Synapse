@@ -1,0 +1,295 @@
+import { z } from "zod"
+
+import { projectRequestSchema } from "../../runtime/ipc/schemas"
+import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
+import {
+  AgentRuntimeService,
+  AGENT_RUNTIME_SERVICE_ID,
+} from "../../services/agent-runtime"
+import {
+  ProviderConfigService,
+  PROVIDER_CONFIG_SERVICE_ID,
+} from "../../services/provider-config"
+import { configStore } from "../../services/config-store"
+import type { ProjectContainerRegistry } from "../../runtime/project-container"
+import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+export const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
+export const LOCAL_RENDERER_PLATFORM = "local-renderer"
+
+// ─── Shared request schemas ───────────────────────────────────────────────────
+
+export { projectRequestSchema }
+
+export const timelineRequestSchema = projectRequestSchema.extend({
+  sessionKey: z.string().optional(),
+  conversationId: z.string().optional(),
+  limit: z.number().int().positive().max(200).optional(),
+})
+
+// ─── Shared response schemas ──────────────────────────────────────────────────
+
+const timelineBaseSchema = {
+  id: z.string(),
+  timestamp: z.string(),
+  agentType: z.string().optional(),
+  agentSessionId: z.string().optional(),
+  threadId: z.string().optional(),
+}
+
+export const timelineItemSchema = z.discriminatedUnion("kind", [
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("message"),
+    role: z.enum(["user", "assistant", "system", "tool"]),
+    content: z.string(),
+    legacy: z.boolean().optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("thinking"),
+    content: z.string(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("toolCall"),
+    toolName: z.string(),
+    toolInput: z.string().optional(),
+    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("toolResult"),
+    toolName: z.string(),
+    content: z.string().optional(),
+    status: z.string().optional(),
+    exitCode: z.number().optional(),
+    success: z.boolean().optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("permissionRequest"),
+    requestId: z.string(),
+    toolName: z.string(),
+    toolInput: z.string().optional(),
+    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("error"),
+    message: z.string(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("result"),
+    content: z.string(),
+    metadata: z.object({
+      model: z.string().optional(),
+      effort: z.string().optional(),
+      contextRemainingPercent: z.number().optional(),
+      workDir: z.string().optional(),
+    }).optional(),
+  }),
+])
+
+export const sessionSummarySchema = z.object({
+  projectId: z.string(),
+  id: z.string(),
+  sessionKey: z.string(),
+  name: z.string().optional(),
+  platform: z.string().optional(),
+  sourceLabel: z.string().optional(),
+  agentType: z.string().optional(),
+  agentSessionId: z.string().optional(),
+  active: z.boolean(),
+  historyCount: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastMessage: timelineItemSchema.optional(),
+})
+
+// ─── Shared helper functions ──────────────────────────────────────────────────
+
+export async function resolveProjectAgent(
+  resolve: <T>(serviceId: string) => T,
+  projectId: string,
+): Promise<{
+  readonly agent: AgentRuntimeService
+  readonly providerConfig: ProviderConfigService
+  readonly project: { readonly uuid: string; readonly name: string; readonly localPath: string }
+}> {
+  const config = await configStore.load()
+  const project = resolveAgentProjectConfig(config, projectId)
+  if (!project) {
+    throw new Error("找不到当前项目。")
+  }
+
+  const containers = resolve<ProjectContainerRegistry>("core.project-containers")
+  const container = await containers.open(project.uuid, {
+    name: project.name,
+    workspacePath: project.localPath,
+  })
+  return {
+    agent: container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID),
+    providerConfig: container.get<ProviderConfigService>(PROVIDER_CONFIG_SERVICE_ID),
+    project,
+  }
+}
+
+function resolveAgentProjectConfig(
+  config: Awaited<ReturnType<typeof configStore.load>>,
+  projectId: string,
+): { readonly uuid: string; readonly name: string; readonly localPath: string } | null {
+  const repository = config.repositories.find((item) => item.uuid === projectId)
+  if (repository) {
+    return repository
+  }
+  const project = config.global.projects.find((item) => item.id === projectId)
+  if (!project) {
+    return null
+  }
+  return {
+    uuid: project.id,
+    name: project.name,
+    localPath: project.path,
+  }
+}
+
+export function sessionSummary(session: ConversationEntryV1) {
+  const last = session.history.at(-1)
+  return {
+    projectId: session.projectId,
+    id: session.id,
+    sessionKey: session.sessionKey,
+    name: session.name,
+    platform: session.platform,
+    sourceLabel: sessionSourceLabel(session),
+    agentType: session.agentType,
+    agentSessionId: session.agentSessionId,
+    active: session.active,
+    historyCount: session.history.length,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    lastMessage: last ? historyEntry(session.id, last, session.history.length - 1, session.agentType) : undefined,
+  }
+}
+
+function sessionSourceLabel(session: ConversationEntryV1): string | undefined {
+  const chatName = stringFromRecord(session.userMeta, "chatName")
+  const userName = stringFromRecord(session.userMeta, "userName")
+  if (chatName && userName) return `${chatName} / ${userName}`
+  return chatName ?? userName ?? session.channelKey
+}
+
+function stringFromRecord(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const item = value?.[key]
+  return typeof item === "string" && item.trim() ? item.trim() : undefined
+}
+
+export async function resolveTimelineSession(
+  agent: AgentRuntimeService,
+  request: z.infer<typeof timelineRequestSchema>,
+): Promise<ConversationEntryV1 | null> {
+  if (request.conversationId) {
+    return agent.getSession(request.conversationId)
+  }
+  const sessions = await agent.listSessions()
+  if (request.sessionKey) {
+    return sessions.find((session) => session.sessionKey === request.sessionKey && session.active)
+      ?? sessions.find((session) => session.sessionKey === request.sessionKey)
+      ?? null
+  }
+  return sessions.find((session) => session.sessionKey === DEFAULT_LOCAL_SESSION_KEY && session.active)
+    ?? sessions[0]
+    ?? null
+}
+
+export function historyEntries(
+  session: ConversationEntryV1,
+  limit?: number,
+) {
+  const start = typeof limit === "number"
+    ? Math.max(0, session.history.length - limit)
+    : 0
+  return session.history.slice(start).map((entry, index) =>
+    historyEntry(session.id, entry, start + index, session.agentType))
+}
+
+export function historyEntry(
+  sessionId: string,
+  entry: ConversationEntryV1["history"][number],
+  index: number,
+  agentType?: string,
+) {
+  return historyRecordToTimelineItem(sessionId, entry, index, agentType)
+}
+
+// ─── Shared event schemas (used in main ipc.ts) ───────────────────────────────
+
+const agentEventBaseSchema = {
+  agentSessionId: z.string().optional(),
+  threadId: z.string().optional(),
+}
+
+export const agentEventTypeSchema = z.enum([
+  "text",
+  "thinking",
+  "toolUse",
+  "toolResult",
+  "permissionRequest",
+  "result",
+  "error",
+])
+
+export const agentEventSchema = z.discriminatedUnion("type", [
+  z.object({ ...agentEventBaseSchema, type: z.literal("text"), content: z.string() }),
+  z.object({ ...agentEventBaseSchema, type: z.literal("thinking"), content: z.string() }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("toolUse"),
+    toolName: z.string(),
+    toolInput: z.string().optional(),
+    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("toolResult"),
+    toolName: z.string(),
+    content: z.string().optional(),
+    status: z.string().optional(),
+    exitCode: z.number().optional(),
+    success: z.boolean().optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("permissionRequest"),
+    requestId: z.string(),
+    toolName: z.string(),
+    toolInput: z.string().optional(),
+    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("result"),
+    content: z.string(),
+    done: z.literal(true),
+    metadata: z.object({
+      model: z.string().optional(),
+      effort: z.string().optional(),
+      contextRemainingPercent: z.number().optional(),
+      workDir: z.string().optional(),
+    }).optional(),
+  }),
+  z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
+])
+
+export const agentEventScopeSchema = z.object({
+  projectId: z.string().optional(),
+  sessionId: z.string().optional(),
+  repositoryId: z.string().optional(),
+}).optional()

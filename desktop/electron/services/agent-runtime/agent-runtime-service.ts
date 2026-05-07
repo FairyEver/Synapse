@@ -27,7 +27,6 @@ import {
 } from "../provider-config"
 import { AgentCommandRouter } from "./command-router"
 import type {
-  AgentCommandRouterResult,
   RegisteredPromptCommand,
 } from "./command-router"
 import type { CustomCommandRegistry, PublishedAgentCommand } from "./command-registry"
@@ -42,13 +41,17 @@ import {
   AgentSessionRepository,
   conversationId,
 } from "./session-repository"
+import { SessionLifecycleManager } from "./session-lifecycle"
+import type {
+  RuntimeSessionState,
+  PendingPermissionState,
+} from "./session-lifecycle"
+import { MessageRouter } from "./message-router"
 import type {
   AgentAdapter,
   AgentEvent,
-  AgentLiveSession,
   AgentMessage,
   AgentPendingPermission,
-  AgentPermissionRequestEvent,
   AgentPermissionResponseRequest,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
@@ -93,24 +96,6 @@ export interface AgentRuntimeServiceDeps {
 
 export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter | Promise<AgentAdapter>
 
-interface QueuedTurn {
-  readonly message: AgentMessage
-  readonly conversationId: string
-  resolve(result: AgentRuntimeTurnResult): void
-}
-
-interface RuntimeSessionState {
-  key: string
-  workspaceKey?: string
-  workspacePath?: string
-  readonly queue: QueuedTurn[]
-  busy: boolean
-  activeTurns: number
-  lastActivity: number
-  liveSession?: AgentLiveSession
-  pending?: PendingPermissionState
-}
-
 export interface AgentRuntimeStatus {
   readonly projectId: string
   readonly agentType: string
@@ -120,23 +105,14 @@ export interface AgentRuntimeStatus {
   readonly pendingPermissions: number
 }
 
-interface PendingPermissionState extends AgentPendingPermission {
-  readonly stateKey: string
-  readonly liveSession: AgentLiveSession
-  resolve(): void
-}
-
-const DEFAULT_PENDING_QUEUE_LIMIT = 5
-
 export class AgentRuntimeService {
-  private static readonly IDLE_TIMEOUT_MS = 10 * 60 * 1000
-
   private readonly deps: AgentRuntimeServiceDeps
   private readonly repository: AgentSessionRepository
   private readonly commandRouter: AgentCommandRouter | undefined
+  private readonly sessionLifecycle: SessionLifecycleManager
+  private readonly messageRouter: MessageRouter
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
-  private reclaimInterval?: ReturnType<typeof setInterval>
 
   constructor(deps: AgentRuntimeServiceDeps) {
     this.deps = deps
@@ -144,6 +120,14 @@ export class AgentRuntimeService {
       projectId: deps.projectId,
       conversations: deps.conversations,
       now: deps.now,
+    })
+    this.sessionLifecycle = new SessionLifecycleManager({
+      projectId: deps.projectId,
+      repository: this.repository,
+      states: this.states,
+      pendingPermissions: this.pendingPermissions,
+      logger: deps.logger,
+      getActiveAgentType: () => this.getActiveAgentType(),
     })
     this.commandRouter = deps.providerConfig
       ? new AgentCommandRouter({
@@ -162,104 +146,48 @@ export class AgentRuntimeService {
         runCustomCommand: (command, args, message) =>
           this.runCustomCommand(command, args, message),
         compressSession: (message, conversation) =>
-          this.compressSession(message, conversation),
+          this.messageRouter.compressSession(message, conversation),
       })
       : undefined
+    this.messageRouter = new MessageRouter({
+      deps: {
+        projectId: deps.projectId,
+        workDir: deps.workDir,
+        eventBus: deps.eventBus,
+        logger: deps.logger,
+        governance: deps.governance,
+        compressState: deps.compressState,
+        pendingQueueLimit: deps.pendingQueueLimit,
+        outbox: deps.outbox,
+        auditSink: deps.auditSink,
+        executionIsolation: deps.executionIsolation,
+        replyTargets: deps.replyTargets,
+        now: deps.now,
+      },
+      repository: this.repository,
+      commandRouter: this.commandRouter,
+      pendingPermissions: this.pendingPermissions,
+      callbacks: {
+        stateForConversation: (id, msg) => this.stateForConversation(id, msg),
+        resolveAdapter: (agentType) => this.resolveAdapter(agentType),
+        resolveProcessIsolation: (msg) => this.resolveProcessIsolation(msg),
+        workDirFor: (msg) => this.workDirFor(msg),
+        getOrCreateCompressionState: (agentType) => this.getOrCreateCompressionState(agentType),
+        markCompressionState: (agentType, status, error) =>
+          this.markCompressionState(agentType, status, error),
+      },
+    })
   }
 
   async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
-    if (message.projectId !== this.deps.projectId) {
-      throw new Error(
-        `AgentRuntime project mismatch: expected "${this.deps.projectId}", got "${message.projectId}"`,
-      )
-    }
-
-    const conversation = await this.repository.getOrCreateActive(message)
-    this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
-    const governance = this.deps.governance?.evaluateMessage(message)
-    if (governance && !governance.allowed) {
-      return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
-    }
-
-    const commandResult = await this.commandRouter?.handle(message, conversation)
-    if (commandResult && isPromptCommandRoute(commandResult)) {
-      message = {
-        ...message,
-        content: commandResult.content,
-      }
-    } else if (commandResult) {
-      for (const event of commandResult.events) {
-        this.emitEvent(message, commandResult.conversationId, event)
-      }
-      return commandResult
-    }
-
-    const state = this.stateForConversation(conversation.id, message)
-    if (state.busy && state.queue.length >= this.queueLimit()) {
-      return this.finishWithError(message, conversation.id, "Session queue is full")
-    }
-
-    return new Promise<AgentRuntimeTurnResult>((resolve) => {
-      state.queue.push({
-        message,
-        conversationId: conversation.id,
-        resolve,
-      })
-      if (!state.busy) {
-        void this.processQueue(state)
-      }
-    })
+    return this.messageRouter.send(message)
   }
 
   async sendNewSession(
     message: AgentMessage,
     name: string,
   ): Promise<AgentRuntimeTurnResult> {
-    if (message.projectId !== this.deps.projectId) {
-      throw new Error(
-        `AgentRuntime project mismatch: expected "${this.deps.projectId}", got "${message.projectId}"`,
-      )
-    }
-
-    const conversation = await this.repository.createSideSession({
-      sessionKey: message.sessionKey,
-      platform: message.platform,
-      channelKey: message.channelKey,
-      workspaceKey: message.workspaceKey,
-      workspacePath: message.workspacePath,
-      name,
-      userMeta: {
-        userId: message.userId,
-        userName: message.userName,
-        chatName: message.chatName,
-        platform: message.platform,
-        channelKey: message.channelKey,
-        workspaceKey: message.workspaceKey,
-        workspacePath: message.workspacePath,
-      },
-      resumePolicy: "fresh",
-    })
-    this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
-    const governance = this.deps.governance?.evaluateMessage(message)
-    if (governance && !governance.allowed) {
-      return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
-    }
-
-    const state = this.stateForConversation(conversation.id, message)
-    if (state.busy && state.queue.length >= this.queueLimit()) {
-      return this.finishWithError(message, conversation.id, "Session queue is full")
-    }
-
-    return new Promise<AgentRuntimeTurnResult>((resolve) => {
-      state.queue.push({
-        message,
-        conversationId: conversation.id,
-        resolve,
-      })
-      if (!state.busy) {
-        void this.processQueue(state)
-      }
-    })
+    return this.messageRouter.sendNewSession(message, name)
   }
 
   async sendSideSessionWithTimeout(
@@ -267,38 +195,7 @@ export class AgentRuntimeService {
     name: string,
     timeoutMs: number,
   ): Promise<AgentRuntimeRelayResult> {
-    if (message.projectId !== this.deps.projectId) {
-      throw new Error(
-        `AgentRuntime project mismatch: expected "${this.deps.projectId}", got "${message.projectId}"`,
-      )
-    }
-
-    const conversation = await this.repository.createSideSession({
-      sessionKey: message.sessionKey,
-      platform: message.platform,
-      channelKey: message.channelKey,
-      workspaceKey: message.workspaceKey,
-      workspacePath: message.workspacePath,
-      name,
-      userMeta: {
-        userId: message.userId,
-        userName: message.userName,
-        chatName: message.chatName,
-        platform: message.platform,
-        channelKey: message.channelKey,
-        workspaceKey: message.workspaceKey,
-        workspacePath: message.workspacePath,
-      },
-      resumePolicy: "fresh",
-    })
-    const state = this.stateForConversation(conversation.id, message)
-    if (state.busy) {
-      return {
-        ...this.finishWithError(message, conversation.id, "Relay session is busy"),
-        timedOut: false,
-      }
-    }
-    return this.processSideSessionWithTimeout(state, message, conversation, timeoutMs)
+    return this.messageRouter.sendSideSessionWithTimeout(message, name, timeoutMs)
   }
 
   listPendingPermissions(): readonly AgentPendingPermission[] {
@@ -329,28 +226,15 @@ export class AgentRuntimeService {
   }
 
   async reclaimIdleSessions(): Promise<void> {
-    const now = Date.now()
-    for (const [key, state] of this.states) {
-      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
-      if (!state.liveSession) continue
-      if (now - state.lastActivity < AgentRuntimeService.IDLE_TIMEOUT_MS) continue
-      await state.liveSession.close()
-      state.liveSession = undefined
-      this.deps.logger?.info("Reclaimed idle agent session.", { conversationId: key })
-    }
+    return this.sessionLifecycle.reclaimIdleSessions()
   }
 
   startIdleReclaim(): void {
-    this.reclaimInterval = setInterval(() => {
-      void this.reclaimIdleSessions()
-    }, 60_000)
+    this.sessionLifecycle.startIdleReclaim()
   }
 
   stopIdleReclaim(): void {
-    if (this.reclaimInterval) {
-      clearInterval(this.reclaimInterval)
-      this.reclaimInterval = undefined
-    }
+    this.sessionLifecycle.stopIdleReclaim()
   }
 
   async getActiveAgentType(): Promise<string> {
@@ -359,11 +243,11 @@ export class AgentRuntimeService {
   }
 
   async listSessions(): Promise<readonly ConversationEntryV1[]> {
-    return this.repository.listSessions()
+    return this.sessionLifecycle.listSessions()
   }
 
   async getSession(conversationIdValue: string): Promise<ConversationEntryV1 | null> {
-    return this.repository.get(conversationIdValue)
+    return this.sessionLifecycle.getSession(conversationIdValue)
   }
 
   async listPublishedCommands(platform = "local-renderer"): Promise<readonly PublishedAgentCommand[]> {
@@ -478,9 +362,7 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
-    if (!conversation) return null
-    return this.repository.clearCurrentAgentSessionId(conversation.id, await this.getActiveAgentType())
+    return this.sessionLifecycle.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
   }
 
   async resetSession(
@@ -488,19 +370,7 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
-    if (conversation) {
-      const state = this.states.get(conversation.id)
-      if (state?.pending) {
-        this.pendingPermissions.delete(state.pending.requestId)
-        state.pending = undefined
-      }
-      if (state?.liveSession) {
-        await state.liveSession.close()
-        state.liveSession = undefined
-      }
-    }
-    return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
+    return this.sessionLifecycle.resetSession(sessionKey, platform, workspaceKey)
   }
 
   async createSession(
@@ -513,15 +383,7 @@ export class AgentRuntimeService {
       readonly workspacePath?: string
     },
   ): Promise<ConversationEntryV1> {
-    return this.repository.createSession({
-      sessionKey: input.sessionKey,
-      platform: input.platform,
-      name: input.name,
-      agentType: input.agentType,
-      workspaceKey: input.workspaceKey,
-      workspacePath: input.workspacePath,
-      resumePolicy: "resume",
-    })
+    return this.sessionLifecycle.createSession(input)
   }
 
   async switchSession(
@@ -530,689 +392,22 @@ export class AgentRuntimeService {
     platform?: string,
     workspaceKey?: string,
   ): Promise<ConversationEntryV1> {
-    const target = await this.repository.get(conversationIdValue)
-    if (!target || target.sessionKey !== sessionKey) {
-      throw new Error(`Conversation "${conversationIdValue}" is not available for this session key`)
-    }
-    const effectiveWorkspaceKey = workspaceKey ?? target.workspaceKey
-    return this.repository.setActiveSession(sessionKey, conversationIdValue, platform, effectiveWorkspaceKey)
+    return this.sessionLifecycle.switchSession(sessionKey, conversationIdValue, platform, workspaceKey)
   }
 
   async reapIdleWorkspaceRuntimes(
     idleTimeoutMs: number,
     nowMs = Date.now(),
   ): Promise<readonly string[]> {
-    const cutoff = nowMs - idleTimeoutMs
-    const reaped: string[] = []
-    for (const [key, state] of this.states) {
-      if (!state.workspaceKey || !state.workspacePath) continue
-      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
-      if (state.lastActivity >= cutoff) continue
-      if (state.liveSession?.alive()) {
-        await state.liveSession.close()
-      }
-      reaped.push(state.workspacePath)
-      this.states.delete(key)
-    }
-    return reaped
+    return this.sessionLifecycle.reapIdleWorkspaceRuntimes(idleTimeoutMs, nowMs)
   }
 
   async renameSession(conversationIdValue: string, name: string): Promise<boolean> {
-    await this.repository.renameSession(conversationIdValue, name)
-    return true
+    return this.sessionLifecycle.renameSession(conversationIdValue, name)
   }
 
   async deleteSession(conversationIdValue: string): Promise<boolean> {
-    const conversation = await this.repository.get(conversationIdValue)
-    if (!conversation) return false
-    const state = this.states.get(conversationIdValue)
-    if (state) {
-      if (state.pending) {
-        this.pendingPermissions.delete(state.pending.requestId)
-        state.pending = undefined
-      }
-      if (state.liveSession) {
-        await state.liveSession.close()
-        state.liveSession = undefined
-      }
-      state.queue.length = 0
-      this.states.delete(conversationIdValue)
-    }
-    await this.repository.deleteSession(conversationIdValue)
-    return true
-  }
-
-  private async processQueue(state: RuntimeSessionState): Promise<void> {
-    state.busy = true
-    try {
-      while (state.queue.length > 0) {
-        const turn = state.queue.shift()
-        if (!turn) continue
-        try {
-          const result = await this.processTurn(state, turn.message, turn.conversationId)
-          turn.resolve(result)
-        } catch (error) {
-          const messageText = error instanceof Error ? error.message : String(error)
-          this.deps.logger?.warn("AgentRuntime queued turn failed.", {
-            error: messageText,
-            projectId: this.deps.projectId,
-            sessionKey: turn.message.sessionKey,
-          })
-          turn.resolve(this.finishWithError(turn.message, turn.conversationId, messageText))
-        }
-      }
-    } finally {
-      state.busy = false
-    }
-  }
-
-  private async processTurn(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversationIdValue: string,
-  ): Promise<AgentRuntimeTurnResult> {
-    state.activeTurns += 1
-    state.lastActivity = Date.now()
-    try {
-      let conversation = await this.repository.get(conversationIdValue)
-      if (!conversation) {
-        conversation = await this.repository.getOrCreateActive(message)
-      }
-      conversation = await this.repository.appendHistory(conversation.id, "user", message.content)
-      this.deps.logger?.info("Agent conversation updated after user message.", {
-        ...conversationLogContext(this.deps.projectId, conversation),
-        contentLength: message.content.length,
-        attachmentCount: message.attachments?.length ?? 0,
-        messageId: message.messageId,
-      })
-      this.emitConversationUpdated(conversation)
-
-      const workDir = this.workDirFor(message)
-      if (!workDir) {
-        return this.finishWithError(message, conversation.id, "Project workspace path is required")
-      }
-
-      const adapter = await this.resolveAdapter(conversation.agentType)
-      if (!conversation.agentType && adapter.agentType) {
-        conversation = await this.repository.saveAgentSession({
-          conversationId: conversation.id,
-          agentType: adapter.agentType,
-        })
-      }
-      if (adapter.startSession) {
-        try {
-          return await this.processLiveTurn(state, message, conversation, adapter, workDir)
-        } catch (error) {
-          if (adapter.agentType !== "codex" || !isLiveStartupFailure(error)) throw error
-          const messageText = error instanceof Error ? error.message : String(error)
-          this.deps.logger?.warn("Agent live session failed; falling back to exec.", {
-            error: messageText,
-            projectId: this.deps.projectId,
-            sessionKey: message.sessionKey,
-            agentType: adapter.agentType,
-          })
-        }
-      }
-      return this.processExecTurn(message, conversation, adapter, workDir)
-    } finally {
-      state.activeTurns = Math.max(0, state.activeTurns - 1)
-      state.lastActivity = Date.now()
-    }
-  }
-
-  private async processSideSessionWithTimeout(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-    timeoutMs: number,
-  ): Promise<AgentRuntimeRelayResult> {
-    state.busy = true
-    state.activeTurns += 1
-    state.lastActivity = Date.now()
-    let savedConversation = conversation
-    try {
-      savedConversation = await this.repository.appendHistory(conversation.id, "user", message.content)
-      const workDir = this.workDirFor(message)
-      if (!workDir) {
-        state.activeTurns = Math.max(0, state.activeTurns - 1)
-        state.busy = false
-        state.lastActivity = Date.now()
-        return {
-          ...this.finishWithError(message, conversation.id, "Project workspace path is required"),
-          timedOut: false,
-        }
-      }
-      const adapter = await this.resolveAdapter(savedConversation.agentType)
-      if (adapter.startSession) {
-        return this.processLiveSideSessionWithTimeout(
-          state,
-          message,
-          savedConversation,
-          adapter,
-          workDir,
-          timeoutMs,
-        )
-      }
-      return this.processExecSideSessionWithTimeout(
-        state,
-        message,
-        savedConversation,
-        adapter,
-        workDir,
-        timeoutMs,
-      )
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error)
-      state.activeTurns = Math.max(0, state.activeTurns - 1)
-      state.busy = false
-      state.lastActivity = Date.now()
-      return {
-        ...this.finishWithError(message, savedConversation.id, messageText),
-        timedOut: false,
-      }
-    }
-  }
-
-  private async processExecSideSessionWithTimeout(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    workDir: string,
-    timeoutMs: number,
-  ): Promise<AgentRuntimeRelayResult> {
-    const events: AgentEvent[] = []
-    let partialText = ""
-    const executionPromise = adapter.execute(message, {
-      projectId: this.deps.projectId,
-      workDir,
-      sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
-      processIsolation: await this.resolveProcessIsolation(message),
-      actor: { kind: "agent", id: "relay" },
-      onEvent: (event) => {
-        events.push(event)
-        partialText = appendRelayText(partialText, event)
-        this.emitEvent(message, conversation.id, event)
-      },
-    })
-    const execution = await promiseWithTimeout(executionPromise, timeoutMs)
-    if (!execution) {
-      void executionPromise
-        .then((finalExecution) => this.finishExecSideSession(
-          state,
-          conversation,
-          adapter,
-          finalExecution.resultText,
-          finalExecution.threadId ?? finalExecution.agentSessionId,
-        ))
-        .catch((error) => {
-          this.deps.logger?.warn("Relay exec drain failed.", {
-            error: error instanceof Error ? error.message : String(error),
-            projectId: this.deps.projectId,
-            sessionKey: message.sessionKey,
-          })
-          state.activeTurns = Math.max(0, state.activeTurns - 1)
-          state.busy = false
-          state.lastActivity = Date.now()
-        })
-      return {
-        conversationId: conversation.id,
-        events,
-        resultText: partialText,
-        partialText,
-        timedOut: true,
-      }
-    }
-    await this.saveEventHistory(conversation.id, execution.events)
-    const saved = await this.finishExecSideSession(
-      state,
-      conversation,
-      adapter,
-      execution.resultText,
-      execution.threadId ?? execution.agentSessionId,
-    )
-    return {
-      conversationId: saved.id,
-      events: execution.events,
-      resultText: execution.resultText,
-      agentSessionId: saved.agentSessionId,
-      threadId: saved.agentSessionId,
-      error: execution.error,
-      timedOut: false,
-    }
-  }
-
-  private async finishExecSideSession(
-    state: RuntimeSessionState,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    resultText: string,
-    agentSessionId?: string,
-  ): Promise<ConversationEntryV1> {
-    try {
-      return await this.saveExecutionResult(conversation, {
-        resultText,
-        agentSessionId,
-        agentType: adapter.agentType,
-      })
-    } finally {
-      state.activeTurns = Math.max(0, state.activeTurns - 1)
-      state.busy = false
-      state.lastActivity = Date.now()
-    }
-  }
-
-  private async processLiveSideSessionWithTimeout(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    workDir: string,
-    timeoutMs: number,
-  ): Promise<AgentRuntimeRelayResult> {
-    const liveSession = await this.getLiveSession(state, conversation, adapter, message, workDir)
-    const events: AgentEvent[] = []
-    let resultText = ""
-    let partialText = ""
-    let error: string | undefined
-    const deadline = Date.now() + timeoutMs
-
-    await liveSession.send(message)
-
-    while (liveSession.alive()) {
-      const remaining = Math.max(1, deadline - Date.now())
-      const event = await nextLiveEventWithTimeout(liveSession, remaining)
-      if (!event) {
-        void this.drainLiveSideSession(state, message, conversation, adapter, liveSession)
-        return {
-          conversationId: conversation.id,
-          events,
-          resultText: partialText,
-          partialText,
-          agentSessionId: liveSession.currentSessionId(),
-          threadId: liveSession.currentSessionId(),
-          timedOut: true,
-        }
-      }
-      events.push(event)
-      partialText = appendRelayText(partialText, event)
-      this.emitEvent(message, conversation.id, event)
-      await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
-      await this.saveEventHistory(conversation.id, event)
-
-      if (event.type === "permissionRequest") {
-        await liveSession.respondPermission(event.requestId, {
-          behavior: "deny",
-          message: "Relay cannot approve tool permissions.",
-        })
-        error = "Relay requested permission."
-        break
-      }
-      if (event.type === "result") {
-        resultText = event.content
-        break
-      }
-      if (event.type === "error") {
-        error = event.message
-        break
-      }
-    }
-
-    const currentSessionId = liveSession.currentSessionId()
-    const saved = await this.saveExecutionResult(conversation, {
-      resultText,
-      agentSessionId: currentSessionId,
-      agentType: adapter.agentType,
-    })
-    state.activeTurns = Math.max(0, state.activeTurns - 1)
-    state.busy = false
-    state.lastActivity = Date.now()
-    return {
-      conversationId: saved.id,
-      events,
-      resultText,
-      agentSessionId: saved.agentSessionId,
-      threadId: saved.agentSessionId,
-      error,
-      timedOut: false,
-    }
-  }
-
-  private async drainLiveSideSession(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    liveSession: AgentLiveSession,
-  ): Promise<void> {
-    let resultText = ""
-    try {
-      while (liveSession.alive()) {
-        const event = await liveSession.nextEvent()
-        if (!event) break
-        this.emitEvent(message, conversation.id, event)
-        await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
-        await this.saveEventHistory(conversation.id, event)
-        if (event.type === "permissionRequest") {
-          await liveSession.respondPermission(event.requestId, {
-            behavior: "deny",
-            message: "Relay cannot approve tool permissions.",
-          })
-          break
-        }
-        if (event.type === "result") {
-          resultText = event.content
-          break
-        }
-        if (event.type === "error") {
-          break
-        }
-      }
-      await this.saveExecutionResult(conversation, {
-        resultText,
-        agentSessionId: liveSession.currentSessionId(),
-        agentType: adapter.agentType,
-      })
-    } catch (error) {
-      this.deps.logger?.warn("Relay live drain failed.", {
-        error: error instanceof Error ? error.message : String(error),
-        projectId: this.deps.projectId,
-        sessionKey: message.sessionKey,
-      })
-    } finally {
-      state.activeTurns = Math.max(0, state.activeTurns - 1)
-      state.busy = false
-      state.lastActivity = Date.now()
-    }
-  }
-
-  private async processExecTurn(
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    workDir: string,
-  ): Promise<AgentRuntimeTurnResult> {
-    const threadId = reusableAgentSessionId(conversation, adapter.agentType)
-    const streamedEvents = new WeakSet<AgentEvent>()
-    const execution = await adapter.execute(message, {
-      projectId: this.deps.projectId,
-      workDir,
-      threadId,
-      agentSessionId: threadId,
-      sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
-      processIsolation: await this.resolveProcessIsolation(message),
-      actor: { kind: "user" },
-      onEvent: (event) => {
-        streamedEvents.add(event)
-        this.emitEvent(message, conversation.id, event)
-      },
-    })
-
-    for (const event of execution.events) {
-      if (streamedEvents.has(event)) continue
-      this.emitEvent(message, conversation.id, event)
-    }
-    await this.saveEventHistory(conversation.id, execution.events)
-
-    const saved = await this.saveExecutionResult(conversation, {
-      resultText: execution.resultText,
-      agentSessionId: execution.threadId ?? execution.agentSessionId,
-      agentType: adapter.agentType,
-    })
-
-    return {
-      conversationId: saved.id,
-      events: execution.events,
-      resultText: execution.resultText,
-      agentSessionId: saved.agentSessionId,
-      threadId: saved.agentSessionId,
-      error: execution.error,
-    }
-  }
-
-  private async processLiveTurn(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    workDir: string,
-  ): Promise<AgentRuntimeTurnResult> {
-    const liveSession = await this.getLiveSession(state, conversation, adapter, message, workDir)
-    const events: AgentEvent[] = []
-    let resultText = ""
-    let error: string | undefined
-
-    await liveSession.send(message)
-
-    while (liveSession.alive()) {
-      const event = await liveSession.nextEvent()
-      if (!event) {
-        error = "Agent session ended"
-        break
-      }
-      events.push(event)
-      this.emitEvent(message, conversation.id, event)
-      await this.saveEventSessionId(conversation.id, event, liveSession, adapter.agentType)
-      await this.saveEventHistory(conversation.id, event)
-
-      if (event.type === "permissionRequest") {
-        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession)
-        continue
-      }
-      if (event.type === "result") {
-        resultText = event.content
-        break
-      }
-      if (event.type === "error") {
-        error = event.message
-        break
-      }
-    }
-
-    const currentSessionId = liveSession.currentSessionId()
-    const saved = await this.saveExecutionResult(conversation, {
-      resultText,
-      agentSessionId: currentSessionId,
-      agentType: adapter.agentType,
-    })
-    await this.maybeAutoCompress(state, message, saved, adapter, liveSession)
-
-    return {
-      conversationId: saved.id,
-      events,
-      resultText,
-      agentSessionId: saved.agentSessionId,
-      threadId: saved.agentSessionId,
-      error,
-    }
-  }
-
-  private async getLiveSession(
-    state: RuntimeSessionState,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    message: AgentMessage,
-    workDir: string,
-  ): Promise<AgentLiveSession> {
-    if (
-      state.liveSession
-      && state.liveSession.alive()
-      && state.liveSession.agentType === adapter.agentType
-    ) {
-      return state.liveSession
-    }
-
-    if (state.liveSession) {
-      await state.liveSession.close()
-    }
-
-    const agentSessionId = reusableAgentSessionId(conversation, adapter.agentType)
-    const liveSession = await adapter.startSession?.({
-      projectId: this.deps.projectId,
-      workDir,
-      threadId: agentSessionId,
-      agentSessionId,
-      sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
-      processIsolation: await this.resolveProcessIsolation(message),
-      actor: { kind: "user" },
-    })
-    if (!liveSession) {
-      throw new Error("Agent adapter did not create a live session")
-    }
-    state.liveSession = liveSession
-    return liveSession
-  }
-
-  private async awaitPendingPermission(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversationIdValue: string,
-    event: AgentPermissionRequestEvent,
-    liveSession: AgentLiveSession,
-  ): Promise<void> {
-    await new Promise<void>((resolve) => {
-      const pending: PendingPermissionState = {
-        requestId: event.requestId,
-        projectId: this.deps.projectId,
-        stateKey: state.key,
-        sessionKey: message.sessionKey,
-        workspaceKey: message.workspaceKey,
-        workspacePath: message.workspacePath,
-        conversationId: conversationIdValue,
-        toolName: event.toolName,
-        toolInput: event.toolInput,
-        toolInputRaw: event.toolInputRaw,
-        createdAt: this.isoNow(),
-        liveSession,
-        resolve,
-      }
-      state.pending = pending
-      this.pendingPermissions.set(event.requestId, pending)
-    })
-  }
-
-  private async saveEventSessionId(
-    conversationIdValue: string,
-    event: AgentEvent,
-    liveSession: AgentLiveSession,
-    agentType: string,
-  ): Promise<void> {
-    const agentSessionId = event.agentSessionId ?? event.threadId ?? liveSession.currentSessionId()
-    if (!agentSessionId) return
-    await this.repository.saveAgentSession({
-      conversationId: conversationIdValue,
-      agentType,
-      agentSessionId,
-      resumePolicy: "resume",
-    })
-  }
-
-  private async saveEventHistory(
-    conversationIdValue: string,
-    events: AgentEvent | readonly AgentEvent[],
-  ): Promise<void> {
-    const eventList = Array.isArray(events) ? events : [events]
-    for (const event of eventList) {
-      const entry = historyEntryForAgentEvent(event)
-      if (!entry) continue
-      await this.repository.appendHistory(
-        conversationIdValue,
-        entry.role,
-        entry.content,
-        entry.metadata,
-      )
-    }
-  }
-
-  private async saveExecutionResult(
-    conversation: ConversationEntryV1,
-    execution: {
-      readonly resultText: string
-      readonly agentSessionId?: string
-      readonly agentType: string
-    },
-  ): Promise<ConversationEntryV1> {
-    let saved = conversation
-    if (execution.agentSessionId) {
-      saved = await this.repository.saveAgentSession({
-        conversationId: conversation.id,
-        agentType: execution.agentType,
-        agentSessionId: execution.agentSessionId,
-        resumePolicy: "resume",
-      })
-    }
-    if (execution.resultText) {
-      saved = await this.repository.appendHistory(saved.id, "assistant", execution.resultText)
-    }
-    if (execution.agentSessionId || execution.resultText) {
-      this.emitConversationUpdated(saved)
-    }
-    return saved
-  }
-
-  private finishWithError(
-    message: AgentMessage,
-    conversationIdValue: string,
-    error: string,
-  ): AgentRuntimeTurnResult {
-    const event: AgentEvent = { type: "error", message: error }
-    this.emitEvent(message, conversationIdValue, event)
-    return {
-      conversationId: conversationIdValue,
-      events: [event],
-      resultText: "",
-      error,
-    }
-  }
-
-  private emitEvent(
-    message: AgentMessage,
-    conversationIdValue: string,
-    event: AgentEvent,
-  ): void {
-    const target = replyTargetFromMessage(message, conversationIdValue, event)
-    this.deps.eventBus?.emit({
-      domain: "agent",
-      type: event.type,
-      payload: {
-        event,
-        projectId: this.deps.projectId,
-        sessionKey: message.sessionKey,
-        platform: message.platform,
-      },
-      scope: { sessionId: conversationIdValue },
-      timestamp: this.isoNow(),
-    })
-    this.deps.logger?.debug("Agent stream event emitted.", {
-      projectId: this.deps.projectId,
-      conversationId: conversationIdValue,
-      sessionKey: message.sessionKey,
-      platform: message.platform,
-      eventType: event.type,
-      messageId: message.messageId,
-    })
-    if (shouldSuppressReply(message)) return
-    this.deps.outbox?.recordAgentEvent(target, event)
-    this.deps.replyTargets?.dispatchAgentEvent(target, event)
-  }
-
-  private emitConversationUpdated(conversation: ConversationEntryV1): void {
-    this.deps.logger?.info("Agent conversation update event emitted.", conversationLogContext(
-      this.deps.projectId,
-      conversation,
-    ))
-    this.deps.eventBus?.emit({
-      domain: "agent",
-      type: "conversationUpdated",
-      payload: {
-        projectId: this.deps.projectId,
-        sessionKey: conversation.sessionKey,
-        platform: conversation.platform ?? "local",
-        conversationId: conversation.id,
-      },
-      scope: { sessionId: conversation.id },
-      timestamp: this.isoNow(),
-    })
+    return this.sessionLifecycle.deleteSession(conversationIdValue)
   }
 
   private recordPermissionAudit(
@@ -1242,26 +437,7 @@ export class AgentRuntimeService {
   }
 
   private stateForConversation(conversationIdValue: string, message?: AgentMessage): RuntimeSessionState {
-    const existing = this.states.get(conversationIdValue)
-    if (existing) {
-      if (message) {
-        existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
-        existing.workspacePath = message.workspacePath ?? existing.workspacePath
-      }
-      existing.lastActivity = Date.now()
-      return existing
-    }
-    const state: RuntimeSessionState = {
-      key: conversationIdValue,
-      workspaceKey: message?.workspaceKey,
-      workspacePath: message?.workspacePath,
-      queue: [],
-      busy: false,
-      activeTurns: 0,
-      lastActivity: Date.now(),
-    }
-    this.states.set(conversationIdValue, state)
-    return state
+    return this.sessionLifecycle.stateForConversation(conversationIdValue, message)
   }
 
   private async closeIdleStateForConversation(
@@ -1269,21 +445,7 @@ export class AgentRuntimeService {
     platform?: string,
     workspaceKey?: string,
   ): Promise<void> {
-    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
-    if (!conversation) return
-    const state = this.states.get(conversation.id)
-    if (!state) return
-    if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
-      throw new Error("Session is busy.")
-    }
-    if (state.pending) {
-      this.pendingPermissions.delete(state.pending.requestId)
-      state.pending = undefined
-    }
-    if (state.liveSession) {
-      await state.liveSession.close()
-      state.liveSession = undefined
-    }
+    return this.sessionLifecycle.closeIdleStateForConversation(sessionKey, platform, workspaceKey)
   }
 
   private resetMessageSession(message: AgentMessage): Promise<ConversationEntryV1 | null> {
@@ -1392,162 +554,6 @@ export class AgentRuntimeService {
     return formatCommandResult(command.name, result)
   }
 
-  private async compressSession(
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-  ): Promise<AgentRuntimeTurnResult> {
-    const state = this.stateForConversation(conversation.id, message)
-    if (state.busy) {
-      return runtimeCommandResult(conversation.id, "Session is busy.", true, conversation.agentSessionId)
-    }
-    const workDir = this.workDirFor(message)
-    if (!workDir) {
-      return runtimeCommandResult(conversation.id, "Project workspace path is required", true, conversation.agentSessionId)
-    }
-    state.busy = true
-    try {
-      const adapter = await this.resolveAdapter(conversation.agentType)
-      if (!adapter.compressionCommand || !adapter.startSession) {
-        await this.markCompressionState(adapter.agentType, "unsupported", "Compression is unsupported.")
-        return runtimeCommandResult(
-          conversation.id,
-          `Compression is unsupported for ${adapter.agentType}.`,
-          true,
-          conversation.agentSessionId,
-        )
-      }
-      const liveSession = await this.getLiveSession(state, conversation, adapter, message, workDir)
-      const result = await this.runCompression({
-        state,
-        message,
-        conversation,
-        adapter,
-        liveSession,
-        reason: "manual",
-      })
-      if (result.error) {
-        return runtimeCommandResult(conversation.id, result.error, true, liveSession.currentSessionId())
-      }
-      return runtimeCommandResult(
-        conversation.id,
-        result.resultText || "Context compressed.",
-        false,
-        liveSession.currentSessionId(),
-      )
-    } finally {
-      state.busy = false
-      state.lastActivity = Date.now()
-    }
-  }
-
-  private async maybeAutoCompress(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-    adapter: AgentAdapter,
-    liveSession: AgentLiveSession,
-  ): Promise<void> {
-    if (!this.deps.compressState || !adapter.compressionCommand) return
-    const config = await this.getOrCreateCompressionState(adapter.agentType)
-    if (!config.enabled) return
-    if (estimateTokens(conversation) < config.maxTokens) return
-    if (!minGapElapsed(config.lastCompressedAt, config.minGapMins)) return
-    try {
-      const result = await this.runCompression({
-        state,
-        message,
-        conversation,
-        adapter,
-        liveSession,
-        reason: "auto",
-      })
-      if (result.error) {
-        await this.markCompressionState(adapter.agentType, "failed", result.error)
-      }
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error)
-      await this.markCompressionState(adapter.agentType, "failed", messageText)
-      this.deps.logger?.warn("Auto-compress failed.", {
-        error: messageText,
-        projectId: this.deps.projectId,
-        sessionKey: message.sessionKey,
-      })
-    }
-  }
-
-  private async runCompression(input: {
-    readonly state: RuntimeSessionState
-    readonly message: AgentMessage
-    readonly conversation: ConversationEntryV1
-    readonly adapter: AgentAdapter
-    readonly liveSession: AgentLiveSession
-    readonly reason: "manual" | "auto"
-  }): Promise<{ readonly resultText: string; readonly error?: string }> {
-    const command = input.adapter.compressionCommand
-    if (!command) {
-      await this.markCompressionState(input.adapter.agentType, "unsupported", "Compression is unsupported.")
-      return { resultText: "", error: "Compression is unsupported." }
-    }
-    const events: AgentEvent[] = []
-    let resultText = ""
-    let error: string | undefined
-    await input.liveSession.send({
-      ...input.message,
-      content: command,
-      replyCtx: { ...(replyCtxRecord(input.message.replyCtx) ?? {}), muted: true },
-    })
-    while (input.liveSession.alive()) {
-      const event = await nextLiveEventWithTimeout(input.liveSession, 5 * 60_000)
-      if (!event) {
-        error = "Compression timed out"
-        break
-      }
-      events.push(event)
-      await this.saveEventSessionId(
-        input.conversation.id,
-        event,
-        input.liveSession,
-        input.adapter.agentType,
-      )
-      if (event.type === "permissionRequest") {
-        await input.liveSession.respondPermission(event.requestId, {
-          behavior: "deny",
-          message: "Compression cannot request tool permissions.",
-        })
-        error = "Compression requested permission."
-        break
-      }
-      if (event.type === "result") {
-        resultText = event.content
-        break
-      }
-      if (event.type === "error") {
-        error = event.message
-        break
-      }
-    }
-    await this.markCompressionState(
-      input.adapter.agentType,
-      error ? "failed" : "success",
-      error,
-    )
-    this.deps.auditSink?.record({
-      action: "agent.spawn",
-      actor: { kind: "agent", id: "compress" },
-      resource: command,
-      outcome: error ? "failed" : "allowed",
-      metadata: {
-        projectId: this.deps.projectId,
-        sessionKey: input.message.sessionKey,
-        conversationId: input.conversation.id,
-        reason: input.reason,
-        eventCount: events.length,
-        error,
-      },
-    })
-    return { resultText, error }
-  }
-
   private async getOrCreateCompressionState(
     agentType: string,
   ): Promise<AgentCompressStateEntryV1> {
@@ -1601,10 +607,6 @@ export class AgentRuntimeService {
     )
   }
 
-  private queueLimit(): number {
-    return this.deps.pendingQueueLimit ?? DEFAULT_PENDING_QUEUE_LIMIT
-  }
-
   private async resolveAdapter(agentTypeOverride?: string): Promise<AgentAdapter> {
     if (!this.deps.providerConfig || !this.deps.adapterFactory) {
       return this.deps.adapter
@@ -1636,23 +638,6 @@ export class AgentRuntimeService {
 
 export { conversationId }
 
-function reusableAgentSessionId(
-  conversation: ConversationEntryV1,
-  agentType: string,
-): string | undefined {
-  if (conversation.resumePolicy === "fresh") return undefined
-  if (conversation.agentType && conversation.agentType !== agentType) return undefined
-  return conversation.agentSessionId
-}
-
-function isLiveStartupFailure(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  return /\bEPIPE\b/.test(message)
-    || message.includes("Process session is not running")
-    || message.includes("app-server exited")
-    || message.includes("ENOENT")
-}
-
 function permissionActionForTool(toolName: string): PermissionAction {
   switch (toolName) {
     case "Bash":
@@ -1674,228 +659,8 @@ function permissionActionForTool(toolName: string): PermissionAction {
   }
 }
 
-function replyCtxRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : undefined
-}
-
-function shouldSuppressReply(message: AgentMessage): boolean {
-  return replyCtxRecord(message.replyCtx)?.muted === true
-}
-
-function replyTargetFromMessage(
-  message: AgentMessage,
-  conversationIdValue: string,
-  event?: AgentEvent,
-): ReplyTarget {
-  const replyCtx = replyCtxRecord(message.replyCtx)
-  const kind = stringValue(replyCtx?.kind)
-  const bridgePlatform = stringValue(replyCtx?.platform)
-  return {
-    projectId: message.projectId,
-    sessionKey: message.sessionKey,
-    conversationId: conversationIdValue,
-    threadId: event?.threadId ?? event?.agentSessionId,
-    messageId: message.messageId,
-    transport: kind === "bridge"
-      ? { kind: "bridge", connectorId: bridgePlatform ?? message.platform }
-      : { kind: message.platform || kind || "local-renderer" },
-    replyCtx,
-    metadata: {
-      channelKey: message.channelKey,
-      channelName: message.channelName,
-      workspaceKey: message.workspaceKey,
-      workspacePath: message.workspacePath,
-      muted: replyCtx?.muted,
-    },
-  }
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined
-}
-
-function isPromptCommandRoute(
-  result: AgentCommandRouterResult,
-): result is Extract<AgentCommandRouterResult, { kind: "prompt" }> {
-  return "kind" in result && result.kind === "prompt"
-}
-
-function runtimeCommandResult(
-  conversationId: string,
-  content: string,
-  isError = false,
-  agentSessionId?: string,
-): AgentRuntimeTurnResult {
-  const event: AgentEvent = isError
-    ? { type: "error", message: content }
-    : { type: "result", content, done: true, agentSessionId, threadId: agentSessionId }
-  return {
-    conversationId,
-    events: [event],
-    resultText: isError ? "" : content,
-    agentSessionId,
-    threadId: agentSessionId,
-    error: isError ? content : undefined,
-  }
-}
-
 function compressionStateId(projectId: string, agentType: string): string {
   return `compress:${projectId}:${agentType}`
-}
-
-function historyEntryForAgentEvent(event: AgentEvent): Pick<
-  ConversationEntryV1["history"][number],
-  "role" | "content" | "metadata"
-> | null {
-  switch (event.type) {
-    case "toolUse":
-      return {
-        role: "tool",
-        content: event.toolInput ? `${event.toolName}\n${event.toolInput}` : event.toolName,
-        metadata: compactMetadata({
-          agentEventType: event.type,
-          agentSessionId: event.agentSessionId,
-          threadId: event.threadId,
-          toolName: event.toolName,
-          toolInputRaw: event.toolInputRaw,
-        }),
-      }
-    case "toolResult":
-      return {
-        role: "tool",
-        content: event.content?.trim() || event.toolName,
-        metadata: compactMetadata({
-          agentEventType: event.type,
-          agentSessionId: event.agentSessionId,
-          threadId: event.threadId,
-          toolName: event.toolName,
-          status: event.status,
-          exitCode: event.exitCode,
-          success: event.success,
-        }),
-      }
-    case "thinking":
-      return {
-        role: "system",
-        content: event.content,
-        metadata: compactMetadata({
-          agentEventType: event.type,
-          agentSessionId: event.agentSessionId,
-          threadId: event.threadId,
-        }),
-      }
-    case "permissionRequest":
-      return {
-        role: "system",
-        content: event.toolInput ? `${event.toolName}\n${event.toolInput}` : event.toolName,
-        metadata: compactMetadata({
-          agentEventType: event.type,
-          agentSessionId: event.agentSessionId,
-          threadId: event.threadId,
-          requestId: event.requestId,
-          toolName: event.toolName,
-          toolInputRaw: event.toolInputRaw,
-          questions: event.questions,
-        }),
-      }
-    case "error":
-      return {
-        role: "system",
-        content: event.message,
-        metadata: compactMetadata({
-          agentEventType: event.type,
-          agentSessionId: event.agentSessionId,
-          threadId: event.threadId,
-        }),
-      }
-    case "text":
-    case "result":
-      return null
-    default: {
-      const exhaustive: never = event
-      return exhaustive
-    }
-  }
-}
-
-function compactMetadata(input: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(input).filter(([, value]) => value !== undefined),
-  )
-}
-
-function estimateTokens(conversation: ConversationEntryV1): number {
-  const chars = conversation.history.reduce((total, entry) => total + entry.content.length, 0)
-  return Math.ceil(chars / 4)
-}
-
-function conversationLogContext(
-  projectId: string,
-  conversation: ConversationEntryV1,
-): Record<string, unknown> {
-  return {
-    projectId,
-    conversationId: conversation.id,
-    sessionKey: conversation.sessionKey,
-    platform: conversation.platform ?? "local",
-    channelKey: conversation.channelKey,
-    workspaceKey: conversation.workspaceKey,
-    workspacePath: conversation.workspacePath,
-    active: conversation.active,
-    historyCount: conversation.history.length,
-    updatedAt: conversation.updatedAt,
-  }
-}
-
-function minGapElapsed(lastCompressedAt: string | undefined, minGapMins: number): boolean {
-  if (!lastCompressedAt) return true
-  const last = Date.parse(lastCompressedAt)
-  if (!Number.isFinite(last)) return true
-  return Date.now() - last >= minGapMins * 60_000
-}
-
-async function nextLiveEventWithTimeout(
-  liveSession: AgentLiveSession,
-  timeoutMs: number,
-): Promise<AgentEvent | null> {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      liveSession.nextEvent(),
-      new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
-}
-
-async function promiseWithTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
-}
-
-function appendRelayText(current: string, event: AgentEvent): string {
-  if (event.type === "text" || event.type === "result") {
-    return `${current}${event.content}`
-  }
-  if (event.type === "error" && !current) return event.message
-  return current
 }
 
 function formatCommandResult(name: string, result: ControlledProcessResult): string {
