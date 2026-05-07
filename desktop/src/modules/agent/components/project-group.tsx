@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { FolderOpen, Plus } from "lucide-react"
+import { useRef, useState } from "react"
+import { Clock, Folder, FolderOpen, Plus } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   ContextMenu,
@@ -49,8 +49,18 @@ function ProjectGroup({
   onDelete,
   onRename,
 }: ProjectGroupProps) {
+  const isSelected = selectedProjectId === project.id
+  const [open, setOpen] = useState(isSelected || sessions.length > 0)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
   const [renameValue, setRenameValue] = useState("")
+
+  const prevIsSelectedRef = useRef(isSelected)
+  const prevSessionCountRef = useRef(sessions.length)
+  if ((isSelected && !prevIsSelectedRef.current) || (sessions.length > 0 && prevSessionCountRef.current === 0)) {
+    if (!open) setOpen(true)
+  }
+  prevIsSelectedRef.current = isSelected
+  prevSessionCountRef.current = sessions.length
 
   function handleRenameOpen(session: SynapseAgentSessionSummary) {
     setRenameTarget(session)
@@ -66,24 +76,27 @@ function ProjectGroup({
 
   return (
     <>
-      <Collapsible defaultOpen data-track="agent-project-group">
-        <CollapsibleTrigger className="flex h-8 w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
-          <span className="flex min-w-0 items-center gap-2 text-left">
-            <FolderOpen className="size-4 shrink-0" />
+      <Collapsible open={open} onOpenChange={setOpen} data-track="agent-project-group">
+        <div className="flex h-8 w-full items-center justify-between rounded-lg px-3">
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
+            {open ? (
+              <FolderOpen className="size-4 shrink-0" />
+            ) : (
+              <Folder className="size-4 shrink-0" />
+            )}
             <span className="truncate">{project.name}</span>
-          </span>
+          </CollapsibleTrigger>
           <AgentPickerPopover agents={availableAgents} onSelect={onCreateSession}>
             <button
               type="button"
               className="rounded p-0.5 text-muted-foreground hover:text-foreground"
               title="新建会话"
-              onClick={(e) => e.stopPropagation()}
             >
               <Plus className="size-3.5" />
               <span className="sr-only">新建会话</span>
             </button>
           </AgentPickerPopover>
-        </CollapsibleTrigger>
+        </div>
         <CollapsibleContent>
           <div className="flex flex-col pl-3">
             {sessions.map((session) => {
@@ -113,7 +126,12 @@ function ProjectGroup({
                       >
                         <span className="flex items-center gap-1.5 text-xs font-normal">
                           {def?.icon ? (
-                            <img src={def.icon} alt="" className="h-3.5 w-3.5 shrink-0" />
+                            <div className="relative shrink-0">
+                              <img src={def.icon} alt="" className="h-3.5 w-3.5" />
+                              {session.platform === "scheduled" && (
+                                <Clock className="absolute -bottom-0.5 -right-0.5 size-2.5 text-muted-foreground" />
+                              )}
+                            </div>
                           ) : null}
                           <span className="truncate">{sessionLabel(session)}</span>
                         </span>

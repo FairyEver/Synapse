@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Archive } from "lucide-react"
+import { Archive, Clock } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   ContextMenu,
@@ -95,7 +95,12 @@ function ArchivedGroup({
                       >
                         <span className="flex items-center gap-1.5 text-xs font-normal">
                           {def?.icon ? (
-                            <img src={def.icon} alt="" className="h-3.5 w-3.5 shrink-0" />
+                            <div className="relative shrink-0">
+                              <img src={def.icon} alt="" className="h-3.5 w-3.5" />
+                              {session.platform === "scheduled" && (
+                                <Clock className="absolute -bottom-0.5 -right-0.5 size-2.5 text-muted-foreground" />
+                              )}
+                            </div>
                           ) : null}
                           <span className="truncate">{sessionLabel(session)}</span>
                         </span>
