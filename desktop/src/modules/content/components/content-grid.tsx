@@ -6,6 +6,7 @@ import { useRepoProfileMap } from "@/app-shell/identity-context"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
 import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
+import { EditorInstallBadges } from "@/modules/content/components/editor-install-badges"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentGridProps = {
@@ -116,45 +117,49 @@ function ContentListCard({
 
   return (
     <div
-      className="flex items-start gap-3 rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
+      className="flex flex-col rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
     >
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        onClick={onOpen}
-      >
-        <ContentItemIcon
-          contentId={item.id}
-          contentType={contentType}
-          icon={item.icon}
-          iconType={item.iconType}
-          iconImage={item.iconImage}
-          title={item.title}
-          tone={item.iconBg}
-        />
-        <ContentItemMeta
-          author={authorLabel}
-          category={categoryLabel}
-          className="flex-1"
-          description={item.description}
-          title={item.title}
-        />
-      </button>
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          onClick={onOpen}
+        >
+          <ContentItemIcon
+            contentId={item.id}
+            contentType={contentType}
+            icon={item.icon}
+            iconType={item.iconType}
+            iconImage={item.iconImage}
+            title={item.title}
+            tone={item.iconBg}
+          />
+          <ContentItemMeta
+            author={authorLabel}
+            category={categoryLabel}
+            className="flex-1"
+            description={item.description}
+            title={item.title}
+          />
+        </button>
 
-      <div
-        className="shrink-0 self-start"
-        onClick={(event) => {
-          event.stopPropagation()
-        }}
-        onKeyDown={(event) => {
-          event.stopPropagation()
-        }}
-      >
-        <ContentActionSplitButton
-          item={item}
-          onInstallDialogOpenChange={onInstallDialogOpenChange}
-        />
+        <div
+          className="shrink-0 self-start"
+          onClick={(event) => {
+            event.stopPropagation()
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+          }}
+        >
+          <ContentActionSplitButton
+            item={item}
+            onInstallDialogOpenChange={onInstallDialogOpenChange}
+          />
+        </div>
       </div>
+
+      <EditorInstallBadges contentId={item.id} />
     </div>
   )
 }
