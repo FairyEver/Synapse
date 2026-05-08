@@ -66,10 +66,6 @@ export const IPC_CHANNELS = {
   "editor-install-status": {
     "resolveForContent": "synapse:editor-install-status:resolve-for-content",
   },
-  "install-status": {
-    "getAll": "synapse:install-status:get-all",
-    "uninstall": "synapse:install-status:uninstall",
-  },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
     "createDirectory": "synapse:editor:create-directory",

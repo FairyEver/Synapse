@@ -15,7 +15,6 @@ import type {
   SynapseRepositoryUpdatedEvent,
 } from "../src/types/repository"
 import type { SynapseAppUpdateState } from "../src/types/update"
-import type { InstallStatusChangedEvent } from "../src/types/install-status"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
 
@@ -78,10 +77,6 @@ const IPC_CHANNELS = {
   },
   "editor-install-status": {
     "resolveForContent": "synapse:editor-install-status:resolve-for-content",
-  },
-  "install-status": {
-    "getAll": "synapse:install-status:get-all",
-    "uninstall": "synapse:install-status:uninstall",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
@@ -207,9 +202,6 @@ const EVENT_CHANNELS = {
   },
   agent: {
     event: "synapse:events:agent",
-  },
-  installStatus: {
-    changed: "synapse:events:install-status",
   },
 }
 
@@ -395,16 +387,6 @@ const synapseBridge: SynapseBridge = {
   },
   editorInstallStatus: {
     resolveForContent: invoke(IPC_CHANNELS["editor-install-status"].resolveForContent),
-  },
-  installStatus: {
-    getAll: invoke(IPC_CHANNELS["install-status"].getAll),
-    uninstall: (payload: { contentId: string; editorId: string }) =>
-      invoke(IPC_CHANNELS["install-status"].uninstall)(payload),
-    onChanged: createDomainEventPayloadSubscription<InstallStatusChangedEvent>(
-      subscribe,
-      "install-status",
-      "install-status.changed",
-    ),
   },
   shell: {
     showItemInFolder: (filePath: string) => {
