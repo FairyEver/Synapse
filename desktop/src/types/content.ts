@@ -24,6 +24,7 @@ export type SynapseContentSnapshotRecord = {
    * dialog forces migration on next save.
    */
   name?: string
+  usage?: string
   description: string
   category: string
   icon: string
@@ -52,6 +53,7 @@ type SynapseContentSummaryBase = {
   title: string
   /** Skill/Rule identifier slug. Optional here for shared-type convenience. */
   name?: string
+  usage?: string
   description: string
   category: string
   icon: string
@@ -127,6 +129,7 @@ export type SynapseContentFile = SynapseTextContentFile | SynapseBinaryContentFi
 
 type SynapseCreateContentPayloadBase = {
   title: string
+  usage?: string
   description: string
   category: string
   icon: string
