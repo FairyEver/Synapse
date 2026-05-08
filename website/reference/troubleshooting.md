@@ -12,7 +12,7 @@ Windows 如遇 SmartScreen 警告，选择“更多信息 → 仍要运行”。
 
 ## 无法查看仓库内容
 
-确认 Settings 中配置的是仓库目录。仓库是 Synapse AI Studio 读取和保存 Rule、Skill 的来源目录；项目是安装目标目录。
+确认 Settings 中配置的是仓库目录。仓库是 Synapse 读取和保存 Rule、Skill 的来源目录；项目是安装目标目录。
 
 使用本地目录时，确认该目录已作为仓库添加。若暂未配置团队仓库，可先创建本地目录用于试用。
 
@@ -36,6 +36,6 @@ Cursor 全局 Rule 目前不支持。可改用 Cursor 项目级 Rule，或选择
 
 Git 仓库同步执行 `git pull --ff-only --progress`。若本地或远端状态不允许 fast-forward，Git 将返回失败。
 
-待同步推送遇到 non-fast-forward、rejected 或 fetch-first 等错误时，Synapse AI Studio 先执行 `git pull --rebase`，再重试推送。
+待同步推送遇到 non-fast-forward、rejected 或 fetch-first 等错误时，Synapse 先执行 `git pull --rebase`，再重试推送。
 
 非 Git 目录不会执行 Git 同步，仅刷新本地内容索引。

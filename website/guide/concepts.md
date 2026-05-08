@@ -2,7 +2,7 @@
 
 # 核心概念
 
-Synapse AI Studio 目前围绕四个核心概念组织使用流程：Rule、Skill、仓库和项目。
+Synapse 目前围绕四个核心概念组织使用流程：Rule、Skill、仓库和项目。
 
 ## Rule（规则）
 
@@ -22,9 +22,9 @@ Skill 有中文标题、标识名称、简介、分类、主说明和附件。�
 
 ## 仓库
 
-仓库是 Synapse AI Studio 管理 Rule 和 Skill 的本地目录。设置页中的对应入口是”仓库”和”本地仓库目录”。
+仓库是 Synapse 管理 Rule 和 Skill 的本地目录。设置页中的对应入口是”仓库”和”本地仓库目录”。
 
-可选择现有文件夹加入仓库列表，也可新建本地仓库。仓库记录可修改名称和路径，也可从 Synapse AI Studio 中移除。移除仓库记录不会删除对应本地目录。
+可选择现有文件夹加入仓库列表，也可新建本地仓库。仓库记录可修改名称和路径，也可从 Synapse 中移除。移除仓库记录不会删除对应本地目录。
 
 ## 项目
 
@@ -36,12 +36,12 @@ Skill 有中文标题、标识名称、简介、分类、主说明和附件。�
 
 | 概念 | 作用 |
 | --- | --- |
-| 仓库 | Synapse AI Studio 读取和保存 Rule、Skill 的来源目录 |
+| 仓库 | Synapse 读取和保存 Rule、Skill 的来源目录 |
 | 项目 | Rule、Skill 安装到编辑器时使用的目标目录 |
 
 ## 编辑器安装范围
 
-Synapse AI Studio 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均支持 Skill 的全局安装和项目级安装。
+Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均支持 Skill 的全局安装和项目级安装。
 
 Rule 的项目级安装支持 Cursor、Codex、Claude Code、Windsurf。Rule 的全局安装支持 Codex、Claude Code、Windsurf；Cursor 全局 Rule 目前不支持。
 
@@ -51,7 +51,7 @@ Rule 的项目级安装支持 Cursor、Codex、Claude Code、Windsurf。Rule 的
 仓库
   Rule / Skill
     ↓ 浏览、搜索、下载
-Synapse AI Studio
+Synapse
     ↓ 安装
 全局编辑器目录 或 项目目录
 ```

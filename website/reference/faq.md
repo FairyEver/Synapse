@@ -8,17 +8,17 @@
 
 浏览、搜索、下载和安装内容无需执行 Git 命令。
 
-仓库为 Git 仓库时，Synapse AI Studio 在创建、更新、删除、恢复和永久删除内容时创建普通 Git commit。团队如需审核，可在代码托管平台审核这些提交。
+仓库为 Git 仓库时，Synapse 在创建、更新、删除、恢复和永久删除内容时创建普通 Git commit。团队如需审核，可在代码托管平台审核这些提交。
 
 ### 是否需要 AI 或编程基础？
 
-无需。Synapse AI Studio 管理的是 Rule 和 Skill 内容；实际 AI 交互由安装后的目标编辑器完成。
+无需。Synapse 管理的是 Rule 和 Skill 内容；实际 AI 交互由安装后的目标编辑器完成。
 
 ## 支持范围
 
 ### 支持范围包含哪些编辑器？
 
-Synapse AI Studio 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均可安装 Rule 和 Skill。
+Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均可安装 Rule 和 Skill。
 
 编辑器安装范围和路径参见 [编辑器安装](/guide/editors)。
 
@@ -43,7 +43,7 @@ Synapse AI Studio 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以�
 
 ### 仓库与项目的区别
 
-仓库是 Synapse AI Studio 读取和保存 Rule、Skill 的来源目录。项目是 Rule 或 Skill 的项目级安装目标。
+仓库是 Synapse 读取和保存 Rule、Skill 的来源目录。项目是 Rule 或 Skill 的项目级安装目标。
 
 ### 无法查看仓库内容如何处理？
 
@@ -71,7 +71,7 @@ Synapse AI Studio 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以�
 
 ### Cursor 是否支持全局 Rule？
 
-不支持。Synapse AI Studio 目前未提供固定的 Cursor 全局 Rule 安装位置，因此 Cursor 全局 Rule 显示为”不支持”。
+不支持。Synapse 目前未提供固定的 Cursor 全局 Rule 安装位置，因此 Cursor 全局 Rule 显示为”不支持”。
 
 ## 内容
 

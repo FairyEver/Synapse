@@ -2,7 +2,7 @@
   "name": "@synapse/desktop",
   "productName": "Synapse",
   "private": true,
-  "version": "0.2.85",
+  "version": "0.2.86",
   "description": "Synapse desktop scaffold built with Electron, Vite, React, Tailwind CSS, and shadcn/ui.",
   "author": "FairyEver",
   "homepage": "https://github.com/FairyEver/Synapse",
@@ -102,7 +102,7 @@
   },
   "build": {
     "appId": "com.fairyever.synapse",
-    "productName": "Synapse AI Studio",
+    "productName": "Synapse",
     "directories": {
       "output": "release"
     },
@@ -143,9 +143,9 @@
       "hardenedRuntime": true,
       "notarize": true,
       "extendInfo": {
-        "NSDocumentsFolderUsageDescription": "Synapse AI Studio 需要访问文稿文件夹以管理你的内容仓库。",
-        "NSDesktopFolderUsageDescription": "Synapse AI Studio 需要访问桌面文件夹以管理你的内容仓库。",
-        "NSDownloadsFolderUsageDescription": "Synapse AI Studio 需要访问下载文件夹以导出内容和备份。"
+        "NSDocumentsFolderUsageDescription": "Synapse 需要访问文稿文件夹以管理你的内容仓库。",
+        "NSDesktopFolderUsageDescription": "Synapse 需要访问桌面文件夹以管理你的内容仓库。",
+        "NSDownloadsFolderUsageDescription": "Synapse 需要访问下载文件夹以导出内容和备份。"
       },
       "target": [
         {

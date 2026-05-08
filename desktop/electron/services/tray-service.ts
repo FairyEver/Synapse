@@ -56,7 +56,7 @@ function createTray(onShowWindow: () => void): void {
   showWindowCallback = onShowWindow
 
   tray = new Tray(buildTrayImage(iconPath))
-  tray.setToolTip("Synapse AI Studio")
+  tray.setToolTip("Synapse")
 
   const contextMenu = Menu.buildFromTemplate([
     {

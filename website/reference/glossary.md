@@ -12,11 +12,11 @@ Skill 是由主说明和附件组成的能力包。安装后写入一个 Skill �
 
 ## 仓库
 
-仓库是 Synapse AI Studio 管理 Rule 和 Skill 的本地目录。Synapse AI Studio 从仓库目录读取内容，并以可浏览、可搜索的形式呈现。
+仓库是 Synapse 管理 Rule 和 Skill 的本地目录。Synapse 从仓库目录读取内容，并以可浏览、可搜索的形式呈现。
 
 ## 项目
 
-项目是 Rule 或 Skill 的项目级安装目标。安装到项目时，Synapse AI Studio 根据项目路径确定编辑器安装位置。
+项目是 Rule 或 Skill 的项目级安装目标。安装到项目时，Synapse 根据项目路径确定编辑器安装位置。
 
 ## 全局安装
 
@@ -28,4 +28,4 @@ Skill 是由主说明和附件组成的能力包。安装后写入一个 Skill �
 
 ## 编辑器
 
-编辑器是 Rule 或 Skill 的安装目标。Synapse AI Studio 目前支持 Cursor、Codex、Claude Code 和 Windsurf。
+编辑器是 Rule 或 Skill 的安装目标。Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。

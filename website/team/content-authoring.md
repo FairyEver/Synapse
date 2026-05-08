@@ -14,7 +14,7 @@ Rule 正文写入 `main.md`。写入时移除正文首尾空白，并保证文�
 
 创建 Skill 时，需要填写与 Rule 相同的基础信息，并提供 `files` 附件列表。Skill 的主说明同样写入 `main.md`。
 
-Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`，以及可选的 `sha256` 和 `bytes`。添加新附件时，Synapse AI Studio 检查文件名、大小和重复路径；已有附件可通过 `sha256` 继续引用。
+Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`，以及可选的 `sha256` 和 `bytes`。添加新附件时，Synapse 检查文件名、大小和重复路径；已有附件可通过 `sha256` 继续引用。
 
 ## 标题、简介与分类
 
@@ -30,7 +30,7 @@ Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`
 | `category` | `snapshot.json` |
 | `content` | `main.md` |
 
-编写时可将 `title` 用作面向用户的标题，将 `description` 写成简短说明，并将 `category` 保持为可分类检索的文本。Synapse AI Studio 检查这些必填项是否填写完整。
+编写时可将 `title` 用作面向用户的标题，将 `description` 写成简短说明，并将 `category` 保持为可分类检索的文本。Synapse 检查这些必填项是否填写完整。
 
 ## 附件
 

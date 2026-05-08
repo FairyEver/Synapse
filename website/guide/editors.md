@@ -4,9 +4,9 @@
 
 ## 支持范围
 
-Synapse AI Studio 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均可安装 Rule 和 Skill，具体安装范围如下。
+Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均可安装 Rule 和 Skill，具体安装范围如下。
 
-安装前，Synapse AI Studio 检查目标位置是否可用。Cursor 暂不支持全局 Rule 安装，因此该组合显示为”不支持”。
+安装前，Synapse 检查目标位置是否可用。Cursor 暂不支持全局 Rule 安装，因此该组合显示为”不支持”。
 
 | 编辑器 | Rule 全局 | Rule 项目 | Skill 全局 | Skill 项目 |
 | --- | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ Synapse AI Studio 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以�
 | Claude Code | `~/.claude/rules/{name}.md` | `~/.claude/skills/{skillName}/` |
 | Windsurf | `~/.codeium/windsurf/memories/global_rules.md` | `~/.codeium/windsurf/skills/{skillName}/` |
 
-Codex 全局 Rule 和 Windsurf 全局 Rule 写入已有文件中的 Synapse AI Studio 标记区块。Skill 全局安装写入目录。
+Codex 全局 Rule 和 Windsurf 全局 Rule 写入已有文件中的 Synapse 标记区块。Skill 全局安装写入目录。
 
 ## 项目级安装
 
@@ -53,7 +53,7 @@ Codex 项目级 Rule 无需填写额外信息。
 
 ## 安装状态
 
-安装前，Synapse AI Studio 检查目标位置。状态包括：
+安装前，Synapse 检查目标位置。状态包括：
 
 | 状态 | 含义 |
 | --- | --- |
@@ -66,8 +66,8 @@ Codex 项目级 Rule 无需填写额外信息。
 
 ## 路径参考
 
-`{name}` 为 Rule 的名称。未设置名称时，Synapse AI Studio 使用自动生成的规则名。
+`{name}` 为 Rule 的名称。未设置名称时，Synapse 使用自动生成的规则名。
 
-`{skillName}` 为 Skill 的名称。未设置名称时，Synapse AI Studio 根据标题生成目录名；仍无法生成时，使用内容 ID。
+`{skillName}` 为 Skill 的名称。未设置名称时，Synapse 根据标题生成目录名；仍无法生成时，使用内容 ID。
 
 `{projectPath}` 为安装时选择的项目目录。项目路径不存在时，安装目标显示为不可用。

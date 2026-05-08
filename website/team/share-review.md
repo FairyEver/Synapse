@@ -4,20 +4,20 @@
 
 ## 创建内容
 
-创建 Rule 或 Skill 时，Synapse AI Studio 使用当前激活仓库和仓库身份保存内容。内容写入仓库目录，并生成新的内容 ID 与历史版本。
+创建 Rule 或 Skill 时，Synapse 使用当前激活仓库和仓库身份保存内容。内容写入仓库目录，并生成新的内容 ID 与历史版本。
 
-创建完成后，Synapse AI Studio 记录 `id`、`type`、`title`、`latestHistoryDirname` 和 `modifiedAt`。若仓库不是 Git 仓库，Synapse AI Studio 刷新内容索引并显示本地保存结果。
+创建完成后，Synapse 记录 `id`、`type`、`title`、`latestHistoryDirname` 和 `modifiedAt`。若仓库不是 Git 仓库，Synapse 刷新内容索引并显示本地保存结果。
 
 ## 提交
 
-若仓库位于 Git 仓库内，Synapse AI Studio 先设置本地提交身份：
+若仓库位于 Git 仓库内，Synapse 先设置本地提交身份：
 
 | Git 配置 | 值 |
 | --- | --- |
 | `user.name` | `Synapse Bot` |
 | `user.email` | `bot@synapse.local` |
 
-随后 Synapse AI Studio 暂存本次变更涉及的文件，并创建提交。内容提交信息格式为：
+随后 Synapse 暂存本次变更涉及的文件，并创建提交。内容提交信息格式为：
 
 ```text
 [synapse] <action> <type> <id前8位>
@@ -29,9 +29,9 @@
 
 ## 审核
 
-更新、删除或恢复内容时，Synapse AI Studio 检查 `baseHistoryDirname`。若当前最新历史版本与请求中的基础版本不同，并且请求未包含 `force`，结果将返回 `status: "conflict"`，同时返回最新版本目录名、修改时间和修改者显示名。
+更新、删除或恢复内容时，Synapse 检查 `baseHistoryDirname`。若当前最新历史版本与请求中的基础版本不同，并且请求未包含 `force`，结果将返回 `status: "conflict"`，同时返回最新版本目录名、修改时间和修改者显示名。
 
-Synapse AI Studio 目前不内置单独的审核状态或审批队列。团队可使用 Git 平台审核 Synapse AI Studio 创建的普通 Git commit。
+Synapse 目前不内置单独的审核状态或审批队列。团队可使用 Git 平台审核 Synapse 创建的普通 Git commit。
 
 ## 同步
 
@@ -41,4 +41,4 @@ Synapse AI Studio 目前不内置单独的审核状态或审批队列。团队�
 git pull --ff-only --progress
 ```
 
-待同步记录包含 `commitHash`、`action`、`targetId`、`title`、创建时间、重试次数和最后错误。执行待同步推送时，Synapse AI Studio 按队列尝试 `git push`；遇到 non-fast-forward、rejected 或 fetch-first 等错误时，先执行 `git pull --rebase`，再重试推送。
+待同步记录包含 `commitHash`、`action`、`targetId`、`title`、创建时间、重试次数和最后错误。执行待同步推送时，Synapse 按队列尝试 `git push`；遇到 non-fast-forward、rejected 或 fetch-first 等错误时，先执行 `git pull --rebase`，再重试推送。
