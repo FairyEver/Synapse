@@ -55,7 +55,10 @@ function ContentActionSplitButton({
 
   const actionMenuSections = useMemo(() => {
     if (primaryAction === "copy") {
-      return downloadAction ? [{ key: "download", items: [downloadAction] }] : []
+      const sections = downloadAction ? [{ key: "download", items: [downloadAction] }] : []
+      // Add copy-related sections (copy-content, copy-icon-prompt) for Prompt
+      const copySections = auxiliaryMenuSections.filter((section) => section.key === "copy")
+      return [...sections, ...copySections]
     }
     if (canInstall) {
       const nonInstallSections = auxiliaryMenuSections.filter((section) => section.key !== "install")
