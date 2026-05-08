@@ -29,6 +29,12 @@ const DATABASE_CAPABILITIES = [
   { id: "database.log.list", title: "List log", description: "List recent database mutation log entries.", mutates: false },
   { id: "database.sql.read", title: "Read SQL", description: "Execute read-only SQL.", mutates: false },
   { id: "database.sql.execute", title: "Execute SQL", description: "Execute raw SQL.", mutates: true, risk: "high" },
+  { id: "database.folder.list", title: "List folders", description: "List table folders and their members.", mutates: false },
+  { id: "database.folder.create", title: "Create folder", description: "Create a table folder.", mutates: true },
+  { id: "database.folder.rename", title: "Rename folder", description: "Rename a table folder.", mutates: true },
+  { id: "database.folder.delete", title: "Delete folder", description: "Delete a table folder. Tables inside are moved to root.", mutates: true },
+  { id: "database.folder.reorder", title: "Reorder folders", description: "Reorder table folders.", mutates: true },
+  { id: "database.table.move", title: "Move table", description: "Move a table to a folder or to root.", mutates: true },
 ] as const satisfies readonly CapabilityDefinition[]
 
 const DATABASE_DOMAIN: CapabilityDomainDefinition = {
