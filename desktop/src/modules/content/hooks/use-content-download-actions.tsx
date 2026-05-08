@@ -62,7 +62,7 @@ function useContentDownloadActions({
   const canCopy = definition.capabilities.canCopyContent
   const canDownload = definition.capabilities.canDownload
   const canInstall = definition.capabilities.canInstallToEditor
-  const isBusy = isCopying || isDownloading
+  const isBusy = isCopying || isDownloading || isCopyingIconPrompt
   const {
     error: adaptersError,
     filteredAdapters,
