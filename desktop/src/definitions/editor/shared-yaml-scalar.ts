@@ -14,10 +14,17 @@ function joinBlockLines(lines: string[], indicator: BlockIndicator): string {
   return indicator.endsWith("-") ? joined : `${joined}\n`
 }
 
-function parseFrontmatterBlock(raw: string): Record<string, string> {
+type ParseResult = {
+  metadata: Record<string, string>
+  hasUnsupportedLines: boolean
+}
+
+function parseFrontmatterBlock(raw: string): ParseResult {
   const metadata: Record<string, string> = {}
   const lines = raw.split(/\r?\n/)
   let i = 0
+  let hasUnsupportedLines = false
+
   while (i < lines.length) {
     const line = lines[i]
     const colonIndex = line.indexOf(":")
@@ -25,6 +32,19 @@ function parseFrontmatterBlock(raw: string): Record<string, string> {
     const key = line.slice(0, colonIndex).trim()
     const rawValue = line.slice(colonIndex + 1).trim()
     if (!key) { i++; continue }
+
+    // Detect YAML arrays/objects (lines starting with - or { or [)
+    const nextLine = lines[i + 1]
+    const isComplexType = nextLine && /^[ \t]*[-{\[]/.test(nextLine)
+    if (isComplexType) {
+      hasUnsupportedLines = true
+      // Skip complex type lines
+      i++
+      while (i < lines.length && /^[ \t]/.test(lines[i])) {
+        i++
+      }
+      continue
+    }
 
     if (isBlockIndicator(rawValue)) {
       const blockLines: string[] = []
@@ -39,7 +59,8 @@ function parseFrontmatterBlock(raw: string): Record<string, string> {
       i++
     }
   }
-  return metadata
+
+  return { metadata, hasUnsupportedLines }
 }
 
 function needsDoubleQuote(value: string): boolean {

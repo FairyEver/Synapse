@@ -52,13 +52,12 @@ function parseFrontmatter(text: string): ParsedFrontmatter {
   }
 
   const block = text.slice(4, endIndex)
-  const parsed = parseFrontmatterBlock(block)
-  const hasUnsupportedLines = Object.keys(parsed).length === 0 && block.trim().length > 0
+  const { metadata: parsed, hasUnsupportedLines } = parseFrontmatterBlock(block)
 
   return {
     metadata: parsed,
     body: text.slice(endIndex + 4).trim(),
-    hasUnsupportedLines,
+    hasUnsupportedLines: hasUnsupportedLines || (Object.keys(parsed).length === 0 && block.trim().length > 0),
   }
 }
 

@@ -100,14 +100,14 @@ function recordEditorTrashAudit(
 }
 
 function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
-  const metadata: Record<string, string> = {}
-  if (!text.startsWith("---")) return { metadata, body: text }
+  if (!text.startsWith("---")) return { metadata: {}, body: text }
 
   const endIndex = text.indexOf("\n---", 3)
-  if (endIndex === -1) return { metadata, body: text }
+  if (endIndex === -1) return { metadata: {}, body: text }
 
   const block = text.slice(4, endIndex)
-  return { metadata: parseFrontmatterBlock(block), body: text.slice(endIndex + 4).trim() }
+  const { metadata } = parseFrontmatterBlock(block)
+  return { metadata, body: text.slice(endIndex + 4).trim() }
 }
 
 function previewLines(text: string): string {

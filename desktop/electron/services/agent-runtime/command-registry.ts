@@ -288,5 +288,6 @@ function parseFrontmatter(content: string): Record<string, string> {
   if (!content.startsWith("---")) return {}
   const end = content.indexOf("\n---", 3)
   if (end < 0) return {}
-  return parseFrontmatterBlock(content.slice(3, end))
+  const { metadata } = parseFrontmatterBlock(content.slice(3, end))
+  return metadata
 }

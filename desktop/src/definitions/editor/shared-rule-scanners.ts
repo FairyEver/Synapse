@@ -38,17 +38,17 @@ async function readFullText(filePath: string): Promise<string> {
 }
 
 function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
-  const metadata: Record<string, string> = {}
   if (!text.startsWith("---")) {
-    return { metadata, body: text }
+    return { metadata: {}, body: text }
   }
   const endIndex = text.indexOf("\n---", 3)
   if (endIndex === -1) {
-    return { metadata, body: text }
+    return { metadata: {}, body: text }
   }
   const block = text.slice(4, endIndex)
   const body = text.slice(endIndex + 4).trim()
-  return { metadata: parseFrontmatterBlock(block), body }
+  const { metadata } = parseFrontmatterBlock(block)
+  return { metadata, body }
 }
 
 export async function scanClaudeCodeRules(dirPath: string): Promise<EditorScanRuleItem[]> {

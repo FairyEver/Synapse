@@ -137,8 +137,9 @@ function parseSkillFile(content: string): {
   const end = content.indexOf("\n---", 3)
   if (end < 0) return { frontmatter: {}, prompt: content }
   const block = content.slice(3, end)
+  const { metadata } = parseFrontmatterBlock(block)
   return {
-    frontmatter: parseFrontmatterBlock(block),
+    frontmatter: metadata,
     prompt: content.slice(end + 4).trim(),
   }
 }
