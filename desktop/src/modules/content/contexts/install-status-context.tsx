@@ -13,6 +13,8 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
   const [statusMap, setStatusMap] = useState<InstallStatusMap>({})
 
   useEffect(() => {
+    if (!window.synapse) return
+
     window.synapse.installStatus.getAll().then(setStatusMap)
 
     const unsubscribe = window.synapse.installStatus.onChanged((event) => {
@@ -31,6 +33,7 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function uninstall(contentId: string, editorId: SynapseEditorId): Promise<void> {
+    if (!window.synapse) return
     await window.synapse.installStatus.uninstall({ contentId, editorId })
   }
 
