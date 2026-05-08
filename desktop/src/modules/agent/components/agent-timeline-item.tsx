@@ -28,7 +28,13 @@ function AgentTimelineItem({
 }) {
   switch (item.kind) {
     case "message":
-      return <AgentMessageEvent item={item} onOpenReference={onOpenReference} />
+      return (
+        <AgentMessageEvent
+          item={item}
+          profile={profile}
+          onOpenReference={onOpenReference}
+        />
+      )
     case "thinking":
       return <AgentThinkingEvent item={item} profile={profile} />
     case "toolCall":
