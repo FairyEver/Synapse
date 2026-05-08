@@ -470,6 +470,15 @@ export const contentIpcModule: IpcModule = {
         return contentInstallService.readEditorInstallFormValues(payload)
       },
     },
+    getIconPromptTemplate: {
+      kind: "invoke",
+      channel: "synapse:content:get-icon-prompt-template",
+      request: z.object({ contentType: contentTypeSchema, id: z.string() }),
+      response: anySchema,
+      handler: async (_ctx, args: { contentType: SynapseContentType; id: string }) => {
+        return contentService.getIconPromptTemplate(args.contentType, args.id)
+      },
+    },
   },
   events: {},
 }

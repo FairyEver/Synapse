@@ -26,6 +26,7 @@ export const IPC_CHANNELS = {
     "resolveEditorInstallTarget": "synapse:content:resolve-editor-install-target",
     "installToEditor": "synapse:content:install-to-editor",
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
+    "getIconPromptTemplate": "synapse:content:get-icon-prompt-template",
   },
   "config": {
     "get": "synapse:config:get",
