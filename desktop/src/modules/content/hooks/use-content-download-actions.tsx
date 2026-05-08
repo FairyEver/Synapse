@@ -1,7 +1,9 @@
 import type { ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Image } from "lucide-react"
 import {
   downloadContent,
+  getIconPromptTemplate,
   readContent,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
@@ -53,6 +55,7 @@ function useContentDownloadActions({
   const [initialInstallSelection, setInitialInstallSelection] =
     useState<EditorWriteTargetInitialSelection | null>(null)
   const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
+  const [isCopyingIconPrompt, setIsCopyingIconPrompt] = useState(false)
   const onInstallDialogOpenChangeRef = useRef(onInstallDialogOpenChange)
 
   onInstallDialogOpenChangeRef.current = onInstallDialogOpenChange
@@ -233,6 +236,50 @@ function useContentDownloadActions({
     }
   }, [canCopy, isBusy, item.id, item.type, logger, promise])
 
+  const handleCopyIconPrompt = useCallback(async () => {
+    if (isBusy || !canCopy) {
+      return
+    }
+
+    setIsCopyingIconPrompt(true)
+
+    try {
+      await promise(
+        async () => {
+          const prompt = await getIconPromptTemplate(item.type, item.id)
+
+          if (!prompt) {
+            throw new Error("无法生成图标提示词。")
+          }
+
+          if (!navigator.clipboard?.writeText) {
+            throw new Error("当前环境不支持复制到剪贴板。")
+          }
+
+          await navigator.clipboard.writeText(prompt)
+
+          logger.info("Icon prompt copied to clipboard.", {
+            contentId: item.id,
+            contentType: item.type,
+          })
+        },
+        {
+          loading: "正在复制图标提示词...",
+          success: "图标提示词已复制。",
+          error: (error) => error instanceof Error ? error.message : "复制失败。",
+        },
+      )
+    } catch (error) {
+      logger.error("Copy icon prompt to clipboard failed.", {
+        contentId: item.id,
+        contentType: item.type,
+        error,
+      })
+    } finally {
+      setIsCopyingIconPrompt(false)
+    }
+  }, [canCopy, isBusy, item.id, item.type, logger, promise])
+
   const auxiliaryMenuSections = useMemo<ContentActionMenuSection[]>(
     () => {
       const sections: ContentActionMenuSection[] = []
@@ -260,20 +307,31 @@ function useContentDownloadActions({
       if (canCopy) {
         sections.push({
           key: "copy",
-          items: [{
-            key: "copy-content",
-            label: "复制正文",
-            disabled: isBusy,
-            onSelect: () => {
-              void handleCopy()
+          items: [
+            {
+              key: "copy-content",
+              label: "复制正文",
+              disabled: isBusy,
+              onSelect: () => {
+                void handleCopy()
+              },
             },
-          }],
+            {
+              key: "copy-icon-prompt",
+              label: "复制图标提示词",
+              icon: <Image className="mr-2 h-4 w-4" />,
+              disabled: isBusy,
+              onSelect: () => {
+                void handleCopyIconPrompt()
+              },
+            },
+          ],
         })
       }
 
       return sections
     },
-    [adaptersError, canCopy, canInstall, filteredAdapters, handleCopy, isBusy, isLoadingAdapters, openInstallDialog],
+    [adaptersError, canCopy, canInstall, filteredAdapters, handleCopy, handleCopyIconPrompt, isBusy, isLoadingAdapters, openInstallDialog],
   )
 
   const downloadAction = useMemo<ContentActionMenuItem | null>(
@@ -325,6 +383,7 @@ function useContentDownloadActions({
     canInstall,
     downloadAction,
     handleCopy,
+    handleCopyIconPrompt,
     handleDownload,
     hasAttachments,
     installDialog: canInstall ? (
@@ -341,6 +400,7 @@ function useContentDownloadActions({
     installMenuItems,
     isBusy,
     isCopying,
+    isCopyingIconPrompt,
     isDownloading,
     loadInstallTargets,
     openInstallDialogForEditorId,
