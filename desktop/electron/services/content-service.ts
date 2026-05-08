@@ -253,7 +253,7 @@ class ContentService {
     }
 
     // 解析对应类型的模板
-    const sectionHeader = `# ${contentType.charAt(0).toUpperCase() + contentType.slice(1)} 图标生成提示词模板`
+    const sectionHeader = `# ${contentType.charAt(0).toUpperCase() + contentType.slice(1)}`
     const sections = templateContent.split(/^---$/m)
 
     let targetTemplate = ""
