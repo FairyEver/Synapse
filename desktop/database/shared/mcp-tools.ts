@@ -487,6 +487,90 @@ function buildTools(): McpTool[] {
         required: ["sql"],
       },
     },
+    {
+      name: "database_folder_list",
+      description: "List all table folders and their members. Returns an array of { id, name, sortOrder, members: [{ tableName, sortOrder }] }.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "database_folder_create",
+      description: "Create a table folder. Folder names must be unique and non-empty.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Folder name. Must be unique and non-empty.",
+          },
+        },
+        required: ["name"],
+      },
+    },
+    {
+      name: "database_folder_rename",
+      description: "Rename a table folder. The new name must be unique and non-empty.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          folderId: {
+            type: "number",
+            description: "Folder id",
+          },
+          name: {
+            type: "string",
+            description: "New folder name. Must be unique and non-empty.",
+          },
+        },
+        required: ["folderId", "name"],
+      },
+    },
+    {
+      name: "database_folder_delete",
+      description: "Delete a table folder. Tables inside the folder are moved to root (no longer in any folder).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          folderId: {
+            type: "number",
+            description: "Folder id",
+          },
+        },
+        required: ["folderId"],
+      },
+    },
+    {
+      name: "database_folder_reorder",
+      description: "Reorder table folders. Pass folderIds in the desired order.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          folderIds: {
+            type: "array",
+            items: { type: "number" },
+            description: "Folder ids in desired order",
+          },
+        },
+        required: ["folderIds"],
+      },
+    },
+    {
+      name: "database_table_move",
+      description: "Move a table to a folder or to root. Call database_folder_list to see available folders. Omit folderId to move table to root (no folder).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tableName: {
+            type: "string",
+            description: "Existing table name. If the user did not provide an exact table name, call database_table_list first.",
+          },
+          folderId: {
+            type: "number",
+            description: "Optional folder id. Omit to move table to root (no folder).",
+          },
+        },
+        required: ["tableName"],
+      },
+    },
   ]
 }
 
