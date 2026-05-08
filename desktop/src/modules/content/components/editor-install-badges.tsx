@@ -1,10 +1,20 @@
 import { useState } from "react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { EditorIcon } from "@/components/editor-icon"
 import type { SynapseEditorId } from "@/types/editor"
 import { editorDefinitions } from "@/definitions/generated/renderer-registry"
 import { useInstallStatus, useUninstallFromEditor } from "@/modules/content/contexts/install-status-context"
+import { LoaderCircle } from "lucide-react"
 
 const editorLabelMap = new Map<string, string>(
   editorDefinitions.map((def) => [def.id, def.label]),
@@ -37,8 +47,8 @@ function EditorBadge({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
         <button
           type="button"
           className="flex size-5 items-center justify-center rounded hover:opacity-80 transition-opacity"
@@ -46,24 +56,33 @@ function EditorBadge({
         >
           <EditorIcon editorId={editorId} className="size-5" />
         </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-2" align="start" side="top">
-        <div className="flex items-center gap-2">
-          <EditorIcon editorId={editorId} className="size-4" />
-          <span className="text-xs font-medium">{label}</span>
-          <span className="text-[10px] text-muted-foreground">global</span>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-full justify-start text-xs text-destructive hover:text-destructive"
-          disabled={busy}
-          onClick={handleUninstall}
-        >
-          {busy ? "卸载中..." : "卸载"}
-        </Button>
-      </PopoverContent>
-    </Popover>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <EditorIcon editorId={editorId} className="size-5" />
+            <span>从 {label} 卸载</span>
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            该内容已安装到 {label} 编辑器的全局设置中。确认要删除吗？
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault()
+              void handleUninstall()
+            }}
+            disabled={busy}
+            className="gap-2"
+          >
+            {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            {busy ? "删除中..." : "删除"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
