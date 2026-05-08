@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
@@ -225,6 +226,55 @@ class ContentService {
     } catch {
       return null
     }
+  }
+
+  async getIconPromptTemplate(
+    contentType: SynapseContentType,
+    contentId: string,
+  ): Promise<string | null> {
+    // 获取内容详情
+    let detail: SynapseContentDetail
+    try {
+      detail = await this.getDetail(contentType, contentId)
+    } catch {
+      return null
+    }
+
+    // 读取模板文件
+    const templatePath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..", "..", "src", "config", "content-types", "icon-prompt-templates.md"
+    )
+
+    let templateContent: string
+    try {
+      templateContent = await readFile(templatePath, "utf-8")
+    } catch {
+      return null
+    }
+
+    // 解析对应类型的模板
+    const sectionHeader = `# ${contentType.charAt(0).toUpperCase() + contentType.slice(1)} 图标生成提示词模板`
+    const sections = templateContent.split(/^---$/m)
+
+    let targetTemplate = ""
+    for (const section of sections) {
+      if (section.includes(sectionHeader)) {
+        targetTemplate = section.trim()
+        break
+      }
+    }
+
+    if (!targetTemplate) {
+      return null
+    }
+
+    // 替换占位符
+    const finalPrompt = targetTemplate
+      .replace(/{{TITLE}}/g, detail.title || "")
+      .replace(/{{CONTENT}}/g, detail.content || "")
+
+    return finalPrompt
   }
 }
 
