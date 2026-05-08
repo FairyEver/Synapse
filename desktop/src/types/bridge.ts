@@ -85,6 +85,7 @@ import type {
   SynapseEditorInstallStatusResult,
   SynapseResolveEditorInstallStatusPayload,
 } from "./editor-install-status"
+import type { InstallStatusChangedEvent, InstallStatusMap } from "./install-status"
 import type {
   EditorScanQuickPublishDraft,
   EditorScanQuickPublishRequest,
@@ -316,6 +317,11 @@ export type SynapseBridge = {
     resolveForContent: (
       payload: SynapseResolveEditorInstallStatusPayload,
     ) => Promise<SynapseEditorInstallStatusResult>
+  }
+  installStatus: {
+    getAll: () => Promise<InstallStatusMap>
+    uninstall: (payload: { contentId: string; editorId: string }) => Promise<void>
+    onChanged: (listener: (payload: InstallStatusChangedEvent) => void) => () => void
   }
   shell: {
     showItemInFolder: (filePath: string) => void

@@ -13,6 +13,7 @@ export type EventDomain =
   | "scheduler"  // M4
   | "project"    // Phase 0.5
   | "system"     // handshake / lifecycle
+  | "install-status"
 
 export interface EventScope {
   readonly projectId?: string
