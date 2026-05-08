@@ -194,11 +194,14 @@ function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | 
 
   const rawName = rawValue.name
   const trimmedName = typeof rawName === "string" ? rawName.trim() : ""
+  const rawUsage = rawValue.usage
+  const trimmedUsage = typeof rawUsage === "string" ? rawUsage.trim() : ""
 
   return {
     schemaVersion: 1,
     title: rawValue.title.trim(),
     ...(trimmedName.length > 0 ? { name: trimmedName } : {}),
+    ...(trimmedUsage.length > 0 ? { usage: trimmedUsage } : {}),
     description: rawValue.description.trim(),
     category: rawValue.category.trim(),
     icon: rawValue.icon.trim(),

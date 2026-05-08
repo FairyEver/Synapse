@@ -126,11 +126,14 @@ function createSnapshotRecord(
 ): SynapseContentSnapshotRecord {
   const payloadName = (payload as { name?: unknown }).name
   const trimmedName = typeof payloadName === "string" ? payloadName.trim() : ""
+  const payloadUsage = (payload as { usage?: unknown }).usage
+  const trimmedUsage = typeof payloadUsage === "string" ? payloadUsage.trim() : ""
 
   return {
     schemaVersion: 1,
     title: payload.title.trim(),
     ...(trimmedName.length > 0 ? { name: trimmedName } : {}),
+    ...(trimmedUsage.length > 0 ? { usage: trimmedUsage } : {}),
     description: payload.description.trim(),
     category: payload.category.trim(),
     icon: payload.icon.trim(),

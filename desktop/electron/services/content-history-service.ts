@@ -156,6 +156,8 @@ function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | 
 
   const rawName = rawValue.name
   const trimmedName = typeof rawName === "string" ? rawName.trim() : ""
+  const rawUsage = rawValue.usage
+  const trimmedUsage = typeof rawUsage === "string" ? rawUsage.trim() : ""
   const rawIconImage = rawValue.iconImage
   const trimmedIconImage = typeof rawIconImage === "string" ? rawIconImage.trim() : ""
 
@@ -163,6 +165,7 @@ function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | 
     schemaVersion: 1,
     title: rawValue.title.trim(),
     ...(trimmedName.length > 0 ? { name: trimmedName } : {}),
+    ...(trimmedUsage.length > 0 ? { usage: trimmedUsage } : {}),
     description: rawValue.description.trim(),
     category: rawValue.category.trim(),
     icon: typeof rawValue.icon === "string" ? rawValue.icon.trim() : "",
@@ -224,6 +227,7 @@ function buildSummary(
     id: meta.id,
     title: snapshot.title,
     ...(snapshot.name ? { name: snapshot.name } : {}),
+    ...(snapshot.usage ? { usage: snapshot.usage } : {}),
     description: snapshot.description,
     category: snapshot.category,
     icon: snapshot.icon,
