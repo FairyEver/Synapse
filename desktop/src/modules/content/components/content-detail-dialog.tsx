@@ -102,6 +102,7 @@ type ContentDetailDialogProps<
   }) => ReactNode
   buildInitialValue: (detail: SynapseContentDetail<TContentType>) => TPayload
   serializePayload?: (payload: TPayload) => Promise<TPayload> | TPayload
+  headerSubtitle?: (item: SynapseContentMeta<TContentType> | SynapseContentDetail<TContentType>) => string
 }
 
 function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>({
@@ -117,6 +118,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   renderVersionView,
   buildInitialValue,
   serializePayload,
+  headerSubtitle,
 }: ContentDetailDialogProps<TPayload, TContentType>) {
   const logger = useMemo(() => createRendererLogger(logCategory), [logCategory])
   const { currentRepoProfileState } = useCurrentRepoProfile()
@@ -505,7 +507,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
                 <ContentItemMeta
                   author={authorLabel}
                   category={categoryLabel}
-                  description={resolvedItem.description}
+                  description={headerSubtitle ? headerSubtitle(resolvedItem) : resolvedItem.description}
                   descriptionWrap
                   title={resolvedItem.title}
                 />

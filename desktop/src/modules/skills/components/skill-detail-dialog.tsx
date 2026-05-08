@@ -56,6 +56,7 @@ function SkillDetailDialog({
           version={version}
         />
       )}
+      headerSubtitle={(resolved) => resolved.usage || "暂无使用说明"}
       buildInitialValue={(detail: SynapseContentDetail): CreateSkillPayload => ({
         title: detail.title,
         name: detail.name ?? "",
