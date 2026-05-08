@@ -39,6 +39,7 @@ const IPC_CHANNELS = {
     "resolveEditorInstallTarget": "synapse:content:resolve-editor-install-target",
     "installToEditor": "synapse:content:install-to-editor",
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
+    "getIconPromptTemplate": "synapse:content:get-icon-prompt-template",
   },
   "config": {
     "get": "synapse:config:get",
@@ -337,6 +338,7 @@ const synapseBridge: SynapseBridge = {
     getEditorAdapters: invoke(IPC_CHANNELS.content.getEditorAdapters),
     installToEditor: invoke(IPC_CHANNELS.content.installToEditor),
     readEditorInstallFormValues: invoke(IPC_CHANNELS.content.readEditorInstallFormValues),
+    getIconPromptTemplate: invoke(IPC_CHANNELS.content.getIconPromptTemplate),
     readIconImage: invoke(IPC_CHANNELS.content.readIconImage),
     resolveEditorInstallTarget: invoke(IPC_CHANNELS.content.resolveEditorInstallTarget),
   },
