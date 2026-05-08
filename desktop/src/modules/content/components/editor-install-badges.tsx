@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { EditorIcon } from "@/components/editor-icon"
 import type { SynapseEditorId } from "@/types/editor"
 import { editorDefinitions } from "@/definitions/generated/renderer-registry"
@@ -49,12 +48,11 @@ function EditorBadge({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-2" align="start" side="top">
-        <div className="flex items-center gap-2 px-1 py-0.5">
+        <div className="flex items-center gap-2 pb-2">
           <EditorIcon editorId={editorId} className="size-4" />
           <span className="text-xs font-medium">{label}</span>
           <span className="text-[10px] text-muted-foreground">global</span>
         </div>
-        <Separator className="my-1" />
         <Button
           variant="ghost"
           size="sm"
@@ -75,7 +73,7 @@ function EditorInstallBadges({ contentId }: { contentId: string }) {
   if (editors.length === 0) return null
 
   return (
-    <div className="flex items-center gap-1.5 border-t border-border pt-2 mt-2">
+    <div className="flex items-center gap-1.5 pt-2">
       {editors.map((editorId) => (
         <EditorBadge key={editorId} contentId={contentId} editorId={editorId} />
       ))}
