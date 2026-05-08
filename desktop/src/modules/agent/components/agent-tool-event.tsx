@@ -1,4 +1,4 @@
-import { ChevronDown, Clipboard } from "lucide-react"
+import { ChevronDown, Clipboard, Terminal } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +12,7 @@ import type {
   SynapseAgentToolCallTimelineItem,
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
+import { AgentAnnotation } from "./agent-annotation"
 
 type AgentToolEventItem =
   | SynapseAgentToolCallTimelineItem
@@ -36,46 +37,56 @@ function AgentToolEvent({
   )
   const status = item.kind === "toolCall" ? null : statusLabel(item, profile)
   return (
-    <Collapsible defaultOpen={defaultOpen} className="py-1">
-      <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="group/agent-event-trigger w-full min-w-0 justify-start px-1">
-          <span className="truncate">{label}</span>
-          {status ? (
-            <Badge variant={failed ? "destructive" : "secondary"} className="ml-1 shrink-0">
-              {status}
-            </Badge>
-          ) : null}
-          <ChevronDown
-            data-icon="inline-end"
-            className="transition-transform group-data-[state=closed]/agent-event-trigger:-rotate-90"
-          />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="flex flex-col gap-2 px-1 pb-3 pt-2">
-          {body ? (
-            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm leading-7">
-              {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}
-            </pre>
-          ) : null}
-          {item.kind === "toolResult" && typeof item.exitCode === "number" ? (
-            <span className="text-xs text-muted-foreground">exit {item.exitCode}</span>
-          ) : null}
-          {body ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() => void navigator.clipboard.writeText(body)}
-            >
-              <Clipboard data-icon="inline-start" />
-              复制
-            </Button>
-          ) : null}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+    <AgentAnnotation>
+      <Collapsible defaultOpen={defaultOpen}>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="group/agent-event-trigger h-7 w-full min-w-0 justify-start gap-1.5 px-0 py-0 text-xs hover:text-foreground"
+          >
+            <Terminal className="size-3.5 text-muted-foreground" />
+            <span className="truncate">{label}</span>
+            {status ? (
+              <Badge
+                variant={failed ? "destructive" : "secondary"}
+                className="ml-1 h-5 shrink-0 text-[10px]"
+              >
+                {status}
+              </Badge>
+            ) : null}
+            <ChevronDown
+              data-icon="inline-end"
+              className="size-3.5 transition-transform group-data-[state=closed]/agent-event-trigger:-rotate-90"
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="relative flex flex-col gap-2 pb-2 pt-1">
+            {body ? (
+              <>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 text-xs leading-5">
+                  {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}
+                </pre>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1 size-6 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
+                  onClick={() => void navigator.clipboard.writeText(body)}
+                >
+                  <Clipboard className="size-3.5" />
+                </Button>
+              </>
+            ) : null}
+            {item.kind === "toolResult" && typeof item.exitCode === "number" ? (
+              <span className="text-xs text-muted-foreground">exit {item.exitCode}</span>
+            ) : null}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </AgentAnnotation>
   )
 }
 
