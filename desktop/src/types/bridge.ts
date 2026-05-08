@@ -257,6 +257,9 @@ export type SynapseBridge = {
     readEditorInstallFormValues: (
       payload: SynapseReadEditorInstallFormValuesPayload,
     ) => Promise<SynapseReadEditorInstallFormValuesResult>
+    getIconPromptTemplate: (
+      args: { contentType: SynapseContentType; id: string },
+    ) => Promise<string | null>
     readIconImage: (
       args: { contentType: SynapseContentType; id: string },
     ) => Promise<string | null>
