@@ -48,7 +48,7 @@ function EditorBadge({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-2" align="start" side="top">
-        <div className="flex items-center gap-2 pb-2">
+        <div className="flex items-center gap-2">
           <EditorIcon editorId={editorId} className="size-4" />
           <span className="text-xs font-medium">{label}</span>
           <span className="text-[10px] text-muted-foreground">global</span>
