@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
+import {
+  iconPromptTemplateForRule,
+  iconPromptTemplateForSkill,
+  iconPromptTemplateForPrompt,
+} from "../../src/config/content-types/icon-prompt-templates"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
@@ -227,11 +232,21 @@ class ContentService {
     }
   }
 
+  private static readonly ICON_PROMPT_TEMPLATES: Record<SynapseContentType, string> = {
+    rule: iconPromptTemplateForRule,
+    skill: iconPromptTemplateForSkill,
+    prompt: iconPromptTemplateForPrompt,
+  }
+
   async getIconPromptTemplate(
     contentType: SynapseContentType,
     contentId: string,
   ): Promise<string | null> {
-    // 获取内容详情
+    const template = ContentService.ICON_PROMPT_TEMPLATES[contentType]
+    if (!template) {
+      return null
+    }
+
     let detail: SynapseContentDetail
     try {
       detail = await this.getDetail(contentType, contentId)
@@ -239,41 +254,9 @@ class ContentService {
       return null
     }
 
-    // 读取模板文件
-    const templatePath = path.join(
-      __dirname,
-      "..", "..", "..", "src", "config", "content-types", "icon-prompt-templates.md"
-    )
-
-    let templateContent: string
-    try {
-      templateContent = await readFile(templatePath, "utf-8")
-    } catch {
-      return null
-    }
-
-    // 解析对应类型的模板
-    const sectionHeader = `请为以下 ${contentType.charAt(0).toUpperCase() + contentType.slice(1)}`
-    const sections = templateContent.split(/^---$/m)
-
-    let targetTemplate = ""
-    for (const section of sections) {
-      if (section.includes(sectionHeader)) {
-        targetTemplate = section.trim()
-        break
-      }
-    }
-
-    if (!targetTemplate) {
-      return null
-    }
-
-    // 替换占位符
-    const finalPrompt = targetTemplate
+    return template
       .replace(/{{TITLE}}/g, detail.title || "")
       .replace(/{{CONTENT}}/g, detail.content || "")
-
-    return finalPrompt
   }
 }
 
