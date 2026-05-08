@@ -59,6 +59,7 @@ function SkillDetailDialog({
       buildInitialValue={(detail: SynapseContentDetail): CreateSkillPayload => ({
         title: detail.title,
         name: detail.name ?? "",
+        usage: detail.usage ?? "",
         description: detail.description,
         category: detail.category,
         icon: detail.icon,

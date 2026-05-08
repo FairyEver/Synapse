@@ -3,6 +3,7 @@ import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 
 type ContentPayload = {
   title: string
+  usage?: string
   description: string
   category: string
   icon: string
@@ -35,6 +36,7 @@ function createEmptyContentPayload<T extends ContentPayload>(
 ): T {
   return {
     title: "",
+    usage: "",
     description: "",
     category: "",
     icon: "",
@@ -52,6 +54,7 @@ function normalizeContentPayload<T extends ContentPayload>(payload: T): T {
     iconBg: payload.iconBg || DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE,
     iconType: payload.iconType || "icon",
     title: payload.title.trim(),
+    usage: payload.usage?.trim() ?? "",
     description: payload.description.trim(),
     content: payload.content.trim(),
   }
@@ -103,6 +106,7 @@ function isContentPayloadDirty<T extends ContentPayload>(
 ): boolean {
   return (
     payload.title !== ""
+    || (payload.usage ?? "") !== ""
     || payload.description !== ""
     || payload.category !== ""
     || payload.icon !== ""
@@ -113,9 +117,10 @@ function isContentPayloadDirty<T extends ContentPayload>(
   )
 }
 
-function buildBaseContentInitialValue(detail: Partial<Pick<ContentPayload, "iconType" | "iconImage">> & Omit<ContentPayload, "iconType" | "iconImage">): ContentPayload {
+function buildBaseContentInitialValue(detail: Partial<Pick<ContentPayload, "iconType" | "iconImage" | "usage">> & Omit<ContentPayload, "iconType" | "iconImage" | "usage">): ContentPayload {
   return {
     title: detail.title,
+    usage: detail.usage ?? "",
     description: detail.description,
     category: detail.category,
     icon: detail.icon,

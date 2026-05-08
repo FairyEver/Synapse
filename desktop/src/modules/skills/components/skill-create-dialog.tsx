@@ -320,6 +320,23 @@ function SkillCreateDialog({
     </div>
   )
 
+  const usageField = (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="skill-create-usage">使用说明</Label>
+      <Textarea
+        id="skill-create-usage"
+        value={form.usage ?? ""}
+        onChange={(event) => updateField("usage", event.target.value)}
+        placeholder="输入 /my-skill 触发，适用于..."
+        rows={2}
+        className="min-h-0 resize-none"
+      />
+      <p className="text-xs text-muted-foreground">
+        显示在详情头部，不会安装到编辑器。
+      </p>
+    </div>
+  )
+
   const descriptionField = (
     <div className="flex flex-col gap-2">
       <Label htmlFor="skill-create-description">简介</Label>
@@ -478,6 +495,7 @@ function SkillCreateDialog({
             {nameField}
           </>
         )}
+        {usageField}
         {descriptionField}
         {!isEditMode ? categoryField : null}
         {contentField}
