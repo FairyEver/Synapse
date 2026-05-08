@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
@@ -242,8 +241,8 @@ class ContentService {
 
     // 读取模板文件
     const templatePath = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "..", "..", "src", "config", "content-types", "icon-prompt-templates.md"
+      __dirname,
+      "..", "..", "..", "src", "config", "content-types", "icon-prompt-templates.md"
     )
 
     let templateContent: string
