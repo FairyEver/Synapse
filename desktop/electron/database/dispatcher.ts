@@ -250,6 +250,37 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     if (result.rows) return { ok: true, data: { rows: result.rows } }
     return { ok: true, data: { changes: result.changes, lastInsertRowid: result.lastInsertRowid } }
   },
+
+  "database.folder.list": () => ({
+    ok: true,
+    data: databaseService.folderList(),
+  }),
+
+  "database.folder.create": (params) => {
+    const result = databaseService.folderCreate(requireString(params, "name"))
+    return { ok: true, data: result }
+  },
+
+  "database.folder.rename": (params) => {
+    databaseService.folderRename(requireNumber(params, "id"), requireString(params, "name"))
+    return { ok: true }
+  },
+
+  "database.folder.delete": (params) => {
+    databaseService.folderDelete(requireNumber(params, "id"))
+    return { ok: true }
+  },
+
+  "database.folder.reorder": (params) => {
+    databaseService.folderReorderFolders(requireArray(params, "folderIds") as number[])
+    return { ok: true }
+  },
+
+  "database.table.move": (params) => {
+    const folderId = params.folderId as number | null | undefined
+    databaseService.folderMoveTable(requireString(params, "tableName"), folderId === undefined ? null : folderId)
+    return { ok: true }
+  },
 }
 
 const MUTATING_ACTIONS = new Set<string>([
@@ -269,6 +300,11 @@ const MUTATING_ACTIONS = new Set<string>([
   "database.column.rename",
   "database.column.delete",
   "database.sql.execute",
+  "database.folder.create",
+  "database.folder.rename",
+  "database.folder.delete",
+  "database.folder.reorder",
+  "database.table.move",
 ])
 
 type DatabaseChangeEvent = { action: string; table?: string }

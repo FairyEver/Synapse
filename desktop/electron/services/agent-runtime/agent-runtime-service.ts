@@ -240,7 +240,7 @@ export class AgentRuntimeService {
       let result: AgentRuntimeTurnResult
 
       if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
-        const name = `scheduled-${new Date().toISOString().slice(0, 16)}`
+        const name = formatScheduledSessionName()
         result = await this.sendNewSession(message, name)
       } else {
         try {
@@ -249,7 +249,7 @@ export class AgentRuntimeService {
           const isNotFound = resumeError instanceof Error
             && resumeError.message.includes("not found")
           if (!isNotFound) throw resumeError
-          const name = `scheduled-${new Date().toISOString().slice(0, 16)}`
+          const name = formatScheduledSessionName()
           result = await this.sendNewSession(message, name)
         }
       }
@@ -769,6 +769,17 @@ function truncateRunes(value: string, maxRunes: number): string {
   const runes = [...value]
   if (runes.length <= maxRunes) return value
   return `${runes.slice(0, maxRunes).join("")}...`
+}
+
+function formatScheduledSessionName(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+  const hours = String(now.getHours()).padStart(2, "0")
+  const minutes = String(now.getMinutes()).padStart(2, "0")
+  const seconds = String(now.getSeconds()).padStart(2, "0")
+  return `⏱ ${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
 export type { AgentGovernanceDecision }
