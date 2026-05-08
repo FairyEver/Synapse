@@ -61,7 +61,7 @@ function EditorBadge({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <EditorIcon editorId={editorId} className="size-5" />
-            <span>从 {label} 卸载</span>
+            <span>从 {label} 删除</span>
           </AlertDialogTitle>
           <AlertDialogDescription>
             该内容已安装到 {label} 编辑器的全局设置中。确认要删除吗？
