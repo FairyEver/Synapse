@@ -8,6 +8,7 @@ import { contextBridge, ipcRenderer } from "electron"
 import type { SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
 import type { DatabaseChangeEvent } from "../src/types/database"
+import type { InstallStatusChangedEvent } from "../src/types/install-status"
 import type {
   SynapsePendingPushUpdatedEvent,
   SynapseRepositoryProgressEvent,
@@ -77,6 +78,10 @@ const IPC_CHANNELS = {
   },
   "editor-install-status": {
     "resolveForContent": "synapse:editor-install-status:resolve-for-content",
+  },
+  "install-status": {
+    "getAll": "synapse:install-status:get-all",
+    "uninstall": "synapse:install-status:uninstall",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
@@ -202,6 +207,9 @@ const EVENT_CHANNELS = {
   },
   agent: {
     event: "synapse:events:agent",
+  },
+  installStatus: {
+    changed: "synapse:events:install-status",
   },
 }
 
@@ -387,6 +395,16 @@ const synapseBridge: SynapseBridge = {
   },
   editorInstallStatus: {
     resolveForContent: invoke(IPC_CHANNELS["editor-install-status"].resolveForContent),
+  },
+  installStatus: {
+    getAll: invoke(IPC_CHANNELS["install-status"].getAll),
+    uninstall: (payload: { contentId: string; editorId: string }) =>
+      invoke(IPC_CHANNELS["install-status"].uninstall)(payload),
+    onChanged: createDomainEventPayloadSubscription<InstallStatusChangedEvent>(
+      subscribe,
+      "install-status",
+      "install-status.changed",
+    ),
   },
   shell: {
     showItemInFolder: (filePath: string) => {
