@@ -122,12 +122,26 @@ export class ScheduledTaskRepository {
   ): Promise<ScheduledTaskEntry | null> {
     const existing = await this.tasks.get(id)
     if (!existing) return null
+    const now = this.isoNow()
+    const recalcNextRunAt =
+      existing.enabled &&
+      existing.trigger.type === "builtin.interval" &&
+      existing.trigger.config.anchor === "last_completed_at"
     const next: ScheduledTaskEntry = {
       ...existing,
-      lastRunAt: this.isoNow(),
+      lastRunAt: now,
       lastStatus: result.status,
       runCount: existing.runCount + 1,
-      updatedAt: this.isoNow(),
+      updatedAt: now,
+      ...(recalcNextRunAt
+        ? {
+            nextRunAt: computeNextRunAt({
+              trigger: existing.trigger,
+              from: this.now(),
+              createdAt: existing.createdAt,
+            }).toISOString(),
+          }
+        : {}),
     }
     await this.tasks.upsert(next)
     return next

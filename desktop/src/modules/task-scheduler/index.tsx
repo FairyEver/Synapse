@@ -61,7 +61,7 @@ function TaskSchedulerModule() {
   const { config } = useAppConfig()
   const platform = getRendererPlatform()
   const { tasks, loading, error, refresh } = useTaskSchedulerTasks()
-  const { promise } = useAppNotifications()
+  const { notify, promise } = useAppNotifications()
   const [formState, setFormState] = useState<TaskFormDialogState>({ mode: "create" })
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [historyTask, setHistoryTask] = useState<ScheduledTask | null>(null)
@@ -254,10 +254,10 @@ function TaskSchedulerModule() {
               }}
               onHistory={(task) => setHistoryTask(task)}
               onRun={(task) => {
-                void runMutation(
-                  () => runTask(task.id),
-                  { loading: "正在启动任务...", success: "任务已启动。", error: "启动任务失败。" },
-                )
+                runTask(task.id).catch((err) => {
+                  logger.error("Failed to run task.", { error: err, taskId: task.id })
+                })
+                notify({ message: "任务已触发", tone: "success" })
               }}
               onStop={(task) => {
                 void runMutation(

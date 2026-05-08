@@ -128,6 +128,7 @@ export interface AgentExecutionContext {
   readonly sessionEnv?: Record<string, string>
   readonly processIsolation?: ControlledProcessIsolationOptions
   readonly actor: ActorIdentity
+  readonly modeOverride?: string
   onEvent?(event: AgentEvent): void
 }
 

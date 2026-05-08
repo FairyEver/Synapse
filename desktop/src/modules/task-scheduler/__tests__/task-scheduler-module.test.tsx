@@ -18,6 +18,7 @@ vi.mock("@/app-shell/config", () => ({
 
 vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
+    notify: vi.fn(),
     promise: async <T,>(operation: () => Promise<T>) => operation(),
   }),
 }))

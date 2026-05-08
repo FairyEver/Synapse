@@ -162,8 +162,18 @@ export class TaskSchedulerService {
     if (!task.enabled) {
       return this.recordSkipped(task.id, triggeredBy, "task is disabled")
     }
-    if (triggeredBy === "schedule") await this.schedule(id)
-    return this.executeOrSkip(task, triggeredBy)
+    const deferSchedule =
+      task.trigger.type === "builtin.interval" &&
+      task.trigger.config.anchor === "last_completed_at"
+    if (triggeredBy === "schedule" && !deferSchedule) await this.schedule(id)
+    const result = await this.executeOrSkip(task, triggeredBy)
+    if (
+      (triggeredBy === "schedule" && deferSchedule) ||
+      triggeredBy === "missed_run"
+    ) {
+      await this.schedule(id)
+    }
+    return result
   }
 
   private async executeOrSkip(

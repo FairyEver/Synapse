@@ -35,6 +35,7 @@ export type SchedulerTaskSummary = {
   readonly name: string
   readonly description?: string
   readonly enabled: boolean
+  readonly scope: { readonly type: "global" } | { readonly type: "project"; readonly projectId: string }
   readonly schedule: SchedulerSchedule
   readonly action: { readonly type: string }
   readonly nextRunAt?: string
@@ -55,6 +56,14 @@ export async function dispatchSchedulerAction(
       const tasks = await service.schedulerTaskList()
       const filtered = tasks
         .filter((task) => input.enabled === undefined || task.enabled === input.enabled)
+        .filter((task) => {
+          if (!input.scope) return true
+          if (input.scope.type !== task.scope.type) return false
+          if (input.scope.type === "project" && input.scope.projectId) {
+            return task.scope.type === "project" && task.scope.projectId === input.scope.projectId
+          }
+          return true
+        })
         .slice(0, input.limit ?? tasks.length)
         .map(toPublicTaskSummary)
       return { ok: true, data: filtered, total: filtered.length }
@@ -120,6 +129,7 @@ export function toPublicTaskSummary(task: ScheduledTaskEntry): SchedulerTaskSumm
     name: task.name,
     description: task.description,
     enabled: task.enabled,
+    scope: task.scope,
     schedule: fromTrigger(task.trigger),
     action: { type: task.action.type },
     nextRunAt: task.nextRunAt,
@@ -183,7 +193,22 @@ function parseListParams(params: Record<string, unknown>): SchedulerTaskListPara
   if (limit !== undefined && (!Number.isInteger(limit) || Number(limit) < 1)) {
     throw new Error("Missing or invalid 'limit': expected positive integer")
   }
-  return { enabled: enabled as boolean | undefined, limit: limit as number | undefined }
+  const scope = parseOptionalScope(params.scope)
+  return { enabled: enabled as boolean | undefined, limit: limit as number | undefined, scope }
+}
+
+function parseOptionalScope(value: unknown): SchedulerTaskListParams["scope"] {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new Error("Missing or invalid 'scope': expected object")
+  if (value.type === "global") return { type: "global" }
+  if (value.type === "project") {
+    const projectId = value.projectId
+    if (projectId !== undefined && (typeof projectId !== "string" || !projectId.trim())) {
+      throw new Error("Missing or invalid 'scope.projectId': expected non-empty string")
+    }
+    return { type: "project", projectId: projectId as string | undefined }
+  }
+  throw new Error("Missing or invalid 'scope.type': expected global or project")
 }
 
 function parseTaskIdParams(params: Record<string, unknown>): SchedulerTaskIdParams {

@@ -60,7 +60,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         sessionId: context.agentSessionId ?? context.threadId,
         model: this.options.model,
         effort: this.options.effort,
-        mode: this.options.mode,
+        mode: context.modeOverride ?? this.options.mode,
       }),
       cwd: context.workDir,
       env: mergeEnv(this.options.env, context.sessionEnv),

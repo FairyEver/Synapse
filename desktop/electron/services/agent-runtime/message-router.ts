@@ -771,6 +771,7 @@ export class MessageRouter {
       sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
       processIsolation: await this.callbacks.resolveProcessIsolation(message),
       actor: { kind: "user" },
+      modeOverride: message.modeOverride,
     })
     if (!liveSession) {
       throw new Error("Agent adapter did not create a live session")

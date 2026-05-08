@@ -51,6 +51,7 @@ export type SchedulerTaskRuntimeStatusParams = {
 export type SchedulerTaskListParams = {
   readonly enabled?: boolean
   readonly limit?: number
+  readonly scope?: { readonly type: "global" } | { readonly type: "project"; readonly projectId?: string }
 }
 
 export type SchedulerTaskIdParams = {
@@ -93,6 +94,14 @@ export function buildSchedulerTools(): McpToolDefinition[] {
         properties: {
           enabled: { type: "boolean", description: "Optional filter for enabled or disabled tasks." },
           limit: { type: "number", description: "Optional maximum number of tasks to return." },
+          scope: {
+            type: "object",
+            description: "Optional scope filter. Pass { type: 'global' } for global tasks, or { type: 'project', projectId: '...' } to filter by project id.",
+            properties: {
+              type: { type: "string", enum: ["global", "project"] },
+              projectId: { type: "string", description: "Project id. Required when type is project. Omit to match all project tasks." },
+            },
+          },
         },
       },
     },

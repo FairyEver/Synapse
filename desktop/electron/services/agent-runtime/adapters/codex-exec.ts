@@ -185,7 +185,7 @@ export class CodexExecAdapter implements AgentAdapter {
       model: this.options.model,
       provider: this.options.provider,
       effort: this.options.effort,
-      mode: this.options.mode,
+      mode: context.modeOverride ?? this.options.mode,
       workDir: context.workDir,
       threadId: context.agentSessionId ?? context.threadId,
       codexHome: stringValue(env?.CODEX_HOME),

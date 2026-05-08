@@ -1,5 +1,4 @@
 import {
-  MoreHorizontal,
   Pencil,
   History,
   Trash2,
@@ -8,13 +7,6 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import {
   Tooltip,
@@ -57,12 +49,19 @@ function TaskCard({
     <div
       className={`rounded-lg bg-background px-4 py-4 hover:ring-2 hover:ring-muted-foreground/25 transition-shadow ${disabled ? "opacity-60" : ""}`}
     >
-      {/* Title row */}
-      <div className="flex items-center gap-2 min-w-0">
-        <span
-          className={`size-2 shrink-0 rounded-full ${getStatusDotClass(task)}`}
+      {/* Header: 状态 + 标题 + 开关 */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={`size-2 shrink-0 rounded-full ${getStatusDotClass(task)}`}
+          />
+          <span className="truncate font-medium text-sm">{task.name}</span>
+        </div>
+        <Switch
+          size="sm"
+          checked={task.enabled}
+          onCheckedChange={onToggleEnabled}
         />
-        <span className="truncate font-medium text-sm">{task.name}</span>
       </div>
 
       {/* Info area */}
@@ -85,61 +84,58 @@ function TaskCard({
         </div>
       </div>
 
-      {/* Action bar */}
-      <div className="mt-3 flex items-center justify-between border-t pt-3">
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {busy ? (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={onStop}
-                >
-                  <Square className="size-3.5" />
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={disabled}
-                  onClick={onRun}
-                >
-                  <Play className="size-3.5" />
-                </Button>
-              )}
-            </TooltipTrigger>
-            <TooltipContent>{busy ? "停止" : "运行"}</TooltipContent>
-          </Tooltip>
-          <Switch
-            size="sm"
-            checked={task.enabled}
-            onCheckedChange={onToggleEnabled}
-          />
-        </div>
+      {/* Footer: 操作按钮图标，靠右显示 */}
+      <div className="mt-3 flex items-center justify-end gap-1 border-t pt-3">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {busy ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onStop}
+              >
+                <Square className="size-3.5" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={disabled}
+                onClick={onRun}
+              >
+                <Play className="size-3.5" />
+              </Button>
+            )}
+          </TooltipTrigger>
+          <TooltipContent>{busy ? "停止" : "运行"}</TooltipContent>
+        </Tooltip>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm">
-              <MoreHorizontal className="size-4" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" onClick={onEdit}>
+              <Pencil className="size-3.5" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit}>
-              <Pencil className="size-4" />
-              编辑
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onHistory}>
-              <History className="size-4" />
-              历史
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onDelete} variant="destructive">
-              <Trash2 className="size-4" />
-              删除
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </TooltipTrigger>
+          <TooltipContent>编辑</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" onClick={onHistory}>
+              <History className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>历史</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" onClick={onDelete}>
+              <Trash2 className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>删除</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   )

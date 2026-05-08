@@ -7,9 +7,12 @@ export function computeNextRunAt(input: {
   readonly createdAt: string
 }): Date {
   if (input.trigger.type === "builtin.cron") {
-    return nextCronRun(input.trigger.config.expr, input.from)
+    return nextCronRun(input.trigger.config.expr, input.from, input.trigger.config.timezone)
   }
   const everyMs = input.trigger.config.everyMinutes * 60_000
+  if (input.trigger.config.anchor === "last_completed_at") {
+    return new Date(input.from.getTime() + everyMs)
+  }
   const anchor = new Date(input.createdAt).getTime()
   const from = input.from.getTime()
   const elapsed = Math.max(0, from - anchor)

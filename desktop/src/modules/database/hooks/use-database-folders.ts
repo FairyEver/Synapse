@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState } from "react"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { DatabaseFolder } from "@/types/database"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { getSynapseBridge } from "@/lib/electron-bridge"
+import type { DatabaseFolder, DatabaseChangeEvent } from "@/types/database"
 
 function useDatabaseFolders() {
   const [folders, setFolders] = useState<DatabaseFolder[]>([])
   const [loading, setLoading] = useState(true)
+  const bridgeRef = useRef(getSynapseBridge())
 
   const refresh = useCallback(async () => {
+    const bridge = bridgeRef.current
+    if (!bridge) return
+
     setLoading(true)
     try {
-      const result = await requireSynapseBridge().database.databaseFolderList()
+      const result = await bridge.database.databaseFolderList()
       setFolders(result)
     } catch {
       setFolders([])
@@ -18,38 +22,65 @@ function useDatabaseFolders() {
     }
   }, [])
 
+  // Initial load
   useEffect(() => {
     void refresh()
   }, [refresh])
 
+  // Listen for database changes from other sources (MCP, other agents)
+  useEffect(() => {
+    const bridge = bridgeRef.current
+    if (!bridge) return
+
+    const unsubscribe = bridge.database.onChanged((event: DatabaseChangeEvent) => {
+      // Refresh folders when folder-related actions occur
+      if (event.action.startsWith("database.folder.") || event.action === "database.table.move") {
+        void refresh()
+      }
+    })
+    return unsubscribe
+  }, [refresh])
+
   const createFolder = useCallback(async (name: string) => {
-    const result = await requireSynapseBridge().database.databaseFolderCreate({ name })
+    const bridge = bridgeRef.current
+    if (!bridge) throw new Error("Bridge not available")
+    const result = await bridge.database.databaseFolderCreate({ name })
     await refresh()
     return result
   }, [refresh])
 
   const renameFolder = useCallback(async (id: number, name: string) => {
-    await requireSynapseBridge().database.databaseFolderRename({ id, name })
+    const bridge = bridgeRef.current
+    if (!bridge) throw new Error("Bridge not available")
+    await bridge.database.databaseFolderRename({ id, name })
     await refresh()
   }, [refresh])
 
   const deleteFolder = useCallback(async (id: number) => {
-    await requireSynapseBridge().database.databaseFolderDelete({ id })
+    const bridge = bridgeRef.current
+    if (!bridge) throw new Error("Bridge not available")
+    await bridge.database.databaseFolderDelete({ id })
     await refresh()
   }, [refresh])
 
   const moveTable = useCallback(async (tableName: string, folderId: number | null) => {
-    await requireSynapseBridge().database.databaseFolderMoveTable({ tableName, folderId })
+    const bridge = bridgeRef.current
+    if (!bridge) throw new Error("Bridge not available")
+    await bridge.database.databaseFolderMoveTable({ tableName, folderId })
     await refresh()
   }, [refresh])
 
   const reorderTables = useCallback(async (folderId: number, tableNames: string[]) => {
-    await requireSynapseBridge().database.databaseFolderReorder({ folderId, tableNames })
+    const bridge = bridgeRef.current
+    if (!bridge) throw new Error("Bridge not available")
+    await bridge.database.databaseFolderReorder({ folderId, tableNames })
     await refresh()
   }, [refresh])
 
   const reorderFolders = useCallback(async (folderIds: number[]) => {
-    await requireSynapseBridge().database.databaseFolderReorderFolders({ folderIds })
+    const bridge = bridgeRef.current
+    if (!bridge) throw new Error("Bridge not available")
+    await bridge.database.databaseFolderReorderFolders({ folderIds })
     await refresh()
   }, [refresh])
 

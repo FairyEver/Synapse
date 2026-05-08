@@ -83,7 +83,7 @@ function ProjectOverview({
             </div>
             {project.pathExists && items.length > 0 ? (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 p-[3px]">
                   {items.map((item) => (
                     <ScanItemCard
                       key={`${item.path}-${item.name}`}
