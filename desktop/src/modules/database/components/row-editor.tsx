@@ -50,7 +50,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
     const init: Record<string, string> = {}
     for (const col of editableColumns) {
       const val = initialData?.[col.name]
-      if (col.kind === "multi_choice" && Array.isArray(val)) {
+      if ((col.kind === "multi_choice" || col.kind === "json") && typeof val === "object" && val !== null) {
         init[col.name] = JSON.stringify(val)
       } else {
         init[col.name] = val != null ? String(val) : ""

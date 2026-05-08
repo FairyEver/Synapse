@@ -43,7 +43,7 @@ function parseRowEditorCellValue(column: Column, raw: string): unknown {
     try {
       return JSON.parse(raw)
     } catch {
-      return raw
+      throw new Error(`列 "${column.name}" 的 JSON 格式不正确`)
     }
   }
 
