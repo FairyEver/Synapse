@@ -7,6 +7,7 @@
 
 import { app, dialog } from "electron"
 import { createMainLogger } from "./services/log-store"
+import { installStatusCacheService } from "./services/install-status-cache-service"
 import { repositoryStore } from "./services/repository-store"
 import type { EventBus } from "./runtime/event-bus"
 import type { IpcHandlerContext } from "./runtime/ipc/types"
@@ -68,6 +69,9 @@ if (!gotSingleInstanceLock) {
         resolve: (serviceId) => registry.get(serviceId),
       }
       createIpcRegistry(ipcCtx)
+
+      // Initialize install status cache
+      await installStatusCacheService.buildCache()
 
       const result = await registry.startAll()
       if (result.degraded.length > 0) {

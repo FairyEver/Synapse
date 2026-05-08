@@ -31,6 +31,7 @@ import type {
 import { configStore } from "../../services/config-store"
 import { contentDownloadService } from "../../services/content-download-service"
 import { contentInstallService } from "../../services/content-install-service"
+import { installStatusCacheService } from "../../services/install-status-cache-service"
 import { contentService } from "../../services/content-service"
 import { contentSubmissionService } from "../../services/content-submission-service"
 import { contentWindowService } from "../../services/content-window-service"
@@ -440,11 +441,24 @@ export const contentIpcModule: IpcModule = {
       response: anySchema,
       handler: async (ctx, payload: SynapseInstallToEditorPayload) => {
         logger.info(`Handling content.installToEditor request. contentType: ${payload.contentType}, contentId: ${payload.contentId}, editorId: ${payload.editorId}, scope: ${payload.scope}`)
-        return contentInstallService.installToEditor(payload, {
+        const result = await contentInstallService.installToEditor(payload, {
           actor: { kind: "user" },
           auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
         })
+
+        if (payload.scope === "global") {
+          const editors = await installStatusCacheService.refresh(payload.contentId)
+          const eventBus = ctx.resolve<EventBus>("core.event-bus")
+          eventBus.emit({
+            domain: "install-status",
+            type: "install-status.changed",
+            payload: { contentId: payload.contentId, editors },
+            timestamp: new Date().toISOString(),
+          })
+        }
+
+        return result
       },
     },
     readEditorInstallFormValues: {
