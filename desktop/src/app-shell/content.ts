@@ -164,6 +164,14 @@ const createRule = (payload: SynapseCreateRulePayload) => createContent("rule", 
 const createSkill = (payload: SynapseCreateSkillPayload) => createContent("skill", payload)
 const updateRule = (payload: SynapseUpdateRulePayload) => updateContent("rule", payload)
 const updateSkill = (payload: SynapseUpdateSkillPayload) => updateContent("skill", payload)
+
+async function getIconPromptTemplate(
+  contentType: SynapseContentType,
+  id: string,
+): Promise<string | null> {
+  return requireContentBridge().getIconPromptTemplate({ contentType, id })
+}
+
 const readRules = () => listContent("rule")
 const readSkills = () => listContent("skill")
 const readRuleContent = (ruleId: string) => readContent("rule", ruleId)
@@ -188,6 +196,7 @@ export {
   downloadRule,
   downloadSkill,
   getEditorAdapters,
+  getIconPromptTemplate,
   hasContentBridge,
   installToEditor,
   listContent,
