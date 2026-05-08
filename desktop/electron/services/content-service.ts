@@ -253,7 +253,7 @@ class ContentService {
     }
 
     // 解析对应类型的模板
-    const sectionHeader = `# ${contentType.charAt(0).toUpperCase() + contentType.slice(1)}`
+    const sectionHeader = `请为以下 ${contentType.charAt(0).toUpperCase() + contentType.slice(1)}`
     const sections = templateContent.split(/^---$/m)
 
     let targetTemplate = ""
