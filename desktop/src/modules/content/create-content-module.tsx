@@ -6,6 +6,7 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { useActiveRepository, useContentList } from "@/app-shell/use-repository-manager"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
+import { InstallStatusProvider } from "@/modules/content/contexts/install-status-context"
 import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import type { SynapseContentMeta, SynapseContentType, SynapseCreateContentPayload } from "@/types/content"
 
@@ -141,7 +142,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
         : null
 
     return (
-      <>
+      <InstallStatusProvider>
         <ContentBrowserPage
           contentType={config.contentType}
           pendingContentOpenRequest={pendingContentOpenRequest}
@@ -175,7 +176,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           notices={createNotices}
           sourceLabel={createSourceLabel}
         />
-      </>
+      </InstallStatusProvider>
     )
   }
 
