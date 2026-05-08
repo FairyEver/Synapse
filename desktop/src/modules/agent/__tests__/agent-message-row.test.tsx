@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
-import type { SynapseAgentMessageTimelineItem } from "@/types/agent"
+import type { SynapseAgentDisplayProfile, SynapseAgentMessageTimelineItem } from "@/types/agent"
 import { AgentMessageEvent } from "../components/agent-message-event"
 
 const baseEntry = {
@@ -11,16 +11,32 @@ const baseEntry = {
   timestamp: "2026-04-27T03:15:00.000Z",
 } satisfies Omit<SynapseAgentMessageTimelineItem, "role">
 
+const mockProfile: SynapseAgentDisplayProfile = {
+  agentLabel: "Claude",
+  thinkingDefaultCollapsed: true,
+  toolDefaultCollapsed: "auto",
+  toolPreviewLines: 6,
+  toolPreviewChars: 1200,
+  statusLabels: {
+    pending: "Pending",
+    running: "Running",
+    success: "Done",
+    error: "Failed",
+    denied: "Denied",
+  },
+}
+
 describe("AgentMessageEvent", () => {
   it("right-aligns user messages with a subtle outgoing bubble", () => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent
         item={{ ...baseEntry, role: "user" }}
+        profile={mockProfile}
         onOpenReference={vi.fn()}
       />,
     )
 
-    expect(html).toContain("justify-end")
+    expect(html).toContain("items-end")
     expect(html).toContain("bg-muted")
     expect(html).toContain("text-foreground")
     expect(html).not.toContain("bg-primary")
@@ -31,13 +47,14 @@ describe("AgentMessageEvent", () => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent
         item={{ ...baseEntry, role: "assistant" }}
+        profile={mockProfile}
         onOpenReference={vi.fn()}
       />,
     )
 
-    expect(html).toContain("justify-start")
+    expect(html).toContain("items-start")
     expect(html).toContain("max-w-[76ch]")
-    expect(html).not.toContain("bg-muted")
+    expect(html).not.toContain("bg-muted px-5")
     expect(html).not.toContain("bg-primary")
     expect(html).not.toContain("rounded-2xl")
   })
@@ -50,6 +67,7 @@ describe("AgentMessageEvent", () => {
           role: "assistant",
           content: "very-long-token-without-natural-breaks/very-long-token-without-natural-breaks",
         }}
+        profile={mockProfile}
         onOpenReference={vi.fn()}
       />,
     )
@@ -67,6 +85,7 @@ describe("AgentMessageEvent", () => {
           role: "assistant",
           content: "/Users/liyang/project/file.ts:12",
         }}
+        profile={mockProfile}
         onOpenReference={vi.fn()}
       />,
     )
