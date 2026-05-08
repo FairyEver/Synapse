@@ -2,15 +2,17 @@ import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { EditorIcon } from "@/components/editor-icon"
 import type { SynapseEditorId } from "@/types/editor"
+import { editorDefinitions } from "@/definitions/generated/renderer-registry"
 import { useInstallStatus, useUninstallFromEditor } from "@/modules/content/contexts/install-status-context"
 
-const EDITOR_META: Record<string, { abbr: string; label: string; bgColor: string }> = {
-  "claude-code": { abbr: "CC", label: "Claude Code", bgColor: "bg-[#d97757]" },
-  "cursor": { abbr: "Cu", label: "Cursor", bgColor: "bg-[#2563eb]" },
-  "codex": { abbr: "Cx", label: "Codex", bgColor: "bg-[#10b981]" },
-  "windsurf": { abbr: "Ws", label: "Windsurf", bgColor: "bg-[#8b5cf6]" },
-  "antigravity": { abbr: "Ag", label: "Antigravity", bgColor: "bg-[#f59e0b]" },
+const editorLabelMap = new Map<string, string>(
+  editorDefinitions.map((def) => [def.id, def.label]),
+)
+
+function getEditorLabel(editorId: string): string {
+  return editorLabelMap.get(editorId) ?? editorId
 }
 
 function EditorBadge({
@@ -23,7 +25,7 @@ function EditorBadge({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const uninstall = useUninstallFromEditor()
-  const meta = EDITOR_META[editorId] ?? { abbr: editorId.slice(0, 2).toUpperCase(), label: editorId, bgColor: "bg-muted" }
+  const label = getEditorLabel(editorId)
 
   async function handleUninstall() {
     setBusy(true)
@@ -40,15 +42,16 @@ function EditorBadge({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`flex size-5 items-center justify-center rounded text-[9px] font-bold text-white ${meta.bgColor} hover:opacity-90 transition-opacity`}
-          title={meta.label}
+          className="flex size-5 items-center justify-center rounded hover:opacity-80 transition-opacity"
+          title={label}
         >
-          {meta.abbr}
+          <EditorIcon editorId={editorId} className="size-5" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-2" align="start" side="top">
         <div className="flex items-center gap-2 px-1 py-0.5">
-          <span className="text-xs font-medium">{meta.label}</span>
+          <EditorIcon editorId={editorId} className="size-4" />
+          <span className="text-xs font-medium">{label}</span>
           <span className="text-[10px] text-muted-foreground">global</span>
         </div>
         <Separator className="my-1" />
