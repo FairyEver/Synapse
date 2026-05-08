@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { useContentDownloadActions } from "@/modules/content/hooks/use-content-download-actions"
+import type { ContentActionMenuSection } from "@/modules/content/hooks/use-content-download-actions"
 import type { SynapseContentMeta } from "@/types/content"
 
 type ContentActionSplitButtonProps = {
@@ -53,7 +54,7 @@ function ContentActionSplitButton({
   const definition = getContentTypeDefinition(item.type)
   const primaryAction = definition.listPrimaryAction ?? "download"
 
-  const actionMenuSections = useMemo(() => {
+  const actionMenuSections = useMemo<ContentActionMenuSection[]>(() => {
     if (primaryAction === "copy") {
       const sections = downloadAction ? [{ key: "download", items: [downloadAction] }] : []
       // Add copy-related sections (copy-content, copy-icon-prompt) for Prompt
