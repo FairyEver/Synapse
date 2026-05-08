@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import type { EditorScanRuleItem } from "../../types/editor-scan"
 import { extractContentIdFromSynapseFile, isSynapseFile, pathExists } from "../../../electron/services/editor-adapters/utils"
-import { decodeYamlScalar } from "./shared-yaml-scalar"
+import { parseFrontmatterBlock } from "./shared-yaml-scalar"
 
 const SYNAPSE_RULE_BEGIN_RE = /<!--\s*synapse-rule:([A-Za-z0-9_.-]+):begin\s*-->/
 const SYNAPSE_RULE_END_RE = /<!--\s*synapse-rule:[A-Za-z0-9_.-]+:end\s*-->/
@@ -46,19 +46,9 @@ function parseFrontmatter(text: string): { metadata: Record<string, string>; bod
   if (endIndex === -1) {
     return { metadata, body: text }
   }
-  const frontmatterBlock = text.slice(4, endIndex)
-  for (const line of frontmatterBlock.split("\n")) {
-    const colonIndex = line.indexOf(":")
-    if (colonIndex > 0) {
-      const key = line.slice(0, colonIndex).trim()
-      const value = line.slice(colonIndex + 1).trim()
-      if (key) {
-        metadata[key] = decodeYamlScalar(value)
-      }
-    }
-  }
+  const block = text.slice(4, endIndex)
   const body = text.slice(endIndex + 4).trim()
-  return { metadata, body }
+  return { metadata: parseFrontmatterBlock(block), body }
 }
 
 export async function scanClaudeCodeRules(dirPath: string): Promise<EditorScanRuleItem[]> {

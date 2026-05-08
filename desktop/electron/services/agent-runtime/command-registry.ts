@@ -7,6 +7,7 @@ import path from "node:path"
 import type { AgentCommandEntryV1, DataNamespace } from "../../runtime/data-repo"
 import type { ShellKind } from "../shell-exec"
 import type { AgentMessage } from "./types"
+import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 
 export type PublishedCommandSource = "builtin" | "custom" | "skill" | "agent-native"
 export type PublishedCommandKind = "builtin" | "prompt" | "exec" | "skill" | "agent-native"
@@ -287,10 +288,5 @@ function parseFrontmatter(content: string): Record<string, string> {
   if (!content.startsWith("---")) return {}
   const end = content.indexOf("\n---", 3)
   if (end < 0) return {}
-  const result: Record<string, string> = {}
-  for (const line of content.slice(3, end).split(/\r?\n/)) {
-    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line)
-    if (match?.[1]) result[match[1]] = (match[2] ?? "").trim().replace(/^["']|["']$/g, "")
-  }
-  return result
+  return parseFrontmatterBlock(content.slice(3, end))
 }

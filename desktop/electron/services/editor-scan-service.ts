@@ -22,7 +22,7 @@ import { editorScanStrategyById } from "./definitions/generated/main-registry"
 import { pathExists } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
-import { decodeYamlScalar } from "../../src/definitions/editor/shared-yaml-scalar"
+import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
   formatEditorWriteFailure,
   replaceFileAtomically,
@@ -106,19 +106,8 @@ function parseFrontmatter(text: string): { metadata: Record<string, string>; bod
   const endIndex = text.indexOf("\n---", 3)
   if (endIndex === -1) return { metadata, body: text }
 
-  const frontmatterBlock = text.slice(4, endIndex)
-  for (const line of frontmatterBlock.split("\n")) {
-    const colonIndex = line.indexOf(":")
-    if (colonIndex > 0) {
-      const key = line.slice(0, colonIndex).trim()
-      const value = line.slice(colonIndex + 1).trim()
-      if (key) {
-        metadata[key] = decodeYamlScalar(value)
-      }
-    }
-  }
-
-  return { metadata, body: text.slice(endIndex + 4).trim() }
+  const block = text.slice(4, endIndex)
+  return { metadata: parseFrontmatterBlock(block), body: text.slice(endIndex + 4).trim() }
 }
 
 function previewLines(text: string): string {

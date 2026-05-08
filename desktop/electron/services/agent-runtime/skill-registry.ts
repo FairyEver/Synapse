@@ -5,6 +5,7 @@ import path from "node:path"
 
 import type { PublishedAgentCommand } from "./command-registry"
 import { normalizeCommandName } from "./command-registry"
+import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 
 export interface AgentSkill {
   readonly name: string
@@ -135,13 +136,9 @@ function parseSkillFile(content: string): {
   if (!content.startsWith("---")) return { frontmatter: {}, prompt: content }
   const end = content.indexOf("\n---", 3)
   if (end < 0) return { frontmatter: {}, prompt: content }
-  const frontmatter: Record<string, string> = {}
-  for (const line of content.slice(3, end).split(/\r?\n/)) {
-    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line)
-    if (match?.[1]) frontmatter[match[1]] = (match[2] ?? "").trim().replace(/^["']|["']$/g, "")
-  }
+  const block = content.slice(3, end)
   return {
-    frontmatter,
+    frontmatter: parseFrontmatterBlock(block),
     prompt: content.slice(end + 4).trim(),
   }
 }

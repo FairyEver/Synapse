@@ -12,6 +12,7 @@ import type {
   ScanItemForDetail,
 } from "@/types/editor-scan"
 import type { SynapseCreateRulePayload } from "@/types/content"
+import { parseFrontmatterBlock } from "@/definitions/editor/shared-yaml-scalar"
 
 type ParsedFrontmatter = {
   metadata: Record<string, string>
@@ -51,24 +52,11 @@ function parseFrontmatter(text: string): ParsedFrontmatter {
   }
 
   const block = text.slice(4, endIndex)
-  let hasUnsupportedLines = false
-  for (const line of block.split("\n")) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith("#")) continue
-    const colonIndex = line.indexOf(":")
-    if (colonIndex <= 0) {
-      hasUnsupportedLines = true
-      continue
-    }
-    const key = line.slice(0, colonIndex).trim()
-    const value = line.slice(colonIndex + 1).trim().replace(/^['"]|['"]$/g, "")
-    if (key) {
-      metadata[key] = value
-    }
-  }
+  const parsed = parseFrontmatterBlock(block)
+  const hasUnsupportedLines = Object.keys(parsed).length === 0 && block.trim().length > 0
 
   return {
-    metadata,
+    metadata: parsed,
     body: text.slice(endIndex + 4).trim(),
     hasUnsupportedLines,
   }

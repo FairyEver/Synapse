@@ -254,7 +254,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           title={isAdminMode ? "管理员模式已开启" : undefined}
         />
         <div className="flex flex-col items-center gap-0.5">
-          <h1 className="text-lg font-semibold tracking-tight">Synapse</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Synapse AI Studio</h1>
           <p className="text-xs tracking-wide text-muted-foreground/70">Where Ideas Connect.</p>
         </div>
       </div>

@@ -314,27 +314,12 @@ function ContentInstallDialog({
       }
     }
 
-    if (definition.install.kind === "directory-overwrite") {
-      if (!activeTarget || activeTarget.status !== "ready") {
-        setInstallError("当前还没有可用的安装目标。")
-        return
-      }
-
-      if (activeTarget.targetExists) {
-        logger.info("Overwrite confirm dialog opened.", {
-          contentId: item.id,
-          contentType: item.type,
-          editorId: editor?.id ?? null,
-          scope,
-          targetPath: activeTarget.targetPath,
-        })
-        setIsOverwriteConfirmOpen(true)
-        return
-      }
+    if (!activeTarget || !canInstall) {
+      setInstallError("当前还没有可用的安装目标。")
+      return
     }
 
-    // Check for Skill name conflict
-    if (activeTarget?.status === "conflict" && item.type === "skill") {
+    if (activeTarget.status === "conflict" && item.type === "skill") {
       logger.info("Skill conflict confirm dialog opened.", {
         contentId: item.id,
         contentType: item.type,
@@ -346,8 +331,20 @@ function ContentInstallDialog({
       return
     }
 
+    if (definition.install.kind === "directory-overwrite" && activeTarget.status === "ready" && activeTarget.targetExists) {
+      logger.info("Overwrite confirm dialog opened.", {
+        contentId: item.id,
+        contentType: item.type,
+        editorId: editor?.id ?? null,
+        scope,
+        targetPath: activeTarget.targetPath,
+      })
+      setIsOverwriteConfirmOpen(true)
+      return
+    }
+
     if (item.type === "rule" && scope === "project" && RuleProjectInstallForm) {
-      if (!activeTarget || activeTarget.status !== "ready") {
+      if (activeTarget.status !== "ready") {
         setInstallError("当前还没有可用的安装目标。")
         return
       }

@@ -503,7 +503,7 @@ class UpdateService {
     }
 
     const notification = new Notification({
-      title: "Synapse",
+      title: "Synapse AI Studio",
       body: `新版本 ${updateInfo.version} 已发布，点击查看更新`,
     })
 
