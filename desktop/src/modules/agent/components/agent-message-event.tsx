@@ -1,6 +1,11 @@
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { SynapseAgentMessageTimelineItem } from "@/types/agent"
+import type {
+  SynapseAgentDisplayProfile,
+  SynapseAgentMessageTimelineItem,
+} from "@/types/agent"
+import { AgentMessageHeader } from "./agent-message-header"
+import { AgentMessageBubble } from "./agent-message-bubble"
 
 type MessageSegment =
   | { readonly kind: "text"; readonly value: string }
@@ -8,41 +13,54 @@ type MessageSegment =
 
 const LOCAL_REFERENCE_PATTERN = /(\[[^\]]+\]\((?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^)]+\)|(?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^\s`),]+(?::\d+(?::\d+)?)?)/g
 
+interface AgentMessageEventProps {
+  readonly item: SynapseAgentMessageTimelineItem
+  readonly profile: SynapseAgentDisplayProfile
+  readonly onOpenReference: (reference: string) => void
+}
+
 function AgentMessageEvent({
   item,
+  profile,
   onOpenReference,
-}: {
-  readonly item: SynapseAgentMessageTimelineItem
-  readonly onOpenReference: (reference: string) => void
-}) {
+}: AgentMessageEventProps) {
   const outgoing = item.role === "user"
   const segments = splitLocalReferences(item.content)
+
   return (
-    <article className={cn("flex min-w-0", outgoing ? "justify-end" : "justify-start")}>
-      <div className={cn(
-        "min-w-0 whitespace-pre-wrap break-words text-sm leading-7",
-        outgoing
-          ? "max-w-[72%] rounded-xl bg-muted px-4 py-2 text-foreground"
-          : "max-w-[76ch] px-1 py-2 text-foreground",
-      )}>
-        {segments.map((segment, index) => segment.kind === "text" ? (
-          <span key={`${item.id}:text:${String(index)}`}>{segment.value}</span>
-        ) : (
-          <Button
-            key={`${item.id}:ref:${String(index)}`}
-            type="button"
-            variant="link"
-            size="sm"
-            className={cn(
-              "h-auto min-w-0 max-w-full whitespace-normal break-all px-1 py-0 text-left align-baseline",
-              outgoing ? "text-inherit hover:text-inherit" : null,
-            )}
-            onClick={() => onOpenReference(segment.value)}
-          >
-            {segment.value}
-          </Button>
-        ))}
-      </div>
+    <article
+      className={cn(
+        "flex min-w-0 flex-col",
+        outgoing ? "items-end" : "items-start"
+      )}
+    >
+      <AgentMessageHeader
+        role={outgoing ? "user" : "assistant"}
+        agentName={outgoing ? undefined : profile.agentLabel}
+        timestamp={item.timestamp}
+        className="mb-1"
+      />
+      <AgentMessageBubble role={outgoing ? "user" : "assistant"}>
+        {segments.map((segment, index) =>
+          segment.kind === "text" ? (
+            <span key={`${item.id}:text:${String(index)}`}>{segment.value}</span>
+          ) : (
+            <Button
+              key={`${item.id}:ref:${String(index)}`}
+              type="button"
+              variant="link"
+              size="sm"
+              className={cn(
+                "h-auto min-w-0 max-w-full whitespace-normal break-all px-1 py-0 text-left align-baseline",
+                outgoing ? "text-inherit hover:text-inherit" : null
+              )}
+              onClick={() => onOpenReference(segment.value)}
+            >
+              {segment.value}
+            </Button>
+          )
+        )}
+      </AgentMessageBubble>
     </article>
   )
 }
@@ -65,4 +83,5 @@ function splitLocalReferences(content: string): readonly MessageSegment[] {
   return segments.length > 0 ? segments : [{ kind: "text", value: content }]
 }
 
-export { AgentMessageEvent }
+export { AgentMessageEvent, splitLocalReferences }
+export type { AgentMessageEventProps }
