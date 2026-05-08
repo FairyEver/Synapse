@@ -1,6 +1,5 @@
 import type { ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Image } from "lucide-react"
 import {
   downloadContent,
   getIconPromptTemplate,
@@ -319,7 +318,6 @@ function useContentDownloadActions({
             {
               key: "copy-icon-prompt",
               label: "复制图标提示词",
-              icon: <Image className="mr-2 h-4 w-4" />,
               disabled: isBusy,
               onSelect: () => {
                 void handleCopyIconPrompt()
