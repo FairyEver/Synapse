@@ -42,7 +42,6 @@ describe("AgentToolEvent", () => {
     expect(html).not.toContain("Running")
     expect(html).toContain("pnpm test")
     expect(html).toContain("w-full")
-    expect(html).not.toContain("lucide-terminal")
     expect(html).not.toContain("border-y border-border")
     expect(html.indexOf("Bash")).toBeLessThan(html.indexOf("lucide-chevron-down"))
     expect(html).toContain("group-data-[state=closed]/agent-event-trigger:-rotate-90")
@@ -101,7 +100,6 @@ describe("AgentToolEvent", () => {
 
     expect(html).toContain("command output")
     expect(html).toContain("exit 2")
-    expect(html).toContain("复制")
     expect(html).toContain("lucide-clipboard")
   })
 

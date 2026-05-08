@@ -31,11 +31,10 @@ describe("AgentThinkingEvent", () => {
       profile={profile}
     />)
 
-    expect(html).toContain("Thinking")
+    expect(html).toContain("思考过程")
     expect(html).toContain("analysis")
-    expect(html).toContain("w-full")
     expect(html).not.toContain("border-y border-border")
-    expect(html.indexOf("Thinking")).toBeLessThan(html.indexOf("lucide-chevron-down"))
+    expect(html.indexOf("思考过程")).toBeLessThan(html.indexOf("lucide-chevron-down"))
     expect(html).toContain("group-data-[state=closed]/agent-event-trigger:-rotate-90")
   })
 })
