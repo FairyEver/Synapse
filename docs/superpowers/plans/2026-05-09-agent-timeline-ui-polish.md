@@ -566,9 +566,9 @@ Also add `data-allow-select="true"` to the timeline content div for text selecti
 
 ```tsx
 // Change the inner div (line 30) from:
-        <div className="mx-auto flex min-w-0 max-w-4xl flex-col gap-6 px-4 pb-24 pt-4">
+        <div className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-24 pt-4">
 // To:
-        <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-6 px-4 pb-24 pt-4">
+        <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-24 pt-4">
 ```
 
 - [ ] **Step 3: Update index.tsx to pass agentIcon**
