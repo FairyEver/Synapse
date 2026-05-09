@@ -11,6 +11,7 @@ import { AgentTimelineItem } from "./agent-timeline-item"
 function AgentTimeline({
   items,
   profile,
+  agentIcon,
   sending,
   pendingPermissions,
   onOpenReference,
@@ -19,6 +20,7 @@ function AgentTimeline({
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
   readonly profile: SynapseAgentDisplayProfile
+  readonly agentIcon?: string
   readonly sending: boolean
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
@@ -27,7 +29,7 @@ function AgentTimeline({
 }) {
   return (
     <ScrollArea className="min-h-0 min-w-0 flex-1">
-      <div className="mx-auto flex min-w-0 max-w-4xl flex-col gap-6 px-4 pb-24 pt-4">
+      <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-6 px-4 pb-24 pt-4">
         {items.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">暂无消息</p>
         ) : items.map((item) => (
@@ -35,6 +37,7 @@ function AgentTimeline({
             key={item.id}
             item={item}
             profile={profile}
+            agentIcon={agentIcon}
             pendingPermissions={pendingPermissions}
             onOpenReference={onOpenReference}
             onRespondPermission={onRespondPermission}

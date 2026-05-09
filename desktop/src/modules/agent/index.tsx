@@ -268,6 +268,7 @@ function AgentModule() {
             <AgentTimeline
               items={chat.timeline}
               profile={selectedDisplayProfile}
+              agentIcon={selectedAgentDefinition?.icon}
               sending={chat.sending}
               pendingPermissions={chat.pendingPermissions}
               onOpenReference={openReference}

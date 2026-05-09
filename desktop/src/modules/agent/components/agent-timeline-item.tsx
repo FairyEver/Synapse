@@ -16,12 +16,14 @@ import { AgentToolEvent } from "./agent-tool-event"
 function AgentTimelineItem({
   item,
   profile,
+  agentIcon,
   pendingPermissions,
   onOpenReference,
   onRespondPermission,
 }: {
   readonly item: SynapseAgentTimelineItem
   readonly profile: SynapseAgentDisplayProfile
+  readonly agentIcon?: string
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
   readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void
@@ -32,6 +34,7 @@ function AgentTimelineItem({
         <AgentMessageEvent
           item={item}
           profile={profile}
+          agentIcon={agentIcon}
           onOpenReference={onOpenReference}
         />
       )
