@@ -26,7 +26,7 @@ function AgentThinkingEvent({
             type="button"
             variant="ghost"
             size="sm"
-            className="group/agent-event-trigger h-7 justify-start gap-1.5 px-0 py-0 text-xs text-muted-foreground hover:text-foreground"
+            className="group/agent-event-trigger h-7 w-full min-w-0 justify-start gap-1.5 px-0 py-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
           >
             <Sparkles className="size-3.5" />
             <span>思考过程</span>
