@@ -9,10 +9,12 @@ import { debounce, track } from "@/lib/ui-tracking"
 function ScrollArea({
   className,
   children,
+  viewportRef,
   "data-track": dataTrack,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   "data-track"?: string
+  viewportRef?: React.Ref<HTMLDivElement>
 }) {
   const lastScrollTopRef = React.useRef(0)
   const logScroll = React.useMemo(
@@ -44,6 +46,7 @@ function ScrollArea({
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
+        ref={viewportRef}
         data-slot="scroll-area-viewport"
         className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
         onScroll={(event) => {
