@@ -1,35 +1,30 @@
-import { Bot, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface AgentMessageHeaderProps {
-  readonly role: "user" | "assistant"
-  readonly agentName?: string
+  readonly agentIcon?: string
   readonly timestamp?: string
   readonly className?: string
 }
 
 function AgentMessageHeader({
-  role,
-  agentName,
+  agentIcon,
   timestamp,
   className,
 }: AgentMessageHeaderProps) {
-  const isUser = role === "user"
-  const displayName = isUser ? "You" : (agentName ?? "Agent")
-  const Icon = isUser ? User : Bot
-
   return (
     <div
       className={cn(
         "flex items-center gap-2",
-        isUser ? "flex-row-reverse justify-start" : "flex-row justify-start",
         className,
       )}
     >
-      <div className="flex size-6 items-center justify-center rounded-full bg-muted">
-        <Icon className="size-4 text-muted-foreground" />
-      </div>
-      <span className="text-sm font-medium">{displayName}</span>
+      {agentIcon ? (
+        <img
+          src={agentIcon}
+          alt=""
+          className="size-5 rounded"
+        />
+      ) : null}
       {timestamp ? (
         <time className="text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}

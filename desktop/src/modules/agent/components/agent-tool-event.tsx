@@ -44,7 +44,7 @@ function AgentToolEvent({
             type="button"
             variant="ghost"
             size="sm"
-            className="group/agent-event-trigger h-7 w-full min-w-0 justify-start gap-1.5 px-0 py-0 text-xs hover:text-foreground"
+            className="group/agent-event-trigger h-7 w-full min-w-0 justify-start gap-1.5 px-0 py-0 text-xs hover:bg-transparent hover:text-foreground"
           >
             <Terminal className="size-3.5 text-muted-foreground" />
             <span className="truncate">{label}</span>
@@ -66,7 +66,7 @@ function AgentToolEvent({
           <div className="relative flex flex-col gap-2 pb-2 pt-1">
             {body ? (
               <>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 text-xs leading-5">
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 text-sm leading-6">
                   {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}
                 </pre>
                 <Button
