@@ -36,5 +36,7 @@ describe("AgentThinkingEvent", () => {
     expect(html).not.toContain("border-y border-border")
     expect(html.indexOf("思考过程")).toBeLessThan(html.indexOf("lucide-chevron-down"))
     expect(html).toContain("group-data-[state=closed]/agent-event-trigger:-rotate-90")
+    expect(html).toContain("w-full")
+    expect(html).toContain("hover:bg-transparent")
   })
 })

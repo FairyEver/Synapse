@@ -37,4 +37,20 @@ describe("AgentTimeline", () => {
     expect(html).toContain("gap-6")
     expect(html).not.toContain("gap-5")
   })
+
+  it("enables text selection on the content area", () => {
+    const html = renderToStaticMarkup(
+      <AgentTimeline
+        items={[]}
+        profile={profile}
+        sending={false}
+        pendingPermissions={[]}
+        onOpenReference={vi.fn()}
+        onRespondPermission={vi.fn()}
+        bottomRef={createRef<HTMLDivElement>()}
+      />,
+    )
+
+    expect(html).toContain('data-allow-select="true"')
+  })
 })
