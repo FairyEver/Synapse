@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react"
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react"
 import AvatarEditor, { useAvatarEditor } from "react-avatar-editor"
 
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/dialog"
 import { Slider } from "@/components/ui/slider"
 
+type ImageCropDialogRef = {
+  /** 触发隐藏的 file input，打开系统文件选择器 */
+  openFileSelector: () => void
+  /** 直接以图片 URL 打开裁剪弹窗（用于粘贴、拖放等外部图片源） */
+  openWithImage: (imageDataUrl: string) => void
+}
+
 type ImageCropDialogProps = {
   /** 输出的正方形图片边长（px） */
   outputSize?: number
@@ -19,17 +26,26 @@ type ImageCropDialogProps = {
   children?: React.ReactNode
 }
 
-function ImageCropDialog({
-  outputSize = 256,
-  onCropped,
-  children,
-}: ImageCropDialogProps) {
-  const [open, setOpen] = useState(false)
-  const [imageSrc, setImageSrc] = useState<string | null>(null)
-  const [scale, setScale] = useState(1)
-  const [position, setPosition] = useState({ x: 0.5, y: 0.5 })
-  const { ref: editorRef, getImageScaledToCanvas } = useAvatarEditor()
-  const fileInputRef = useRef<HTMLInputElement>(null)
+const ImageCropDialog = forwardRef<ImageCropDialogRef, ImageCropDialogProps>(
+  function ImageCropDialog({ outputSize = 256, onCropped, children }, ref) {
+    const [open, setOpen] = useState(false)
+    const [imageSrc, setImageSrc] = useState<string | null>(null)
+    const [scale, setScale] = useState(1)
+    const [position, setPosition] = useState({ x: 0.5, y: 0.5 })
+    const { ref: editorRef, getImageScaledToCanvas } = useAvatarEditor()
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    useImperativeHandle(ref, () => ({
+      openFileSelector: () => {
+        fileInputRef.current?.click()
+      },
+      openWithImage: (imageDataUrl: string) => {
+        setImageSrc(imageDataUrl)
+        setScale(1)
+        setPosition({ x: 0.5, y: 0.5 })
+        setOpen(true)
+      },
+    }))
 
   const handleFileSelect = useCallback(() => {
     fileInputRef.current?.click()
@@ -170,7 +186,7 @@ function ImageCropDialog({
       </Dialog>
     </>
   )
-}
+})
 
 export { ImageCropDialog }
-export type { ImageCropDialogProps }
+export type { ImageCropDialogRef, ImageCropDialogProps }
