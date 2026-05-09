@@ -111,14 +111,14 @@ function ContentImageField({
       <div className="flex flex-col gap-4">
         <div
           className={cn(
-            "flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6 transition-colors",
+            "flex flex-col items-center gap-3 rounded-lg border border-dashed p-6 transition-colors",
             isDragOver ? "border-primary" : "border-border",
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <ImageIcon className="size-8 text-muted-foreground" />
+          <ImageUp className="size-8 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">上传图片作为内容图标</span>
           <div className="flex gap-2">
             <ImageCropDialog ref={cropDialogRef} onCropped={handleCropped}>
