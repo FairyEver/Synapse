@@ -1,4 +1,5 @@
 import {
+  execFileSync,
   spawn,
   type ChildProcessWithoutNullStreams,
   type SpawnOptionsWithoutStdio,
@@ -676,6 +677,40 @@ class LineEmitter {
   }
 }
 
+let cachedShellPath: string | null = null
+let shellPathResolveFailed = false
+
+function resolveShellPath(): string | null {
+  if (cachedShellPath) return cachedShellPath
+  if (shellPathResolveFailed) return null
+
+  if (process.platform === "win32") {
+    cachedShellPath = process.env.PATH ?? ""
+    return cachedShellPath
+  }
+
+  try {
+    const shell = process.env.SHELL || "/bin/zsh"
+    const shellEnv: Record<string, string> = { SHELL: shell, PATH: process.env.PATH ?? "" }
+    if (process.env.HOME) shellEnv.HOME = process.env.HOME
+    const stdout = execFileSync(shell, ["-i", "-l", "-c", "echo $PATH"], {
+      timeout: 5000,
+      encoding: "utf-8",
+      env: shellEnv,
+    })
+    const resolved = stdout.trim()
+    if (resolved) {
+      cachedShellPath = resolved
+      return resolved
+    }
+  } catch {
+    // Shell PATH resolution failed; fall back to process.env.PATH.
+  }
+
+  shellPathResolveFailed = true
+  return null
+}
+
 function buildAllowedEnv(
   env: Record<string, string | undefined> | undefined,
   envAllowlist: readonly string[] | undefined,
@@ -685,7 +720,13 @@ function buildAllowedEnv(
 
   for (const key of allowlist) {
     if (!key) continue
-    const entry = findEnvEntry(env, key) ?? findEnvEntry(process.env, key)
+    let entry = findEnvEntry(env, key)
+    if (!entry && key === "PATH") {
+      // 优先使用登录 shell 的完整 PATH（Electron .app 启动时 PATH 只有系统默认值）
+      const shellPath = resolveShellPath()
+      if (shellPath) entry = { key: "PATH", value: shellPath }
+    }
+    if (!entry) entry = findEnvEntry(process.env, key)
     if (entry) nextEnv[entry.key] = entry.value
   }
 
