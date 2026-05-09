@@ -66,7 +66,7 @@ function AgentToolEvent({
           <div className="relative flex flex-col gap-2 pb-2 pt-1">
             {body ? (
               <>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 text-sm leading-6">
+                <pre data-allow-select="true" className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 font-mono text-xs leading-5 text-muted-foreground">
                   {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}
                 </pre>
                 <Button

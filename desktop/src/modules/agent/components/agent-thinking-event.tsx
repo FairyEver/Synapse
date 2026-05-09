@@ -1,4 +1,4 @@
-import { ChevronDown, Sparkles } from "lucide-react"
+import { ChevronDown, Clipboard, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Collapsible,
@@ -37,9 +37,20 @@ function AgentThinkingEvent({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <pre className="whitespace-pre-wrap break-words pb-2 pt-1 text-sm leading-6 text-muted-foreground">
-            {item.content}
-          </pre>
+          <div className="relative pb-2 pt-1">
+            <pre data-allow-select="true" className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+              {item.content}
+            </pre>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-2 size-6 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
+              onClick={() => void navigator.clipboard.writeText(item.content)}
+            >
+              <Clipboard className="size-3.5" />
+            </Button>
+          </div>
         </CollapsibleContent>
       </Collapsible>
     </AgentAnnotation>

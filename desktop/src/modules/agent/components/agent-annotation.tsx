@@ -8,7 +8,7 @@ interface AgentAnnotationProps {
 
 export function AgentAnnotation({ children, className }: AgentAnnotationProps) {
   return (
-    <div className={cn("pl-2", className)}>
+    <div className={cn(className)}>
       {children}
     </div>
   )
