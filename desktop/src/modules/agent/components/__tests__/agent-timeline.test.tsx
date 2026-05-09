@@ -41,7 +41,7 @@ function renderTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>>
 describe("AgentTimeline", () => {
   it("uses compact vertical spacing between timeline items", () => {
     const html = renderTimeline()
-    expect(html).toContain("gap-6")
+    expect(html).toContain("gap-2")
     expect(html).not.toContain("gap-5")
   })
 
