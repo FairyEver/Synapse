@@ -65,7 +65,9 @@ describe("AgentMessageEvent", () => {
     )
 
     expect(html).toContain("复制")
-    expect(html).toContain("11:15")
+    const d = new Date(baseEntry.timestamp)
+    const expected = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`
+    expect(html).toContain(expected)
   })
 
   it("left-aligns assistant messages with markdown rendering", () => {
