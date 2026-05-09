@@ -1,4 +1,5 @@
-import { ImageIcon, Palette } from "lucide-react"
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
+import { ImageIcon, ImageUp, Palette, Trash2 } from "lucide-react"
 
 import {
   Field,
@@ -9,11 +10,148 @@ import {
   FieldTitle,
 } from "@/components/ui/field"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ImageCropDialog } from "@/components/image-crop-dialog"
+import { ImageCropDialog, type ImageCropDialogRef } from "@/components/image-crop-dialog"
 import { Button } from "@/components/ui/button"
 import { ContentBackgroundPicker } from "@/modules/content/components/content-background-picker"
 import { ContentIconPicker } from "@/modules/content/components/content-icon-picker"
 import type { SynapseContentIconType } from "@/types/content"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+
+type ContentImageFieldProps = {
+  iconImagePreview: string | null
+  iconImageError?: string
+  onIconImageChange: (blob: Blob) => void
+  onIconImageRemove: () => void
+}
+
+function ContentImageField({
+  iconImagePreview,
+  iconImageError,
+  onIconImageChange,
+  onIconImageRemove,
+}: ContentImageFieldProps) {
+  const cropDialogRef = useRef<ImageCropDialogRef>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  // Ctrl+V paste listener (hidden feature)
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          e.preventDefault()
+          const blob = items[i].getAsFile()
+          if (blob) {
+            const url = URL.createObjectURL(blob)
+            cropDialogRef.current?.openWithImage(url)
+          }
+          return
+        }
+      }
+    }
+    document.addEventListener("paste", handlePaste)
+    return () => document.removeEventListener("paste", handlePaste)
+  }, [])
+
+  // Drag handlers
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "copy"
+    setIsDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback((e: DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      toast.error("仅支持图片文件")
+      return
+    }
+    const url = URL.createObjectURL(file)
+    cropDialogRef.current?.openWithImage(url)
+  }, [])
+
+  // Clipboard paste button
+  const handlePasteClick = useCallback(async () => {
+    try {
+      const items = await navigator.clipboard.read()
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type.startsWith("image/")) {
+            const blob = await item.getType(type)
+            const url = URL.createObjectURL(blob)
+            cropDialogRef.current?.openWithImage(url)
+            return
+          }
+        }
+      }
+      toast.info("剪贴板中无图片")
+    } catch {
+      toast.info("无法读取剪贴板")
+    }
+  }, [])
+
+  // Crop confirm callback
+  const handleCropped = useCallback((blob: Blob) => {
+    onIconImageChange(blob)
+  }, [onIconImageChange])
+
+  // --- Empty state ---
+  if (!iconImagePreview) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div
+          className={cn(
+            "flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6 transition-colors",
+            isDragOver ? "border-primary" : "border-border",
+          )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <ImageIcon className="size-8 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">上传图片作为内容图标</span>
+          <div className="flex gap-2">
+            <ImageCropDialog ref={cropDialogRef} onCropped={handleCropped}>
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                data-track="content-icon-image-select"
+              >
+                选择文件
+              </Button>
+            </ImageCropDialog>
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              data-track="content-icon-image-paste"
+              onClick={handlePasteClick}
+            >
+              从剪贴板粘贴
+            </Button>
+          </div>
+        </div>
+        {iconImageError && (
+          <FieldError>{iconImageError}</FieldError>
+        )}
+      </div>
+    )
+  }
+
+  // --- Has-image state (Task 3 will implement this) ---
+  return null
+}
 
 type ContentAppearanceFieldsProps = {
   backgroundError?: string
@@ -93,45 +231,12 @@ function ContentAppearanceFields({
         </TabsContent>
 
         <TabsContent value="image" className="flex flex-col gap-4">
-          <Field data-invalid={iconImageError && !iconImagePreview ? true : undefined}>
-            <FieldContent>
-              {iconImagePreview ? (
-                <div className="flex items-center gap-3">
-                  <img
-                    src={iconImagePreview}
-                    alt="图标预览"
-                    className="size-20 rounded-lg object-cover"
-                  />
-                  <div className="flex gap-2">
-                    <ImageCropDialog onCropped={onIconImageChange}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        data-track="content-icon-image-reselect"
-                      >
-                        重新选择
-                      </Button>
-                    </ImageCropDialog>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      type="button"
-                      data-track="content-icon-image-remove"
-                      onClick={onIconImageRemove}
-                    >
-                      移除
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <ImageCropDialog onCropped={onIconImageChange} />
-              )}
-              {iconImageError && !iconImagePreview ? (
-                <FieldError>{iconImageError}</FieldError>
-              ) : null}
-            </FieldContent>
-          </Field>
+          <ContentImageField
+            iconImagePreview={iconImagePreview}
+            iconImageError={iconImageError}
+            onIconImageChange={onIconImageChange}
+            onIconImageRemove={onIconImageRemove}
+          />
         </TabsContent>
       </Tabs>
     </FieldSet>
