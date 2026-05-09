@@ -18,7 +18,7 @@ type MarkdownViewerProps = {
   surface?: MarkdownViewerSurface
 }
 
-const MARKDOWN_BODY_CLASSNAME = cn(
+export const MARKDOWN_BODY_CLASSNAME = cn(
   "text-sm leading-6 text-foreground",
   "[&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4",
   "[&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground",
