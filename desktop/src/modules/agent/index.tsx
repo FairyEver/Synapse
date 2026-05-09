@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
 import { Clock, Command as CommandIcon, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
@@ -27,6 +27,7 @@ import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtim
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
 import { useAgentChat } from "./hooks/use-agent-chat"
+import { useStickToBottom } from "./hooks/use-stick-to-bottom"
 import { resolveAgentProjectScope } from "./project-resolution"
 import {
   agentCliLabel,
@@ -66,7 +67,16 @@ function AgentModule() {
   const [availableAgents, setAvailableAgents] = useState<SynapseAgentAvailability[]>([])
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const timelineBottomRef = useRef<HTMLDivElement | null>(null)
+  const latestEntry = chat.timeline.at(-1)
+  const stick = useStickToBottom({
+    contentSignal: [
+      chat.timeline.length,
+      latestEntry?.id,
+      latestEntry?.timestamp,
+      chat.sending,
+    ],
+    latestEntryId: latestEntry?.id,
+  })
 
   const projectOptions: ProjectOption[] = useMemo(() =>
     config.global.projects.map((project) => ({
@@ -82,29 +92,17 @@ function AgentModule() {
     void bridge.agent.getAvailableAgents().then(setAvailableAgents)
   }, [])
 
-  const latestEntry = chat.timeline.at(-1)
-
   useEffect(() => {
-    const bottom = timelineBottomRef.current
-    if (!bottom) return undefined
-    const frame = window.requestAnimationFrame(() => {
-      bottom.scrollIntoView({ block: "end" })
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [
-    chat.selectedProjectId,
-    chat.selectedConversationId,
-    chat.selectedSessionKey,
-    chat.timeline.length,
-    latestEntry?.id,
-    latestEntry?.timestamp,
-    chat.sending,
-  ])
+    stick.forcePin()
+    // forcePin is stable; only fire when the active session identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.selectedProjectId, chat.selectedConversationId, chat.selectedSessionKey])
 
   const submitDraft = () => {
     const content = draft.trim()
     if (!content || !chat.activeProjectId) return
     setDraft("")
+    stick.forcePin()
     void chat.sendMessage(content)
   }
 
@@ -273,7 +271,9 @@ function AgentModule() {
               pendingPermissions={chat.pendingPermissions}
               onOpenReference={openReference}
               onRespondPermission={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
-              bottomRef={timelineBottomRef}
+              viewportRef={stick.viewportRef}
+              showJumpToBottom={!stick.isPinned && stick.hasUnread}
+              onJumpToBottom={() => stick.scrollToBottom({ behavior: "smooth" })}
             />
 
             <AgentComposer
