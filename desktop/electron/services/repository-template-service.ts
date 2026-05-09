@@ -21,6 +21,7 @@ type RepositorySeedContent = {
   name?: string
   title: string
   type: SynapseContentType
+  usage?: string
 }
 
 type RepositoryTemplateMeta = Omit<RepositorySeedContent, "attachments" | "content" | "type">
@@ -65,6 +66,12 @@ function parseTemplateMeta(
     throw new Error(`模板 ${templateDirectoryPath} 缺少 name。`)
   }
 
+  const usage = record.usage
+
+  if (usage != null && (typeof usage !== "string" || !usage.trim())) {
+    throw new Error(`模板 ${templateDirectoryPath} 的 usage 必须是非空字符串。`)
+  }
+
   const category = assertStringField(record.category, "category", templateDirectoryPath)
   const categoryExists = getContentTypeDefinition(type).categories.some((item) => item.id === category)
 
@@ -76,6 +83,7 @@ function parseTemplateMeta(
     id: assertStringField(record.id, "id", templateDirectoryPath),
     ...(typeof name === "string" ? { name } : {}),
     title: assertStringField(record.title, "title", templateDirectoryPath),
+    ...(typeof usage === "string" ? { usage } : {}),
     description: assertStringField(record.description, "description", templateDirectoryPath),
     category,
     icon: assertStringField(record.icon, "icon", templateDirectoryPath),

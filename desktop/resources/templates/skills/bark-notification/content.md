@@ -1,8 +1,3 @@
----
-name: bark-notification
-description: 使用 Bark 发送手机推送通知。Use when the user asks to send a Bark notification, phone push, iPhone push, or says "给我手机发消息", "给手机发信息", "bark通知我", "手机通知我", "发到我手机", or asks to notify them with a title and message.
----
-
 当用户要求发送 Bark 通知、手机消息或手机推送时，按以下步骤执行：
 
 1. 你的 BARK_ID 是：`${{ BARK_ID }}`。

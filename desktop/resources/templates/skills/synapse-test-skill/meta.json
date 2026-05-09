@@ -2,7 +2,8 @@
   "id": "test-skill",
   "name": "synapse-test-skill",
   "title": "技能安装验证",
-  "description": "测试技能，安装到编辑器后发送 \"synapse verify skill\"，若回复 ✅ 验证码则技能和附件均安装成功",
+  "usage": "测试技能。安装到编辑器后向 AI 发送 \"synapse verify skill\"，若回复 ✅ 验证码即说明技能和附件均安装成功。",
+  "description": "Verify Synapse skill installation by reading the verification code from the bundled verify-marker.txt. Use when the user sends a message containing \"synapse verify skill\" or asks to verify a Synapse skill installation; reply with `✅ {code}` only.",
   "category": "automation",
   "icon": "flask-conical",
   "iconBg": "teal"

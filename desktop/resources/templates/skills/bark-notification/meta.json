@@ -2,7 +2,8 @@
   "id": "bark-notification",
   "name": "bark-notification",
   "title": "Bark 通知",
-  "description": "通过 Bark 发送标题和内容明确的推送通知",
+  "usage": "在 Synapse 变量中配置好 BARK_ID 后，使用「手机通知我」「Bark 通知我」等触发 AI，向你的手机推送 Bark 通知。",
+  "description": "Send a Bark phone push notification with a clear title and message. Use when the user asks to send a Bark notification, phone push, or iPhone push, or says \"给我手机发消息\", \"给手机发信息\", \"bark通知我\", \"手机通知我\", \"发到我手机\", or otherwise asks to be notified on their phone with a title and message.",
   "category": "integration",
   "icon": "workflow",
   "iconBg": "teal"

@@ -81,6 +81,7 @@ function toMeta(seed: BuiltinContentRecord): SynapseContentMeta {
     type: seed.type,
     title: seed.title,
     ...(seed.name ? { name: seed.name } : {}),
+    ...(seed.usage ? { usage: seed.usage } : {}),
     description: seed.description,
     category: "builtin",
     icon: seed.icon,

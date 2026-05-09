@@ -138,7 +138,7 @@ function ContentListCard({
             author={authorLabel}
             category={categoryLabel}
             className="flex-1"
-            description={item.description}
+            description={item.usage?.trim() || item.description}
             title={item.title}
           />
         </button>
