@@ -44,7 +44,7 @@ function AgentToolEvent({
             type="button"
             variant="ghost"
             size="sm"
-            className="group/agent-event-trigger h-7 w-full min-w-0 justify-start gap-1.5 px-0 py-0 text-xs hover:bg-transparent hover:text-foreground"
+            className="group/agent-event-trigger h-7 w-full min-w-0 justify-start gap-1.5 px-0 py-0 text-xs hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
           >
             <Terminal className="size-3.5 text-muted-foreground" />
             <span className="truncate">{label}</span>
