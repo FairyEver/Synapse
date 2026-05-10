@@ -38,8 +38,8 @@ export function WorkflowEditorApp() {
 
   useWorkflowEvents(runId, {
     onNodeStarted: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "running" as const } })),
-    onNodeCompleted: (nodeId, output) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "success" as const, output: String(output) } })),
-    onNodeFailed: (nodeId, error) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "failed" as const, error } })),
+    onNodeCompleted: (nodeId, output, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "success" as const, output: String(output) } })),
+    onNodeFailed: (nodeId, error, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "failed" as const, error } })),
     onNodeSkipped: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { nodeId, input: { variables: {} }, status: "skipped" as const } })),
     onCompleted: (results) => { setRunState("completed"); setNodeResults(results) },
     onFailed: () => setRunState("failed"),

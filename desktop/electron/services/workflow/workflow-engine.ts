@@ -1,7 +1,7 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
 import type { AgentSendDeps } from "../../../workflow-nodes/types"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
-import { resolveVariables } from "./variable-resolver"
+import { interpolatePrompt, resolveVariables } from "./variable-resolver"
 
 type EventCallback = (event: WorkflowEvent) => void
 
@@ -69,7 +69,11 @@ export class WorkflowEngine {
         const cfg = manifest.configSchema.parse(node.config)
         const vars = (cfg as Record<string, unknown>)["variables"]
         const resolved = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs)
-        nr.input = { variables: resolved }
+        const prompt = (cfg as Record<string, unknown>)["prompt"]
+        nr.input = {
+          variables: resolved,
+          ...(typeof prompt === "string" ? { prompt: interpolatePrompt(prompt, resolved) } : {}),
+        }
 
         const execResult = await executor.execute({
           config: cfg, resolvedVariables: resolved,
@@ -82,7 +86,7 @@ export class WorkflowEngine {
 
         if (execResult.status === "success") {
           nodeOutputs[nodeId] = execResult.output
-          emit({ type: "node:completed", nodeId, output: execResult.output })
+          emit({ type: "node:completed", nodeId, output: execResult.output, result: { ...nr } })
           for (const e of def.edges.filter((e) => e.from === nodeId)) {
             if (!execResult.activeBranch || e.branch === execResult.activeBranch) {
               reachableNodes.add(e.to)
@@ -91,13 +95,14 @@ export class WorkflowEngine {
           }
         } else {
           overallFailed = true
-          emit({ type: "node:failed", nodeId, error: execResult.error ?? "Unknown error" })
+          emit({ type: "node:failed", nodeId, error: execResult.error ?? "Unknown error", result: { ...nr } })
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         nr.status = "failed"; nr.error = msg; nr.endedAt = Date.now()
+        nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
         overallFailed = true
-        emit({ type: "node:failed", nodeId, error: msg })
+        emit({ type: "node:failed", nodeId, error: msg, result: { ...nr } })
       }
     }
 
@@ -106,7 +111,7 @@ export class WorkflowEngine {
       status: overallFailed ? "failed" : "completed",
       nodeResults, durationMs,
     }
-    if (overallFailed) emit({ type: "workflow:failed", error: "One or more nodes failed" })
+    if (overallFailed) emit({ type: "workflow:failed", error: "One or more nodes failed", result })
     else emit({ type: "workflow:completed", result })
     return result
   }

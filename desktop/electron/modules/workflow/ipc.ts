@@ -71,7 +71,7 @@ export const workflowIpcModule: IpcModule = {
           if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
             abortMap.delete(runId)
             const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
-            const nodeResults = event.type === "workflow:completed" ? event.result.nodeResults : {}
+            const nodeResults = event.type === "workflow:completed" ? event.result.nodeResults : event.type === "workflow:failed" ? event.result?.nodeResults ?? {} : {}
             void snapshots.save({ runId, workflowId: id, version: def.version, startedAt: Date.now(), endedAt: Date.now(), status, params, nodeResults })
           }
         })

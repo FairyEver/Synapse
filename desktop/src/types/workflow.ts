@@ -29,12 +29,12 @@ export interface WorkflowRunResult {
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string }
   | { type: "node:started"; nodeId: string }
-  | { type: "node:completed"; nodeId: string; output: unknown }
-  | { type: "node:failed"; nodeId: string; error: string }
+  | { type: "node:completed"; nodeId: string; output: unknown; result?: NodeRunResult }
+  | { type: "node:failed"; nodeId: string; error: string; result?: NodeRunResult }
   | { type: "node:skipped"; nodeId: string }
   | { type: "edge:activated"; from: string; to: string }
   | { type: "workflow:completed"; result: WorkflowRunResult }
-  | { type: "workflow:failed"; error: string }
+  | { type: "workflow:failed"; error: string; result?: WorkflowRunResult }
   | { type: "workflow:cancelled" }
 export interface ValidationError {
   type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch"
