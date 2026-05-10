@@ -87,6 +87,7 @@ import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
+import "../../workflow-nodes/register.main"
 
 /**
  * core.logging — wraps the existing `logStore` singleton.

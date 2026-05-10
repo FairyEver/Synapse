@@ -41,9 +41,10 @@ import { EditorScanModule } from "@/modules/editor-scan"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import { TokenUsageModule } from "@/modules/token-usage"
+import { WorkflowModule } from "@/modules/workflow"
 import type { SynapseContentType } from "@/types/content"
 
-type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "token-usage" | "settings"
+type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "token-usage" | "workflow" | "settings"
 type DialogKind = "create" | "detail" | "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -128,6 +129,7 @@ function MainApp() {
       { id: "task-scheduler" as const, label: "定时任务" },
       { id: "editor-scan" as const, label: "IDE" },
       { id: "token-usage" as const, label: "用量" },
+      { id: "workflow" as const, label: "工作流" },
       { id: "settings" as const, label: "设置" },
     ],
     [],
@@ -368,6 +370,11 @@ function MainApp() {
           {activeTab === "token-usage" ? (
             <ErrorBoundary fallbackTitle="Token Usage 模块出现问题">
               <TokenUsageModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "workflow" ? (
+            <ErrorBoundary fallbackTitle="工作流模块出现问题">
+              <WorkflowModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "settings" ? (

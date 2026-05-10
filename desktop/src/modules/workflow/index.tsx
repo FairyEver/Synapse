@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { WorkflowList } from "./components/workflow-list"
 import { Plus } from "lucide-react"
+import "../../../workflow-nodes/register.main"
 
 export function WorkflowModule() {
   const handleCreate = async () => {
