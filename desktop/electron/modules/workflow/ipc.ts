@@ -67,7 +67,10 @@ export const workflowIpcModule: IpcModule = {
         abortMap.set(runId, ac)
 
         void engine.run(def, params, runId, (event) => {
-          eventBus.emit({ domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() })
+          eventBus.emit(
+            { domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() },
+            { backpressure: "block" },
+          )
           if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
             abortMap.delete(runId)
             const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
