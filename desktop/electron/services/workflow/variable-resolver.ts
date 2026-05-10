@@ -4,6 +4,7 @@ export function resolveVariables(
   bindings: VariableBinding[],
   paramValues: Record<string, unknown>,
   nodeOutputs: Record<string, string>,
+  nodeNames?: Record<string, string>,
 ): Record<string, string> {
   const result: Record<string, string> = {}
   for (const { name, source } of bindings) {
@@ -11,7 +12,8 @@ export function resolveVariables(
       result[name] = String(paramValues[source.param] ?? "")
     } else if (source.type === "node_output") {
       if (!(source.node in nodeOutputs)) {
-        throw new Error(`变量 $${name} 引用的节点 ${source.node} 在本次运行中未执行（被分支跳过）`)
+        const displayName = nodeNames?.[source.node] ?? source.node
+        throw new Error(`变量 $${name} 引用的节点「${displayName}」在本次运行中未执行（被分支跳过）`)
       }
       result[name] = nodeOutputs[source.node]
     } else {

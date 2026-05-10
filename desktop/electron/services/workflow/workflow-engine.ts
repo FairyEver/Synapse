@@ -70,7 +70,8 @@ export class WorkflowEngine {
         const executor = nodeTypeRegistry.getExecutor(node.type)
         const cfg = manifest.configSchema.parse(node.config)
         const vars = (cfg as Record<string, unknown>)["variables"]
-        const resolved = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs)
+        const nodeNames = Object.fromEntries(def.nodes.map((n) => [n.id, n.name]))
+        const resolved = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs, nodeNames)
         const prompt = (cfg as Record<string, unknown>)["prompt"]
         nr.input = {
           variables: resolved,
