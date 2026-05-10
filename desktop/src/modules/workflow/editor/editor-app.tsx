@@ -95,11 +95,19 @@ export function WorkflowEditorApp() {
     return result
   }
 
+  const handleRun = async (params: Record<string, unknown>) => {
+    const currentDefinition = definitionRef.current
+    if (!currentDefinition) return null
+    const saveResult = await handleSave(currentDefinition)
+    if (!saveResult || "errors" in saveResult) return null
+    return start(params)
+  }
+
   if (!definition) return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
 
   return (
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={start} onCancel={cancel} onChange={handleDefinitionChange} />
+      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={handleRun} onCancel={cancel} onChange={handleDefinitionChange} />
       {saveErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
