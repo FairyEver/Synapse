@@ -25,6 +25,7 @@ import { connectorsIpcModule } from "../modules/connectors/ipc"
 import { opsIpcModule } from "../modules/ops/ipc"
 import { licenseIpcModule } from "../modules/license/ipc"
 import { taskSchedulerIpcModule } from "../modules/task-scheduler/ipc"
+import { workflowIpcModule } from "../modules/workflow/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -51,6 +52,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(agentIpcModule, ctx)
   registry.register(connectorsIpcModule, ctx)
   registry.register(taskSchedulerIpcModule, ctx)
+  registry.register(workflowIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
   registry.register(licenseIpcModule, ctx)
 
@@ -77,6 +79,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   agentIpcModule,
   connectorsIpcModule,
   taskSchedulerIpcModule,
+  workflowIpcModule,
   opsIpcModule,
   licenseIpcModule,
 ]

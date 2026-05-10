@@ -83,6 +83,10 @@ import { getCliDebugInfo } from "../database/cli-installer"
 import { getMcpServers } from "../database/mcp-installer"
 import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../database/mcp-server"
 import { collectOpsStatus } from "../modules/ops/status"
+import { WorkflowService } from "../services/workflow/workflow-service"
+import { WorkflowEngine } from "../services/workflow/workflow-engine"
+import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
+import { WorkflowWindowManager } from "../services/workflow/window-manager"
 
 /**
  * core.logging — wraps the existing `logStore` singleton.
@@ -813,4 +817,59 @@ export const coreTokenUsageDescriptor: ServiceDescriptor<{ initialized: true }> 
     registerTokenUsageHandlers()
     return { initialized: true }
   },
+}
+
+export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> = {
+  id: "core.workflow",
+  criticality: "degraded",
+  dependsOn: ["core.config"],
+  async create() {
+    const config = await configStore.load()
+    const repoPath = config.repositories[0]?.localPath ?? app.getPath("userData")
+    return new WorkflowService(repoPath)
+  },
+}
+
+export const coreWorkflowSnapshotsDescriptor: ServiceDescriptor<RunSnapshotService> = {
+  id: "core.workflow.snapshots",
+  criticality: "degraded",
+  create() { return new RunSnapshotService(app.getPath("userData")) },
+}
+
+export const coreWorkflowRunAbortsDescriptor: ServiceDescriptor<Map<string, AbortController>> = {
+  id: "core.workflow.run-aborts",
+  criticality: "degraded",
+  create() { return new Map<string, AbortController>() },
+}
+
+export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
+  id: "core.workflow.engine",
+  criticality: "degraded",
+  dependsOn: ["core.project-containers"],
+  create(ctx) {
+    const registry = ctx.registry
+    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortSignal }) => {
+      try {
+        const config = await configStore.load()
+        const projectId = config.repositories[0]?.uuid ?? ""
+        const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
+        const container = await containers.open(projectId, { name: "", workspacePath: config.repositories[0]?.localPath ?? "" })
+        const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+        const result = await agentRuntime.sendScheduled({
+          projectId, agentType: agent, mode: "default", prompt,
+          sessionPolicy: "fresh", timeoutMs: 120_000, abortSignal,
+        })
+        return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
+      } catch (err) {
+        return { status: "failed", response: "", error: String(err), durationMs: 0 }
+      }
+    }
+    return new WorkflowEngine({ sendToAgent })
+  },
+}
+
+export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {
+  id: "core.workflow.window-manager",
+  criticality: "degraded",
+  create() { return new WorkflowWindowManager() },
 }

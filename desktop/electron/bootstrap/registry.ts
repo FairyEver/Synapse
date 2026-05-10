@@ -42,6 +42,11 @@ import {
   coreTokenUsageDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
+  coreWorkflowServiceDescriptor,
+  coreWorkflowSnapshotsDescriptor,
+  coreWorkflowRunAbortsDescriptor,
+  coreWorkflowEngineDescriptor,
+  coreWorkflowWindowManagerDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
@@ -84,6 +89,11 @@ export function buildServiceRegistry(
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDatabaseDescriptor)
   registry.register(coreTokenUsageDescriptor)
+  registry.register(coreWorkflowServiceDescriptor)
+  registry.register(coreWorkflowSnapshotsDescriptor)
+  registry.register(coreWorkflowRunAbortsDescriptor)
+  registry.register(coreWorkflowEngineDescriptor)
+  registry.register(coreWorkflowWindowManagerDescriptor)
   registry.register(coreDiagnosticsDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)
