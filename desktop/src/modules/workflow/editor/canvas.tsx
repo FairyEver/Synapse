@@ -8,9 +8,22 @@ export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
 }
 
+function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string | undefined {
+  const node = def.nodes.find((n) => n.id === fromId)
+  if (!node || node.type !== "switch") return undefined
+  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
+  return branches?.find((b) => b.id === branchId)?.label ?? branchId
+}
+
 function defToFlow(def: WorkflowDefinition) {
   const nodes = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: { ...n.config, name: n.name } as Record<string, unknown>, selected: false }))
-  const edges = def.edges.map((e) => ({ id: e.id, source: e.from, target: e.to, sourceHandle: e.branch ?? null }))
+  const edges = def.edges.map((e) => {
+    const label = e.branch ? resolveBranchLabel(def, e.from, e.branch) : undefined
+    return {
+      id: e.id, source: e.from, target: e.to, sourceHandle: e.branch ?? null,
+      ...(label ? { label, labelStyle: { fontSize: 10 }, style: { stroke: "#f59e0b" } } : {}),
+    }
+  })
   return { nodes, edges }
 }
 
@@ -41,7 +54,10 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => {
-      const updated = addEdge(connection, eds)
+      const withLabel = connection.sourceHandle
+        ? { label: resolveBranchLabel(definition, connection.source, connection.sourceHandle), labelStyle: { fontSize: 10 }, style: { stroke: "#f59e0b" } }
+        : {}
+      const updated = addEdge({ ...connection, ...withLabel }, eds) as typeof eds
       const wfEdges: WorkflowEdge[] = updated.map((e) => ({ id: e.id, from: e.source, to: e.target, branch: e.sourceHandle ?? undefined }))
       onChange({ ...definition, edges: wfEdges })
       return updated
