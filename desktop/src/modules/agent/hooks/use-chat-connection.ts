@@ -396,6 +396,7 @@ function useChatConnection(
         projectId,
         sessionKey,
         content: trimmed,
+        clientSubmittedAt: now,
       })
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "发送失败"

@@ -443,7 +443,7 @@ export type SynapseBridge = {
       args: { projectId: string; conversationId: string; name: string },
     ) => Promise<{ ok: boolean }>
     send: (
-      args: { projectId: string; sessionKey?: string; content: string },
+      args: { projectId: string; sessionKey?: string; content: string; clientSubmittedAt?: string },
     ) => Promise<SynapseAgentSendResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
     respondPermission: (
