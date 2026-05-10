@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { homedir } from "node:os"
 import { shell } from "electron"
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import { createMainLogger } from "../services/log-store"
 import { mcpDefinitions } from "../services/definitions/generated/main-registry"
 import type { SynapseMcpDefinition } from "../../src/definitions/types"
@@ -50,12 +51,16 @@ function usesCodexTomlSettings(definition: SynapseMcpDefinition): boolean {
   return definition.settingsFormat === "codex-toml"
 }
 
+function usesHermesYamlSettings(definition: SynapseMcpDefinition): boolean {
+  return definition.settingsFormat === "hermes-yaml"
+}
+
 function getTargetSettingsPath(target: McpTarget): string {
   return getSettingsPath(requireMcpDefinition(target))
 }
 
 function assertSupportedSettingsFormat(definition: SynapseMcpDefinition): void {
-  if (!usesJsonSettings(definition) && !usesCodexTomlSettings(definition)) {
+  if (!usesJsonSettings(definition) && !usesCodexTomlSettings(definition) && !usesHermesYamlSettings(definition)) {
     throw new Error(`不支持的 MCP 设置格式：${definition.settingsFormat}`)
   }
 }
@@ -253,6 +258,87 @@ function registerCodexMcp(settingsPath: string, mcpUrl: string): void {
   writeFileSync(settingsPath, nextConfig, "utf-8")
 }
 
+function readHermesYamlSettings(settingsPath: string): Record<string, unknown> {
+  if (!existsSync(settingsPath)) {
+    return {}
+  }
+
+  let raw: string
+  try {
+    raw = readFileSync(settingsPath, "utf-8")
+  } catch {
+    return {}
+  }
+
+  if (!raw.trim()) {
+    return {}
+  }
+
+  let parsed: unknown
+  try {
+    parsed = parseYaml(raw)
+  } catch {
+    throw new Error(`配置文件 YAML 格式损坏：${settingsPath}`)
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("配置文件格式无效。")
+  }
+
+  return parsed
+}
+
+function detectHermesYamlRegistration(raw: string): { registered: boolean; mode: McpRegistrationMode; url: string | null } {
+  if (!raw.trim()) return { registered: false, mode: null, url: null }
+
+  let parsed: unknown
+  try {
+    parsed = parseYaml(raw)
+  } catch {
+    return { registered: false, mode: null, url: null }
+  }
+
+  if (!isRecord(parsed)) return { registered: false, mode: null, url: null }
+
+  const servers = parsed.mcp_servers
+  if (!isRecord(servers)) return { registered: false, mode: null, url: null }
+
+  const server = servers[SYNAPSE_MCP_SERVER_NAME]
+  if (!isRecord(server)) return { registered: false, mode: null, url: null }
+
+  if (typeof server.url === "string" && server.url.startsWith("http://127.0.0.1:")) {
+    return { registered: true, mode: "http", url: server.url }
+  }
+
+  if (typeof server.command === "string") {
+    return { registered: true, mode: "stdio", url: null }
+  }
+
+  return { registered: false, mode: null, url: null }
+}
+
+function registerHermesYamlMcp(settingsPath: string, mcpUrl: string): void {
+  const settings = readHermesYamlSettings(settingsPath)
+  const servers = isRecord(settings.mcp_servers) ? settings.mcp_servers : {}
+
+  servers[SYNAPSE_MCP_SERVER_NAME] = { url: mcpUrl }
+  settings.mcp_servers = servers
+
+  ensureParentDirectory(settingsPath)
+  writeFileSync(settingsPath, stringifyYaml(settings, { lineWidth: 0 }), "utf-8")
+}
+
+function removeHermesYamlMcp(settingsPath: string, serverName: string): boolean {
+  if (!existsSync(settingsPath)) return false
+  const settings = readHermesYamlSettings(settingsPath)
+  const servers = settings.mcp_servers
+  if (!isRecord(servers) || !(serverName in servers)) return false
+  delete servers[serverName]
+  settings.mcp_servers = servers
+  writeFileSync(settingsPath, stringifyYaml(settings, { lineWidth: 0 }), "utf-8")
+  return true
+}
+
 function registerMcp(target: McpTarget, mcpPort: number): { success: boolean; error?: string } {
   try {
     const definition = requireMcpDefinition(target)
@@ -264,6 +350,8 @@ function registerMcp(target: McpTarget, mcpPort: number): { success: boolean; er
 
     if (usesJsonSettings(definition)) {
       registerJsonMcp(settingsPath, mcpUrl)
+    } else if (usesHermesYamlSettings(definition)) {
+      registerHermesYamlMcp(settingsPath, mcpUrl)
     } else {
       registerCodexMcp(settingsPath, mcpUrl)
     }
@@ -308,7 +396,9 @@ function unregisterMcp(target: McpTarget, serverName: string): { success: boolea
     const settingsPath = getSettingsPath(definition)
     const modified = usesCodexTomlSettings(definition)
       ? removeCodexMcp(settingsPath, serverName)
-      : removeJsonMcp(settingsPath, serverName)
+      : usesHermesYamlSettings(definition)
+        ? removeHermesYamlMcp(settingsPath, serverName)
+        : removeJsonMcp(settingsPath, serverName)
     return { success: true, modified }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -346,6 +436,9 @@ function getMcpServers(): McpServerInfo[] {
       if (usesJsonSettings(definition)) {
         const settings = readJsonSettings(settingsPath)
         detection = detectJsonRegistration(settings)
+      } else if (usesHermesYamlSettings(definition)) {
+        const raw = readFileSync(settingsPath, "utf-8")
+        detection = detectHermesYamlRegistration(raw)
       } else {
         const raw = readFileSync(settingsPath, "utf-8")
         detection = detectCodexRegistration(raw)
@@ -413,6 +506,8 @@ function autoRegisterMcp(mcpPort: number): void {
       if (settingsFileExists) {
         if (usesJsonSettings(definition)) {
           detection = detectJsonRegistration(readJsonSettings(settingsPath))
+        } else if (usesHermesYamlSettings(definition)) {
+          detection = detectHermesYamlRegistration(readFileSync(settingsPath, "utf-8"))
         } else {
           detection = detectCodexRegistration(readFileSync(settingsPath, "utf-8"))
         }
