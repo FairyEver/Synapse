@@ -48,7 +48,10 @@
 interface WorkflowDefinition {
   id: string
   name: string
+  description?: string
   version: string // "v_<timestamp>_<short-hash>"
+  createdAt: number // Unix ms
+  updatedAt: number // Unix ms
 
   // 工作流级参数（运行前用户填值，节点内只读）
   params: WorkflowParam[]
@@ -65,6 +68,17 @@ interface WorkflowParam {
   type: "text" | "number" // 未来扩展 "file" 等
   default: string | number | null
   description?: string
+}
+
+// 列表页使用的轻量元信息（避免加载完整 definition）
+interface WorkflowMeta {
+  id: string
+  name: string
+  description?: string
+  version: string
+  nodeCount: number
+  createdAt: number
+  updatedAt: number
 }
 ```
 
@@ -168,6 +182,32 @@ interface WorkflowEdge {
 - `outputs?: Record<string, unknown>` 支持多输出端口
 - JSON 输出类型：节点可配置输出为 JSON，此时第二级菜单展开为 JSON 各字段
 - 引用语法扩展：第二级菜单显示 JSON 各字段名
+
+### 1.6 节点运行结果 (NodeRunResult)
+
+```typescript
+interface NodeRunResult {
+  nodeId: string
+  status: "pending" | "running" | "success" | "failed" | "skipped"
+  input: {
+    variables: Record<string, string> // 实际解析后的变量值
+    prompt?: string                   // 插值后的完整 prompt（便于调试回看）
+  }
+  output?: string
+  outputs?: Record<string, unknown> // 未来多输出
+  activeBranch?: string             // Switch 节点选中的分支 id
+  error?: string
+  startedAt?: number  // Unix ms
+  endedAt?: number    // Unix ms
+  durationMs?: number
+}
+```
+
+此结构用于：
+- 运行时画布展示每个节点的输入/输出
+- 运行快照持久化（WorkflowRunSnapshot.nodeResults）
+- 失败节点回看和调试
+- 未来"从某个节点重跑"功能的基础
 
 ---
 
@@ -293,6 +333,10 @@ const sendToAgent: AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortS
 }
 ```
 
+> **注意：** MVP 节点输出使用 `AgentRuntimeService.sendScheduled()` 返回的 `summary` 字段。
+> 如果 summary 是摘要而非完整 LLM 原文，下游节点拿到的是压缩后的结果。
+> 实现时需确认 summary 的实际内容，必要时改用更完整的返回字段。
+
 ### 2.5 Switch 节点分支匹配策略
 
 Switch 节点在发送给 Agent 的 prompt 末尾自动追加约束指令（使用分支 id）：
@@ -402,10 +446,18 @@ type WorkflowEvent =
 interface ValidationResult {
   valid: boolean
   errors: ValidationError[]
+  warnings: ValidationWarning[]
 }
 
 interface ValidationError {
-  type: "cycle" | "unreachable_reference" | "invalid_config" | "disconnected_node"
+  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch"
+  nodeId?: string
+  edgeId?: string
+  message: string
+}
+
+interface ValidationWarning {
+  type: "disconnected_node" | "multiple_start_nodes"
   nodeId?: string
   message: string
 }
@@ -418,7 +470,15 @@ function validateWorkflow(definition: WorkflowDefinition): ValidationResult
 1. **DAG 无环检测** — 拓扑排序验证
 2. **变量引用路径可达性** — 对每个 `source.type === "node_output"` 的变量绑定，检查从 source node 到当前节点是否存在有向路径
 3. **Config schema 验证** — 每个节点的 config 通过对应节点类型的 Zod schema 验证
-4. **孤立节点检测** — 没有任何连线的节点（起始节点除外）发出警告
+4. **Switch 出边校验** — 如果 edge.from 是 Switch 节点，则 `edge.branch` 必须存在且匹配 `branches[].id` 或 `defaultBranch`；如果 edge.from 不是 Switch 节点，则 `edge.branch` 不应存在
+5. **孤立节点检测**（warning）— 没有任何连线的节点（起始节点除外）发出警告
+6. **多起始节点提示**（warning）— 存在多个起始节点时提示"将按依赖顺序依次执行"
+
+**起始节点规则：**
+
+- 入度为 0 的节点是起始节点
+- 允许多个起始节点
+- MVP 并发数为 1 时，多个起始节点按拓扑排序顺序依次执行
 
 **校验时机：**
 
@@ -551,6 +611,8 @@ content-repo/workflows/<workflow-id>/
 - 不修改已有文件，多人推送不冲突（全是文件新增）
 - 当前生效版本 = 文件名字典序最大的（timestamp 前缀保证正确排序）
 - 复用现有 Content Store 的 Git 同步基础设施
+
+> **已知限制（MVP）：** 多人并发编辑时，后保存的版本自动成为最新版本，先保存的修改虽然文件仍在但不再生效（"语义覆盖"）。MVP 以版本历史浏览和恢复为主要补救手段；后续再引入 currentVersion pointer / baseVersion 冲突检测机制。
 
 ### 6.2 内容类型注册
 
