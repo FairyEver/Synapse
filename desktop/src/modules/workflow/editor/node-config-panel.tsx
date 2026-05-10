@@ -1,9 +1,6 @@
 import { Input } from "@/components/ui/input"
 import type { WorkflowDefinition } from "@/types/workflow"
-import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
-import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
-import { PromptNodePanel } from "../../../../workflow-nodes/prompt/panel"
-import { SwitchNodePanel } from "../../../../workflow-nodes/switch/panel"
+import { getPanel } from "../../../../workflow-nodes/panel-registry"
 import { useUpstreamNodes } from "../hooks/use-upstream-nodes"
 
 interface NodeConfigPanelProps {
@@ -28,27 +25,22 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
               key={node.id}
               onBlur={(e) => onNameChange(node.id, e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">{node.type === "prompt" ? "提示词节点" : "分支节点"}</p>
+            <p className="text-xs text-muted-foreground capitalize">{node.type} 节点</p>
           </div>
           <div className="flex-1 overflow-auto p-3">
-            {node.type === "prompt" && (
-              <PromptNodePanel
-                key={node.id}
-                config={node.config as PromptNodeConfig}
-                onChange={(c) => onConfigChange(node.id, c as Record<string, unknown>)}
-                upstreamNodes={upstreamNodes}
-                workflowParams={definition.params}
-              />
-            )}
-            {node.type === "switch" && (
-              <SwitchNodePanel
-                key={node.id}
-                config={node.config as SwitchNodeConfig}
-                onChange={(c) => onConfigChange(node.id, c as Record<string, unknown>)}
-                upstreamNodes={upstreamNodes}
-                workflowParams={definition.params}
-              />
-            )}
+            {(() => {
+              const PanelComponent = getPanel(node.type)
+              if (!PanelComponent) return null
+              return (
+                <PanelComponent
+                  key={node.id}
+                  config={node.config}
+                  onChange={(c) => onConfigChange(node.id, c)}
+                  upstreamNodes={upstreamNodes}
+                  workflowParams={definition.params}
+                />
+              )
+            })()}
           </div>
         </>
       ) : (
