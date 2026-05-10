@@ -7,22 +7,38 @@ const MAX = 20
 export class RunSnapshotService {
   constructor(private readonly dataDir: string) {}
   private dir(wfId: string) { return path.join(this.dataDir, "workflow-runs", wfId) }
+  private snapshotTime(s: WorkflowRunSnapshot): number { return s.startedAt || s.endedAt || 0 }
+
+  private async readSnapshotFiles(workflowId: string): Promise<Array<{ file: string; snapshot: WorkflowRunSnapshot }>> {
+    const dir = this.dir(workflowId)
+    const files = (await readdir(dir)).filter((f) => f.endsWith(".json"))
+    const entries = await Promise.all(files.map(async (file) => {
+      try {
+        const snapshot = JSON.parse(await readFile(path.join(dir, file), "utf-8")) as WorkflowRunSnapshot
+        return { file, snapshot }
+      } catch {
+        return null
+      }
+    }))
+    return entries.filter((entry): entry is { file: string; snapshot: WorkflowRunSnapshot } => entry !== null)
+  }
 
   async save(s: WorkflowRunSnapshot): Promise<void> {
     const dir = this.dir(s.workflowId)
     await mkdir(dir, { recursive: true })
     await writeFile(path.join(dir, `${s.runId}.json`), JSON.stringify(s, null, 2), "utf-8")
-    const files = (await readdir(dir)).filter((f) => f.endsWith(".json")).sort()
-    await Promise.all(files.slice(0, Math.max(0, files.length - MAX)).map((f) => rm(path.join(dir, f), { force: true })))
+    const snapshots = await this.readSnapshotFiles(s.workflowId)
+    const stale = snapshots
+      .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
+      .slice(0, Math.max(0, snapshots.length - MAX))
+    await Promise.all(stale.map(({ file }) => rm(path.join(dir, file), { force: true })))
   }
 
   async list(workflowId: string): Promise<WorkflowRunSnapshot[]> {
     try {
-      const files = (await readdir(this.dir(workflowId))).filter((f) => f.endsWith(".json")).sort().reverse()
-      return (await Promise.all(files.map(async (f) => {
-        try { return JSON.parse(await readFile(path.join(this.dir(workflowId), f), "utf-8")) as WorkflowRunSnapshot }
-        catch { return null }
-      }))).filter(Boolean) as WorkflowRunSnapshot[]
+      return (await this.readSnapshotFiles(workflowId))
+        .sort((a, b) => this.snapshotTime(b.snapshot) - this.snapshotTime(a.snapshot))
+        .map(({ snapshot }) => snapshot)
     } catch { return [] }
   }
 
