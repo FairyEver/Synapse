@@ -27,6 +27,12 @@ export function WorkflowToolbar({ definition, runState, onSave, onRun, onCancel,
         value={definition.name}
         onChange={(e) => onChange({ ...definition, name: e.target.value })}
       />
+      <Input
+        className="h-7 w-64 text-xs text-muted-foreground"
+        value={definition.description ?? ""}
+        onChange={(e) => onChange({ ...definition, description: e.target.value || undefined })}
+        placeholder="描述（可选）"
+      />
       <div className="ml-auto flex items-center gap-1.5">
         <Button size="sm" variant="ghost" onClick={() => setParamsOpen(true)}>
           <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />参数
