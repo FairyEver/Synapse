@@ -118,14 +118,27 @@ function useChatConnection(
       return
     }
     // Phase items are renderer-only in Plan A (not persisted). When DB-backed
-    // entries replace the timeline, preserve any in-flight phase rows so the
-    // user keeps seeing them across `conversationUpdated`-triggered reloads.
+    // entries replace the timeline, preserve in-flight phase rows AND anchor
+    // them right after the most recent user message — sorting by `timestamp`
+    // is unreliable because the backend stamps the user message at persist
+    // time (often AFTER the IPC handler has already emitted the early
+    // `submitted` / `received` events), which would float phase rows above
+    // the user bubble.
     updateTimeline((current) => {
       const phaseItems = current.filter((item) => item.kind === "phase")
       if (phaseItems.length === 0) return [...result.entries]
-      const merged: SynapseAgentTimelineItem[] = [...result.entries, ...phaseItems]
-      merged.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
-      return merged
+      let lastUserIdx = -1
+      for (let i = result.entries.length - 1; i >= 0; i--) {
+        const candidate = result.entries[i]
+        if (candidate.kind === "message" && candidate.role === "user") {
+          lastUserIdx = i
+          break
+        }
+      }
+      if (lastUserIdx < 0) return [...result.entries, ...phaseItems]
+      const out: SynapseAgentTimelineItem[] = [...result.entries]
+      out.splice(lastUserIdx + 1, 0, ...phaseItems)
+      return out
     })
   }, [updateTimeline, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, timelineVersionRef])
 

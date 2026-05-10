@@ -30,16 +30,20 @@ function AgentMessageEvent({
   const outgoing = item.role === "user"
 
   if (outgoing) {
+    // Toolbar sits OUTSIDE the bubble so it does not contribute to the
+    // bubble's layout height. Otherwise a single-line message looks like it
+    // has a trailing blank line because the invisible toolbar still reserves
+    // space inside the bubble.
     return (
-      <article className="flex min-w-0 flex-col items-end">
+      <article className="group/message flex min-w-0 flex-col items-end">
         <AgentMessageBubble role="user">
           <span data-allow-select="true">{item.content}</span>
-          <AgentMessageToolbar
-            timestamp={item.timestamp}
-            content={item.content}
-            className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
-          />
         </AgentMessageBubble>
+        <AgentMessageToolbar
+          timestamp={item.timestamp}
+          content={item.content}
+          className="mt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
+        />
       </article>
     )
   }
