@@ -58,6 +58,19 @@ export type SynapseAgentEvent =
       threadId?: string
     }
 
+export type SynapseAgentPhaseValue =
+  | "submitted"
+  | "received"
+  | "runtime_starting"
+  | "runtime_ready"
+  | "request_submitted"
+  | "awaiting_first_token"
+  | "streaming"
+  | "completed"
+  | "failed"
+
+export type SynapseAgentPhaseStatus = "in-progress" | "done" | "failed"
+
 export type SynapseAgentTimelineKind =
   | "message"
   | "thinking"
@@ -66,6 +79,7 @@ export type SynapseAgentTimelineKind =
   | "permissionRequest"
   | "error"
   | "result"
+  | "phase"
 
 interface SynapseAgentTimelineBase {
   readonly id: string
@@ -128,6 +142,16 @@ export interface SynapseAgentResultTimelineItem extends SynapseAgentTimelineBase
   }
 }
 
+export interface SynapseAgentPhaseTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "phase"
+  readonly runId: string
+  readonly phase: SynapseAgentPhaseValue
+  readonly status: SynapseAgentPhaseStatus
+  readonly startedAt: string
+  readonly completedAt?: string
+  readonly errorMessage?: string
+}
+
 export type SynapseAgentTimelineItem =
   | SynapseAgentMessageTimelineItem
   | SynapseAgentThinkingTimelineItem
@@ -136,6 +160,7 @@ export type SynapseAgentTimelineItem =
   | SynapseAgentPermissionRequestTimelineItem
   | SynapseAgentErrorTimelineItem
   | SynapseAgentResultTimelineItem
+  | SynapseAgentPhaseTimelineItem
 
 export interface SynapseAgentAvailability {
   readonly agentType: string

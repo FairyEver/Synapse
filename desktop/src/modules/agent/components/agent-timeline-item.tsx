@@ -62,6 +62,11 @@ function AgentTimelineItem({
       )
     case "result":
       return null
+    case "phase":
+      // Phase rows render through AgentPhaseRow inside AgentTimeline; this
+      // branch is unreachable in the current call path but keeps the switch
+      // exhaustive without coupling AgentTimelineItem to phase rendering.
+      return null
     default: {
       const exhaustive: never = item
       return exhaustive

@@ -69,6 +69,8 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
       return "错误"
     case "result":
       return "结果"
+    case "phase":
+      return "阶段"
     default: {
       const exhaustive: never = entry
       return exhaustive
@@ -90,6 +92,8 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       return entry.toolInput ? `${entry.toolName}\n${entry.toolInput}` : entry.toolName
     case "error":
       return entry.message
+    case "phase":
+      return entry.errorMessage ?? entry.phase
     default: {
       const exhaustive: never = entry
       return exhaustive
