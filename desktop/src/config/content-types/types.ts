@@ -6,6 +6,7 @@ export type ContentTypeCapabilities = {
   canInstallToEditor: boolean
   canCopyContent: boolean
   canDownload: boolean
+  canRunAsAgent: boolean
 }
 
 export type ContentDownloadSpec = {

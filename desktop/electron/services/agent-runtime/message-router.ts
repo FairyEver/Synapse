@@ -304,17 +304,30 @@ export class MessageRouter {
       while (state.queue.length > 0) {
         const turn = state.queue.shift()
         if (!turn) continue
+        const ac = new AbortController()
+        state.turnAbortController = ac
         try {
           const result = await this.processTurn(state, turn.message, turn.conversationId)
-          turn.resolve(result)
+          if (ac.signal.aborted) {
+            turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
+          } else {
+            turn.resolve(result)
+          }
         } catch (error) {
-          const messageText = error instanceof Error ? error.message : String(error)
-          this.deps.logger?.warn("AgentRuntime queued turn failed.", {
-            error: messageText,
-            projectId: this.deps.projectId,
-            sessionKey: turn.message.sessionKey,
-          })
-          turn.resolve(this.finishWithError(turn.message, turn.conversationId, messageText))
+          if (ac.signal.aborted) {
+            turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
+          } else {
+            const messageText = error instanceof Error ? error.message : String(error)
+            this.deps.logger?.warn("AgentRuntime queued turn failed.", {
+              error: messageText,
+              projectId: this.deps.projectId,
+              sessionKey: turn.message.sessionKey,
+            })
+            turn.resolve(this.finishWithError(turn.message, turn.conversationId, messageText))
+          }
+        } finally {
+          state.turnAbortController = undefined
+          this.clearCancelState(state)
         }
       }
     } finally {
@@ -369,7 +382,7 @@ export class MessageRouter {
           })
         }
       }
-      return this.processExecTurn(message, conversation, adapter, workDir)
+      return this.processExecTurn(message, conversation, adapter, workDir, state.turnAbortController?.signal)
     } finally {
       state.activeTurns = Math.max(0, state.activeTurns - 1)
       state.lastActivity = Date.now()
@@ -647,6 +660,7 @@ export class MessageRouter {
     conversation: ConversationEntryV1,
     adapter: AgentAdapter,
     workDir: string,
+    abortSignal?: AbortSignal,
   ): Promise<AgentRuntimeTurnResult> {
     const threadId = reusableAgentSessionId(conversation, adapter.agentType)
     const streamedEvents = new WeakSet<AgentEvent>()
@@ -658,6 +672,7 @@ export class MessageRouter {
       sessionEnv: this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey),
       processIsolation: await this.callbacks.resolveProcessIsolation(message),
       actor: { kind: "user" },
+      abortSignal,
       onEvent: (event) => {
         streamedEvents.add(event)
         this.emitEvent(message, conversation.id, event)
@@ -865,6 +880,32 @@ export class MessageRouter {
       this.emitConversationUpdated(saved)
     }
     return saved
+  }
+
+  buildCancelledResult(
+    message: AgentMessage,
+    conversationIdValue: string,
+  ): AgentRuntimeTurnResult {
+    const cancelEvent: AgentEvent = {
+      type: "result",
+      content: "",
+      done: true,
+      metadata: { cancelled: true },
+    }
+    this.emitEvent(message, conversationIdValue, cancelEvent)
+    return {
+      conversationId: conversationIdValue,
+      events: [cancelEvent],
+      resultText: "",
+      error: "cancelled",
+    }
+  }
+
+  clearCancelState(state: RuntimeSessionState): void {
+    if (state.cancelState?.escalationTimer) {
+      clearTimeout(state.cancelState.escalationTimer)
+    }
+    state.cancelState = undefined
   }
 
   finishWithError(

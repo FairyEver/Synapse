@@ -97,6 +97,7 @@ export interface AgentResultMetadata {
   readonly effort?: string
   readonly contextRemainingPercent?: number
   readonly workDir?: string
+  readonly cancelled?: boolean
 }
 
 export interface AgentResultEvent extends AgentEventBase {
@@ -129,6 +130,7 @@ export interface AgentExecutionContext {
   readonly processIsolation?: ControlledProcessIsolationOptions
   readonly actor: ActorIdentity
   readonly modeOverride?: string
+  readonly abortSignal?: AbortSignal
   onEvent?(event: AgentEvent): void
 }
 
@@ -189,6 +191,7 @@ export interface AgentLiveSession {
   currentSessionId(): string | undefined
   alive(): boolean
   close(): Promise<void>
+  cancelCurrentTurn?(): Promise<boolean>
 }
 
 export interface AgentRuntimeTurnResult {
@@ -214,6 +217,10 @@ export type ScheduledAgentSendInput = {
   readonly timeoutMs: number
   readonly lastConversationId?: string
   readonly abortSignal?: AbortSignal
+}
+
+export type CancelTurnResult = {
+  readonly status: "no-active-turn" | "graceful-pending" | "hard-killed"
 }
 
 export type ScheduledAgentSendResult = {

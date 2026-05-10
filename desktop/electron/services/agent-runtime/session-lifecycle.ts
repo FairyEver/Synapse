@@ -13,6 +13,11 @@ export interface RuntimeSessionState {
   lastActivity: number
   liveSession?: AgentLiveSession
   pending?: PendingPermissionState
+  turnAbortController?: AbortController
+  cancelState?: {
+    requestedAt: number
+    escalationTimer?: ReturnType<typeof setTimeout>
+  }
 }
 
 export interface QueuedTurn {

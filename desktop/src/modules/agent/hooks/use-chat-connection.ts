@@ -50,6 +50,8 @@ type ChatConnectionResult = {
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
+  readonly cancelTurn: () => Promise<void>
+  readonly forceKillTurn: () => Promise<void>
 }
 
 function useChatConnection(
@@ -544,6 +546,36 @@ function useChatConnection(
     }
   }, [dispatch, getDefaultProjectId, refreshPendingPermissions, state.pendingPermissions])
 
+  const cancelTurn = useCallback(async () => {
+    const projectId = selectedProjectIdRef.current ?? getDefaultProjectId()
+    const conversationId = selectedConversationIdRef.current
+    if (!projectId || !conversationId) return
+    const bridge = requireSynapseBridge()
+    dispatch({ type: "CANCEL_REQUESTED" })
+    try {
+      const result = await bridge.agent.cancelTurn({ projectId, conversationId })
+      if (result.status === "hard-killed") {
+        dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
+      }
+    } catch (rawError) {
+      logger.error("Agent cancel turn failed.", rawError)
+      dispatch({ type: "CANCEL_RESET" })
+    }
+  }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
+
+  const forceKillTurn = useCallback(async () => {
+    const projectId = selectedProjectIdRef.current ?? getDefaultProjectId()
+    const conversationId = selectedConversationIdRef.current
+    if (!projectId || !conversationId) return
+    const bridge = requireSynapseBridge()
+    try {
+      await bridge.agent.forceKillTurn({ projectId, conversationId })
+      dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
+    } catch (rawError) {
+      logger.error("Agent force kill turn failed.", rawError)
+    }
+  }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
+
   return {
     replaceTimeline,
     updateTimeline,
@@ -562,6 +594,8 @@ function useChatConnection(
     deleteSession,
     renameSession,
     respondPermission,
+    cancelTurn,
+    forceKillTurn,
   }
 }
 

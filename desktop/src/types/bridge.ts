@@ -17,6 +17,7 @@ import type {
   DatabaseWhereClause,
 } from "./database"
 import type {
+  SynapseAgentCancelTurnResult,
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
   SynapseAgentPublishedCommand,
@@ -449,6 +450,12 @@ export type SynapseBridge = {
     respondPermission: (
       args: { projectId: string; requestId: string; behavior: "allow" | "deny"; message?: string },
     ) => Promise<{ ok: true }>
+    cancelTurn: (
+      args: { projectId: string; conversationId: string },
+    ) => Promise<SynapseAgentCancelTurnResult>
+    forceKillTurn: (
+      args: { projectId: string; conversationId: string },
+    ) => Promise<SynapseAgentCancelTurnResult>
     getProviders: (projectId: string) => Promise<SynapseAgentProviderState>
     getRuntimeStatus: (
       request: { projectId?: string },

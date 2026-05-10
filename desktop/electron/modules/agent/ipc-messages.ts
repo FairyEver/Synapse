@@ -43,6 +43,14 @@ const respondPermissionRequestSchema = projectRequestSchema.extend({
   message: z.string().optional(),
 })
 
+const cancelTurnRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+})
+
+const cancelTurnResultSchema = z.object({
+  status: z.enum(["no-active-turn", "graceful-pending", "hard-killed"]),
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const sendResultSchema = z.object({
@@ -273,6 +281,26 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         actor: { kind: "user" },
       })
       return { ok: true }
+    },
+  },
+  cancelTurn: {
+    kind: "invoke",
+    channel: "synapse:agent:cancel-turn",
+    request: cancelTurnRequestSchema,
+    response: cancelTurnResultSchema,
+    handler: async (ctx, request: z.infer<typeof cancelTurnRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return agent.cancelTurn(request.conversationId)
+    },
+  },
+  forceKillTurn: {
+    kind: "invoke",
+    channel: "synapse:agent:force-kill-turn",
+    request: cancelTurnRequestSchema,
+    response: cancelTurnResultSchema,
+    handler: async (ctx, request: z.infer<typeof cancelTurnRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return agent.forceKillTurn(request.conversationId)
     },
   },
 }

@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useRef, useEffect, useState } from "react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUp, Square } from "lucide-react"
 import "./agent-composer.css"
 
 const SINGLE_LINE_HEIGHT = 28
@@ -8,16 +8,24 @@ function AgentComposer({
   draft,
   disabled,
   canSend,
+  sending,
+  cancelPhase,
   onDraftChange,
   onInputKeyDown,
   onSubmit,
+  onCancelTurn,
+  onForceKillTurn,
 }: {
   readonly draft: string
   readonly disabled: boolean
   readonly canSend: boolean
+  readonly sending: boolean
+  readonly cancelPhase: "idle" | "cancel_pending" | "cancelled"
   readonly onDraftChange: (value: string) => void
   readonly onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
   readonly onSubmit: (event: FormEvent) => void
+  readonly onCancelTurn: () => void
+  readonly onForceKillTurn: () => void
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [multiline, setMultiline] = useState(false)
@@ -47,14 +55,25 @@ function AgentComposer({
           disabled={disabled}
           rows={1}
         />
-        <button
-          type="submit"
-          className="agent-composer__send"
-          disabled={!canSend}
-          aria-label="发送"
-        >
-          <ArrowUp size={14} strokeWidth={2.5} />
-        </button>
+        {sending || cancelPhase === "cancel_pending" ? (
+          <button
+            type="button"
+            className="agent-composer__stop"
+            onClick={cancelPhase === "cancel_pending" ? onForceKillTurn : onCancelTurn}
+            aria-label={cancelPhase === "cancel_pending" ? "强制停止" : "停止"}
+          >
+            <Square size={12} strokeWidth={0} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="agent-composer__send"
+            disabled={!canSend}
+            aria-label="发送"
+          >
+            <ArrowUp size={14} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
     </form>
   )

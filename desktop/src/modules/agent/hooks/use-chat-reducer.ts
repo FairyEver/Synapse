@@ -24,6 +24,7 @@ type ChatState = {
   selectedSessionKey: string
   loading: boolean
   sendingConversationIds: Set<string>
+  cancelPhase: "idle" | "cancel_pending" | "cancelled"
   error: string | null
 }
 
@@ -49,6 +50,9 @@ type ChatAction =
   | { type: "REMOVE_SENDING_CONVERSATION"; conversationId: string }
   | { type: "SET_SENDING_CONVERSATION_IDS"; sendingConversationIds: Set<string> }
   | { type: "SET_ERROR"; error: string | null }
+  | { type: "SET_CANCEL_PHASE"; cancelPhase: ChatState["cancelPhase"] }
+  | { type: "CANCEL_REQUESTED" }
+  | { type: "CANCEL_RESET" }
   | { type: "RESET" }
 
 const initialChatState: ChatState = {
@@ -66,6 +70,7 @@ const initialChatState: ChatState = {
   selectedSessionKey: DEFAULT_LOCAL_SESSION_KEY,
   loading: false,
   sendingConversationIds: new Set(),
+  cancelPhase: "idle",
   error: null,
 }
 
@@ -119,6 +124,12 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, sendingConversationIds: action.sendingConversationIds }
     case "SET_ERROR":
       return { ...state, error: action.error }
+    case "SET_CANCEL_PHASE":
+      return { ...state, cancelPhase: action.cancelPhase }
+    case "CANCEL_REQUESTED":
+      return { ...state, cancelPhase: "cancel_pending" }
+    case "CANCEL_RESET":
+      return { ...state, cancelPhase: "idle" }
     case "RESET":
       return { ...initialChatState }
   }

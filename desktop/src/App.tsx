@@ -11,7 +11,14 @@ import { useAppConfig } from "@/app-shell/config"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
 import { createRendererLogger } from "@/app-shell/logging"
-import { publishActiveAppTab, requestOpenSettingsAbout, requestOpenSettingsStorage, subscribeOpenSettingsTab } from "@/app-shell/navigation"
+import {
+  type OpenAgentSessionPayload,
+  publishActiveAppTab,
+  requestOpenSettingsAbout,
+  requestOpenSettingsStorage,
+  subscribeOpenAgentSession,
+  subscribeOpenSettingsTab,
+} from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
@@ -84,6 +91,8 @@ function MainApp() {
   contentDialogStatesRef.current = contentDialogStates
   const [pendingContentOpenRequest, setPendingContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
+  const [pendingAgentSession, setPendingAgentSession] =
+    useState<OpenAgentSessionPayload | null>(null)
 
   // 检查是否需要显示空状态页面
   const hasNoRepositories = !hasRepositories
@@ -202,6 +211,13 @@ function MainApp() {
   useEffect(() => {
     return subscribeOpenSettingsTab(() => {
       setActiveTab("settings", "shortcut")
+    })
+  }, [setActiveTab])
+
+  useEffect(() => {
+    return subscribeOpenAgentSession((payload) => {
+      setActiveTab("agent", "notification")
+      setPendingAgentSession(payload)
     })
   }, [setActiveTab])
 
@@ -328,7 +344,10 @@ function MainApp() {
           })}
           {activeTab === "agent" ? (
             <ErrorBoundary fallbackTitle="Agent 模块出现问题">
-              <AgentModule />
+              <AgentModule
+                pendingAgentSession={pendingAgentSession}
+                onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
+              />
             </ErrorBoundary>
           ) : null}
           {activeTab === "database" ? (

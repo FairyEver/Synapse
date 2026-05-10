@@ -55,6 +55,7 @@ import type {
   AgentPermissionResponseRequest,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
+  CancelTurnResult,
   ScheduledAgentSendInput,
   ScheduledAgentSendResult,
 } from "./types"
@@ -285,6 +286,84 @@ export class AgentRuntimeService {
       clearTimeout(timeout)
       externalSignal?.removeEventListener("abort", onExternalAbort)
     }
+  }
+
+  async cancelTurn(conversationId: string): Promise<CancelTurnResult> {
+    const state = this.states.get(conversationId)
+    if (!state || !state.busy) {
+      return { status: "no-active-turn" }
+    }
+    if (state.cancelState) {
+      return { status: state.cancelState.escalationTimer ? "graceful-pending" : "hard-killed" }
+    }
+
+    state.cancelState = { requestedAt: Date.now() }
+
+    if (state.pending) {
+      this.pendingPermissions.delete(state.pending.requestId)
+      state.pending.resolve()
+      state.pending = undefined
+    }
+
+    const liveSession = state.liveSession
+    if (liveSession) {
+      let gracefulSent = false
+      if (liveSession.cancelCurrentTurn) {
+        try {
+          gracefulSent = await liveSession.cancelCurrentTurn()
+        } catch {
+          gracefulSent = false
+        }
+      }
+      if (!gracefulSent) {
+        state.turnAbortController?.abort("user-cancel")
+        await liveSession.close()
+        state.liveSession = undefined
+        return { status: "hard-killed" }
+      }
+      state.cancelState.escalationTimer = setTimeout(() => {
+        this.emitCancelEscalation(conversationId)
+      }, 5000)
+      return { status: "graceful-pending" }
+    }
+
+    if (state.turnAbortController) {
+      state.turnAbortController.abort("user-cancel")
+      return { status: "hard-killed" }
+    }
+
+    return { status: "no-active-turn" }
+  }
+
+  async forceKillTurn(conversationId: string): Promise<CancelTurnResult> {
+    const state = this.states.get(conversationId)
+    if (!state || !state.busy) {
+      return { status: "no-active-turn" }
+    }
+    this.messageRouter.clearCancelState(state)
+    state.turnAbortController?.abort("force-kill")
+    if (state.liveSession) {
+      await state.liveSession.close()
+      state.liveSession = undefined
+    }
+    return { status: "hard-killed" }
+  }
+
+  private emitCancelEscalation(conversationId: string): void {
+    this.deps.eventBus?.emit({
+      domain: "agent",
+      type: "phase.update",
+      payload: {
+        runId: conversationId,
+        projectId: this.deps.projectId,
+        sessionKey: "",
+        phase: "cancel_pending",
+        status: "in-progress",
+        startedAt: new Date().toISOString(),
+      },
+      scope: { sessionId: conversationId },
+      timestamp: new Date().toISOString(),
+    })
   }
 
   listPendingPermissions(): readonly AgentPendingPermission[] {

@@ -10,9 +10,13 @@ describe("AgentComposer", () => {
         draft="你好"
         disabled={false}
         canSend={true}
+        sending={false}
+        cancelPhase="idle"
         onDraftChange={vi.fn()}
         onInputKeyDown={vi.fn()}
         onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
       />,
     )
 
@@ -32,9 +36,13 @@ describe("AgentComposer", () => {
         draft=""
         disabled={false}
         canSend={false}
+        sending={false}
+        cancelPhase="idle"
         onDraftChange={vi.fn()}
         onInputKeyDown={vi.fn()}
         onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
       />,
     )
 

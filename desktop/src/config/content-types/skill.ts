@@ -12,6 +12,7 @@ export const skillContentTypeDefinition: ContentTypeDefinition = {
     canInstallToEditor: true,
     canCopyContent: true,
     canDownload: true,
+    canRunAsAgent: false,
   },
   download: {
     extension: ".zip",

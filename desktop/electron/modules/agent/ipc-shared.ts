@@ -90,6 +90,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
       effort: z.string().optional(),
       contextRemainingPercent: z.number().optional(),
       workDir: z.string().optional(),
+      cancelled: z.boolean().optional(),
     }).optional(),
   }),
   z.object({
@@ -106,6 +107,8 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
       "streaming",
       "completed",
       "failed",
+      "cancel_pending",
+      "cancelled",
     ]),
     status: z.enum(["in-progress", "done", "failed"]),
     startedAt: z.string(),
@@ -303,6 +306,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
       effort: z.string().optional(),
       contextRemainingPercent: z.number().optional(),
       workDir: z.string().optional(),
+      cancelled: z.boolean().optional(),
     }).optional(),
   }),
   z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
@@ -326,6 +330,8 @@ export const agentPhaseValueSchema = z.enum([
   "streaming",
   "completed",
   "failed",
+  "cancel_pending",
+  "cancelled",
 ])
 
 export const agentPhaseStatusSchema = z.enum(["in-progress", "done", "failed"])

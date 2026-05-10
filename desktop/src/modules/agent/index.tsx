@@ -21,6 +21,7 @@ import { AgentComposer } from "./components/agent-composer"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
+import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
 import type { SynapseAgentAvailability, SynapseAgentDisplayProfile } from "@/types/agent"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 
@@ -51,7 +52,12 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
   },
 }
 
-function AgentModule() {
+type AgentModuleProps = {
+  pendingAgentSession?: OpenAgentSessionPayload | null
+  onPendingAgentSessionConsumed?: () => void
+}
+
+function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: AgentModuleProps) {
   const activeRepository = useActiveRepository()
   const { config } = useAppConfig()
   const platform = getRendererPlatform()
@@ -97,6 +103,18 @@ function AgentModule() {
     // forcePin is stable; only fire when the active session identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.selectedProjectId, chat.selectedConversationId, chat.selectedSessionKey])
+
+  useEffect(() => {
+    if (!pendingAgentSession) return
+    const target = chat.sessions.find(
+      (s) => s.id === pendingAgentSession.conversationId
+        && s.projectId === pendingAgentSession.projectId,
+    )
+    if (target) {
+      void chat.selectSession(target)
+      onPendingAgentSessionConsumed?.()
+    }
+  }, [pendingAgentSession, chat.sessions, chat.selectSession, onPendingAgentSessionConsumed])
 
   const submitDraft = () => {
     const content = draft.trim()
@@ -286,9 +304,13 @@ function AgentModule() {
               draft={draft}
               disabled={!chat.activeProjectId}
               canSend={Boolean(draft.trim() && chat.activeProjectId)}
+              sending={chat.sending}
+              cancelPhase={chat.cancelPhase}
               onDraftChange={setDraft}
               onInputKeyDown={handleInputKeyDown}
               onSubmit={handleSubmit}
+              onCancelTurn={() => void chat.cancelTurn()}
+              onForceKillTurn={() => void chat.forceKillTurn()}
             />
           </>
         )}

@@ -12,6 +12,7 @@ export const promptContentTypeDefinition: ContentTypeDefinition = {
     canInstallToEditor: false,
     canCopyContent: true,
     canDownload: true,
+    canRunAsAgent: true,
   },
   download: {
     extension: ".md",

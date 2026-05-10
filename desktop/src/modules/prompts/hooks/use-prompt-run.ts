@@ -1,0 +1,81 @@
+import { useCallback, useState } from "react"
+import { toast } from "sonner"
+import { readContent } from "@/app-shell/content"
+import { createRendererLogger } from "@/app-shell/logging"
+import { requestOpenAgentSession } from "@/app-shell/navigation"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
+import type { SynapseContentMeta } from "@/types/content"
+
+const logger = createRendererLogger("prompts.run")
+
+type PromptRunArgs = {
+  item: SynapseContentMeta<"prompt">
+  projectId: string
+  agentType: string
+  navigate: boolean
+}
+
+function usePromptRun() {
+  const [isRunning, setIsRunning] = useState(false)
+
+  const run = useCallback(async (args: PromptRunArgs): Promise<boolean> => {
+    const { item, projectId, agentType, navigate } = args
+    setIsRunning(true)
+
+    try {
+      let content: string
+      try {
+        const file = await readContent("prompt", item.id)
+        content = file.content
+      } catch (error) {
+        logger.error("Prompt run: read content failed.", error)
+        toast.error("读取提示词失败")
+        return false
+      }
+
+      const bridge = requireSynapseBridge()
+      const now = new Date().toISOString()
+
+      let session: Awaited<ReturnType<typeof bridge.agent.createSession>>
+      try {
+        session = await bridge.agent.createSession({
+          projectId,
+          name: `${item.title} ${now}`,
+          agentType,
+        })
+      } catch (error) {
+        logger.error("Prompt run: create session failed.", error)
+        toast.error("创建会话失败")
+        return false
+      }
+
+      try {
+        await bridge.agent.send({
+          projectId,
+          sessionKey: session.sessionKey,
+          content,
+          clientSubmittedAt: now,
+        })
+      } catch (error) {
+        logger.error("Prompt run: send message failed.", error)
+        toast.error("发送失败")
+        return false
+      }
+
+      if (navigate) {
+        requestOpenAgentSession({ projectId, conversationId: session.id })
+      } else {
+        toast("已发送到 Agent")
+      }
+
+      return true
+    } finally {
+      setIsRunning(false)
+    }
+  }, [])
+
+  return { run, isRunning }
+}
+
+export { usePromptRun }
+export type { PromptRunArgs }

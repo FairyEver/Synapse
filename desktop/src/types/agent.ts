@@ -47,6 +47,7 @@ export type SynapseAgentEvent =
         effort?: string
         contextRemainingPercent?: number
         workDir?: string
+        cancelled?: boolean
       }
       agentSessionId?: string
       threadId?: string
@@ -68,6 +69,8 @@ export type SynapseAgentPhaseValue =
   | "streaming"
   | "completed"
   | "failed"
+  | "cancel_pending"
+  | "cancelled"
 
 export type SynapseAgentPhaseStatus = "in-progress" | "done" | "failed"
 
@@ -139,7 +142,12 @@ export interface SynapseAgentResultTimelineItem extends SynapseAgentTimelineBase
     readonly effort?: string
     readonly contextRemainingPercent?: number
     readonly workDir?: string
+    readonly cancelled?: boolean
   }
+}
+
+export type SynapseAgentCancelTurnResult = {
+  readonly status: "no-active-turn" | "graceful-pending" | "hard-killed"
 }
 
 export interface SynapseAgentPhaseTimelineItem extends SynapseAgentTimelineBase {

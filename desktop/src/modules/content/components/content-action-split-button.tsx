@@ -5,6 +5,7 @@ import {
   Download,
   LoaderCircle,
   PackagePlus,
+  Play,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -18,8 +19,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getContentTypeDefinition } from "@/config/content-types"
+import { useAppConfig } from "@/app-shell/config"
 import { useContentDownloadActions } from "@/modules/content/hooks/use-content-download-actions"
 import type { ContentActionMenuSection } from "@/modules/content/hooks/use-content-download-actions"
+import { PromptRunDialog } from "@/modules/prompts/components/prompt-run-dialog"
 import type { SynapseContentMeta } from "@/types/content"
 
 type ContentActionSplitButtonProps = {
@@ -51,7 +54,12 @@ function ContentActionSplitButton({
     onInstallDialogOpenChange,
   })
 
+  const [runDialogOpen, setRunDialogOpen] = useState(false)
+  const { config } = useAppConfig()
+  const hasProjects = config.global.projects.length > 0
+
   const definition = getContentTypeDefinition(item.type)
+  const canRunAsAgent = definition.capabilities.canRunAsAgent
   const primaryAction = definition.listPrimaryAction ?? "download"
 
   const actionMenuSections = useMemo<ContentActionMenuSection[]>(() => {
@@ -75,6 +83,18 @@ function ContentActionSplitButton({
   return (
     <>
       <ButtonGroup>
+        {canRunAsAgent ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy || !hasProjects}
+            title={hasProjects ? undefined : "请先在设置中添加项目"}
+            onClick={() => setRunDialogOpen(true)}
+          >
+            <Play className="size-3" data-icon="inline-start" />
+            运行
+          </Button>
+        ) : null}
         {primaryAction === "copy" && canCopy ? (
           <Button
             variant="outline"
@@ -192,6 +212,13 @@ function ContentActionSplitButton({
       </ButtonGroup>
 
       {installDialog}
+      {canRunAsAgent ? (
+        <PromptRunDialog
+          open={runDialogOpen}
+          onOpenChange={setRunDialogOpen}
+          item={item.type === "prompt" ? (item as SynapseContentMeta<"prompt">) : null}
+        />
+      ) : null}
     </>
   )
 }

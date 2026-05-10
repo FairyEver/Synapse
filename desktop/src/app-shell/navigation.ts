@@ -2,6 +2,12 @@ const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
 const OPEN_SETTINGS_ABOUT_EVENT = "synapse:open-settings-about"
 const OPEN_SETTINGS_STORAGE_EVENT = "synapse:open-settings-storage"
 const APP_TAB_CHANGED_EVENT = "synapse:app-tab-changed"
+const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
+
+type OpenAgentSessionPayload = {
+  projectId: string
+  conversationId: string
+}
 let currentAppTab = "rule"
 
 function requestOpenSettingsTab(): void {
@@ -75,14 +81,36 @@ function subscribeOpenSettingsStorage(listener: () => void): () => void {
   }
 }
 
+function requestOpenAgentSession(payload: OpenAgentSessionPayload): void {
+  window.dispatchEvent(new CustomEvent(OPEN_AGENT_SESSION_EVENT, { detail: payload }))
+}
+
+function subscribeOpenAgentSession(
+  listener: (payload: OpenAgentSessionPayload) => void,
+): () => void {
+  const handleEvent = (event: Event) => {
+    listener((event as CustomEvent<OpenAgentSessionPayload>).detail)
+  }
+
+  window.addEventListener(OPEN_AGENT_SESSION_EVENT, handleEvent)
+
+  return () => {
+    window.removeEventListener(OPEN_AGENT_SESSION_EVENT, handleEvent)
+  }
+}
+
 export {
   publishActiveAppTab,
   readCurrentAppTab,
+  requestOpenAgentSession,
   requestOpenSettingsAbout,
   requestOpenSettingsStorage,
   requestOpenSettingsTab,
   subscribeActiveAppTab,
+  subscribeOpenAgentSession,
   subscribeOpenSettingsAbout,
   subscribeOpenSettingsStorage,
   subscribeOpenSettingsTab,
 }
+
+export type { OpenAgentSessionPayload }

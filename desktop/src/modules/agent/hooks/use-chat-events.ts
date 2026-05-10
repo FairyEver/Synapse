@@ -88,7 +88,16 @@ function useChatEvents(
           errorMessage: payload.errorMessage,
           eventTimestamp: domainEvent.timestamp,
         }))
-        if (payload.phase === "failed" || (payload.phase === "completed" && payload.status === "done")) {
+        if (payload.phase === "cancel_pending") {
+          dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancel_pending" })
+        }
+        if (payload.phase === "cancelled" || payload.phase === "failed" || (payload.phase === "completed" && payload.status === "done")) {
+          if (payload.phase === "cancelled") {
+            dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
+          }
+          if (payload.phase === "completed" || payload.phase === "failed") {
+            dispatch({ type: "CANCEL_RESET" })
+          }
           if (payload.conversationId) {
             dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
           }
