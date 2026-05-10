@@ -1,14 +1,18 @@
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { WorkflowList } from "./components/workflow-list"
 import { Plus } from "lucide-react"
 import "../../../workflow-nodes/register.main"
 
 export function WorkflowModule() {
+  const [listKey, setListKey] = useState(0)
+
   const handleCreate = async () => {
     const id = crypto.randomUUID()
     const now = Date.now()
     await window.synapse?.workflow.save({ id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [], nodes: [], edges: [] })
     await window.synapse?.workflow.openEditor(id)
+    setListKey((k) => k + 1)
   }
   return (
     <div className="flex flex-col h-full">
@@ -16,7 +20,7 @@ export function WorkflowModule() {
         <h2 className="text-sm font-semibold">工作流</h2>
         <Button size="sm" variant="outline" onClick={handleCreate}><Plus className="h-4 w-4 mr-1.5" />新建</Button>
       </div>
-      <div className="flex-1 overflow-auto"><WorkflowList /></div>
+      <div className="flex-1 overflow-auto"><WorkflowList key={listKey} /></div>
     </div>
   )
 }
