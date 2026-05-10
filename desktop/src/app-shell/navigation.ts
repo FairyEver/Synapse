@@ -7,6 +7,7 @@ const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
 type OpenAgentSessionPayload = {
   projectId: string
   conversationId: string
+  prompt?: string
 }
 let currentAppTab = "rule"
 

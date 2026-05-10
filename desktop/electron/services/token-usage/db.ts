@@ -43,8 +43,52 @@ function initSchema(database: DatabaseSync): void {
       UNIQUE(client, model_id, provider_id, date)
     )
   `)
+  migrateHourlySchema(database)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS usage_hourly (
+    CREATE TABLE IF NOT EXISTS scan_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `)
+}
+
+function migrateHourlySchema(database: DatabaseSync): void {
+  const tableExists = database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='usage_hourly'",
+  ).get()
+
+  if (!tableExists) {
+    database.exec(`
+      CREATE TABLE usage_hourly (
+        hour TEXT NOT NULL,
+        client TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        provider_id TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        message_count INTEGER NOT NULL DEFAULT 0,
+        turn_count INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0,
+        PRIMARY KEY (hour, client, model_id, provider_id)
+      )
+    `)
+    return
+  }
+
+  const pkColumns = database.prepare(
+    "SELECT name FROM pragma_table_info('usage_hourly') WHERE pk > 0 ORDER BY pk",
+  ).all() as { name: string }[]
+  const pkNames = pkColumns.map((r) => r.name)
+
+  if (pkNames.includes("provider_id")) return
+
+  database.exec("DROP TABLE usage_hourly")
+  database.exec("DELETE FROM file_fingerprints")
+  database.exec(`
+    CREATE TABLE usage_hourly (
       hour TEXT NOT NULL,
       client TEXT NOT NULL,
       model_id TEXT NOT NULL,
@@ -57,13 +101,7 @@ function initSchema(database: DatabaseSync): void {
       message_count INTEGER NOT NULL DEFAULT 0,
       turn_count INTEGER NOT NULL DEFAULT 0,
       cost_usd REAL NOT NULL DEFAULT 0,
-      PRIMARY KEY (hour, client, model_id)
-    )
-  `)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS scan_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
+      PRIMARY KEY (hour, client, model_id, provider_id)
     )
   `)
 }
@@ -130,7 +168,7 @@ export function upsertHourlyUsage(messages: UnifiedMessage[]): void {
     `INSERT INTO usage_hourly (hour, client, model_id, provider_id, input_tokens, output_tokens,
        cache_read_tokens, cache_write_tokens, reasoning_tokens, message_count, turn_count, cost_usd)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(hour, client, model_id) DO UPDATE SET
+     ON CONFLICT(hour, client, model_id, provider_id) DO UPDATE SET
        input_tokens = input_tokens + excluded.input_tokens,
        output_tokens = output_tokens + excluded.output_tokens,
        cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,

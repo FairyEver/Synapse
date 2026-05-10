@@ -111,10 +111,15 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         && s.projectId === pendingAgentSession.projectId,
     )
     if (target) {
-      void chat.selectSession(target)
+      const prompt = pendingAgentSession.prompt
+      void chat.selectSession(target).then(() => {
+        if (prompt) {
+          void chat.sendMessage(prompt)
+        }
+      })
       onPendingAgentSessionConsumed?.()
     }
-  }, [pendingAgentSession, chat.sessions, chat.selectSession, onPendingAgentSessionConsumed])
+  }, [pendingAgentSession, chat.sessions, chat.selectSession, chat.sendMessage, onPendingAgentSessionConsumed])
 
   const submitDraft = () => {
     const content = draft.trim()
@@ -205,6 +210,12 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       onCreateSession={(projectId, agentType) => void chat.createSession(projectId, agentType)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
+      onDeleteOthers={(keep) => {
+        const others = chat.sessions.filter(
+          (s) => s.projectId === keep.projectId && s.id !== keep.id,
+        )
+        for (const session of others) void chat.deleteSession(session)
+      }}
       onRename={(session, name) => void chat.renameSession(session, name)}
       onFollowFeishuChange={chat.setFollowFeishu}
     />

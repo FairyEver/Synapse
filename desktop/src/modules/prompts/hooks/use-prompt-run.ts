@@ -49,23 +49,19 @@ function usePromptRun() {
         return false
       }
 
-      try {
-        await bridge.agent.send({
+      if (navigate) {
+        requestOpenAgentSession({ projectId, conversationId: session.id, prompt: content })
+      } else {
+        toast("已发送到 Agent")
+        bridge.agent.send({
           projectId,
           sessionKey: session.sessionKey,
           content,
           clientSubmittedAt: now,
+        }).catch((error) => {
+          logger.error("Prompt run: send message failed.", error)
+          toast.error("发送失败")
         })
-      } catch (error) {
-        logger.error("Prompt run: send message failed.", error)
-        toast.error("发送失败")
-        return false
-      }
-
-      if (navigate) {
-        requestOpenAgentSession({ projectId, conversationId: session.id })
-      } else {
-        toast("已发送到 Agent")
       }
 
       return true

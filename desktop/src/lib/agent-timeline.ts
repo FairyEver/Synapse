@@ -156,6 +156,18 @@ export function appendAgentTimelineEvent(
     return [...current.slice(0, -1), { ...last, content: event.content, timestamp }]
   }
   if (item.kind === "result" && item.content.trim().length === 0) return [...current]
+  if (item.kind === "result") {
+    return [...current, {
+      id: item.id,
+      kind: "message" as const,
+      role: "assistant" as const,
+      content: item.content,
+      timestamp: item.timestamp,
+      agentType: item.agentType,
+      agentSessionId: item.agentSessionId,
+      threadId: item.threadId,
+    }]
+  }
   return [...current, item]
 }
 

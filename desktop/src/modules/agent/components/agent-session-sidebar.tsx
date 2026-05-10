@@ -37,6 +37,7 @@ type AgentSessionSidebarProps = {
   onCreateSession: (projectId: string, agentType: string) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
+  onDeleteOthers: (session: SynapseAgentSessionSummary) => void
   onRename: (session: SynapseAgentSessionSummary, name: string) => void
   onFollowFeishuChange: (follow: boolean) => void
 }
@@ -53,6 +54,7 @@ function AgentSessionSidebar({
   onCreateSession,
   onSelect,
   onDelete,
+  onDeleteOthers,
   onRename,
   onFollowFeishuChange,
 }: AgentSessionSidebarProps) {
@@ -103,6 +105,7 @@ function AgentSessionSidebar({
                 onCreateSession={(agentType) => onCreateSession(project.id, agentType)}
                 onSelect={onSelect}
                 onDelete={onDelete}
+                onDeleteOthers={onDeleteOthers}
                 onRename={onRename}
               />
             ))}

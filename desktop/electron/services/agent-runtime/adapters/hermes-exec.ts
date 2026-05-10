@@ -40,6 +40,7 @@ export class HermesExecAdapter implements AgentAdapter {
     const command = this.options.command ?? "hermes"
     const args = buildHermesExecArgs({
       mode: message.modeOverride ?? this.options.mode,
+      prompt: message.content,
     })
 
     const env = mergeEnv(this.options.env, context.sessionEnv)
@@ -56,7 +57,6 @@ export class HermesExecAdapter implements AgentAdapter {
         command,
         args,
         cwd: context.workDir,
-        stdin: message.content,
         env,
         envAllowlist,
         timeoutMs: this.options.timeoutMs ?? 30 * 60 * 1000,
@@ -92,14 +92,13 @@ export class HermesExecAdapter implements AgentAdapter {
   }
 }
 
-function buildHermesExecArgs(options: { mode?: string }): string[] {
-  const args = ["-z", "--quiet"]
+function buildHermesExecArgs(options: { mode?: string; prompt: string }): string[] {
+  const args = ["-z", options.prompt]
 
   if (options.mode === "yolo") {
     args.push("--yolo")
   }
 
-  args.push("-")
   return args
 }
 

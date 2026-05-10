@@ -102,4 +102,27 @@ describe("agent timeline conversion", () => {
     expect(third).toHaveLength(2)
     expect(third[1]).toEqual(expect.objectContaining({ kind: "toolCall", toolName: "Bash" }))
   })
+
+  it("promotes a standalone result event to a visible message item", () => {
+    const userMessage = [{
+      id: "user:1",
+      kind: "message" as const,
+      role: "user" as const,
+      content: "hello",
+      timestamp: "2026-05-10T00:00:00.000Z",
+    }]
+    const after = appendAgentTimelineEvent(userMessage, {
+      type: "result",
+      content: "hermes reply",
+      done: true,
+    }, "2026-05-10T00:00:01.000Z", "hermes")
+
+    expect(after).toHaveLength(2)
+    expect(after[1]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "hermes reply",
+      agentType: "hermes",
+    }))
+  })
 })

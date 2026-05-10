@@ -28,6 +28,7 @@ describe("AgentSessionSidebar", () => {
         onCreateSession={vi.fn()}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
+        onDeleteOthers={vi.fn()}
         onRename={vi.fn()}
         onFollowFeishuChange={vi.fn()}
       />,
