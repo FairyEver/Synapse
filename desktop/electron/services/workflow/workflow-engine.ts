@@ -37,6 +37,9 @@ export class WorkflowEngine {
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
     let overallFailed = false
+    const reachableNodes = new Set<string>(
+      def.nodes.filter((n) => !def.edges.some((e) => e.to === n.id)).map((n) => n.id)
+    )
 
     for (const nodeId of order) {
       if (this.abortSignal?.aborted) {
@@ -47,7 +50,9 @@ export class WorkflowEngine {
       const incomingEdges = def.edges.filter((e) => e.to === nodeId)
       const ancestors = incomingEdges.map((e) => e.from)
 
-      const shouldSkip = overallFailed && ancestors.length > 0
+      const shouldSkip =
+        (overallFailed && ancestors.length > 0) ||
+        (ancestors.length > 0 && !reachableNodes.has(nodeId))
       if (shouldSkip) {
         const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} } }
         nodeResults[nodeId] = res
@@ -79,8 +84,10 @@ export class WorkflowEngine {
           nodeOutputs[nodeId] = execResult.output
           emit({ type: "node:completed", nodeId, output: execResult.output })
           for (const e of def.edges.filter((e) => e.from === nodeId)) {
-            if (!execResult.activeBranch || e.branch === execResult.activeBranch)
+            if (!execResult.activeBranch || e.branch === execResult.activeBranch) {
+              reachableNodes.add(e.to)
               emit({ type: "edge:activated", from: e.from, to: e.to })
+            }
           }
         } else {
           overallFailed = true
