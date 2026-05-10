@@ -2,123 +2,79 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a visual workflow orchestration feature to Synapse that lets users chain Prompt nodes on a DAG canvas, with Switch branching and variable-based data flow.
+**Goal:** Add workflow orchestration to Synapse — users build multi-step Prompt chains on a visual canvas, configure Switch nodes for conditional branching, and execute them locally against any configured Agent.
 
-**Architecture:** Node type plugin system (self-contained folders) + DAG execution engine in Electron main process + React Flow canvas in independent editor windows. Edges = control flow only; data passes via variable references inside nodes.
+**Architecture:** Electron main-process `WorkflowEngine` executes a DAG of nodes; each node type is a self-contained plugin under `desktop/workflow-nodes/`. The engine pushes `WorkflowEvent`s through the EventBus to the renderer, which visualises execution on a `@xyflow/react` canvas opened in a dedicated BrowserWindow. Workflow definitions are stored in the Git content-repo (full-snapshot model); run history is stored locally under `<userData>/workflow-runs/`.
 
-**Tech Stack:** @xyflow/react, p-queue, Zod, Vitest, Electron BrowserWindow
-
----
-
-## File Structure
-
-```
-desktop/
-├── workflow-nodes/                    ← Node type plugins (cross-process)
-│   ├── types.ts                       Shared interfaces (NodeManifest, NodeExecutor, etc.)
-│   ├── registry.ts                    Node type registry
-│   ├── prompt/
-│   │   ├── manifest.ts                Prompt node metadata + ports
-│   │   ├── schema.ts                  Zod config schema
-│   │   ├── executor.main.ts           Main process execution (calls AgentRuntime)
-│   │   ├── card.tsx                   Canvas card component
-│   │   ├── panel.tsx                  Edit panel component
-│   │   └── index.ts
-│   └── switch/
-│       ├── manifest.ts                Switch node metadata + dynamic ports
-│       ├── schema.ts                  Zod config schema
-│       ├── executor.main.ts           Main process execution (AI branch decision)
-│       ├── card.tsx                   Canvas card component
-│       ├── panel.tsx                  Edit panel component
-│       └── index.ts
-│
-├── electron/
-│   ├── ipc/workflow-handlers.ts       IPC handler (CRUD + run + window mgmt)
-│   └── services/workflow/
-│       ├── workflow-engine.ts          DAG execution engine
-│       ├── workflow-service.ts         CRUD + Git full-snapshot storage
-│       ├── variable-resolver.ts        Variable resolution logic
-│       └── window-manager.ts           Editor window lifecycle
-│
-└── src/modules/workflow/               ← Renderer process
-    ├── index.tsx                        Main window Tab (list view)
-    ├── components/
-    │   ├── workflow-list.tsx            Workflow list
-    │   ├── workflow-card.tsx            List card item
-    │   └── run-params-dialog.tsx        Pre-run parameter form
-    ├── editor/
-    │   ├── editor-app.tsx              Editor root (independent window)
-    │   ├── canvas.tsx                  React Flow canvas wrapper
-    │   ├── toolbar.tsx                 Top toolbar
-    │   ├── node-palette.tsx            Left panel (drag to add)
-    │   └── execution-overlay.tsx       Runtime state visualization
-    └── hooks/
-        ├── use-workflow-list.ts         List data hook
-        ├── use-workflow-run.ts          Execution control hook
-        └── use-workflow-events.ts       Real-time event listener hook
-```
+**Tech Stack:** TypeScript · Electron · React · @xyflow/react · Zod · p-queue · shadcn/ui + Radix + Tailwind · Vitest
 
 ---
 
-## Task 1: Shared Types & Node Plugin Interfaces
+## File Map
+
+### `desktop/workflow-nodes/` (cross-process shared)
+- `types.ts` — NodeManifest, NodeExecutor, NodeExecutionInput/Result, WorkflowRuntimeContext, AgentSendDeps
+- `registry.ts` — NodeTypeRegistry (register/getManifest/getExecutor/listTypes)
+- `schemas/variable-binding.ts` — VariableBinding + VariableSource Zod schemas (with regex)
+- `prompt/{manifest,schema,executor.main,card,panel,index}.ts(x)`
+- `switch/{manifest,schema,executor.main,card,panel,index}.ts(x)`
+
+### `desktop/electron/services/workflow/`
+- `variable-resolver.ts` — resolves `{{$name}}` bindings at runtime
+- `workflow-validator.ts` — DAG cycle check, variable path-reachability, config schema validation
+- `workflow-service.ts` — CRUD + Git full-snapshot version management
+- `run-snapshot-service.ts` — local run history (max 20 per workflow)
+- `workflow-engine.ts` — DAG executor, WorkflowEvent emitter, AbortController management
+- `window-manager.ts` — editor BrowserWindow lifecycle
+
+### `desktop/electron/modules/workflow/ipc.ts` — IpcModule (13 channels)
+
+### Modified files
+| File | Change |
+|---|---|
+| `desktop/electron/runtime/event-bus/types.ts` | Add `"workflow"` to EventDomain |
+| `desktop/electron/bootstrap/descriptors.ts` | Add 5 workflow service descriptors |
+| `desktop/electron/bootstrap/registry.ts` | Register workflow descriptors |
+| `desktop/electron/bootstrap/ipc-registry.ts` | Register workflowIpcModule |
+| `desktop/electron/preload.ts` | Add `workflow` namespace to bridge |
+| `desktop/src/types/content.ts` | Add `"workflow"` to SynapseContentType |
+| `desktop/src/types/bridge.ts` | Add WorkflowBridge types |
+| `desktop/vitest.config.ts` | Add `workflow-nodes` to test include |
+
+### `desktop/src/types/workflow.ts` — all renderer-facing workflow types
+
+### `desktop/src/modules/workflow/`
+- `index.tsx`, `components/{workflow-list,workflow-card,run-params-dialog}.tsx`
+- `hooks/{use-workflow-list,use-workflow-run,use-workflow-events,use-upstream-nodes}.ts`
+- `editor/{editor-app,canvas,toolbar,node-palette,node-wrappers,execution-overlay}.tsx`
+
+---
+
+## Task 1: Data model types + vitest config
 
 **Files:**
-- Create: `workflow-nodes/types.ts`
-- Create: `workflow-nodes/registry.ts`
-- Test: `workflow-nodes/__tests__/registry.test.ts`
+- Create: `desktop/workflow-nodes/types.ts`
+- Create: `desktop/src/types/workflow.ts`
+- Modify: `desktop/vitest.config.ts`
 
-- [ ] **Step 1: Create shared type definitions**
+- [ ] **Step 1: Add `workflow-nodes` to vitest include**
+
+In `desktop/vitest.config.ts`, add to the `include` array:
+```
+"workflow-nodes/**/__tests__/**/*.{test,spec}.ts",
+```
+
+- [ ] **Step 2: Create `desktop/workflow-nodes/types.ts`**
 
 ```typescript
-// workflow-nodes/types.ts
-import type { z } from "zod"
+import type { ZodType } from "zod"
 
-// --- Data Model ---
-
-export interface WorkflowDefinition {
-  id: string
+export interface PortDefinition { id: string; label: string }
+export interface ConfigFieldDescriptor {
   name: string
-  version: string
-  params: WorkflowParam[]
-  nodes: WorkflowNode[]
-  edges: WorkflowEdge[]
-}
-
-export interface WorkflowParam {
-  name: string
-  type: "text" | "number"
-  default: string | number | null
-  description?: string
-}
-
-export interface WorkflowNode {
-  id: string
-  type: string
-  position: { x: number; y: number }
-  config: Record<string, unknown>
-}
-
-export interface WorkflowEdge {
-  from: string
-  to: string
-  branch?: string
-}
-
-export interface VariableBinding {
-  name: string
-  source: VariableSource
-}
-
-export type VariableSource =
-  | { type: "param"; param: string }
-  | { type: "node_output"; node: string }
-  | { type: "static"; value: string }
-
-// --- Node Plugin Interfaces ---
-
-export interface PortDefinition {
-  id: string
+  kind: "text" | "select" | "variable-binding-list" | "branch-list"
   label: string
+  optional?: boolean
 }
 
 export interface NodeManifest<TConfig = unknown> {
@@ -126,19 +82,33 @@ export interface NodeManifest<TConfig = unknown> {
   title: string
   icon: string
   color: string
-  ports: {
-    inputs: PortDefinition[]
-    outputs: PortDefinition[] | "dynamic"
-  }
+  ports: { inputs: PortDefinition[]; outputs: PortDefinition[] | "dynamic" }
   resolveDynamicPorts?: (config: TConfig) => PortDefinition[]
   cardSummary: (config: TConfig) => { title: string; subtitle: string }
-  configSchema: z.ZodType<TConfig>
+  configFields: readonly ConfigFieldDescriptor[]
+  configSchema: ZodType<TConfig>
 }
 
-export interface NodeExecutionInput<TConfig = unknown> {
+export interface WorkflowRuntimeContext {
+  projectId: string
+  runId: string
+  abortSignal: AbortSignal
+}
+
+export interface AgentSendDeps {
+  sendToAgent: (input: { agent: string; prompt: string; abortSignal: AbortSignal }) => Promise<{
+    status: "success" | "failed"
+    response: string
+    error?: string
+    durationMs: number
+  }>
+}
+
+export interface NodeExecutionInput<TConfig> {
   config: TConfig
   resolvedVariables: Record<string, string>
   context: WorkflowRuntimeContext
+  agentDeps: AgentSendDeps
 }
 
 export interface NodeExecutionResult {
@@ -153,3133 +123,2270 @@ export interface NodeExecutionResult {
 export interface NodeExecutor<TConfig = unknown> {
   execute(input: NodeExecutionInput<TConfig>): Promise<NodeExecutionResult>
 }
+```
 
-export interface WorkflowRuntimeContext {
-  runId: string
-  workflowId: string
-  abortSignal: AbortSignal
-  logger: { info(msg: string): void; error(msg: string, err?: unknown): void }
+- [ ] **Step 3: Create `desktop/src/types/workflow.ts`**
+
+```typescript
+export interface WorkflowParam {
+  name: string; type: "text" | "number"; default: string | number | null; description?: string
 }
-
-// --- Engine Events ---
-
-export type WorkflowEvent =
-  | { type: "workflow:started"; runId: string }
-  | { type: "node:started"; nodeId: string }
-  | { type: "node:completed"; nodeId: string; output: string }
-  | { type: "node:failed"; nodeId: string; error: string }
-  | { type: "edge:activated"; from: string; to: string }
-  | { type: "workflow:completed"; result: WorkflowRunResult }
-  | { type: "workflow:failed"; error: string }
-  | { type: "workflow:cancelled" }
-
+export interface WorkflowNode {
+  id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown>
+}
+export interface WorkflowEdge { id: string; from: string; to: string; branch?: string }
+export interface WorkflowDefinition {
+  id: string; name: string; description?: string; version: string
+  createdAt: number; updatedAt: number
+  params: WorkflowParam[]; nodes: WorkflowNode[]; edges: WorkflowEdge[]
+}
+export interface WorkflowMeta {
+  id: string; name: string; description?: string; version: string
+  nodeCount: number; createdAt: number; updatedAt: number
+}
+export interface NodeRunResult {
+  nodeId: string
+  status: "pending" | "running" | "success" | "failed" | "skipped"
+  input: { variables: Record<string, string>; prompt?: string }
+  output?: string; outputs?: Record<string, unknown>; activeBranch?: string; error?: string
+  startedAt?: number; endedAt?: number; durationMs?: number
+}
 export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled"
   nodeResults: Record<string, NodeRunResult>
   durationMs: number
 }
-
-export interface NodeRunResult {
-  status: "success" | "failed" | "skipped"
-  output?: string
-  error?: string
-  durationMs: number
+export type WorkflowEvent =
+  | { type: "workflow:started"; runId: string }
+  | { type: "node:started"; nodeId: string }
+  | { type: "node:completed"; nodeId: string; output: unknown }
+  | { type: "node:failed"; nodeId: string; error: string }
+  | { type: "node:skipped"; nodeId: string }
+  | { type: "edge:activated"; from: string; to: string }
+  | { type: "workflow:completed"; result: WorkflowRunResult }
+  | { type: "workflow:failed"; error: string }
+  | { type: "workflow:cancelled" }
+export interface ValidationError {
+  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch"
+  nodeId?: string; edgeId?: string; message: string
 }
-
-// --- Node Registration ---
-
-export interface RegisteredNodeType<TConfig = unknown> {
-  manifest: NodeManifest<TConfig>
-  executor: NodeExecutor<TConfig>
-}
-```
-
-- [ ] **Step 2: Create node type registry**
-
-```typescript
-// workflow-nodes/registry.ts
-import type { RegisteredNodeType } from "./types"
-
-export class WorkflowNodeRegistry {
-  private readonly nodes = new Map<string, RegisteredNodeType>()
-
-  register(node: RegisteredNodeType): void {
-    const { type } = node.manifest
-    if (this.nodes.has(type)) {
-      throw new Error(`Workflow node type "${type}" is already registered`)
-    }
-    this.nodes.set(type, node)
-  }
-
-  get(type: string): RegisteredNodeType {
-    const node = this.nodes.get(type)
-    if (!node) {
-      throw new Error(`Workflow node type "${type}" is not registered`)
-    }
-    return node
-  }
-
-  list(): readonly RegisteredNodeType[] {
-    return [...this.nodes.values()]
-  }
-
-  has(type: string): boolean {
-    return this.nodes.has(type)
-  }
+export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes"; nodeId?: string; message: string }
+export interface ValidationResult { valid: boolean; errors: ValidationError[]; warnings: ValidationWarning[] }
+export interface WorkflowRunSnapshot {
+  runId: string; workflowId: string; version: string; startedAt: number; endedAt?: number
+  status: "completed" | "failed" | "cancelled"; params: Record<string, unknown>
+  nodeResults: Record<string, NodeRunResult>
 }
 ```
 
-- [ ] **Step 3: Write registry tests**
+- [ ] **Step 4: Verify TypeScript**
 
-```typescript
-// workflow-nodes/__tests__/registry.test.ts
-import { describe, expect, it } from "vitest"
-import { z } from "zod"
-import { WorkflowNodeRegistry } from "../registry"
-import type { RegisteredNodeType } from "../types"
-
-const testSchema = z.object({ prompt: z.string() })
-
-const testNode: RegisteredNodeType<z.infer<typeof testSchema>> = {
-  manifest: {
-    type: "test",
-    title: "Test Node",
-    icon: "circle",
-    color: "blue",
-    ports: {
-      inputs: [{ id: "in", label: "Input" }],
-      outputs: [{ id: "out", label: "Output" }],
-    },
-    cardSummary: (config) => ({ title: "Test", subtitle: config.prompt.slice(0, 20) }),
-    configSchema: testSchema,
-  },
-  executor: {
-    execute: async () => ({ status: "success", output: "ok", durationMs: 1 }),
-  },
-}
-
-describe("WorkflowNodeRegistry", () => {
-  it("registers and retrieves node types", () => {
-    const registry = new WorkflowNodeRegistry()
-    registry.register(testNode)
-
-    expect(registry.get("test")).toBe(testNode)
-    expect(registry.has("test")).toBe(true)
-    expect(registry.list()).toHaveLength(1)
-  })
-
-  it("rejects duplicate type registration", () => {
-    const registry = new WorkflowNodeRegistry()
-    registry.register(testNode)
-
-    expect(() => registry.register(testNode)).toThrow(/already registered/)
-  })
-
-  it("throws for unknown type", () => {
-    const registry = new WorkflowNodeRegistry()
-
-    expect(() => registry.get("missing")).toThrow(/not registered/)
-    expect(registry.has("missing")).toBe(false)
-  })
-})
-```
-
-- [ ] **Step 4: Run tests**
-
-Run: `pnpm vitest run workflow-nodes/__tests__/registry.test.ts`
-Expected: 3 tests PASS
+Run: `pnpm --filter @synapse/desktop run typecheck`  
+Expected: exit 0
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add workflow-nodes/
-git commit -m "feat(workflow): add shared types and node registry"
+git add desktop/workflow-nodes/types.ts desktop/src/types/workflow.ts desktop/vitest.config.ts
+git commit -m "feat(workflow): shared types + vitest config"
 ```
 
 ---
 
-## Task 2: Variable Resolver
+## Task 2: VariableBinding Zod schema
 
 **Files:**
-- Create: `electron/services/workflow/variable-resolver.ts`
-- Test: `electron/services/workflow/__tests__/variable-resolver.test.ts`
+- Create: `desktop/workflow-nodes/schemas/variable-binding.ts`
+- Create: `desktop/workflow-nodes/schemas/__tests__/variable-binding.test.ts`
 
-- [ ] **Step 1: Write variable resolver tests**
+- [ ] **Step 1: Write failing tests**
 
 ```typescript
-// electron/services/workflow/__tests__/variable-resolver.test.ts
+// desktop/workflow-nodes/schemas/__tests__/variable-binding.test.ts
 import { describe, expect, it } from "vitest"
-import { resolveVariables } from "../variable-resolver"
-import type { VariableBinding } from "../../../../workflow-nodes/types"
+import { variableBindingSchema } from "../variable-binding"
+
+describe("variableBindingSchema", () => {
+  it("accepts valid names: letter, underscore prefix", () => {
+    expect(variableBindingSchema.safeParse({ name: "myVar", source: { type: "static", value: "x" } }).success).toBe(true)
+    expect(variableBindingSchema.safeParse({ name: "_private", source: { type: "static", value: "x" } }).success).toBe(true)
+  })
+  it("rejects names starting with digit or containing hyphens", () => {
+    expect(variableBindingSchema.safeParse({ name: "1bad", source: { type: "static", value: "x" } }).success).toBe(false)
+    expect(variableBindingSchema.safeParse({ name: "bad-name", source: { type: "static", value: "x" } }).success).toBe(false)
+  })
+  it("accepts all source types", () => {
+    expect(variableBindingSchema.safeParse({ name: "a", source: { type: "param", param: "p" } }).success).toBe(true)
+    expect(variableBindingSchema.safeParse({ name: "a", source: { type: "node_output", node: "n1" } }).success).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/schemas/__tests__/variable-binding.test.ts`  
+Expected: FAIL — module not found
+
+- [ ] **Step 3: Implement schema**
+
+```typescript
+// desktop/workflow-nodes/schemas/variable-binding.ts
+import { z } from "zod"
+
+const VARIABLE_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+
+export const variableSourceSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("param"), param: z.string().min(1) }),
+  z.object({ type: z.literal("node_output"), node: z.string().min(1) }),
+  z.object({ type: z.literal("static"), value: z.string() }),
+])
+
+export const variableBindingSchema = z.object({
+  name: z.string().regex(VARIABLE_NAME_RE, "Variable name must match /^[a-zA-Z_][a-zA-Z0-9_]*/"),
+  source: variableSourceSchema,
+})
+
+export type VariableBinding = z.infer<typeof variableBindingSchema>
+export type VariableSource = z.infer<typeof variableSourceSchema>
+```
+
+- [ ] **Step 4: Run tests to pass**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/schemas/__tests__/variable-binding.test.ts`  
+Expected: PASS — 3 tests
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/workflow-nodes/schemas/
+git commit -m "feat(workflow): VariableBinding Zod schema with name/branch regex"
+```
+
+---
+
+## Task 3: Node type registry
+
+**Files:**
+- Create: `desktop/workflow-nodes/registry.ts`
+- Create: `desktop/workflow-nodes/__tests__/registry.test.ts`
+
+- [ ] **Step 1: Write failing test**
+
+```typescript
+// desktop/workflow-nodes/__tests__/registry.test.ts
+import { describe, expect, it } from "vitest"
+import { NodeTypeRegistry } from "../registry"
+import { z } from "zod"
+import type { NodeManifest, NodeExecutor } from "../types"
+
+const stub: NodeManifest<{ t: string }> = {
+  type: "stub", title: "Stub", icon: "square", color: "bg-muted",
+  ports: { inputs: [{ id: "in", label: "In" }], outputs: [{ id: "out", label: "Out" }] },
+  cardSummary: (c) => ({ title: c.t, subtitle: "" }),
+  configFields: [],
+  configSchema: z.object({ t: z.string() }),
+}
+const exec: NodeExecutor<{ t: string }> = { execute: async () => ({ status: "success", output: "ok", durationMs: 0 }) }
+
+describe("NodeTypeRegistry", () => {
+  it("registers and retrieves manifest and executor", () => {
+    const r = new NodeTypeRegistry()
+    r.register(stub, exec)
+    expect(r.getManifest("stub")).toBe(stub)
+    expect(r.getExecutor("stub")).toBe(exec)
+    expect(r.listTypes()).toEqual(["stub"])
+  })
+  it("throws for unknown type", () => {
+    expect(() => new NodeTypeRegistry().getManifest("nope")).toThrow("Unknown node type: nope")
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/__tests__/registry.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Implement registry**
+
+```typescript
+// desktop/workflow-nodes/registry.ts
+import type { NodeManifest, NodeExecutor } from "./types"
+
+export class NodeTypeRegistry {
+  private readonly manifests = new Map<string, NodeManifest>()
+  private readonly executors = new Map<string, NodeExecutor>()
+
+  register<T>(manifest: NodeManifest<T>, executor: NodeExecutor<T>): void {
+    this.manifests.set(manifest.type, manifest as NodeManifest)
+    this.executors.set(manifest.type, executor as NodeExecutor)
+  }
+  getManifest(type: string): NodeManifest {
+    const m = this.manifests.get(type)
+    if (!m) throw new Error(`Unknown node type: ${type}`)
+    return m
+  }
+  getExecutor(type: string): NodeExecutor {
+    const e = this.executors.get(type)
+    if (!e) throw new Error(`Unknown node type: ${type}`)
+    return e
+  }
+  listTypes(): string[] { return [...this.manifests.keys()] }
+}
+
+export const nodeTypeRegistry = new NodeTypeRegistry()
+```
+
+- [ ] **Step 4: Run tests to pass**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/__tests__/registry.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/workflow-nodes/registry.ts desktop/workflow-nodes/__tests__/registry.test.ts
+git commit -m "feat(workflow): NodeTypeRegistry"
+```
+
+---
+
+## Task 4: Prompt node
+
+**Files:**
+- Create: `desktop/workflow-nodes/prompt/schema.ts`
+- Create: `desktop/workflow-nodes/prompt/manifest.ts`
+- Create: `desktop/workflow-nodes/prompt/executor.main.ts`
+- Create: `desktop/workflow-nodes/prompt/__tests__/executor.test.ts`
+- Create: `desktop/workflow-nodes/prompt/index.ts`
+
+- [ ] **Step 1: Write executor tests**
+
+```typescript
+// desktop/workflow-nodes/prompt/__tests__/executor.test.ts
+import { describe, expect, it, vi } from "vitest"
+import { promptNodeExecutor } from "../executor.main"
+
+const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
+const deps = (response: string) => ({
+  sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response, durationMs: 5 }),
+})
+
+describe("promptNodeExecutor", () => {
+  it("interpolates {{$name}} in prompt before sending", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "ok", durationMs: 5 })
+    await promptNodeExecutor.execute({
+      config: { agent: "claude-code", variables: [], prompt: "Hello {{$name}}" },
+      resolvedVariables: { name: "world" },
+      context: ctx, agentDeps: { sendToAgent },
+    })
+    expect((sendToAgent.mock.calls[0][0] as { prompt: string }).prompt).toBe("Hello world")
+  })
+  it("returns success with agent response as output", async () => {
+    const r = await promptNodeExecutor.execute({
+      config: { agent: "claude-code", variables: [], prompt: "test" },
+      resolvedVariables: {}, context: ctx, agentDeps: deps("answer"),
+    })
+    expect(r.status).toBe("success")
+    expect(r.output).toBe("answer")
+  })
+  it("returns failed when agent fails", async () => {
+    const r = await promptNodeExecutor.execute({
+      config: { agent: "claude-code", variables: [], prompt: "test" },
+      resolvedVariables: {}, context: ctx,
+      agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: "timeout", durationMs: 100 }) },
+    })
+    expect(r.status).toBe("failed")
+    expect(r.error).toBe("timeout")
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/prompt/__tests__/executor.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Create `prompt/schema.ts`**
+
+```typescript
+import { z } from "zod"
+import { variableBindingSchema } from "../schemas/variable-binding"
+
+export const promptNodeConfigSchema = z.object({
+  agent: z.string().min(1),
+  variables: z.array(variableBindingSchema),
+  prompt: z.string(),
+})
+export type PromptNodeConfig = z.infer<typeof promptNodeConfigSchema>
+```
+
+- [ ] **Step 4: Create `prompt/executor.main.ts`**
+
+```typescript
+import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
+import type { PromptNodeConfig } from "./schema"
+
+function interpolate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{\$([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (_, n) => vars[n] ?? `{{$${n}}}`)
+}
+
+export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
+  async execute(input: NodeExecutionInput<PromptNodeConfig>): Promise<NodeExecutionResult> {
+    const start = Date.now()
+    const prompt = interpolate(input.config.prompt, input.resolvedVariables)
+    const result = await input.agentDeps.sendToAgent({ agent: input.config.agent, prompt, abortSignal: input.context.abortSignal })
+    const durationMs = Date.now() - start
+    if (result.status === "failed") return { status: "failed", output: "", error: result.error, durationMs }
+    return { status: "success", output: result.response, durationMs }
+  },
+}
+```
+
+- [ ] **Step 5: Create `prompt/manifest.ts`**
+
+```typescript
+import type { NodeManifest } from "../types"
+import type { PromptNodeConfig } from "./schema"
+import { promptNodeConfigSchema } from "./schema"
+
+export const promptNodeManifest: NodeManifest<PromptNodeConfig> = {
+  type: "prompt", title: "Prompt", icon: "MessageSquare", color: "bg-blue-500/10",
+  ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
+  cardSummary: (c) => ({ title: c.agent || "未选择 Agent", subtitle: c.prompt.slice(0, 60) || "无 Prompt" }),
+  configFields: [
+    { name: "agent", kind: "select", label: "Agent" },
+    { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
+    { name: "prompt", kind: "text", label: "Prompt 模板" },
+  ],
+  configSchema: promptNodeConfigSchema,
+}
+```
+
+- [ ] **Step 6: Create `prompt/index.ts`**
+
+```typescript
+export { promptNodeManifest } from "./manifest"
+export { promptNodeExecutor } from "./executor.main"
+export { promptNodeConfigSchema } from "./schema"
+export type { PromptNodeConfig } from "./schema"
+```
+
+- [ ] **Step 7: Run tests to pass**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/prompt/__tests__/executor.test.ts`  
+Expected: PASS
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add desktop/workflow-nodes/prompt/
+git commit -m "feat(workflow): prompt node (schema, manifest, executor)"
+```
+
+---
+
+## Task 5: Switch node
+
+**Files:**
+- Create: `desktop/workflow-nodes/switch/schema.ts`
+- Create: `desktop/workflow-nodes/switch/manifest.ts`
+- Create: `desktop/workflow-nodes/switch/executor.main.ts`
+- Create: `desktop/workflow-nodes/switch/__tests__/executor.test.ts`
+- Create: `desktop/workflow-nodes/switch/index.ts`
+
+- [ ] **Step 1: Write executor tests**
+
+```typescript
+// desktop/workflow-nodes/switch/__tests__/executor.test.ts
+import { describe, expect, it, vi } from "vitest"
+import { switchNodeExecutor } from "../executor.main"
+
+const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
+const config = {
+  agent: "claude-code", variables: [], prompt: "Which?",
+  branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }],
+}
+
+describe("switchNodeExecutor", () => {
+  it("sets activeBranch when response matches branch id (trims + lowercases)", async () => {
+    const r = await switchNodeExecutor.execute({
+      config, resolvedVariables: {}, context: ctx,
+      agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response: "  YES  ", durationMs: 5 }) },
+    })
+    expect(r.activeBranch).toBe("yes")
+  })
+  it("uses defaultBranch on mismatch if configured", async () => {
+    const r = await switchNodeExecutor.execute({
+      config: { ...config, defaultBranch: "no" }, resolvedVariables: {}, context: ctx,
+      agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response: "maybe", durationMs: 5 }) },
+    })
+    expect(r.status).toBe("success"); expect(r.activeBranch).toBe("no")
+  })
+  it("returns failed on mismatch with no defaultBranch", async () => {
+    const r = await switchNodeExecutor.execute({
+      config, resolvedVariables: {}, context: ctx,
+      agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response: "maybe", durationMs: 5 }) },
+    })
+    expect(r.status).toBe("failed"); expect(r.error).toContain("maybe")
+  })
+  it("appends branch list constraint to prompt", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "yes", durationMs: 5 })
+    await switchNodeExecutor.execute({ config, resolvedVariables: {}, context: ctx, agentDeps: { sendToAgent } })
+    const sent = (sendToAgent.mock.calls[0][0] as { prompt: string }).prompt
+    expect(sent).toContain("- yes"); expect(sent).toContain("- no")
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/switch/__tests__/executor.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Create `switch/schema.ts`**
+
+```typescript
+import { z } from "zod"
+import { variableBindingSchema } from "../schemas/variable-binding"
+
+const BRANCH_ID_RE = /^[a-z][a-z0-9_]*$/
+
+export const switchBranchSchema = z.object({
+  id: z.string().regex(BRANCH_ID_RE, "Branch id must match /^[a-z][a-z0-9_]*/"),
+  label: z.string().min(1),
+})
+export const switchNodeConfigSchema = z.object({
+  agent: z.string().min(1),
+  variables: z.array(variableBindingSchema),
+  prompt: z.string(),
+  branches: z.array(switchBranchSchema).min(1),
+  defaultBranch: z.string().optional(),
+})
+export type SwitchNodeConfig = z.infer<typeof switchNodeConfigSchema>
+export type SwitchBranch = z.infer<typeof switchBranchSchema>
+```
+
+- [ ] **Step 4: Create `switch/executor.main.ts`**
+
+```typescript
+import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
+import type { SwitchNodeConfig } from "./schema"
+
+function interpolate(t: string, v: Record<string, string>): string {
+  return t.replace(/\{\{\$([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (_, n) => v[n] ?? `{{$${n}}}`)
+}
+
+export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
+  async execute(input: NodeExecutionInput<SwitchNodeConfig>): Promise<NodeExecutionResult> {
+    const start = Date.now()
+    const { config, resolvedVariables, agentDeps, context } = input
+    const ids = config.branches.map((b) => b.id)
+    const basePrompt = interpolate(config.prompt, resolvedVariables)
+    const prompt = `${basePrompt}\n\n---\n你必须只回复以下选项之一（不要包含任何其他文字）：\n${ids.map((id) => `- ${id}`).join("\n")}`
+
+    const agentResult = await agentDeps.sendToAgent({ agent: config.agent, prompt, abortSignal: context.abortSignal })
+    const durationMs = Date.now() - start
+    if (agentResult.status === "failed") return { status: "failed", output: "", error: agentResult.error, durationMs }
+
+    const raw = agentResult.response.trim().toLowerCase()
+    const matched = ids.find((id) => id === raw)
+    if (matched) return { status: "success", output: raw, activeBranch: matched, durationMs }
+    if (config.defaultBranch) return { status: "success", output: config.defaultBranch, activeBranch: config.defaultBranch, durationMs }
+    return {
+      status: "failed", output: "", durationMs,
+      error: `Agent 响应 "${agentResult.response.trim()}" 不匹配任何分支 [${ids.join(", ")}]`,
+    }
+  },
+}
+```
+
+- [ ] **Step 5: Create `switch/manifest.ts`**
+
+```typescript
+import type { NodeManifest } from "../types"
+import type { SwitchNodeConfig } from "./schema"
+import { switchNodeConfigSchema } from "./schema"
+
+export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
+  type: "switch", title: "Switch", icon: "GitBranch", color: "bg-amber-500/10",
+  ports: { inputs: [{ id: "in", label: "输入" }], outputs: "dynamic" },
+  resolveDynamicPorts: (c) => c.branches.map((b) => ({ id: b.id, label: b.label })),
+  cardSummary: (c) => ({ title: c.agent || "未选择 Agent", subtitle: `${c.branches.length} 个分支` }),
+  configFields: [
+    { name: "agent", kind: "select", label: "Agent" },
+    { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
+    { name: "prompt", kind: "text", label: "判断 Prompt" },
+    { name: "branches", kind: "branch-list", label: "分支" },
+  ],
+  configSchema: switchNodeConfigSchema,
+}
+```
+
+- [ ] **Step 6: Create `switch/index.ts`**
+
+```typescript
+export { switchNodeManifest } from "./manifest"
+export { switchNodeExecutor } from "./executor.main"
+export { switchNodeConfigSchema } from "./schema"
+export type { SwitchNodeConfig, SwitchBranch } from "./schema"
+```
+
+- [ ] **Step 7: Run tests to pass**
+
+Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/switch/__tests__/executor.test.ts`  
+Expected: PASS
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add desktop/workflow-nodes/switch/
+git commit -m "feat(workflow): switch node (schema, manifest, executor + branch regex)"
+```
+
+---
+
+## Task 6: Variable resolver
+
+**Files:**
+- Create: `desktop/electron/services/workflow/variable-resolver.ts`
+- Create: `desktop/electron/services/__tests__/workflow-variable-resolver.test.ts`
+
+- [ ] **Step 1: Write tests**
+
+```typescript
+// desktop/electron/services/__tests__/workflow-variable-resolver.test.ts
+import { describe, expect, it } from "vitest"
+import { resolveVariables, interpolatePrompt } from "../workflow/variable-resolver"
+import type { VariableBinding } from "../../../workflow-nodes/schemas/variable-binding"
 
 describe("resolveVariables", () => {
-  const params = { repo_url: "https://github.com/test/repo", count: 5 }
-  const nodeOutputs = {
-    check_issue: "Issue #42 needs fixing: null pointer in auth module",
-    generate_code: "function fix() { return true }",
-  }
-
   it("resolves param source", () => {
-    const variables: VariableBinding[] = [
-      { name: "repo", source: { type: "param", param: "repo_url" } },
-    ]
-    const result = resolveVariables(variables, params, nodeOutputs)
-    expect(result).toEqual({ repo: "https://github.com/test/repo" })
+    const b: VariableBinding[] = [{ name: "t", source: { type: "param", param: "topic" } }]
+    expect(resolveVariables(b, { topic: "TS" }, {})).toEqual({ t: "TS" })
   })
-
   it("resolves node_output source", () => {
-    const variables: VariableBinding[] = [
-      { name: "analysis", source: { type: "node_output", node: "check_issue" } },
-    ]
-    const result = resolveVariables(variables, params, nodeOutputs)
-    expect(result).toEqual({ analysis: "Issue #42 needs fixing: null pointer in auth module" })
+    const b: VariableBinding[] = [{ name: "r", source: { type: "node_output", node: "n1" } }]
+    expect(resolveVariables(b, {}, { n1: "output" })).toEqual({ r: "output" })
   })
-
+  it("throws when node output missing (skipped branch)", () => {
+    const b: VariableBinding[] = [{ name: "x", source: { type: "node_output", node: "missing" } }]
+    expect(() => resolveVariables(b, {}, {})).toThrow("missing")
+  })
   it("resolves static source", () => {
-    const variables: VariableBinding[] = [
-      { name: "lang", source: { type: "static", value: "TypeScript" } },
-    ]
-    const result = resolveVariables(variables, params, nodeOutputs)
-    expect(result).toEqual({ lang: "TypeScript" })
-  })
-
-  it("resolves multiple variables", () => {
-    const variables: VariableBinding[] = [
-      { name: "repo", source: { type: "param", param: "repo_url" } },
-      { name: "code", source: { type: "node_output", node: "generate_code" } },
-      { name: "hint", source: { type: "static", value: "be careful" } },
-    ]
-    const result = resolveVariables(variables, params, nodeOutputs)
-    expect(result).toEqual({
-      repo: "https://github.com/test/repo",
-      code: "function fix() { return true }",
-      hint: "be careful",
-    })
-  })
-
-  it("converts number params to string", () => {
-    const variables: VariableBinding[] = [
-      { name: "n", source: { type: "param", param: "count" } },
-    ]
-    const result = resolveVariables(variables, params, nodeOutputs)
-    expect(result).toEqual({ n: "5" })
-  })
-
-  it("throws when referencing missing param", () => {
-    const variables: VariableBinding[] = [
-      { name: "x", source: { type: "param", param: "nonexistent" } },
-    ]
-    expect(() => resolveVariables(variables, params, nodeOutputs))
-      .toThrow(/param "nonexistent" not found/)
-  })
-
-  it("throws when referencing missing node output", () => {
-    const variables: VariableBinding[] = [
-      { name: "x", source: { type: "node_output", node: "missing_node" } },
-    ]
-    expect(() => resolveVariables(variables, params, nodeOutputs))
-      .toThrow(/output of node "missing_node" not available/)
+    const b: VariableBinding[] = [{ name: "g", source: { type: "static", value: "Hello" } }]
+    expect(resolveVariables(b, {}, {})).toEqual({ g: "Hello" })
   })
 })
 
 describe("interpolatePrompt", () => {
-  it("replaces {{$var}} placeholders with resolved values", () => {
-    const { interpolatePrompt } = require("../variable-resolver")
-    const resolved = { repo: "my-repo", issue: "42" }
-    const template = "Check {{$repo}} issue #{{$issue}}"
-    expect(interpolatePrompt(template, resolved)).toBe("Check my-repo issue #42")
+  it("replaces {{$name}} tokens", () => {
+    expect(interpolatePrompt("Hello {{$name}}", { name: "world" })).toBe("Hello world")
   })
-
-  it("throws on unresolved placeholder", () => {
-    const { interpolatePrompt } = require("../variable-resolver")
-    const resolved = { repo: "my-repo" }
-    const template = "Check {{$repo}} and {{$missing}}"
-    expect(() => interpolatePrompt(template, resolved)).toThrow(/variable "\$missing" not resolved/)
+  it("leaves unresolved tokens unchanged", () => {
+    expect(interpolatePrompt("{{$missing}}", {})).toBe("{{$missing}}")
   })
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm vitest run electron/services/workflow/__tests__/variable-resolver.test.ts`
-Expected: FAIL — module not found
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-variable-resolver.test.ts`  
+Expected: FAIL
 
-- [ ] **Step 3: Implement variable resolver**
+- [ ] **Step 3: Implement**
 
 ```typescript
-// electron/services/workflow/variable-resolver.ts
-import type { VariableBinding } from "../../../workflow-nodes/types"
+// desktop/electron/services/workflow/variable-resolver.ts
+import type { VariableBinding } from "../../../workflow-nodes/schemas/variable-binding"
 
 export function resolveVariables(
-  variables: VariableBinding[],
-  params: Record<string, unknown>,
+  bindings: VariableBinding[],
+  paramValues: Record<string, unknown>,
   nodeOutputs: Record<string, string>,
 ): Record<string, string> {
-  const resolved: Record<string, string> = {}
-
-  for (const binding of variables) {
-    switch (binding.source.type) {
-      case "param": {
-        const value = params[binding.source.param]
-        if (value === undefined) {
-          throw new Error(`Variable resolution failed: param "${binding.source.param}" not found`)
-        }
-        resolved[binding.name] = String(value)
-        break
+  const result: Record<string, string> = {}
+  for (const { name, source } of bindings) {
+    if (source.type === "param") {
+      result[name] = String(paramValues[source.param] ?? "")
+    } else if (source.type === "node_output") {
+      if (!(source.node in nodeOutputs)) {
+        throw new Error(`变量 $${name} 引用的节点 ${source.node} 在本次运行中未执行（被分支跳过）`)
       }
-      case "node_output": {
-        const output = nodeOutputs[binding.source.node]
-        if (output === undefined) {
-          throw new Error(
-            `Variable resolution failed: output of node "${binding.source.node}" not available`,
-          )
-        }
-        resolved[binding.name] = output
-        break
-      }
-      case "static": {
-        resolved[binding.name] = binding.source.value
-        break
-      }
+      result[name] = nodeOutputs[source.node]
+    } else {
+      result[name] = source.value
     }
   }
-
-  return resolved
+  return result
 }
 
-export function interpolatePrompt(
-  template: string,
-  resolvedVariables: Record<string, string>,
-): string {
-  return template.replace(/\{\{\$(\w+)\}\}/g, (match, varName) => {
-    const value = resolvedVariables[varName]
-    if (value === undefined) {
-      throw new Error(`Prompt interpolation failed: variable "$${varName}" not resolved`)
-    }
-    return value
-  })
+export function interpolatePrompt(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{\$([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (_, n) => vars[n] ?? `{{$${n}}}`)
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run tests to pass**
 
-Run: `pnpm vitest run electron/services/workflow/__tests__/variable-resolver.test.ts`
-Expected: All tests PASS
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-variable-resolver.test.ts`  
+Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add electron/services/workflow/variable-resolver.ts electron/services/workflow/__tests__/variable-resolver.test.ts
-git commit -m "feat(workflow): add variable resolver with interpolation"
+git add desktop/electron/services/workflow/variable-resolver.ts desktop/electron/services/__tests__/workflow-variable-resolver.test.ts
+git commit -m "feat(workflow): variable resolver"
 ```
 
 ---
 
-## Task 3: Workflow Engine (DAG Scheduler)
+## Task 7: Workflow validator
 
 **Files:**
-- Create: `electron/services/workflow/workflow-engine.ts`
-- Test: `electron/services/workflow/__tests__/workflow-engine.test.ts`
+- Create: `desktop/electron/services/workflow/workflow-validator.ts`
+- Create: `desktop/electron/services/__tests__/workflow-validator.test.ts`
 
-- [ ] **Step 1: Write engine tests**
+- [ ] **Step 1: Write tests**
 
 ```typescript
-// electron/services/workflow/__tests__/workflow-engine.test.ts
-import { describe, expect, it, vi, beforeEach } from "vitest"
-import { WorkflowEngine } from "../workflow-engine"
-import { WorkflowNodeRegistry } from "../../../../workflow-nodes/registry"
-import type {
-  WorkflowDefinition,
-  WorkflowEvent,
-  RegisteredNodeType,
-} from "../../../../workflow-nodes/types"
-import { z } from "zod"
+// desktop/electron/services/__tests__/workflow-validator.test.ts
+import { describe, expect, it } from "vitest"
+import { validateWorkflow } from "../workflow/workflow-validator"
+import type { WorkflowDefinition } from "../../../src/types/workflow"
 
-function createTestRegistry(): WorkflowNodeRegistry {
-  const registry = new WorkflowNodeRegistry()
-  const schema = z.object({ variables: z.array(z.any()).default([]), prompt: z.string() })
+const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "hi" } }
+const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "bye" } }
+const base: WorkflowDefinition = { id: "wf", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, nodeB], edges: [{ id: "e1", from: "a", to: "b" }] }
 
-  const promptNode: RegisteredNodeType = {
-    manifest: {
-      type: "prompt",
-      title: "Prompt",
-      icon: "message-square",
-      color: "blue",
-      ports: { inputs: [{ id: "in", label: "In" }], outputs: [{ id: "out", label: "Out" }] },
-      cardSummary: () => ({ title: "Prompt", subtitle: "" }),
-      configSchema: schema,
-    },
-    executor: {
-      execute: async ({ resolvedVariables }) => ({
-        status: "success",
-        output: `executed with: ${JSON.stringify(resolvedVariables)}`,
-        durationMs: 10,
-      }),
-    },
-  }
-
-  const switchNode: RegisteredNodeType = {
-    manifest: {
-      type: "switch",
-      title: "Switch",
-      icon: "git-branch",
-      color: "yellow",
-      ports: { inputs: [{ id: "in", label: "In" }], outputs: "dynamic" },
-      resolveDynamicPorts: (config: any) =>
-        config.branches.map((b: string) => ({ id: b, label: b })),
-      cardSummary: () => ({ title: "Switch", subtitle: "" }),
-      configSchema: z.object({
-        variables: z.array(z.any()).default([]),
-        prompt: z.string(),
-        branches: z.array(z.string()),
-      }),
-    },
-    executor: {
-      execute: async ({ config }) => ({
-        status: "success",
-        output: "fix",
-        activeBranch: "fix",
-        durationMs: 5,
-      }),
-    },
-  }
-
-  registry.register(promptNode)
-  registry.register(switchNode)
-  return registry
-}
-
-describe("WorkflowEngine", () => {
-  let registry: WorkflowNodeRegistry
-  let engine: WorkflowEngine
-
-  beforeEach(() => {
-    registry = createTestRegistry()
-    engine = new WorkflowEngine(registry)
+describe("validateWorkflow", () => {
+  it("returns valid for a clean two-node DAG", () => {
+    const r = validateWorkflow(base)
+    expect(r.valid).toBe(true); expect(r.errors).toHaveLength(0)
   })
-
-  it("executes a linear chain in order", async () => {
-    const definition: WorkflowDefinition = {
-      id: "test-wf",
-      name: "Test",
-      version: "v_001",
-      params: [],
-      nodes: [
-        { id: "a", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "step a" } },
-        { id: "b", type: "prompt", position: { x: 0, y: 100 }, config: { variables: [], prompt: "step b" } },
-      ],
-      edges: [{ from: "a", to: "b" }],
-    }
-
-    const events: WorkflowEvent[] = []
-    engine.on((e) => events.push(e))
-
-    const result = await engine.run({
-      definition,
-      params: {},
-      abortSignal: new AbortController().signal,
-    })
-
-    expect(result.status).toBe("completed")
-    expect(result.nodeResults["a"].status).toBe("success")
-    expect(result.nodeResults["b"].status).toBe("success")
-
-    const nodeStartEvents = events.filter((e) => e.type === "node:started")
-    expect(nodeStartEvents).toHaveLength(2)
+  it("detects a cycle", () => {
+    const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "a" }] })
+    expect(r.valid).toBe(false); expect(r.errors.some((e) => e.type === "cycle")).toBe(true)
   })
-
-  it("routes switch branches correctly", async () => {
-    const definition: WorkflowDefinition = {
-      id: "test-switch",
-      name: "Switch Test",
-      version: "v_001",
-      params: [],
-      nodes: [
-        { id: "sw", type: "switch", position: { x: 0, y: 0 }, config: { variables: [], prompt: "decide", branches: ["fix", "skip"] } },
-        { id: "fix_node", type: "prompt", position: { x: 0, y: 100 }, config: { variables: [], prompt: "fixing" } },
-        { id: "skip_node", type: "prompt", position: { x: 100, y: 100 }, config: { variables: [], prompt: "skipping" } },
-      ],
-      edges: [
-        { from: "sw", to: "fix_node", branch: "fix" },
-        { from: "sw", to: "skip_node", branch: "skip" },
-      ],
-    }
-
-    const result = await engine.run({
-      definition,
-      params: {},
-      abortSignal: new AbortController().signal,
-    })
-
-    expect(result.status).toBe("completed")
-    expect(result.nodeResults["fix_node"].status).toBe("success")
-    expect(result.nodeResults["skip_node"].status).toBe("skipped")
+  it("detects unreachable variable reference", () => {
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 0, y: 0 }, config: { agent: "x", variables: [{ name: "x", source: { type: "node_output", node: "a" } }], prompt: "" } }
+    const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, nodeC], edges: [{ id: "e1", from: "b", to: "c" }] })
+    expect(r.errors.some((e) => e.type === "unreachable_reference")).toBe(true)
   })
-
-  it("stops on node failure", async () => {
-    const failRegistry = createTestRegistry()
-    // Override prompt executor to fail
-    const failNode: RegisteredNodeType = {
-      manifest: failRegistry.get("prompt").manifest,
-      executor: {
-        execute: async () => ({ status: "failed", output: "", error: "boom", durationMs: 1 }),
-      },
-    }
-    const failReg = new WorkflowNodeRegistry()
-    failReg.register(failNode)
-    failReg.register(failRegistry.get("switch"))
-    const failEngine = new WorkflowEngine(failReg)
-
-    const definition: WorkflowDefinition = {
-      id: "fail-wf",
-      name: "Fail",
-      version: "v_001",
-      params: [],
-      nodes: [
-        { id: "a", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "fail" } },
-        { id: "b", type: "prompt", position: { x: 0, y: 100 }, config: { variables: [], prompt: "never" } },
-      ],
-      edges: [{ from: "a", to: "b" }],
-    }
-
-    const result = await failEngine.run({
-      definition,
-      params: {},
-      abortSignal: new AbortController().signal,
-    })
-
-    expect(result.status).toBe("failed")
-    expect(result.nodeResults["a"].status).toBe("failed")
-    expect(result.nodeResults["b"]).toBeUndefined()
+  it("warns about disconnected node", () => {
+    const iso = { id: "iso", name: "Iso", type: "prompt", position: { x: 600, y: 0 }, config: { agent: "x", variables: [], prompt: "" } }
+    const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, iso] })
+    expect(r.warnings.some((w) => w.type === "disconnected_node")).toBe(true)
   })
-
-  it("supports cancellation via abortSignal", async () => {
-    const controller = new AbortController()
-    // Create a slow executor
-    const slowRegistry = new WorkflowNodeRegistry()
-    slowRegistry.register({
-      manifest: registry.get("prompt").manifest,
-      executor: {
-        execute: async ({ context }) => {
-          await new Promise((resolve, reject) => {
-            const timer = setTimeout(resolve, 5000)
-            context.abortSignal.addEventListener("abort", () => {
-              clearTimeout(timer)
-              reject(new Error("aborted"))
-            })
-          })
-          return { status: "success", output: "", durationMs: 0 }
-        },
-      },
-    })
-    slowRegistry.register(registry.get("switch"))
-    const slowEngine = new WorkflowEngine(slowRegistry)
-
-    const definition: WorkflowDefinition = {
-      id: "cancel-wf",
-      name: "Cancel",
-      version: "v_001",
-      params: [],
-      nodes: [
-        { id: "slow", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "slow" } },
-      ],
-      edges: [],
-    }
-
-    const promise = slowEngine.run({
-      definition,
-      params: {},
-      abortSignal: controller.signal,
-    })
-
-    setTimeout(() => controller.abort(), 50)
-    const result = await promise
-
-    expect(result.status).toBe("cancelled")
-  })
-
-  it("detects cycles and rejects", async () => {
-    const definition: WorkflowDefinition = {
-      id: "cycle-wf",
-      name: "Cycle",
-      version: "v_001",
-      params: [],
-      nodes: [
-        { id: "a", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "a" } },
-        { id: "b", type: "prompt", position: { x: 0, y: 100 }, config: { variables: [], prompt: "b" } },
-      ],
-      edges: [{ from: "a", to: "b" }, { from: "b", to: "a" }],
-    }
-
-    await expect(engine.run({
-      definition,
-      params: {},
-      abortSignal: new AbortController().signal,
-    })).rejects.toThrow(/cycle detected/)
-  })
-
-  it("executes parallel branches concurrently", async () => {
-    const definition: WorkflowDefinition = {
-      id: "parallel-wf",
-      name: "Parallel",
-      version: "v_001",
-      params: [],
-      nodes: [
-        { id: "start", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "start" } },
-        { id: "branch_a", type: "prompt", position: { x: 0, y: 100 }, config: { variables: [], prompt: "a" } },
-        { id: "branch_b", type: "prompt", position: { x: 100, y: 100 }, config: { variables: [], prompt: "b" } },
-      ],
-      edges: [
-        { from: "start", to: "branch_a" },
-        { from: "start", to: "branch_b" },
-      ],
-    }
-
-    const result = await engine.run({
-      definition,
-      params: {},
-      abortSignal: new AbortController().signal,
-    })
-
-    expect(result.status).toBe("completed")
-    expect(result.nodeResults["branch_a"].status).toBe("success")
-    expect(result.nodeResults["branch_b"].status).toBe("success")
+  it("errors on switch edge referencing non-existent branch", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { agent: "x", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }] } }
+    const r = validateWorkflow({ ...base, nodes: [sw, nodeB], edges: [{ id: "e1", from: "sw", to: "b", branch: "nope" }] })
+    expect(r.errors.some((e) => e.type === "invalid_switch_edge")).toBe(true)
   })
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm vitest run electron/services/workflow/__tests__/workflow-engine.test.ts`
-Expected: FAIL — module not found
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-validator.test.ts`  
+Expected: FAIL
 
-- [ ] **Step 3: Implement workflow engine**
+- [ ] **Step 3: Implement validator**
 
 ```typescript
-// electron/services/workflow/workflow-engine.ts
+// desktop/electron/services/workflow/workflow-validator.ts
+import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
+import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
+
+function buildReverseAdj(def: WorkflowDefinition): Map<string, string[]> {
+  const r = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
+  for (const e of def.edges) r.get(e.to)?.push(e.from)
+  return r
+}
+
+function topoSort(def: WorkflowDefinition): { order: string[]; hasCycle: boolean } {
+  const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
+  const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
+  for (const e of def.edges) { adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1) }
+  const queue = def.nodes.filter((n) => inDeg.get(n.id) === 0).map((n) => n.id)
+  const order: string[] = []
+  while (queue.length) {
+    const id = queue.shift()!; order.push(id)
+    for (const next of adj.get(id) ?? []) { const d = (inDeg.get(next) ?? 0) - 1; inDeg.set(next, d); if (d === 0) queue.push(next) }
+  }
+  return { order, hasCycle: order.length !== def.nodes.length }
+}
+
+function ancestors(nodeId: string, def: WorkflowDefinition): Set<string> {
+  const rev = buildReverseAdj(def)
+  const visited = new Set<string>(); const stack = [nodeId]
+  while (stack.length) { for (const p of rev.get(stack.pop()!) ?? []) { if (!visited.has(p)) { visited.add(p); stack.push(p) } } }
+  return visited
+}
+
+export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
+  const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
+  const { hasCycle } = topoSort(def)
+  if (hasCycle) errors.push({ type: "cycle", message: "工作流包含循环依赖" })
+
+  const byId = new Map(def.nodes.map((n) => [n.id, n]))
+  if (def.nodes.filter((n) => !def.edges.some((e) => e.to === n.id)).length > 1)
+    warnings.push({ type: "multiple_start_nodes", message: "存在多个起始节点" })
+
+  for (const node of def.nodes) {
+    if (!def.edges.some((e) => e.to === node.id || e.from === node.id) && def.nodes.length > 1)
+      warnings.push({ type: "disconnected_node", nodeId: node.id, message: `节点 "${node.name}" 未连接` })
+
+    try {
+      const manifest = nodeTypeRegistry.getManifest(node.type)
+      const parsed = manifest.configSchema.safeParse(node.config)
+      if (!parsed.success) errors.push({ type: "invalid_config", nodeId: node.id, message: parsed.error.message })
+    } catch { /* unknown type — skip */ }
+
+    if (!hasCycle) {
+      const anc = ancestors(node.id, def)
+      const vars = (node.config as Record<string, unknown>)["variables"]
+      for (const v of (Array.isArray(vars) ? vars : []) as Array<Record<string, unknown>>) {
+        const src = v["source"] as Record<string, unknown> | undefined
+        if (src?.["type"] === "node_output" && !anc.has(src["node"] as string)) {
+          errors.push({ type: "unreachable_reference", nodeId: node.id, message: `节点 "${node.name}" 引用了不可达上游节点 "${byId.get(src["node"] as string)?.name ?? src["node"]}"` })
+        }
+      }
+    }
+  }
+
+  for (const edge of def.edges) {
+    const from = byId.get(edge.from)
+    if (!from) continue
+    const branches = ((from.config as Record<string, unknown>)["branches"] as Array<{ id: string }> | undefined) ?? []
+    if (from.type === "switch") {
+      if (edge.branch !== undefined && !branches.some((b) => b.id === edge.branch))
+        errors.push({ type: "invalid_switch_edge", edgeId: edge.id, message: `edge branch "${edge.branch}" 不在分支列表中` })
+    } else if (edge.branch !== undefined) {
+      errors.push({ type: "orphan_edge_branch", edgeId: edge.id, message: `非 Switch 节点出边不应设置 branch` })
+    }
+  }
+
+  return { valid: errors.length === 0, errors, warnings }
+}
+```
+
+- [ ] **Step 4: Run tests to pass**
+
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-validator.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/electron/services/workflow/workflow-validator.ts desktop/electron/services/__tests__/workflow-validator.test.ts
+git commit -m "feat(workflow): DAG validator (cycle, reachability, switch edges)"
+```
+
+---
+
+## Task 8: Workflow service (CRUD + Git storage)
+
+**Files:**
+- Create: `desktop/electron/services/workflow/workflow-service.ts`
+- Create: `desktop/electron/services/__tests__/workflow-service.test.ts`
+
+- [ ] **Step 1: Write tests**
+
+```typescript
+// desktop/electron/services/__tests__/workflow-service.test.ts
+import { randomUUID } from "node:crypto"
+import { mkdir, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp" } }))
+
+import { WorkflowService } from "../workflow/workflow-service"
+import type { WorkflowDefinition } from "../../../src/types/workflow"
+
+const roots: string[] = []
+async function tmpDir() {
+  const d = path.join(os.tmpdir(), `wf-svc-${randomUUID()}`)
+  await mkdir(d, { recursive: true }); roots.push(d); return d
+}
+afterEach(() => Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true }))))
+
+function makeDef(): WorkflowDefinition {
+  return { id: randomUUID(), name: "WF", version: "", createdAt: 0, updatedAt: 0, params: [], nodes: [], edges: [] }
+}
+
+describe("WorkflowService", () => {
+  it("save + list + get roundtrip", async () => {
+    const svc = new WorkflowService(await tmpDir())
+    const def = makeDef()
+    const r = await svc.save(def)
+    expect("versionHash" in r && (r as { versionHash: string }).versionHash).toMatch(/^v_/)
+    expect((await svc.list()).some((m) => m.id === def.id)).toBe(true)
+    expect((await svc.get(def.id))?.name).toBe("WF")
+  })
+  it("latest save wins when saved twice", async () => {
+    const svc = new WorkflowService(await tmpDir())
+    const def = makeDef()
+    await svc.save(def)
+    await svc.save({ ...def, name: "Updated" })
+    expect((await svc.get(def.id))?.name).toBe("Updated")
+  })
+  it("delete removes workflow", async () => {
+    const svc = new WorkflowService(await tmpDir())
+    const def = makeDef()
+    await svc.save(def); await svc.delete(def.id)
+    expect(await svc.get(def.id)).toBeNull()
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-service.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Implement**
+
+```typescript
+// desktop/electron/services/workflow/workflow-service.ts
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import path from "node:path"
+import { createHash } from "node:crypto"
+import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
+import { validateWorkflow } from "./workflow-validator"
+
+export interface WorkflowSaveResult { versionHash: string }
+export interface WorkflowSaveError { errors: ValidationError[] }
+
+export class WorkflowService {
+  constructor(private readonly repoPath: string) {}
+
+  private dir(id: string) { return path.join(this.repoPath, "workflows", id) }
+
+  private versionHash(def: WorkflowDefinition): string {
+    const ts = Date.now()
+    const hash = createHash("sha256").update(JSON.stringify(def)).digest("hex").slice(0, 8)
+    return `v_${ts}_${hash}`
+  }
+
+  async list(): Promise<WorkflowMeta[]> {
+    let ids: string[]
+    try { ids = await readdir(path.join(this.repoPath, "workflows")) } catch { return [] }
+    const metas: WorkflowMeta[] = []
+    for (const id of ids) {
+      const def = await this.get(id)
+      if (def) metas.push({ id: def.id, name: def.name, description: def.description, version: def.version, nodeCount: def.nodes.length, createdAt: def.createdAt, updatedAt: def.updatedAt })
+    }
+    return metas
+  }
+
+  async get(id: string): Promise<WorkflowDefinition | null> {
+    let files: string[]
+    try { files = await readdir(this.dir(id)) } catch { return null }
+    const versions = files.filter((f) => f.startsWith("v_") && f.endsWith(".json")).sort()
+    if (!versions.length) return null
+    return JSON.parse(await readFile(path.join(this.dir(id), versions[versions.length - 1]), "utf-8")) as WorkflowDefinition
+  }
+
+  async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {
+    const validation = validateWorkflow(def)
+    if (!validation.valid) return { errors: validation.errors }
+    const versionHash = this.versionHash(def)
+    const versioned: WorkflowDefinition = { ...def, version: versionHash, updatedAt: Date.now() }
+    await mkdir(this.dir(def.id), { recursive: true })
+    await writeFile(path.join(this.dir(def.id), `${versionHash}.json`), JSON.stringify(versioned, null, 2), "utf-8")
+    return { versionHash }
+  }
+
+  async delete(id: string): Promise<void> {
+    try { await rm(this.dir(id), { recursive: true, force: true }) } catch { /* already gone */ }
+  }
+}
+```
+
+- [ ] **Step 4: Run tests to pass**
+
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-service.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/electron/services/workflow/workflow-service.ts desktop/electron/services/__tests__/workflow-service.test.ts
+git commit -m "feat(workflow): WorkflowService CRUD + Git full-snapshot storage"
+```
+
+---
+
+## Task 9: Run snapshot service
+
+**Files:**
+- Create: `desktop/electron/services/workflow/run-snapshot-service.ts`
+
+- [ ] **Step 1: Implement**
+
+```typescript
+// desktop/electron/services/workflow/run-snapshot-service.ts
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import path from "node:path"
+import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
+
+const MAX = 20
+
+export class RunSnapshotService {
+  constructor(private readonly dataDir: string) {}
+  private dir(wfId: string) { return path.join(this.dataDir, "workflow-runs", wfId) }
+
+  async save(s: WorkflowRunSnapshot): Promise<void> {
+    const dir = this.dir(s.workflowId)
+    await mkdir(dir, { recursive: true })
+    await writeFile(path.join(dir, `${s.runId}.json`), JSON.stringify(s, null, 2), "utf-8")
+    const files = (await readdir(dir)).filter((f) => f.endsWith(".json")).sort()
+    await Promise.all(files.slice(0, Math.max(0, files.length - MAX)).map((f) => rm(path.join(dir, f), { force: true })))
+  }
+
+  async list(workflowId: string): Promise<WorkflowRunSnapshot[]> {
+    try {
+      const files = (await readdir(this.dir(workflowId))).filter((f) => f.endsWith(".json")).sort().reverse()
+      return (await Promise.all(files.map(async (f) => {
+        try { return JSON.parse(await readFile(path.join(this.dir(workflowId), f), "utf-8")) as WorkflowRunSnapshot }
+        catch { return null }
+      }))).filter(Boolean) as WorkflowRunSnapshot[]
+    } catch { return [] }
+  }
+
+  async get(runId: string, workflowId: string): Promise<WorkflowRunSnapshot | null> {
+    try { return JSON.parse(await readFile(path.join(this.dir(workflowId), `${runId}.json`), "utf-8")) as WorkflowRunSnapshot }
+    catch { return null }
+  }
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add desktop/electron/services/workflow/run-snapshot-service.ts
+git commit -m "feat(workflow): RunSnapshotService (local run history, max 20)"
+```
+
+---
+
+## Task 10: Workflow engine
+
+**Files:**
+- Create: `desktop/electron/services/workflow/workflow-engine.ts`
+- Create: `desktop/electron/services/__tests__/workflow-engine.test.ts`
+
+- [ ] **Step 1: Write tests**
+
+```typescript
+// desktop/electron/services/__tests__/workflow-engine.test.ts
+import { describe, expect, it, vi } from "vitest"
+import { WorkflowEngine } from "../workflow/workflow-engine"
+import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
+import { promptNodeManifest, promptNodeExecutor } from "../../../workflow-nodes/prompt"
+import { switchNodeManifest, switchNodeExecutor } from "../../../workflow-nodes/switch"
+import type { WorkflowDefinition } from "../../../src/types/workflow"
+
+nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
+nodeTypeRegistry.register(switchNodeManifest, switchNodeExecutor)
+
+const agent = vi.fn().mockResolvedValue({ status: "success" as const, response: "done", durationMs: 5 })
+
+const linear: WorkflowDefinition = {
+  id: "wf1", name: "L", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+  nodes: [
+    { id: "n1", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { agent: "x", variables: [], prompt: "p1" } },
+    { id: "n2", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { agent: "x", variables: [], prompt: "p2" } },
+  ],
+  edges: [{ id: "e1", from: "n1", to: "n2" }],
+}
+
+describe("WorkflowEngine", () => {
+  it("runs two nodes in order and completes", async () => {
+    const events: string[] = []
+    const r = await new WorkflowEngine({ sendToAgent: agent }).run({ definition: linear, params: {}, abortSignal: new AbortController().signal, onEvent: (e) => events.push(e.type) })
+    expect(r.status).toBe("completed")
+    expect(events).toContain("node:started"); expect(events).toContain("workflow:completed")
+  })
+  it("emits node:skipped for the inactive switch branch", async () => {
+    const switchDef: WorkflowDefinition = {
+      id: "wf2", name: "S", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [
+        { id: "sw", name: "Sw", type: "switch", position: { x: 0, y: 0 }, config: { agent: "x", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }, { id: "no", label: "N" }] } },
+        { id: "by", name: "Yes", type: "prompt", position: { x: 200, y: -50 }, config: { agent: "x", variables: [], prompt: "y" } },
+        { id: "bn", name: "No", type: "prompt", position: { x: 200, y: 50 }, config: { agent: "x", variables: [], prompt: "n" } },
+      ],
+      edges: [{ id: "e1", from: "sw", to: "by", branch: "yes" }, { id: "e2", from: "sw", to: "bn", branch: "no" }],
+    }
+    const skipped: string[] = []
+    await new WorkflowEngine({ sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response: "yes", durationMs: 5 }) })
+      .run({ definition: switchDef, params: {}, abortSignal: new AbortController().signal, onEvent: (e) => { if (e.type === "node:skipped") skipped.push(e.nodeId) } })
+    expect(skipped).toContain("bn"); expect(skipped).not.toContain("by")
+  })
+  it("cancels on abort signal", async () => {
+    const ac = new AbortController()
+    const slow = vi.fn().mockImplementation(() => new Promise<never>((_, r) => setTimeout(() => r(new Error("cancelled")), 500)))
+    const runP = new WorkflowEngine({ sendToAgent: slow }).run({ definition: linear, params: {}, abortSignal: ac.signal, onEvent: () => {} })
+    setTimeout(() => ac.abort(), 10)
+    expect((await runP).status).toBe("cancelled")
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-engine.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Implement `workflow-engine.ts`**
+
+```typescript
+// desktop/electron/services/workflow/workflow-engine.ts
 import PQueue from "p-queue"
-import type {
-  WorkflowDefinition,
-  WorkflowEvent,
-  WorkflowRunResult,
-  NodeRunResult,
-  WorkflowRuntimeContext,
-  RegisteredNodeType,
-} from "../../../workflow-nodes/types"
-import type { WorkflowNodeRegistry } from "../../../workflow-nodes/registry"
-import { resolveVariables, interpolatePrompt } from "./variable-resolver"
+import { randomUUID } from "node:crypto"
+import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
+import type { AgentSendDeps, VariableBinding } from "../../../workflow-nodes/types"
+import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
+import { resolveVariables } from "./variable-resolver"
+
+// Note: VariableBinding is imported from types but the resolveVariables param type
+// uses the Zod inferred type from schemas/variable-binding. Cast is safe since shapes match.
 
 export interface WorkflowRunInput {
   definition: WorkflowDefinition
   params: Record<string, unknown>
   abortSignal: AbortSignal
+  onEvent: (event: WorkflowEvent) => void
 }
 
 export class WorkflowEngine {
-  private readonly listeners: Array<(event: WorkflowEvent) => void> = []
-
-  constructor(private readonly registry: WorkflowNodeRegistry) {}
-
-  on(handler: (event: WorkflowEvent) => void): () => void {
-    this.listeners.push(handler)
-    return () => {
-      const idx = this.listeners.indexOf(handler)
-      if (idx >= 0) this.listeners.splice(idx, 1)
-    }
-  }
-
-  private emit(event: WorkflowEvent): void {
-    for (const listener of this.listeners) listener(event)
-  }
+  constructor(private readonly agentDeps: AgentSendDeps) {}
 
   async run(input: WorkflowRunInput): Promise<WorkflowRunResult> {
-    const { definition, params, abortSignal } = input
-    const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    const startTime = Date.now()
-
-    // Validate DAG (detect cycles)
-    this.validateDAG(definition)
-
-    this.emit({ type: "workflow:started", runId })
-
-    const nodeOutputs: Record<string, string> = {}
+    const { definition: def, params, abortSignal, onEvent } = input
+    const runId = randomUUID()
+    const startMs = Date.now()
     const nodeResults: Record<string, NodeRunResult> = {}
-    const completedNodes = new Set<string>()
-    const skippedNodes = new Set<string>()
+    const nodeOutputs: Record<string, string> = {}
+
+    onEvent({ type: "workflow:started", runId })
+    if (abortSignal.aborted) { onEvent({ type: "workflow:cancelled" }); return { status: "cancelled", nodeResults, durationMs: 0 } }
+
+    const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
+    const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
+    for (const e of def.edges) { adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1) }
+
+    const skipped = new Set<string>()
     let failed = false
+    const queue = new PQueue({ concurrency: 1 })
 
-    // Build adjacency: for each node, which nodes must complete before it
-    const incomingEdges = new Map<string, Array<{ from: string; branch?: string }>>()
-    const outgoingEdges = new Map<string, Array<{ to: string; branch?: string }>>()
-
-    for (const node of definition.nodes) {
-      incomingEdges.set(node.id, [])
-      outgoingEdges.set(node.id, [])
-    }
-    for (const edge of definition.edges) {
-      incomingEdges.get(edge.to)!.push({ from: edge.from, branch: edge.branch })
-      outgoingEdges.get(edge.from)!.push({ to: edge.to, branch: edge.branch })
+    const advanceFrom = (nodeId: string, activeBranch: string | undefined) => {
+      for (const edge of def.edges.filter((e) => e.from === nodeId)) {
+        if (edge.branch !== undefined && edge.branch !== activeBranch) skipped.add(edge.to)
+        onEvent({ type: "edge:activated", from: edge.from, to: edge.to })
+        const deg = (inDeg.get(edge.to) ?? 0) - 1; inDeg.set(edge.to, deg)
+        if (deg === 0) scheduleNode(edge.to)
+      }
     }
 
-    // Find start nodes (no incoming edges)
-    const startNodes = definition.nodes
-      .filter((n) => incomingEdges.get(n.id)!.length === 0)
-      .map((n) => n.id)
-
-    const queue = new PQueue({ concurrency: 3 })
-
-    const isNodeReady = (nodeId: string): boolean => {
-      const incoming = incomingEdges.get(nodeId)!
-      return incoming.every(({ from }) => completedNodes.has(from) || skippedNodes.has(from))
-    }
-
-    const isNodeActivated = (nodeId: string): boolean => {
-      const incoming = incomingEdges.get(nodeId)!
-      if (incoming.length === 0) return true
-
-      // A node is activated if at least one incoming edge is "active"
-      return incoming.some(({ from, branch }) => {
-        if (skippedNodes.has(from)) return false
-        if (!completedNodes.has(from)) return false
-        // If edge has a branch condition, check if the source node's activeBranch matches
-        if (branch !== undefined) {
-          const sourceResult = nodeResults[from]
-          if (!sourceResult) return false
-          // The source node must have selected this branch
-          return (sourceResult as any).activeBranch === branch
+    const scheduleNode = (nodeId: string) => {
+      void queue.add(async () => {
+        if (abortSignal.aborted || failed) return
+        if (skipped.has(nodeId)) {
+          onEvent({ type: "node:skipped", nodeId })
+          nodeResults[nodeId] = { nodeId, status: "skipped", input: { variables: {} } }
+          advanceFrom(nodeId, undefined); return
         }
-        return true
-      })
-    }
-
-    const scheduleNode = (nodeId: string): void => {
-      if (failed || abortSignal.aborted) return
-
-      queue.add(async () => {
-        if (failed || abortSignal.aborted) return
-
-        const nodeDef = definition.nodes.find((n) => n.id === nodeId)!
-        const nodeType = this.registry.get(nodeDef.type)
-
-        this.emit({ type: "node:started", nodeId })
-        const nodeStart = Date.now()
-
+        const node = def.nodes.find((n) => n.id === nodeId)!
+        onEvent({ type: "node:started", nodeId })
+        nodeResults[nodeId] = { nodeId, status: "running", input: { variables: {} }, startedAt: Date.now() }
         try {
-          // Resolve variables
-          const variables = (nodeDef.config as any).variables ?? []
-          const resolved = resolveVariables(variables, params, nodeOutputs)
-
-          // Build context
-          const context: WorkflowRuntimeContext = {
-            runId,
-            workflowId: definition.id,
-            abortSignal,
-            logger: {
-              info: (msg) => {},
-              error: (msg) => {},
-            },
-          }
-
-          const result = await nodeType.executor.execute({
-            config: nodeDef.config,
-            resolvedVariables: resolved,
-            context,
-          })
-
-          const duration = Date.now() - nodeStart
-
+          const executor = nodeTypeRegistry.getExecutor(node.type)
+          const vars = (node.config["variables"] ?? []) as Parameters<typeof resolveVariables>[0]
+          const resolvedVariables = resolveVariables(vars, params, nodeOutputs)
+          const result = await executor.execute({ config: node.config, resolvedVariables, context: { projectId: "", runId, abortSignal }, agentDeps: this.agentDeps })
+          const endedAt = Date.now()
           if (result.status === "failed") {
-            nodeResults[nodeId] = { status: "failed", error: result.error, durationMs: duration }
             failed = true
-            this.emit({ type: "node:failed", nodeId, error: result.error ?? "Unknown error" })
-            return
-          }
-
-          nodeOutputs[nodeId] = result.output
-          nodeResults[nodeId] = {
-            status: "success",
-            output: result.output,
-            durationMs: duration,
-            ...(result.activeBranch ? { activeBranch: result.activeBranch } : {}),
-          } as NodeRunResult & { activeBranch?: string }
-
-          completedNodes.add(nodeId)
-          this.emit({ type: "node:completed", nodeId, output: result.output })
-
-          // Schedule downstream nodes
-          const outgoing = outgoingEdges.get(nodeId) ?? []
-          for (const { to, branch } of outgoing) {
-            // If this is a branch edge, check if it's the active branch
-            if (branch !== undefined && result.activeBranch !== branch) {
-              // Mark the target and its descendants as skipped
-              this.markSkipped(to, definition, outgoingEdges, skippedNodes, nodeResults)
-              continue
-            }
-
-            this.emit({ type: "edge:activated", from: nodeId, to })
-
-            if (isNodeReady(to) && isNodeActivated(to) && !skippedNodes.has(to)) {
-              scheduleNode(to)
-            }
+            nodeResults[nodeId] = { nodeId, status: "failed", input: { variables: resolvedVariables }, error: result.error, startedAt: nodeResults[nodeId].startedAt, endedAt, durationMs: result.durationMs }
+            onEvent({ type: "node:failed", nodeId, error: result.error ?? "unknown" })
+          } else {
+            nodeOutputs[nodeId] = result.output
+            nodeResults[nodeId] = { nodeId, status: "success", input: { variables: resolvedVariables }, output: result.output, activeBranch: result.activeBranch, startedAt: nodeResults[nodeId].startedAt, endedAt, durationMs: result.durationMs }
+            onEvent({ type: "node:completed", nodeId, output: result.output })
+            advanceFrom(nodeId, result.activeBranch)
           }
         } catch (err) {
-          const duration = Date.now() - nodeStart
-          const error = err instanceof Error ? err.message : String(err)
-          nodeResults[nodeId] = { status: "failed", error, durationMs: duration }
           failed = true
-          this.emit({ type: "node:failed", nodeId, error })
+          nodeResults[nodeId] = { nodeId, status: "failed", input: { variables: {} }, error: String(err) }
+          onEvent({ type: "node:failed", nodeId, error: String(err) })
         }
       })
     }
 
-    // Handle abort
-    const abortHandler = () => {
-      queue.clear()
-    }
-    abortSignal.addEventListener("abort", abortHandler)
-
-    // Schedule start nodes
-    for (const nodeId of startNodes) {
-      scheduleNode(nodeId)
-    }
-
-    // Wait for all queued tasks
+    for (const n of def.nodes.filter((n) => inDeg.get(n.id) === 0)) scheduleNode(n.id)
     await queue.onIdle()
 
-    abortSignal.removeEventListener("abort", abortHandler)
-
-    const totalDuration = Date.now() - startTime
-    const status = abortSignal.aborted ? "cancelled" : failed ? "failed" : "completed"
-
-    const result: WorkflowRunResult = {
-      status,
-      nodeResults,
-      durationMs: totalDuration,
-    }
-
-    if (status === "completed") {
-      this.emit({ type: "workflow:completed", result })
-    } else if (status === "failed") {
-      this.emit({ type: "workflow:failed", error: "One or more nodes failed" })
-    } else {
-      this.emit({ type: "workflow:cancelled" })
-    }
-
-    return result
-  }
-
-  private markSkipped(
-    nodeId: string,
-    definition: WorkflowDefinition,
-    outgoingEdges: Map<string, Array<{ to: string; branch?: string }>>,
-    skippedNodes: Set<string>,
-    nodeResults: Record<string, NodeRunResult>,
-  ): void {
-    if (skippedNodes.has(nodeId)) return
-    skippedNodes.add(nodeId)
-    nodeResults[nodeId] = { status: "skipped", durationMs: 0 }
-
-    const outgoing = outgoingEdges.get(nodeId) ?? []
-    for (const { to } of outgoing) {
-      this.markSkipped(to, definition, outgoingEdges, skippedNodes, nodeResults)
-    }
-  }
-
-  private validateDAG(definition: WorkflowDefinition): void {
-    const visited = new Set<string>()
-    const inStack = new Set<string>()
-
-    const adjacency = new Map<string, string[]>()
-    for (const node of definition.nodes) {
-      adjacency.set(node.id, [])
-    }
-    for (const edge of definition.edges) {
-      adjacency.get(edge.from)!.push(edge.to)
-    }
-
-    const dfs = (nodeId: string): void => {
-      visited.add(nodeId)
-      inStack.add(nodeId)
-
-      for (const neighbor of adjacency.get(nodeId) ?? []) {
-        if (inStack.has(neighbor)) {
-          throw new Error(`DAG validation failed: cycle detected involving node "${neighbor}"`)
-        }
-        if (!visited.has(neighbor)) {
-          dfs(neighbor)
-        }
-      }
-
-      inStack.delete(nodeId)
-    }
-
-    for (const node of definition.nodes) {
-      if (!visited.has(node.id)) {
-        dfs(node.id)
-      }
-    }
+    if (abortSignal.aborted) { onEvent({ type: "workflow:cancelled" }); return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs } }
+    if (failed) { const r = { status: "failed" as const, nodeResults, durationMs: Date.now() - startMs }; onEvent({ type: "workflow:failed", error: "节点执行失败" }); return r }
+    const result = { status: "completed" as const, nodeResults, durationMs: Date.now() - startMs }
+    onEvent({ type: "workflow:completed", result }); return result
   }
 }
 ```
 
-- [ ] **Step 4: Install p-queue dependency**
+> **Note:** `p-queue` must be available in the desktop package. Check `desktop/package.json` — if absent, run `pnpm --filter @synapse/desktop add p-queue`.
 
-Run: `pnpm add p-queue`
+- [ ] **Step 4: Run tests to pass**
 
-- [ ] **Step 5: Run tests to verify they pass**
+Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-engine.test.ts`  
+Expected: PASS
 
-Run: `pnpm vitest run electron/services/workflow/__tests__/workflow-engine.test.ts`
-Expected: All 6 tests PASS
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/electron/services/workflow/workflow-engine.ts desktop/electron/services/__tests__/workflow-engine.test.ts
+git commit -m "feat(workflow): WorkflowEngine (DAG, node:skipped, AbortSignal)"
+```
+
+---
+
+## Task 11: Window manager
+
+**Files:**
+- Create: `desktop/electron/services/workflow/window-manager.ts`
+
+- [ ] **Step 1: Implement**
+
+```typescript
+// desktop/electron/services/workflow/window-manager.ts
+import { BrowserWindow } from "electron"
+
+export class WorkflowWindowManager {
+  private readonly windows = new Map<string, BrowserWindow>()
+
+  open(workflowId: string, baseUrl: string): BrowserWindow {
+    const existing = this.windows.get(workflowId)
+    if (existing && !existing.isDestroyed()) { existing.focus(); return existing }
+
+    const win = new BrowserWindow({
+      width: 1200, height: 800, title: "Workflow Editor",
+      webPreferences: { preload: require.resolve("../../preload"), contextIsolation: true, sandbox: false },
+    })
+
+    const url = `${baseUrl}?window=workflow-editor&workflowId=${encodeURIComponent(workflowId)}`
+    void win.loadURL(url)
+
+    win.on("close", (e) => { e.preventDefault(); win.webContents.send("synapse:workflow:editor-close-requested") })
+    win.on("closed", () => this.windows.delete(workflowId))
+    this.windows.set(workflowId, win)
+    return win
+  }
+
+  forceClose(workflowId: string): void {
+    const win = this.windows.get(workflowId)
+    if (win && !win.isDestroyed()) win.destroy()
+    this.windows.delete(workflowId)
+  }
+
+  getOpenEditorIds(): string[] {
+    return [...this.windows.entries()].filter(([, w]) => !w.isDestroyed()).map(([id]) => id)
+  }
+
+  checkCanSync(): { canSync: boolean; blockers: string[] } {
+    const open = this.getOpenEditorIds()
+    return open.length > 0
+      ? { canSync: false, blockers: open.map((id) => `Workflow editor open: ${id}`) }
+      : { canSync: true, blockers: [] }
+  }
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add desktop/electron/services/workflow/window-manager.ts
+git commit -m "feat(workflow): WorkflowWindowManager"
+```
+
+
+---
+
+## Task 12: IPC module
+
+**Files:**
+- Modify: `desktop/electron/runtime/event-bus/types.ts` — add `"workflow"` to EventDomain
+- Create: `desktop/electron/modules/workflow/ipc.ts`
+
+- [ ] **Step 1: Add "workflow" to EventDomain**
+
+In `desktop/electron/runtime/event-bus/types.ts`, add `| "workflow"` to the `EventDomain` union type (after `"install-status"`).
+
+- [ ] **Step 2: Create `desktop/electron/modules/workflow/ipc.ts`**
+
+The module exports `workflowIpcModule: IpcModule` with 13 methods plus a push-event descriptor. Key implementation details:
+
+**`synapse:workflow:run` handler** — creates an `AbortController` per run, stores it in a `Map<runId, AbortController>` resolved from service id `"core.workflow.run-aborts"`, starts the engine fire-and-forget, and emits events through the EventBus. Returns `{ runId }` synchronously before the run completes.
+
+**`synapse:workflow:cancel` handler** — looks up the controller by `runId` in the same map and calls `.abort()`.
+
+```typescript
+// desktop/electron/modules/workflow/ipc.ts
+import { randomUUID } from "node:crypto"
+import { z } from "zod"
+import type { IpcModule } from "../../runtime/ipc/types"
+import type { WorkflowService } from "../../services/workflow/workflow-service"
+import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
+import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
+import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
+import type { EventBus } from "../../runtime/event-bus"
+
+const workflowDefinitionSchema = z.object({
+  id: z.string(), name: z.string(), description: z.string().optional(),
+  version: z.string(), createdAt: z.number(), updatedAt: z.number(),
+  params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number"]), default: z.union([z.string(), z.number(), z.null()]), description: z.string().optional() })),
+  nodes: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
+  edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),
+})
+
+const validationResultSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })),
+  warnings: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), message: z.string() })),
+})
+
+export const workflowIpcModule: IpcModule = {
+  id: "workflow",
+  methods: {
+    list: {
+      channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
+      response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
+      handler: async (ctx) => ctx.resolve<WorkflowService>("core.workflow").list(),
+    },
+    get: {
+      channel: "synapse:workflow:get", kind: "invoke", request: z.object({ id: z.string() }),
+      response: workflowDefinitionSchema.nullable(),
+      handler: async (ctx, { id }) => ctx.resolve<WorkflowService>("core.workflow").get(id),
+    },
+    save: {
+      channel: "synapse:workflow:save", kind: "invoke", request: workflowDefinitionSchema,
+      response: z.union([z.object({ versionHash: z.string() }), z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) })]),
+      handler: async (ctx, def) => ctx.resolve<WorkflowService>("core.workflow").save(def),
+    },
+    delete: {
+      channel: "synapse:workflow:delete", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),
+      handler: async (ctx, { id }) => ctx.resolve<WorkflowService>("core.workflow").delete(id),
+    },
+    validate: {
+      channel: "synapse:workflow:validate", kind: "invoke", request: workflowDefinitionSchema, response: validationResultSchema,
+      handler: async (_ctx, def) => { const { validateWorkflow } = await import("../../services/workflow/workflow-validator"); return validateWorkflow(def) },
+    },
+    run: {
+      channel: "synapse:workflow:run", kind: "invoke",
+      request: z.object({ id: z.string(), params: z.record(z.string(), z.unknown()) }),
+      response: z.object({ runId: z.string() }),
+      handler: async (ctx, { id, params }) => {
+        const svc = ctx.resolve<WorkflowService>("core.workflow")
+        const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
+        const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
+        const eventBus = ctx.resolve<EventBus>("core.event-bus")
+        const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
+
+        const def = await svc.get(id)
+        if (!def) throw new Error(`Workflow ${id} not found`)
+
+        const ac = new AbortController()
+        const runId = randomUUID()
+        abortMap.set(runId, ac)
+
+        void engine.run({
+          definition: def, params, abortSignal: ac.signal,
+          onEvent: (event) => {
+            eventBus.emit({ domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() })
+            if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
+              abortMap.delete(runId)
+              const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
+              const nodeResults = event.type === "workflow:completed" ? event.result.nodeResults : {}
+              void snapshots.save({ runId, workflowId: id, version: def.version, startedAt: Date.now(), endedAt: Date.now(), status, params, nodeResults })
+            }
+          },
+        })
+
+        return { runId }
+      },
+    },
+    cancel: {
+      channel: "synapse:workflow:cancel", kind: "invoke", request: z.object({ runId: z.string() }), response: z.void(),
+      handler: (ctx, { runId }) => { ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts").get(runId)?.abort() },
+    },
+    runHistory: {
+      channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: z.string() }), response: z.array(z.unknown()),
+      handler: async (ctx, { workflowId }) => ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId),
+    },
+    runSnapshot: {
+      channel: "synapse:workflow:run-snapshot", kind: "invoke", request: z.object({ runId: z.string(), workflowId: z.string() }), response: z.unknown().nullable(),
+      handler: async (ctx, { runId, workflowId }) => ctx.resolve<RunSnapshotService>("core.workflow.snapshots").get(runId, workflowId),
+    },
+    openEditor: {
+      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),
+      handler: (ctx, { id }) => {
+        const baseUrl = process.env.VITE_DEV_SERVER_URL ?? "app://-"
+        ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").open(id, baseUrl)
+      },
+    },
+    editorState: {
+      channel: "synapse:workflow:editor-state", kind: "invoke", request: z.void().optional(),
+      response: z.object({ openEditors: z.array(z.string()) }),
+      handler: (ctx) => ({ openEditors: ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").getOpenEditorIds() }),
+    },
+    checkCanSync: {
+      channel: "synapse:workflow:check-can-sync", kind: "invoke", request: z.void().optional(),
+      response: z.object({ canSync: z.boolean(), blockers: z.array(z.string()) }),
+      handler: (ctx) => ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").checkCanSync(),
+    },
+  },
+  events: {
+    event: {
+      kind: "event", channel: "synapse:workflow:event",
+      payload: z.object({ domain: z.literal("workflow"), type: z.string(), payload: z.unknown(), timestamp: z.string() }),
+    },
+  },
+}
+```
+
+- [ ] **Step 3: Verify TypeScript**
+
+Run: `pnpm --filter @synapse/desktop run typecheck`  
+Expected: exit 0
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add desktop/electron/modules/workflow/ desktop/electron/runtime/event-bus/types.ts
+git commit -m "feat(workflow): IPC module (13 channels + AbortController run-map)"
+```
+
+---
+
+## Task 13: Bootstrap wiring
+
+**Files:**
+- Modify: `desktop/electron/bootstrap/descriptors.ts`
+- Modify: `desktop/electron/bootstrap/registry.ts`
+- Modify: `desktop/electron/bootstrap/ipc-registry.ts`
+
+- [ ] **Step 1: Add imports to `descriptors.ts`**
+
+At the top with the other service imports:
+
+```typescript
+import { WorkflowService } from "../services/workflow/workflow-service"
+import { WorkflowEngine } from "../services/workflow/workflow-engine"
+import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
+import { WorkflowWindowManager } from "../services/workflow/window-manager"
+```
+
+- [ ] **Step 2: Add five descriptors at the bottom of `descriptors.ts`**
+
+```typescript
+export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> = {
+  id: "core.workflow",
+  criticality: "degraded",
+  dependsOn: ["core.config"],
+  async create() {
+    const config = await configStore.load()
+    const repoPath = config.repositories[0]?.localPath ?? app.getPath("userData")
+    return new WorkflowService(repoPath)
+  },
+}
+
+export const coreWorkflowSnapshotsDescriptor: ServiceDescriptor<RunSnapshotService> = {
+  id: "core.workflow.snapshots",
+  criticality: "degraded",
+  create() { return new RunSnapshotService(app.getPath("userData")) },
+}
+
+export const coreWorkflowRunAbortsDescriptor: ServiceDescriptor<Map<string, AbortController>> = {
+  id: "core.workflow.run-aborts",
+  criticality: "degraded",
+  create() { return new Map<string, AbortController>() },
+}
+
+export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
+  id: "core.workflow.engine",
+  criticality: "degraded",
+  dependsOn: ["core.project-containers"],
+  create(ctx) {
+    // Wire sendToAgent through AgentRuntimeService from the project container.
+    // The projectId is resolved per-run from the first configured repository.
+    // This bridge is injected here so WorkflowEngine remains pure of Electron deps.
+    const registry = ctx.registry
+    const sendToAgent: import("../../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortSignal }) => {
+      try {
+        const config = await configStore.load()
+        const projectId = config.repositories[0]?.uuid ?? ""
+        const containers = registry.get<import("../services/project-container-registry").ProjectContainerRegistry>("core.project-containers")
+        const container = await containers.open(projectId, { name: "", workspacePath: config.repositories[0]?.localPath ?? "" })
+        const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>("agent-runtime")
+        const result = await agentRuntime.sendScheduled({
+          projectId, agentType: agent, mode: "default", prompt,
+          sessionPolicy: "fresh", timeoutMs: 120_000, abortSignal,
+        })
+        return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
+      } catch (err) {
+        return { status: "failed", response: "", error: String(err), durationMs: 0 }
+      }
+    }
+    return new WorkflowEngine({ sendToAgent })
+  },
+}
+
+export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {
+  id: "core.workflow.window-manager",
+  criticality: "degraded",
+  create() { return new WorkflowWindowManager() },
+}
+```
+
+> **Note on `sendScheduled` signature:** The exact parameter shape depends on the current `AgentRuntimeService` interface. Check `desktop/electron/services/agent-runtime/agent-runtime-service.ts` and adjust field names (`agentType` vs `platform`, `sessionPolicy` vs `sessionMode`, etc.) to match. The intent is to send a prompt on a fresh session and return `{ status, summary, error, durationMs }`.
+
+- [ ] **Step 3: Register in `registry.ts`**
+
+Add to imports in `registry.ts`:
+```typescript
+import {
+  // ...existing...
+  coreWorkflowServiceDescriptor,
+  coreWorkflowSnapshotsDescriptor,
+  coreWorkflowRunAbortsDescriptor,
+  coreWorkflowEngineDescriptor,
+  coreWorkflowWindowManagerDescriptor,
+} from "./descriptors"
+```
+
+Inside `buildServiceRegistry()`:
+```typescript
+registry.register(coreWorkflowServiceDescriptor)
+registry.register(coreWorkflowSnapshotsDescriptor)
+registry.register(coreWorkflowRunAbortsDescriptor)
+registry.register(coreWorkflowEngineDescriptor)
+registry.register(coreWorkflowWindowManagerDescriptor)
+```
+
+- [ ] **Step 4: Register IPC module in `ipc-registry.ts`**
+
+Add import and call `registry.register(workflowIpcModule, ctx)` in the registration list (following the pattern of existing modules in that file).
+
+- [ ] **Step 5: Verify TypeScript**
+
+Run: `pnpm --filter @synapse/desktop run typecheck`  
+Expected: exit 0 — fix any `AgentRuntimeService` field name mismatches in the descriptor.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add electron/services/workflow/workflow-engine.ts electron/services/workflow/__tests__/workflow-engine.test.ts package.json pnpm-lock.yaml
-git commit -m "feat(workflow): add DAG execution engine with branching and cancellation"
+git add desktop/electron/bootstrap/
+git commit -m "feat(workflow): service descriptors + IPC registry wiring"
 ```
 
 ---
 
-## Task 4: Prompt Node Plugin
+## Task 14: Preload bridge + renderer types
 
 **Files:**
-- Create: `workflow-nodes/prompt/schema.ts`
-- Create: `workflow-nodes/prompt/manifest.ts`
-- Create: `workflow-nodes/prompt/executor.main.ts`
-- Create: `workflow-nodes/prompt/card.tsx`
-- Create: `workflow-nodes/prompt/panel.tsx`
-- Create: `workflow-nodes/prompt/index.ts`
-- Test: `workflow-nodes/prompt/__tests__/executor.test.ts`
+- Modify: `desktop/src/types/bridge.ts`
+- Modify: `desktop/electron/preload.ts`
 
-- [ ] **Step 1: Create schema**
+- [ ] **Step 1: Add workflow types to `bridge.ts`**
 
+Add import near the other type imports:
 ```typescript
-// workflow-nodes/prompt/schema.ts
-import { z } from "zod"
-
-const variableBindingSchema = z.object({
-  name: z.string().min(1),
-  source: z.discriminatedUnion("type", [
-    z.object({ type: z.literal("param"), param: z.string().min(1) }),
-    z.object({ type: z.literal("node_output"), node: z.string().min(1) }),
-    z.object({ type: z.literal("static"), value: z.string() }),
-  ]),
-})
-
-export const promptNodeConfigSchema = z.object({
-  agent: z.string().min(1),
-  variables: z.array(variableBindingSchema).default([]),
-  prompt: z.string().min(1),
-})
-
-export type PromptNodeConfig = z.infer<typeof promptNodeConfigSchema>
+import type { WorkflowDefinition, WorkflowMeta, ValidationResult, WorkflowRunSnapshot, WorkflowEvent } from "./workflow"
 ```
 
-- [ ] **Step 2: Create manifest**
-
+Add `workflow` field to the `SynapseBridge` interface:
 ```typescript
-// workflow-nodes/prompt/manifest.ts
-import type { NodeManifest } from "../types"
-import { promptNodeConfigSchema, type PromptNodeConfig } from "./schema"
-
-export const promptNodeManifest: NodeManifest<PromptNodeConfig> = {
-  type: "prompt",
-  title: "Prompt",
-  icon: "message-square",
-  color: "blue",
-  ports: {
-    inputs: [{ id: "in", label: "输入" }],
-    outputs: [{ id: "out", label: "输出" }],
-  },
-  cardSummary: (config) => ({
-    title: config.agent,
-    subtitle: config.prompt.length > 40 ? config.prompt.slice(0, 40) + "..." : config.prompt,
-  }),
-  configSchema: promptNodeConfigSchema,
-}
-```
-
-- [ ] **Step 3: Create executor with test**
-
-```typescript
-// workflow-nodes/prompt/__tests__/executor.test.ts
-import { describe, expect, it, vi } from "vitest"
-import { createPromptNodeExecutor } from "../executor.main"
-
-describe("prompt node executor", () => {
-  it("sends interpolated prompt to agent and returns response", async () => {
-    const sendToAgent = vi.fn(async () => ({
-      status: "success" as const,
-      response: "The fix is: return null check",
-      durationMs: 1200,
-    }))
-
-    const executor = createPromptNodeExecutor({ sendToAgent })
-
-    const result = await executor.execute({
-      config: {
-        agent: "claude-code",
-        variables: [{ name: "issue", source: { type: "static", value: "NPE in auth" } }],
-        prompt: "Fix this: {{$issue}}",
-      },
-      resolvedVariables: { issue: "NPE in auth" },
-      context: {
-        runId: "run_1",
-        workflowId: "wf_1",
-        abortSignal: new AbortController().signal,
-        logger: { info: () => {}, error: () => {} },
-      },
-    })
-
-    expect(result.status).toBe("success")
-    expect(result.output).toBe("The fix is: return null check")
-    expect(sendToAgent).toHaveBeenCalledWith({
-      agent: "claude-code",
-      prompt: "Fix this: NPE in auth",
-      abortSignal: expect.any(AbortSignal),
-    })
-  })
-
-  it("returns failed status when agent errors", async () => {
-    const sendToAgent = vi.fn(async () => ({
-      status: "failed" as const,
-      response: "",
-      error: "Agent timeout",
-      durationMs: 30000,
-    }))
-
-    const executor = createPromptNodeExecutor({ sendToAgent })
-
-    const result = await executor.execute({
-      config: { agent: "claude-code", variables: [], prompt: "hello" },
-      resolvedVariables: {},
-      context: {
-        runId: "run_1",
-        workflowId: "wf_1",
-        abortSignal: new AbortController().signal,
-        logger: { info: () => {}, error: () => {} },
-      },
-    })
-
-    expect(result.status).toBe("failed")
-    expect(result.error).toBe("Agent timeout")
-  })
-})
-```
-
-```typescript
-// workflow-nodes/prompt/executor.main.ts
-import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
-import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
-import type { PromptNodeConfig } from "./schema"
-
-export interface AgentSendResult {
-  status: "success" | "failed"
-  response: string
-  error?: string
-  durationMs: number
-}
-
-export interface PromptNodeDeps {
-  sendToAgent: (input: {
-    agent: string
-    prompt: string
-    abortSignal: AbortSignal
-  }) => Promise<AgentSendResult>
-}
-
-export function createPromptNodeExecutor(deps: PromptNodeDeps): NodeExecutor<PromptNodeConfig> {
-  return {
-    async execute(input: NodeExecutionInput<PromptNodeConfig>): Promise<NodeExecutionResult> {
-      const { config, resolvedVariables, context } = input
-      const startTime = Date.now()
-
-      const interpolatedPrompt = interpolatePrompt(config.prompt, resolvedVariables)
-
-      const result = await deps.sendToAgent({
-        agent: config.agent,
-        prompt: interpolatedPrompt,
-        abortSignal: context.abortSignal,
-      })
-
-      return {
-        status: result.status,
-        output: result.response,
-        error: result.error,
-        durationMs: Date.now() - startTime,
-      }
-    },
+  workflow: {
+    list: () => Promise<WorkflowMeta[]>
+    get: (id: string) => Promise<WorkflowDefinition | null>
+    save: (def: WorkflowDefinition) => Promise<{ versionHash: string } | { errors: unknown[] }>
+    delete: (id: string) => Promise<void>
+    validate: (def: WorkflowDefinition) => Promise<ValidationResult>
+    run: (id: string, params: Record<string, unknown>) => Promise<{ runId: string }>
+    cancel: (runId: string) => Promise<void>
+    runHistory: (workflowId: string) => Promise<WorkflowRunSnapshot[]>
+    runSnapshot: (runId: string, workflowId: string) => Promise<WorkflowRunSnapshot | null>
+    openEditor: (id: string) => Promise<void>
+    editorState: () => Promise<{ openEditors: string[] }>
+    checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
+    onEvent: (listener: (event: WorkflowEvent) => void) => () => void
   }
-}
 ```
 
-- [ ] **Step 4: Create card and panel components (UI)**
+- [ ] **Step 2: Add to `preload.ts`**
 
-```tsx
-// workflow-nodes/prompt/card.tsx
-import type { PromptNodeConfig } from "./schema"
-import { promptNodeManifest } from "./manifest"
-
-interface PromptNodeCardProps {
-  config: PromptNodeConfig
-  status?: "idle" | "running" | "completed" | "failed" | "skipped"
-}
-
-export function PromptNodeCard({ config, status }: PromptNodeCardProps) {
-  const summary = promptNodeManifest.cardSummary(config)
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span>{summary.title}</span>
-      </div>
-      <div className="text-xs text-muted-foreground/70 line-clamp-2">
-        {summary.subtitle}
-      </div>
-    </div>
-  )
-}
-```
-
-```tsx
-// workflow-nodes/prompt/panel.tsx
-import type { PromptNodeConfig } from "./schema"
-import type { VariableBinding } from "../types"
-
-interface PromptNodePanelProps {
-  config: PromptNodeConfig
-  onChange: (config: PromptNodeConfig) => void
-  availableNodes: Array<{ id: string; name: string }>
-  availableParams: Array<{ name: string }>
-}
-
-export function PromptNodePanel({ config, onChange, availableNodes, availableParams }: PromptNodePanelProps) {
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      {/* Agent selector */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium">Agent</label>
-        <select
-          className="h-9 rounded-md border bg-background px-3 text-sm"
-          value={config.agent}
-          onChange={(e) => onChange({ ...config, agent: e.target.value })}
-        >
-          <option value="claude-code">Claude Code</option>
-          <option value="codex">Codex</option>
-        </select>
-      </div>
-
-      {/* Variables section */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium">变量定义</label>
-        {config.variables.map((v, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className="font-mono">${v.name}</span>
-            <span className="text-muted-foreground">=</span>
-            <span className="text-muted-foreground">
-              {v.source.type === "param" && `参数: ${v.source.param}`}
-              {v.source.type === "node_output" && `节点: ${v.source.node}`}
-              {v.source.type === "static" && `"${v.source.value}"`}
-            </span>
-          </div>
-        ))}
-        {/* Add variable button would go here */}
-      </div>
-
-      {/* Prompt editor */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium">Prompt</label>
-        <textarea
-          className="min-h-[120px] rounded-md border bg-background px-3 py-2 text-sm font-mono"
-          value={config.prompt}
-          onChange={(e) => onChange({ ...config, prompt: e.target.value })}
-          placeholder="使用 {{$变量名}} 引用变量..."
-        />
-      </div>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 5: Create index**
-
+Locate the `IPC_CHANNELS` constant and add:
 ```typescript
-// workflow-nodes/prompt/index.ts
-export { promptNodeManifest } from "./manifest"
-export { promptNodeConfigSchema, type PromptNodeConfig } from "./schema"
-export { createPromptNodeExecutor } from "./executor.main"
-export { PromptNodeCard } from "./card"
-export { PromptNodePanel } from "./panel"
-```
-
-- [ ] **Step 6: Run tests**
-
-Run: `pnpm vitest run workflow-nodes/prompt/__tests__/executor.test.ts`
-Expected: 2 tests PASS
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add workflow-nodes/prompt/
-git commit -m "feat(workflow): add prompt node plugin"
-```
-
----
-
-## Task 5: Switch Node Plugin
-
-**Files:**
-- Create: `workflow-nodes/switch/schema.ts`
-- Create: `workflow-nodes/switch/manifest.ts`
-- Create: `workflow-nodes/switch/executor.main.ts`
-- Create: `workflow-nodes/switch/card.tsx`
-- Create: `workflow-nodes/switch/panel.tsx`
-- Create: `workflow-nodes/switch/index.ts`
-- Test: `workflow-nodes/switch/__tests__/executor.test.ts`
-
-- [ ] **Step 1: Create schema**
-
-```typescript
-// workflow-nodes/switch/schema.ts
-import { z } from "zod"
-
-const variableBindingSchema = z.object({
-  name: z.string().min(1),
-  source: z.discriminatedUnion("type", [
-    z.object({ type: z.literal("param"), param: z.string().min(1) }),
-    z.object({ type: z.literal("node_output"), node: z.string().min(1) }),
-    z.object({ type: z.literal("static"), value: z.string() }),
-  ]),
-})
-
-export const switchNodeConfigSchema = z.object({
-  agent: z.string().min(1),
-  variables: z.array(variableBindingSchema).default([]),
-  prompt: z.string().min(1),
-  branches: z.array(z.string().min(1)).min(2),
-})
-
-export type SwitchNodeConfig = z.infer<typeof switchNodeConfigSchema>
-```
-
-- [ ] **Step 2: Create manifest with dynamic ports**
-
-```typescript
-// workflow-nodes/switch/manifest.ts
-import type { NodeManifest } from "../types"
-import { switchNodeConfigSchema, type SwitchNodeConfig } from "./schema"
-
-export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
-  type: "switch",
-  title: "Switch",
-  icon: "git-branch",
-  color: "yellow",
-  ports: {
-    inputs: [{ id: "in", label: "输入" }],
-    outputs: "dynamic",
-  },
-  resolveDynamicPorts: (config) =>
-    config.branches.map((branch) => ({ id: branch, label: branch })),
-  cardSummary: (config) => ({
-    title: "Switch",
-    subtitle: config.branches.join(" / "),
-  }),
-  configSchema: switchNodeConfigSchema,
-}
-```
-
-- [ ] **Step 3: Create executor with test**
-
-```typescript
-// workflow-nodes/switch/__tests__/executor.test.ts
-import { describe, expect, it, vi } from "vitest"
-import { createSwitchNodeExecutor } from "../executor.main"
-
-describe("switch node executor", () => {
-  it("returns activeBranch matching agent response", async () => {
-    const sendToAgent = vi.fn(async () => ({
-      status: "success" as const,
-      response: "fix",
-      durationMs: 800,
-    }))
-
-    const executor = createSwitchNodeExecutor({ sendToAgent })
-
-    const result = await executor.execute({
-      config: {
-        agent: "claude-code",
-        variables: [],
-        prompt: "Decide: fix or skip?",
-        branches: ["fix", "skip"],
-      },
-      resolvedVariables: {},
-      context: {
-        runId: "run_1",
-        workflowId: "wf_1",
-        abortSignal: new AbortController().signal,
-        logger: { info: () => {}, error: () => {} },
-      },
-    })
-
-    expect(result.status).toBe("success")
-    expect(result.activeBranch).toBe("fix")
-    expect(result.output).toBe("fix")
-  })
-
-  it("trims and lowercases agent response to match branch", async () => {
-    const sendToAgent = vi.fn(async () => ({
-      status: "success" as const,
-      response: "  Skip  \n",
-      durationMs: 500,
-    }))
-
-    const executor = createSwitchNodeExecutor({ sendToAgent })
-
-    const result = await executor.execute({
-      config: {
-        agent: "claude-code",
-        variables: [],
-        prompt: "Decide",
-        branches: ["fix", "skip"],
-      },
-      resolvedVariables: {},
-      context: {
-        runId: "run_1",
-        workflowId: "wf_1",
-        abortSignal: new AbortController().signal,
-        logger: { info: () => {}, error: () => {} },
-      },
-    })
-
-    expect(result.activeBranch).toBe("skip")
-  })
-
-  it("fails when agent response matches no branch", async () => {
-    const sendToAgent = vi.fn(async () => ({
-      status: "success" as const,
-      response: "maybe",
-      durationMs: 500,
-    }))
-
-    const executor = createSwitchNodeExecutor({ sendToAgent })
-
-    const result = await executor.execute({
-      config: {
-        agent: "claude-code",
-        variables: [],
-        prompt: "Decide",
-        branches: ["fix", "skip"],
-      },
-      resolvedVariables: {},
-      context: {
-        runId: "run_1",
-        workflowId: "wf_1",
-        abortSignal: new AbortController().signal,
-        logger: { info: () => {}, error: () => {} },
-      },
-    })
-
-    expect(result.status).toBe("failed")
-    expect(result.error).toContain("no matching branch")
-  })
-})
-```
-
-```typescript
-// workflow-nodes/switch/executor.main.ts
-import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
-import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
-import type { SwitchNodeConfig } from "./schema"
-import type { PromptNodeDeps } from "../prompt/executor.main"
-
-export function createSwitchNodeExecutor(deps: PromptNodeDeps): NodeExecutor<SwitchNodeConfig> {
-  return {
-    async execute(input: NodeExecutionInput<SwitchNodeConfig>): Promise<NodeExecutionResult> {
-      const { config, resolvedVariables, context } = input
-      const startTime = Date.now()
-
-      const interpolatedPrompt = interpolatePrompt(config.prompt, resolvedVariables)
-
-      const result = await deps.sendToAgent({
-        agent: config.agent,
-        prompt: interpolatedPrompt,
-        abortSignal: context.abortSignal,
-      })
-
-      if (result.status === "failed") {
-        return {
-          status: "failed",
-          output: "",
-          error: result.error,
-          durationMs: Date.now() - startTime,
-        }
-      }
-
-      // Match response to a branch (case-insensitive, trimmed)
-      const response = result.response.trim().toLowerCase()
-      const matchedBranch = config.branches.find(
-        (b) => b.toLowerCase() === response,
-      )
-
-      if (!matchedBranch) {
-        return {
-          status: "failed",
-          output: result.response,
-          error: `Switch decision failed: agent responded "${result.response}" but no matching branch found. Expected one of: ${config.branches.join(", ")}`,
-          durationMs: Date.now() - startTime,
-        }
-      }
-
-      return {
-        status: "success",
-        output: matchedBranch,
-        activeBranch: matchedBranch,
-        durationMs: Date.now() - startTime,
-      }
-    },
-  }
-}
-```
-
-- [ ] **Step 4: Create card and panel components**
-
-```tsx
-// workflow-nodes/switch/card.tsx
-import type { SwitchNodeConfig } from "./schema"
-
-interface SwitchNodeCardProps {
-  config: SwitchNodeConfig
-  status?: "idle" | "running" | "completed" | "failed" | "skipped"
-}
-
-export function SwitchNodeCard({ config }: SwitchNodeCardProps) {
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span>Switch</span>
-      </div>
-      <div className="flex flex-wrap gap-1">
-        {config.branches.map((branch) => (
-          <span
-            key={branch}
-            className="rounded px-1.5 py-0.5 text-[10px] bg-muted text-muted-foreground"
-          >
-            {branch}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-```
-
-```tsx
-// workflow-nodes/switch/panel.tsx
-import type { SwitchNodeConfig } from "./schema"
-
-interface SwitchNodePanelProps {
-  config: SwitchNodeConfig
-  onChange: (config: SwitchNodeConfig) => void
-  availableNodes: Array<{ id: string; name: string }>
-  availableParams: Array<{ name: string }>
-}
-
-export function SwitchNodePanel({ config, onChange, availableNodes, availableParams }: SwitchNodePanelProps) {
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium">Agent</label>
-        <select
-          className="h-9 rounded-md border bg-background px-3 text-sm"
-          value={config.agent}
-          onChange={(e) => onChange({ ...config, agent: e.target.value })}
-        >
-          <option value="claude-code">Claude Code</option>
-          <option value="codex">Codex</option>
-        </select>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium">判断 Prompt</label>
-        <textarea
-          className="min-h-[100px] rounded-md border bg-background px-3 py-2 text-sm font-mono"
-          value={config.prompt}
-          onChange={(e) => onChange({ ...config, prompt: e.target.value })}
-          placeholder="让 Agent 判断走哪个分支，输出分支名..."
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium">分支</label>
-        <div className="flex flex-wrap gap-2">
-          {config.branches.map((branch, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <input
-                className="h-7 w-24 rounded border bg-background px-2 text-sm"
-                value={branch}
-                onChange={(e) => {
-                  const newBranches = [...config.branches]
-                  newBranches[i] = e.target.value
-                  onChange({ ...config, branches: newBranches })
-                }}
-              />
-              {config.branches.length > 2 && (
-                <button
-                  className="text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => onChange({ ...config, branches: config.branches.filter((_, j) => j !== i) })}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            className="h-7 rounded border border-dashed px-2 text-xs text-muted-foreground"
-            onClick={() => onChange({ ...config, branches: [...config.branches, `branch_${config.branches.length + 1}`] })}
-          >
-            + 添加分支
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 5: Create index**
-
-```typescript
-// workflow-nodes/switch/index.ts
-export { switchNodeManifest } from "./manifest"
-export { switchNodeConfigSchema, type SwitchNodeConfig } from "./schema"
-export { createSwitchNodeExecutor } from "./executor.main"
-export { SwitchNodeCard } from "./card"
-export { SwitchNodePanel } from "./panel"
-```
-
-- [ ] **Step 6: Run tests**
-
-Run: `pnpm vitest run workflow-nodes/switch/__tests__/executor.test.ts`
-Expected: 3 tests PASS
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add workflow-nodes/switch/
-git commit -m "feat(workflow): add switch node plugin with AI branch routing"
-```
-
----
-
-## Task 6: Workflow Storage Service
-
-**Files:**
-- Create: `electron/services/workflow/workflow-service.ts`
-- Test: `electron/services/workflow/__tests__/workflow-service.test.ts`
-
-- [ ] **Step 1: Write storage service tests**
-
-```typescript
-// electron/services/workflow/__tests__/workflow-service.test.ts
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
-import { WorkflowService } from "../workflow-service"
-import * as fs from "node:fs/promises"
-import * as path from "node:path"
-import { tmpdir } from "node:os"
-
-describe("WorkflowService", () => {
-  let service: WorkflowService
-  let testDir: string
-
-  beforeEach(async () => {
-    testDir = path.join(tmpdir(), `wf-test-${Date.now()}`)
-    await fs.mkdir(testDir, { recursive: true })
-    service = new WorkflowService(testDir)
-  })
-
-  afterEach(async () => {
-    await fs.rm(testDir, { recursive: true, force: true })
-  })
-
-  it("saves a workflow and lists it", async () => {
-    const definition = {
-      id: "test-wf",
-      name: "Test Workflow",
-      version: "",
-      params: [],
-      nodes: [{ id: "a", type: "prompt", position: { x: 0, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "hi" } }],
-      edges: [],
-    }
-
-    const { versionHash } = await service.save(definition)
-    expect(versionHash).toMatch(/^v_\d+_[a-z0-9]+$/)
-
-    const list = await service.list()
-    expect(list).toHaveLength(1)
-    expect(list[0].id).toBe("test-wf")
-    expect(list[0].name).toBe("Test Workflow")
-  })
-
-  it("get returns the latest version", async () => {
-    const def1 = {
-      id: "wf-1",
-      name: "V1",
-      version: "",
-      params: [],
-      nodes: [],
-      edges: [],
-    }
-    await service.save(def1)
-
-    // Small delay to ensure different timestamp
-    await new Promise((r) => setTimeout(r, 10))
-
-    const def2 = { ...def1, name: "V2" }
-    await service.save(def2)
-
-    const latest = await service.get("wf-1")
-    expect(latest.name).toBe("V2")
-  })
-
-  it("delete removes the workflow directory", async () => {
-    const def = { id: "to-delete", name: "Delete Me", version: "", params: [], nodes: [], edges: [] }
-    await service.save(def)
-
-    await service.delete("to-delete")
-    const list = await service.list()
-    expect(list).toHaveLength(0)
-  })
-
-  it("get throws for nonexistent workflow", async () => {
-    await expect(service.get("nope")).rejects.toThrow(/not found/)
-  })
-})
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `pnpm vitest run electron/services/workflow/__tests__/workflow-service.test.ts`
-Expected: FAIL — module not found
-
-- [ ] **Step 3: Implement workflow service**
-
-```typescript
-// electron/services/workflow/workflow-service.ts
-import * as fs from "node:fs/promises"
-import * as path from "node:path"
-import { createHash } from "node:crypto"
-import type { WorkflowDefinition } from "../../../workflow-nodes/types"
-
-export interface WorkflowMeta {
-  id: string
-  name: string
-  nodeCount: number
-  createdAt: string
-  updatedAt: string
-}
-
-export class WorkflowService {
-  constructor(private readonly baseDir: string) {}
-
-  async save(definition: WorkflowDefinition): Promise<{ versionHash: string }> {
-    const workflowDir = path.join(this.baseDir, definition.id)
-    await fs.mkdir(workflowDir, { recursive: true })
-
-    // Write/update meta.json
-    const metaPath = path.join(workflowDir, "meta.json")
-    const now = new Date().toISOString()
-    let meta: Record<string, unknown>
-    try {
-      meta = JSON.parse(await fs.readFile(metaPath, "utf-8"))
-      meta.name = definition.name
-      meta.updatedAt = now
-    } catch {
-      meta = {
-        id: definition.id,
-        name: definition.name,
-        createdAt: now,
-        updatedAt: now,
-      }
-    }
-    await fs.writeFile(metaPath, JSON.stringify(meta, null, 2))
-
-    // Generate version filename: v_<timestamp>_<short-hash>.json
-    const timestamp = Date.now()
-    const content = JSON.stringify(definition)
-    const hash = createHash("sha256").update(content).digest("hex").slice(0, 8)
-    const versionHash = `v_${timestamp}_${hash}`
-    const versionFile = path.join(workflowDir, `${versionHash}.json`)
-
-    // Write version with the hash embedded
-    const versionedDef = { ...definition, version: versionHash }
-    await fs.writeFile(versionFile, JSON.stringify(versionedDef, null, 2))
-
-    return { versionHash }
-  }
-
-  async list(): Promise<WorkflowMeta[]> {
-    let entries: string[]
-    try {
-      entries = await fs.readdir(this.baseDir)
-    } catch {
-      return []
-    }
-
-    const results: WorkflowMeta[] = []
-    for (const entry of entries) {
-      const metaPath = path.join(this.baseDir, entry, "meta.json")
-      try {
-        const raw = await fs.readFile(metaPath, "utf-8")
-        const meta = JSON.parse(raw)
-        const versions = await this.listVersionFiles(entry)
-        const latestVersion = versions.length > 0
-          ? JSON.parse(await fs.readFile(path.join(this.baseDir, entry, versions[versions.length - 1]), "utf-8"))
-          : null
-        results.push({
-          id: meta.id,
-          name: meta.name,
-          nodeCount: latestVersion?.nodes?.length ?? 0,
-          createdAt: meta.createdAt,
-          updatedAt: meta.updatedAt,
-        })
-      } catch {
-        // Skip invalid entries
-      }
-    }
-
-    return results
-  }
-
-  async get(id: string): Promise<WorkflowDefinition> {
-    const versions = await this.listVersionFiles(id)
-    if (versions.length === 0) {
-      throw new Error(`Workflow "${id}" not found`)
-    }
-
-    const latestFile = path.join(this.baseDir, id, versions[versions.length - 1])
-    const raw = await fs.readFile(latestFile, "utf-8")
-    return JSON.parse(raw)
-  }
-
-  async delete(id: string): Promise<void> {
-    const dir = path.join(this.baseDir, id)
-    await fs.rm(dir, { recursive: true, force: true })
-  }
-
-  private async listVersionFiles(id: string): Promise<string[]> {
-    const dir = path.join(this.baseDir, id)
-    let files: string[]
-    try {
-      files = await fs.readdir(dir)
-    } catch {
-      throw new Error(`Workflow "${id}" not found`)
-    }
-    return files
-      .filter((f) => f.startsWith("v_") && f.endsWith(".json"))
-      .sort() // Lexicographic sort works because timestamp prefix
-  }
-}
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `pnpm vitest run electron/services/workflow/__tests__/workflow-service.test.ts`
-Expected: All 4 tests PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add electron/services/workflow/workflow-service.ts electron/services/workflow/__tests__/workflow-service.test.ts
-git commit -m "feat(workflow): add workflow storage service with Git full-snapshot versioning"
-```
-
----
-
-## Task 7: Window Manager
-
-**Files:**
-- Create: `electron/services/workflow/window-manager.ts`
-- Test: `electron/services/workflow/__tests__/window-manager.test.ts`
-
-- [ ] **Step 1: Write window manager tests**
-
-```typescript
-// electron/services/workflow/__tests__/window-manager.test.ts
-import { describe, expect, it, vi, beforeEach } from "vitest"
-import { WorkflowWindowManager } from "../window-manager"
-
-// Mock BrowserWindow
-const mockWindow = (id: string) => ({
-  id,
-  isDestroyed: vi.fn(() => false),
-  focus: vi.fn(),
-  close: vi.fn(),
-  on: vi.fn(),
-  webContents: { send: vi.fn() },
-})
-
-describe("WorkflowWindowManager", () => {
-  let manager: WorkflowWindowManager
-  let createWindow: ReturnType<typeof vi.fn>
-
-  beforeEach(() => {
-    createWindow = vi.fn((workflowId: string) => mockWindow(workflowId))
-    manager = new WorkflowWindowManager(createWindow)
-  })
-
-  it("opens a new editor window", () => {
-    manager.openEditor("wf-1")
-    expect(createWindow).toHaveBeenCalledWith("wf-1")
-    expect(manager.getOpenEditors()).toEqual(["wf-1"])
-  })
-
-  it("focuses existing window instead of creating duplicate", () => {
-    manager.openEditor("wf-1")
-    manager.openEditor("wf-1")
-    expect(createWindow).toHaveBeenCalledTimes(1)
-  })
-
-  it("allows multiple different workflows open simultaneously", () => {
-    manager.openEditor("wf-1")
-    manager.openEditor("wf-2")
-    expect(manager.getOpenEditors()).toEqual(["wf-1", "wf-2"])
-  })
-
-  it("checkCanSync returns false when editors are open", () => {
-    manager.openEditor("wf-1")
-    const result = manager.checkCanSync()
-    expect(result.canSync).toBe(false)
-    expect(result.blockers).toContain("wf-1")
-  })
-
-  it("checkCanSync returns true when no editors are open", () => {
-    const result = manager.checkCanSync()
-    expect(result.canSync).toBe(true)
-    expect(result.blockers).toHaveLength(0)
-  })
-
-  it("removes window from tracking when closed", () => {
-    manager.openEditor("wf-1")
-    manager.handleWindowClosed("wf-1")
-    expect(manager.getOpenEditors()).toEqual([])
-    expect(manager.checkCanSync().canSync).toBe(true)
-  })
-})
-```
-
-- [ ] **Step 2: Implement window manager**
-
-```typescript
-// electron/services/workflow/window-manager.ts
-type WindowLike = {
-  isDestroyed(): boolean
-  focus(): void
-  close(): void
-  on(event: string, handler: () => void): void
-  webContents: { send(channel: string, ...args: unknown[]): void }
-}
-
-type CreateWindowFn = (workflowId: string) => WindowLike
-
-export class WorkflowWindowManager {
-  private readonly windows = new Map<string, WindowLike>()
-
-  constructor(private readonly createWindow: CreateWindowFn) {}
-
-  openEditor(workflowId: string): void {
-    const existing = this.windows.get(workflowId)
-    if (existing && !existing.isDestroyed()) {
-      existing.focus()
-      return
-    }
-
-    const window = this.createWindow(workflowId)
-    this.windows.set(workflowId, window)
-  }
-
-  handleWindowClosed(workflowId: string): void {
-    this.windows.delete(workflowId)
-  }
-
-  getOpenEditors(): string[] {
-    // Clean up destroyed windows
-    for (const [id, win] of this.windows) {
-      if (win.isDestroyed()) this.windows.delete(id)
-    }
-    return [...this.windows.keys()]
-  }
-
-  checkCanSync(): { canSync: boolean; blockers: string[] } {
-    const editors = this.getOpenEditors()
-    return {
-      canSync: editors.length === 0,
-      blockers: editors,
-    }
-  }
-
-  sendEvent(workflowId: string, event: unknown): void {
-    const win = this.windows.get(workflowId)
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("synapse:workflow:event", event)
-    }
-  }
-
-  closeAll(): string[] {
-    const openIds = this.getOpenEditors()
-    for (const [, win] of this.windows) {
-      if (!win.isDestroyed()) win.close()
-    }
-    return openIds
-  }
-}
-```
-
-- [ ] **Step 3: Run tests**
-
-Run: `pnpm vitest run electron/services/workflow/__tests__/window-manager.test.ts`
-Expected: All 6 tests PASS
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add electron/services/workflow/window-manager.ts electron/services/workflow/__tests__/window-manager.test.ts
-git commit -m "feat(workflow): add editor window manager with sync guard"
-```
-
----
-
-## Task 8: IPC Handlers
-
-**Files:**
-- Create: `electron/ipc/workflow-handlers.ts`
-- Test: `tests/ipc/workflow-handlers.test.ts`
-
-- [ ] **Step 1: Create IPC handlers**
-
-```typescript
-// electron/ipc/workflow-handlers.ts
-import type { WorkflowService } from "../services/workflow/workflow-service"
-import type { WorkflowEngine, WorkflowRunInput } from "../services/workflow/workflow-engine"
-import type { WorkflowWindowManager } from "../services/workflow/window-manager"
-import type { WorkflowDefinition } from "../../workflow-nodes/types"
-
-export interface WorkflowHandlerDeps {
-  workflowService: WorkflowService
-  workflowEngine: WorkflowEngine
-  windowManager: WorkflowWindowManager
-}
-
-export function registerWorkflowHandlers(
-  ipcMain: { handle(channel: string, handler: (...args: any[]) => any): void },
-  deps: WorkflowHandlerDeps,
-) {
-  const { workflowService, workflowEngine, windowManager } = deps
-
-  // CRUD
-  ipcMain.handle("synapse:workflow:list", async () => {
-    return workflowService.list()
-  })
-
-  ipcMain.handle("synapse:workflow:get", async (_event, { id }: { id: string }) => {
-    return workflowService.get(id)
-  })
-
-  ipcMain.handle("synapse:workflow:save", async (_event, { definition }: { definition: WorkflowDefinition }) => {
-    return workflowService.save(definition)
-  })
-
-  ipcMain.handle("synapse:workflow:delete", async (_event, { id }: { id: string }) => {
-    return workflowService.delete(id)
-  })
-
-  // Execution
-  const activeRuns = new Map<string, AbortController>()
-
-  ipcMain.handle("synapse:workflow:run", async (_event, { id, params }: { id: string; params: Record<string, unknown> }) => {
-    const definition = await workflowService.get(id)
-    const controller = new AbortController()
-    const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    activeRuns.set(runId, controller)
-
-    // Run async — don't await, return runId immediately
-    workflowEngine.run({
-      definition,
-      params,
-      abortSignal: controller.signal,
-    }).finally(() => {
-      activeRuns.delete(runId)
-    })
-
-    return { runId }
-  })
-
-  ipcMain.handle("synapse:workflow:cancel", async (_event, { runId }: { runId: string }) => {
-    const controller = activeRuns.get(runId)
-    if (controller) controller.abort()
-  })
-
-  // Window management
-  ipcMain.handle("synapse:workflow:open-editor", async (_event, { id }: { id: string }) => {
-    windowManager.openEditor(id)
-  })
-
-  ipcMain.handle("synapse:workflow:editor-state", async () => {
-    return { openEditors: windowManager.getOpenEditors() }
-  })
-
-  ipcMain.handle("synapse:workflow:check-can-sync", async () => {
-    return windowManager.checkCanSync()
-  })
-}
-```
-
-- [ ] **Step 2: Write IPC handler test**
-
-```typescript
-// tests/ipc/workflow-handlers.test.ts
-import { describe, expect, it, vi, beforeEach } from "vitest"
-import { registerWorkflowHandlers } from "../../electron/ipc/workflow-handlers"
-
-describe("workflow IPC handlers", () => {
-  let handlers: Record<string, Function>
-  let mockService: any
-  let mockEngine: any
-  let mockWindowManager: any
-
-  beforeEach(() => {
-    handlers = {}
-    const ipcMain = {
-      handle: (channel: string, handler: Function) => { handlers[channel] = handler },
-    }
-
-    mockService = {
-      list: vi.fn(async () => [{ id: "wf-1", name: "Test", nodeCount: 2, createdAt: "", updatedAt: "" }]),
-      get: vi.fn(async () => ({ id: "wf-1", name: "Test", version: "v_1", params: [], nodes: [], edges: [] })),
-      save: vi.fn(async () => ({ versionHash: "v_123_abc" })),
-      delete: vi.fn(async () => {}),
-    }
-
-    mockEngine = {
-      run: vi.fn(async () => ({ status: "completed", nodeResults: {}, durationMs: 100 })),
-      on: vi.fn(),
-    }
-
-    mockWindowManager = {
-      openEditor: vi.fn(),
-      getOpenEditors: vi.fn(() => ["wf-1"]),
-      checkCanSync: vi.fn(() => ({ canSync: false, blockers: ["wf-1"] })),
-    }
-
-    registerWorkflowHandlers(ipcMain, {
-      workflowService: mockService,
-      workflowEngine: mockEngine,
-      windowManager: mockWindowManager,
-    })
-  })
-
-  it("registers all expected channels", () => {
-    expect(Object.keys(handlers)).toEqual(expect.arrayContaining([
-      "synapse:workflow:list",
-      "synapse:workflow:get",
-      "synapse:workflow:save",
-      "synapse:workflow:delete",
-      "synapse:workflow:run",
-      "synapse:workflow:cancel",
-      "synapse:workflow:open-editor",
-      "synapse:workflow:editor-state",
-      "synapse:workflow:check-can-sync",
-    ]))
-  })
-
-  it("list delegates to service", async () => {
-    const result = await handlers["synapse:workflow:list"]({})
-    expect(result).toHaveLength(1)
-    expect(mockService.list).toHaveBeenCalled()
-  })
-
-  it("check-can-sync returns window manager state", async () => {
-    const result = await handlers["synapse:workflow:check-can-sync"]({})
-    expect(result.canSync).toBe(false)
-    expect(result.blockers).toContain("wf-1")
-  })
-})
-```
-
-- [ ] **Step 3: Run tests**
-
-Run: `pnpm vitest run tests/ipc/workflow-handlers.test.ts`
-Expected: 3 tests PASS
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add electron/ipc/workflow-handlers.ts tests/ipc/workflow-handlers.test.ts
-git commit -m "feat(workflow): add IPC handlers for CRUD, execution, and window management"
-```
-
----
-
-## Task 9: Renderer — Workflow List (Main Window Tab)
-
-**Files:**
-- Create: `src/modules/workflow/index.tsx`
-- Create: `src/modules/workflow/components/workflow-list.tsx`
-- Create: `src/modules/workflow/components/workflow-card.tsx`
-- Create: `src/modules/workflow/components/run-params-dialog.tsx`
-- Create: `src/modules/workflow/hooks/use-workflow-list.ts`
-- Create: `src/modules/workflow/hooks/use-workflow-run.ts`
-
-- [ ] **Step 1: Create workflow list hook**
-
-```typescript
-// src/modules/workflow/hooks/use-workflow-list.ts
-import { useCallback, useEffect, useState } from "react"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
-
-export interface WorkflowMeta {
-  id: string
-  name: string
-  nodeCount: number
-  createdAt: string
-  updatedAt: string
-}
-
-export function useWorkflowList() {
-  const [workflows, setWorkflows] = useState<WorkflowMeta[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const bridge = requireSynapseBridge()
-      const list = await bridge.workflow.list()
-      setWorkflows(list)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { refresh() }, [refresh])
-
-  return { workflows, loading, refresh }
-}
-```
-
-- [ ] **Step 2: Create workflow run hook**
-
-```typescript
-// src/modules/workflow/hooks/use-workflow-run.ts
-import { useCallback, useState } from "react"
-import { toast } from "sonner"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
-
-export function useWorkflowRun() {
-  const [runningId, setRunningId] = useState<string | null>(null)
-
-  const run = useCallback(async (id: string, params: Record<string, unknown>) => {
-    setRunningId(id)
-    try {
-      const bridge = requireSynapseBridge()
-      const { runId } = await bridge.workflow.run({ id, params })
-      toast("工作流已启动")
-      return runId
-    } catch (err) {
-      toast.error("启动工作流失败")
-      return null
-    } finally {
-      setRunningId(null)
-    }
-  }, [])
-
-  const cancel = useCallback(async (runId: string) => {
-    const bridge = requireSynapseBridge()
-    await bridge.workflow.cancel({ runId })
-    toast("已取消")
-  }, [])
-
-  return { run, cancel, runningId }
-}
-```
-
-- [ ] **Step 3: Create workflow card component**
-
-```tsx
-// src/modules/workflow/components/workflow-card.tsx
-import type { WorkflowMeta } from "../hooks/use-workflow-list"
-
-interface WorkflowCardProps {
-  workflow: WorkflowMeta
-  isEditing: boolean
-  onOpen: () => void
-  onRun: () => void
-  onDelete: () => void
-}
-
-export function WorkflowCard({ workflow, isEditing, onOpen, onRun, onDelete }: WorkflowCardProps) {
-  return (
-    <div
-      className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50 ${isEditing ? "border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20" : ""}`}
-      onDoubleClick={onOpen}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate">{workflow.name}</div>
-        <div className="text-xs text-muted-foreground">
-          {workflow.nodeCount} 个节点
-          {isEditing && <span className="ml-2 text-yellow-600">编辑中</span>}
-        </div>
-      </div>
-      <div className="flex items-center gap-1">
-        <button
-          className="h-7 px-2 rounded text-xs hover:bg-accent"
-          onClick={(e) => { e.stopPropagation(); onRun() }}
-        >
-          ▶
-        </button>
-        <button
-          className="h-7 px-2 rounded text-xs hover:bg-accent"
-          onClick={(e) => { e.stopPropagation(); onOpen() }}
-        >
-          编辑
-        </button>
-      </div>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 4: Create run params dialog**
-
-```tsx
-// src/modules/workflow/components/run-params-dialog.tsx
-import { useState } from "react"
-import type { WorkflowParam } from "../../../../workflow-nodes/types"
-
-interface RunParamsDialogProps {
-  params: WorkflowParam[]
-  onConfirm: (values: Record<string, unknown>) => void
-  onCancel: () => void
-}
-
-export function RunParamsDialog({ params, onConfirm, onCancel }: RunParamsDialogProps) {
-  const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const initial: Record<string, unknown> = {}
-    for (const p of params) {
-      initial[p.name] = p.default ?? ""
-    }
-    return initial
-  })
-
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      <h3 className="text-sm font-medium">运行参数</h3>
-      {params.map((param) => (
-        <div key={param.name} className="flex flex-col gap-1">
-          <label className="text-xs font-medium">{param.name}</label>
-          {param.description && (
-            <span className="text-xs text-muted-foreground">{param.description}</span>
-          )}
-          <input
-            className="h-8 rounded-md border bg-background px-2 text-sm"
-            type={param.type === "number" ? "number" : "text"}
-            value={String(values[param.name] ?? "")}
-            onChange={(e) => setValues({
-              ...values,
-              [param.name]: param.type === "number" ? Number(e.target.value) : e.target.value,
-            })}
-          />
-        </div>
-      ))}
-      <div className="flex justify-end gap-2">
-        <button className="h-8 px-3 rounded-md border text-sm" onClick={onCancel}>取消</button>
-        <button className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-sm" onClick={() => onConfirm(values)}>运行</button>
-      </div>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 5: Create workflow list page**
-
-```tsx
-// src/modules/workflow/components/workflow-list.tsx
-import { useState } from "react"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
-import { useWorkflowList } from "../hooks/use-workflow-list"
-import { useWorkflowRun } from "../hooks/use-workflow-run"
-import { WorkflowCard } from "./workflow-card"
-import { RunParamsDialog } from "./run-params-dialog"
-
-export function WorkflowList() {
-  const { workflows, loading, refresh } = useWorkflowList()
-  const { run } = useWorkflowRun()
-  const [openEditors, setOpenEditors] = useState<string[]>([])
-  const [runTarget, setRunTarget] = useState<string | null>(null)
-
-  const handleOpen = async (id: string) => {
-    const bridge = requireSynapseBridge()
-    await bridge.workflow.openEditor({ id })
-    const state = await bridge.workflow.editorState()
-    setOpenEditors(state.openEditors)
-  }
-
-  const handleRun = (id: string) => {
-    setRunTarget(id)
-  }
-
-  const handleConfirmRun = async (params: Record<string, unknown>) => {
-    if (runTarget) {
-      await run(runTarget, params)
-      setRunTarget(null)
-    }
-  }
-
-  if (loading) {
-    return <div className="p-4 text-sm text-muted-foreground">加载中...</div>
-  }
-
-  return (
-    <div className="flex flex-col gap-2 p-4">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-medium">工作流</h2>
-        {/* Create button would go here */}
-      </div>
-
-      {workflows.length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">
-          暂无工作流
-        </div>
-      ) : (
-        workflows.map((wf) => (
-          <WorkflowCard
-            key={wf.id}
-            workflow={wf}
-            isEditing={openEditors.includes(wf.id)}
-            onOpen={() => handleOpen(wf.id)}
-            onRun={() => handleRun(wf.id)}
-            onDelete={() => {}}
-          />
-        ))
-      )}
-
-      {runTarget && (
-        <RunParamsDialog
-          params={[]} // Would load from workflow definition
-          onConfirm={handleConfirmRun}
-          onCancel={() => setRunTarget(null)}
-        />
-      )}
-    </div>
-  )
-}
-```
-
-- [ ] **Step 6: Create module index**
-
-```tsx
-// src/modules/workflow/index.tsx
-import { WorkflowList } from "./components/workflow-list"
-
-export function WorkflowModule() {
-  return <WorkflowList />
-}
-```
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add src/modules/workflow/
-git commit -m "feat(workflow): add workflow list module for main window tab"
-```
-
----
-
-## Task 10: Renderer — Editor Window (Canvas + Toolbar + Palette)
-
-**Files:**
-- Create: `src/modules/workflow/editor/editor-app.tsx`
-- Create: `src/modules/workflow/editor/canvas.tsx`
-- Create: `src/modules/workflow/editor/toolbar.tsx`
-- Create: `src/modules/workflow/editor/node-palette.tsx`
-- Create: `src/modules/workflow/hooks/use-workflow-events.ts`
-
-- [ ] **Step 1: Install @xyflow/react**
-
-```bash
-pnpm add @xyflow/react
-```
-
-- [ ] **Step 2: Create the workflow events hook**
-
-```typescript
-// src/modules/workflow/hooks/use-workflow-events.ts
-import { useEffect, useRef, useCallback } from "react"
-import { getSynapseBridge } from "@/lib/electron-bridge"
-import type { WorkflowEvent } from "../../../../workflow-nodes/types"
-
-type WorkflowEventHandler = (event: WorkflowEvent) => void
-
-export function useWorkflowEvents(runId: string | null, handler: WorkflowEventHandler) {
-  const handlerRef = useRef(handler)
-  handlerRef.current = handler
-
-  useEffect(() => {
-    if (!runId) return undefined
-    const bridge = getSynapseBridge()
-    if (!bridge) return undefined
-
-    return bridge.workflow.onEvent((event: WorkflowEvent) => {
-      handlerRef.current(event)
-    })
-  }, [runId])
-}
-```
-
-- [ ] **Step 3: Create the canvas component**
-
-```tsx
-// src/modules/workflow/editor/canvas.tsx
-import { useCallback } from "react"
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-  type Connection,
-  type Node,
-  type Edge,
-} from "@xyflow/react"
-import "@xyflow/react/dist/style.css"
-import type { WorkflowDefinition } from "../../../../workflow-nodes/types"
-import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
-import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
-
-const nodeTypes = {
-  prompt: PromptNodeCard,
-  switch: SwitchNodeCard,
-}
-
-type WorkflowCanvasProps = {
-  definition: WorkflowDefinition
-  onDefinitionChange: (def: WorkflowDefinition) => void
-  onNodeSelect: (nodeId: string | null) => void
-}
-
-function definitionToFlowNodes(def: WorkflowDefinition): Node[] {
-  return def.nodes.map((node) => ({
-    id: node.id,
-    type: node.type,
-    position: node.position,
-    data: { config: node.config },
-  }))
-}
-
-function definitionToFlowEdges(def: WorkflowDefinition): Edge[] {
-  return def.edges.map((edge, i) => ({
-    id: `e-${edge.from}-${edge.to}-${i}`,
-    source: edge.from,
-    target: edge.to,
-    label: edge.branch ?? undefined,
-    animated: false,
-  }))
-}
-
-export function WorkflowCanvas({ definition, onDefinitionChange, onNodeSelect }: WorkflowCanvasProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(definitionToFlowNodes(definition))
-  const [edges, setEdges, onEdgesChange] = useEdgesState(definitionToFlowEdges(definition))
-
-  const onConnect = useCallback((connection: Connection) => {
-    setEdges((eds) => addEdge(connection, eds))
-    onDefinitionChange({
-      ...definition,
-      edges: [
-        ...definition.edges,
-        { from: connection.source!, to: connection.target! },
-      ],
-    })
-  }, [definition, onDefinitionChange, setEdges])
-
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    onNodeSelect(node.id)
-  }, [onNodeSelect])
-
-  const onPaneClick = useCallback(() => {
-    onNodeSelect(null)
-  }, [onNodeSelect])
-
-  return (
-    <div className="h-full w-full">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
-        fitView
-      >
-        <Background />
-        <Controls />
-        <MiniMap />
-      </ReactFlow>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 4: Create the toolbar component**
-
-```tsx
-// src/modules/workflow/editor/toolbar.tsx
-import { Play, Save, Square } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-
-type ToolbarProps = {
-  name: string
-  onNameChange: (name: string) => void
-  onSave: () => void
-  onRun: () => void
-  onCancel: () => void
-  isRunning: boolean
-  isDirty: boolean
-}
-
-export function WorkflowToolbar({
-  name,
-  onNameChange,
-  onSave,
-  onRun,
-  onCancel,
-  isRunning,
-  isDirty,
-}: ToolbarProps) {
-  return (
-    <div className="flex items-center gap-2 border-b px-4 py-2">
-      <Input
-        value={name}
-        onChange={(e) => onNameChange(e.target.value)}
-        className="w-64"
-      />
-
-      <div className="ml-auto flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onSave} disabled={!isDirty}>
-          <Save className="mr-1 h-4 w-4" />
-          保存
-        </Button>
-
-        {isRunning ? (
-          <Button variant="destructive" size="sm" onClick={onCancel}>
-            <Square className="mr-1 h-4 w-4" />
-            停止
-          </Button>
-        ) : (
-          <Button size="sm" onClick={onRun}>
-            <Play className="mr-1 h-4 w-4" />
-            运行
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 5: Create the node palette component**
-
-```tsx
-// src/modules/workflow/editor/node-palette.tsx
-import { GripVertical, MessageSquare, GitBranch } from "lucide-react"
-
-type PaletteItem = {
-  type: string
-  label: string
-  icon: React.ReactNode
-}
-
-const PALETTE_ITEMS: PaletteItem[] = [
-  { type: "prompt", label: "Prompt", icon: <MessageSquare className="h-4 w-4" /> },
-  { type: "switch", label: "Switch", icon: <GitBranch className="h-4 w-4" /> },
-]
-
-export function NodePalette() {
-  const onDragStart = (event: React.DragEvent, nodeType: string) => {
-    event.dataTransfer.setData("application/reactflow", nodeType)
-    event.dataTransfer.effectAllowed = "move"
-  }
-
-  return (
-    <div className="w-48 border-r p-3">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">节点</p>
-      <div className="flex flex-col gap-1">
-        {PALETTE_ITEMS.map((item) => (
-          <div
-            key={item.type}
-            className="flex cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-sm hover:bg-muted"
-            draggable
-            onDragStart={(e) => onDragStart(e, item.type)}
-          >
-            <GripVertical className="h-3 w-3 text-muted-foreground" />
-            {item.icon}
-            {item.label}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 6: Create the editor app root component**
-
-```tsx
-// src/modules/workflow/editor/editor-app.tsx
-import { useState, useEffect, useCallback } from "react"
-import { ReactFlowProvider } from "@xyflow/react"
-import { getSynapseBridge } from "@/lib/electron-bridge"
-import type { WorkflowDefinition } from "../../../../workflow-nodes/types"
-import { WorkflowCanvas } from "./canvas"
-import { WorkflowToolbar } from "./toolbar"
-import { NodePalette } from "./node-palette"
-import { ExecutionOverlay } from "./execution-overlay"
-import { useWorkflowEvents } from "../hooks/use-workflow-events"
-
-export function WorkflowEditorApp() {
-  const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
-  const [isDirty, setIsDirty] = useState(false)
-  const [runId, setRunId] = useState<string | null>(null)
-  const [nodeStates, setNodeStates] = useState<Record<string, string>>({})
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const workflowId = params.get("workflowId")
-    if (!workflowId) return
-
-    const bridge = getSynapseBridge()
-    if (!bridge) return
-
-    bridge.workflow.get(workflowId).then(setDefinition)
-  }, [])
-
-  useWorkflowEvents(runId, (event) => {
-    if (event.type === "node:started") {
-      setNodeStates((prev) => ({ ...prev, [event.nodeId]: "running" }))
-    } else if (event.type === "node:completed") {
-      setNodeStates((prev) => ({ ...prev, [event.nodeId]: "completed" }))
-    } else if (event.type === "node:failed") {
-      setNodeStates((prev) => ({ ...prev, [event.nodeId]: "failed" }))
-    } else if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
-      setRunId(null)
-    }
-  })
-
-  const handleSave = useCallback(async () => {
-    if (!definition) return
-    const bridge = getSynapseBridge()
-    if (!bridge) return
-    await bridge.workflow.save(definition)
-    setIsDirty(false)
-  }, [definition])
-
-  const handleRun = useCallback(async () => {
-    if (!definition) return
-    await handleSave()
-    const bridge = getSynapseBridge()
-    if (!bridge) return
-    const result = await bridge.workflow.run(definition.id, {})
-    setRunId(result.runId)
-    setNodeStates({})
-  }, [definition, handleSave])
-
-  const handleCancel = useCallback(async () => {
-    if (!runId) return
-    const bridge = getSynapseBridge()
-    if (!bridge) return
-    await bridge.workflow.cancel(runId)
-    setRunId(null)
-  }, [runId])
-
-  const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
-    setDefinition(def)
-    setIsDirty(true)
-  }, [])
-
-  if (!definition) {
-    return <div className="flex h-screen items-center justify-center text-muted-foreground">加载中...</div>
-  }
-
-  return (
-    <ReactFlowProvider>
-      <div className="flex h-screen flex-col">
-        <WorkflowToolbar
-          name={definition.name}
-          onNameChange={(name) => handleDefinitionChange({ ...definition, name })}
-          onSave={handleSave}
-          onRun={handleRun}
-          onCancel={handleCancel}
-          isRunning={!!runId}
-          isDirty={isDirty}
-        />
-        <div className="flex flex-1 overflow-hidden">
-          <NodePalette />
-          <div className="relative flex-1">
-            <WorkflowCanvas
-              definition={definition}
-              onDefinitionChange={handleDefinitionChange}
-              onNodeSelect={setSelectedNodeId}
-            />
-            {runId && <ExecutionOverlay nodeStates={nodeStates} />}
-          </div>
-        </div>
-      </div>
-    </ReactFlowProvider>
-  )
-}
-```
-
-- [ ] **Step 7: Verify build compiles**
-
-Run: `pnpm --filter desktop exec tsc --noEmit`
-Expected: No type errors related to workflow editor files.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add src/modules/workflow/editor/ src/modules/workflow/hooks/use-workflow-events.ts
-git commit -m "feat(workflow): add editor window with React Flow canvas, toolbar, and node palette"
-```
-
----
-
-## Task 11: Execution Overlay & Runtime Visualization
-
-**Files:**
-- Create: `src/modules/workflow/editor/execution-overlay.tsx`
-
-- [ ] **Step 1: Create the execution overlay component**
-
-```tsx
-// src/modules/workflow/editor/execution-overlay.tsx
-import { CheckCircle2, XCircle, Loader2, MinusCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-type NodeState = "idle" | "running" | "completed" | "failed" | "skipped"
-
-type ExecutionOverlayProps = {
-  nodeStates: Record<string, string>
-}
-
-function NodeStatusIcon({ status }: { status: NodeState }) {
-  switch (status) {
-    case "running":
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-    case "completed":
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />
-    case "failed":
-      return <XCircle className="h-4 w-4 text-destructive" />
-    case "skipped":
-      return <MinusCircle className="h-4 w-4 text-muted-foreground" />
-    default:
-      return null
-  }
-}
-
-export function ExecutionOverlay({ nodeStates }: ExecutionOverlayProps) {
-  const entries = Object.entries(nodeStates)
-  if (entries.length === 0) return null
-
-  const running = entries.filter(([, s]) => s === "running").length
-  const completed = entries.filter(([, s]) => s === "completed").length
-  const failed = entries.filter(([, s]) => s === "failed").length
-
-  return (
-    <div className="absolute bottom-4 right-4 z-10 rounded-lg border bg-card p-3 shadow-sm">
-      <p className="mb-1 text-xs font-medium text-muted-foreground">执行状态</p>
-      <div className="flex items-center gap-3 text-sm">
-        {running > 0 && (
-          <span className="flex items-center gap-1">
-            <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-            {running} 执行中
-          </span>
-        )}
-        {completed > 0 && (
-          <span className="flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3 text-green-500" />
-            {completed} 完成
-          </span>
-        )}
-        {failed > 0 && (
-          <span className="flex items-center gap-1">
-            <XCircle className="h-3 w-3 text-destructive" />
-            {failed} 失败
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-export { NodeStatusIcon }
-export type { NodeState }
-```
-
-- [ ] **Step 2: Add node status styling to canvas card components**
-
-The Prompt and Switch card components need to accept a `status` prop and render visual state. Update the card components created in Tasks 5 and 6.
-
-```tsx
-// workflow-nodes/prompt/card.tsx
-import { Handle, Position, type NodeProps } from "@xyflow/react"
-import { MessageSquare } from "lucide-react"
-import { cn } from "../../src/lib/utils"
-import type { PromptNodeConfig } from "./schema"
-
-type PromptCardData = {
-  config: PromptNodeConfig
-  status?: "idle" | "running" | "completed" | "failed" | "skipped"
-}
-
-export function PromptNodeCard({ data }: NodeProps) {
-  const { config, status } = data as PromptCardData
-  const prompt = config?.prompt ?? ""
-  const truncated = prompt.length > 60 ? prompt.slice(0, 60) + "..." : prompt
-
-  return (
-    <div
-      className={cn(
-        "min-w-[180px] rounded-lg border bg-card px-3 py-2 shadow-sm",
-        status === "running" && "border-blue-500 ring-2 ring-blue-500/20",
-        status === "completed" && "border-green-500",
-        status === "failed" && "border-destructive",
-        status === "skipped" && "opacity-50",
-      )}
-    >
-      <Handle type="target" position={Position.Top} />
-      <div className="flex items-center gap-2">
-        <MessageSquare className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Prompt</span>
-      </div>
-      {truncated && (
-        <p className="mt-1 text-xs text-muted-foreground">{truncated}</p>
-      )}
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  )
-}
-```
-
-```tsx
-// workflow-nodes/switch/card.tsx
-import { Handle, Position, type NodeProps } from "@xyflow/react"
-import { GitBranch } from "lucide-react"
-import { cn } from "../../src/lib/utils"
-import type { SwitchNodeConfig } from "./schema"
-
-type SwitchCardData = {
-  config: SwitchNodeConfig
-  status?: "idle" | "running" | "completed" | "failed" | "skipped"
-}
-
-export function SwitchNodeCard({ data }: NodeProps) {
-  const { config, status } = data as SwitchCardData
-  const branches = config?.branches ?? []
-
-  return (
-    <div
-      className={cn(
-        "min-w-[180px] rounded-lg border bg-card px-3 py-2 shadow-sm",
-        status === "running" && "border-blue-500 ring-2 ring-blue-500/20",
-        status === "completed" && "border-green-500",
-        status === "failed" && "border-destructive",
-        status === "skipped" && "opacity-50",
-      )}
-    >
-      <Handle type="target" position={Position.Top} />
-      <div className="flex items-center gap-2">
-        <GitBranch className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Switch</span>
-      </div>
-      {branches.length > 0 && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {branches.join(" / ")}
-        </p>
-      )}
-      {branches.map((branch, i) => (
-        <Handle
-          key={branch}
-          type="source"
-          position={Position.Bottom}
-          id={branch}
-          style={{ left: `${((i + 1) / (branches.length + 1)) * 100}%` }}
-        />
-      ))}
-      {branches.length === 0 && <Handle type="source" position={Position.Bottom} />}
-    </div>
-  )
-}
-```
-
-- [ ] **Step 3: Wire node states into canvas during execution**
-
-Update `editor-app.tsx` to pass `nodeStates` into the canvas nodes' data:
-
-```tsx
-// In editor-app.tsx, update the definition passed to WorkflowCanvas
-// Add this effect after the useWorkflowEvents hook:
-
-useEffect(() => {
-  if (!definition) return
-  // When nodeStates change during a run, update node data with status
-  setDefinition((prev) => {
-    if (!prev) return prev
-    return {
-      ...prev,
-      nodes: prev.nodes.map((node) => ({
-        ...node,
-        config: { ...node.config, __status: nodeStates[node.id] ?? "idle" },
-      })),
-    }
-  })
-}, [nodeStates])
-```
-
-And in `canvas.tsx`, update `definitionToFlowNodes` to pass status:
-
-```typescript
-function definitionToFlowNodes(def: WorkflowDefinition): Node[] {
-  return def.nodes.map((node) => ({
-    id: node.id,
-    type: node.type,
-    position: node.position,
-    data: {
-      config: node.config,
-      status: (node.config as Record<string, unknown>).__status ?? "idle",
-    },
-  }))
-}
-```
-
-- [ ] **Step 4: Verify build compiles**
-
-Run: `pnpm --filter desktop exec tsc --noEmit`
-Expected: No type errors.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/modules/workflow/editor/execution-overlay.tsx workflow-nodes/prompt/card.tsx workflow-nodes/switch/card.tsx
-git commit -m "feat(workflow): add execution overlay and runtime node status visualization"
-```
-
----
-
-## Task 12: Integration — Navigation + Content Type + Sync Guard
-
-**Files:**
-- Modify: `src/types/content.ts`
-- Create: `src/types/workflow.ts`
-- Modify: `src/types/bridge.ts`
-- Create: `src/config/content-types/workflow.ts`
-- Modify: `src/config/content-types/index.ts`
-- Modify: `electron/preload.ts`
-- Modify: App shell tab configuration (navigation)
-
-- [ ] **Step 1: Add "workflow" to SynapseContentType**
-
-```typescript
-// src/types/content.ts — modify the type union
-export type SynapseContentType = "rule" | "skill" | "prompt" | "workflow"
-```
-
-- [ ] **Step 2: Create workflow content type definition**
-
-```typescript
-// src/config/content-types/workflow.ts
-import type { ContentTypeDefinition } from "./types"
-
-export const workflowContentTypeDefinition: ContentTypeDefinition = {
-  id: "workflow",
-  singularLabel: "工作流",
-  pluralLabel: "工作流",
-  tabLabel: "工作流",
-  emptyStateNoun: "工作流",
-  capabilities: {
-    hasAttachments: false,
-    canInstallToEditor: false,
-    canCopyContent: false,
-    canDownload: true,
-    canRunAsAgent: false,
-  },
-  download: {
-    extension: "json",
-    dialogFilterName: "Workflow JSON",
-    exporter: "text-file",
-  },
-  install: { kind: "none" },
-  repositoryDir: {
-    defaultDirectoryName: "workflows",
-  },
-  categories: [],
-  requiresFilesInPayload: false,
-}
-```
-
-- [ ] **Step 3: Register workflow content type in the registry**
-
-```typescript
-// src/config/content-types/index.ts — add import and registry entry
-import { workflowContentTypeDefinition } from "./workflow"
-
-export const CONTENT_TYPE_REGISTRY = {
-  rule: ruleContentTypeDefinition,
-  skill: skillContentTypeDefinition,
-  prompt: promptContentTypeDefinition,
-  workflow: workflowContentTypeDefinition,
-} as const satisfies Record<SynapseContentType, ContentTypeDefinition>
-```
-
-- [ ] **Step 4: Add workflow bridge type definitions**
-
-```typescript
-// src/types/workflow.ts
-import type { WorkflowDefinition, WorkflowEvent } from "../../workflow-nodes/types"
-
-export type WorkflowMeta = {
-  id: string
-  name: string
-  description?: string
-  nodeCount: number
-  createdAt: string
-  updatedAt: string
-}
-
-export type WorkflowRunResult = {
-  status: "completed" | "failed" | "cancelled"
-  nodeResults: Record<string, { status: string; output?: string; error?: string }>
-  durationMs: number
-}
-
-export type WorkflowBridge = {
-  list(): Promise<WorkflowMeta[]>
-  get(id: string): Promise<WorkflowDefinition>
-  save(definition: WorkflowDefinition): Promise<{ versionHash: string }>
-  delete(id: string): Promise<void>
-  run(id: string, params: Record<string, unknown>): Promise<{ runId: string }>
-  cancel(runId: string): Promise<void>
-  runStatus(runId: string): Promise<WorkflowRunResult>
-  openEditor(id: string): Promise<void>
-  editorState(): Promise<{ openEditors: string[] }>
-  checkCanSync(): Promise<{ canSync: boolean; blockers: string[] }>
-  onEvent(handler: (event: WorkflowEvent) => void): () => void
-}
-```
-
-- [ ] **Step 5: Add workflow domain to SynapseBridge**
-
-```typescript
-// src/types/bridge.ts — add import and property
-import type { WorkflowBridge } from "./workflow"
-
-// Add to SynapseBridge interface:
-workflow: WorkflowBridge
-```
-
-- [ ] **Step 6: Add workflow tab to navigation**
-
-The app shell uses a tab system. Add the workflow tab to the tab list. Locate the tab definitions (likely in the component that renders the main window tabs) and add:
-
-```typescript
-// In the tab configuration array (e.g., where "rule", "skill", "prompt" tabs are defined)
-// Add after the existing tabs:
-{
-  id: "workflow",
-  label: "工作流",
-  icon: GitBranch, // from lucide-react
-}
-```
-
-And in the tab content renderer, add the case:
-
-```tsx
-// Where tab content is rendered based on active tab:
-case "workflow":
-  return <WorkflowModule />
-```
-
-Import at the top:
-
-```typescript
-import { WorkflowModule } from "@/modules/workflow"
-import { GitBranch } from "lucide-react"
-```
-
-- [ ] **Step 7: Add sync guard integration**
-
-In the repository sync flow (where `syncRepository` is called), add a pre-check:
-
-The `WorkflowWindowManager` class already has a `checkCanSync()` method (defined in Task 8). The IPC handler (Task 9) already calls `windowManager.checkCanSync()` for the `synapse:workflow:check-can-sync` channel.
-
-In the repository sync flow, call the workflow check-can-sync IPC before proceeding:
-
-```typescript
-// In the renderer-side sync trigger (e.g., use-repository-manager.ts or equivalent):
-const bridge = getSynapseBridge()
-const { canSync, blockers } = await bridge.workflow.checkCanSync()
-if (!canSync) {
-  // Show toast: "请先关闭编辑中的工作流"
-  return
-}
-// Proceed with sync...
-```
-
-In the IPC handler for sync (or wherever sync is triggered), add the check before proceeding:
-
-```typescript
-// In the sync handler, before calling syncRepository:
-const workflowCheck = checkWorkflowSyncBlockers()
-if (!workflowCheck.canSync) {
-  return { error: workflowCheck.blockers.join("; ") }
-}
-```
-
-- [ ] **Step 8: Register workflow IPC channels in preload**
-
-```typescript
-// electron/preload.ts — add workflow domain to the exposed bridge
-// In the contextBridge.exposeInMainWorld("synapse", { ... }) call:
 workflow: {
-  list: () => ipcRenderer.invoke("synapse:workflow:list"),
-  get: (id: string) => ipcRenderer.invoke("synapse:workflow:get", id),
-  save: (def: unknown) => ipcRenderer.invoke("synapse:workflow:save", def),
-  delete: (id: string) => ipcRenderer.invoke("synapse:workflow:delete", id),
-  run: (id: string, params: unknown) => ipcRenderer.invoke("synapse:workflow:run", { id, params }),
-  cancel: (runId: string) => ipcRenderer.invoke("synapse:workflow:cancel", runId),
-  runStatus: (runId: string) => ipcRenderer.invoke("synapse:workflow:run-status", runId),
-  openEditor: (id: string) => ipcRenderer.invoke("synapse:workflow:open-editor", id),
-  editorState: () => ipcRenderer.invoke("synapse:workflow:editor-state"),
-  checkCanSync: () => ipcRenderer.invoke("synapse:workflow:check-can-sync"),
-  onEvent: (handler: (event: unknown) => void) => {
-    const listener = (_: unknown, event: unknown) => handler(event)
-    ipcRenderer.on("synapse:workflow:event", listener)
-    return () => { ipcRenderer.removeListener("synapse:workflow:event", listener) }
-  },
+  list: "synapse:workflow:list",
+  get: "synapse:workflow:get",
+  save: "synapse:workflow:save",
+  delete: "synapse:workflow:delete",
+  validate: "synapse:workflow:validate",
+  run: "synapse:workflow:run",
+  cancel: "synapse:workflow:cancel",
+  runHistory: "synapse:workflow:run-history",
+  runSnapshot: "synapse:workflow:run-snapshot",
+  openEditor: "synapse:workflow:open-editor",
+  editorState: "synapse:workflow:editor-state",
+  checkCanSync: "synapse:workflow:check-can-sync",
 },
 ```
 
-- [ ] **Step 9: Verify full build**
+Locate the `EVENT_CHANNELS` constant and add:
+```typescript
+workflow: { event: "synapse:workflow:event" },
+```
 
-Run: `pnpm --filter desktop exec tsc --noEmit`
-Expected: No type errors across the entire project.
+In the bridge object, add `workflow` namespace following the same `invoke` / `subscribe` helpers used by other namespaces (e.g. `taskScheduler`):
+```typescript
+  workflow: {
+    list: invoke(IPC_CHANNELS.workflow.list),
+    get: (id: string) => invoke(IPC_CHANNELS.workflow.get)({ id }),
+    save: (def: WorkflowDefinition) => invoke(IPC_CHANNELS.workflow.save)(def),
+    delete: (id: string) => invoke(IPC_CHANNELS.workflow.delete)({ id }),
+    validate: (def: WorkflowDefinition) => invoke(IPC_CHANNELS.workflow.validate)(def),
+    run: (id: string, params: Record<string, unknown>) => invoke(IPC_CHANNELS.workflow.run)({ id, params }),
+    cancel: (runId: string) => invoke(IPC_CHANNELS.workflow.cancel)({ runId }),
+    runHistory: (workflowId: string) => invoke(IPC_CHANNELS.workflow.runHistory)({ workflowId }),
+    runSnapshot: (runId: string, workflowId: string) => invoke(IPC_CHANNELS.workflow.runSnapshot)({ runId, workflowId }),
+    openEditor: (id: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id }),
+    editorState: invoke(IPC_CHANNELS.workflow.editorState),
+    checkCanSync: invoke(IPC_CHANNELS.workflow.checkCanSync),
+    onEvent: (listener: (event: WorkflowEvent) => void) =>
+      subscribe(EVENT_CHANNELS.workflow.event, (_event: Electron.IpcRendererEvent, domainEvent: unknown) =>
+        listener((domainEvent as { payload: WorkflowEvent }).payload)),
+  },
+```
 
-- [ ] **Step 10: Commit**
+Add `import type { WorkflowDefinition, WorkflowEvent } from "../src/types/workflow"` at the top of `preload.ts`.
+
+- [ ] **Step 3: Verify TypeScript**
+
+Run: `pnpm --filter @synapse/desktop run typecheck`  
+Expected: exit 0
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/types/content.ts src/types/workflow.ts src/types/bridge.ts \
-  src/config/content-types/workflow.ts src/config/content-types/index.ts \
-  electron/preload.ts
-git commit -m "feat(workflow): integrate workflow as content type with navigation, bridge, and sync guard"
+git add desktop/electron/preload.ts desktop/src/types/bridge.ts
+git commit -m "feat(workflow): preload bridge + SynapseBridge types"
 ```
+
+---
+
+## Task 15: Renderer hooks
+
+**Files:**
+- Create: `desktop/src/modules/workflow/hooks/use-workflow-list.ts`
+- Create: `desktop/src/modules/workflow/hooks/use-workflow-run.ts`
+- Create: `desktop/src/modules/workflow/hooks/use-workflow-events.ts`
+- Create: `desktop/src/modules/workflow/hooks/use-upstream-nodes.ts`
+
+- [ ] **Step 1: Create `use-workflow-list.ts`**
+
+```typescript
+import { useCallback, useEffect, useState } from "react"
+import type { WorkflowMeta } from "@/types/workflow"
+
+export function useWorkflowList() {
+  const [items, setItems] = useState<WorkflowMeta[]>([])
+  const [loading, setLoading] = useState(false)
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    try { setItems(await window.synapse.workflow.list()) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { void refresh() }, [refresh])
+  return { items, loading, refresh }
+}
+```
+
+- [ ] **Step 2: Create `use-workflow-run.ts`**
+
+```typescript
+import { useCallback, useState } from "react"
+import type { NodeRunResult } from "@/types/workflow"
+
+export type RunState = "idle" | "running" | "completed" | "failed" | "cancelled"
+
+export function useWorkflowRun(workflowId: string) {
+  const [runId, setRunId] = useState<string | null>(null)
+  const [runState, setRunState] = useState<RunState>("idle")
+  const [nodeResults, setNodeResults] = useState<Record<string, NodeRunResult>>({})
+
+  const start = useCallback(async (params: Record<string, unknown>) => {
+    setRunState("running"); setNodeResults({})
+    const { runId: id } = await window.synapse.workflow.run(workflowId, params)
+    setRunId(id); return id
+  }, [workflowId])
+
+  const cancel = useCallback(async () => { if (runId) await window.synapse.workflow.cancel(runId) }, [runId])
+
+  return { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel }
+}
+```
+
+- [ ] **Step 3: Create `use-workflow-events.ts`**
+
+```typescript
+import { useEffect } from "react"
+import type { WorkflowEvent, NodeRunResult } from "@/types/workflow"
+
+export function useWorkflowEvents(
+  runId: string | null,
+  callbacks: {
+    onNodeStarted?: (nodeId: string) => void
+    onNodeCompleted?: (nodeId: string, output: unknown) => void
+    onNodeFailed?: (nodeId: string, error: string) => void
+    onNodeSkipped?: (nodeId: string) => void
+    onCompleted?: (nodeResults: Record<string, NodeRunResult>) => void
+    onFailed?: (error: string) => void
+    onCancelled?: () => void
+  },
+) {
+  useEffect(() => {
+    if (!runId) return
+    return window.synapse.workflow.onEvent((event: WorkflowEvent) => {
+      if (event.type === "node:started") callbacks.onNodeStarted?.(event.nodeId)
+      else if (event.type === "node:completed") callbacks.onNodeCompleted?.(event.nodeId, event.output)
+      else if (event.type === "node:failed") callbacks.onNodeFailed?.(event.nodeId, event.error)
+      else if (event.type === "node:skipped") callbacks.onNodeSkipped?.(event.nodeId)
+      else if (event.type === "workflow:completed") callbacks.onCompleted?.(event.result.nodeResults)
+      else if (event.type === "workflow:failed") callbacks.onFailed?.(event.error)
+      else if (event.type === "workflow:cancelled") callbacks.onCancelled?.()
+    })
+  }, [runId])
+}
+```
+
+- [ ] **Step 4: Create `use-upstream-nodes.ts`**
+
+```typescript
+import { useMemo } from "react"
+import type { WorkflowDefinition } from "@/types/workflow"
+
+export function useUpstreamNodes(nodeId: string, definition: WorkflowDefinition | null) {
+  return useMemo(() => {
+    if (!definition) return []
+    const rev = new Map(definition.nodes.map((n) => [n.id, [] as string[]]))
+    for (const e of definition.edges) rev.get(e.to)?.push(e.from)
+    const visited = new Set<string>(); const stack = [nodeId]
+    while (stack.length) { for (const p of rev.get(stack.pop()!) ?? []) { if (!visited.has(p)) { visited.add(p); stack.push(p) } } }
+    return definition.nodes.filter((n) => visited.has(n.id)).map((n) => ({ id: n.id, name: n.name }))
+  }, [nodeId, definition])
+}
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/src/modules/workflow/hooks/
+git commit -m "feat(workflow): renderer hooks (list, run, events, upstream-nodes)"
+```
+
+---
+
+## Task 16: Renderer list view
+
+**Files:**
+- Create: `desktop/src/modules/workflow/components/workflow-card.tsx`
+- Create: `desktop/src/modules/workflow/components/run-params-dialog.tsx`
+- Create: `desktop/src/modules/workflow/components/workflow-list.tsx`
+- Create: `desktop/src/modules/workflow/index.tsx`
+
+- [ ] **Step 1: Create `workflow-card.tsx`**
+
+```tsx
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import type { WorkflowMeta } from "@/types/workflow"
+import { GitBranch, Play } from "lucide-react"
+
+interface WorkflowCardProps { meta: WorkflowMeta; onOpen: () => void; onRun: () => void }
+
+export function WorkflowCard({ meta, onOpen, onRun }: WorkflowCardProps) {
+  return (
+    <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onDoubleClick={onOpen}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <GitBranch className="h-4 w-4 text-muted-foreground" />
+          {meta.name}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">{meta.nodeCount} 个节点</span>
+        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onRun() }}>
+          <Play className="h-3.5 w-3.5" />
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+- [ ] **Step 2: Create `run-params-dialog.tsx`**
+
+```tsx
+import { useState } from "react"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import type { WorkflowParam } from "@/types/workflow"
+
+interface RunParamsDialogProps { open: boolean; params: WorkflowParam[]; onConfirm: (values: Record<string, unknown>) => void; onCancel: () => void }
+
+export function RunParamsDialog({ open, params, onConfirm, onCancel }: RunParamsDialogProps) {
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(params.map((p) => [p.name, String(p.default ?? "")])))
+  const handleSubmit = () => {
+    const parsed: Record<string, unknown> = {}
+    for (const p of params) parsed[p.name] = p.type === "number" ? Number(values[p.name]) : values[p.name]
+    onConfirm(parsed)
+  }
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>设置运行参数</DialogTitle></DialogHeader>
+        <div className="grid gap-4 py-4">
+          {params.length === 0 && <p className="text-sm text-muted-foreground">此工作流无需参数。</p>}
+          {params.map((p) => (
+            <div key={p.name} className="grid gap-1.5">
+              <Label htmlFor={p.name}>{p.description ?? p.name}</Label>
+              <Input id={p.name} type={p.type === "number" ? "number" : "text"} value={values[p.name] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [p.name]: e.target.value }))} />
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCancel}>取消</Button>
+          <Button onClick={handleSubmit}>运行</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+```
+
+- [ ] **Step 3: Create `workflow-list.tsx`**
+
+```tsx
+import { useState } from "react"
+import { WorkflowCard } from "./workflow-card"
+import { RunParamsDialog } from "./run-params-dialog"
+import { useWorkflowList } from "../hooks/use-workflow-list"
+import type { WorkflowDefinition } from "@/types/workflow"
+
+export function WorkflowList() {
+  const { items, loading, refresh } = useWorkflowList()
+  const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
+
+  const handleRun = async (id: string) => { const def = await window.synapse.workflow.get(id); if (def) setRunTarget(def) }
+
+  const handleConfirmRun = async (params: Record<string, unknown>) => {
+    if (!runTarget) return
+    setRunTarget(null)
+    await window.synapse.workflow.run(runTarget.id, params)
+    void refresh()
+  }
+
+  if (loading) return <p className="text-sm text-muted-foreground p-4">加载中…</p>
+  if (items.length === 0) return <p className="text-sm text-muted-foreground p-4">还没有工作流。</p>
+
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+        {items.map((meta) => (
+          <WorkflowCard key={meta.id} meta={meta}
+            onOpen={() => void window.synapse.workflow.openEditor(meta.id)}
+            onRun={() => void handleRun(meta.id)} />
+        ))}
+      </div>
+      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} onConfirm={handleConfirmRun} onCancel={() => setRunTarget(null)} />
+    </>
+  )
+}
+```
+
+- [ ] **Step 4: Create `index.tsx`**
+
+```tsx
+import { Button } from "@/components/ui/button"
+import { WorkflowList } from "./components/workflow-list"
+import { Plus } from "lucide-react"
+
+export function WorkflowModule() {
+  const handleCreate = async () => {
+    const id = crypto.randomUUID()
+    const now = Date.now()
+    await window.synapse.workflow.save({ id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [], nodes: [], edges: [] })
+    await window.synapse.workflow.openEditor(id)
+  }
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <h2 className="text-sm font-semibold">工作流</h2>
+        <Button size="sm" variant="outline" onClick={handleCreate}><Plus className="h-4 w-4 mr-1.5" />新建</Button>
+      </div>
+      <div className="flex-1 overflow-auto"><WorkflowList /></div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/src/modules/workflow/components/ desktop/src/modules/workflow/index.tsx
+git commit -m "feat(workflow): list view (WorkflowModule, WorkflowCard, RunParamsDialog)"
+```
+
+---
+
+## Task 17: Editor app shell
+
+**Files:**
+- Create: `desktop/src/modules/workflow/editor/editor-app.tsx`
+- Modify: `desktop/src/main.tsx`
+
+- [ ] **Step 1: Create `editor-app.tsx`**
+
+Reads `?workflowId=` from `window.location.search`, loads the definition, wires `useWorkflowRun` + `useWorkflowEvents`, and renders `WorkflowToolbar` + `WorkflowCanvas` + `ExecutionOverlay`.
+
+```tsx
+import { useEffect, useRef, useState } from "react"
+import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
+import { useWorkflowRun } from "../hooks/use-workflow-run"
+import { useWorkflowEvents } from "../hooks/use-workflow-events"
+import { WorkflowToolbar } from "./toolbar"
+import { WorkflowCanvas } from "./canvas"
+import { ExecutionOverlay } from "./execution-overlay"
+
+export function WorkflowEditorApp() {
+  const workflowId = new URLSearchParams(window.location.search).get("workflowId") ?? ""
+  const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
+  const definitionRef = useRef(definition)
+  definitionRef.current = definition
+
+  useEffect(() => { if (workflowId) void window.synapse.workflow.get(workflowId).then(setDefinition) }, [workflowId])
+
+  const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel } = useWorkflowRun(workflowId)
+
+  useWorkflowEvents(runId, {
+    onNodeStarted: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "running" as const } })),
+    onNodeCompleted: (nodeId, output) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "success" as const, output: String(output) } })),
+    onNodeFailed: (nodeId, error) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "failed" as const, error } })),
+    onNodeSkipped: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { nodeId, input: { variables: {} }, status: "skipped" as const } })),
+    onCompleted: (results) => { setRunState("completed"); setNodeResults(results) },
+    onFailed: () => setRunState("failed"),
+    onCancelled: () => setRunState("cancelled"),
+  })
+
+  const handleSave = async (def: WorkflowDefinition) => {
+    const result = await window.synapse.workflow.save(def)
+    if ("versionHash" in result) setDefinition({ ...def, version: result.versionHash })
+    return result
+  }
+
+  if (!definition) return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
+
+  return (
+    <div className="flex flex-col h-screen">
+      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={start} onCancel={cancel} onChange={setDefinition} />
+      <div className="flex-1 relative">
+        <WorkflowCanvas definition={definition} onChange={setDefinition} />
+        <ExecutionOverlay nodeResults={nodeResults} runState={runState} />
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Route editor window in `main.tsx`**
+
+The renderer `main.tsx` currently renders `<App />` unconditionally. Add a URL-param branch so the editor window renders a separate root:
+
+```tsx
+// At the top of main.tsx, before createRoot():
+const urlParams = new URLSearchParams(window.location.search)
+const windowType = urlParams.get("window")
+
+// Replace the createRoot render block:
+if (windowType === "workflow-editor") {
+  const { WorkflowEditorApp } = await import("@/modules/workflow/editor/editor-app")
+  createRoot(document.getElementById("root")!).render(<StrictMode><AppErrorBoundary><WorkflowEditorApp /></AppErrorBoundary></StrictMode>)
+} else {
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      {/* ...existing providers... */}
+    </StrictMode>,
+  )
+}
+```
+
+Since `main.tsx` is not async, wrap in a top-level async IIFE or use dynamic `import()` inside the render call. Match the existing pattern in the codebase (check if other window types already do branching in main.tsx).
+
+- [ ] **Step 3: Verify TypeScript**
+
+Run: `pnpm --filter @synapse/desktop run typecheck`  
+Expected: exit 0
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add desktop/src/modules/workflow/editor/editor-app.tsx desktop/src/main.tsx
+git commit -m "feat(workflow): editor app shell + main.tsx window routing"
+```
+
+---
+
+## Task 18: Canvas + node wrappers
+
+**Files:**
+- Create: `desktop/src/modules/workflow/editor/canvas.tsx`
+- Create: `desktop/src/modules/workflow/editor/node-wrappers.tsx`
+- Create: `desktop/workflow-nodes/prompt/card.tsx`
+- Create: `desktop/workflow-nodes/switch/card.tsx`
+
+> Prerequisite: `@xyflow/react` must be in `desktop/package.json`. If absent, add it: `pnpm --filter @synapse/desktop add @xyflow/react`.
+
+- [ ] **Step 1: Create `prompt/card.tsx`** (canvas node card, renderer-side)
+
+```tsx
+// desktop/workflow-nodes/prompt/card.tsx
+import { MessageSquare } from "lucide-react"
+import type { PromptNodeConfig } from "./schema"
+
+export function PromptNodeCard({ config, selected }: { config: PromptNodeConfig; selected?: boolean }) {
+  return (
+    <div className={`rounded-lg border bg-card px-3 py-2 w-52 shadow-sm ${selected ? "ring-2 ring-primary" : ""}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <MessageSquare className="h-3.5 w-3.5 text-blue-500" />
+        <span className="text-xs font-medium text-foreground truncate">{config.agent || "Prompt"}</span>
+      </div>
+      <p className="text-xs text-muted-foreground truncate">{config.prompt.slice(0, 50) || "无 Prompt"}</p>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Create `switch/card.tsx`**
+
+```tsx
+// desktop/workflow-nodes/switch/card.tsx
+import { GitBranch } from "lucide-react"
+import type { SwitchNodeConfig } from "./schema"
+
+export function SwitchNodeCard({ config, selected }: { config: SwitchNodeConfig; selected?: boolean }) {
+  return (
+    <div className={`rounded-lg border bg-card px-3 py-2 w-52 shadow-sm ${selected ? "ring-2 ring-primary" : ""}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <GitBranch className="h-3.5 w-3.5 text-amber-500" />
+        <span className="text-xs font-medium text-foreground truncate">{config.agent || "Switch"}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{config.branches.length} 个分支</p>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Create `node-wrappers.tsx`** (React Flow node type adapter)
+
+```tsx
+// desktop/src/modules/workflow/editor/node-wrappers.tsx
+import { Handle, Position, type NodeProps } from "@xyflow/react"
+import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
+import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
+
+export function PromptNodeWrapper({ data, selected }: NodeProps) {
+  return (
+    <>
+      <Handle type="target" position={Position.Left} />
+      <PromptNodeCard config={data as Parameters<typeof PromptNodeCard>[0]["config"]} selected={selected} />
+      <Handle type="source" position={Position.Right} />
+    </>
+  )
+}
+
+export function SwitchNodeWrapper({ data, selected }: NodeProps) {
+  return (
+    <>
+      <Handle type="target" position={Position.Left} />
+      <SwitchNodeCard config={data as Parameters<typeof SwitchNodeCard>[0]["config"]} selected={selected} />
+      {/* Dynamic output handles rendered per branch */}
+      {(data as { branches?: Array<{ id: string; label: string }> }).branches?.map((b, i, arr) => (
+        <Handle key={b.id} type="source" position={Position.Right} id={b.id} style={{ top: `${((i + 0.5) / arr.length) * 100}%` }} />
+      ))}
+    </>
+  )
+}
+
+export const nodeTypes = {
+  prompt: PromptNodeWrapper,
+  switch: SwitchNodeWrapper,
+}
+```
+
+- [ ] **Step 4: Create `canvas.tsx`**
+
+```tsx
+// desktop/src/modules/workflow/editor/canvas.tsx
+import { useCallback } from "react"
+import { ReactFlow, Background, Controls, useNodesState, useEdgesState, addEdge, type Connection } from "@xyflow/react"
+import "@xyflow/react/dist/style.css"
+import { nodeTypes } from "./node-wrappers"
+import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from "@/types/workflow"
+import { randomUUID } from "@/lib/utils"
+
+function defToFlow(def: WorkflowDefinition) {
+  const nodes = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.config, selected: false }))
+  const edges = def.edges.map((e) => ({ id: e.id, source: e.from, target: e.to, sourceHandle: e.branch }))
+  return { nodes, edges }
+}
+
+interface WorkflowCanvasProps { definition: WorkflowDefinition; onChange: (def: WorkflowDefinition) => void }
+
+export function WorkflowCanvas({ definition, onChange }: WorkflowCanvasProps) {
+  const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
+  const [nodes, setNodes, onNodesChange] = useNodesState(initNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges)
+
+  const onConnect = useCallback((connection: Connection) => {
+    setEdges((eds) => {
+      const updated = addEdge(connection, eds)
+      const wfEdges: WorkflowEdge[] = updated.map((e) => ({ id: e.id, from: e.source, to: e.target, branch: e.sourceHandle ?? undefined }))
+      onChange({ ...definition, edges: wfEdges })
+      return updated
+    })
+  }, [definition, onChange, setEdges])
+
+  const onNodeDragStop = useCallback(() => {
+    const wfNodes: WorkflowNode[] = nodes.map((n) => ({ id: n.id, name: (n.data as { name?: string }).name ?? n.id, type: n.type ?? "prompt", position: n.position, config: n.data as Record<string, unknown> }))
+    onChange({ ...definition, nodes: wfNodes })
+  }, [nodes, definition, onChange])
+
+  return (
+    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+      onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+      onConnect={onConnect} onNodeDragStop={onNodeDragStop}
+      fitView>
+      <Background />
+      <Controls />
+    </ReactFlow>
+  )
+}
+```
+
+> **Note on `randomUUID`:** Import from `node:crypto` is not available in renderer. Use `crypto.randomUUID()` (web API, available in modern Electron renderer). Adjust import accordingly.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/workflow-nodes/prompt/card.tsx desktop/workflow-nodes/switch/card.tsx desktop/src/modules/workflow/editor/
+git commit -m "feat(workflow): canvas + React Flow node wrappers"
+```
+
+---
+
+## Task 19: Toolbar, node palette, execution overlay
+
+**Files:**
+- Create: `desktop/src/modules/workflow/editor/toolbar.tsx`
+- Create: `desktop/src/modules/workflow/editor/node-palette.tsx`
+- Create: `desktop/src/modules/workflow/editor/execution-overlay.tsx`
+
+- [ ] **Step 1: Create `toolbar.tsx`**
+
+```tsx
+// desktop/src/modules/workflow/editor/toolbar.tsx
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Save, Play, Square } from "lucide-react"
+import type { WorkflowDefinition } from "@/types/workflow"
+import type { RunState } from "../hooks/use-workflow-run"
+
+interface WorkflowToolbarProps {
+  definition: WorkflowDefinition
+  runState: RunState
+  onSave: (def: WorkflowDefinition) => Promise<unknown>
+  onRun: (params: Record<string, unknown>) => Promise<string>
+  onCancel: () => Promise<void>
+  onChange: (def: WorkflowDefinition) => void
+}
+
+export function WorkflowToolbar({ definition, runState, onSave, onRun, onCancel, onChange }: WorkflowToolbarProps) {
+  const isRunning = runState === "running"
+  return (
+    <div className="flex items-center gap-2 border-b px-3 py-2 bg-background">
+      <Input
+        className="h-7 w-48 text-sm"
+        value={definition.name}
+        onChange={(e) => onChange({ ...definition, name: e.target.value })}
+      />
+      <div className="ml-auto flex items-center gap-1.5">
+        <Button size="sm" variant="ghost" onClick={() => void onSave(definition)}><Save className="h-3.5 w-3.5 mr-1" />保存</Button>
+        {isRunning
+          ? <Button size="sm" variant="destructive" onClick={() => void onCancel()}><Square className="h-3.5 w-3.5 mr-1" />停止</Button>
+          : <Button size="sm" onClick={() => void onRun({})}><Play className="h-3.5 w-3.5 mr-1" />运行</Button>
+        }
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Create `node-palette.tsx`**
+
+```tsx
+// desktop/src/modules/workflow/editor/node-palette.tsx
+import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
+
+export function NodePalette() {
+  const types = nodeTypeRegistry.listTypes()
+  return (
+    <div className="w-44 border-r bg-background flex flex-col gap-1 p-2">
+      <p className="text-xs font-medium text-muted-foreground px-1 pb-1">节点</p>
+      {types.map((type) => {
+        const manifest = nodeTypeRegistry.getManifest(type)
+        return (
+          <div
+            key={type}
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData("application/workflow-node-type", type)}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-grab hover:bg-muted active:cursor-grabbing"
+          >
+            <span className="text-muted-foreground">{manifest.title}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Create `execution-overlay.tsx`**
+
+Overlays per-node status badges on the canvas using absolute positioning. Reads `nodeResults` and shows a coloured badge (running/success/failed/skipped) near each node. Implementation uses a `div` overlay with `pointer-events-none` that maps over nodes — since React Flow exposes node positions, the overlay iterates `nodeResults` and positions badges. A simple approach: render a fixed panel listing node statuses rather than true overlay positioning (position overlay is complex without direct access to internal React Flow node DOM refs).
+
+```tsx
+// desktop/src/modules/workflow/editor/execution-overlay.tsx
+import type { NodeRunResult } from "@/types/workflow"
+import type { RunState } from "../hooks/use-workflow-run"
+import { Badge } from "@/components/ui/badge"
+
+const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过", pending: "等待" }
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  running: "default", success: "secondary", failed: "destructive", skipped: "outline", pending: "outline",
+}
+
+interface ExecutionOverlayProps { nodeResults: Record<string, NodeRunResult>; runState: RunState }
+
+export function ExecutionOverlay({ nodeResults, runState }: ExecutionOverlayProps) {
+  if (runState === "idle") return null
+  return (
+    <div className="absolute bottom-4 right-4 bg-background/90 border rounded-lg shadow-sm p-3 flex flex-col gap-1.5 max-h-64 overflow-auto pointer-events-none z-10">
+      <p className="text-xs font-medium text-muted-foreground mb-1">运行状态</p>
+      {Object.values(nodeResults).map((r) => (
+        <div key={r.nodeId} className="flex items-center gap-2">
+          <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs">{STATUS_LABEL[r.status] ?? r.status}</Badge>
+          <span className="text-xs text-muted-foreground truncate max-w-32">{r.nodeId}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add desktop/src/modules/workflow/editor/toolbar.tsx desktop/src/modules/workflow/editor/node-palette.tsx desktop/src/modules/workflow/editor/execution-overlay.tsx
+git commit -m "feat(workflow): toolbar, node palette, execution overlay"
+```
+
+---
+
+## Task 20: Main window tab registration
+
+**Files:**
+- Identify and modify the file that declares app-shell navigation tabs (typically `desktop/src/App.tsx` or `desktop/src/app-shell/navigation.ts` / `desktop/src/app-shell/tabs.tsx`).
+
+- [ ] **Step 1: Find the tab registration file**
+
+Run: `grep -r "taskScheduler\|Scheduler\|tabId\|TabItem" desktop/src/App.tsx desktop/src/app-shell/ --include="*.tsx" --include="*.ts" -l`
+
+Identify which file defines the sidebar tabs or navigation entries.
+
+- [ ] **Step 2: Add Workflow tab entry**
+
+Following the exact pattern used for the existing Scheduler/Database tab, add a Workflow entry:
+
+```tsx
+{ id: "workflow", label: "工作流", icon: <GitBranch className="h-4 w-4" />, component: <WorkflowModule /> }
+```
+
+Import `WorkflowModule` from `@/modules/workflow` and `GitBranch` from `lucide-react`.
+
+- [ ] **Step 3: Register prompt + switch node types at app startup**
+
+In `desktop/src/modules/workflow/index.tsx` or a dedicated `workflow-nodes/register.main.ts` called from bootstrap, register both node types into the singleton `nodeTypeRegistry`:
+
+```typescript
+// desktop/workflow-nodes/register.main.ts
+import { nodeTypeRegistry } from "./registry"
+import { promptNodeManifest, promptNodeExecutor } from "./prompt"
+import { switchNodeManifest, switchNodeExecutor } from "./switch"
+
+nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
+nodeTypeRegistry.register(switchNodeManifest, switchNodeExecutor)
+```
+
+Call this file from the workflow service descriptor's `create()` (before constructing `WorkflowEngine`) by adding `import "../../../workflow-nodes/register.main"` at the top of `descriptors.ts`.
+
+- [ ] **Step 4: Verify TypeScript**
+
+Run: `pnpm --filter @synapse/desktop run typecheck`  
+Expected: exit 0
+
+- [ ] **Step 5: Run all workflow tests**
+
+Run: `pnpm --filter @synapse/desktop run test -- --reporter=verbose workflow`  
+Expected: all tests PASS
+
+- [ ] **Step 6: Run hard-constraint check**
+
+Run: `pnpm --filter @synapse/desktop run check:hard-constraints`  
+Expected: exit 0
+
+- [ ] **Step 7: Final commit**
+
+```bash
+git add desktop/src/ desktop/workflow-nodes/register.main.ts
+git commit -m "feat(workflow): main window tab + node type registration"
+```
+
+---
+
+## Post-implementation checklist
+
+- [ ] All 20 tasks committed and TypeScript clean
+- [ ] All workflow tests pass: `pnpm --filter @synapse/desktop run test -- workflow`
+- [ ] Hard constraints pass: `pnpm --filter @synapse/desktop run check:hard-constraints`
+- [ ] `WorkflowEvent` union includes `{ type: "node:skipped"; nodeId: string }` ✓ (Task 1)
+- [ ] `SwitchBranch.id` Zod regex `/^[a-z][a-z0-9_]*$/` in `switch/schema.ts` ✓ (Task 5)
+- [ ] `VariableBinding.name` Zod regex `/^[a-zA-Z_][a-zA-Z0-9_]*$/` in `schemas/variable-binding.ts` ✓ (Task 2)
+- [ ] IPC `synapse:workflow:run` creates `AbortController`, stores in `Map<runId, AbortController>` ✓ (Task 12)
+- [ ] IPC `synapse:workflow:cancel` finds controller by `runId` and calls `.abort()` ✓ (Task 12)
+- [ ] No bare `ipcMain.handle` calls (all IPC goes through `IpcRegistry`) ✓
+- [ ] No bare `webContents.send` calls (events go through `EventBus.emit`) ✓
+
