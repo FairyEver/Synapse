@@ -5,6 +5,7 @@ import { useWorkflowEvents } from "../hooks/use-workflow-events"
 import { WorkflowToolbar } from "./toolbar"
 import { WorkflowCanvas } from "./canvas"
 import { ExecutionOverlay } from "./execution-overlay"
+import { NodePalette } from "./node-palette"
 
 export function WorkflowEditorApp() {
   const workflowId = new URLSearchParams(window.location.search).get("workflowId") ?? ""
@@ -37,9 +38,12 @@ export function WorkflowEditorApp() {
   return (
     <div className="flex flex-col h-screen">
       <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={start} onCancel={cancel} onChange={setDefinition} />
-      <div className="flex-1 relative">
-        <WorkflowCanvas definition={definition} onChange={setDefinition} />
-        <ExecutionOverlay nodeResults={nodeResults} runState={runState} />
+      <div className="flex-1 flex min-h-0">
+        <NodePalette />
+        <div className="flex-1 relative">
+          <WorkflowCanvas definition={definition} onChange={setDefinition} />
+          <ExecutionOverlay nodeResults={nodeResults} runState={runState} />
+        </div>
       </div>
     </div>
   )
