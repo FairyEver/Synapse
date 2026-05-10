@@ -57,14 +57,14 @@
 - Create: `desktop/src/types/workflow.ts`
 - Modify: `desktop/vitest.config.ts`
 
-- [ ] **Step 1: Add `workflow-nodes` to vitest include**
+- [x] **Step 1: Add `workflow-nodes` to vitest include**
 
 In `desktop/vitest.config.ts`, add to the `include` array:
 ```
 "workflow-nodes/**/__tests__/**/*.{test,spec}.ts",
 ```
 
-- [ ] **Step 2: Create `desktop/workflow-nodes/types.ts`**
+- [x] **Step 2: Create `desktop/workflow-nodes/types.ts`**
 
 ```typescript
 import type { ZodType } from "zod"
@@ -125,7 +125,7 @@ export interface NodeExecutor<TConfig = unknown> {
 }
 ```
 
-- [ ] **Step 3: Create `desktop/src/types/workflow.ts`**
+- [x] **Step 3: Create `desktop/src/types/workflow.ts`**
 
 ```typescript
 export interface WorkflowParam {
@@ -179,12 +179,12 @@ export interface WorkflowRunSnapshot {
 }
 ```
 
-- [ ] **Step 4: Verify TypeScript**
+- [x] **Step 4: Verify TypeScript**
 
 Run: `pnpm --filter @synapse/desktop run typecheck`  
 Expected: exit 0
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/workflow-nodes/types.ts desktop/src/types/workflow.ts desktop/vitest.config.ts
@@ -199,7 +199,7 @@ git commit -m "feat(workflow): shared types + vitest config"
 - Create: `desktop/workflow-nodes/schemas/variable-binding.ts`
 - Create: `desktop/workflow-nodes/schemas/__tests__/variable-binding.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```typescript
 // desktop/workflow-nodes/schemas/__tests__/variable-binding.test.ts
@@ -222,12 +222,12 @@ describe("variableBindingSchema", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/schemas/__tests__/variable-binding.test.ts`  
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement schema**
+- [x] **Step 3: Implement schema**
 
 ```typescript
 // desktop/workflow-nodes/schemas/variable-binding.ts
@@ -250,12 +250,12 @@ export type VariableBinding = z.infer<typeof variableBindingSchema>
 export type VariableSource = z.infer<typeof variableSourceSchema>
 ```
 
-- [ ] **Step 4: Run tests to pass**
+- [x] **Step 4: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/schemas/__tests__/variable-binding.test.ts`  
 Expected: PASS — 3 tests
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/workflow-nodes/schemas/
@@ -270,7 +270,7 @@ git commit -m "feat(workflow): VariableBinding Zod schema with name/branch regex
 - Create: `desktop/workflow-nodes/registry.ts`
 - Create: `desktop/workflow-nodes/__tests__/registry.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // desktop/workflow-nodes/__tests__/registry.test.ts
@@ -302,12 +302,12 @@ describe("NodeTypeRegistry", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/__tests__/registry.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement registry**
+- [x] **Step 3: Implement registry**
 
 ```typescript
 // desktop/workflow-nodes/registry.ts
@@ -337,12 +337,12 @@ export class NodeTypeRegistry {
 export const nodeTypeRegistry = new NodeTypeRegistry()
 ```
 
-- [ ] **Step 4: Run tests to pass**
+- [x] **Step 4: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/__tests__/registry.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/workflow-nodes/registry.ts desktop/workflow-nodes/__tests__/registry.test.ts
@@ -360,7 +360,7 @@ git commit -m "feat(workflow): NodeTypeRegistry"
 - Create: `desktop/workflow-nodes/prompt/__tests__/executor.test.ts`
 - Create: `desktop/workflow-nodes/prompt/index.ts`
 
-- [ ] **Step 1: Write executor tests**
+- [x] **Step 1: Write executor tests**
 
 ```typescript
 // desktop/workflow-nodes/prompt/__tests__/executor.test.ts
@@ -402,12 +402,12 @@ describe("promptNodeExecutor", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/prompt/__tests__/executor.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Create `prompt/schema.ts`**
+- [x] **Step 3: Create `prompt/schema.ts`**
 
 ```typescript
 import { z } from "zod"
@@ -421,7 +421,7 @@ export const promptNodeConfigSchema = z.object({
 export type PromptNodeConfig = z.infer<typeof promptNodeConfigSchema>
 ```
 
-- [ ] **Step 4: Create `prompt/executor.main.ts`**
+- [x] **Step 4: Create `prompt/executor.main.ts`**
 
 ```typescript
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
@@ -443,7 +443,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
 }
 ```
 
-- [ ] **Step 5: Create `prompt/manifest.ts`**
+- [x] **Step 5: Create `prompt/manifest.ts`**
 
 ```typescript
 import type { NodeManifest } from "../types"
@@ -463,7 +463,7 @@ export const promptNodeManifest: NodeManifest<PromptNodeConfig> = {
 }
 ```
 
-- [ ] **Step 6: Create `prompt/index.ts`**
+- [x] **Step 6: Create `prompt/index.ts`**
 
 ```typescript
 export { promptNodeManifest } from "./manifest"
@@ -472,12 +472,12 @@ export { promptNodeConfigSchema } from "./schema"
 export type { PromptNodeConfig } from "./schema"
 ```
 
-- [ ] **Step 7: Run tests to pass**
+- [x] **Step 7: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/prompt/__tests__/executor.test.ts`  
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add desktop/workflow-nodes/prompt/
@@ -495,7 +495,7 @@ git commit -m "feat(workflow): prompt node (schema, manifest, executor)"
 - Create: `desktop/workflow-nodes/switch/__tests__/executor.test.ts`
 - Create: `desktop/workflow-nodes/switch/index.ts`
 
-- [ ] **Step 1: Write executor tests**
+- [x] **Step 1: Write executor tests**
 
 ```typescript
 // desktop/workflow-nodes/switch/__tests__/executor.test.ts
@@ -539,12 +539,12 @@ describe("switchNodeExecutor", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/switch/__tests__/executor.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Create `switch/schema.ts`**
+- [x] **Step 3: Create `switch/schema.ts`**
 
 ```typescript
 import { z } from "zod"
@@ -567,7 +567,7 @@ export type SwitchNodeConfig = z.infer<typeof switchNodeConfigSchema>
 export type SwitchBranch = z.infer<typeof switchBranchSchema>
 ```
 
-- [ ] **Step 4: Create `switch/executor.main.ts`**
+- [x] **Step 4: Create `switch/executor.main.ts`**
 
 ```typescript
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
@@ -601,7 +601,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
 }
 ```
 
-- [ ] **Step 5: Create `switch/manifest.ts`**
+- [x] **Step 5: Create `switch/manifest.ts`**
 
 ```typescript
 import type { NodeManifest } from "../types"
@@ -623,7 +623,7 @@ export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
 }
 ```
 
-- [ ] **Step 6: Create `switch/index.ts`**
+- [x] **Step 6: Create `switch/index.ts`**
 
 ```typescript
 export { switchNodeManifest } from "./manifest"
@@ -632,12 +632,12 @@ export { switchNodeConfigSchema } from "./schema"
 export type { SwitchNodeConfig, SwitchBranch } from "./schema"
 ```
 
-- [ ] **Step 7: Run tests to pass**
+- [x] **Step 7: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- workflow-nodes/switch/__tests__/executor.test.ts`  
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add desktop/workflow-nodes/switch/
@@ -652,7 +652,7 @@ git commit -m "feat(workflow): switch node (schema, manifest, executor + branch 
 - Create: `desktop/electron/services/workflow/variable-resolver.ts`
 - Create: `desktop/electron/services/__tests__/workflow-variable-resolver.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 ```typescript
 // desktop/electron/services/__tests__/workflow-variable-resolver.test.ts
@@ -689,12 +689,12 @@ describe("interpolatePrompt", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-variable-resolver.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```typescript
 // desktop/electron/services/workflow/variable-resolver.ts
@@ -726,12 +726,12 @@ export function interpolatePrompt(template: string, vars: Record<string, string>
 }
 ```
 
-- [ ] **Step 4: Run tests to pass**
+- [x] **Step 4: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-variable-resolver.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/workflow/variable-resolver.ts desktop/electron/services/__tests__/workflow-variable-resolver.test.ts
@@ -746,7 +746,7 @@ git commit -m "feat(workflow): variable resolver"
 - Create: `desktop/electron/services/workflow/workflow-validator.ts`
 - Create: `desktop/electron/services/__tests__/workflow-validator.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 ```typescript
 // desktop/electron/services/__tests__/workflow-validator.test.ts
@@ -785,12 +785,12 @@ describe("validateWorkflow", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-validator.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement validator**
+- [x] **Step 3: Implement validator**
 
 ```typescript
 // desktop/electron/services/workflow/workflow-validator.ts
@@ -870,12 +870,12 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
 }
 ```
 
-- [ ] **Step 4: Run tests to pass**
+- [x] **Step 4: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-validator.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/workflow/workflow-validator.ts desktop/electron/services/__tests__/workflow-validator.test.ts
@@ -890,7 +890,7 @@ git commit -m "feat(workflow): DAG validator (cycle, reachability, switch edges)
 - Create: `desktop/electron/services/workflow/workflow-service.ts`
 - Create: `desktop/electron/services/__tests__/workflow-service.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 ```typescript
 // desktop/electron/services/__tests__/workflow-service.test.ts
@@ -941,12 +941,12 @@ describe("WorkflowService", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-service.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```typescript
 // desktop/electron/services/workflow/workflow-service.ts
@@ -1005,12 +1005,12 @@ export class WorkflowService {
 }
 ```
 
-- [ ] **Step 4: Run tests to pass**
+- [x] **Step 4: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-service.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/workflow/workflow-service.ts desktop/electron/services/__tests__/workflow-service.test.ts
@@ -1024,7 +1024,7 @@ git commit -m "feat(workflow): WorkflowService CRUD + Git full-snapshot storage"
 **Files:**
 - Create: `desktop/electron/services/workflow/run-snapshot-service.ts`
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```typescript
 // desktop/electron/services/workflow/run-snapshot-service.ts
@@ -1063,7 +1063,7 @@ export class RunSnapshotService {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add desktop/electron/services/workflow/run-snapshot-service.ts
@@ -1078,7 +1078,7 @@ git commit -m "feat(workflow): RunSnapshotService (local run history, max 20)"
 - Create: `desktop/electron/services/workflow/workflow-engine.ts`
 - Create: `desktop/electron/services/__tests__/workflow-engine.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 ```typescript
 // desktop/electron/services/__tests__/workflow-engine.test.ts
@@ -1135,12 +1135,12 @@ describe("WorkflowEngine", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-engine.test.ts`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement `workflow-engine.ts`**
+- [x] **Step 3: Implement `workflow-engine.ts`**
 
 ```typescript
 // desktop/electron/services/workflow/workflow-engine.ts
@@ -1239,12 +1239,12 @@ export class WorkflowEngine {
 
 > **Note:** `p-queue` must be available in the desktop package. Check `desktop/package.json` — if absent, run `pnpm --filter @synapse/desktop add p-queue`.
 
-- [ ] **Step 4: Run tests to pass**
+- [x] **Step 4: Run tests to pass**
 
 Run: `pnpm --filter @synapse/desktop run test -- electron/services/__tests__/workflow-engine.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/workflow/workflow-engine.ts desktop/electron/services/__tests__/workflow-engine.test.ts
@@ -1258,7 +1258,7 @@ git commit -m "feat(workflow): WorkflowEngine (DAG, node:skipped, AbortSignal)"
 **Files:**
 - Create: `desktop/electron/services/workflow/window-manager.ts`
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```typescript
 // desktop/electron/services/workflow/window-manager.ts
@@ -1304,7 +1304,7 @@ export class WorkflowWindowManager {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add desktop/electron/services/workflow/window-manager.ts
@@ -1320,11 +1320,11 @@ git commit -m "feat(workflow): WorkflowWindowManager"
 - Modify: `desktop/electron/runtime/event-bus/types.ts` — add `"workflow"` to EventDomain
 - Create: `desktop/electron/modules/workflow/ipc.ts`
 
-- [ ] **Step 1: Add "workflow" to EventDomain**
+- [x] **Step 1: Add "workflow" to EventDomain**
 
 In `desktop/electron/runtime/event-bus/types.ts`, add `| "workflow"` to the `EventDomain` union type (after `"install-status"`).
 
-- [ ] **Step 2: Create `desktop/electron/modules/workflow/ipc.ts`**
+- [x] **Step 2: Create `desktop/electron/modules/workflow/ipc.ts`**
 
 The module exports `workflowIpcModule: IpcModule` with 13 methods plus a push-event descriptor. Key implementation details:
 
@@ -1456,12 +1456,12 @@ export const workflowIpcModule: IpcModule = {
 }
 ```
 
-- [ ] **Step 3: Verify TypeScript**
+- [x] **Step 3: Verify TypeScript**
 
 Run: `pnpm --filter @synapse/desktop run typecheck`  
 Expected: exit 0
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add desktop/electron/modules/workflow/ desktop/electron/runtime/event-bus/types.ts
@@ -1477,7 +1477,7 @@ git commit -m "feat(workflow): IPC module (13 channels + AbortController run-map
 - Modify: `desktop/electron/bootstrap/registry.ts`
 - Modify: `desktop/electron/bootstrap/ipc-registry.ts`
 
-- [ ] **Step 1: Add imports to `descriptors.ts`**
+- [x] **Step 1: Add imports to `descriptors.ts`**
 
 At the top with the other service imports:
 
@@ -1488,7 +1488,7 @@ import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 ```
 
-- [ ] **Step 2: Add five descriptors at the bottom of `descriptors.ts`**
+- [x] **Step 2: Add five descriptors at the bottom of `descriptors.ts`**
 
 ```typescript
 export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> = {
@@ -1552,7 +1552,7 @@ export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWind
 
 > **Note on `sendScheduled` signature:** The exact parameter shape depends on the current `AgentRuntimeService` interface. Check `desktop/electron/services/agent-runtime/agent-runtime-service.ts` and adjust field names (`agentType` vs `platform`, `sessionPolicy` vs `sessionMode`, etc.) to match. The intent is to send a prompt on a fresh session and return `{ status, summary, error, durationMs }`.
 
-- [ ] **Step 3: Register in `registry.ts`**
+- [x] **Step 3: Register in `registry.ts`**
 
 Add to imports in `registry.ts`:
 ```typescript
@@ -1575,16 +1575,16 @@ registry.register(coreWorkflowEngineDescriptor)
 registry.register(coreWorkflowWindowManagerDescriptor)
 ```
 
-- [ ] **Step 4: Register IPC module in `ipc-registry.ts`**
+- [x] **Step 4: Register IPC module in `ipc-registry.ts`**
 
 Add import and call `registry.register(workflowIpcModule, ctx)` in the registration list (following the pattern of existing modules in that file).
 
-- [ ] **Step 5: Verify TypeScript**
+- [x] **Step 5: Verify TypeScript**
 
 Run: `pnpm --filter @synapse/desktop run typecheck`  
 Expected: exit 0 — fix any `AgentRuntimeService` field name mismatches in the descriptor.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add desktop/electron/bootstrap/
@@ -1599,7 +1599,7 @@ git commit -m "feat(workflow): service descriptors + IPC registry wiring"
 - Modify: `desktop/src/types/bridge.ts`
 - Modify: `desktop/electron/preload.ts`
 
-- [ ] **Step 1: Add workflow types to `bridge.ts`**
+- [x] **Step 1: Add workflow types to `bridge.ts`**
 
 Add import near the other type imports:
 ```typescript
@@ -1625,7 +1625,7 @@ Add `workflow` field to the `SynapseBridge` interface:
   }
 ```
 
-- [ ] **Step 2: Add to `preload.ts`**
+- [x] **Step 2: Add to `preload.ts`**
 
 Locate the `IPC_CHANNELS` constant and add:
 ```typescript
@@ -1673,12 +1673,12 @@ In the bridge object, add `workflow` namespace following the same `invoke` / `su
 
 Add `import type { WorkflowDefinition, WorkflowEvent } from "../src/types/workflow"` at the top of `preload.ts`.
 
-- [ ] **Step 3: Verify TypeScript**
+- [x] **Step 3: Verify TypeScript**
 
 Run: `pnpm --filter @synapse/desktop run typecheck`  
 Expected: exit 0
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add desktop/electron/preload.ts desktop/src/types/bridge.ts
@@ -1695,7 +1695,7 @@ git commit -m "feat(workflow): preload bridge + SynapseBridge types"
 - Create: `desktop/src/modules/workflow/hooks/use-workflow-events.ts`
 - Create: `desktop/src/modules/workflow/hooks/use-upstream-nodes.ts`
 
-- [ ] **Step 1: Create `use-workflow-list.ts`**
+- [x] **Step 1: Create `use-workflow-list.ts`**
 
 ```typescript
 import { useCallback, useEffect, useState } from "react"
@@ -1713,7 +1713,7 @@ export function useWorkflowList() {
 }
 ```
 
-- [ ] **Step 2: Create `use-workflow-run.ts`**
+- [x] **Step 2: Create `use-workflow-run.ts`**
 
 ```typescript
 import { useCallback, useState } from "react"
@@ -1738,7 +1738,7 @@ export function useWorkflowRun(workflowId: string) {
 }
 ```
 
-- [ ] **Step 3: Create `use-workflow-events.ts`**
+- [x] **Step 3: Create `use-workflow-events.ts`**
 
 ```typescript
 import { useEffect } from "react"
@@ -1771,7 +1771,7 @@ export function useWorkflowEvents(
 }
 ```
 
-- [ ] **Step 4: Create `use-upstream-nodes.ts`**
+- [x] **Step 4: Create `use-upstream-nodes.ts`**
 
 ```typescript
 import { useMemo } from "react"
@@ -1789,7 +1789,7 @@ export function useUpstreamNodes(nodeId: string, definition: WorkflowDefinition 
 }
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/src/modules/workflow/hooks/
@@ -1806,7 +1806,7 @@ git commit -m "feat(workflow): renderer hooks (list, run, events, upstream-nodes
 - Create: `desktop/src/modules/workflow/components/workflow-list.tsx`
 - Create: `desktop/src/modules/workflow/index.tsx`
 
-- [ ] **Step 1: Create `workflow-card.tsx`**
+- [x] **Step 1: Create `workflow-card.tsx`**
 
 ```tsx
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1836,7 +1836,7 @@ export function WorkflowCard({ meta, onOpen, onRun }: WorkflowCardProps) {
 }
 ```
 
-- [ ] **Step 2: Create `run-params-dialog.tsx`**
+- [x] **Step 2: Create `run-params-dialog.tsx`**
 
 ```tsx
 import { useState } from "react"
@@ -1878,7 +1878,7 @@ export function RunParamsDialog({ open, params, onConfirm, onCancel }: RunParams
 }
 ```
 
-- [ ] **Step 3: Create `workflow-list.tsx`**
+- [x] **Step 3: Create `workflow-list.tsx`**
 
 ```tsx
 import { useState } from "react"
@@ -1918,7 +1918,7 @@ export function WorkflowList() {
 }
 ```
 
-- [ ] **Step 4: Create `index.tsx`**
+- [x] **Step 4: Create `index.tsx`**
 
 ```tsx
 import { Button } from "@/components/ui/button"
@@ -1944,7 +1944,7 @@ export function WorkflowModule() {
 }
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/src/modules/workflow/components/ desktop/src/modules/workflow/index.tsx
@@ -1959,7 +1959,7 @@ git commit -m "feat(workflow): list view (WorkflowModule, WorkflowCard, RunParam
 - Create: `desktop/src/modules/workflow/editor/editor-app.tsx`
 - Modify: `desktop/src/main.tsx`
 
-- [ ] **Step 1: Create `editor-app.tsx`**
+- [x] **Step 1: Create `editor-app.tsx`**
 
 Reads `?workflowId=` from `window.location.search`, loads the definition, wires `useWorkflowRun` + `useWorkflowEvents`, and renders `WorkflowToolbar` + `WorkflowCanvas` + `ExecutionOverlay`.
 
@@ -2012,7 +2012,7 @@ export function WorkflowEditorApp() {
 }
 ```
 
-- [ ] **Step 2: Route editor window in `main.tsx`**
+- [x] **Step 2: Route editor window in `main.tsx`**
 
 The renderer `main.tsx` currently renders `<App />` unconditionally. Add a URL-param branch so the editor window renders a separate root:
 
@@ -2036,12 +2036,12 @@ if (windowType === "workflow-editor") {
 
 Since `main.tsx` is not async, wrap in a top-level async IIFE or use dynamic `import()` inside the render call. Match the existing pattern in the codebase (check if other window types already do branching in main.tsx).
 
-- [ ] **Step 3: Verify TypeScript**
+- [x] **Step 3: Verify TypeScript**
 
 Run: `pnpm --filter @synapse/desktop run typecheck`  
 Expected: exit 0
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add desktop/src/modules/workflow/editor/editor-app.tsx desktop/src/main.tsx
@@ -2060,7 +2060,7 @@ git commit -m "feat(workflow): editor app shell + main.tsx window routing"
 
 > Prerequisite: `@xyflow/react` must be in `desktop/package.json`. If absent, add it: `pnpm --filter @synapse/desktop add @xyflow/react`.
 
-- [ ] **Step 1: Create `prompt/card.tsx`** (canvas node card, renderer-side)
+- [x] **Step 1: Create `prompt/card.tsx`** (canvas node card, renderer-side)
 
 ```tsx
 // desktop/workflow-nodes/prompt/card.tsx
@@ -2080,7 +2080,7 @@ export function PromptNodeCard({ config, selected }: { config: PromptNodeConfig;
 }
 ```
 
-- [ ] **Step 2: Create `switch/card.tsx`**
+- [x] **Step 2: Create `switch/card.tsx`**
 
 ```tsx
 // desktop/workflow-nodes/switch/card.tsx
@@ -2100,7 +2100,7 @@ export function SwitchNodeCard({ config, selected }: { config: SwitchNodeConfig;
 }
 ```
 
-- [ ] **Step 3: Create `node-wrappers.tsx`** (React Flow node type adapter)
+- [x] **Step 3: Create `node-wrappers.tsx`** (React Flow node type adapter)
 
 ```tsx
 // desktop/src/modules/workflow/editor/node-wrappers.tsx
@@ -2137,7 +2137,7 @@ export const nodeTypes = {
 }
 ```
 
-- [ ] **Step 4: Create `canvas.tsx`**
+- [x] **Step 4: Create `canvas.tsx`**
 
 ```tsx
 // desktop/src/modules/workflow/editor/canvas.tsx
@@ -2189,7 +2189,7 @@ export function WorkflowCanvas({ definition, onChange }: WorkflowCanvasProps) {
 
 > **Note on `randomUUID`:** Import from `node:crypto` is not available in renderer. Use `crypto.randomUUID()` (web API, available in modern Electron renderer). Adjust import accordingly.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/workflow-nodes/prompt/card.tsx desktop/workflow-nodes/switch/card.tsx desktop/src/modules/workflow/editor/
@@ -2205,7 +2205,7 @@ git commit -m "feat(workflow): canvas + React Flow node wrappers"
 - Create: `desktop/src/modules/workflow/editor/node-palette.tsx`
 - Create: `desktop/src/modules/workflow/editor/execution-overlay.tsx`
 
-- [ ] **Step 1: Create `toolbar.tsx`**
+- [x] **Step 1: Create `toolbar.tsx`**
 
 ```tsx
 // desktop/src/modules/workflow/editor/toolbar.tsx
@@ -2245,7 +2245,7 @@ export function WorkflowToolbar({ definition, runState, onSave, onRun, onCancel,
 }
 ```
 
-- [ ] **Step 2: Create `node-palette.tsx`**
+- [x] **Step 2: Create `node-palette.tsx`**
 
 ```tsx
 // desktop/src/modules/workflow/editor/node-palette.tsx
@@ -2274,7 +2274,7 @@ export function NodePalette() {
 }
 ```
 
-- [ ] **Step 3: Create `execution-overlay.tsx`**
+- [x] **Step 3: Create `execution-overlay.tsx`**
 
 Overlays per-node status badges on the canvas using absolute positioning. Reads `nodeResults` and shows a coloured badge (running/success/failed/skipped) near each node. Implementation uses a `div` overlay with `pointer-events-none` that maps over nodes — since React Flow exposes node positions, the overlay iterates `nodeResults` and positions badges. A simple approach: render a fixed panel listing node statuses rather than true overlay positioning (position overlay is complex without direct access to internal React Flow node DOM refs).
 
@@ -2307,7 +2307,7 @@ export function ExecutionOverlay({ nodeResults, runState }: ExecutionOverlayProp
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add desktop/src/modules/workflow/editor/toolbar.tsx desktop/src/modules/workflow/editor/node-palette.tsx desktop/src/modules/workflow/editor/execution-overlay.tsx
@@ -2321,13 +2321,13 @@ git commit -m "feat(workflow): toolbar, node palette, execution overlay"
 **Files:**
 - Identify and modify the file that declares app-shell navigation tabs (typically `desktop/src/App.tsx` or `desktop/src/app-shell/navigation.ts` / `desktop/src/app-shell/tabs.tsx`).
 
-- [ ] **Step 1: Find the tab registration file**
+- [x] **Step 1: Find the tab registration file**
 
 Run: `grep -r "taskScheduler\|Scheduler\|tabId\|TabItem" desktop/src/App.tsx desktop/src/app-shell/ --include="*.tsx" --include="*.ts" -l`
 
 Identify which file defines the sidebar tabs or navigation entries.
 
-- [ ] **Step 2: Add Workflow tab entry**
+- [x] **Step 2: Add Workflow tab entry**
 
 Following the exact pattern used for the existing Scheduler/Database tab, add a Workflow entry:
 
@@ -2337,7 +2337,7 @@ Following the exact pattern used for the existing Scheduler/Database tab, add a 
 
 Import `WorkflowModule` from `@/modules/workflow` and `GitBranch` from `lucide-react`.
 
-- [ ] **Step 3: Register prompt + switch node types at app startup**
+- [x] **Step 3: Register prompt + switch node types at app startup**
 
 In `desktop/src/modules/workflow/index.tsx` or a dedicated `workflow-nodes/register.main.ts` called from bootstrap, register both node types into the singleton `nodeTypeRegistry`:
 
@@ -2353,22 +2353,22 @@ nodeTypeRegistry.register(switchNodeManifest, switchNodeExecutor)
 
 Call this file from the workflow service descriptor's `create()` (before constructing `WorkflowEngine`) by adding `import "../../../workflow-nodes/register.main"` at the top of `descriptors.ts`.
 
-- [ ] **Step 4: Verify TypeScript**
+- [x] **Step 4: Verify TypeScript**
 
 Run: `pnpm --filter @synapse/desktop run typecheck`  
 Expected: exit 0
 
-- [ ] **Step 5: Run all workflow tests**
+- [x] **Step 5: Run all workflow tests**
 
 Run: `pnpm --filter @synapse/desktop run test -- --reporter=verbose workflow`  
 Expected: all tests PASS
 
-- [ ] **Step 6: Run hard-constraint check**
+- [x] **Step 6: Run hard-constraint check**
 
 Run: `pnpm --filter @synapse/desktop run check:hard-constraints`  
 Expected: exit 0
 
-- [ ] **Step 7: Final commit**
+- [x] **Step 7: Final commit**
 
 ```bash
 git add desktop/src/ desktop/workflow-nodes/register.main.ts
