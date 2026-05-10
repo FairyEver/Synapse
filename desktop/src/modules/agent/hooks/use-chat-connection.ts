@@ -119,6 +119,13 @@ function useChatConnection(
     })) {
       return
     }
+    // Strip empty entries that may have been persisted during cancel/error
+    // paths (e.g. empty error records, empty assistant messages).
+    const dbEntries = result.entries.filter((entry) => {
+      if (entry.kind === "error") return Boolean(entry.message && entry.message.trim().length > 0)
+      if (entry.kind === "message" && entry.role !== "user") return entry.content.trim().length > 0
+      return true
+    })
     // Phase items are renderer-only in Plan A (not persisted). When DB-backed
     // entries replace the timeline, preserve in-flight phase rows AND anchor
     // them right after the most recent user message — sorting by `timestamp`
@@ -127,19 +134,25 @@ function useChatConnection(
     // `submitted` / `received` events), which would float phase rows above
     // the user bubble.
     updateTimeline((current) => {
-      const phaseItems = current.filter((item) => item.kind === "phase")
-      if (phaseItems.length === 0) return [...result.entries]
+      // Only preserve phase items that are still in-progress (belong to the
+      // active turn). Completed / failed / cancelled phase rows from previous
+      // turns must NOT survive a DB-backed timeline reload — otherwise they
+      // accumulate across turns and appear under the wrong user message.
+      const activePhaseItems = current.filter(
+        (item) => item.kind === "phase" && item.status === "in-progress",
+      )
+      if (activePhaseItems.length === 0) return [...dbEntries]
       let lastUserIdx = -1
-      for (let i = result.entries.length - 1; i >= 0; i--) {
-        const candidate = result.entries[i]
+      for (let i = dbEntries.length - 1; i >= 0; i--) {
+        const candidate = dbEntries[i]
         if (candidate.kind === "message" && candidate.role === "user") {
           lastUserIdx = i
           break
         }
       }
-      if (lastUserIdx < 0) return [...result.entries, ...phaseItems]
-      const out: SynapseAgentTimelineItem[] = [...result.entries]
-      out.splice(lastUserIdx + 1, 0, ...phaseItems)
+      if (lastUserIdx < 0) return [...dbEntries, ...activePhaseItems]
+      const out: SynapseAgentTimelineItem[] = [...dbEntries]
+      out.splice(lastUserIdx + 1, 0, ...activePhaseItems)
       return out
     })
   }, [updateTimeline, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, timelineVersionRef])
@@ -422,11 +435,17 @@ function useChatConnection(
         content: trimmed,
         clientSubmittedAt: now,
       })
+      // NOTE: send() resolves when the message is enqueued, NOT when the turn
+      // completes.  REMOVE_SENDING_CONVERSATION is handled by the terminal
+      // phase event handler in use-chat-events (cancelled / completed / failed)
+      // so we must NOT remove here — doing so causes `sending` to briefly flash
+      // false between enqueue and actual turn completion.
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "发送失败"
       logger.error("Agent send failed.", rawError)
       dispatch({ type: "SET_ERROR", error: message })
-    } finally {
+      // Only remove on enqueue failure — the turn never started, so no phase
+      // event will fire to clean it up.
       if (conversationId) {
         dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId })
       }

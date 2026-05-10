@@ -171,8 +171,8 @@
   input,
   textarea,
   [contenteditable="true"],
-  [data-allow-select="true"],
-  [data-allow-select="true"] * {
+  #root [data-allow-select="true"],
+  #root [data-allow-select="true"] * {
     @apply select-text;
   }
 

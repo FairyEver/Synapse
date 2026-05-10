@@ -54,6 +54,7 @@ function AgentTimelineItem({
       )
     }
     case "error":
+      if (!item.message || item.message.trim().length === 0) return null
       return (
         <Alert variant="destructive">
           <AlertCircle data-icon="inline-start" />

@@ -92,12 +92,9 @@ function useChatEvents(
           dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancel_pending" })
         }
         if (payload.phase === "cancelled" || payload.phase === "failed" || (payload.phase === "completed" && payload.status === "done")) {
-          if (payload.phase === "cancelled") {
-            dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
-          }
-          if (payload.phase === "completed" || payload.phase === "failed") {
-            dispatch({ type: "CANCEL_RESET" })
-          }
+          // All terminal phases reset cancelPhase back to idle so the next
+          // turn starts with a clean state.
+          dispatch({ type: "CANCEL_RESET" })
           if (payload.conversationId) {
             dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
           }
