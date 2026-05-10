@@ -80,6 +80,7 @@ export type ScanItemForDetail = {
   editorLabel: string
   scope: EditorScanScope
   projectName?: string
+  projectPath?: string
   content?: string
   trash: EditorScanTrashInfo
 }

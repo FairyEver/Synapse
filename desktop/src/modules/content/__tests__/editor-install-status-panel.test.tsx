@@ -5,12 +5,15 @@ import { describe, expect, it, vi } from "vitest"
 
 import { Button } from "@/components/ui/button"
 import { DialogContent } from "@/components/ui/dialog"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { TooltipContent } from "@/components/ui/tooltip"
 import {
   EditorInstallStatusDetailList,
   EditorInstallStatusPanel,
 } from "@/modules/content/components/editor-install-status-panel"
 import type { SynapseEditorInstallStatusEntry } from "@/types/editor-install-status"
+
+type DropdownMenuItemProps = ComponentProps<typeof DropdownMenuItem>
 
 const showItemInFolder = vi.hoisted(() => vi.fn())
 
@@ -170,6 +173,20 @@ function findButtonByText(
   return button
 }
 
+function findMenuItemByText(
+  node: ReactNode,
+  text: string,
+): ReactElement<DropdownMenuItemProps> {
+  const items = findElementsByType<DropdownMenuItemProps>(node, DropdownMenuItem)
+  const item = items.find((candidate) => textFromNode(candidate.props.children) === text)
+
+  if (!item) {
+    throw new Error(`Dropdown menu item not found: ${text}`)
+  }
+
+  return item
+}
+
 describe("EditorInstallStatusPanel", () => {
   it("renders a toolbar trigger without inline status details", () => {
     const html = renderPanel({
@@ -228,7 +245,7 @@ describe("EditorInstallStatusPanel", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 
-  it("calls onOpenInstallTarget when install is clicked", () => {
+  it("calls onOpenInstallTarget when install is selected", () => {
     const onOpenInstallTarget = vi.fn()
     const entry = createEntry({
       status: "not_installed",
@@ -238,7 +255,7 @@ describe("EditorInstallStatusPanel", () => {
       onOpenInstallTarget,
     })
 
-    findButtonByText(element, "安装").props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
+    findMenuItemByText(element, "安装").props.onSelect?.({} as Event)
     expect(onOpenInstallTarget).toHaveBeenCalledWith(entry)
   })
 
@@ -346,7 +363,7 @@ describe("EditorInstallStatusPanel", () => {
     expect(html).not.toMatch(/data-install-status-row-title=""[^>]*>Codex<\/p>/)
   })
 
-  it("calls onOpenInstallTarget when update is clicked", () => {
+  it("calls onOpenInstallTarget when update is selected", () => {
     const onOpenInstallTarget = vi.fn()
     const entry = createEntry({
       status: "needs_update",
@@ -356,7 +373,21 @@ describe("EditorInstallStatusPanel", () => {
       onOpenInstallTarget,
     })
 
-    findButtonByText(element, "更新").props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
+    findMenuItemByText(element, "更新").props.onSelect?.({} as Event)
+    expect(onOpenInstallTarget).toHaveBeenCalledWith(entry)
+  })
+
+  it("offers reinstall for already installed targets", () => {
+    const onOpenInstallTarget = vi.fn()
+    const entry = createEntry({
+      status: "installed",
+    })
+    const element = createDetailElement({
+      entries: [entry],
+      onOpenInstallTarget,
+    })
+
+    findMenuItemByText(element, "重新安装").props.onSelect?.({} as Event)
     expect(onOpenInstallTarget).toHaveBeenCalledWith(entry)
   })
 

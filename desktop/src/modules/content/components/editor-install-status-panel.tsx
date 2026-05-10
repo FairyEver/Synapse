@@ -1,4 +1,4 @@
-import { LoaderCircle, RefreshCw } from "lucide-react"
+import { LoaderCircle, MoreHorizontal, RefreshCw } from "lucide-react"
 import type { ComponentProps } from "react"
 
 import { EditorIcon } from "@/components/editor-icon"
@@ -6,13 +6,18 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Tooltip,
@@ -55,8 +60,21 @@ const statusLabels: Record<SynapseEditorInstallStatusValue, string> = {
   unsupported: "不支持",
 }
 
-function canWriteStatus(status: SynapseEditorInstallStatusValue): boolean {
-  return status === "not_installed" || status === "needs_update"
+type RowAction = {
+  label: string
+}
+
+function getRowActions(status: SynapseEditorInstallStatusValue): RowAction[] {
+  switch (status) {
+    case "not_installed":
+      return [{ label: "安装" }]
+    case "needs_update":
+      return [{ label: "更新" }]
+    case "installed":
+      return [{ label: "重新安装" }]
+    default:
+      return []
+  }
 }
 
 function canOpenStatus(status: SynapseEditorInstallStatusValue): boolean {
@@ -132,7 +150,7 @@ function renderInstallStatusTargetList({
   return (
     <div className="divide-y divide-border">
       {orderEntriesForEditor(entries).map((entry) => {
-        const canWrite = canWriteStatus(entry.status)
+        const actions = getRowActions(entry.status)
         const targetPath = entry.targetPath
         const openableTargetPath = targetPath && canOpenStatus(entry.status)
           ? targetPath
@@ -156,16 +174,24 @@ function renderInstallStatusTargetList({
               </div>
 
               <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                {canWrite ? (
-                  <DialogClose asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => onOpenInstallTarget(entry)}
-                    >
-                      {entry.status === "needs_update" ? "更新" : "安装"}
-                    </Button>
-                  </DialogClose>
+                {actions.length > 0 ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon" className="size-7">
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {actions.map((action) => (
+                        <DropdownMenuItem
+                          key={action.label}
+                          onSelect={() => onOpenInstallTarget(entry)}
+                        >
+                          {action.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 ) : null}
               </div>
             </div>

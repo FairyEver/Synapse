@@ -23,6 +23,7 @@ type ProjectOverviewProps = {
       editorLabel: string
       scope: EditorScanScope
       projectName: string
+      projectPath: string
     },
   ) => void
 }
@@ -97,6 +98,7 @@ function ProjectOverview({
                         editorLabel: selectedEditorLabel,
                         scope: "project",
                         projectName: project.projectName,
+                        projectPath: project.projectPath,
                       })}
                     />
                   ))}

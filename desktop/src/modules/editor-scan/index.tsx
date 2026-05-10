@@ -52,6 +52,7 @@ function EditorScanModule() {
         editorLabel: string
         scope: EditorScanScope
         projectName?: string
+        projectPath?: string
       },
     ) => {
       setDetailItem({
@@ -67,6 +68,7 @@ function EditorScanModule() {
         editorLabel: context.editorLabel,
         scope: context.scope,
         projectName: context.projectName,
+        projectPath: context.projectPath,
         content: "content" in item ? item.content : undefined,
         trash: item.trash,
       })
