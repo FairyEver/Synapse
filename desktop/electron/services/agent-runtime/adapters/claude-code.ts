@@ -239,6 +239,9 @@ class ClaudeCodeLiveSession implements AgentLiveSession {
     const raw = parseRecord(line)
     if (!raw) return
     const eventType = stringValue(raw.type)
+    // DEBUG: Log every raw event from Claude Code CLI to diagnose streaming granularity
+    const debugSummary = buildDebugSummary(raw, eventType)
+    console.log(`[claude-code-raw] type=${eventType ?? "unknown"} ${debugSummary}`)
     switch (eventType) {
       case "system":
         this.handleSystem(raw)
@@ -433,4 +436,50 @@ function stringFromUnknown(value: unknown): string {
   } catch {
     return String(value)
   }
+}
+
+function buildDebugSummary(raw: Record<string, unknown>, eventType: string | undefined): string {
+  const parts: string[] = []
+  if (eventType === "assistant") {
+    const msg = asRecord(raw.message)
+    const content = msg?.content
+    if (Array.isArray(content)) {
+      const blocks = content.map((block) => {
+        const b = asRecord(block)
+        if (!b) return "?"
+        const t = stringValue(b.type) ?? "?"
+        if (t === "text") return `text(${(stringValue(b.text) ?? "").length}chars)`
+        if (t === "thinking") return `thinking(${(stringValue(b.thinking) ?? "").length}chars)`
+        if (t === "tool_use") return `tool_use(${stringValue(b.name) ?? "?"})`
+        return t
+      })
+      parts.push(`blocks=[${blocks.join(", ")}]`)
+    }
+  } else if (eventType === "stream_event") {
+    const event = asRecord(raw.event)
+    if (event) {
+      const evtType = stringValue(event.type) ?? "?"
+      parts.push(`event.type=${evtType}`)
+      if (evtType === "content_block_delta") {
+        const delta = asRecord(event.delta)
+        if (delta) {
+          const deltaType = stringValue(delta.type) ?? "?"
+          const text = stringValue(delta.text)
+          const thinking = stringValue(delta.thinking)
+          parts.push(`delta.type=${deltaType}`)
+          if (text !== undefined) parts.push(`text="${text.slice(0, 40)}${text.length > 40 ? "..." : ""}"`)
+          if (thinking !== undefined) parts.push(`thinking="${thinking.slice(0, 40)}${thinking.length > 40 ? "..." : ""}"`)
+        }
+      } else if (evtType === "content_block_start") {
+        const contentBlock = asRecord(event.content_block)
+        if (contentBlock) parts.push(`block.type=${stringValue(contentBlock.type) ?? "?"}`)
+      }
+    }
+  } else if (eventType === "result") {
+    const result = stringValue(raw.result)
+    parts.push(`result_len=${result?.length ?? 0}`)
+  } else if (eventType === "system") {
+    parts.push(`session_id=${stringValue(raw.session_id) ?? "?"}`)
+  }
+  return parts.join(" ")
 }
