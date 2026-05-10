@@ -15,6 +15,7 @@ export function WorkflowEditorApp() {
   const workflowId = new URLSearchParams(window.location.search).get("workflowId") ?? ""
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [viewingNodeId, setViewingNodeId] = useState<string | null>(null)
   const [saveErrors, setSaveErrors] = useState<ValidationError[]>([])
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const definitionRef = useRef(definition)
@@ -70,6 +71,18 @@ export function WorkflowEditorApp() {
     })
   }, [])
 
+  const handleNodeSelect = useCallback((nodeId: string | null) => {
+    if (nodeId && runState !== "idle") {
+      const result = nodeResults[nodeId]
+      if (result?.status === "success" || result?.status === "failed") {
+        setViewingNodeId(nodeId)
+        return
+      }
+    }
+    setSelectedNodeId(nodeId)
+    setViewingNodeId(null)
+  }, [runState, nodeResults])
+
   const handleSave = async (def: WorkflowDefinition) => {
     const result = await window.synapse?.workflow.save(def)
     if (result && "errors" in result) {
@@ -106,10 +119,10 @@ export function WorkflowEditorApp() {
       <div className="flex-1 flex min-h-0">
         <NodePalette />
         <div className="flex-1 relative">
-          <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={setSelectedNodeId} />
-          <ExecutionOverlay nodeResults={nodeResults} runState={runState} definition={definition} />
+          <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} />
+          <ExecutionOverlay nodeResults={nodeResults} runState={runState} definition={definition} viewingNodeId={viewingNodeId} onViewClose={() => setViewingNodeId(null)} />
         </div>
-        <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
+        <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
       </div>
     </div>
   )

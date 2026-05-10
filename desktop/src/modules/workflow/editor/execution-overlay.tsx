@@ -13,14 +13,23 @@ interface ExecutionOverlayProps {
   nodeResults: Record<string, NodeRunResult>
   runState: RunState
   definition: WorkflowDefinition
+  viewingNodeId?: string | null
+  onViewClose?: () => void
 }
 
-export function ExecutionOverlay({ nodeResults, runState, definition }: ExecutionOverlayProps) {
+export function ExecutionOverlay({ nodeResults, runState, definition, viewingNodeId, onViewClose }: ExecutionOverlayProps) {
   const [selected, setSelected] = useState<NodeRunResult | null>(null)
 
   if (runState === "idle") return null
 
   const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
+
+  const externalResult = viewingNodeId ? (nodeResults[viewingNodeId] ?? null) : null
+  const dialogTarget = selected ?? externalResult
+  const handleDialogClose = () => {
+    if (selected) setSelected(null)
+    else onViewClose?.()
+  }
 
   return (
     <>
@@ -37,35 +46,35 @@ export function ExecutionOverlay({ nodeResults, runState, definition }: Executio
           </div>
         ))}
       </div>
-      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
+      <Dialog open={!!dialogTarget} onOpenChange={(o) => { if (!o) handleDialogClose() }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-sm">{selected ? nameOf(selected.nodeId) : ""} — 执行详情</DialogTitle>
+            <DialogTitle className="text-sm">{dialogTarget ? nameOf(dialogTarget.nodeId) : ""} — 执行详情</DialogTitle>
           </DialogHeader>
-          {selected && (
+          {dialogTarget && (
             <div className="grid gap-3 text-xs overflow-auto max-h-[60vh]">
-              {selected.input.prompt && (
+              {dialogTarget.input.prompt && (
                 <div className="grid gap-1">
                   <p className="font-medium text-muted-foreground">完整 Prompt</p>
-                  <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all">{selected.input.prompt}</pre>
+                  <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all">{dialogTarget.input.prompt}</pre>
                 </div>
               )}
-              {selected.output !== undefined && (
+              {dialogTarget.output !== undefined && (
                 <div className="grid gap-1">
                   <p className="font-medium text-muted-foreground">输出</p>
-                  <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all">{selected.output}</pre>
+                  <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all">{dialogTarget.output}</pre>
                 </div>
               )}
-              {selected.error && (
+              {dialogTarget.error && (
                 <div className="grid gap-1">
                   <p className="font-medium text-destructive">错误</p>
-                  <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all text-destructive">{selected.error}</pre>
+                  <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all text-destructive">{dialogTarget.error}</pre>
                 </div>
               )}
-              {selected.activeBranch && (
+              {dialogTarget.activeBranch && (
                 <div className="grid gap-1">
                   <p className="font-medium text-muted-foreground">激活分支</p>
-                  <span className="font-mono">{selected.activeBranch}</span>
+                  <span className="font-mono">{dialogTarget.activeBranch}</span>
                 </div>
               )}
             </div>
