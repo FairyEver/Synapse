@@ -10,6 +10,11 @@ export function WorkflowList() {
 
   const handleRun = async (id: string) => { const def = await window.synapse?.workflow.get(id); if (def) setRunTarget(def) }
 
+  const handleDelete = async (id: string) => {
+    await window.synapse?.workflow.delete(id)
+    void refresh()
+  }
+
   const handleConfirmRun = async (params: Record<string, unknown>) => {
     if (!runTarget) return
     setRunTarget(null)
@@ -26,7 +31,8 @@ export function WorkflowList() {
         {items.map((meta) => (
           <WorkflowCard key={meta.id} meta={meta}
             onOpen={() => void window.synapse?.workflow.openEditor(meta.id)}
-            onRun={() => void handleRun(meta.id)} />
+            onRun={() => void handleRun(meta.id)}
+            onDelete={() => void handleDelete(meta.id)} />
         ))}
       </div>
       <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} onConfirm={handleConfirmRun} onCancel={() => setRunTarget(null)} />

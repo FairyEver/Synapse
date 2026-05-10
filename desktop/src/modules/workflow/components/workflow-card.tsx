@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import type { WorkflowMeta } from "@/types/workflow"
-import { GitBranch, Play } from "lucide-react"
+import { GitBranch, Play, Trash2 } from "lucide-react"
 
-interface WorkflowCardProps { meta: WorkflowMeta; onOpen: () => void; onRun: () => void }
+interface WorkflowCardProps { meta: WorkflowMeta; onOpen: () => void; onRun: () => void; onDelete: () => void }
 
-export function WorkflowCard({ meta, onOpen, onRun }: WorkflowCardProps) {
+export function WorkflowCard({ meta, onOpen, onRun, onDelete }: WorkflowCardProps) {
   return (
     <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onDoubleClick={onOpen}>
       <CardHeader className="pb-2">
@@ -16,9 +17,28 @@ export function WorkflowCard({ meta, onOpen, onRun }: WorkflowCardProps) {
       </CardHeader>
       <CardContent className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">{meta.nodeCount} 个节点</span>
-        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onRun() }}>
-          <Play className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onRun() }}>
+            <Play className="h-3.5 w-3.5" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="ghost" onClick={(e) => e.stopPropagation()}>
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>删除工作流</AlertDialogTitle>
+                <AlertDialogDescription>确定删除「{meta.name}」？此操作不可恢复。</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction onClick={onDelete}>删除</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </CardContent>
     </Card>
   )
