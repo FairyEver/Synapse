@@ -8,16 +8,23 @@ const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "�
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   running: "default", success: "secondary", failed: "destructive", skipped: "outline", pending: "outline",
 }
+const RUN_STATE_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" } | null> = {
+  running: { label: "执行中", variant: "default" },
+  completed: { label: "全部完成", variant: "secondary" },
+  failed: { label: "执行失败", variant: "destructive" },
+  cancelled: { label: "已取消", variant: "outline" },
+}
 
 interface ExecutionOverlayProps {
   nodeResults: Record<string, NodeRunResult>
   runState: RunState
+  runError?: string | null
   definition: WorkflowDefinition
   viewingNodeId?: string | null
   onViewClose?: () => void
 }
 
-export function ExecutionOverlay({ nodeResults, runState, definition, viewingNodeId, onViewClose }: ExecutionOverlayProps) {
+export function ExecutionOverlay({ nodeResults, runState, runError, definition, viewingNodeId, onViewClose }: ExecutionOverlayProps) {
   const [selected, setSelected] = useState<NodeRunResult | null>(null)
   const results = Object.values(nodeResults)
 
@@ -36,6 +43,14 @@ export function ExecutionOverlay({ nodeResults, runState, definition, viewingNod
     <>
       <div className="absolute bottom-4 right-4 bg-background/90 border rounded-lg shadow-sm p-3 flex flex-col gap-1.5 max-h-64 overflow-auto z-10">
         <p className="text-xs font-medium text-muted-foreground mb-1">运行状态</p>
+        {RUN_STATE_BADGE[runState] && (
+          <div className="flex flex-col gap-1 pb-1.5 mb-0.5 border-b">
+            <Badge variant={RUN_STATE_BADGE[runState]!.variant} className="text-xs w-fit">{RUN_STATE_BADGE[runState]!.label}</Badge>
+            {runState === "failed" && runError && (
+              <p className="text-xs text-destructive break-words max-w-48">{runError}</p>
+            )}
+          </div>
+        )}
         {results.map((r) => (
           <div
             key={r.nodeId}

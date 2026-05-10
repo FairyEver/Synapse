@@ -22,6 +22,7 @@ export function WorkflowEditorApp() {
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
   const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel } = useWorkflowRun(workflowId)
+  const [runError, setRunError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!workflowId) return
@@ -56,9 +57,9 @@ export function WorkflowEditorApp() {
     onNodeCompleted: (nodeId, output, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "success" as const, output: String(output) } })),
     onNodeFailed: (nodeId, error, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "failed" as const, error } })),
     onNodeSkipped: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { nodeId, input: { variables: {} }, status: "skipped" as const } })),
-    onCompleted: (results) => { setRunState("completed"); setNodeResults(results) },
-    onFailed: () => setRunState("failed"),
-    onCancelled: () => setRunState("cancelled"),
+    onCompleted: (results) => { setRunState("completed"); setRunError(null); setNodeResults(results) },
+    onFailed: (error) => { setRunState("failed"); setRunError(error) },
+    onCancelled: () => { setRunState("cancelled"); setRunError(null) },
   })
 
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
@@ -115,6 +116,7 @@ export function WorkflowEditorApp() {
     if (!currentDefinition) return null
     const saveResult = await handleSave(currentDefinition)
     if (!saveResult || "errors" in saveResult) return null
+    setRunError(null)
     return start(params)
   }
 
@@ -143,7 +145,7 @@ export function WorkflowEditorApp() {
         <NodePalette />
         <div className="flex-1 relative">
           <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} />
-          <ExecutionOverlay nodeResults={nodeResults} runState={runState} definition={definition} viewingNodeId={viewingNodeId} onViewClose={() => setViewingNodeId(null)} />
+          <ExecutionOverlay nodeResults={nodeResults} runState={runState} runError={runError} definition={definition} viewingNodeId={viewingNodeId} onViewClose={() => setViewingNodeId(null)} />
         </div>
         <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
       </div>
