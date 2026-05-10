@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
-import { AlertCircle, File, FolderOpen, LoaderCircle, Trash2 } from "lucide-react"
-import { readDetail } from "@/app-shell/content"
+import { AlertCircle, File, FolderOpen, LoaderCircle, MoreHorizontal } from "lucide-react"
+import { getEditorAdapters, readDetail } from "@/app-shell/content"
+import { useAppConfig } from "@/app-shell/config"
 import {
   createContentOpenRequestId,
   requestOpenContentCreate,
   requestOpenContentDetail,
+  requestOpenContentEditOverwrite,
 } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { Badge } from "@/components/ui/badge"
@@ -29,13 +31,13 @@ import {
 } from "@/components/ui/dialog"
 import { Menubar } from "@/components/ui/menubar"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Empty,
   EmptyDescription,
@@ -49,6 +51,10 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
+import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
+import type { EditorWriteTargetInitialSelection } from "@/modules/content/components/editor-write-target-selector"
+import type { SynapseContentMeta } from "@/types/content"
+import type { SynapseEditorAdapterSummary } from "@/types/editor"
 import type { EditorScanSkillFileEntry, ScanItemForDetail } from "@/types/editor-scan"
 import { useScanItemContent, useSkillFiles } from "../hooks/use-scan-item-content"
 import {
@@ -77,6 +83,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   const activeRepository = useActiveRepository()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const { success, error: notifyError } = useAppNotifications()
+  const { config } = useAppConfig()
   const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered")
   const [contentReady, setContentReady] = useState(false)
   const [quickPublishError, setQuickPublishError] = useState<string | null>(null)
@@ -86,6 +93,13 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   const [trashError, setTrashError] = useState<string | null>(null)
   const [isTrashConfirmOpen, setIsTrashConfirmOpen] = useState(false)
   const [isTrashBusy, setIsTrashBusy] = useState(false)
+  const [reinstallMeta, setReinstallMeta] = useState<SynapseContentMeta | null>(null)
+  const [reinstallEditor, setReinstallEditor] = useState<SynapseEditorAdapterSummary | null>(null)
+  const [reinstallSelection, setReinstallSelection] = useState<EditorWriteTargetInitialSelection | null>(null)
+  const [isReinstallOpen, setIsReinstallOpen] = useState(false)
+  const [isReinstallBusy, setIsReinstallBusy] = useState(false)
+  const [isPublishChoiceOpen, setIsPublishChoiceOpen] = useState(false)
+  const [isOverwriteBusy, setIsOverwriteBusy] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -97,6 +111,9 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       setTrashError(null)
       setIsTrashConfirmOpen(false)
       setIsTrashBusy(false)
+      setIsReinstallBusy(false)
+      setIsPublishChoiceOpen(false)
+      setIsOverwriteBusy(false)
       return
     }
     const timer = setTimeout(() => setContentReady(true), 200)
@@ -261,7 +278,161 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
     }
   }, [disabledReason, item, onOpenChange, publishAsNew])
 
+  const handleReinstall = useCallback(async () => {
+    if (!item?.synapseContentId) return
+    setIsReinstallBusy(true)
+    try {
+      const [detail, adapters] = await Promise.all([
+        readDetail(item.type, item.synapseContentId),
+        getEditorAdapters(),
+      ])
+
+      if (detail.deleted) {
+        setFallbackReason("仓库内容已删除。")
+        return
+      }
+
+      const adapter = adapters.find((candidate) => candidate.id === item.editorId)
+      if (!adapter) {
+        notifyError("当前编辑器没有可用的安装适配器。")
+        return
+      }
+
+      const { content: _content, attachments: _attachments, ...metaFields } = detail
+      setReinstallMeta(metaFields as SynapseContentMeta)
+      setReinstallEditor(adapter)
+      setReinstallSelection({
+        scope: item.scope,
+        projectPath: item.scope === "project" ? item.projectPath : undefined,
+      })
+      setIsReinstallOpen(true)
+    } catch (error) {
+      logger.warn("Reinstall preparation failed.", {
+        contentId: item.synapseContentId,
+        contentType: item.type,
+        editorId: item.editorId,
+        error,
+      })
+      setFallbackReason("仓库内容不可用。")
+    } finally {
+      setIsReinstallBusy(false)
+    }
+  }, [item, notifyError])
+
+  const handleReinstallOpenChange = useCallback((nextOpen: boolean) => {
+    setIsReinstallOpen(nextOpen)
+    if (!nextOpen) {
+      setReinstallMeta(null)
+      setReinstallEditor(null)
+      setReinstallSelection(null)
+    }
+  }, [])
+
+  const handlePublishOverwrite = useCallback(async () => {
+    if (!item || !item.synapseContentId || disabledReason) return
+    setIsOverwriteBusy(true)
+    setQuickPublishError(null)
+
+    try {
+      const bridge = getSynapseBridge()
+      if (!bridge) {
+        throw new Error("当前窗口无法读取本地内容。")
+      }
+
+      const detail = await readDetail(item.type, item.synapseContentId)
+      if (detail.deleted) {
+        setIsPublishChoiceOpen(false)
+        setFallbackReason("仓库内容已删除。")
+        logger.info("Publish-to-repo overwrite fallback.", {
+          contentId: item.synapseContentId,
+          contentType: item.type,
+          editorId: item.editorId,
+          reason: "deleted",
+          scope: item.scope,
+        })
+        return
+      }
+
+      const draft = await bridge.editorScan.prepareQuickPublishDraft({
+        itemType: item.type,
+        itemPath: item.path,
+        itemName: item.name,
+        ruleContent: item.type === "rule" ? item.content : undefined,
+        metadata: item.metadata,
+      })
+
+      const sourceLabel = formatQuickPublishSourceLabel(item)
+      const requestId = createContentOpenRequestId()
+
+      if (draft.itemType === "rule") {
+        requestOpenContentEditOverwrite({
+          kind: "edit-overwrite",
+          requestId,
+          contentType: "rule",
+          contentId: item.synapseContentId,
+          prefill: { contentType: "rule", content: draft.content },
+          sourceLabel,
+        })
+      } else {
+        requestOpenContentEditOverwrite({
+          kind: "edit-overwrite",
+          requestId,
+          contentType: "skill",
+          contentId: item.synapseContentId,
+          prefill: {
+            contentType: "skill",
+            content: draft.content,
+            files: draft.files.map((file) => ({
+              originalName: file.originalName,
+              size: file.size,
+              bytes: file.bytes,
+            })),
+          },
+          sourceLabel,
+        })
+      }
+
+      logger.info("Publish-to-repo overwrite dispatched.", {
+        contentId: item.synapseContentId,
+        contentType: item.type,
+        editorId: item.editorId,
+        requestId,
+        scope: item.scope,
+      })
+
+      setIsPublishChoiceOpen(false)
+      onOpenChange(false)
+    } catch (error) {
+      logger.warn("Publish-to-repo overwrite failed.", {
+        contentId: item.synapseContentId,
+        contentType: item.type,
+        editorId: item.editorId,
+        error,
+      })
+      setQuickPublishError(
+        error instanceof Error ? error.message : "读取本地内容失败。",
+      )
+    } finally {
+      setIsOverwriteBusy(false)
+    }
+  }, [disabledReason, item, onOpenChange])
+
+  const handlePublishAsNewFromChoice = useCallback(async () => {
+    if (!item) return
+    logger.info("Publish-to-repo publish-as-new chosen.", {
+      contentId: item.synapseContentId,
+      contentType: item.type,
+      editorId: item.editorId,
+      scope: item.scope,
+    })
+    setIsPublishChoiceOpen(false)
+    await publishAsNew()
+  }, [item, publishAsNew])
+
   if (!item) return null
+
+  const canReinstall = item.source === "synapse" && Boolean(item.synapseContentId)
+  const canPublishToRepo = item.source === "synapse" && Boolean(item.synapseContentId)
 
   const metaEntries = item.metadata
     ? Object.entries(item.metadata).filter(([, v]) => v)
@@ -326,6 +497,46 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
               }}
             >
               作为新内容导入
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={isPublishChoiceOpen}
+        onOpenChange={(nextOpen) => {
+          if (!isOverwriteBusy && !isQuickPublishBusy) setIsPublishChoiceOpen(nextOpen)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>发布到仓库</AlertDialogTitle>
+            <AlertDialogDescription>
+              把本地内容推回仓库。覆盖会替换该 {item.type === "skill" ? "Skill" : "Rule"} 在仓库的现有内容，仓库会保留历史版本，可回退。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isOverwriteBusy || isQuickPublishBusy}>取消</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isOverwriteBusy || isQuickPublishBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                void handlePublishAsNewFromChoice()
+              }}
+            >
+              发布为新内容
+            </Button>
+            <AlertDialogAction
+              disabled={isOverwriteBusy || isQuickPublishBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                void handlePublishOverwrite()
+              }}
+            >
+              {isOverwriteBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+              覆盖现有内容
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -446,58 +657,62 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
               <FolderOpen className="size-3 shrink-0" />
               <span className="truncate">{item.path}</span>
             </button>
-            <div className="flex items-center gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={isQuickPublishBusy || disabledReason !== null}
-                        onClick={() => void handlePrimaryAction()}
-                      >
-                        {isQuickPublishBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-                        {primaryActionLabel}
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {disabledReason ? (
-                    <TooltipContent>{disabledReason}</TooltipContent>
-                  ) : null}
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={isTrashBusy || trashDisabledReason !== null}
-                        onClick={() => setIsTrashConfirmOpen(true)}
-                      >
-                        <Trash2 data-icon="inline-start" />
-                        移到废纸篓
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {trashDisabledReason ? (
-                    <TooltipContent>{trashDisabledReason}</TooltipContent>
-                  ) : null}
-                </Tooltip>
-              </TooltipProvider>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!content}
-                onClick={() => setIsEditorCopyOpen(true)}
-              >
-                复制到其它编辑器
-              </Button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm">
+                  {isQuickPublishBusy ? (
+                    <LoaderCircle className="animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <MoreHorizontal data-icon="inline-start" />
+                  )}
+                  操作
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-40">
+                <DropdownMenuItem
+                  disabled={isQuickPublishBusy || disabledReason !== null}
+                  onSelect={() => void handlePrimaryAction()}
+                >
+                  {primaryActionLabel}
+                </DropdownMenuItem>
+                {canReinstall ? (
+                  <DropdownMenuItem
+                    disabled={isReinstallBusy}
+                    onSelect={() => void handleReinstall()}
+                  >
+                    重新安装
+                  </DropdownMenuItem>
+                ) : null}
+                {canPublishToRepo ? (
+                  <DropdownMenuItem
+                    disabled={isOverwriteBusy || isQuickPublishBusy || disabledReason !== null}
+                    onSelect={() => {
+                      logger.info("Publish-to-repo choice opened.", {
+                        contentId: item.synapseContentId,
+                        contentType: item.type,
+                        editorId: item.editorId,
+                        scope: item.scope,
+                      })
+                      setIsPublishChoiceOpen(true)
+                    }}
+                  >
+                    发布到仓库
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem
+                  disabled={isTrashBusy || trashDisabledReason !== null}
+                  onSelect={() => setIsTrashConfirmOpen(true)}
+                >
+                  移到废纸篓
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!content}
+                  onSelect={() => setIsEditorCopyOpen(true)}
+                >
+                  复制到其它编辑器
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </DialogContent>
       </Dialog>
@@ -509,6 +724,18 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         open={isEditorCopyOpen}
         onOpenChange={setIsEditorCopyOpen}
       />
+
+      {reinstallMeta ? (
+        <ContentInstallDialog
+          editor={reinstallEditor}
+          initialSelection={reinstallSelection}
+          item={reinstallMeta}
+          onInstalled={onChanged}
+          open={isReinstallOpen}
+          onOpenChange={handleReinstallOpenChange}
+          projects={config.global.projects}
+        />
+      ) : null}
     </>
   )
 }

@@ -105,4 +105,47 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain("item?.trash.mode === \"unsupported\"")
     expect(source).toContain("item.trash.disabledReason")
   })
+
+  it("offers a publish-to-repo action for synapse-installed scan items", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("发布到仓库")
+    expect(source).toContain("canPublishToRepo")
+    expect(source).toContain('item.source === "synapse"')
+  })
+
+  it("asks user to choose between overwrite and publish-as-new", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("覆盖现有内容")
+    expect(source).toContain("发布为新内容")
+    expect(source).toContain("isPublishChoiceOpen")
+  })
+
+  it("dispatches edit-overwrite for the overwrite choice", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("requestOpenContentEditOverwrite")
+    expect(source).toContain("prepareQuickPublishDraft")
+    expect(source).toContain('kind: "edit-overwrite"')
+  })
+
+  it("falls back to publish-as-new when linked content is unavailable on overwrite", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("setFallbackReason")
+    expect(source).toContain("handlePublishOverwrite")
+  })
 })
