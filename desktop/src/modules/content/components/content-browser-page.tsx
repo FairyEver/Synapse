@@ -2,7 +2,11 @@ import { type ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useR
 import Fuse from "fuse.js"
 import { toast } from "sonner"
 import { purgeContent, restoreContent } from "@/app-shell/content"
-import type { ContentOpenRequest } from "@/app-shell/content-navigation"
+import type {
+  ContentOpenRequest,
+  EditOverwriteRulePrefill,
+  EditOverwriteSkillPrefill,
+} from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile, useIdentity } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useActiveRepository, useRepositoryState } from "@/app-shell/use-repository-manager"
@@ -50,6 +54,7 @@ type ContentBrowserDetailDialogProps = {
   item: SynapseContentMeta | null
   onOpenChange: (open: boolean) => void
   open: boolean
+  overwritePrefill: { requestId: string; prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill } | null
 }
 
 type ContentBrowserPageProps = {
@@ -95,6 +100,9 @@ function ContentBrowserPage({
     setActiveCategoryIdRaw(nextId)
   }, [contentType, logger])
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
+  const [overwritePrefill, setOverwritePrefill] = useState<
+    { requestId: string; prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill } | null
+  >(null)
   const consumedOpenRequestIdRef = useRef<string | null>(null)
   const refreshedOpenRequestIdRef = useRef<string | null>(null)
   const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
@@ -166,8 +174,15 @@ function ContentBrowserPage({
 
   useEffect(() => {
     const request = pendingContentOpenRequest
-    if (!request || request.contentType !== contentType || request.kind !== "detail"
-      || consumedOpenRequestIdRef.current === request.requestId || isLoading) return
+    if (
+      !request
+      || request.contentType !== contentType
+      || !(request.kind === "detail" || request.kind === "edit-overwrite")
+      || consumedOpenRequestIdRef.current === request.requestId
+      || isLoading
+    ) {
+      return
+    }
     const item = items.find((c) => c.id === request.contentId) ?? null
     if (!item && items.length === 0 && refreshedOpenRequestIdRef.current !== request.requestId) {
       refreshedOpenRequestIdRef.current = request.requestId
@@ -176,10 +191,19 @@ function ContentBrowserPage({
     }
     consumedOpenRequestIdRef.current = request.requestId
     if (item) {
-      logger.info("Content detail opened from external request.", { contentId: item.id, contentType: item.type })
+      logger.info("Content detail opened from external request.", {
+        contentId: item.id,
+        contentType: item.type,
+        kind: request.kind,
+      })
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
       addRecentlyViewed(contentType, item.id)
       setSelectedItem(item)
+      if (request.kind === "edit-overwrite") {
+        setOverwritePrefill({ requestId: request.requestId, prefill: request.prefill })
+      } else {
+        setOverwritePrefill(null)
+      }
     } else {
       logger.warn("Content detail external request target not found.", { contentId: request.contentId, contentType })
     }
@@ -452,7 +476,13 @@ function ContentBrowserPage({
       {renderDetailDialog({
         item: selectedItem,
         open: selectedItem !== null,
-        onOpenChange: (open) => { if (!open) setSelectedItem(null) },
+        onOpenChange: (open) => {
+          if (!open) {
+            setSelectedItem(null)
+            setOverwritePrefill(null)
+          }
+        },
+        overwritePrefill,
       })}
     </>
   )

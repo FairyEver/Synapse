@@ -1,3 +1,7 @@
+import type {
+  EditOverwriteRulePrefill,
+  EditOverwriteSkillPrefill,
+} from "@/app-shell/content-navigation"
 import {
   ContentDetailDialog,
   type ContentDetailDialogLabels,
@@ -14,6 +18,10 @@ type SkillDetailDialogProps = {
   onOpenChange: (open: boolean) => void
   open: boolean
   refreshSignal?: number
+  overwritePrefill?: {
+    requestId: string
+    prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill
+  } | null
 }
 
 const SKILL_LABELS: ContentDetailDialogLabels = {
@@ -37,6 +45,7 @@ function SkillDetailDialog({
   onOpenChange,
   open,
   refreshSignal = 0,
+  overwritePrefill = null,
 }: SkillDetailDialogProps) {
   return (
     <ContentDetailDialog
@@ -48,6 +57,7 @@ function SkillDetailDialog({
       onOpenChange={onOpenChange}
       open={open}
       refreshSignal={refreshSignal}
+      overwritePrefill={overwritePrefill}
       renderCreateDialog={(props) => <SkillCreateDialog {...props} />}
       renderVersionView={({ mode, version }) => (
         <SkillVersionView

@@ -1,3 +1,7 @@
+import type {
+  EditOverwriteRulePrefill,
+  EditOverwriteSkillPrefill,
+} from "@/app-shell/content-navigation"
 import {
   ContentDetailDialog,
   type ContentDetailDialogLabels,
@@ -13,6 +17,10 @@ type RuleDetailDialogProps = {
   onOpenChange: (open: boolean) => void
   open: boolean
   refreshSignal?: number
+  overwritePrefill?: {
+    requestId: string
+    prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill
+  } | null
 }
 
 const RULE_LABELS: ContentDetailDialogLabels = {
@@ -36,6 +44,7 @@ function RuleDetailDialog({
   onOpenChange,
   open,
   refreshSignal = 0,
+  overwritePrefill = null,
 }: RuleDetailDialogProps) {
   return (
     <ContentDetailDialog
@@ -47,6 +56,7 @@ function RuleDetailDialog({
       onOpenChange={onOpenChange}
       open={open}
       refreshSignal={refreshSignal}
+      overwritePrefill={overwritePrefill}
       renderCreateDialog={(props) => <RuleCreateDialog {...props} />}
       renderVersionView={({ mode, version }) => (
         <RuleVersionView

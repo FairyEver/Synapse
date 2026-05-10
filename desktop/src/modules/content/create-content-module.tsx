@@ -1,5 +1,9 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { ContentOpenRequest } from "@/app-shell/content-navigation"
+import type {
+  ContentOpenRequest,
+  EditOverwriteRulePrefill,
+  EditOverwriteSkillPrefill,
+} from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -29,6 +33,10 @@ type ContentModuleConfig<T extends SynapseContentType> = {
     refreshSignal?: number
     onContentChanged?: () => void
     onOpenChange: (open: boolean) => void
+    overwritePrefill?: {
+      requestId: string
+      prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill
+    } | null
   }>
   transformCreatePayload?: (
     payload: SynapseCreateContentPayload<T>,
@@ -156,11 +164,12 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           onCreateDialogOpenChange={onCreateDialogOpenChange}
           onDetailDialogOpenChange={onDetailDialogOpenChange}
           onInstallDialogOpenChange={onInstallDialogOpenChange}
-          renderDetailDialog={({ item, onOpenChange, open }) => (
+          renderDetailDialog={({ item, onOpenChange, open, overwritePrefill }) => (
             <config.DetailDialog
               item={item?.type === config.contentType ? item as SynapseContentMeta<T> : null}
               open={open}
               onOpenChange={onOpenChange}
+              overwritePrefill={overwritePrefill}
             />
           )}
         />

@@ -3,6 +3,10 @@ import {
   openContentDetailWindow,
 } from "@/app-shell/content"
 import { useAppConfig } from "@/app-shell/config"
+import type {
+  EditOverwriteRulePrefill,
+  EditOverwriteSkillPrefill,
+} from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile, useRepoProfileMap } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -103,6 +107,10 @@ type ContentDetailDialogProps<
   buildInitialValue: (detail: SynapseContentDetail<TContentType>) => TPayload
   serializePayload?: (payload: TPayload) => Promise<TPayload> | TPayload
   headerSubtitle?: (item: SynapseContentMeta<TContentType> | SynapseContentDetail<TContentType>) => string
+  overwritePrefill?: {
+    requestId: string
+    prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill
+  } | null
 }
 
 function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>({
@@ -119,6 +127,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   buildInitialValue,
   serializePayload,
   headerSubtitle,
+  overwritePrefill = null,
 }: ContentDetailDialogProps<TPayload, TContentType>) {
   const logger = useMemo(() => createRendererLogger(logCategory), [logCategory])
   const { currentRepoProfileState } = useCurrentRepoProfile()
@@ -141,6 +150,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   const [installStatusRefreshSignal, setInstallStatusRefreshSignal] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [installTargetRequest, setInstallTargetRequest] = useState<ContentInstallTargetRequest | null>(null)
+  const consumedOverwriteRequestIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -252,8 +262,17 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
       setIsEditOpen(false)
       setIsDeleteConfirmOpen(false)
       setConflictState(null)
+      consumedOverwriteRequestIdRef.current = null
     }
   }, [open, setSelectedHistoryDirnameRaw, setViewModeRaw])
+
+  useEffect(() => {
+    if (!open || !detail || !overwritePrefill) return
+    if (overwritePrefill.prefill.contentType !== detail.type) return
+    if (consumedOverwriteRequestIdRef.current === overwritePrefill.requestId) return
+    consumedOverwriteRequestIdRef.current = overwritePrefill.requestId
+    setIsEditOpen(true)
+  }, [detail, open, overwritePrefill])
 
   if (!item) {
     return null
@@ -583,17 +602,37 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
         </DialogContent>
       </Dialog>
 
-      {detail && !isReadonly ? renderCreateDialog({
-        editingId: item?.id ?? null,
-        existingNames,
-        initialValue: buildInitialValue(detail),
-        mode: "edit",
-        open: isEditOpen,
-        onOpenChange: setIsEditOpen,
-        onSubmit: (payload) => void handleSave(payload),
-        submitDisabled: isSaving || submitDisabledReason !== null,
-        submitDisabledReason: isSaving ? "正在保存..." : submitDisabledReason,
-      }) : null}
+      {detail && !isReadonly ? (() => {
+        const baseInitialValue = buildInitialValue(detail)
+        const shouldMergePrefill =
+          overwritePrefill
+          && consumedOverwriteRequestIdRef.current === overwritePrefill.requestId
+          && overwritePrefill.prefill.contentType === detail.type
+        let initialValue: TPayload = baseInitialValue
+        if (shouldMergePrefill && overwritePrefill.prefill.contentType === "rule") {
+          initialValue = {
+            ...baseInitialValue,
+            content: overwritePrefill.prefill.content,
+          } as TPayload
+        } else if (shouldMergePrefill && overwritePrefill.prefill.contentType === "skill") {
+          initialValue = {
+            ...baseInitialValue,
+            content: overwritePrefill.prefill.content,
+            files: overwritePrefill.prefill.files,
+          } as TPayload
+        }
+        return renderCreateDialog({
+          editingId: item?.id ?? null,
+          existingNames,
+          initialValue,
+          mode: "edit",
+          open: isEditOpen,
+          onOpenChange: setIsEditOpen,
+          onSubmit: (payload) => void handleSave(payload),
+          submitDisabled: isSaving || submitDisabledReason !== null,
+          submitDisabledReason: isSaving ? "正在保存..." : submitDisabledReason,
+        })
+      })() : null}
     </>
   )
 }
