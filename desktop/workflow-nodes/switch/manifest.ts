@@ -12,6 +12,7 @@ export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
     { name: "prompt", kind: "text", label: "判断 Prompt" },
     { name: "branches", kind: "branch-list", label: "分支" },
+    { name: "defaultBranch", kind: "select", label: "默认分支", optional: true },
   ],
   configSchema: switchNodeConfigSchema,
 }

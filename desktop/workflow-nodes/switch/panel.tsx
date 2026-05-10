@@ -40,8 +40,10 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
 
   const removeBranch = (i: number) => {
     const next = branches.filter((_, j) => j !== i)
+    const nextDefault = next.some((branch) => branch.id === defaultBranch) ? defaultBranch : NO_DEFAULT
     setBranches(next)
-    commit({ branches: next })
+    setDefaultBranch(nextDefault)
+    commit({ branches: next, defaultBranch: nextDefault === NO_DEFAULT ? undefined : nextDefault })
   }
 
   const updateBranchLabel = (i: number, label: string) => {

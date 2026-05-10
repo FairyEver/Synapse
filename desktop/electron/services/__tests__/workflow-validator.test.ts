@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { validateWorkflow } from "../workflow/workflow-validator"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+import "../../../workflow-nodes/register.main"
 
 const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "hi" } }
 const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "bye" } }
@@ -29,5 +30,10 @@ describe("validateWorkflow", () => {
     const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { agent: "x", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }] } }
     const r = validateWorkflow({ ...base, nodes: [sw, nodeB], edges: [{ id: "e1", from: "sw", to: "b", branch: "nope" }] })
     expect(r.errors.some((e) => e.type === "invalid_switch_edge")).toBe(true)
+  })
+  it("errors on switch defaultBranch outside branch list", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { agent: "x", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }], defaultBranch: "nope" } }
+    const r = validateWorkflow({ ...base, nodes: [sw, nodeB], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }] })
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "sw")).toBe(true)
   })
 })
