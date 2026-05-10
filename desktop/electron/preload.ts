@@ -647,7 +647,10 @@ const synapseBridge: SynapseBridge = {
     openEditor: (id: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id }),
     editorState: invoke(IPC_CHANNELS.workflow.editorState),
     checkCanSync: invoke(IPC_CHANNELS.workflow.checkCanSync),
-    onEvent: createRawPayloadSubscription<WorkflowEvent>(subscribe, EVENT_CHANNELS.workflow.event),
+    onEvent: (listener) =>
+      subscribe("synapse:events:workflow")((domainEvent) => {
+        listener((domainEvent as DomainEvent).payload as WorkflowEvent)
+      }),
   },
   tokenUsage: {
     scan: invoke(IPC_CHANNELS["token-usage"].scan),
