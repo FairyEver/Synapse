@@ -3,7 +3,7 @@ import { createRef } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
-import type { SynapseAgentDisplayProfile } from "@/types/agent"
+import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
 
 const profile: SynapseAgentDisplayProfile = {
@@ -60,5 +60,30 @@ describe("AgentTimeline", () => {
     const html = renderTimeline({ showJumpToBottom: true })
     expect(html).toContain("↓ 新消息")
     expect(html).toContain('aria-label="跳到最新消息"')
+  })
+
+  it("renders an AgentPhaseRow for phase items", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "phase:received",
+        kind: "phase",
+        timestamp: "2026-05-10T00:00:00.000Z",
+        runId: "run-1",
+        phase: "received",
+        status: "in-progress",
+        startedAt: "2026-05-10T00:00:00.000Z",
+      },
+    ]
+    const html = renderTimeline({ items })
+    // AgentPhaseRow uses tabular-nums for elapsed time and aria-live for in-progress.
+    expect(html).toContain("tabular-nums")
+    expect(html).toContain('aria-live="polite"')
+    // Legacy AgentRunStatus copy must not surface.
+    expect(html).not.toContain("正在处理")
+  })
+
+  it("does not render the legacy 正在处理 spinner row even when sending=true", () => {
+    const html = renderTimeline({ sending: true })
+    expect(html).not.toContain("正在处理")
   })
 })

@@ -6,14 +6,15 @@ import type {
   SynapseAgentPendingPermission,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
-import { AgentRunStatus } from "./agent-run-status"
+import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
+import { AgentPhaseRow } from "./agent-phase-row"
 import { AgentTimelineItem } from "./agent-timeline-item"
 
 function AgentTimeline({
   items,
   profile,
   agentIcon,
-  sending,
+  sending: _sending,
   pendingPermissions,
   onOpenReference,
   onRespondPermission,
@@ -32,6 +33,9 @@ function AgentTimeline({
   readonly showJumpToBottom: boolean
   readonly onJumpToBottom: () => void
 }) {
+  // Drives 1s re-renders for any in-progress phase row's elapsed timer.
+  useActivePhaseTicker(items)
+  const now = Date.now()
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <ScrollArea className="min-h-0 min-w-0 flex-1" viewportRef={viewportRef}>
@@ -39,17 +43,20 @@ function AgentTimeline({
           {items.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">暂无消息</p>
           ) : items.map((item) => (
-            <AgentTimelineItem
-              key={item.id}
-              item={item}
-              profile={profile}
-              agentIcon={agentIcon}
-              pendingPermissions={pendingPermissions}
-              onOpenReference={onOpenReference}
-              onRespondPermission={onRespondPermission}
-            />
+            item.kind === "phase" ? (
+              <AgentPhaseRow key={item.id} item={item} now={now} />
+            ) : (
+              <AgentTimelineItem
+                key={item.id}
+                item={item}
+                profile={profile}
+                agentIcon={agentIcon}
+                pendingPermissions={pendingPermissions}
+                onOpenReference={onOpenReference}
+                onRespondPermission={onRespondPermission}
+              />
+            )
           ))}
-          {sending ? <AgentRunStatus label={`${profile.agentLabel} 正在处理`} /> : null}
         </div>
       </ScrollArea>
       {showJumpToBottom ? (
