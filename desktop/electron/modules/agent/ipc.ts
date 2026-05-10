@@ -5,6 +5,7 @@ import {
   agentEventTypeSchema,
   agentEventSchema,
   agentEventScopeSchema,
+  agentPhaseUpdatePayloadSchema,
 } from "./ipc-shared"
 import { sessionMethods } from "./ipc-sessions"
 import { messageMethods } from "./ipc-messages"
@@ -38,6 +39,14 @@ const agentConversationUpdatedDomainEventSchema = z.object({
   scope: agentEventScopeSchema,
 })
 
+const agentPhaseUpdateDomainEventSchema = z.object({
+  domain: z.literal("agent"),
+  type: z.literal("phase.update"),
+  payload: agentPhaseUpdatePayloadSchema,
+  timestamp: z.string(),
+  scope: agentEventScopeSchema,
+})
+
 // ─── Module assembly ──────────────────────────────────────────────────────────
 
 export const agentIpcModule: IpcModule = {
@@ -54,6 +63,7 @@ export const agentIpcModule: IpcModule = {
       payload: z.discriminatedUnion("type", [
         agentStreamDomainEventSchema,
         agentConversationUpdatedDomainEventSchema,
+        agentPhaseUpdateDomainEventSchema,
       ]),
     },
   },
