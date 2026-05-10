@@ -62,6 +62,7 @@ class EditorAdapterService {
         adapter: {
           id: payload.editorId,
           label: payload.editorId,
+          order: 0,
           supportsGlobal: false,
           supportsProject: false,
           supportedContentTypes: [],
