@@ -21,7 +21,7 @@
 |---|---|
 | 节点类型 | Prompt 节点 + Switch 节点（AI 判断分支） |
 | 连线语义 | 执行顺序 + 变量可用性约束（只能引用有路径可达的上游节点） |
-| 数据传递 | 节点内变量引用 `{{node_name.output}}` + 工作流参数 `{{$param}}` |
+| 数据传递 | 通过变量绑定 UI 引用上游节点输出，Prompt 中使用 `{{$变量名}}` |
 | 工作流参数 | 带类型的只读常量（text / number），运行前弹表单填值 |
 | 流程结构 | DAG（无循环） |
 | 执行 | 纯本地（Electron 主进程），手动触发 |
@@ -56,7 +56,7 @@ interface WorkflowDefinition {
   // 节点
   nodes: WorkflowNode[]
 
-  // 连线（纯控制流）
+  // 连线（执行顺序 + 变量可用性约束）
   edges: WorkflowEdge[]
 }
 
@@ -73,6 +73,7 @@ interface WorkflowParam {
 ```typescript
 interface WorkflowNode {
   id: string
+  name: string // 用户可编辑的显示名称（变量绑定 UI 按此展示）
   type: string // "prompt" | "switch" | 未来更多
   position: { x: number; y: number }
   config: Record<string, unknown> // 由节点类型的 schema 验证
@@ -90,7 +91,13 @@ interface SwitchNodeConfig {
   agent: string
   variables: VariableBinding[]
   prompt: string // 让 Agent 判断走哪个分支
-  branches: string[] // 可能的分支名列表
+  branches: SwitchBranch[] // 分支定义
+  defaultBranch?: string // 可选兜底分支 id，匹配失败时走此分支；未配置则节点失败
+}
+
+interface SwitchBranch {
+  id: string    // 小写英文，用于匹配 Agent 输出和 edge.branch
+  label: string // 展示名（可中文）
 }
 ```
 
@@ -112,9 +119,10 @@ type VariableSource =
 
 ```typescript
 interface WorkflowEdge {
+  id: string   // 稳定 ID，React Flow 需要 + 边状态/动画定位
   from: string // 源节点 id
   to: string   // 目标节点 id
-  branch?: string // Switch 节点专用：仅当输出匹配此分支时激活
+  branch?: string // Switch 节点专用：仅当输出匹配此分支 id 时激活
 }
 ```
 
@@ -287,7 +295,7 @@ const sendToAgent: AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortS
 
 ### 2.5 Switch 节点分支匹配策略
 
-Switch 节点在发送给 Agent 的 prompt 末尾自动追加约束指令：
+Switch 节点在发送给 Agent 的 prompt 末尾自动追加约束指令（使用分支 id）：
 
 ```
 ---
@@ -298,9 +306,16 @@ Switch 节点在发送给 Agent 的 prompt 末尾自动追加约束指令：
 
 匹配逻辑：
 1. 对 Agent 响应执行 `trim().toLowerCase()`
-2. 精确匹配分支名列表
-3. 匹配失败 → 返回 `status: "failed"`，错误信息包含 Agent 实际响应和期望的分支列表
-4. 不重试（避免无限循环和 token 浪费）
+2. 精确匹配 `branches[].id` 列表（分支 id 限制为小写英文）
+3. 匹配成功 → `activeBranch` 设为匹配到的分支 id
+4. 匹配失败 → 检查是否配置了 `defaultBranch`：
+   - 有 defaultBranch → 走默认分支，`activeBranch` 设为 defaultBranch
+   - 无 defaultBranch → 返回 `status: "failed"`，错误信息包含 Agent 实际响应和期望的分支列表
+5. 不重试（避免无限循环和 token 浪费）
+
+**分支命名规则：**
+- `id`：小写英文 + 数字 + 下划线，用于匹配和 edge.branch 关联
+- `label`：用户可见的展示名，支持中文（如 "需要修复"、"跳过"）
 
 ### 2.6 跨进程约定
 
@@ -661,5 +676,5 @@ desktop/
 |---|---|
 | Phase 2 | HTTP 节点、Script 节点、file 参数类型 |
 | Phase 3 | Loop/迭代节点、子工作流、多输出端口 |
-| Phase 4 | 定时触发（集成 Task Scheduler）、运行历史记录 |
+| Phase 4 | 定时触发（集成 Task Scheduler）、完整运行历史浏览 UI、运行对比、重跑 |
 | Phase 5 | 服务端执行、工作流市场/分享 |
