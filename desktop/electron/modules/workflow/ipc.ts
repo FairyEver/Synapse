@@ -74,7 +74,7 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.type === "workflow:completed" ? event.result.nodeResults : event.type === "workflow:failed" ? event.result?.nodeResults ?? {} : {}
             void snapshots.save({ runId, workflowId: id, version: def.version, startedAt: Date.now(), endedAt: Date.now(), status, params, nodeResults })
           }
-        })
+        }, ac.signal)
 
         return { runId }
       },

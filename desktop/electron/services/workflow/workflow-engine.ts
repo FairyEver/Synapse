@@ -26,8 +26,10 @@ export class WorkflowEngine {
     paramValues: Record<string, unknown>,
     runId: string,
     emit: EventCallback,
+    abortSignal?: AbortSignal,
   ): Promise<WorkflowRunResult> {
-    if (this.abortSignal?.aborted) {
+    const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
+    if (effectiveAbortSignal.aborted) {
       emit({ type: "workflow:cancelled" })
       return { status: "cancelled", nodeResults: {}, durationMs: 0 }
     }
@@ -42,7 +44,7 @@ export class WorkflowEngine {
     )
 
     for (const nodeId of order) {
-      if (this.abortSignal?.aborted) {
+      if (effectiveAbortSignal.aborted) {
         emit({ type: "workflow:cancelled" })
         return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
       }
@@ -77,9 +79,13 @@ export class WorkflowEngine {
 
         const execResult = await executor.execute({
           config: cfg, resolvedVariables: resolved,
-          context: { projectId: def.id, runId, abortSignal: this.abortSignal ?? new AbortController().signal },
+          context: { projectId: def.id, runId, abortSignal: effectiveAbortSignal },
           agentDeps: this.agentDeps,
         })
+        if (effectiveAbortSignal.aborted) {
+          emit({ type: "workflow:cancelled" })
+          return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+        }
         nr.status = execResult.status; nr.output = execResult.output; nr.outputs = execResult.outputs
         nr.activeBranch = execResult.activeBranch; nr.error = execResult.error
         nr.endedAt = Date.now(); nr.durationMs = execResult.durationMs
@@ -98,6 +104,10 @@ export class WorkflowEngine {
           emit({ type: "node:failed", nodeId, error: execResult.error ?? "Unknown error", result: { ...nr } })
         }
       } catch (err) {
+        if (effectiveAbortSignal.aborted) {
+          emit({ type: "workflow:cancelled" })
+          return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+        }
         const msg = err instanceof Error ? err.message : String(err)
         nr.status = "failed"; nr.error = msg; nr.endedAt = Date.now()
         nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
