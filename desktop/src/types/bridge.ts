@@ -131,6 +131,7 @@ import type {
   ScheduledTaskRun,
   ScheduledTaskUpdateInput,
 } from "./task-scheduler"
+import type { WorkflowDefinition, WorkflowMeta, ValidationResult, WorkflowRunSnapshot, WorkflowEvent } from "./workflow"
 
 export type SynapseOpsDiagnostics = {
   appVersion: string
@@ -537,6 +538,21 @@ export type SynapseBridge = {
       maxTokens?: number
       minGapMins?: number
     }) => Promise<SynapseOpsRecord>
+  }
+  workflow: {
+    list: () => Promise<WorkflowMeta[]>
+    get: (id: string) => Promise<WorkflowDefinition | null>
+    save: (def: WorkflowDefinition) => Promise<{ versionHash: string } | { errors: unknown[] }>
+    delete: (id: string) => Promise<void>
+    validate: (def: WorkflowDefinition) => Promise<ValidationResult>
+    run: (id: string, params: Record<string, unknown>) => Promise<{ runId: string }>
+    cancel: (runId: string) => Promise<void>
+    runHistory: (workflowId: string) => Promise<WorkflowRunSnapshot[]>
+    runSnapshot: (runId: string, workflowId: string) => Promise<WorkflowRunSnapshot | null>
+    openEditor: (id: string) => Promise<void>
+    editorState: () => Promise<{ openEditors: string[] }>
+    checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
+    onEvent: (listener: (event: WorkflowEvent) => void) => () => void
   }
   tokenUsage: {
     scan: () => Promise<{

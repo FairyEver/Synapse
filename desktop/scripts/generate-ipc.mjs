@@ -57,6 +57,7 @@ const MODULE_SOURCES = [
   { id: "task-scheduler", importPath: "../electron/modules/task-scheduler/ipc.ts" },
   { id: "ops", importPath: "../electron/modules/ops/ipc.ts" },
   { id: "license", importPath: "../electron/modules/license/ipc.ts" },
+  { id: "workflow", importPath: "../electron/modules/workflow/ipc.ts" },
 ]
 
 /**
