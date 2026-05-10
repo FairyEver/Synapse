@@ -19,8 +19,9 @@ interface ExecutionOverlayProps {
 
 export function ExecutionOverlay({ nodeResults, runState, definition, viewingNodeId, onViewClose }: ExecutionOverlayProps) {
   const [selected, setSelected] = useState<NodeRunResult | null>(null)
+  const results = Object.values(nodeResults)
 
-  if (runState === "idle") return null
+  if (runState === "idle" && results.length === 0) return null
 
   const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
 
@@ -35,7 +36,7 @@ export function ExecutionOverlay({ nodeResults, runState, definition, viewingNod
     <>
       <div className="absolute bottom-4 right-4 bg-background/90 border rounded-lg shadow-sm p-3 flex flex-col gap-1.5 max-h-64 overflow-auto z-10">
         <p className="text-xs font-medium text-muted-foreground mb-1">运行状态</p>
-        {Object.values(nodeResults).map((r) => (
+        {results.map((r) => (
           <div
             key={r.nodeId}
             className={`flex items-center gap-2 ${r.status === "success" || r.status === "failed" ? "cursor-pointer hover:opacity-75" : ""}`}

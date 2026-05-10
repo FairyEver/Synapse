@@ -21,8 +21,25 @@ export function WorkflowEditorApp() {
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
+  const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel } = useWorkflowRun(workflowId)
 
-  useEffect(() => { if (workflowId) void window.synapse?.workflow.get(workflowId).then((def) => { if (def) setDefinition(def) }) }, [workflowId])
+  useEffect(() => {
+    if (!workflowId) return
+    const workflowApi = window.synapse?.workflow
+    if (!workflowApi) return
+    let cancelled = false
+    void (async () => {
+      const [def, snapshots] = await Promise.all([
+        workflowApi.get(workflowId),
+        workflowApi.runHistory(workflowId),
+      ])
+      if (cancelled) return
+      if (def) setDefinition(def)
+      const latest = snapshots[0]
+      if (latest) setNodeResults(latest.nodeResults)
+    })()
+    return () => { cancelled = true }
+  }, [workflowId, setNodeResults])
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -33,8 +50,6 @@ export function WorkflowEditorApp() {
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
   }, [])
-
-  const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel } = useWorkflowRun(workflowId)
 
   useWorkflowEvents(runId, {
     onNodeStarted: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "running" as const } })),
