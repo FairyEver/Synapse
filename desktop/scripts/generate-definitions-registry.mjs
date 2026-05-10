@@ -153,7 +153,7 @@ import type { SynapseMcpDefinition } from "../../../../src/definitions/types"
 
 export const editorAdapters = [
 ${adapterDirs.map((dir) => `  ${toIdentifier(dir)}EditorAdapter,`).join("\n")}
-] satisfies EditorAdapter[]
+].sort((left, right) => left.order - right.order) satisfies EditorAdapter[]
 
 export const editorAdapterById = new Map(
   editorAdapters.map((adapter) => [adapter.id, adapter]),

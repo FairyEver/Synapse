@@ -21,6 +21,7 @@ function resolveAntigravityHomePath(): string {
 const antigravityAdapter: EditorAdapter = {
   id: "antigravity",
   label: "Antigravity",
+  order: 50,
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],

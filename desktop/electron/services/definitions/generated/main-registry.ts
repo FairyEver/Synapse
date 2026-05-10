@@ -40,7 +40,7 @@ export const editorAdapters = [
   cursorEditorAdapter,
   hermesEditorAdapter,
   windsurfEditorAdapter,
-] satisfies EditorAdapter[]
+].sort((left, right) => left.order - right.order) satisfies EditorAdapter[]
 
 export const editorAdapterById = new Map(
   editorAdapters.map((adapter) => [adapter.id, adapter]),

@@ -32,6 +32,7 @@ function resolveHermesGlobalSkillsPath(): string {
 const hermesAdapter: EditorAdapter = {
   id: "hermes",
   label: "Hermes",
+  order: 60,
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],

@@ -43,6 +43,7 @@ function resolveCodexGlobalSkillPaths(): readonly string[] {
 const codexAdapter: EditorAdapter = {
   id: "codex",
   label: "Codex",
+  order: 20,
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],

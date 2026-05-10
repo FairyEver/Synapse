@@ -22,6 +22,7 @@ class EditorAdapterService {
     return editorAdapters.map((adapter) => ({
       id: adapter.id,
       label: adapter.label,
+      order: adapter.order,
       supportsGlobal: adapter.supportsGlobal,
       supportsProject: adapter.supportsProject,
       supportedContentTypes: adapter.supportedContentTypes,

@@ -18,6 +18,7 @@ import {
 const claudeCodeAdapter: EditorAdapter = {
   id: "claude-code",
   label: "Claude Code",
+  order: 30,
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],

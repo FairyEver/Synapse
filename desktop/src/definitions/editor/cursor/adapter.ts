@@ -19,6 +19,7 @@ import {
 const cursorAdapter: EditorAdapter = {
   id: "cursor",
   label: "Cursor",
+  order: 10,
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],

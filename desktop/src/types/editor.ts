@@ -13,6 +13,7 @@ export type SynapseEditorInstallFormValues = Record<string, unknown>
 export type SynapseEditorAdapterSummary = {
   id: SynapseEditorId
   label: string
+  order: number
   supportsGlobal: boolean
   supportsProject: boolean
   supportedContentTypes: SynapseContentType[]

@@ -22,6 +22,7 @@ function resolveWindsurfHomePath(): string {
 const windsurfAdapter: EditorAdapter = {
   id: "windsurf",
   label: "Windsurf",
+  order: 40,
   supportsGlobal: true,
   supportsProject: true,
   supportedContentTypes: ["rule", "skill"],
