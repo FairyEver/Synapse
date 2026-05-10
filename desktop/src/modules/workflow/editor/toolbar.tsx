@@ -40,7 +40,7 @@ export function WorkflowToolbar({ definition, runState, onSave, onRun, onCancel,
         <Button size="sm" variant="ghost" onClick={() => void onSave(definition)}><Save className="h-3.5 w-3.5 mr-1" />保存</Button>
         {isRunning
           ? <Button size="sm" variant="destructive" onClick={() => void onCancel()}><Square className="h-3.5 w-3.5 mr-1" />停止</Button>
-          : <Button size="sm" onClick={() => setRunParamsOpen(true)}><Play className="h-3.5 w-3.5 mr-1" />运行</Button>
+          : <Button size="sm" onClick={() => definition.params.length === 0 ? void onRun({}) : setRunParamsOpen(true)}><Play className="h-3.5 w-3.5 mr-1" />运行</Button>
         }
       </div>
       <ParamsEditorDialog
