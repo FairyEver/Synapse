@@ -14,6 +14,7 @@ export type EventDomain =
   | "project"    // Phase 0.5
   | "system"     // handshake / lifecycle
   | "install-status"
+  | "workflow"
 
 export interface EventScope {
   readonly projectId?: string
