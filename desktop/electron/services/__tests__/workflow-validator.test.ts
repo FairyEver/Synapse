@@ -41,4 +41,13 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow({ ...base, nodes: [sw, nodeB], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }] })
     expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "sw")).toBe(true)
   })
+  it("errors on unknown node type", () => {
+    const unknown = { id: "u", name: "Unknown", type: "unknown", position: { x: 0, y: 0 }, config: {} }
+    const r = validateWorkflow({ ...base, nodes: [unknown], edges: [] })
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "u")).toBe(true)
+  })
+  it("errors on edge referencing a missing node", () => {
+    const r = validateWorkflow({ ...base, edges: [{ id: "missing", from: "a", to: "nope" }] })
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.edgeId === "missing")).toBe(true)
+  })
 })

@@ -44,7 +44,10 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       const manifest = nodeTypeRegistry.getManifest(node.type)
       const parsed = manifest.configSchema.safeParse(node.config)
       if (!parsed.success) errors.push({ type: "invalid_config", nodeId: node.id, message: parsed.error.message })
-    } catch { /* unknown type — skip */ }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 "${node.name}" 类型无效：${message}` })
+    }
 
     if (!hasCycle) {
       const anc = ancestors(node.id, def)
@@ -60,7 +63,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
 
   for (const edge of def.edges) {
     const from = byId.get(edge.from)
-    if (!from) continue
+    const to = byId.get(edge.to)
+    if (!from || !to) {
+      errors.push({ type: "invalid_config", edgeId: edge.id, message: `连线 "${edge.id}" 引用了不存在的节点` })
+      continue
+    }
     const branches = ((from.config as Record<string, unknown>)["branches"] as Array<{ id: string }> | undefined) ?? []
     if (from.type === "switch") {
       if (edge.branch === undefined)
