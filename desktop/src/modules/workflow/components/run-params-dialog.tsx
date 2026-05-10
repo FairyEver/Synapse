@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,11 @@ interface RunParamsDialogProps { open: boolean; params: WorkflowParam[]; onConfi
 
 export function RunParamsDialog({ open, params, onConfirm, onCancel }: RunParamsDialogProps) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(params.map((p) => [p.name, String(p.default ?? "")])))
+
+  useEffect(() => {
+    if (open) setValues(Object.fromEntries(params.map((p) => [p.name, String(p.default ?? "")])))
+  }, [open, params])
+
   const handleSubmit = () => {
     const parsed: Record<string, unknown> = {}
     for (const p of params) parsed[p.name] = p.type === "number" ? Number(values[p.name]) : values[p.name]

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,10 @@ interface ParamsEditorDialogProps {
 
 export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEditorDialogProps) {
   const [draft, setDraft] = useState<WorkflowParam[]>(params)
+
+  useEffect(() => {
+    if (open) setDraft(params)
+  }, [open, params])
 
   const handleOpenChange = (o: boolean) => { if (!o) onClose() }
 
