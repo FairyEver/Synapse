@@ -38,6 +38,20 @@ describe("AgentPhaseRow", () => {
     expect(html).toContain("已收到")
   })
 
+  it("renders Chinese label (not the English enum) when received is still in-progress", () => {
+    // Regression: PHASE_LABEL_IN_PROGRESS must include `received` so the row
+    // does NOT fall back to the literal enum string "received" during the
+    // entire agent.send await window in Plan A.
+    const html = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({ phase: "received", status: "in-progress" })}
+        now={Date.parse("2026-05-10T00:00:00.500Z")}
+      />,
+    )
+    expect(html).toContain("Agent 处理中")
+    expect(html).not.toMatch(/>received</)
+  })
+
   it("shows the error message on a failed row", () => {
     const html = renderToStaticMarkup(
       <AgentPhaseRow

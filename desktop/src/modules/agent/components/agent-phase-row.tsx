@@ -6,6 +6,12 @@ import type {
 } from "@/types/agent"
 
 const PHASE_LABEL_IN_PROGRESS: Partial<Record<SynapseAgentPhaseValue, string>> = {
+  // In Plan A `received` stays in-progress for the entire `agent.send` await
+  // (no runtime-side phase emits yet), so its label needs to read like an
+  // ongoing activity rather than a terminal acknowledgement. Plan B's
+  // runtime_starting / request_submitted / streaming events will pre-empt
+  // this row within a few ms.
+  received: "Agent 处理中",
   runtime_starting: "Agent 启动中",
   request_submitted: "已提交给模型",
   awaiting_first_token: "等待回复",

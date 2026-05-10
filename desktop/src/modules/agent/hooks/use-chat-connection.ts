@@ -117,8 +117,17 @@ function useChatConnection(
     })) {
       return
     }
-    replaceTimeline(result.entries)
-  }, [replaceTimeline, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, timelineVersionRef])
+    // Phase items are renderer-only in Plan A (not persisted). When DB-backed
+    // entries replace the timeline, preserve any in-flight phase rows so the
+    // user keeps seeing them across `conversationUpdated`-triggered reloads.
+    updateTimeline((current) => {
+      const phaseItems = current.filter((item) => item.kind === "phase")
+      if (phaseItems.length === 0) return [...result.entries]
+      const merged: SynapseAgentTimelineItem[] = [...result.entries, ...phaseItems]
+      merged.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+      return merged
+    })
+  }, [updateTimeline, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, timelineVersionRef])
 
   const loadSessionsForProjects = useCallback(async () => {
     const bridge = requireSynapseBridge()

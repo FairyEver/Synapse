@@ -113,6 +113,12 @@ function AgentModule() {
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey) return
+    // Skip while IME is composing (Chinese / Japanese / Korean input). The
+    // first Enter that confirms an IME candidate fires keydown with
+    // `isComposing=true` (or keyCode 229 on legacy paths) and must not be
+    // treated as a submit, otherwise the user sees a trailing newline in the
+    // sent message and a partial submission.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
     event.preventDefault()
     submitDraft()
   }
