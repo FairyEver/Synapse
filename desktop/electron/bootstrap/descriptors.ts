@@ -826,7 +826,8 @@ export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> =
   dependsOn: ["core.config"],
   async create() {
     const config = await configStore.load()
-    const repoPath = config.repositories[0]?.localPath ?? app.getPath("userData")
+    const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
+    const repoPath = activeRepo?.localPath ?? app.getPath("userData")
     return new WorkflowService(repoPath)
   },
 }
@@ -852,9 +853,10 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortSignal }) => {
       try {
         const config = await configStore.load()
-        const projectId = config.repositories[0]?.uuid ?? ""
+        const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
+        const projectId = activeRepo?.uuid ?? ""
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
-        const container = await containers.open(projectId, { name: "", workspacePath: config.repositories[0]?.localPath ?? "" })
+        const container = await containers.open(projectId, { name: "", workspacePath: activeRepo?.localPath ?? "" })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
         const result = await agentRuntime.sendScheduled({
           projectId, agentType: agent, mode: "default", prompt,
