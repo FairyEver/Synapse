@@ -17,6 +17,8 @@
     }
   },
   "include": [
+    "workflow-nodes/**/__tests__/**/*.ts",
+    "workflow-nodes/**/*.ts",
     "action-packages/**/__tests__/**/*.ts",
     "action-packages/**/*.test.ts",
     "electron/**/__tests__/**/*.ts",
