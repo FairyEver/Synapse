@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
+import { AlertCircle, X } from "lucide-react"
+import type { WorkflowDefinition, NodeRunResult, ValidationError } from "@/types/workflow"
+import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { useWorkflowRun } from "../hooks/use-workflow-run"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
 import { WorkflowToolbar } from "./toolbar"
@@ -12,6 +15,7 @@ export function WorkflowEditorApp() {
   const workflowId = new URLSearchParams(window.location.search).get("workflowId") ?? ""
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [saveErrors, setSaveErrors] = useState<ValidationError[]>([])
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const definitionRef = useRef(definition)
   definitionRef.current = definition
@@ -30,13 +34,24 @@ export function WorkflowEditorApp() {
     onCancelled: () => setRunState("cancelled"),
   })
 
+  const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
+    setSaveErrors([])
+    setDefinition(def)
+  }, [])
+
   const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
     canvasRef.current?.updateNodeConfig(nodeId, config)
+    setSaveErrors([])
     setDefinition((def) => def ? { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n) } : def)
   }, [])
 
   const handleSave = async (def: WorkflowDefinition) => {
     const result = await window.synapse?.workflow.save(def)
+    if (result && "errors" in result) {
+      setSaveErrors(result.errors)
+      return result
+    }
+    setSaveErrors([])
     if (result && "versionHash" in result) setDefinition({ ...def, version: result.versionHash })
     return result
   }
@@ -45,11 +60,27 @@ export function WorkflowEditorApp() {
 
   return (
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={start} onCancel={cancel} onChange={setDefinition} />
+      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={start} onCancel={cancel} onChange={handleDefinitionChange} />
+      {saveErrors.length > 0 && (
+        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle className="text-xs font-medium">保存失败</AlertTitle>
+          <AlertDescription className="text-xs">
+            <ul className="mt-0.5 space-y-0.5 list-none">
+              {saveErrors.map((e, i) => <li key={i}>{e.message}</li>)}
+            </ul>
+          </AlertDescription>
+          <AlertAction>
+            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setSaveErrors([])}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </AlertAction>
+        </Alert>
+      )}
       <div className="flex-1 flex min-h-0">
         <NodePalette />
         <div className="flex-1 relative">
-          <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={setDefinition} onNodeSelect={setSelectedNodeId} />
+          <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={setSelectedNodeId} />
           <ExecutionOverlay nodeResults={nodeResults} runState={runState} />
         </div>
         <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} />
