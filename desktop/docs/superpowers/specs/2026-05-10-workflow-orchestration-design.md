@@ -132,18 +132,34 @@ interface WorkflowEdge {
 
 - 每个节点固定一个输出，类型为纯文本（LLM 原始响应）
 - 输出字段固定命名为 `output`
-- 引用语法：`{{node_name.output}}`
+
+**用户操作方式（重要）：**
+
+用户**不直接**在 prompt 中写 `{{node_name.output}}`。实际流程是：
+
+1. 用户在节点编辑面板中通过变量绑定 UI 定义变量（两级选择器选择上游节点 + 输出字段）
+2. 变量绑定内部使用节点 **ID**（非名称）作为引用，节点改名不影响绑定
+3. 用户在 prompt 模板中使用 `{{$变量名}}` 引用已绑定的变量
+
+示例：
+```
+// 变量绑定（UI 操作，内部存储）
+{ name: "requirement", source: { type: "node_output", node: "node_abc123" } }
+
+// 用户在 prompt 中写
+请基于 {{$requirement}} 生成代码
+```
 
 **变量绑定 UI（两级选择）：**
 
-- 第一级：选择上游节点（只显示有路径可达的上游节点）
+- 第一级：选择上游节点（只显示有路径可达的上游节点，按名称展示）
 - 第二级：选择输出字段（MVP 阶段只有"输出"一个选项）
 
 **架构预留（未来扩展）：**
 
 - `outputs?: Record<string, unknown>` 支持多输出端口
 - JSON 输出类型：节点可配置输出为 JSON，此时第二级菜单展开为 JSON 各字段
-- 引用语法扩展：`{{node_name.output.field}}`
+- 引用语法扩展：第二级菜单显示 JSON 各字段名
 
 ---
 
@@ -328,7 +344,7 @@ interface WorkflowRunResult {
 1. **准备**：拓扑排序 → DAG 校验（检测环路）→ 创建 RunContext
 2. **调度循环**：
    - 找出所有前置节点已完成的就绪节点
-   - 用 p-queue 并发执行（默认并发数 3）
+   - 用 p-queue 并发执行（MVP 默认并发数 1，架构支持配置更高并发）
    - 每个节点执行前：变量解析器替换 `{{...}}` 为实际值
    - 调用节点 executor.execute()
    - 存储输出到 `nodeOutputs[nodeId]`
@@ -525,6 +541,31 @@ content-repo/workflows/<workflow-id>/
 
 workflow 作为新的 `SynapseContentType` 注册，与 rule / skill / prompt 并列。
 
+### 6.3 运行快照（本地存储，不进 Git）
+
+工作流定义存 Git，运行记录存本地。关闭编辑器窗口后仍可回看历史运行结果。
+
+```typescript
+interface WorkflowRunSnapshot {
+  runId: string
+  workflowId: string
+  version: string        // 运行时使用的工作流版本
+  startedAt: number      // Unix ms
+  endedAt?: number
+  status: "completed" | "failed" | "cancelled"
+  params: Record<string, unknown>
+  nodeResults: Record<string, NodeRunResult>
+}
+```
+
+**存储位置：** `<app-data>/workflow-runs/<workflowId>/` 目录，每次运行一个 JSON 文件。
+
+**保留策略：** 每个工作流最多保留最近 20 次运行记录，超出时删除最旧的。
+
+**用途：**
+- 编辑器窗口重新打开时，可加载最近一次运行的节点输出
+- 未来可扩展为完整运行历史浏览 UI
+
 ---
 
 ## 7. IPC Channel
@@ -541,6 +582,10 @@ synapse:workflow:validate {def}    → ValidationResult（编辑时局部校验�
 synapse:workflow:run      {id, params}  → { runId }
 synapse:workflow:cancel   {runId}       → void
 synapse:workflow:run-status {runId}     → WorkflowRunResult
+
+// 运行历史（本地）
+synapse:workflow:run-history {workflowId}  → WorkflowRunSnapshot[]
+synapse:workflow:run-snapshot {runId}      → WorkflowRunSnapshot
 
 // 事件推送（主进程 → 渲染进程）
 synapse:workflow:event    ← WorkflowEvent
@@ -572,6 +617,7 @@ desktop/
 │       ├── workflow-engine.ts      ← DAG 执行引擎
 │       ├── workflow-validator.ts   ← 保存/运行前校验（DAG + 变量路径可达性）
 │       ├── variable-resolver.ts    ← 变量解析器
+│       ├── run-snapshot-service.ts ← 本地运行记录存取
 │       └── window-manager.ts       ← 编辑窗口生命周期
 │
 └── src/modules/workflow/           ← 渲染进程
