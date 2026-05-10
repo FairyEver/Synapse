@@ -7,6 +7,7 @@ describe("agent definition registry", () => {
     expect(agentDefinitions.map((definition) => definition.id)).toEqual([
       "claude-code",
       "codex",
+      "hermes",
     ])
   })
 

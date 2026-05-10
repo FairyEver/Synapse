@@ -14,6 +14,7 @@ describe("editor definition registry", () => {
       "claude-code",
       "windsurf",
       "antigravity",
+      "hermes",
     ])
   })
 
@@ -24,6 +25,7 @@ describe("editor definition registry", () => {
       "codex",
       "windsurf",
       "antigravity",
+      "hermes",
     ])
     expect(installFormDefinitionByEditorId.has("cursor")).toBe(true)
     expect(installFormDefinitionByEditorId.has("windsurf")).toBe(true)

@@ -16,6 +16,7 @@ describe("agent runtime main registry", () => {
     expect(agentRuntimeDefinitions.map((definition) => definition.id)).toEqual([
       "claude-code",
       "codex",
+      "hermes",
     ])
     expect(agentRuntimeDefinitionById.get("codex")?.runtime.binaries).toEqual(["codex"])
     expect(agentRuntimeDefinitionById.get("claude-code")?.runtime.binaries).toEqual(["claude"])

@@ -171,7 +171,7 @@ describe("agentIpcModule", () => {
       }[]
     }
 
-    expect(result.agents.map((agent) => agent.id)).toEqual(["claude-code", "codex"])
+    expect(result.agents.map((agent) => agent.id)).toEqual(["claude-code", "codex", "hermes"])
     expect(result.agents.find((agent) => agent.id === "codex")).toEqual(expect.objectContaining({
       ready: expect.any(Boolean),
       provider: {
