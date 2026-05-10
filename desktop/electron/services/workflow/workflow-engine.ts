@@ -1,0 +1,106 @@
+import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
+import type { AgentSendDeps } from "../../../workflow-nodes/types"
+import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
+import { resolveVariables } from "./variable-resolver"
+
+type EventCallback = (event: WorkflowEvent) => void
+
+function topoOrder(def: WorkflowDefinition): string[] {
+  const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
+  const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
+  for (const e of def.edges) { adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1) }
+  const queue = def.nodes.filter((n) => inDeg.get(n.id) === 0).map((n) => n.id)
+  const order: string[] = []
+  while (queue.length) {
+    const id = queue.shift()!; order.push(id)
+    for (const next of adj.get(id) ?? []) { const d = (inDeg.get(next) ?? 0) - 1; inDeg.set(next, d); if (d === 0) queue.push(next) }
+  }
+  return order
+}
+
+export class WorkflowEngine {
+  constructor(private readonly agentDeps: AgentSendDeps, private readonly abortSignal?: AbortSignal) {}
+
+  async run(
+    def: WorkflowDefinition,
+    paramValues: Record<string, unknown>,
+    runId: string,
+    emit: EventCallback,
+  ): Promise<WorkflowRunResult> {
+    if (this.abortSignal?.aborted) {
+      emit({ type: "workflow:cancelled" })
+      return { status: "cancelled", nodeResults: {}, durationMs: 0 }
+    }
+    emit({ type: "workflow:started", runId })
+    const startMs = Date.now()
+    const order = topoOrder(def)
+    const nodeResults: Record<string, NodeRunResult> = {}
+    const nodeOutputs: Record<string, string> = {}
+    let overallFailed = false
+
+    for (const nodeId of order) {
+      if (this.abortSignal?.aborted) {
+        emit({ type: "workflow:cancelled" })
+        return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+      }
+      const node = def.nodes.find((n) => n.id === nodeId)!
+      const incomingEdges = def.edges.filter((e) => e.to === nodeId)
+      const ancestors = incomingEdges.map((e) => e.from)
+
+      const shouldSkip = overallFailed && ancestors.length > 0
+      if (shouldSkip) {
+        const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} } }
+        nodeResults[nodeId] = res
+        emit({ type: "node:skipped", nodeId })
+        continue
+      }
+      emit({ type: "node:started", nodeId })
+      const nr: NodeRunResult = { nodeId, status: "running", input: { variables: {} }, startedAt: Date.now() }
+      nodeResults[nodeId] = nr
+
+      try {
+        const manifest = nodeTypeRegistry.getManifest(node.type)
+        const executor = nodeTypeRegistry.getExecutor(node.type)
+        const cfg = manifest.configSchema.parse(node.config)
+        const vars = (cfg as Record<string, unknown>)["variables"]
+        const resolved = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs)
+        nr.input = { variables: resolved }
+
+        const execResult = await executor.execute({
+          config: cfg, resolvedVariables: resolved,
+          context: { projectId: def.id, runId, abortSignal: this.abortSignal ?? new AbortController().signal },
+          agentDeps: this.agentDeps,
+        })
+        nr.status = execResult.status; nr.output = execResult.output; nr.outputs = execResult.outputs
+        nr.activeBranch = execResult.activeBranch; nr.error = execResult.error
+        nr.endedAt = Date.now(); nr.durationMs = execResult.durationMs
+
+        if (execResult.status === "success") {
+          nodeOutputs[nodeId] = execResult.output
+          emit({ type: "node:completed", nodeId, output: execResult.output })
+          for (const e of def.edges.filter((e) => e.from === nodeId)) {
+            if (!execResult.activeBranch || e.branch === execResult.activeBranch)
+              emit({ type: "edge:activated", from: e.from, to: e.to })
+          }
+        } else {
+          overallFailed = true
+          emit({ type: "node:failed", nodeId, error: execResult.error ?? "Unknown error" })
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        nr.status = "failed"; nr.error = msg; nr.endedAt = Date.now()
+        overallFailed = true
+        emit({ type: "node:failed", nodeId, error: msg })
+      }
+    }
+
+    const durationMs = Date.now() - startMs
+    const result: WorkflowRunResult = {
+      status: overallFailed ? "failed" : "completed",
+      nodeResults, durationMs,
+    }
+    if (overallFailed) emit({ type: "workflow:failed", error: "One or more nodes failed" })
+    else emit({ type: "workflow:completed", result })
+    return result
+  }
+}
