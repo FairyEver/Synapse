@@ -2,23 +2,28 @@ import { editorAdapter as antigravityEditorAdapter } from "../../../../src/defin
 import { editorAdapter as claudeCodeEditorAdapter } from "../../../../src/definitions/editor/claude-code/adapter"
 import { editorAdapter as codexEditorAdapter } from "../../../../src/definitions/editor/codex/adapter"
 import { editorAdapter as cursorEditorAdapter } from "../../../../src/definitions/editor/cursor/adapter"
+import { editorAdapter as hermesEditorAdapter } from "../../../../src/definitions/editor/hermes/adapter"
 import { editorAdapter as windsurfEditorAdapter } from "../../../../src/definitions/editor/windsurf/adapter"
 import { agentRuntimeDefinition as claudeCodeAgentRuntimeDefinition } from "../../../../src/definitions/agent/claude-code/agent-main"
 import { agentRuntimeDefinition as codexAgentRuntimeDefinition } from "../../../../src/definitions/agent/codex/agent-main"
+import { agentRuntimeDefinition as hermesAgentRuntimeDefinition } from "../../../../src/definitions/agent/hermes/agent-main"
 import { mcpDefinition as antigravityMcpDefinition } from "../../../../src/definitions/editor/antigravity/mcp"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../../../../src/definitions/editor/claude-code/mcp"
 import { mcpDefinition as codexMcpDefinition } from "../../../../src/definitions/editor/codex/mcp"
 import { mcpDefinition as cursorMcpDefinition } from "../../../../src/definitions/editor/cursor/mcp"
+import { mcpDefinition as hermesMcpDefinition } from "../../../../src/definitions/editor/hermes/mcp"
 import { mcpDefinition as windsurfMcpDefinition } from "../../../../src/definitions/editor/windsurf/mcp"
 import { installStrategy as antigravityInstallStrategy } from "../../../../src/definitions/editor/antigravity/install"
 import { installStrategy as claudeCodeInstallStrategy } from "../../../../src/definitions/editor/claude-code/install"
 import { installStrategy as codexInstallStrategy } from "../../../../src/definitions/editor/codex/install"
 import { installStrategy as cursorInstallStrategy } from "../../../../src/definitions/editor/cursor/install"
+import { installStrategy as hermesInstallStrategy } from "../../../../src/definitions/editor/hermes/install"
 import { installStrategy as windsurfInstallStrategy } from "../../../../src/definitions/editor/windsurf/install"
 import { scanStrategy as antigravityScanStrategy } from "../../../../src/definitions/editor/antigravity/scan"
 import { scanStrategy as claudeCodeScanStrategy } from "../../../../src/definitions/editor/claude-code/scan"
 import { scanStrategy as codexScanStrategy } from "../../../../src/definitions/editor/codex/scan"
 import { scanStrategy as cursorScanStrategy } from "../../../../src/definitions/editor/cursor/scan"
+import { scanStrategy as hermesScanStrategy } from "../../../../src/definitions/editor/hermes/scan"
 import { scanStrategy as windsurfScanStrategy } from "../../../../src/definitions/editor/windsurf/scan"
 import type {
   AgentRuntimeDefinition,
@@ -33,6 +38,7 @@ export const editorAdapters = [
   claudeCodeEditorAdapter,
   codexEditorAdapter,
   cursorEditorAdapter,
+  hermesEditorAdapter,
   windsurfEditorAdapter,
 ] satisfies EditorAdapter[]
 
@@ -43,6 +49,7 @@ export const editorAdapterById = new Map(
 export const agentRuntimeDefinitions = [
   claudeCodeAgentRuntimeDefinition,
   codexAgentRuntimeDefinition,
+  hermesAgentRuntimeDefinition,
 ].sort((left, right) => left.order - right.order) satisfies AgentRuntimeDefinition[]
 
 export const agentRuntimeDefinitionById = new Map<string, AgentRuntimeDefinition>(
@@ -54,6 +61,7 @@ export const mcpDefinitions = [
   claudeCodeMcpDefinition,
   codexMcpDefinition,
   cursorMcpDefinition,
+  hermesMcpDefinition,
   windsurfMcpDefinition,
 ].sort((left, right) => left.order - right.order) satisfies SynapseMcpDefinition[]
 
@@ -62,6 +70,7 @@ export const editorInstallStrategyById = new Map<string, EditorInstallStrategy>(
   [claudeCodeEditorAdapter.id, claudeCodeInstallStrategy],
   [codexEditorAdapter.id, codexInstallStrategy],
   [cursorEditorAdapter.id, cursorInstallStrategy],
+  [hermesEditorAdapter.id, hermesInstallStrategy],
   [windsurfEditorAdapter.id, windsurfInstallStrategy],
 ])
 
@@ -70,5 +79,6 @@ export const editorScanStrategyById = new Map<string, EditorScanStrategy>([
   [claudeCodeEditorAdapter.id, claudeCodeScanStrategy],
   [codexEditorAdapter.id, codexScanStrategy],
   [cursorEditorAdapter.id, cursorScanStrategy],
+  [hermesEditorAdapter.id, hermesScanStrategy],
   [windsurfEditorAdapter.id, windsurfScanStrategy],
 ])
