@@ -31,6 +31,11 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow({ ...base, nodes: [sw, nodeB], edges: [{ id: "e1", from: "sw", to: "b", branch: "nope" }] })
     expect(r.errors.some((e) => e.type === "invalid_switch_edge")).toBe(true)
   })
+  it("errors on switch edge without branch", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { agent: "x", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }] } }
+    const r = validateWorkflow({ ...base, nodes: [sw, nodeB], edges: [{ id: "e1", from: "sw", to: "b" }] })
+    expect(r.errors.some((e) => e.type === "invalid_switch_edge")).toBe(true)
+  })
   it("errors on switch defaultBranch outside branch list", () => {
     const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { agent: "x", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }], defaultBranch: "nope" } }
     const r = validateWorkflow({ ...base, nodes: [sw, nodeB], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }] })

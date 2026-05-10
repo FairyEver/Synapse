@@ -63,7 +63,9 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     if (!from) continue
     const branches = ((from.config as Record<string, unknown>)["branches"] as Array<{ id: string }> | undefined) ?? []
     if (from.type === "switch") {
-      if (edge.branch !== undefined && !branches.some((b) => b.id === edge.branch))
+      if (edge.branch === undefined)
+        errors.push({ type: "invalid_switch_edge", edgeId: edge.id, message: "Switch 节点出边必须设置 branch" })
+      else if (!branches.some((b) => b.id === edge.branch))
         errors.push({ type: "invalid_switch_edge", edgeId: edge.id, message: `edge branch "${edge.branch}" 不在分支列表中` })
     } else if (edge.branch !== undefined) {
       errors.push({ type: "orphan_edge_branch", edgeId: edge.id, message: `非 Switch 节点出边不应设置 branch` })
