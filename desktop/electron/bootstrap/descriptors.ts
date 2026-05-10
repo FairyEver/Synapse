@@ -872,5 +872,9 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
 export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {
   id: "core.workflow.window-manager",
   criticality: "degraded",
-  create() { return new WorkflowWindowManager() },
+  dependsOn: ["core.window-manager"],
+  create(ctx) {
+    const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
+    return new WorkflowWindowManager(windowManager)
+  },
 }

@@ -1,7 +1,11 @@
 import { BrowserWindow } from "electron"
+import type { WindowManager } from "../../runtime/window"
+import { managedBrowserWindow } from "../../runtime/window"
 
 export class WorkflowWindowManager {
   private readonly windows = new Map<string, BrowserWindow>()
+
+  constructor(private readonly mainWindowManager?: WindowManager) {}
 
   open(workflowId: string, baseUrl: string): BrowserWindow {
     const existing = this.windows.get(workflowId)
@@ -14,6 +18,11 @@ export class WorkflowWindowManager {
 
     const url = `${baseUrl}?window=workflow-editor&workflowId=${encodeURIComponent(workflowId)}`
     void win.loadURL(url)
+
+    const windowId = `workflow-editor:${workflowId}`
+    if (this.mainWindowManager) {
+      this.mainWindowManager.attach({ id: windowId, role: "detail" }, managedBrowserWindow(win, "detail"))
+    }
 
     win.on("closed", () => this.windows.delete(workflowId))
     this.windows.set(workflowId, win)
