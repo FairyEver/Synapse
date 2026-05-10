@@ -1,10 +1,12 @@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2 } from "lucide-react"
 import type { WorkflowParam } from "@/types/workflow"
 import type { VariableBinding } from "./schemas/variable-binding"
+
+const OUTPUT_FIELD = "output"
 
 interface VariableBindingEditorProps {
   variables: VariableBinding[]
@@ -45,23 +47,37 @@ export function VariableBindingEditor({ variables, onChange, upstreamNodes, work
           >
             <SelectTrigger className="h-6 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="node_output" className="text-xs">上游节点输出</SelectItem>
-              <SelectItem value="param" className="text-xs">工作流参数</SelectItem>
-              <SelectItem value="static" className="text-xs">固定值</SelectItem>
+              <SelectGroup>
+                <SelectItem value="node_output" className="text-xs">上游节点输出</SelectItem>
+                <SelectItem value="param" className="text-xs">工作流参数</SelectItem>
+                <SelectItem value="static" className="text-xs">固定值</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
           {v.source.type === "node_output" && (
-            <Select
-              value={v.source.node}
-              onValueChange={(node) => update(i, { source: { type: "node_output", node } })}
-            >
-              <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="选择上游节点" /></SelectTrigger>
-              <SelectContent>
-                {upstreamNodes.map((n) => (
-                  <SelectItem key={n.id} value={n.id} className="text-xs">{n.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-2 gap-1.5">
+              <Select
+                value={v.source.node}
+                onValueChange={(node) => update(i, { source: { type: "node_output", node } })}
+              >
+                <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="上游节点" /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {upstreamNodes.map((n) => (
+                      <SelectItem key={n.id} value={n.id} className="text-xs">{n.name}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select value={OUTPUT_FIELD} disabled>
+                <SelectTrigger className="h-6 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={OUTPUT_FIELD} className="text-xs">输出</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
           )}
           {v.source.type === "param" && (
             <Select
@@ -70,9 +86,11 @@ export function VariableBindingEditor({ variables, onChange, upstreamNodes, work
             >
               <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="选择参数" /></SelectTrigger>
               <SelectContent>
-                {workflowParams.map((p) => (
-                  <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>
-                ))}
+                <SelectGroup>
+                  {workflowParams.map((p) => (
+                    <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           )}
