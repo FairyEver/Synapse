@@ -15,14 +15,14 @@ function statusClass(status?: NodeStatus): string {
   }
 }
 
-export function PromptNodeCard({ config, selected, status }: { config: PromptNodeConfig; selected?: boolean; status?: NodeStatus }) {
+export function PromptNodeCard({ config, name, selected, status }: { config: PromptNodeConfig; name?: string; selected?: boolean; status?: NodeStatus }) {
   return (
     <div className={`rounded-lg border bg-card px-3 py-2 w-52 shadow-sm ${selected ? "ring-2 ring-primary" : ""} ${statusClass(status)}`}>
       <div className="flex items-center gap-2 mb-1">
-        <MessageSquare className="h-3.5 w-3.5 text-blue-500" />
-        <span className="text-xs font-medium text-foreground truncate">{config.agent || "Prompt"}</span>
+        <MessageSquare className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+        <span className="text-xs font-medium text-foreground truncate">{name || config.agent || "Prompt"}</span>
       </div>
-      <p className="text-xs text-muted-foreground truncate">{config.prompt.slice(0, 50) || "无 Prompt"}</p>
+      <p className="text-xs text-muted-foreground truncate">{config.agent || config.prompt.slice(0, 50) || "无 Prompt"}</p>
     </div>
   )
 }
