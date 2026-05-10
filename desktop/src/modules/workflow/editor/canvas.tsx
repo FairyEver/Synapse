@@ -1,8 +1,8 @@
 import { forwardRef, useCallback, useImperativeHandle } from "react"
 import { ReactFlow, Background, Controls, ReactFlowProvider, useNodesState, useEdgesState, useReactFlow, addEdge, type Connection, type OnSelectionChangeParams } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { nodeTypes } from "./node-wrappers"
-import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from "@/types/workflow"
+import { nodeTypes, NodeResultsContext } from "./node-wrappers"
+import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } from "@/types/workflow"
 
 export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
@@ -21,12 +21,13 @@ function defaultConfig(type: string): Record<string, unknown> {
 
 interface WorkflowCanvasProps {
   definition: WorkflowDefinition
+  nodeResults?: Record<string, NodeRunResult>
   onChange: (def: WorkflowDefinition) => void
   onNodeSelect?: (nodeId: string | null) => void
 }
 
 const CanvasContent = forwardRef<WorkflowCanvasHandle, WorkflowCanvasProps>(
-function CanvasContent({ definition, onChange, onNodeSelect }, ref) {
+function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref) {
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes, onNodesChange] = useNodesState(initNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges)
@@ -74,15 +75,17 @@ function CanvasContent({ definition, onChange, onNodeSelect }, ref) {
   }, [onNodeSelect])
 
   return (
-    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-      onConnect={onConnect} onNodeDragStop={onNodeDragStop}
-      onDrop={onDrop} onDragOver={onDragOver}
-      onSelectionChange={onSelectionChange}
-      fitView>
-      <Background />
-      <Controls />
-    </ReactFlow>
+    <NodeResultsContext.Provider value={nodeResults ?? {}}>
+      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+        onConnect={onConnect} onNodeDragStop={onNodeDragStop}
+        onDrop={onDrop} onDragOver={onDragOver}
+        onSelectionChange={onSelectionChange}
+        fitView>
+        <Background />
+        <Controls />
+      </ReactFlow>
+    </NodeResultsContext.Provider>
   )
 })
 
