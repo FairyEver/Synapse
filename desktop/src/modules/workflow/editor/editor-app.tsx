@@ -45,6 +45,17 @@ export function WorkflowEditorApp() {
     setDefinition((def) => def ? { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n) } : def)
   }, [])
 
+  const handleNameChange = useCallback((nodeId: string, name: string) => {
+    setSaveErrors([])
+    setDefinition((def) => {
+      if (!def) return def
+      const node = def.nodes.find((n) => n.id === nodeId)
+      if (!node) return def
+      canvasRef.current?.updateNodeConfig(nodeId, { ...node.config, name })
+      return { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, name } : n) }
+    })
+  }, [])
+
   const handleSave = async (def: WorkflowDefinition) => {
     const result = await window.synapse?.workflow.save(def)
     if (result && "errors" in result) {
@@ -83,7 +94,7 @@ export function WorkflowEditorApp() {
           <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={setSelectedNodeId} />
           <ExecutionOverlay nodeResults={nodeResults} runState={runState} />
         </div>
-        <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} />
+        <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
       </div>
     </div>
   )

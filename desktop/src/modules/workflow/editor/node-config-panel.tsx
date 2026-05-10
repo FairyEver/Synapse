@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2 } from "lucide-react"
 import type { WorkflowDefinition } from "@/types/workflow"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -12,6 +13,7 @@ interface NodeConfigPanelProps {
   nodeId: string | null
   definition: WorkflowDefinition
   onConfigChange: (nodeId: string, config: Record<string, unknown>) => void
+  onNameChange: (nodeId: string, name: string) => void
 }
 
 function PromptEditor({ config, onChange }: { config: PromptNodeConfig; onChange: (c: PromptNodeConfig) => void }) {
@@ -32,12 +34,15 @@ function PromptEditor({ config, onChange }: { config: PromptNodeConfig; onChange
   )
 }
 
+const NO_DEFAULT = "__none__"
+
 function SwitchEditor({ config, onChange }: { config: SwitchNodeConfig; onChange: (c: SwitchNodeConfig) => void }) {
   const [agent, setAgent] = useState(config.agent)
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
+  const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
 
-  const commit = (overrides?: Partial<SwitchNodeConfig>) => onChange({ ...config, agent, prompt, branches, ...overrides })
+  const commit = (overrides?: Partial<SwitchNodeConfig>) => onChange({ ...config, agent, prompt, branches, defaultBranch: defaultBranch === NO_DEFAULT ? undefined : defaultBranch, ...overrides })
 
   const addBranch = () => {
     const id = `branch${branches.length + 1}`
@@ -83,19 +88,44 @@ function SwitchEditor({ config, onChange }: { config: SwitchNodeConfig; onChange
           <Plus className="h-3 w-3 mr-1" />添加分支
         </Button>
       </div>
+      <div className="grid gap-1.5">
+        <Label className="text-xs">默认分支</Label>
+        <Select
+          value={defaultBranch}
+          onValueChange={(v) => {
+            setDefaultBranch(v)
+            commit({ defaultBranch: v === NO_DEFAULT ? undefined : v })
+          }}
+        >
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue placeholder="无（匹配失败则失败）" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_DEFAULT} className="text-xs">无（匹配失败则失败）</SelectItem>
+            {branches.map((b) => (
+              <SelectItem key={b.id} value={b.id} className="text-xs">{b.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 }
 
-export function NodeConfigPanel({ nodeId, definition, onConfigChange }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange }: NodeConfigPanelProps) {
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
 
   return (
     <div className="w-60 border-l bg-background flex flex-col shrink-0">
       {node ? (
         <>
-          <div className="border-b px-3 py-2">
-            <p className="text-xs font-medium truncate">{node.name}</p>
+          <div className="border-b px-3 py-2 grid gap-1">
+            <Input
+              className="h-7 text-xs font-medium"
+              defaultValue={node.name}
+              key={node.id}
+              onBlur={(e) => onNameChange(node.id, e.target.value)}
+            />
             <p className="text-xs text-muted-foreground">{node.type === "prompt" ? "提示词节点" : "分支节点"}</p>
           </div>
           <div className="flex-1 overflow-auto p-3">

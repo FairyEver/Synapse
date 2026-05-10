@@ -9,7 +9,7 @@ export interface WorkflowCanvasHandle {
 }
 
 function defToFlow(def: WorkflowDefinition) {
-  const nodes = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.config, selected: false }))
+  const nodes = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: { ...n.config, name: n.name } as Record<string, unknown>, selected: false }))
   const edges = def.edges.map((e) => ({ id: e.id, source: e.from, target: e.to, sourceHandle: e.branch ?? null }))
   return { nodes, edges }
 }
