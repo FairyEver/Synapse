@@ -16,22 +16,37 @@ const bootstrapLogger = createRendererLogger("renderer.bootstrap")
 bootstrapLogger.info("Renderer bootstrap started.")
 installRendererLogForwarding()
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <AppErrorBoundary>
-      <AppConfigProvider>
-        <RepositoryManagerProvider>
-          <LicenseProvider>
-            <IdentityProvider>
-              <AppNotificationsProvider>
-                <ActiveRepositorySwitchProvider>
-                  <App />
-                </ActiveRepositorySwitchProvider>
-              </AppNotificationsProvider>
-            </IdentityProvider>
-          </LicenseProvider>
-        </RepositoryManagerProvider>
-      </AppConfigProvider>
-    </AppErrorBoundary>
-  </StrictMode>,
-)
+void (async () => {
+  const windowType = new URLSearchParams(window.location.search).get("window")
+
+  if (windowType === "workflow-editor") {
+    const { WorkflowEditorApp } = await import("@/modules/workflow/editor/editor-app")
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <WorkflowEditorApp />
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
+  } else {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <AppConfigProvider>
+            <RepositoryManagerProvider>
+              <LicenseProvider>
+                <IdentityProvider>
+                  <AppNotificationsProvider>
+                    <ActiveRepositorySwitchProvider>
+                      <App />
+                    </ActiveRepositorySwitchProvider>
+                  </AppNotificationsProvider>
+                </IdentityProvider>
+              </LicenseProvider>
+            </RepositoryManagerProvider>
+          </AppConfigProvider>
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
+  }
+})()
