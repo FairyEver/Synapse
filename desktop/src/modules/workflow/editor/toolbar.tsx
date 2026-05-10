@@ -5,6 +5,7 @@ import { Save, Play, Square, SlidersHorizontal } from "lucide-react"
 import type { WorkflowDefinition } from "@/types/workflow"
 import type { RunState } from "../hooks/use-workflow-run"
 import { ParamsEditorDialog } from "../components/params-editor-dialog"
+import { RunParamsDialog } from "../components/run-params-dialog"
 
 interface WorkflowToolbarProps {
   definition: WorkflowDefinition
@@ -18,6 +19,7 @@ interface WorkflowToolbarProps {
 export function WorkflowToolbar({ definition, runState, onSave, onRun, onCancel, onChange }: WorkflowToolbarProps) {
   const isRunning = runState === "running"
   const [paramsOpen, setParamsOpen] = useState(false)
+  const [runParamsOpen, setRunParamsOpen] = useState(false)
   return (
     <div className="flex items-center gap-2 border-b px-3 py-2 bg-background">
       <Input
@@ -32,7 +34,7 @@ export function WorkflowToolbar({ definition, runState, onSave, onRun, onCancel,
         <Button size="sm" variant="ghost" onClick={() => void onSave(definition)}><Save className="h-3.5 w-3.5 mr-1" />保存</Button>
         {isRunning
           ? <Button size="sm" variant="destructive" onClick={() => void onCancel()}><Square className="h-3.5 w-3.5 mr-1" />停止</Button>
-          : <Button size="sm" onClick={() => void onRun({})}><Play className="h-3.5 w-3.5 mr-1" />运行</Button>
+          : <Button size="sm" onClick={() => setRunParamsOpen(true)}><Play className="h-3.5 w-3.5 mr-1" />运行</Button>
         }
       </div>
       <ParamsEditorDialog
@@ -40,6 +42,12 @@ export function WorkflowToolbar({ definition, runState, onSave, onRun, onCancel,
         params={definition.params}
         onChange={(params) => onChange({ ...definition, params })}
         onClose={() => setParamsOpen(false)}
+      />
+      <RunParamsDialog
+        open={runParamsOpen}
+        params={definition.params}
+        onConfirm={(params) => { setRunParamsOpen(false); void onRun(params) }}
+        onCancel={() => setRunParamsOpen(false)}
       />
     </div>
   )
