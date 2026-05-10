@@ -92,7 +92,7 @@ export function WorkflowEditorApp() {
         <NodePalette />
         <div className="flex-1 relative">
           <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={setSelectedNodeId} />
-          <ExecutionOverlay nodeResults={nodeResults} runState={runState} />
+          <ExecutionOverlay nodeResults={nodeResults} runState={runState} definition={definition} />
         </div>
         <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
       </div>
