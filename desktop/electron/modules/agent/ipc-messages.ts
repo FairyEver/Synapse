@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto"
 import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
 import type { AgentEvent } from "../../services/agent-runtime"
+import type { EventBus } from "../../runtime/event-bus"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
@@ -15,11 +17,24 @@ import {
   historyEntries,
 } from "./ipc-shared"
 
+const MAX_CLIENT_SKEW_MS = 60_000
+
+function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string): string {
+  if (!clientIso) return recvIso
+  const recv = Date.parse(recvIso)
+  const client = Date.parse(clientIso)
+  if (!Number.isFinite(client) || !Number.isFinite(recv)) return recvIso
+  if (client > recv) return recvIso
+  if (recv - client > MAX_CLIENT_SKEW_MS) return recvIso
+  return clientIso
+}
+
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
 const sendRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   content: z.string().min(1),
+  clientSubmittedAt: z.string().optional(),
 })
 
 const respondPermissionRequestSchema = projectRequestSchema.extend({
@@ -117,28 +132,120 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: SendRequest) => {
       const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
       const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
-      const result = await agent.send({
-        projectId: request.projectId,
-        sessionKey,
-        platform: LOCAL_RENDERER_PLATFORM,
-        userId: "renderer",
-        userName: "Renderer",
-        content: request.content,
-        replyCtx: {
-          kind: LOCAL_RENDERER_PLATFORM,
+      const eventBus = ctx.resolve<EventBus>("core.event-bus")
+      const runId = randomUUID()
+      const t_recv = new Date().toISOString()
+      const submittedAt = clampClientSubmittedAt(request.clientSubmittedAt, t_recv)
+
+      eventBus.emit({
+        domain: "agent",
+        type: "phase.update",
+        payload: {
+          runId,
           projectId: request.projectId,
           sessionKey,
+          phase: "submitted",
+          status: "done",
+          startedAt: submittedAt,
+          completedAt: t_recv,
         },
+        scope: { projectId: request.projectId },
+        timestamp: t_recv,
       })
-      return {
-        projectId: request.projectId,
-        sessionKey,
-        conversationId: result.conversationId,
-        resultText: result.resultText,
-        events: result.events as AgentEvent[],
-        agentSessionId: result.agentSessionId,
-        threadId: result.threadId,
-        error: result.error,
+
+      eventBus.emit({
+        domain: "agent",
+        type: "phase.update",
+        payload: {
+          runId,
+          projectId: request.projectId,
+          sessionKey,
+          phase: "received",
+          status: "in-progress",
+          startedAt: t_recv,
+        },
+        scope: { projectId: request.projectId },
+        timestamp: t_recv,
+      })
+
+      try {
+        const result = await agent.send({
+          projectId: request.projectId,
+          sessionKey,
+          platform: LOCAL_RENDERER_PLATFORM,
+          userId: "renderer",
+          userName: "Renderer",
+          content: request.content,
+          replyCtx: {
+            kind: LOCAL_RENDERER_PLATFORM,
+            projectId: request.projectId,
+            sessionKey,
+          },
+        })
+        const t_done = new Date().toISOString()
+        eventBus.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId,
+            projectId: request.projectId,
+            sessionKey,
+            conversationId: result.conversationId,
+            phase: "received",
+            status: "done",
+            startedAt: t_recv,
+            completedAt: t_done,
+          },
+          scope: { projectId: request.projectId },
+          timestamp: t_done,
+        })
+        eventBus.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId,
+            projectId: request.projectId,
+            sessionKey,
+            conversationId: result.conversationId,
+            phase: result.error ? "failed" : "completed",
+            status: result.error ? "failed" : "done",
+            startedAt: t_recv,
+            completedAt: t_done,
+            errorMessage: result.error,
+          },
+          scope: { projectId: request.projectId },
+          timestamp: t_done,
+        })
+        return {
+          projectId: request.projectId,
+          sessionKey,
+          conversationId: result.conversationId,
+          resultText: result.resultText,
+          events: result.events as AgentEvent[],
+          agentSessionId: result.agentSessionId,
+          threadId: result.threadId,
+          error: result.error,
+        }
+      } catch (rawError) {
+        const t_fail = new Date().toISOString()
+        const message = rawError instanceof Error ? rawError.message : "发送失败"
+        eventBus.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId,
+            projectId: request.projectId,
+            sessionKey,
+            phase: "failed",
+            status: "failed",
+            startedAt: t_recv,
+            completedAt: t_fail,
+            errorMessage: message,
+          },
+          scope: { projectId: request.projectId },
+          timestamp: t_fail,
+        })
+        throw rawError
       }
     },
   },

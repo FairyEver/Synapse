@@ -436,6 +436,102 @@ describe("agentIpcModule", () => {
     })).toEqual({ ok: true })
     expect(deleteSession).toHaveBeenCalledWith("conv-1")
   })
+
+  describe("phase emit (Plan A)", () => {
+    it("emits submitted (done) + received (in-progress) + received (done) + completed (done) on success", async () => {
+      const send = vi.fn().mockResolvedValue({
+        conversationId: "conv-1",
+        resultText: "ok",
+        events: [],
+      })
+      const harness = createHarness({ agent: { send } })
+
+      const past = new Date(Date.now() - 100).toISOString()
+      await harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "hi",
+        clientSubmittedAt: past,
+      })
+
+      const phases = harness.eventBusEmits
+        .filter((e) => e.type === "phase.update")
+        .map((e) => {
+          const payload = e.payload as { phase: string; status: string }
+          return { phase: payload.phase, status: payload.status }
+        })
+
+      expect(phases).toEqual([
+        { phase: "submitted", status: "done" },
+        { phase: "received", status: "in-progress" },
+        { phase: "received", status: "done" },
+        { phase: "completed", status: "done" },
+      ])
+    })
+
+    it("clamps a client clock that is ahead of the server", async () => {
+      const send = vi.fn().mockResolvedValue({
+        conversationId: "conv-1",
+        resultText: "ok",
+        events: [],
+      })
+      const harness = createHarness({ agent: { send } })
+
+      const future = new Date(Date.now() + 5_000).toISOString()
+      await harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "hi",
+        clientSubmittedAt: future,
+      })
+
+      const submitted = harness.eventBusEmits.find(
+        (e) => e.type === "phase.update" && (e.payload as { phase: string }).phase === "submitted",
+      )
+      expect(submitted).toBeDefined()
+      // Clamped: startedAt is NOT the future timestamp.
+      expect((submitted!.payload as { startedAt: string }).startedAt).not.toBe(future)
+    })
+
+    it("falls back to t_recv when clientSubmittedAt is older than 60s", async () => {
+      const send = vi.fn().mockResolvedValue({
+        conversationId: "conv-1",
+        resultText: "ok",
+        events: [],
+      })
+      const harness = createHarness({ agent: { send } })
+
+      const stale = new Date(Date.now() - 120_000).toISOString()
+      await harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "hi",
+        clientSubmittedAt: stale,
+      })
+
+      const submitted = harness.eventBusEmits.find(
+        (e) => e.type === "phase.update" && (e.payload as { phase: string }).phase === "submitted",
+      )
+      expect((submitted!.payload as { startedAt: string }).startedAt).not.toBe(stale)
+    })
+
+    it("emits a failed phase when agent.send throws", async () => {
+      const send = vi.fn().mockImplementation(async () => {
+        throw new Error("nope")
+      })
+      const harness = createHarness({ agent: { send } })
+
+      await expect(
+        harness.invoke("synapse:agent:send", {
+          projectId: "project-1",
+          content: "hi",
+        }),
+      ).rejects.toThrow("nope")
+
+      const failed = harness.eventBusEmits.find(
+        (e) => e.type === "phase.update" && (e.payload as { phase: string }).phase === "failed",
+      )
+      expect(failed).toBeDefined()
+      expect((failed!.payload as { errorMessage: string }).errorMessage).toBe("nope")
+    })
+  })
 })
 
 function createHarness(overrides: {
@@ -483,13 +579,23 @@ function createHarness(overrides: {
     open: vi.fn().mockResolvedValue(container),
   }
   const harness = createInMemoryHarness()
+  const eventBusEmits: Array<{ domain: string; type: string; payload: unknown; timestamp?: string }> = []
+  const eventBus = {
+    emit: (event: { domain: string; type: string; payload: unknown; timestamp?: string }) => {
+      eventBusEmits.push(event)
+    },
+    emitInternal: () => {},
+    on: () => () => {},
+    onType: () => () => {},
+  }
   const resolve: IpcHandlerContext["resolve"] = <T>(serviceId: string): T => {
     if (serviceId === "core.project-containers") return projectContainers as T
+    if (serviceId === "core.event-bus") return eventBus as T
     throw new Error(`Unknown service: ${serviceId}`)
   }
   harness.registry.register(agentIpcModule, {
     moduleId: "agent",
     resolve,
   })
-  return Object.assign(harness, { projectContainers })
+  return Object.assign(harness, { projectContainers, eventBusEmits })
 }
