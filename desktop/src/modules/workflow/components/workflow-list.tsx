@@ -8,7 +8,16 @@ export function WorkflowList() {
   const { items, loading, refresh } = useWorkflowList()
   const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
 
-  const handleRun = async (id: string) => { const def = await window.synapse?.workflow.get(id); if (def) setRunTarget(def) }
+  const handleRun = async (id: string) => {
+    const def = await window.synapse?.workflow.get(id)
+    if (!def) return
+    if (def.params.length === 0) {
+      await window.synapse?.workflow.run(def.id, {})
+      void window.synapse?.workflow.openEditor(def.id)
+    } else {
+      setRunTarget(def)
+    }
+  }
 
   const handleDelete = async (id: string) => {
     await window.synapse?.workflow.delete(id)
@@ -17,8 +26,10 @@ export function WorkflowList() {
 
   const handleConfirmRun = async (params: Record<string, unknown>) => {
     if (!runTarget) return
+    const id = runTarget.id
     setRunTarget(null)
-    await window.synapse?.workflow.run(runTarget.id, params)
+    await window.synapse?.workflow.run(id, params)
+    void window.synapse?.workflow.openEditor(id)
     void refresh()
   }
 
