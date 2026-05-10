@@ -341,6 +341,24 @@ export interface SynapseAgentConversationUpdatedDomainEvent extends SynapseAgent
   readonly payload: SynapseAgentConversationUpdatedPayload
 }
 
+export interface SynapseAgentPhaseUpdatePayload {
+  readonly runId: string
+  readonly projectId: string
+  readonly sessionKey: string
+  readonly conversationId?: string
+  readonly phase: SynapseAgentPhaseValue
+  readonly status: SynapseAgentPhaseStatus
+  readonly startedAt: string
+  readonly completedAt?: string
+  readonly errorMessage?: string
+}
+
+export interface SynapseAgentPhaseUpdateDomainEvent extends SynapseAgentDomainEventBase {
+  readonly type: "phase.update"
+  readonly payload: SynapseAgentPhaseUpdatePayload
+}
+
 export type SynapseAgentDomainEvent =
   | SynapseAgentStreamDomainEvent
   | SynapseAgentConversationUpdatedDomainEvent
+  | SynapseAgentPhaseUpdateDomainEvent

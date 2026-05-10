@@ -3,6 +3,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
 import type { SynapseAgentDomainEvent } from "@/types/agent"
+import { reducePhaseEvent } from "../utils/phase-reducer"
 import {
   clearConversationUnread,
   incrementUnreadForConversation,
@@ -51,8 +52,47 @@ function useChatEvents(
             ? domainEvent.payload.conversationId
             : undefined,
           sessionKey: domainEvent.payload.sessionKey,
-          platform: domainEvent.payload.platform,
+          platform: "platform" in domainEvent.payload ? domainEvent.payload.platform : undefined,
         })
+        return
+      }
+      if (domainEvent.type === "phase.update") {
+        const payload = domainEvent.payload
+        const selectedProject = selectedProjectIdRef.current
+        const selectedConv = selectedConversationIdRef.current
+        const selectedSession = selectedSessionKeyRef.current
+        const sameProject = payload.projectId === selectedProject
+        const sameSessionKey = payload.sessionKey === selectedSession
+        const sameConv = payload.conversationId
+          ? payload.conversationId === selectedConv
+          : sameSessionKey
+        if (!sameProject || !sameConv) {
+          logger.debug("Phase event ignored for inactive conversation.", {
+            projectId: payload.projectId,
+            sessionKey: payload.sessionKey,
+            conversationId: payload.conversationId,
+            phase: payload.phase,
+            status: payload.status,
+          })
+          return
+        }
+        updateTimeline((current) => reducePhaseEvent(current, {
+          runId: payload.runId,
+          projectId: payload.projectId,
+          sessionKey: payload.sessionKey,
+          conversationId: payload.conversationId,
+          phase: payload.phase,
+          status: payload.status,
+          startedAt: payload.startedAt,
+          completedAt: payload.completedAt,
+          errorMessage: payload.errorMessage,
+          eventTimestamp: domainEvent.timestamp,
+        }))
+        if (payload.phase === "failed" || (payload.phase === "completed" && payload.status === "done")) {
+          if (payload.conversationId) {
+            dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
+          }
+        }
         return
       }
       if (domainEvent.type === "conversationUpdated") {
