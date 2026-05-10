@@ -1,4 +1,5 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react"
+import { Badge } from "@/components/ui/badge"
 
 export function BranchEdge({
   id,
@@ -21,12 +22,13 @@ export function BranchEdge({
       <BaseEdge id={id} path={edgePath} style={style} />
       {label && (
         <EdgeLabelRenderer>
-          <div
+          <Badge
+            variant="outline"
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)` }}
-            className="absolute bg-amber-50 text-amber-700 text-[10px] px-1.5 py-0.5 rounded border border-amber-200 pointer-events-none nodrag nopan"
+            className="absolute bg-background text-xs pointer-events-none nodrag nopan"
           >
             {label}
-          </div>
+          </Badge>
         </EdgeLabelRenderer>
       )}
     </>

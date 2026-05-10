@@ -3,7 +3,7 @@ import type { SwitchNodeConfig } from "./schema"
 import { switchNodeConfigSchema } from "./schema"
 
 export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
-  type: "switch", title: "Switch", icon: "GitBranch", color: "bg-amber-500/10",
+  type: "switch", title: "Switch", icon: "GitBranch", color: "bg-secondary",
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: "dynamic" },
   resolveDynamicPorts: (c) => c.branches.map((b) => ({ id: b.id, label: b.label })),
   cardSummary: (c) => ({ title: c.agent || "未选择 Agent", subtitle: `${c.branches.length} 个分支` }),
