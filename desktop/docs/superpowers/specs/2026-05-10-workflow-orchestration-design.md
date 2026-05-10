@@ -2,7 +2,7 @@
 
 ## 概述
 
-为 Synapse 桌面应用新增工作流编排功能，让用户在可视化画布上编排多步 Prompt Chain，一键串联执行，支持条件分支（Switch）和并行执行。
+为 Synapse 桌面应用新增工作流编排功能，让用户在可视化画布上编排多步 Prompt Chain，一键串联执行，支持条件分支（Switch）。MVP 默认串行执行，架构预留并行执行能力。
 
 ## 目标用户
 
@@ -106,7 +106,7 @@ interface SwitchNodeConfig {
   variables: VariableBinding[]
   prompt: string // 让 Agent 判断走哪个分支
   branches: SwitchBranch[] // 分支定义
-  defaultBranch?: string // 可选兜底分支 id，匹配失败时走此分支；未配置则节点失败
+  defaultBranch?: string // 可选兜底分支 id，必须是 branches[].id 之一；匹配失败时走此分支；未配置则节点失败
 }
 
 interface SwitchBranch {
@@ -438,6 +438,24 @@ type WorkflowEvent =
 - 解析时机：节点执行前（lazy），确保引用上游最新输出
 - prompt 模板中的 `{{$变量名}}` 由引擎替换后传给 executor
 
+**Switch 分支汇合后的变量引用（重要）：**
+
+当 Switch 分支汇合到同一个下游节点时，存在运行时可达性问题：
+
+```
+A → Switch
+Switch --fix--> B
+Switch --skip--> C
+B → D
+C → D
+```
+
+静态图上 D 的上游有 B 和 C，路径可达检查通过。但运行时 B 和 C 只会执行一个。
+
+**MVP 规则：** 变量解析时，如果引用的上游节点在本次运行中被 skipped（输出不存在），则该节点执行失败，错误信息提示"变量 $xxx 引用的节点 [节点名] 在本次运行中未执行（被分支跳过）"。
+
+**使用建议：** Switch 分支汇合后的节点不应引用分支内节点的输出。如需汇合分支结果，后续版本可引入可选变量（`optional: true`）或 Merge 节点。
+
 ### 3.6 工作流校验器
 
 `electron/services/workflow/workflow-validator.ts`
@@ -470,7 +488,7 @@ function validateWorkflow(definition: WorkflowDefinition): ValidationResult
 1. **DAG 无环检测** — 拓扑排序验证
 2. **变量引用路径可达性** — 对每个 `source.type === "node_output"` 的变量绑定，检查从 source node 到当前节点是否存在有向路径
 3. **Config schema 验证** — 每个节点的 config 通过对应节点类型的 Zod schema 验证
-4. **Switch 出边校验** — 如果 edge.from 是 Switch 节点，则 `edge.branch` 必须存在且匹配 `branches[].id` 或 `defaultBranch`；如果 edge.from 不是 Switch 节点，则 `edge.branch` 不应存在
+4. **Switch 出边校验** — 如果 edge.from 是 Switch 节点，则 `edge.branch` 必须存在且匹配 `branches[].id`；如果 edge.from 不是 Switch 节点，则 `edge.branch` 不应存在；`defaultBranch` 如配置则必须是 `branches[].id` 之一
 5. **孤立节点检测**（warning）— 没有任何连线的节点（起始节点除外）发出警告
 6. **多起始节点提示**（warning）— 存在多个起始节点时提示"将按依赖顺序依次执行"
 
