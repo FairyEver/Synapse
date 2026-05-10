@@ -19,8 +19,19 @@ export function WorkflowEditorApp() {
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const definitionRef = useRef(definition)
   definitionRef.current = definition
+  const isDirtyRef = useRef(false)
 
   useEffect(() => { if (workflowId) void window.synapse?.workflow.get(workflowId).then((def) => { if (def) setDefinition(def) }) }, [workflowId])
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) return
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", handler)
+    return () => window.removeEventListener("beforeunload", handler)
+  }, [])
 
   const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel } = useWorkflowRun(workflowId)
 
@@ -35,17 +46,20 @@ export function WorkflowEditorApp() {
   })
 
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
+    isDirtyRef.current = true
     setSaveErrors([])
     setDefinition(def)
   }, [])
 
   const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
+    isDirtyRef.current = true
     canvasRef.current?.updateNodeConfig(nodeId, config)
     setSaveErrors([])
     setDefinition((def) => def ? { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n) } : def)
   }, [])
 
   const handleNameChange = useCallback((nodeId: string, name: string) => {
+    isDirtyRef.current = true
     setSaveErrors([])
     setDefinition((def) => {
       if (!def) return def
@@ -62,6 +76,7 @@ export function WorkflowEditorApp() {
       setSaveErrors(result.errors)
       return result
     }
+    isDirtyRef.current = false
     setSaveErrors([])
     if (result && "versionHash" in result) setDefinition({ ...def, version: result.versionHash })
     return result
