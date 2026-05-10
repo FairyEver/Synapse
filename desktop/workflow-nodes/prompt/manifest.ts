@@ -1,0 +1,15 @@
+import type { NodeManifest } from "../types"
+import type { PromptNodeConfig } from "./schema"
+import { promptNodeConfigSchema } from "./schema"
+
+export const promptNodeManifest: NodeManifest<PromptNodeConfig> = {
+  type: "prompt", title: "Prompt", icon: "MessageSquare", color: "bg-blue-500/10",
+  ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
+  cardSummary: (c) => ({ title: c.agent || "未选择 Agent", subtitle: c.prompt.slice(0, 60) || "无 Prompt" }),
+  configFields: [
+    { name: "agent", kind: "select", label: "Agent" },
+    { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
+    { name: "prompt", kind: "text", label: "Prompt 模板" },
+  ],
+  configSchema: promptNodeConfigSchema,
+}
