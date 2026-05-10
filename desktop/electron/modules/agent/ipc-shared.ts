@@ -92,6 +92,26 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
       workDir: z.string().optional(),
     }).optional(),
   }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("phase"),
+    runId: z.string(),
+    phase: z.enum([
+      "submitted",
+      "received",
+      "runtime_starting",
+      "runtime_ready",
+      "request_submitted",
+      "awaiting_first_token",
+      "streaming",
+      "completed",
+      "failed",
+    ]),
+    status: z.enum(["in-progress", "done", "failed"]),
+    startedAt: z.string(),
+    completedAt: z.string().optional(),
+    errorMessage: z.string().optional(),
+  }),
 ])
 
 export const sessionSummarySchema = z.object({
@@ -293,3 +313,33 @@ export const agentEventScopeSchema = z.object({
   sessionId: z.string().optional(),
   repositoryId: z.string().optional(),
 }).optional()
+
+// ─── Phase update domain event (T1/T2 in Plan A; T3..T9 in Plan B) ────────────
+
+export const agentPhaseValueSchema = z.enum([
+  "submitted",
+  "received",
+  "runtime_starting",
+  "runtime_ready",
+  "request_submitted",
+  "awaiting_first_token",
+  "streaming",
+  "completed",
+  "failed",
+])
+
+export const agentPhaseStatusSchema = z.enum(["in-progress", "done", "failed"])
+
+export const agentPhaseUpdatePayloadSchema = z.object({
+  runId: z.string(),
+  projectId: z.string(),
+  sessionKey: z.string(),
+  conversationId: z.string().optional(),
+  phase: agentPhaseValueSchema,
+  status: agentPhaseStatusSchema,
+  startedAt: z.string(),
+  completedAt: z.string().optional(),
+  errorMessage: z.string().optional(),
+})
+
+export type AgentPhaseUpdatePayload = z.infer<typeof agentPhaseUpdatePayloadSchema>
