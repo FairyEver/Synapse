@@ -1,8 +1,12 @@
-import { useCallback } from "react"
-import { ReactFlow, Background, Controls, ReactFlowProvider, useNodesState, useEdgesState, useReactFlow, addEdge, type Connection } from "@xyflow/react"
+import { forwardRef, useCallback, useImperativeHandle } from "react"
+import { ReactFlow, Background, Controls, ReactFlowProvider, useNodesState, useEdgesState, useReactFlow, addEdge, type Connection, type OnSelectionChangeParams } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { nodeTypes } from "./node-wrappers"
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from "@/types/workflow"
+
+export interface WorkflowCanvasHandle {
+  updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
+}
 
 function defToFlow(def: WorkflowDefinition) {
   const nodes = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.config, selected: false }))
@@ -15,13 +19,24 @@ function defaultConfig(type: string): Record<string, unknown> {
   return { name: "新提示词", agent: "", prompt: "", variables: [] }
 }
 
-interface WorkflowCanvasProps { definition: WorkflowDefinition; onChange: (def: WorkflowDefinition) => void }
+interface WorkflowCanvasProps {
+  definition: WorkflowDefinition
+  onChange: (def: WorkflowDefinition) => void
+  onNodeSelect?: (nodeId: string | null) => void
+}
 
-function CanvasContent({ definition, onChange }: WorkflowCanvasProps) {
+const CanvasContent = forwardRef<WorkflowCanvasHandle, WorkflowCanvasProps>(
+function CanvasContent({ definition, onChange, onNodeSelect }, ref) {
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes, onNodesChange] = useNodesState(initNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges)
   const { screenToFlowPosition } = useReactFlow()
+
+  useImperativeHandle(ref, () => ({
+    updateNodeConfig: (nodeId, config) => {
+      setNodes((nds) => nds.map((n) => n.id === nodeId ? { ...n, data: config } : n))
+    },
+  }))
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => {
@@ -54,22 +69,28 @@ function CanvasContent({ definition, onChange }: WorkflowCanvasProps) {
     onChange({ ...definition, nodes: [...definition.nodes, newWfNode] })
   }, [screenToFlowPosition, definition, onChange, setNodes])
 
+  const onSelectionChange = useCallback(({ nodes: selected }: OnSelectionChangeParams) => {
+    onNodeSelect?.(selected[0]?.id ?? null)
+  }, [onNodeSelect])
+
   return (
     <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
       onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
       onConnect={onConnect} onNodeDragStop={onNodeDragStop}
       onDrop={onDrop} onDragOver={onDragOver}
+      onSelectionChange={onSelectionChange}
       fitView>
       <Background />
       <Controls />
     </ReactFlow>
   )
-}
+})
 
-export function WorkflowCanvas(props: WorkflowCanvasProps) {
+export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasProps>(
+function WorkflowCanvas(props, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasContent {...props} />
+      <CanvasContent ref={ref} {...props} />
     </ReactFlowProvider>
   )
-}
+})

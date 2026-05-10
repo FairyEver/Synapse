@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 import { useWorkflowRun } from "../hooks/use-workflow-run"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
 import { WorkflowToolbar } from "./toolbar"
-import { WorkflowCanvas } from "./canvas"
+import { WorkflowCanvas, type WorkflowCanvasHandle } from "./canvas"
 import { ExecutionOverlay } from "./execution-overlay"
 import { NodePalette } from "./node-palette"
+import { NodeConfigPanel } from "./node-config-panel"
 
 export function WorkflowEditorApp() {
   const workflowId = new URLSearchParams(window.location.search).get("workflowId") ?? ""
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const definitionRef = useRef(definition)
   definitionRef.current = definition
 
@@ -27,6 +30,11 @@ export function WorkflowEditorApp() {
     onCancelled: () => setRunState("cancelled"),
   })
 
+  const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
+    canvasRef.current?.updateNodeConfig(nodeId, config)
+    setDefinition((def) => def ? { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n) } : def)
+  }, [])
+
   const handleSave = async (def: WorkflowDefinition) => {
     const result = await window.synapse?.workflow.save(def)
     if (result && "versionHash" in result) setDefinition({ ...def, version: result.versionHash })
@@ -41,9 +49,10 @@ export function WorkflowEditorApp() {
       <div className="flex-1 flex min-h-0">
         <NodePalette />
         <div className="flex-1 relative">
-          <WorkflowCanvas definition={definition} onChange={setDefinition} />
+          <WorkflowCanvas ref={canvasRef} definition={definition} onChange={setDefinition} onNodeSelect={setSelectedNodeId} />
           <ExecutionOverlay nodeResults={nodeResults} runState={runState} />
         </div>
+        <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} />
       </div>
     </div>
   )

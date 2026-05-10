@@ -15,7 +15,6 @@ export class WorkflowWindowManager {
     const url = `${baseUrl}?window=workflow-editor&workflowId=${encodeURIComponent(workflowId)}`
     void win.loadURL(url)
 
-    win.on("close", (e) => { e.preventDefault(); win.webContents.send("synapse:workflow:editor-close-requested") })
     win.on("closed", () => this.windows.delete(workflowId))
     this.windows.set(workflowId, win)
     return win
