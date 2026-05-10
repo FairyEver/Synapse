@@ -2,7 +2,10 @@ import { forwardRef, useCallback, useImperativeHandle } from "react"
 import { ReactFlow, Background, Controls, ReactFlowProvider, useNodesState, useEdgesState, useReactFlow, addEdge, type Connection, type OnSelectionChangeParams } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { nodeTypes, NodeResultsContext } from "./node-wrappers"
+import { BranchEdge } from "./custom-edge"
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } from "@/types/workflow"
+
+const edgeTypes = { branch: BranchEdge }
 
 export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
@@ -18,10 +21,10 @@ function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: s
 function defToFlow(def: WorkflowDefinition) {
   const nodes = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: { ...n.config, name: n.name } as Record<string, unknown>, selected: false }))
   const edges = def.edges.map((e) => {
-    const label = e.branch ? resolveBranchLabel(def, e.from, e.branch) : undefined
+    const branchLabel = e.branch ? resolveBranchLabel(def, e.from, e.branch) : undefined
     return {
       id: e.id, source: e.from, target: e.to, sourceHandle: e.branch ?? null,
-      ...(label ? { label, labelStyle: { fontSize: 10 }, style: { stroke: "#f59e0b" } } : {}),
+      ...(branchLabel ? { type: "branch", data: { label: branchLabel }, style: { stroke: "#f59e0b" } } : {}),
     }
   })
   return { nodes, edges }
@@ -54,10 +57,13 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => {
-      const withLabel = connection.sourceHandle
-        ? { label: resolveBranchLabel(definition, connection.source, connection.sourceHandle), labelStyle: { fontSize: 10 }, style: { stroke: "#f59e0b" } }
+      const branchLabel = connection.sourceHandle
+        ? resolveBranchLabel(definition, connection.source, connection.sourceHandle)
+        : undefined
+      const withBranch = branchLabel
+        ? { type: "branch", data: { label: branchLabel }, style: { stroke: "#f59e0b" } }
         : {}
-      const updated = addEdge({ ...connection, ...withLabel }, eds) as typeof eds
+      const updated = addEdge({ ...connection, ...withBranch }, eds) as typeof eds
       const wfEdges: WorkflowEdge[] = updated.map((e) => ({ id: e.id, from: e.source, to: e.target, branch: e.sourceHandle ?? undefined }))
       onChange({ ...definition, edges: wfEdges })
       return updated
@@ -97,6 +103,7 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
         onConnect={onConnect} onNodeDragStop={onNodeDragStop}
         onDrop={onDrop} onDragOver={onDragOver}
         onSelectionChange={onSelectionChange}
+        edgeTypes={edgeTypes}
         fitView>
         <Background />
         <Controls />
