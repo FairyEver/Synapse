@@ -9,6 +9,7 @@ import {
 
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { requestWatchNextAgentSession } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { Button } from "@/components/ui/button"
@@ -254,6 +255,12 @@ function TaskSchedulerModule() {
               }}
               onHistory={(task) => setHistoryTask(task)}
               onRun={(task) => {
+                if (task.action.type === "builtin.agent") {
+                  const projectId = task.action.config["projectId"]
+                  if (typeof projectId === "string" && projectId) {
+                    requestWatchNextAgentSession({ projectId })
+                  }
+                }
                 runTask(task.id).catch((err) => {
                   logger.error("Failed to run task.", { error: err, taskId: task.id })
                 })
