@@ -36,6 +36,14 @@ export const workflowIpcModule: IpcModule = {
       response: workflowDefinitionSchema.nullable(),
       handler: async (ctx, { id }: { id: string }) => ctx.resolve<WorkflowService>("core.workflow").get(id),
     },
+    create: {
+      channel: "synapse:workflow:create", kind: "invoke", request: z.void().optional(),
+      response: z.union([
+        z.object({ id: z.string(), versionHash: z.string() }),
+        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+      ]),
+      handler: async (ctx) => ctx.resolve<WorkflowService>("core.workflow").create(),
+    },
     save: {
       channel: "synapse:workflow:save", kind: "invoke", request: workflowDefinitionSchema,
       response: z.union([z.object({ versionHash: z.string() }), z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) })]),

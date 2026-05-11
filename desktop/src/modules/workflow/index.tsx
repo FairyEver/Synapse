@@ -8,10 +8,9 @@ export function WorkflowModule() {
   const [listKey, setListKey] = useState(0)
 
   const handleCreate = async () => {
-    const id = crypto.randomUUID()
-    const now = Date.now()
-    await window.synapse?.workflow.save({ id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [], nodes: [], edges: [] })
-    await window.synapse?.workflow.openEditor(id)
+    const result = await window.synapse?.workflow.create()
+    if (!result || "errors" in result) return
+    await window.synapse?.workflow.openEditor(result.id)
     setListKey((k) => k + 1)
   }
   return (

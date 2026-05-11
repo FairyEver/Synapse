@@ -2,8 +2,10 @@ import { createContext, useContext } from "react"
 import { Handle, Position, type NodeProps } from "@xyflow/react"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
 import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
+import { EndNodeCard } from "../../../../workflow-nodes/end/card"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
+import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
 import type { NodeRunResult } from "@/types/workflow"
 
 export const NodeResultsContext = createContext<Record<string, NodeRunResult>>({})
@@ -36,7 +38,20 @@ export function SwitchNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function EndNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(NodeResultsContext)
+  const status = nodeResults[id]?.status
+  const name = (data as { name?: string }).name
+  return (
+    <>
+      <Handle type="target" position={Position.Left} />
+      <EndNodeCard config={data as EndNodeConfig} name={name} selected={selected} status={status} />
+    </>
+  )
+}
+
 export const nodeTypes = {
   prompt: PromptNodeWrapper,
   switch: SwitchNodeWrapper,
+  end: EndNodeWrapper,
 }

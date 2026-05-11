@@ -2,6 +2,7 @@ import type { ComponentType } from "react"
 import type { WorkflowParam } from "@/types/workflow"
 import { PromptNodePanel } from "./prompt/panel"
 import { SwitchNodePanel } from "./switch/panel"
+import { EndNodePanel } from "./end/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -18,6 +19,7 @@ type PanelComponent = ComponentType<NodePanelProps>
 const panelRegistry = new Map<string, PanelComponent>([
   ["prompt", PromptNodePanel as unknown as PanelComponent],
   ["switch", SwitchNodePanel as unknown as PanelComponent],
+  ["end", EndNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {

@@ -1,7 +1,7 @@
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 
 export function NodePalette() {
-  const types = nodeTypeRegistry.listTypes()
+  const types = nodeTypeRegistry.listTypes().filter((t) => t !== "end")
   return (
     <div className="w-44 border-r bg-background flex flex-col gap-1 p-2">
       <p className="text-xs font-medium text-muted-foreground px-1 pb-1">节点</p>

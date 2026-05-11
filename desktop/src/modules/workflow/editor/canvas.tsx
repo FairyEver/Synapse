@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useImperativeHandle } from "react"
+import { toast } from "sonner"
 import {
   ReactFlow,
   Background,
@@ -39,7 +40,7 @@ function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: s
 }
 
 function defToFlow(def: WorkflowDefinition) {
-  const nodes: WorkflowFlowNode[] = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: { ...n.config, name: n.name }, selected: false }))
+  const nodes: WorkflowFlowNode[] = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: { ...n.config, name: n.name }, selected: false, deletable: n.type !== "end" }))
   const edges: WorkflowFlowEdge[] = def.edges.map((e) => {
     const branchLabel = e.branch ? resolveBranchLabel(def, e.from, e.branch) : undefined
     return {
@@ -52,11 +53,14 @@ function defToFlow(def: WorkflowDefinition) {
 
 function defaultConfig(type: string): Record<string, unknown> {
   if (type === "switch") return { agent: "", prompt: "", variables: [], branches: [{ id: "branch1", label: "分支 1" }] }
+  if (type === "end") return { outputType: "text", template: "", variables: [] }
   return { agent: "", prompt: "", variables: [] }
 }
 
 function defaultName(type: string): string {
-  return type === "switch" ? "新分支" : "新提示词"
+  if (type === "switch") return "新分支"
+  if (type === "end") return "结束"
+  return "新提示词"
 }
 
 function flowNodeToWorkflowNode(node: WorkflowFlowNode): WorkflowNode {
@@ -100,14 +104,21 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
   }))
 
   const handleNodesChange = useCallback((changes: NodeChange<WorkflowFlowNode>[]) => {
+    const blockedEnd = changes.some((c) => c.type === "remove" && nodes.find((n) => n.id === c.id)?.type === "end")
+    if (blockedEnd) toast("结束节点不能删除")
     setNodes((currentNodes) => {
-      const updated = applyNodeChanges(changes, currentNodes)
-      if (changes.some((change) => change.type !== "select")) {
+      const filteredChanges = changes.filter((change) => {
+        if (change.type !== "remove") return true
+        const node = currentNodes.find((n) => n.id === change.id)
+        return node?.type !== "end"
+      })
+      const updated = applyNodeChanges(filteredChanges, currentNodes)
+      if (filteredChanges.some((change) => change.type !== "select")) {
         onChange({ ...definition, nodes: updated.map(flowNodeToWorkflowNode) })
       }
       return updated
     })
-  }, [definition, onChange, setNodes])
+  }, [definition, onChange, setNodes, nodes])
 
   const handleEdgesChange = useCallback((changes: EdgeChange<WorkflowFlowEdge>[]) => {
     setEdges((currentEdges) => {

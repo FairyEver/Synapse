@@ -25,6 +25,7 @@ export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled"
   nodeResults: Record<string, NodeRunResult>
   durationMs: number
+  output?: string
 }
 export interface WorkflowRunStatus {
   runId: string
@@ -47,7 +48,7 @@ export type WorkflowEvent =
   | { type: "workflow:failed"; runId: string; error: string; result?: WorkflowRunResult }
   | { type: "workflow:cancelled"; runId: string; result?: WorkflowRunResult }
 export interface ValidationError {
-  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch"
+  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes"
   nodeId?: string; edgeId?: string; message: string
 }
 export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes"; nodeId?: string; message: string }

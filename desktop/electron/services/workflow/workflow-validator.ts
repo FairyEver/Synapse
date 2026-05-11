@@ -29,11 +29,18 @@ function ancestors(nodeId: string, def: WorkflowDefinition): Set<string> {
 
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
+
+  const endNodes = def.nodes.filter((n) => n.type === "end")
+  if (endNodes.length === 0)
+    errors.push({ type: "missing_end_node", message: "工作流必须包含一个结束节点" })
+  if (endNodes.length > 1)
+    errors.push({ type: "multiple_end_nodes", message: "结束节点只能有一个" })
+
   const { hasCycle } = topoSort(def)
   if (hasCycle) errors.push({ type: "cycle", message: "工作流包含循环依赖" })
 
   const byId = new Map(def.nodes.map((n) => [n.id, n]))
-  if (def.nodes.filter((n) => !def.edges.some((e) => e.to === n.id)).length > 1)
+  if (def.nodes.filter((n) => n.type !== "end" && !def.edges.some((e) => e.to === n.id)).length > 1)
     warnings.push({ type: "multiple_start_nodes", message: "存在多个起始节点" })
 
   for (const node of def.nodes) {

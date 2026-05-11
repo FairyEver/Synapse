@@ -8,6 +8,7 @@ vi.mock("electron", () => ({ app: { getPath: () => "/tmp" } }))
 
 import { WorkflowService } from "../workflow/workflow-service"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+import "../../../workflow-nodes/register.main"
 
 const roots: string[] = []
 async function tmpDir() {
@@ -17,7 +18,12 @@ async function tmpDir() {
 afterEach(() => Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true }))))
 
 function makeDef(): WorkflowDefinition {
-  return { id: randomUUID(), name: "WF", version: "", createdAt: 0, updatedAt: 0, params: [], nodes: [], edges: [] }
+  const id = randomUUID()
+  return {
+    id, name: "WF", version: "", createdAt: 0, updatedAt: 0, params: [],
+    nodes: [{ id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "", variables: [] } }],
+    edges: [],
+  }
 }
 
 describe("WorkflowService", () => {

@@ -173,6 +173,7 @@ export const IPC_CHANNELS = {
   "workflow": {
     "list": "synapse:workflow:list",
     "get": "synapse:workflow:get",
+    "create": "synapse:workflow:create",
     "save": "synapse:workflow:save",
     "delete": "synapse:workflow:delete",
     "validate": "synapse:workflow:validate",

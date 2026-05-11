@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
 import { validateWorkflow } from "./workflow-validator"
 
@@ -45,6 +45,19 @@ export class WorkflowService {
     await mkdir(this.dir(def.id), { recursive: true })
     await writeFile(path.join(this.dir(def.id), `${versionHash}.json`), JSON.stringify(versioned, null, 2), "utf-8")
     return { versionHash }
+  }
+
+  async create(): Promise<{ id: string; versionHash: string } | WorkflowSaveError> {
+    const id = randomUUID()
+    const now = Date.now()
+    const def: WorkflowDefinition = {
+      id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [],
+      nodes: [{ id: randomUUID(), name: "结束", type: "end", position: { x: 600, y: 200 }, config: { outputType: "text", template: "", variables: [] } }],
+      edges: [],
+    }
+    const result = await this.save(def)
+    if ("errors" in result) return result
+    return { id, ...result }
   }
 
   async delete(id: string): Promise<void> {

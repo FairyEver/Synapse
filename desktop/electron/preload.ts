@@ -187,6 +187,7 @@ const IPC_CHANNELS = {
   "workflow": {
     "list": "synapse:workflow:list",
     "get": "synapse:workflow:get",
+    "create": "synapse:workflow:create",
     "save": "synapse:workflow:save",
     "delete": "synapse:workflow:delete",
     "validate": "synapse:workflow:validate",
@@ -638,6 +639,7 @@ const synapseBridge: SynapseBridge = {
   workflow: {
     list: invoke(IPC_CHANNELS.workflow.list),
     get: (id: string) => invoke(IPC_CHANNELS.workflow.get)({ id }),
+    create: () => invoke(IPC_CHANNELS.workflow.create)(),
     save: (def) => invoke(IPC_CHANNELS.workflow.save)(def),
     delete: (id: string) => invoke(IPC_CHANNELS.workflow.delete)({ id }),
     validate: (def) => invoke(IPC_CHANNELS.workflow.validate)(def),

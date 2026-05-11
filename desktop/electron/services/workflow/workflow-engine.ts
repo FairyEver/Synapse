@@ -5,6 +5,20 @@ import { interpolatePrompt, resolveVariables } from "./variable-resolver"
 
 type EventCallback = (event: WorkflowEvent) => void
 
+function reachableFromEnd(def: WorkflowDefinition): Set<string> {
+  const endNode = def.nodes.find((n) => n.type === "end")
+  if (!endNode) return new Set(def.nodes.map((n) => n.id))
+  const visited = new Set<string>()
+  const queue = [endNode.id]
+  while (queue.length) {
+    const id = queue.shift()!
+    if (visited.has(id)) continue
+    visited.add(id)
+    for (const e of def.edges.filter((e) => e.to === id)) queue.push(e.from)
+  }
+  return visited
+}
+
 function topoOrder(def: WorkflowDefinition): string[] {
   const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
   const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
@@ -36,7 +50,8 @@ export class WorkflowEngine {
     }
     emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
-    const order = topoOrder(def)
+    const reachableSet = reachableFromEnd(def)
+    const order = topoOrder(def).filter((id) => reachableSet.has(id))
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
     let overallFailed = false
@@ -122,9 +137,11 @@ export class WorkflowEngine {
     }
 
     const durationMs = Date.now() - startMs
+    const endNodeId = def.nodes.find((n) => n.type === "end")?.id
     const result: WorkflowRunResult = {
       status: overallFailed ? "failed" : "completed",
       nodeResults, durationMs,
+      output: endNodeId ? nodeOutputs[endNodeId] : undefined,
     }
     if (overallFailed) emit({ type: "workflow:failed", runId, error: "One or more nodes failed", result })
     else emit({ type: "workflow:completed", runId, result })
