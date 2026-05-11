@@ -1,5 +1,8 @@
 import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
+import { createMainLogger } from "../log-store"
+
+const logger = createMainLogger("service.workflow.validator")
 
 function buildReverseAdj(def: WorkflowDefinition): Map<string, string[]> {
   const r = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
@@ -84,6 +87,13 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     } else if (edge.branch !== undefined) {
       errors.push({ type: "orphan_edge_branch", edgeId: edge.id, message: `非 Switch 节点出边不应设置 branch` })
     }
+  }
+
+  if (errors.length > 0) {
+    logger.warn("workflow validation failed", { workflowId: def.id, errorCount: errors.length, errors: errors.map((e) => ({ type: e.type, nodeId: e.nodeId, edgeId: e.edgeId, message: e.message })) })
+  }
+  if (warnings.length > 0) {
+    logger.info("workflow validation warnings", { workflowId: def.id, warnCount: warnings.length, warnings: warnings.map((w) => ({ type: w.type, nodeId: w.nodeId, message: w.message })) })
   }
 
   return { valid: errors.length === 0, errors, warnings }

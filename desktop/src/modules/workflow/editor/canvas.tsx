@@ -30,6 +30,7 @@ type WorkflowFlowEdge = Edge<{ label?: string }, string>
 
 export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
+  removeEdgesByIds: (edgeIds: string[]) => void
 }
 
 function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string | undefined {
@@ -108,6 +109,11 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
         return { ...n, data: { ...config, ...(typeof nextName === "string" ? { name: nextName } : {}) } }
       }))
     },
+    removeEdgesByIds: (edgeIds) => {
+      if (edgeIds.length === 0) return
+      const idSet = new Set(edgeIds)
+      setEdges((eds) => eds.filter((e) => !idSet.has(e.id)))
+    },
   }))
 
   const handleNodesChange = useCallback((changes: NodeChange<WorkflowFlowNode>[]) => {
@@ -120,7 +126,10 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
         return node?.type !== "end"
       })
       const updated = applyNodeChanges(filteredChanges, currentNodes)
-      if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions")) {
+      // Only propagate structural changes (add/remove) to the definition.
+      // Position changes are propagated on drag-end via onNodeDragStop to avoid
+      // excessive re-renders and premature dirty-marking during drag.
+      if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions" && change.type !== "position")) {
         const newDef = { ...definitionRef.current, nodes: updated.map(flowNodeToWorkflowNode) }
         definitionRef.current = newDef
         onChange(newDef)

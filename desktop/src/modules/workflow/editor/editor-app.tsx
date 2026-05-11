@@ -90,7 +90,28 @@ export function WorkflowEditorApp() {
     isDirtyRef.current = true
     canvasRef.current?.updateNodeConfig(nodeId, config)
     setRunErrors([])
-    setDefinition((def) => def ? { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n) } : def)
+    setDefinition((def) => {
+      if (!def) return def
+      const node = def.nodes.find((n) => n.id === nodeId)
+      const updatedNodes = def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n)
+
+      // When a Switch node's branches change, remove edges referencing deleted branches
+      let updatedEdges = def.edges
+      if (node?.type === "switch") {
+        const newBranchIds = new Set(
+          (Array.isArray(config.branches) ? config.branches as Array<{ id: string }> : []).map((b) => b.id),
+        )
+        const orphanedEdgeIds = def.edges
+          .filter((e) => e.from === nodeId && e.branch && !newBranchIds.has(e.branch))
+          .map((e) => e.id)
+        if (orphanedEdgeIds.length > 0) {
+          updatedEdges = def.edges.filter((e) => !orphanedEdgeIds.includes(e.id))
+          canvasRef.current?.removeEdgesByIds(orphanedEdgeIds)
+        }
+      }
+
+      return { ...def, nodes: updatedNodes, edges: updatedEdges }
+    })
   }, [])
 
   const handleNameChange = useCallback((nodeId: string, name: string) => {
