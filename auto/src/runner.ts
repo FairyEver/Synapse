@@ -24,12 +24,16 @@ export async function runOnce(config: Config): Promise<void> {
 
   spinner.start('Thinking…')
 
+  const abort = new AbortController()
+  const timeoutId = setTimeout(() => abort.abort(), config.timeoutMinutes * 60_000)
+
   try {
     for await (const message of query({
       prompt,
       options: {
         cwd: config.workingDirectory,
         permissionMode: 'bypassPermissions',
+        abortController: abort,
       },
     })) {
       if (message.type === 'assistant' && message.message?.content) {
@@ -58,6 +62,8 @@ export async function runOnce(config: Config): Promise<void> {
     const errLine = `\n${c.boldRed('✗')} ${c.red(result)}\n`
     process.stdout.write(errLine)
     logger.writeFile(`\n\n**Error:** ${result}\n`)
+  } finally {
+    clearTimeout(timeoutId)
   }
 
   spinner.stop()
