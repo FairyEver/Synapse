@@ -13,20 +13,6 @@ function truncate(text: string | undefined, maxLen: number): string | undefined 
 
 type EventCallback = (event: WorkflowEvent) => void
 
-function reachableFromEnd(def: WorkflowDefinition): Set<string> {
-  const endNode = def.nodes.find((n) => n.type === "end")
-  if (!endNode) return new Set(def.nodes.map((n) => n.id))
-  const visited = new Set<string>()
-  const queue = [endNode.id]
-  while (queue.length) {
-    const id = queue.shift()!
-    if (visited.has(id)) continue
-    visited.add(id)
-    for (const e of def.edges.filter((e) => e.to === id)) queue.push(e.from)
-  }
-  return visited
-}
-
 function topoOrder(def: WorkflowDefinition): string[] {
   const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
   const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
@@ -59,9 +45,8 @@ export class WorkflowEngine {
     }
     emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
-    const reachableSet = reachableFromEnd(def)
-    const order = topoOrder(def).filter((id) => reachableSet.has(id))
-    logger.info("workflow run started", { runId, workflowId: def.id, nodeCount: def.nodes.length, reachableCount: order.length, params: paramValues })
+    const order = topoOrder(def)
+    logger.info("workflow run started", { runId, workflowId: def.id, nodeCount: def.nodes.length, executionOrder: order.length, params: paramValues })
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
     let overallFailed = false
@@ -140,6 +125,7 @@ export class WorkflowEngine {
           for (const e of def.edges.filter((e) => e.from === nodeId)) {
             if (!execResult.activeBranch || e.branch === execResult.activeBranch) {
               reachableNodes.add(e.to)
+              logger.info("edge activated", { runId, from: nodeId, to: e.to, branch: e.branch ?? null })
               emit({ type: "edge:activated", runId, from: e.from, to: e.to })
             }
           }

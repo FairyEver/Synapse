@@ -93,6 +93,11 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
   const { screenToFlowPosition } = useReactFlow()
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
+  // Synchronous definition ref — updated immediately on each onChange call so that
+  // sequential handlers (e.g. node-delete + edge-delete in the same event) always
+  // read the latest combined state instead of a stale closure capture.
+  const definitionRef = useRef(definition)
+  definitionRef.current = definition
 
   useImperativeHandle(ref, () => ({
     updateNodeConfig: (nodeId, config) => {
@@ -116,41 +121,49 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
       })
       const updated = applyNodeChanges(filteredChanges, currentNodes)
       if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions")) {
-        onChange({ ...definition, nodes: updated.map(flowNodeToWorkflowNode) })
+        const newDef = { ...definitionRef.current, nodes: updated.map(flowNodeToWorkflowNode) }
+        definitionRef.current = newDef
+        onChange(newDef)
       }
       return updated
     })
-  }, [definition, onChange, setNodes])
+  }, [onChange, setNodes])
 
   const handleEdgesChange = useCallback((changes: EdgeChange<WorkflowFlowEdge>[]) => {
     setEdges((currentEdges) => {
       const updated = applyEdgeChanges(changes, currentEdges)
       if (changes.some((change) => change.type !== "select")) {
-        onChange({ ...definition, edges: updated.map(flowEdgeToWorkflowEdge) })
+        const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
+        definitionRef.current = newDef
+        onChange(newDef)
       }
       return updated
     })
-  }, [definition, onChange, setEdges])
+  }, [onChange, setEdges])
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => {
       const branchLabel = connection.sourceHandle
-        ? resolveBranchLabel(definition, connection.source, connection.sourceHandle)
+        ? resolveBranchLabel(definitionRef.current, connection.source, connection.sourceHandle)
         : undefined
       const withBranch = branchLabel
         ? { type: "branch", data: { label: branchLabel } }
         : {}
       const updated = addEdge({ ...connection, ...withBranch }, eds) as typeof eds
       const wfEdges: WorkflowEdge[] = updated.map(flowEdgeToWorkflowEdge)
-      onChange({ ...definition, edges: wfEdges })
+      const newDef = { ...definitionRef.current, edges: wfEdges }
+      definitionRef.current = newDef
+      onChange(newDef)
       return updated
     })
-  }, [definition, onChange, setEdges])
+  }, [onChange, setEdges])
 
   const onNodeDragStop = useCallback(() => {
-    const wfNodes: WorkflowNode[] = nodes.map(flowNodeToWorkflowNode)
-    onChange({ ...definition, nodes: wfNodes })
-  }, [nodes, definition, onChange])
+    const wfNodes: WorkflowNode[] = nodesRef.current.map(flowNodeToWorkflowNode)
+    const newDef = { ...definitionRef.current, nodes: wfNodes }
+    definitionRef.current = newDef
+    onChange(newDef)
+  }, [onChange])
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
@@ -167,8 +180,10 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
     const name = defaultName(type)
     setNodes((nds) => nds.concat({ id, type, position, data: { ...config, name }, selected: false }))
     const newWfNode: WorkflowNode = { id, name, type, position, config }
-    onChange({ ...definition, nodes: [...definition.nodes, newWfNode] })
-  }, [screenToFlowPosition, definition, onChange, setNodes])
+    const newDef = { ...definitionRef.current, nodes: [...definitionRef.current.nodes, newWfNode] }
+    definitionRef.current = newDef
+    onChange(newDef)
+  }, [screenToFlowPosition, onChange, setNodes])
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowFlowNode) => {
     onNodeSelect?.(node.id)
