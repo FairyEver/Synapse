@@ -10,6 +10,7 @@ import { useAppShellToolbarState } from "@/app-shell/use-app-shell-toolbar-state
 import { useAppConfig } from "@/app-shell/config"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
+import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   type OpenAgentSessionPayload,
@@ -228,6 +229,7 @@ function MainApp() {
 
   useEffect(() => {
     return subscribeContentOpenRequest((request) => {
+      ensureBodyInteractable()
       setActiveTab(request.contentType, "shortcut")
       setPendingContentOpenRequest(request)
     })

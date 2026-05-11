@@ -5,6 +5,7 @@ import type {
   EditOverwriteSkillPrefill,
 } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
+import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useActiveRepository, useContentList } from "@/app-shell/use-repository-manager"
@@ -102,9 +103,9 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       setCreateInitialValue(request.initialValue as SynapseCreateContentPayload<T>)
       setCreateNotices(request.notices ?? [])
       setCreateSourceLabel(request.sourceLabel)
-      if (document.body.style.pointerEvents) {
-        document.body.style.pointerEvents = ""
-      }
+      // Guard against Radix DismissableLayer originalBodyPointerEvents pollution.
+      // See desktop/src/app-shell/dialog-navigate.ts for context.
+      ensureBodyInteractable()
       setIsCreateDialogOpen(true)
       onCreateDialogOpenChange?.(true)
       onPendingContentOpenRequestConsumed?.(request.requestId)
