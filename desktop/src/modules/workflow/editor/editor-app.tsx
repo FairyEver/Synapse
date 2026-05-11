@@ -53,8 +53,17 @@ export function WorkflowEditorApp() {
       ])
       if (cancelled) return
       if (def) setDefinition(def)
+      // Only apply snapshot results when there is NO active run.
+      // When initialRunId is set, useWorkflowEvents handles hydration from the
+      // live run status — applying a stale snapshot here would overwrite it due
+      // to the async race (runHistory reads from disk, runStatus from memory).
       const latest = snapshots[0]
-      if (latest) setNodeResults(latest.nodeResults)
+      if (latest && !initialRunId) {
+        logger.info("applying latest snapshot nodeResults (no active run)", { workflowId, snapshotRunId: latest.runId })
+        setNodeResults(latest.nodeResults)
+      } else if (latest && initialRunId) {
+        logger.info("skipping snapshot nodeResults — active run will hydrate via events", { workflowId, initialRunId, snapshotRunId: latest.runId })
+      }
     })()
     return () => { cancelled = true }
   }, [workflowId, setNodeResults])

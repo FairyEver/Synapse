@@ -149,7 +149,7 @@ export const workflowIpcModule: IpcModule = {
 
         logger.info("workflow:run started", { workflowId: id, runId, workflowName: def.name, nodeCount: def.nodes.length, projectId })
 
-        void engine.run(def, params, runId, (event) => {
+        engine.run(def, params, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
           const nextNodeResults: Record<string, NodeRunResult> = { ...current.nodeResults }
           if (event.type === "node:started") {
@@ -183,7 +183,38 @@ export const workflowIpcModule: IpcModule = {
             })
             void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params, nodeResults })
           }
-        }, ac.signal, projectId)
+        }, ac.signal, projectId).catch((err) => {
+          // Guard against unhandled rejection: if the engine throws before emitting
+          // a terminal event, the run would be stuck at "running" forever. Catch the
+          // rejection, update status to "failed", and emit workflow:failed so the
+          // renderer can recover.
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          logger.error("workflow engine rejected unexpectedly", { workflowId: id, runId, error: errorMsg, stack: err instanceof Error ? err.stack : undefined })
+          abortMap.delete(runId)
+          const current = runStatuses.get(runId)
+          // Only recover if the run hasn't already reached a terminal state
+          // (the engine might have emitted workflow:failed before throwing)
+          if (current && current.status === "running") {
+            const endedAt = Date.now()
+            const durationMs = endedAt - startedAt
+            const failedStatus = {
+              runId,
+              workflowId: id,
+              status: "failed" as const,
+              nodeResults: current.nodeResults,
+              startedAt,
+              endedAt,
+              durationMs,
+              error: `引擎异常：${errorMsg}`,
+            }
+            runStatuses.set(runId, failedStatus)
+            eventBus.emit(
+              { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: failedStatus.error, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
+              { backpressure: "block" },
+            )
+            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults })
+          }
+        })
 
         return { runId }
       },
