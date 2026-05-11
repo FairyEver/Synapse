@@ -1,4 +1,4 @@
-const CONTENT_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
+const CONTENT_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/
 const CONTENT_NAME_MAX_LENGTH = 64
 
 const WINDOWS_RESERVED_NAMES = new Set([
@@ -23,7 +23,7 @@ function validateContentNameInput(value: string): string | null {
   }
 
   if (!CONTENT_NAME_PATTERN.test(normalized)) {
-    return "只能使用小写字母、数字、连字符；首尾必须是字母或数字。"
+    return "只能使用小写字母、数字、连字符、点号；首尾必须是字母或数字。"
   }
 
   if (WINDOWS_RESERVED_NAMES.has(normalized)) {

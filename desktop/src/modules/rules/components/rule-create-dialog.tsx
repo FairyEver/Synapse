@@ -159,7 +159,7 @@ function RuleCreateDialog({
           placeholder="code-style"
         />
         <p className="text-xs text-muted-foreground">
-          小写字母、数字、连字符，3-64 字符。安装到编辑器时用作文件名。
+          小写字母、数字、连字符、点号，3-64 字符。安装到编辑器时用作文件名。
         </p>
         <FieldError>{errors.name}</FieldError>
       </FieldContent>
