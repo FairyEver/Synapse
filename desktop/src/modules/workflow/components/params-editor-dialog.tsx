@@ -19,7 +19,7 @@ interface WorkflowParamCardProps {
 
 function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCardProps) {
   return (
-    <div className="rounded-md border border-border p-3 grid gap-3">
+    <div className="rounded-lg bg-muted/50 p-3 grid gap-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">参数 {index + 1}</span>
         <Button
@@ -36,7 +36,6 @@ function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCa
         <div className="grid gap-1.5">
           <Label className="text-xs">参数名</Label>
           <Input
-            className="h-7 text-xs"
             value={param.name}
             onChange={(e) => onChange({ name: e.target.value })}
             placeholder="param_name"
@@ -48,12 +47,12 @@ function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCa
             value={param.type}
             onValueChange={(v) => onChange({ type: v as WorkflowParam["type"] })}
           >
-            <SelectTrigger className="h-7 w-full text-xs">
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="text" className="text-xs">文本</SelectItem>
-              <SelectItem value="number" className="text-xs">数字</SelectItem>
+              <SelectItem value="text">文本</SelectItem>
+              <SelectItem value="number">数字</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -62,7 +61,6 @@ function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCa
         <Label className="text-xs">默认值</Label>
         {param.type === "number" ? (
           <Input
-            className="h-7 text-xs"
             type="number"
             value={param.default ?? ""}
             onChange={(e) =>
@@ -72,7 +70,7 @@ function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCa
           />
         ) : (
           <Textarea
-            className="text-xs resize-none"
+            className="resize-none"
             rows={2}
             value={String(param.default ?? "")}
             onChange={(e) =>
