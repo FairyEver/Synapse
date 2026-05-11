@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronUp, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react"
+import { ShieldAlert, ShieldCheck, ShieldX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -33,7 +33,10 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
       )}
     >
       {/* 标题区 */}
-      <div className="flex items-center gap-2 bg-muted/30 px-3 py-2">
+      <div
+        className={cn("flex items-center gap-2 bg-muted/30 px-3 py-2", body && "cursor-pointer select-none")}
+        onClick={body ? () => setCodeCollapsed(!codeCollapsed) : undefined}
+      >
         {isAllowed ? (
           <ShieldCheck className="size-4 shrink-0 text-green-500" />
         ) : isDenied ? (
@@ -55,18 +58,6 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
             </Badge>
           ) : !pending && resolved === null ? (
             <Badge variant="secondary">已处理</Badge>
-          ) : null}
-          {body ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setCodeCollapsed(!codeCollapsed)}
-              className="h-5 w-5 p-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-              aria-label={codeCollapsed ? "展开代码" : "折叠代码"}
-            >
-              <ChevronUp className={cn("size-3 transition-transform", codeCollapsed && "rotate-180")} />
-            </Button>
           ) : null}
         </div>
       </div>
