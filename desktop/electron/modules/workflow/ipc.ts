@@ -71,6 +71,12 @@ export const workflowIpcModule: IpcModule = {
       handler: async (ctx, def) => {
         const d = def as { id: string; name: string; nodes: unknown[] }
         logger.info("workflow:save requested", { id: d.id, name: d.name, nodeCount: d.nodes.length })
+        const validation = validateWorkflow(def as never)
+        if (!validation.valid) {
+          logger.warn("workflow:save blocked by validation", { id: d.id, errorCount: validation.errors.length, errors: validation.errors })
+          return { errors: validation.errors }
+        }
+        logger.info("workflow:save validation passed", { id: d.id })
         const result = await ctx.resolve<WorkflowService>("core.workflow").save(def as never)
         if ("errors" in result) {
           logger.warn("workflow:save failed", { id: d.id, errors: result.errors })

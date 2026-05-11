@@ -133,7 +133,11 @@ export function WorkflowEditorApp() {
 
   const handleSave = async (def: WorkflowDefinition) => {
     const result = await window.synapse?.workflow.save(def)
-    if (result && "errors" in result) return result
+    if (result && "errors" in result) {
+      setRunErrors(result.errors)
+      return result
+    }
+    setRunErrors([])
     isDirtyRef.current = false
     if (result && "versionHash" in result) setDefinition({ ...def, version: result.versionHash })
     return result
@@ -142,12 +146,8 @@ export function WorkflowEditorApp() {
   const handleRun = async (params: Record<string, unknown>) => {
     const currentDefinition = definitionRef.current
     if (!currentDefinition) return null
-    const validation = await window.synapse?.workflow.validate(currentDefinition)
-    if (validation && !validation.valid) {
-      setRunErrors(validation.errors)
-      return null
-    }
-    await handleSave(currentDefinition)
+    const saveResult = await handleSave(currentDefinition)
+    if (!saveResult || "errors" in saveResult) return null
     setRunError(null)
     return start(params)
   }
@@ -161,7 +161,7 @@ export function WorkflowEditorApp() {
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle className="text-xs font-medium">运行前检查失败</AlertTitle>
+          <AlertTitle className="text-xs font-medium">校验失败</AlertTitle>
           <AlertDescription className="text-xs">
             <ul className="mt-0.5 space-y-0.5 list-none">
               {runErrors.map((e, i) => <li key={i}>{e.message}</li>)}
