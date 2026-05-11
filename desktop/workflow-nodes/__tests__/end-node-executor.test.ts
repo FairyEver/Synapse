@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
+
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+
 import { endNodeExecutor } from "../end/executor.main"
 import type { NodeExecutionInput } from "../types"
 import type { EndNodeConfig } from "../end/schema"

@@ -64,7 +64,7 @@ function useChatEvents(
         const selectedSession = selectedSessionKeyRef.current
         const sameProject = payload.projectId === selectedProject
         const sameSessionKey = payload.sessionKey === selectedSession
-        const inPendingConv = Boolean(payload.conversationId)
+        const inPendingConv = payload.conversationId != null
           && pendingConversationIdsRef.current.has(payload.conversationId)
         const sameConv = payload.conversationId
           ? payload.conversationId === selectedConv

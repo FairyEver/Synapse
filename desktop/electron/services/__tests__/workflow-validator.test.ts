@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+
 import { validateWorkflow } from "../workflow/workflow-validator"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import "../../../workflow-nodes/register.main"

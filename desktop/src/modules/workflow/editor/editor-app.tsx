@@ -186,7 +186,7 @@ export function WorkflowEditorApp() {
   }
 
   const handleSave = async (def: WorkflowDefinition) => {
-    let result: Awaited<ReturnType<typeof window.synapse.workflow.save>> | undefined
+    let result: Awaited<ReturnType<NonNullable<typeof window.synapse>["workflow"]["save"]>> | undefined
     try {
       result = await window.synapse?.workflow.save(def)
     } catch (err) {

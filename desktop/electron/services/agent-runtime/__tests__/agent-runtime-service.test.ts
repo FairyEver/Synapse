@@ -337,7 +337,7 @@ describe("AgentRuntimeService", () => {
       content: "hello",
     })
 
-    const update = events.at(-1)
+    const update = events.filter((e) => e.type === "conversationUpdated").at(-1)
     const saved = await conversations.get(result.conversationId)
     expect(saved?.history.at(-1)).toEqual(expect.objectContaining({
       role: "assistant",
@@ -345,9 +345,12 @@ describe("AgentRuntimeService", () => {
     }))
     expect(events.map((event) => event.type)).toEqual([
       "conversationUpdated",
+      "phase.update",
       "text",
       "result",
       "conversationUpdated",
+      "phase.update",
+      "phase.update",
     ])
     expect(update).toEqual(expect.objectContaining({
       domain: "agent",
@@ -435,26 +438,33 @@ describe("AgentRuntimeService", () => {
     ])
     expect(events.map((event) => event.type)).toEqual([
       "conversationUpdated",
+      "phase.update",
       "text",
       "result",
       "conversationUpdated",
+      "phase.update",
+      "phase.update",
     ])
     expect(eventSnapshots.map((snapshot) => snapshot.event.type)).toEqual([
       "conversationUpdated",
+      "phase.update",
       "text",
       "result",
       "conversationUpdated",
+      "phase.update",
+      "phase.update",
     ])
-    expect(eventSnapshots[0]?.history).toEqual([
+    const scopedSnapshots = eventSnapshots.filter((s) => s.event.type !== "phase.update")
+    expect(scopedSnapshots[0]?.history).toEqual([
       { role: "user", content: "hello from Feishu" },
     ])
-    expect(eventSnapshots[1]?.history).toEqual([
+    expect(scopedSnapshots[1]?.history).toEqual([
       { role: "user", content: "hello from Feishu" },
     ])
-    expect(eventSnapshots[2]?.history).toEqual([
+    expect(scopedSnapshots[2]?.history).toEqual([
       { role: "user", content: "hello from Feishu" },
     ])
-    expect(eventSnapshots[3]?.history).toEqual([
+    expect(scopedSnapshots[3]?.history).toEqual([
       { role: "user", content: "hello from Feishu" },
       { role: "assistant", content: "done" },
     ])

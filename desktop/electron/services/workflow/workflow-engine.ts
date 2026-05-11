@@ -51,8 +51,28 @@ export class WorkflowEngine {
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
     let overallFailed = false
+    // Backward-reachability: compute which nodes have a path to the end node.
+    // Orphan subgraphs that can never reach the end node are pruned.
+    const endNodeForReach = def.nodes.find((n) => n.type === "end")
+    const canReachEnd = new Set<string>()
+    if (endNodeForReach) {
+      canReachEnd.add(endNodeForReach.id)
+      const revAdj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
+      for (const e of def.edges) { revAdj.get(e.to)?.push(e.from) }
+      const bfsQueue = [endNodeForReach.id]
+      while (bfsQueue.length) {
+        const cur = bfsQueue.shift()!
+        for (const prev of revAdj.get(cur) ?? []) {
+          if (!canReachEnd.has(prev)) { canReachEnd.add(prev); bfsQueue.push(prev) }
+        }
+      }
+    }
+
     const reachableNodes = new Set<string>(
-      def.nodes.filter((n) => !def.edges.some((e) => e.to === n.id)).map((n) => n.id)
+      def.nodes
+        .filter((n) => !def.edges.some((e) => e.to === n.id))
+        .filter((n) => canReachEnd.size === 0 || canReachEnd.has(n.id))
+        .map((n) => n.id)
     )
 
     for (const nodeId of order) {
@@ -68,6 +88,7 @@ export class WorkflowEngine {
 
       const shouldSkip =
         overallFailed ||
+        (canReachEnd.size > 0 && !canReachEnd.has(nodeId)) ||
         (ancestors.length > 0 && !reachableNodes.has(nodeId))
       if (shouldSkip) {
         const reason = overallFailed ? "overall-failed" : "not-reachable"

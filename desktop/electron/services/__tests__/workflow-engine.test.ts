@@ -60,7 +60,7 @@ describe("WorkflowEngine", () => {
     expect(result.status).toBe("completed")
     // orphan has no path to end node, so sendToAgent only called once (for nodeA)
     expect(agent.sendToAgent).toHaveBeenCalledTimes(1)
-    expect(result.nodeResults["orphan"]).toBeUndefined()
+    expect(result.nodeResults["orphan"]?.status).toBe("skipped")
   })
 
   it("aborts when signal fires before start", async () => {

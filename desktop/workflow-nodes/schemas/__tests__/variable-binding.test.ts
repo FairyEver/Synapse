@@ -6,8 +6,10 @@ describe("variableBindingSchema", () => {
     expect(variableBindingSchema.safeParse({ name: "myVar", source: { type: "static", value: "x" } }).success).toBe(true)
     expect(variableBindingSchema.safeParse({ name: "_private", source: { type: "static", value: "x" } }).success).toBe(true)
   })
-  it("rejects names starting with digit or containing hyphens", () => {
-    expect(variableBindingSchema.safeParse({ name: "1bad", source: { type: "static", value: "x" } }).success).toBe(false)
+  it("accepts names starting with a digit", () => {
+    expect(variableBindingSchema.safeParse({ name: "1ok", source: { type: "static", value: "x" } }).success).toBe(true)
+  })
+  it("rejects names containing hyphens", () => {
     expect(variableBindingSchema.safeParse({ name: "bad-name", source: { type: "static", value: "x" } }).success).toBe(false)
   })
   it("accepts all source types", () => {

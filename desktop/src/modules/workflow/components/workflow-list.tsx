@@ -16,7 +16,8 @@ export function WorkflowList() {
       const result = await window.synapse?.workflow.run(def.id, {})
       if (!result) return
       if ("errors" in result) {
-        toast.error(result.errors[0]?.message ?? "工作流校验失败")
+        const errors = result.errors as { message?: string }[]
+        toast.error(errors[0]?.message ?? "工作流校验失败")
         return
       }
       void window.synapse?.workflow.openEditor(def.id, result.runId)
@@ -37,7 +38,8 @@ export function WorkflowList() {
     const result = await window.synapse?.workflow.run(id, params)
     if (!result) return
     if ("errors" in result) {
-      toast.error(result.errors[0]?.message ?? "工作流校验失败")
+      const errors = result.errors as { message?: string }[]
+      toast.error(errors[0]?.message ?? "工作流校验失败")
       return
     }
     void window.synapse?.workflow.openEditor(id, result.runId)
