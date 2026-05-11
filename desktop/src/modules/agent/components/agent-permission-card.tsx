@@ -42,39 +42,41 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
           <ShieldAlert className="size-4 shrink-0 text-muted-foreground" />
         )}
         <span className="text-sm font-semibold">{item.toolName}</span>
-        {isAllowed ? (
-          <Badge variant="secondary" className="ml-auto gap-1 border-green-200 bg-green-50 text-green-600">
-            <ShieldCheck className="size-3" />
-            已允许
-          </Badge>
-        ) : isDenied ? (
-          <Badge variant="destructive" className="ml-auto gap-1">
-            <ShieldX className="size-3" />
-            已拒绝
-          </Badge>
-        ) : !pending && resolved === null ? (
-          <Badge variant="secondary" className="ml-auto">已处理</Badge>
-        ) : null}
+        <div className="ml-auto flex items-center gap-1.5">
+          {isAllowed ? (
+            <Badge variant="secondary" className="gap-1 border-green-200 bg-green-50 text-green-600">
+              <ShieldCheck className="size-3" />
+              已允许
+            </Badge>
+          ) : isDenied ? (
+            <Badge variant="destructive" className="gap-1">
+              <ShieldX className="size-3" />
+              已拒绝
+            </Badge>
+          ) : !pending && resolved === null ? (
+            <Badge variant="secondary">已处理</Badge>
+          ) : null}
+          {body ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setCodeCollapsed(!codeCollapsed)}
+              className="h-5 w-5 p-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+              aria-label={codeCollapsed ? "展开代码" : "折叠代码"}
+            >
+              <ChevronUp className={cn("size-3 transition-transform", codeCollapsed && "rotate-180")} />
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {/* 代码区 */}
-      {body ? (
-        <div className="relative min-h-7 border-t border-border bg-muted">
-          {!codeCollapsed ? (
-            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 pr-8 font-mono text-xs leading-5 text-foreground">
-              {body}
-            </pre>
-          ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setCodeCollapsed(!codeCollapsed)}
-            className="absolute right-1 top-1 h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-            aria-label={codeCollapsed ? "展开代码" : "折叠代码"}
-          >
-            <ChevronUp className={cn("size-3 transition-transform", codeCollapsed && "rotate-180")} />
-          </Button>
+      {body && !codeCollapsed ? (
+        <div className="border-t border-border bg-muted">
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-foreground">
+            {body}
+          </pre>
         </div>
       ) : null}
 
