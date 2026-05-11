@@ -59,7 +59,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
 
       {/* 代码区 */}
       {body ? (
-        <div className="relative border-t border-border bg-muted">
+        <div className="relative min-h-7 border-t border-border bg-muted">
           {!codeCollapsed ? (
             <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 pr-8 font-mono text-xs leading-5 text-foreground">
               {body}
