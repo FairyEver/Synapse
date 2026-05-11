@@ -7,14 +7,16 @@ export interface WorkflowSaveResult { versionHash: string }
 export interface WorkflowSaveError { errors: ValidationError[] }
 
 export class WorkflowService {
+  private _seq = 0
   constructor(private readonly repoPath: string) {}
 
   private dir(id: string) { return path.join(this.repoPath, "workflows", id) }
 
   private versionHash(def: WorkflowDefinition): string {
     const ts = Date.now()
+    const seq = String(this._seq++).padStart(8, "0")
     const hash = createHash("sha256").update(JSON.stringify(def)).digest("hex").slice(0, 8)
-    return `v_${ts}_${hash}`
+    return `v_${ts}_${seq}_${hash}`
   }
 
   async list(): Promise<WorkflowMeta[]> {
