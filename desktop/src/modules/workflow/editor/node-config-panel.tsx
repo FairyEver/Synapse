@@ -15,7 +15,7 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
 
   return (
-    <div className="w-60 border-l bg-background flex flex-col shrink-0">
+    <div className="h-full w-full border-l bg-background flex flex-col">
       {node ? (
         <>
           <div className="border-b px-3 py-2 grid gap-1">
