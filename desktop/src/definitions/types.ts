@@ -43,6 +43,7 @@ export type SynapseRuleProjectInstallFormProps = {
 
 export type SynapseInstallFormDefinition = {
   RuleProjectInstallForm: ComponentType<SynapseRuleProjectInstallFormProps>
+  RuleGlobalInstallForm?: ComponentType<SynapseRuleProjectInstallFormProps>
 }
 
 export type SynapseAgentCommandOption = {

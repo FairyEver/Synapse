@@ -92,6 +92,7 @@ function ContentInstallDialog({
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false)
   const [isConflictConfirmOpen, setIsConflictConfirmOpen] = useState(false)
   const [isRuleProjectInstallFormOpen, setIsRuleProjectInstallFormOpen] = useState(false)
+  const [isRuleGlobalInstallFormOpen, setIsRuleGlobalInstallFormOpen] = useState(false)
 
   const scope = selection?.scope ?? "global"
   const projectPath = selection?.projectPath ?? ""
@@ -99,6 +100,7 @@ function ContentInstallDialog({
   const canInstall = (activeTarget?.status === "ready" || (activeTarget?.status === "conflict" && item.type === "skill")) && !isInstalling
   const installFormDefinition = editor ? installFormDefinitionByEditorId.get(editor.id) : undefined
   const RuleProjectInstallForm = installFormDefinition?.RuleProjectInstallForm
+  const RuleGlobalInstallForm = installFormDefinition?.RuleGlobalInstallForm
 
   useEffect(() => {
     if (!open) {
@@ -111,6 +113,7 @@ function ContentInstallDialog({
     setIsOverwriteConfirmOpen(false)
     setIsConflictConfirmOpen(false)
     setIsRuleProjectInstallFormOpen(false)
+    setIsRuleGlobalInstallFormOpen(false)
     setPreloadedContent(null)
     setIsVariableConfirmOpen(false)
     setIsVariableSaveConfirmOpen(false)
@@ -343,6 +346,17 @@ function ContentInstallDialog({
       return
     }
 
+    if (item.type === "rule" && scope === "global" && RuleGlobalInstallForm) {
+      if (activeTarget.status !== "ready") {
+        setInstallError("当前还没有可用的安装目标。")
+        return
+      }
+
+      setInstallError(null)
+      setIsRuleGlobalInstallFormOpen(true)
+      return
+    }
+
     if (item.type === "rule" && scope === "project" && RuleProjectInstallForm) {
       if (activeTarget.status !== "ready") {
         setInstallError("当前还没有可用的安装目标。")
@@ -389,6 +403,33 @@ function ContentInstallDialog({
         onSkip={handleSkipVariableSave}
         open={isVariableSaveConfirmOpen}
       />
+
+      {RuleGlobalInstallForm && item.type === "rule" ? (
+        <RuleGlobalInstallForm
+          editorId={editor.id}
+          item={item}
+          isSubmitting={isInstalling}
+          onConfirm={(values) => {
+            logger.info("Rule global install form confirmed.", {
+              contentId: item.id,
+              contentType: item.type,
+              editorId: editor.id,
+              scope,
+              targetPath: activeTarget?.status === "ready" ? activeTarget.targetPath : null,
+            })
+            void runInstall(values)
+          }}
+          onError={handleInstallFormError}
+          onOpenChange={(next) => {
+            if (isInstalling) {
+              return
+            }
+            setIsRuleGlobalInstallFormOpen(next)
+          }}
+          open={isRuleGlobalInstallFormOpen}
+          target={activeTarget?.status === "ready" ? activeTarget : null}
+        />
+      ) : null}
 
       {RuleProjectInstallForm && item.type === "rule" ? (
         <RuleProjectInstallForm

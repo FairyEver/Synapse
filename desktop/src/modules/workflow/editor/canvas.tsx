@@ -1,10 +1,11 @@
-import { forwardRef, useCallback, useImperativeHandle } from "react"
+import { forwardRef, useCallback, useImperativeHandle, useRef } from "react"
 import { toast } from "sonner"
 import {
   ReactFlow,
   Background,
   Controls,
   ReactFlowProvider,
+  PanOnScrollMode,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -91,6 +92,8 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
   const [nodes, setNodes] = useNodesState(initNodes)
   const [edges, setEdges] = useEdgesState(initEdges)
   const { screenToFlowPosition } = useReactFlow()
+  const nodesRef = useRef(nodes)
+  nodesRef.current = nodes
 
   useImperativeHandle(ref, () => ({
     updateNodeConfig: (nodeId, config) => {
@@ -104,7 +107,7 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
   }))
 
   const handleNodesChange = useCallback((changes: NodeChange<WorkflowFlowNode>[]) => {
-    const blockedEnd = changes.some((c) => c.type === "remove" && nodes.find((n) => n.id === c.id)?.type === "end")
+    const blockedEnd = changes.some((c) => c.type === "remove" && nodesRef.current.find((n) => n.id === c.id)?.type === "end")
     if (blockedEnd) toast("结束节点不能删除")
     setNodes((currentNodes) => {
       const filteredChanges = changes.filter((change) => {
@@ -118,7 +121,7 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
       }
       return updated
     })
-  }, [definition, onChange, setNodes, nodes])
+  }, [definition, onChange, setNodes])
 
   const handleEdgesChange = useCallback((changes: EdgeChange<WorkflowFlowEdge>[]) => {
     setEdges((currentEdges) => {
@@ -180,7 +183,7 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
         onDrop={onDrop} onDragOver={onDragOver}
         onSelectionChange={onSelectionChange}
         edgeTypes={edgeTypes}
-        fitView>
+        fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
         <Background />
         <Controls />
       </ReactFlow>

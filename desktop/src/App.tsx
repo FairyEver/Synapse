@@ -129,7 +129,7 @@ function MainApp() {
       { id: "task-scheduler" as const, label: "定时任务" },
       { id: "editor-scan" as const, label: "IDE" },
       { id: "token-usage" as const, label: "用量" },
-      { id: "workflow" as const, label: "工作流" },
+      ...(import.meta.env.DEV ? [{ id: "workflow" as const, label: "工作流" }] : []),
       { id: "settings" as const, label: "设置" },
     ],
     [],

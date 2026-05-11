@@ -32,9 +32,13 @@ function HermesRuleProjectInstallForm({
         {isSoulMd && (
           <div className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              此规则将追加到 ~/.hermes/SOUL.md。SOUL.md 超过 20,000 字符会被截断。
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">SOUL.md 是 Hermes 的人格文件</p>
+              <p className="text-sm text-muted-foreground">
+                SOUL.md 专门定义 Hermes 的语气和交互风格，不是为代码规则设计的。将规则安装到此处会与人格内容混合。建议改用"项目"范围，安装到项目的 .hermes.md 文件。
+              </p>
+              <p className="text-xs text-muted-foreground">超过 20,000 字符时内容会被截断。</p>
+            </div>
           </div>
         )}
 
@@ -71,4 +75,5 @@ function HermesRuleProjectInstallForm({
 
 export const installFormDefinition = {
   RuleProjectInstallForm: HermesRuleProjectInstallForm,
+  RuleGlobalInstallForm: HermesRuleProjectInstallForm,
 } as const
