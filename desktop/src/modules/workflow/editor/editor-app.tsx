@@ -3,6 +3,7 @@ import { AlertCircle, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, NodeRunResult, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
+import { createRendererLogger } from "@/app-shell/logging"
 // Side-effect: populate node type registry in the editor window's renderer process.
 // Without this, NodePalette.listTypes() returns [] and users cannot add nodes.
 import "../../../../workflow-nodes/register.main"
@@ -15,6 +16,8 @@ import { ExecutionOverlay } from "./execution-overlay"
 import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+
+const logger = createRendererLogger("workflow.editor")
 
 export function WorkflowEditorApp() {
   const searchParams = new URLSearchParams(window.location.search)
@@ -153,14 +156,27 @@ export function WorkflowEditorApp() {
   }
 
   const handleSave = async (def: WorkflowDefinition) => {
-    const result = await window.synapse?.workflow.save(def)
-    if (result && "errors" in result) {
+    let result: Awaited<ReturnType<typeof window.synapse.workflow.save>> | undefined
+    try {
+      result = await window.synapse?.workflow.save(def)
+    } catch (err) {
+      logger.error("save IPC call threw", { workflowId: def.id, error: err instanceof Error ? err.message : String(err) })
+      setRunErrors([{ type: "invalid_config", message: "保存失败：无法连接到主进程" }])
+      return { errors: [{ type: "invalid_config" as const, message: "保存失败：无法连接到主进程" }] }
+    }
+    if (!result) {
+      logger.error("save returned undefined — IPC bridge unavailable", { workflowId: def.id })
+      setRunErrors([{ type: "invalid_config", message: "保存失败：IPC 通道不可用" }])
+      return { errors: [{ type: "invalid_config" as const, message: "保存失败：IPC 通道不可用" }] }
+    }
+    if ("errors" in result) {
+      logger.warn("save blocked by validation", { workflowId: def.id, errorCount: result.errors.length })
       setRunErrors(result.errors)
       return result
     }
     setRunErrors([])
     isDirtyRef.current = false
-    if (result && "versionHash" in result) setDefinition({ ...def, version: result.versionHash })
+    if ("versionHash" in result) setDefinition({ ...def, version: result.versionHash })
     return result
   }
 
