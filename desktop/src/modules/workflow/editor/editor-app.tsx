@@ -182,9 +182,9 @@ export function WorkflowEditorApp() {
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel
-            defaultSize={240}
-            minSize={200}
-            maxSize={480}
+            defaultSize={300}
+            minSize={300}
+            maxSize={600}
             groupResizeBehavior="preserve-pixel-size"
           >
             <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />

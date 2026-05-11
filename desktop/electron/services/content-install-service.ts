@@ -108,7 +108,9 @@ export class ContentInstallService {
     const target = await editorAdapterService.resolveTarget(payload)
     const definition = getContentTypeDefinition(payload.contentType)
 
-    if (target.status !== "ready") {
+    const isConfirmedConflict = target.status === "conflict" && payload.replaceConfirmed
+
+    if (target.status !== "ready" && !isConfirmedConflict) {
       throw new Error(target.message ?? "当前编辑器暂时不能安装到这个位置。")
     }
 
@@ -261,6 +263,10 @@ export class ContentInstallService {
             && previousSkillDirectoryPath !== target.targetPath
           ) {
             await rm(previousSkillDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up previous skill directory", err))
+          }
+
+          if (backupPathForRestore) {
+            await rm(backupPathForRestore, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up conflict backup directory", err))
           }
 
           break
