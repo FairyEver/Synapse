@@ -23,8 +23,8 @@ interface WorkflowParamRowProps {
 
 function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) {
   return (
-    <div className="w-full flex items-stretch h-9 divide-x divide-border">
-      <div className="w-[120px] shrink-0 flex items-center">
+    <div className="w-full grid grid-cols-[120px_80px_120px_1fr_32px] h-9 divide-x divide-border">
+      <div className="flex items-center">
         <input
           className={CELL_INPUT}
           value={param.name}
@@ -32,7 +32,7 @@ function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) 
           placeholder="参数名"
         />
       </div>
-      <div className="w-[80px] shrink-0 flex items-center">
+      <div className="flex items-center">
         <Select
           value={param.type}
           onValueChange={(v) => onChange({ type: v as WorkflowParam["type"] })}
@@ -46,7 +46,7 @@ function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) 
           </SelectContent>
         </Select>
       </div>
-      <div className="w-[120px] shrink-0 flex items-center">
+      <div className="flex items-center">
         <input
           className={CELL_INPUT}
           type={param.type === "number" ? "number" : "text"}
@@ -64,7 +64,7 @@ function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) 
           placeholder="默认值"
         />
       </div>
-      <div className="flex-1 flex items-center min-w-0">
+      <div className="flex items-center overflow-hidden">
         <input
           className={CELL_INPUT}
           value={param.description ?? ""}
@@ -72,7 +72,7 @@ function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) 
           placeholder="描述（可选）"
         />
       </div>
-      <div className="w-8 shrink-0 flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <Button
           type="button"
           size="icon"
@@ -132,12 +132,12 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
           )}
           {draft.length > 0 && (
             <div className="w-full rounded-md border border-border overflow-hidden divide-y divide-border">
-              <div className="w-full flex items-center h-7 text-xs text-muted-foreground divide-x divide-border bg-muted/50">
-                <div className="w-[120px] shrink-0 px-2 whitespace-nowrap">参数名</div>
-                <div className="w-[80px] shrink-0 px-2 whitespace-nowrap">类型</div>
-                <div className="w-[120px] shrink-0 px-2 whitespace-nowrap">默认值</div>
-                <div className="flex-1 min-w-0 px-2 whitespace-nowrap">描述</div>
-                <div className="w-8 shrink-0" />
+              <div className="w-full grid grid-cols-[120px_80px_120px_1fr_32px] h-7 text-xs text-muted-foreground divide-x divide-border bg-muted/50">
+                <div className="flex items-center px-2 whitespace-nowrap">参数名</div>
+                <div className="flex items-center px-2 whitespace-nowrap">类型</div>
+                <div className="flex items-center px-2 whitespace-nowrap">默认值</div>
+                <div className="flex items-center px-2 whitespace-nowrap">描述</div>
+                <div />
               </div>
               {draft.map((p, i) => (
                 <WorkflowParamRow
