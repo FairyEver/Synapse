@@ -1,4 +1,7 @@
 import type { VariableBinding } from "../../../workflow-nodes/schemas/variable-binding"
+import { createMainLogger } from "../log-store"
+
+const logger = createMainLogger("service.workflow.variable-resolver")
 
 export function resolveVariables(
   bindings: VariableBinding[],
@@ -13,7 +16,9 @@ export function resolveVariables(
     } else if (source.type === "node_output") {
       if (!(source.node in nodeOutputs)) {
         const displayName = nodeNames?.[source.node] ?? source.node
-        throw new Error(`变量 $${name} 引用的节点「${displayName}」在本次运行中未执行（被分支跳过）`)
+        const errorMsg = `变量 $${name} 引用的节点「${displayName}」在本次运行中未执行（被分支跳过）`
+        logger.warn("variable resolution failed: referenced node not executed", { variableName: name, sourceNodeId: source.node, sourceNodeName: displayName })
+        throw new Error(errorMsg)
       }
       result[name] = nodeOutputs[source.node]
     } else {
@@ -24,5 +29,6 @@ export function resolveVariables(
 }
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{([a-zA-Z0-9_\u4e00-\u9fff]+)\}\}/g, (_, n) => vars[n] ?? `{{${n}}}`)
+  // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
+  return template.replace(/\{\{\$?([a-zA-Z0-9_\u4e00-\u9fff]+)\}\}/g, (match, n) => vars[n] ?? match)
 }

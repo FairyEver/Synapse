@@ -2,7 +2,8 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../t
 import type { SwitchNodeConfig } from "./schema"
 
 function interpolate(t: string, v: Record<string, string>): string {
-  return t.replace(/\{\{([a-zA-Z0-9_\u4e00-\u9fff]+)\}\}/g, (_, n) => v[n] ?? `{{${n}}}`)
+  // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
+  return t.replace(/\{\{\$?([a-zA-Z0-9_\u4e00-\u9fff]+)\}\}/g, (match, n) => v[n] ?? match)
 }
 
 export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {

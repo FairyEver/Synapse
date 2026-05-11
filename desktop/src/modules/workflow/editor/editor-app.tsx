@@ -36,6 +36,10 @@ export function WorkflowEditorApp() {
   const isDirtyRef = useRef(false)
   const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel, attachRun } = useWorkflowRun(workflowId, initialRunId)
   const [runError, setRunError] = useState<string | null>(null)
+  // Track current runId in a ref so the workflow:started listener can avoid
+  // re-attaching (and wiping nodeResults) for a run already managed locally.
+  const runIdRef = useRef(runId)
+  runIdRef.current = runId
 
   useEffect(() => {
     if (!workflowId) return
@@ -69,7 +73,16 @@ export function WorkflowEditorApp() {
   useEffect(() => {
     if (!workflowId) return
     return window.synapse?.workflow.onEvent((event) => {
-      if (event.type === "workflow:started" && event.workflowId === workflowId) attachRun(event.runId)
+      if (event.type === "workflow:started" && event.workflowId === workflowId) {
+        // Skip if this run was already attached locally (e.g. initiated from this editor).
+        // Re-attaching would wipe nodeResults that useWorkflowEvents already hydrated.
+        if (runIdRef.current === event.runId) {
+          logger.info("workflow:started event skipped — run already attached", { runId: event.runId })
+          return
+        }
+        logger.info("workflow:started event — attaching external run", { runId: event.runId })
+        attachRun(event.runId)
+      }
     })
   }, [workflowId, attachRun])
 
