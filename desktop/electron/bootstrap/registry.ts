@@ -45,6 +45,7 @@ import {
   coreWorkflowServiceDescriptor,
   coreWorkflowSnapshotsDescriptor,
   coreWorkflowRunAbortsDescriptor,
+  coreWorkflowRunStatusesDescriptor,
   coreWorkflowEngineDescriptor,
   coreWorkflowWindowManagerDescriptor,
   createUiTrayDescriptor,
@@ -92,6 +93,7 @@ export function buildServiceRegistry(
   registry.register(coreWorkflowServiceDescriptor)
   registry.register(coreWorkflowSnapshotsDescriptor)
   registry.register(coreWorkflowRunAbortsDescriptor)
+  registry.register(coreWorkflowRunStatusesDescriptor)
   registry.register(coreWorkflowEngineDescriptor)
   registry.register(coreWorkflowWindowManagerDescriptor)
   registry.register(coreDiagnosticsDescriptor)

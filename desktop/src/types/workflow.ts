@@ -26,16 +26,26 @@ export interface WorkflowRunResult {
   nodeResults: Record<string, NodeRunResult>
   durationMs: number
 }
+export interface WorkflowRunStatus {
+  runId: string
+  workflowId: string
+  status: "running" | WorkflowRunResult["status"]
+  nodeResults: Record<string, NodeRunResult>
+  startedAt: number
+  endedAt?: number
+  durationMs?: number
+  error?: string
+}
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string }
-  | { type: "node:started"; nodeId: string }
-  | { type: "node:completed"; nodeId: string; output: unknown; result?: NodeRunResult }
-  | { type: "node:failed"; nodeId: string; error: string; result?: NodeRunResult }
-  | { type: "node:skipped"; nodeId: string }
-  | { type: "edge:activated"; from: string; to: string }
-  | { type: "workflow:completed"; result: WorkflowRunResult }
-  | { type: "workflow:failed"; error: string; result?: WorkflowRunResult }
-  | { type: "workflow:cancelled" }
+  | { type: "node:started"; runId: string; nodeId: string }
+  | { type: "node:completed"; runId: string; nodeId: string; output: unknown; result?: NodeRunResult }
+  | { type: "node:failed"; runId: string; nodeId: string; error: string; result?: NodeRunResult }
+  | { type: "node:skipped"; runId: string; nodeId: string; result?: NodeRunResult }
+  | { type: "edge:activated"; runId: string; from: string; to: string }
+  | { type: "workflow:completed"; runId: string; result: WorkflowRunResult }
+  | { type: "workflow:failed"; runId: string; error: string; result?: WorkflowRunResult }
+  | { type: "workflow:cancelled"; runId: string; result?: WorkflowRunResult }
 export interface ValidationError {
   type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch"
   nodeId?: string; edgeId?: string; message: string

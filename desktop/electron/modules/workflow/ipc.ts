@@ -7,6 +7,7 @@ import type { RunSnapshotService } from "../../services/workflow/run-snapshot-se
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
 import type { EventBus } from "../../runtime/event-bus"
 import { validateWorkflow } from "../../services/workflow/workflow-validator"
+import type { NodeRunResult, WorkflowRunStatus } from "../../../src/types/workflow"
 
 const workflowDefinitionSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().optional(),
@@ -58,15 +59,27 @@ export const workflowIpcModule: IpcModule = {
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
+        const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
 
         const def = await svc.get(id)
         if (!def) throw new Error(`Workflow ${id} not found`)
 
         const ac = new AbortController()
         const runId = randomUUID()
+        const startedAt = Date.now()
         abortMap.set(runId, ac)
+        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt })
 
         void engine.run(def, params, runId, (event) => {
+          const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
+          const nextNodeResults: Record<string, NodeRunResult> = { ...current.nodeResults }
+          if (event.type === "node:started") {
+            nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running" }
+          } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
+            nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: event.type === "node:skipped" ? "skipped" : "failed", input: { variables: {} } }
+          }
+          runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
+
           eventBus.emit(
             { domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() },
             { backpressure: "block" },
@@ -74,8 +87,21 @@ export const workflowIpcModule: IpcModule = {
           if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
             abortMap.delete(runId)
             const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
-            const nodeResults = event.type === "workflow:completed" ? event.result.nodeResults : event.type === "workflow:failed" ? event.result?.nodeResults ?? {} : {}
-            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt: Date.now(), endedAt: Date.now(), status, params, nodeResults })
+            const endedAt = Date.now()
+            const nodeResults = event.result?.nodeResults ?? nextNodeResults
+            const durationMs = event.result?.durationMs ?? endedAt - startedAt
+            runStatuses.set(runId, {
+              ...current,
+              runId,
+              workflowId: id,
+              status,
+              nodeResults,
+              startedAt,
+              endedAt,
+              durationMs,
+              ...(event.type === "workflow:failed" ? { error: event.error } : {}),
+            })
+            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params, nodeResults })
           }
         }, ac.signal)
 
@@ -93,6 +119,10 @@ export const workflowIpcModule: IpcModule = {
     runSnapshot: {
       channel: "synapse:workflow:run-snapshot", kind: "invoke", request: z.object({ runId: z.string(), workflowId: z.string() }), response: z.unknown().nullable(),
       handler: async (ctx, { runId, workflowId }: { runId: string; workflowId: string }) => ctx.resolve<RunSnapshotService>("core.workflow.snapshots").get(runId, workflowId),
+    },
+    runStatus: {
+      channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: z.string() }), response: z.unknown().nullable(),
+      handler: (ctx, { runId }: { runId: string }) => ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId) ?? null,
     },
     openEditor: {
       channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),

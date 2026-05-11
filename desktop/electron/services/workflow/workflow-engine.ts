@@ -30,8 +30,9 @@ export class WorkflowEngine {
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
-      emit({ type: "workflow:cancelled" })
-      return { status: "cancelled", nodeResults: {}, durationMs: 0 }
+      const result: WorkflowRunResult = { status: "cancelled", nodeResults: {}, durationMs: 0 }
+      emit({ type: "workflow:cancelled", runId, result })
+      return result
     }
     emit({ type: "workflow:started", runId })
     const startMs = Date.now()
@@ -45,8 +46,9 @@ export class WorkflowEngine {
 
     for (const nodeId of order) {
       if (effectiveAbortSignal.aborted) {
-        emit({ type: "workflow:cancelled" })
-        return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+        const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+        emit({ type: "workflow:cancelled", runId, result })
+        return result
       }
       const node = def.nodes.find((n) => n.id === nodeId)!
       const incomingEdges = def.edges.filter((e) => e.to === nodeId)
@@ -58,10 +60,10 @@ export class WorkflowEngine {
       if (shouldSkip) {
         const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} } }
         nodeResults[nodeId] = res
-        emit({ type: "node:skipped", nodeId })
+        emit({ type: "node:skipped", runId, nodeId, result: res })
         continue
       }
-      emit({ type: "node:started", nodeId })
+      emit({ type: "node:started", runId, nodeId })
       const nr: NodeRunResult = { nodeId, status: "running", input: { variables: {} }, startedAt: Date.now() }
       nodeResults[nodeId] = nr
 
@@ -84,8 +86,9 @@ export class WorkflowEngine {
           agentDeps: this.agentDeps,
         })
         if (effectiveAbortSignal.aborted) {
-          emit({ type: "workflow:cancelled" })
-          return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+          const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+          emit({ type: "workflow:cancelled", runId, result })
+          return result
         }
         nr.status = execResult.status; nr.output = execResult.output; nr.outputs = execResult.outputs
         nr.activeBranch = execResult.activeBranch; nr.error = execResult.error
@@ -93,27 +96,28 @@ export class WorkflowEngine {
 
         if (execResult.status === "success") {
           nodeOutputs[nodeId] = execResult.output
-          emit({ type: "node:completed", nodeId, output: execResult.output, result: { ...nr } })
+          emit({ type: "node:completed", runId, nodeId, output: execResult.output, result: { ...nr } })
           for (const e of def.edges.filter((e) => e.from === nodeId)) {
             if (!execResult.activeBranch || e.branch === execResult.activeBranch) {
               reachableNodes.add(e.to)
-              emit({ type: "edge:activated", from: e.from, to: e.to })
+              emit({ type: "edge:activated", runId, from: e.from, to: e.to })
             }
           }
         } else {
           overallFailed = true
-          emit({ type: "node:failed", nodeId, error: execResult.error ?? "Unknown error", result: { ...nr } })
+          emit({ type: "node:failed", runId, nodeId, error: execResult.error ?? "Unknown error", result: { ...nr } })
         }
       } catch (err) {
         if (effectiveAbortSignal.aborted) {
-          emit({ type: "workflow:cancelled" })
-          return { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+          const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
+          emit({ type: "workflow:cancelled", runId, result })
+          return result
         }
         const msg = err instanceof Error ? err.message : String(err)
         nr.status = "failed"; nr.error = msg; nr.endedAt = Date.now()
         nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
         overallFailed = true
-        emit({ type: "node:failed", nodeId, error: msg, result: { ...nr } })
+        emit({ type: "node:failed", runId, nodeId, error: msg, result: { ...nr } })
       }
     }
 
@@ -122,8 +126,8 @@ export class WorkflowEngine {
       status: overallFailed ? "failed" : "completed",
       nodeResults, durationMs,
     }
-    if (overallFailed) emit({ type: "workflow:failed", error: "One or more nodes failed", result })
-    else emit({ type: "workflow:completed", result })
+    if (overallFailed) emit({ type: "workflow:failed", runId, error: "One or more nodes failed", result })
+    else emit({ type: "workflow:completed", runId, result })
     return result
   }
 }

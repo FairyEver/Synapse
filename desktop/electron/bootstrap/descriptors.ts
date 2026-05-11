@@ -87,6 +87,7 @@ import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
+import type { WorkflowRunStatus } from "../../src/types/workflow"
 import "../../workflow-nodes/register.main"
 
 /**
@@ -842,6 +843,12 @@ export const coreWorkflowRunAbortsDescriptor: ServiceDescriptor<Map<string, Abor
   id: "core.workflow.run-aborts",
   criticality: "degraded",
   create() { return new Map<string, AbortController>() },
+}
+
+export const coreWorkflowRunStatusesDescriptor: ServiceDescriptor<Map<string, WorkflowRunStatus>> = {
+  id: "core.workflow.run-statuses",
+  criticality: "degraded",
+  create() { return new Map<string, WorkflowRunStatus>() },
 }
 
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {

@@ -131,7 +131,7 @@ import type {
   ScheduledTaskRun,
   ScheduledTaskUpdateInput,
 } from "./task-scheduler"
-import type { WorkflowDefinition, WorkflowMeta, ValidationError, ValidationResult, WorkflowRunSnapshot, WorkflowEvent } from "./workflow"
+import type { WorkflowDefinition, WorkflowMeta, ValidationError, ValidationResult, WorkflowRunSnapshot, WorkflowEvent, WorkflowRunStatus } from "./workflow"
 
 export type SynapseOpsDiagnostics = {
   appVersion: string
@@ -549,6 +549,7 @@ export type SynapseBridge = {
     cancel: (runId: string) => Promise<void>
     runHistory: (workflowId: string) => Promise<WorkflowRunSnapshot[]>
     runSnapshot: (runId: string, workflowId: string) => Promise<WorkflowRunSnapshot | null>
+    runStatus: (runId: string) => Promise<WorkflowRunStatus | null>
     openEditor: (id: string) => Promise<void>
     editorState: () => Promise<{ openEditors: string[] }>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
