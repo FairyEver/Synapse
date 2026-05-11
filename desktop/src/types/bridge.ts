@@ -542,6 +542,7 @@ export type SynapseBridge = {
   workflow: {
     list: () => Promise<WorkflowMeta[]>
     get: (id: string) => Promise<WorkflowDefinition | null>
+    create: () => Promise<{ id: string; versionHash: string } | { errors: ValidationError[] }>
     save: (def: WorkflowDefinition) => Promise<{ versionHash: string } | { errors: ValidationError[] }>
     delete: (id: string) => Promise<void>
     validate: (def: WorkflowDefinition) => Promise<ValidationResult>
