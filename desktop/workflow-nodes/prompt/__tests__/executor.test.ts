@@ -7,10 +7,10 @@ const deps = (response: string) => ({
 })
 
 describe("promptNodeExecutor", () => {
-  it("interpolates {{$name}} in prompt before sending", async () => {
+  it("interpolates {{name}} in prompt before sending", async () => {
     const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "ok", durationMs: 5 })
     await promptNodeExecutor.execute({
-      config: { agent: "claude-code", variables: [], prompt: "Hello {{$name}}" },
+      config: { agent: "claude-code", variables: [], prompt: "Hello {{name}}" },
       resolvedVariables: { name: "world" },
       context: ctx, agentDeps: { sendToAgent },
     })

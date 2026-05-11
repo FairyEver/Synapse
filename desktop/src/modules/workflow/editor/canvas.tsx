@@ -17,7 +17,6 @@ import {
   type EdgeChange,
   type Node,
   type NodeChange,
-  type OnSelectionChangeParams,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { nodeTypes, NodeResultsContext } from "./node-wrappers"
@@ -171,8 +170,12 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
     onChange({ ...definition, nodes: [...definition.nodes, newWfNode] })
   }, [screenToFlowPosition, definition, onChange, setNodes])
 
-  const onSelectionChange = useCallback(({ nodes: selected }: OnSelectionChangeParams) => {
-    onNodeSelect?.(selected[0]?.id ?? null)
+  const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowFlowNode) => {
+    onNodeSelect?.(node.id)
+  }, [onNodeSelect])
+
+  const onPaneClick = useCallback(() => {
+    onNodeSelect?.(null)
   }, [onNodeSelect])
 
   return (
@@ -181,7 +184,7 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
         onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange}
         onConnect={onConnect} onNodeDragStop={onNodeDragStop}
         onDrop={onDrop} onDragOver={onDragOver}
-        onSelectionChange={onSelectionChange}
+        onNodeClick={onNodeClick} onPaneClick={onPaneClick}
         edgeTypes={edgeTypes}
         fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
         <Background />

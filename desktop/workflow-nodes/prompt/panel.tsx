@@ -1,7 +1,8 @@
 import { useState } from "react"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import type { WorkflowParam } from "@/types/workflow"
 import type { PromptNodeConfig } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
@@ -14,25 +15,31 @@ export interface PromptNodePanelProps {
 }
 
 export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams }: PromptNodePanelProps) {
-  const [agent, setAgent] = useState(config.agent)
   const [prompt, setPrompt] = useState(config.prompt)
-  const commit = () => onChange({ ...config, agent, prompt })
 
   return (
     <div className="grid gap-3">
       <div className="grid gap-1.5">
         <Label className="text-xs">Agent</Label>
-        <Input
-          className="h-7 text-xs"
-          value={agent}
-          onChange={(e) => setAgent(e.target.value)}
-          onBlur={commit}
-          placeholder="Agent 名称"
-        />
+        <Select
+          value={config.agent}
+          onValueChange={(agent) => onChange({ ...config, agent, prompt })}
+        >
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue placeholder="选择 Agent" />
+          </SelectTrigger>
+          <SelectContent>
+            {agentDefinitions.map((def) => (
+              <SelectItem key={def.id} value={def.id} className="text-xs">
+                {def.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <VariableBindingEditor
         variables={config.variables}
-        onChange={(variables) => onChange({ ...config, agent, prompt, variables })}
+        onChange={(variables) => onChange({ ...config, prompt, variables })}
         upstreamNodes={upstreamNodes}
         workflowParams={workflowParams}
       />
@@ -43,8 +50,8 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
           rows={8}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          onBlur={commit}
-          placeholder="输入提示词，用 {{$变量名}} 引用变量…"
+          onBlur={() => onChange({ ...config, prompt })}
+          placeholder="输入提示词，用 {{变量名}} 引用变量…"
         />
       </div>
     </div>

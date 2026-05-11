@@ -154,7 +154,7 @@ export function WorkflowEditorApp() {
   return (
     <>
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={handleRun} onCancel={cancel} onChange={handleDefinitionChange} />
+      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={handleRun} onCancel={cancel} onReset={() => { setRunState("idle"); setViewingNodeId(null) }} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />

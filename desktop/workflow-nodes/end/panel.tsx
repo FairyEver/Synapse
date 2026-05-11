@@ -32,7 +32,7 @@ export function EndNodePanel({ config, onChange, upstreamNodes, workflowParams }
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
           onBlur={commit}
-          placeholder="输入返回文本，用 {{$变量名}} 引用变量…"
+          placeholder="输入返回文本，用 {{变量名}} 引用变量…"
         />
       </div>
     </div>

@@ -110,6 +110,7 @@ type AboutPanelProps = {
 function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [updateState, setUpdateState] = useState<SynapseAppUpdateState>(INITIAL_UPDATE_STATE)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isRestarting, setIsRestarting] = useState(false)
   const [clickCount, setClickCount] = useState(0)
   const [resetTimer, setResetTimer] = useState<NodeJS.Timeout | null>(null)
 
@@ -159,8 +160,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const isChecking = updateState.status === "checking"
   const isDownloading = updateState.status === "available" || updateState.status === "downloading"
   const isDownloaded = updateState.status === "downloaded"
-  const actionLabel = isDownloaded ? "重启安装" : isChecking ? "检查中..." : isDownloading ? "下载中..." : "检查更新"
-  const actionDisabled = isDownloaded ? false : !updateState.canCheck || isChecking || isDownloading
+  const actionLabel = isRestarting ? "重启中..." : isDownloaded ? "重启安装" : isChecking ? "检查中..." : isDownloading ? "下载中..." : "检查更新"
+  const actionDisabled = isRestarting || (isDownloaded ? false : !updateState.canCheck || isChecking || isDownloading)
   const statusClassName = updateState.status === "error" || actionError
     ? "text-sm text-destructive"
     : "text-sm text-muted-foreground"
@@ -211,6 +212,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
     try {
       if (isDownloaded) {
+        setIsRestarting(true)
         await bridge.installUpdate()
         return
       }

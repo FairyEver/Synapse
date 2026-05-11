@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import type {
   AgentCompressStateEntryV1,
   ConversationEntryV1,
@@ -368,9 +369,33 @@ export class MessageRouter {
           agentType: adapter.agentType,
         })
       }
+
+      // Emit received in-progress for background platforms (e.g. scheduled tasks).
+      // The renderer-initiated path emits its own phase events in ipc-messages.ts.
+      const isBackgroundPlatform = message.platform !== "local-renderer"
+      const phaseRunId = randomUUID()
+      const t_recv = this.isoNow()
+      if (isBackgroundPlatform) {
+        this.deps.eventBus?.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId: phaseRunId,
+            projectId: this.deps.projectId,
+            sessionKey: message.sessionKey,
+            conversationId: conversation.id,
+            phase: "received",
+            status: "in-progress",
+            startedAt: t_recv,
+          },
+          timestamp: t_recv,
+        })
+      }
+
+      let result: AgentRuntimeTurnResult
       if (adapter.startSession) {
         try {
-          return await this.processLiveTurn(state, message, conversation, adapter, workDir)
+          result = await this.processLiveTurn(state, message, conversation, adapter, workDir)
         } catch (error) {
           if (adapter.agentType !== "codex" || !isLiveStartupFailure(error)) throw error
           const messageText = error instanceof Error ? error.message : String(error)
@@ -380,9 +405,48 @@ export class MessageRouter {
             sessionKey: message.sessionKey,
             agentType: adapter.agentType,
           })
+          result = await this.processExecTurn(message, conversation, adapter, workDir, state.turnAbortController?.signal)
         }
+      } else {
+        result = await this.processExecTurn(message, conversation, adapter, workDir, state.turnAbortController?.signal)
       }
-      return this.processExecTurn(message, conversation, adapter, workDir, state.turnAbortController?.signal)
+
+      if (isBackgroundPlatform) {
+        const t_done = this.isoNow()
+        this.deps.eventBus?.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId: phaseRunId,
+            projectId: this.deps.projectId,
+            sessionKey: message.sessionKey,
+            conversationId: conversation.id,
+            phase: "received",
+            status: "done",
+            startedAt: t_recv,
+            completedAt: t_done,
+          },
+          timestamp: t_done,
+        })
+        this.deps.eventBus?.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId: phaseRunId,
+            projectId: this.deps.projectId,
+            sessionKey: message.sessionKey,
+            conversationId: conversation.id,
+            phase: result.error ? "failed" : "completed",
+            status: result.error ? "failed" : "done",
+            startedAt: t_recv,
+            completedAt: t_done,
+            errorMessage: result.error,
+          },
+          timestamp: t_done,
+        })
+      }
+
+      return result
     } finally {
       state.activeTurns = Math.max(0, state.activeTurns - 1)
       state.lastActivity = Date.now()

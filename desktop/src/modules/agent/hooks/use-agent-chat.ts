@@ -36,6 +36,7 @@ type UseAgentChatState = {
   sending: boolean
   cancelPhase: ChatState["cancelPhase"]
   error: string | null
+  currentConversationModel: string | undefined
   createSession: (projectId: string, agentType: string) => Promise<void>
   selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
@@ -69,6 +70,7 @@ function useAgentChat(
     sendingConversationIds,
     cancelPhase,
     error,
+    currentConversationModel,
   } = state
 
   const followFeishuRef = useRef(followFeishu)
@@ -80,6 +82,7 @@ function useAgentChat(
   const selectedSessionKeyRef = useRef(selectedSessionKey)
   const selectRequestIdRef = useRef(0)
   const timelineVersionRef = useRef(0)
+  const pendingConversationIdsRef = useRef(new Set<string>())
 
   const projectIdsKey = projectScope.projectIds.join("\0")
 
@@ -99,6 +102,7 @@ function useAgentChat(
     selectedSessionKeyRef,
     selectRequestIdRef,
     timelineVersionRef,
+    pendingConversationIdsRef,
   }
 
   const connection = useChatConnection(state, dispatch, connectionRefs)
@@ -157,6 +161,7 @@ function useAgentChat(
     sending: selectedConversationId ? sendingConversationIds.has(selectedConversationId) : false,
     cancelPhase,
     error,
+    currentConversationModel,
     createSession: connection.createSession,
     selectSession: connection.selectSession,
     deleteSession: connection.deleteSession,

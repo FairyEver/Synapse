@@ -14,7 +14,7 @@ function makeInput(template: string, vars: Record<string, string> = {}): NodeExe
 
 describe("endNodeExecutor", () => {
   it("renders template with resolved variables", async () => {
-    const result = await endNodeExecutor.execute(makeInput("Hello {{$name}}!", { name: "World" }))
+    const result = await endNodeExecutor.execute(makeInput("Hello {{name}}!", { name: "World" }))
     expect(result.status).toBe("success")
     expect(result.output).toBe("Hello World!")
   })
@@ -26,8 +26,8 @@ describe("endNodeExecutor", () => {
   })
 
   it("preserves unresolved placeholders", async () => {
-    const result = await endNodeExecutor.execute(makeInput("{{$missing}} value"))
-    expect(result.output).toBe("{{$missing}} value")
+    const result = await endNodeExecutor.execute(makeInput("{{missing}} value"))
+    expect(result.output).toBe("{{missing}} value")
   })
 
   it("does not call Agent", async () => {

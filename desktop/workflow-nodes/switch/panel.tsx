@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2 } from "lucide-react"
+import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import type { WorkflowParam } from "@/types/workflow"
 import type { SwitchNodeConfig, SwitchBranch } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
@@ -19,14 +20,13 @@ export interface SwitchNodePanelProps {
 }
 
 export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams }: SwitchNodePanelProps) {
-  const [agent, setAgent] = useState(config.agent)
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
 
   const commit = (overrides?: Partial<SwitchNodeConfig>) =>
     onChange({
-      ...config, agent, prompt, branches,
+      ...config, prompt, branches,
       defaultBranch: defaultBranch === NO_DEFAULT ? undefined : defaultBranch,
       ...overrides,
     })
@@ -56,23 +56,25 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
     <div className="grid gap-3">
       <div className="grid gap-1.5">
         <Label className="text-xs">Agent</Label>
-        <Input
-          className="h-7 text-xs"
-          value={agent}
-          onChange={(e) => setAgent(e.target.value)}
-          onBlur={() => commit({ agent })}
-          placeholder="Agent 名称"
-        />
+        <Select
+          value={config.agent}
+          onValueChange={(agent) => commit({ agent })}
+        >
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue placeholder="选择 Agent" />
+          </SelectTrigger>
+          <SelectContent>
+            {agentDefinitions.map((def) => (
+              <SelectItem key={def.id} value={def.id} className="text-xs">
+                {def.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <VariableBindingEditor
         variables={config.variables}
-        onChange={(variables) =>
-          onChange({
-            ...config, agent, prompt, branches,
-            defaultBranch: defaultBranch === NO_DEFAULT ? undefined : defaultBranch,
-            variables,
-          })
-        }
+        onChange={(variables) => commit({ variables })}
         upstreamNodes={upstreamNodes}
         workflowParams={workflowParams}
       />

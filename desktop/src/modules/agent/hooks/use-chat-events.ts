@@ -35,6 +35,7 @@ function useChatEvents(
     selectRequestIdRef,
     followFeishuRef,
     inputDirtyRef,
+    pendingConversationIdsRef,
   } = refs
   const { loadTimeline, refreshConversationSnapshot, refreshPendingPermissions, updateTimeline } = connection
 
@@ -63,10 +64,13 @@ function useChatEvents(
         const selectedSession = selectedSessionKeyRef.current
         const sameProject = payload.projectId === selectedProject
         const sameSessionKey = payload.sessionKey === selectedSession
+        const inPendingConv = Boolean(payload.conversationId)
+          && pendingConversationIdsRef.current.has(payload.conversationId)
         const sameConv = payload.conversationId
           ? payload.conversationId === selectedConv
+            || inPendingConv
           : sameSessionKey
-        if (!sameProject || !sameConv) {
+        if (!inPendingConv && (!sameProject || !sameConv)) {
           logger.debug("Phase event ignored for inactive conversation.", {
             projectId: payload.projectId,
             sessionKey: payload.sessionKey,
@@ -157,6 +161,11 @@ function useChatEvents(
           domainEvent.payload,
           selected,
         ) })
+        // Track this conversationId so subsequent phase.update events for it
+        // are accepted before selectSession has finished updating the refs.
+        const pendingId = domainEvent.payload.conversationId
+        pendingConversationIdsRef.current.add(pendingId)
+        setTimeout(() => { pendingConversationIdsRef.current.delete(pendingId) }, 30_000)
         return
       }
       if (!matchesSelectedEvent(domainEvent, {
@@ -190,6 +199,10 @@ function useChatEvents(
         ?? state.status?.agentType
       updateTimeline((current) =>
         appendAgentTimelineEvent(current, domainEvent.payload.event, domainEvent.timestamp, agentType))
+      const event = domainEvent.payload.event
+      if (event.type === "result" && event.metadata?.model) {
+        dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: event.metadata.model })
+      }
       void refreshPendingPermissions()
     })
   }, [

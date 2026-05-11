@@ -26,6 +26,7 @@ type ChatState = {
   sendingConversationIds: Set<string>
   cancelPhase: "idle" | "cancel_pending" | "cancelled"
   error: string | null
+  currentConversationModel: string | undefined
 }
 
 type ChatAction =
@@ -51,6 +52,7 @@ type ChatAction =
   | { type: "SET_SENDING_CONVERSATION_IDS"; sendingConversationIds: Set<string> }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_CANCEL_PHASE"; cancelPhase: ChatState["cancelPhase"] }
+  | { type: "SET_CURRENT_CONVERSATION_MODEL"; model: string | undefined }
   | { type: "CANCEL_REQUESTED" }
   | { type: "CANCEL_RESET" }
   | { type: "RESET" }
@@ -72,6 +74,7 @@ const initialChatState: ChatState = {
   sendingConversationIds: new Set(),
   cancelPhase: "idle",
   error: null,
+  currentConversationModel: undefined,
 }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -83,7 +86,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_ARCHIVED_SESSIONS":
       return { ...state, archivedSessions: action.archivedSessions }
     case "SET_TIMELINE":
-      return { ...state, timeline: action.timeline }
+      return { ...state, timeline: action.timeline, currentConversationModel: undefined }
     case "UPDATE_TIMELINE":
       return { ...state, timeline: action.updater(state.timeline) }
     case "SET_PENDING_PERMISSIONS":
@@ -122,6 +125,8 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "SET_SENDING_CONVERSATION_IDS":
       return { ...state, sendingConversationIds: action.sendingConversationIds }
+    case "SET_CURRENT_CONVERSATION_MODEL":
+      return { ...state, currentConversationModel: action.model }
     case "SET_ERROR":
       return { ...state, error: action.error }
     case "SET_CANCEL_PHASE":

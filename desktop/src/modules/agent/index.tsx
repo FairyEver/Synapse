@@ -245,9 +245,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
 
             {/* 右区：模型信息 · 权限 · 复制 · 命令 */}
             <div className="flex shrink-0 items-center gap-2">
-              {chat.providers?.activeModel ? (
+              {chat.currentConversationModel ? (
                 <span className="text-xs text-muted-foreground">
-                  {chat.providers.activeModel}
+                  {chat.currentConversationModel}
                   {activeProvider ? ` · ${activeProvider.id}` : ""}
                 </span>
               ) : null}

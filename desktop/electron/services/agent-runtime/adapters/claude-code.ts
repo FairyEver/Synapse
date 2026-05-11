@@ -152,6 +152,7 @@ class ClaudeCodeLiveSession implements AgentLiveSession {
   private readonly processSession: ControlledProcessSession
   private readonly queue = new AsyncEventQueue()
   private sessionId: string | undefined
+  private model: string | undefined
 
   constructor(
     processSession: ControlledProcessSession,
@@ -266,6 +267,7 @@ class ClaudeCodeLiveSession implements AgentLiveSession {
     const sessionId = stringValue(raw.session_id)
     if (!sessionId) return
     this.sessionId = sessionId
+    this.model = stringValue(raw.model)
     this.queue.push(this.withSession({ type: "text", content: "" }))
   }
 
@@ -311,6 +313,7 @@ class ClaudeCodeLiveSession implements AgentLiveSession {
       type: "result",
       content: stringValue(raw.result) ?? "",
       done: true,
+      metadata: this.model ? { model: this.model } : undefined,
     }))
   }
 

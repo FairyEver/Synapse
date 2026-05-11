@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-const VARIABLE_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+const VARIABLE_NAME_RE = /^[a-zA-Z0-9_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]*$/
 
 export const variableSourceSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("param"), param: z.string().min(1) }),
@@ -9,7 +9,7 @@ export const variableSourceSchema = z.discriminatedUnion("type", [
 ])
 
 export const variableBindingSchema = z.object({
-  name: z.string().regex(VARIABLE_NAME_RE, "Variable name must match /^[a-zA-Z_][a-zA-Z0-9_]*/"),
+  name: z.string().regex(VARIABLE_NAME_RE, "变量名只能包含字母、数字、下划线或中文"),
   source: variableSourceSchema,
 })
 

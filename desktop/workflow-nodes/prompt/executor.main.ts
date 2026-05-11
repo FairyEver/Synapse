@@ -2,7 +2,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../t
 import type { PromptNodeConfig } from "./schema"
 
 function interpolate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{\$([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (_, n) => vars[n] ?? `{{$${n}}}`)
+  return template.replace(/\{\{([a-zA-Z0-9_\u4e00-\u9fff]+)\}\}/g, (_, n) => vars[n] ?? `{{${n}}}`)
 }
 
 export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {

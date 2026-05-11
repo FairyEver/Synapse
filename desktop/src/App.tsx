@@ -349,14 +349,14 @@ function MainApp() {
               </ErrorBoundary>
             )
           })}
-          {activeTab === "agent" ? (
+          <div className={activeTab !== "agent" ? "hidden" : "contents"}>
             <ErrorBoundary fallbackTitle="Agent 模块出现问题">
               <AgentModule
                 pendingAgentSession={pendingAgentSession}
                 onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
               />
             </ErrorBoundary>
-          ) : null}
+          </div>
           {activeTab === "database" ? (
             <ErrorBoundary fallbackTitle="数据库模块出现问题">
               <DatabaseModule />

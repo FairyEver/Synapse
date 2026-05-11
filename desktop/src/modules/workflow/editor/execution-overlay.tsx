@@ -75,7 +75,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
                   <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all">{dialogTarget.input.prompt}</pre>
                 </div>
               )}
-              {dialogTarget.output !== undefined && (
+              {dialogTarget.output != null && dialogTarget.output !== "" && (
                 <div className="grid gap-1">
                   <p className="font-medium text-muted-foreground">输出</p>
                   <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all">{dialogTarget.output}</pre>
@@ -92,6 +92,9 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
                   <p className="font-medium text-muted-foreground">激活分支</p>
                   <span className="font-mono">{dialogTarget.activeBranch}</span>
                 </div>
+              )}
+              {!dialogTarget.input.prompt && !dialogTarget.error && !dialogTarget.activeBranch && (dialogTarget.output == null || dialogTarget.output === "") && (
+                <p className="text-xs text-muted-foreground">（无可展示的输出）</p>
               )}
             </div>
           )}

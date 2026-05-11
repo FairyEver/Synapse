@@ -22,10 +22,10 @@ describe("resolveVariables", () => {
 })
 
 describe("interpolatePrompt", () => {
-  it("replaces {{$name}} tokens", () => {
-    expect(interpolatePrompt("Hello {{$name}}", { name: "world" })).toBe("Hello world")
+  it("replaces {{name}} tokens", () => {
+    expect(interpolatePrompt("Hello {{name}}", { name: "world" })).toBe("Hello world")
   })
   it("leaves unresolved tokens unchanged", () => {
-    expect(interpolatePrompt("{{$missing}}", {})).toBe("{{$missing}}")
+    expect(interpolatePrompt("{{missing}}", {})).toBe("{{missing}}")
   })
 })
