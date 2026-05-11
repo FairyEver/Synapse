@@ -8,6 +8,9 @@ import type { WorkflowWindowManager } from "../../services/workflow/window-manag
 import type { EventBus } from "../../runtime/event-bus"
 import { validateWorkflow } from "../../services/workflow/workflow-validator"
 import type { NodeRunResult, WorkflowRunStatus } from "../../../src/types/workflow"
+import { createMainLogger } from "../../services/log-store"
+
+const logger = createMainLogger("workflow.ipc")
 
 const workflowDefinitionSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().optional(),
@@ -29,12 +32,21 @@ export const workflowIpcModule: IpcModule = {
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
       response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
-      handler: async (ctx) => ctx.resolve<WorkflowService>("core.workflow").list(),
+      handler: async (ctx) => {
+        const result = await ctx.resolve<WorkflowService>("core.workflow").list()
+        logger.info("workflow:list", { count: result.length })
+        return result
+      },
     },
     get: {
       channel: "synapse:workflow:get", kind: "invoke", request: z.object({ id: z.string() }),
       response: workflowDefinitionSchema.nullable(),
-      handler: async (ctx, { id }: { id: string }) => ctx.resolve<WorkflowService>("core.workflow").get(id),
+      handler: async (ctx, { id }: { id: string }) => {
+        logger.info("workflow:get", { id })
+        const result = await ctx.resolve<WorkflowService>("core.workflow").get(id)
+        if (!result) logger.info("workflow:get not found", { id })
+        return result
+      },
     },
     create: {
       channel: "synapse:workflow:create", kind: "invoke", request: z.void().optional(),
@@ -42,26 +54,57 @@ export const workflowIpcModule: IpcModule = {
         z.object({ id: z.string(), versionHash: z.string() }),
         z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
       ]),
-      handler: async (ctx) => ctx.resolve<WorkflowService>("core.workflow").create(),
+      handler: async (ctx) => {
+        logger.info("workflow:create requested")
+        const result = await ctx.resolve<WorkflowService>("core.workflow").create()
+        if ("errors" in result) {
+          logger.warn("workflow:create failed", { errors: result.errors })
+        } else {
+          logger.info("workflow:create succeeded", { id: result.id, versionHash: result.versionHash })
+        }
+        return result
+      },
     },
     save: {
       channel: "synapse:workflow:save", kind: "invoke", request: workflowDefinitionSchema,
       response: z.union([z.object({ versionHash: z.string() }), z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) })]),
-      handler: async (ctx, def) => ctx.resolve<WorkflowService>("core.workflow").save(def as never),
+      handler: async (ctx, def) => {
+        const d = def as { id: string; name: string; nodes: unknown[] }
+        logger.info("workflow:save requested", { id: d.id, name: d.name, nodeCount: d.nodes.length })
+        const result = await ctx.resolve<WorkflowService>("core.workflow").save(def as never)
+        if ("errors" in result) {
+          logger.warn("workflow:save failed", { id: d.id, errors: result.errors })
+        } else {
+          logger.info("workflow:save succeeded", { id: d.id, versionHash: result.versionHash })
+        }
+        return result
+      },
     },
     delete: {
       channel: "synapse:workflow:delete", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),
-      handler: async (ctx, { id }: { id: string }) => ctx.resolve<WorkflowService>("core.workflow").delete(id),
+      handler: async (ctx, { id }: { id: string }) => {
+        logger.info("workflow:delete requested", { id })
+        await ctx.resolve<WorkflowService>("core.workflow").delete(id)
+        logger.info("workflow:delete done", { id })
+      },
     },
     validate: {
       channel: "synapse:workflow:validate", kind: "invoke", request: workflowDefinitionSchema, response: validationResultSchema,
-      handler: async (_ctx, def) => validateWorkflow(def as never),
+      handler: async (_ctx, def) => {
+        const d = def as { id: string; nodes: unknown[] }
+        logger.info("workflow:validate requested", { id: d.id, nodeCount: d.nodes.length })
+        const result = validateWorkflow(def as never)
+        logger.info("workflow:validate result", { id: d.id, valid: result.valid, errorCount: result.errors.length, warnCount: result.warnings.length })
+        if (!result.valid) logger.warn("workflow:validate errors", { id: d.id, errors: result.errors })
+        return result
+      },
     },
     run: {
       channel: "synapse:workflow:run", kind: "invoke",
       request: z.object({ id: z.string(), params: z.record(z.string(), z.unknown()) }),
       response: z.object({ runId: z.string() }),
       handler: async (ctx, { id, params }: { id: string; params: Record<string, unknown> }) => {
+        logger.info("workflow:run requested", { workflowId: id, paramKeys: Object.keys(params) })
         const svc = ctx.resolve<WorkflowService>("core.workflow")
         const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
@@ -70,13 +113,18 @@ export const workflowIpcModule: IpcModule = {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
 
         const def = await svc.get(id)
-        if (!def) throw new Error(`Workflow ${id} not found`)
+        if (!def) {
+          logger.error("workflow:run failed - not found", { workflowId: id })
+          throw new Error(`Workflow ${id} not found`)
+        }
 
         const ac = new AbortController()
         const runId = randomUUID()
         const startedAt = Date.now()
         abortMap.set(runId, ac)
         runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt })
+
+        logger.info("workflow:run started", { workflowId: id, runId, workflowName: def.name, nodeCount: def.nodes.length })
 
         void engine.run(def, params, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
@@ -98,6 +146,7 @@ export const workflowIpcModule: IpcModule = {
             const endedAt = Date.now()
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
+            logger.info("workflow:run finished", { workflowId: id, runId, status, durationMs })
             runStatuses.set(runId, {
               ...current,
               runId,
@@ -118,7 +167,11 @@ export const workflowIpcModule: IpcModule = {
     },
     cancel: {
       channel: "synapse:workflow:cancel", kind: "invoke", request: z.object({ runId: z.string() }), response: z.void(),
-      handler: (ctx, { runId }: { runId: string }) => { ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts").get(runId)?.abort() },
+      handler: (ctx, { runId }: { runId: string }) => {
+        logger.info("workflow:cancel requested", { runId })
+        ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts").get(runId)?.abort()
+        logger.info("workflow:cancel signal sent", { runId })
+      },
     },
     runHistory: {
       channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: z.string() }), response: z.array(z.unknown()),
@@ -135,6 +188,7 @@ export const workflowIpcModule: IpcModule = {
     openEditor: {
       channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string(), runId: z.string().optional() }), response: z.void(),
       handler: (ctx, { id, runId }: { id: string; runId?: string }) => {
+        logger.info("workflow:openEditor", { workflowId: id, runId })
         const baseUrl = process.env.VITE_DEV_SERVER_URL ?? "app://-"
         ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").open(id, baseUrl, runId)
       },
