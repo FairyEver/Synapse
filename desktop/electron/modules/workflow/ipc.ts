@@ -102,7 +102,10 @@ export const workflowIpcModule: IpcModule = {
     run: {
       channel: "synapse:workflow:run", kind: "invoke",
       request: z.object({ id: z.string(), params: z.record(z.string(), z.unknown()) }),
-      response: z.object({ runId: z.string() }),
+      response: z.union([
+        z.object({ runId: z.string() }),
+        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+      ]),
       handler: async (ctx, { id, params }: { id: string; params: Record<string, unknown> }) => {
         logger.info("workflow:run requested", { workflowId: id, paramKeys: Object.keys(params) })
         const svc = ctx.resolve<WorkflowService>("core.workflow")
@@ -116,6 +119,14 @@ export const workflowIpcModule: IpcModule = {
         if (!def) {
           logger.error("workflow:run failed - not found", { workflowId: id })
           throw new Error(`Workflow ${id} not found`)
+        }
+
+        // Validate before running — prevents invalid workflows from executing
+        // when triggered from paths that skip editor-side validation (e.g. list page "Run" button)
+        const validation = validateWorkflow(def)
+        if (!validation.valid) {
+          logger.warn("workflow:run blocked by validation", { workflowId: id, errors: validation.errors })
+          return { errors: validation.errors }
         }
 
         const ac = new AbortController()

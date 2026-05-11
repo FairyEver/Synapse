@@ -11,7 +11,9 @@ export interface WorkflowSaveError { errors: ValidationError[] }
 
 export class WorkflowService {
   private _seq = 0
-  constructor(private readonly repoPath: string) {}
+  constructor(private readonly getRepoPath: () => string) {}
+
+  private get repoPath(): string { return this.getRepoPath() }
 
   private dir(id: string) { return path.join(this.repoPath, "workflows", id) }
 
@@ -23,8 +25,10 @@ export class WorkflowService {
   }
 
   async list(): Promise<WorkflowMeta[]> {
+    const resolvedPath = this.repoPath
+    logger.info("workflow list: resolving from repo", { repoPath: resolvedPath })
     let ids: string[]
-    try { ids = await readdir(path.join(this.repoPath, "workflows")) } catch { return [] }
+    try { ids = await readdir(path.join(resolvedPath, "workflows")) } catch { return [] }
     const metas: WorkflowMeta[] = []
     for (const id of ids) {
       const def = await this.get(id)

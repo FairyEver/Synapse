@@ -3,6 +3,9 @@ import { AlertCircle, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, NodeRunResult, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
+// Side-effect: populate node type registry in the editor window's renderer process.
+// Without this, NodePalette.listTypes() returns [] and users cannot add nodes.
+import "../../../../workflow-nodes/register.main"
 import { Button } from "@/components/ui/button"
 import { useWorkflowRun } from "../hooks/use-workflow-run"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"

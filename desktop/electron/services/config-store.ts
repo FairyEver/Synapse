@@ -275,6 +275,18 @@ class ConfigStore {
     this.cachedConfig = config
     return config
   }
+
+  /**
+   * Synchronous access to the cached config. Only safe to call AFTER initialize() / load()
+   * has completed (guaranteed by service dependency ordering in descriptors.ts).
+   * Used by services that need the current config in synchronous getters (e.g. WorkflowService repo path).
+   */
+  loadSync(): SynapseConfig {
+    if (!this.cachedConfig) {
+      throw new Error("ConfigStore.loadSync() called before config was loaded — check service dependency ordering")
+    }
+    return this.cachedConfig
+  }
 }
 
 // Singleton instance

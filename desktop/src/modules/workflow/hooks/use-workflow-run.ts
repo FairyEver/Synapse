@@ -33,7 +33,7 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
   const start = useCallback(async (params: Record<string, unknown>) => {
     setRunState("running"); setNodeResults({})
     const result = await window.synapse?.workflow.run(workflowId, params)
-    if (!result) return null
+    if (!result || "errors" in result) { setRunState("idle"); return null }
     setRunId(result.runId); return result.runId
   }, [workflowId])
 

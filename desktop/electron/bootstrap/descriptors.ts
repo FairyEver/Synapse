@@ -825,11 +825,15 @@ export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> =
   id: "core.workflow",
   criticality: "degraded",
   dependsOn: ["core.config"],
-  async create() {
-    const config = await configStore.load()
-    const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
-    const repoPath = activeRepo?.localPath ?? app.getPath("userData")
-    return new WorkflowService(repoPath)
+  create() {
+    // Pass a getter so WorkflowService always resolves the CURRENT active repo path,
+    // not a stale snapshot captured at service creation time.
+    const getRepoPath = (): string => {
+      const config = configStore.loadSync()
+      const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
+      return activeRepo?.localPath ?? app.getPath("userData")
+    }
+    return new WorkflowService(getRepoPath)
   },
 }
 
