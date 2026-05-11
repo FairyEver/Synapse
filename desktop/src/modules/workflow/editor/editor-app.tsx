@@ -18,7 +18,7 @@ export function WorkflowEditorApp() {
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [viewingNodeId, setViewingNodeId] = useState<string | null>(null)
-  const [saveErrors, setSaveErrors] = useState<ValidationError[]>([])
+  const [runErrors, setRunErrors] = useState<ValidationError[]>([])
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const definitionRef = useRef(definition)
   definitionRef.current = definition
@@ -73,20 +73,20 @@ export function WorkflowEditorApp() {
 
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
     isDirtyRef.current = true
-    setSaveErrors([])
+    setRunErrors([])
     setDefinition(def)
   }, [])
 
   const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
     isDirtyRef.current = true
     canvasRef.current?.updateNodeConfig(nodeId, config)
-    setSaveErrors([])
+    setRunErrors([])
     setDefinition((def) => def ? { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n) } : def)
   }, [])
 
   const handleNameChange = useCallback((nodeId: string, name: string) => {
     isDirtyRef.current = true
-    setSaveErrors([])
+    setRunErrors([])
     setDefinition((def) => {
       if (!def) return def
       const node = def.nodes.find((n) => n.id === nodeId)
@@ -110,12 +110,8 @@ export function WorkflowEditorApp() {
 
   const handleSave = async (def: WorkflowDefinition) => {
     const result = await window.synapse?.workflow.save(def)
-    if (result && "errors" in result) {
-      setSaveErrors(result.errors)
-      return result
-    }
+    if (result && "errors" in result) return result
     isDirtyRef.current = false
-    setSaveErrors([])
     if (result && "versionHash" in result) setDefinition({ ...def, version: result.versionHash })
     return result
   }
@@ -123,8 +119,12 @@ export function WorkflowEditorApp() {
   const handleRun = async (params: Record<string, unknown>) => {
     const currentDefinition = definitionRef.current
     if (!currentDefinition) return null
-    const saveResult = await handleSave(currentDefinition)
-    if (!saveResult || "errors" in saveResult) return null
+    const validation = await window.synapse?.workflow.validate(currentDefinition)
+    if (validation && !validation.valid) {
+      setRunErrors(validation.errors)
+      return null
+    }
+    await handleSave(currentDefinition)
     setRunError(null)
     return start(params)
   }
@@ -134,17 +134,17 @@ export function WorkflowEditorApp() {
   return (
     <div className="flex flex-col h-screen">
       <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={handleRun} onCancel={cancel} onChange={handleDefinitionChange} />
-      {saveErrors.length > 0 && (
+      {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle className="text-xs font-medium">保存失败</AlertTitle>
+          <AlertTitle className="text-xs font-medium">运行前检查失败</AlertTitle>
           <AlertDescription className="text-xs">
             <ul className="mt-0.5 space-y-0.5 list-none">
-              {saveErrors.map((e, i) => <li key={i}>{e.message}</li>)}
+              {runErrors.map((e, i) => <li key={i}>{e.message}</li>)}
             </ul>
           </AlertDescription>
           <AlertAction>
-            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setSaveErrors([])}>
+            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setRunErrors([])}>
               <X className="h-3.5 w-3.5" />
             </Button>
           </AlertAction>

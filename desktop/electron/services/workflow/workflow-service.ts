@@ -2,7 +2,6 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
-import { validateWorkflow } from "./workflow-validator"
 
 export interface WorkflowSaveResult { versionHash: string }
 export interface WorkflowSaveError { errors: ValidationError[] }
@@ -38,8 +37,6 @@ export class WorkflowService {
   }
 
   async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {
-    const validation = validateWorkflow(def)
-    if (!validation.valid) return { errors: validation.errors }
     const versionHash = this.versionHash(def)
     const versioned: WorkflowDefinition = { ...def, version: versionHash, updatedAt: Date.now() }
     await mkdir(this.dir(def.id), { recursive: true })

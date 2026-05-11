@@ -116,7 +116,7 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect }, ref)
         return node?.type !== "end"
       })
       const updated = applyNodeChanges(filteredChanges, currentNodes)
-      if (filteredChanges.some((change) => change.type !== "select")) {
+      if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions")) {
         onChange({ ...definition, nodes: updated.map(flowNodeToWorkflowNode) })
       }
       return updated

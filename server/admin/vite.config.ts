@@ -22,7 +22,6 @@ export default defineConfig({
   server: {
     port: 3000,
     strictPort: true,
-    open: "/admin/",
     proxy: {
       "/admin/api": { target: apiTarget, changeOrigin: true },
       "/admin/session": { target: apiTarget, changeOrigin: true },
