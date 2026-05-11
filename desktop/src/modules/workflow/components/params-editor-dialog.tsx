@@ -32,23 +32,23 @@ function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCa
           <Trash2 className="size-3" />
         </Button>
       </div>
-      <div className="grid gap-1.5">
-        <Label className="text-xs">参数名</Label>
-        <Input
-          className="h-7 text-xs"
-          value={param.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="param_name"
-        />
-      </div>
       <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label className="text-xs">参数名</Label>
+          <Input
+            className="h-7 text-xs"
+            value={param.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            placeholder="param_name"
+          />
+        </div>
         <div className="grid gap-1.5">
           <Label className="text-xs">类型</Label>
           <Select
             value={param.type}
             onValueChange={(v) => onChange({ type: v as WorkflowParam["type"] })}
           >
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger className="h-7 w-full text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -56,15 +56,6 @@ function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCa
               <SelectItem value="number" className="text-xs">数字</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        <div className="grid gap-1.5">
-          <Label className="text-xs">描述</Label>
-          <Input
-            className="h-7 text-xs"
-            value={param.description ?? ""}
-            onChange={(e) => onChange({ description: e.target.value || undefined })}
-            placeholder="可选"
-          />
         </div>
       </div>
       <div className="grid gap-1.5">
