@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
+
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+
 import { WorkflowEngine } from "../workflow/workflow-engine"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { promptNodeManifest, promptNodeExecutor } from "../../../workflow-nodes/prompt"

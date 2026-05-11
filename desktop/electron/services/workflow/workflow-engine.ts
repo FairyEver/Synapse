@@ -2,6 +2,14 @@ import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResul
 import type { AgentSendDeps } from "../../../workflow-nodes/types"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { interpolatePrompt, resolveVariables } from "./variable-resolver"
+import { createMainLogger } from "../log-store"
+
+const logger = createMainLogger("service.workflow.engine")
+
+function truncate(text: string | undefined, maxLen: number): string | undefined {
+  if (!text) return text
+  return text.length <= maxLen ? text : `${text.slice(0, maxLen)}...(truncated)`
+}
 
 type EventCallback = (event: WorkflowEvent) => void
 
@@ -44,6 +52,7 @@ export class WorkflowEngine {
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
+      logger.warn("workflow cancelled before start", { runId, workflowId: def.id })
       const result: WorkflowRunResult = { status: "cancelled", nodeResults: {}, durationMs: 0 }
       emit({ type: "workflow:cancelled", runId, result })
       return result
@@ -52,6 +61,7 @@ export class WorkflowEngine {
     const startMs = Date.now()
     const reachableSet = reachableFromEnd(def)
     const order = topoOrder(def).filter((id) => reachableSet.has(id))
+    logger.info("workflow run started", { runId, workflowId: def.id, nodeCount: def.nodes.length, reachableCount: order.length, params: paramValues })
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
     let overallFailed = false
@@ -61,6 +71,7 @@ export class WorkflowEngine {
 
     for (const nodeId of order) {
       if (effectiveAbortSignal.aborted) {
+        logger.warn("workflow cancelled mid-run", { runId, workflowId: def.id, durationMs: Date.now() - startMs })
         const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
         emit({ type: "workflow:cancelled", runId, result })
         return result
@@ -73,6 +84,8 @@ export class WorkflowEngine {
         overallFailed ||
         (ancestors.length > 0 && !reachableNodes.has(nodeId))
       if (shouldSkip) {
+        const reason = overallFailed ? "overall-failed" : "not-reachable"
+        logger.info("node skipped", { runId, nodeId, nodeName: node.name, nodeType: node.type, reason })
         const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} } }
         nodeResults[nodeId] = res
         emit({ type: "node:skipped", runId, nodeId, result: res })
@@ -95,12 +108,19 @@ export class WorkflowEngine {
           ...(typeof prompt === "string" ? { prompt: interpolatePrompt(prompt, resolved) } : {}),
         }
 
+        logger.info("node started", {
+          runId, nodeId, nodeType: node.type, nodeName: node.name,
+          inputVariables: resolved,
+          ...(nr.input.prompt !== undefined ? { prompt: truncate(nr.input.prompt, 200) } : {}),
+        })
+
         const execResult = await executor.execute({
           config: cfg, resolvedVariables: resolved,
           context: { projectId: def.id, runId, abortSignal: effectiveAbortSignal },
           agentDeps: this.agentDeps,
         })
         if (effectiveAbortSignal.aborted) {
+          logger.warn("node aborted mid-execution", { runId, nodeId, nodeName: node.name })
           const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
           emit({ type: "workflow:cancelled", runId, result })
           return result
@@ -110,6 +130,11 @@ export class WorkflowEngine {
         nr.endedAt = Date.now(); nr.durationMs = execResult.durationMs
 
         if (execResult.status === "success") {
+          logger.info("node succeeded", {
+            runId, nodeId, nodeName: node.name, durationMs: nr.durationMs,
+            ...(nr.output !== undefined ? { outputPreview: truncate(nr.output, 500) } : {}),
+            ...(nr.activeBranch !== undefined ? { activeBranch: nr.activeBranch } : {}),
+          })
           nodeOutputs[nodeId] = execResult.output
           emit({ type: "node:completed", runId, nodeId, output: execResult.output, result: { ...nr } })
           for (const e of def.edges.filter((e) => e.from === nodeId)) {
@@ -119,16 +144,26 @@ export class WorkflowEngine {
             }
           }
         } else {
+          logger.warn("node failed", {
+            runId, nodeId, nodeName: node.name, nodeType: node.type, error: execResult.error, durationMs: nr.durationMs,
+            inputVariables: nr.input.variables,
+            ...(nr.input.prompt !== undefined ? { prompt: truncate(nr.input.prompt, 200) } : {}),
+          })
           overallFailed = true
           emit({ type: "node:failed", runId, nodeId, error: execResult.error ?? "Unknown error", result: { ...nr } })
         }
       } catch (err) {
         if (effectiveAbortSignal.aborted) {
+          logger.warn("node aborted mid-execution (exception path)", { runId, nodeId, nodeName: node.name })
           const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
           emit({ type: "workflow:cancelled", runId, result })
           return result
         }
         const msg = err instanceof Error ? err.message : String(err)
+        logger.warn("node threw exception", {
+          runId, nodeId, nodeName: node.name, nodeType: node.type, error: msg,
+          ...(err instanceof Error && err.stack ? { stack: err.stack } : {}),
+        })
         nr.status = "failed"; nr.error = msg; nr.endedAt = Date.now()
         nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
         overallFailed = true
@@ -143,8 +178,16 @@ export class WorkflowEngine {
       nodeResults, durationMs,
       output: endNodeId ? nodeOutputs[endNodeId] : undefined,
     }
-    if (overallFailed) emit({ type: "workflow:failed", runId, error: "One or more nodes failed", result })
-    else emit({ type: "workflow:completed", runId, result })
+    if (overallFailed) {
+      logger.error("workflow run failed", { runId, workflowId: def.id, durationMs })
+      emit({ type: "workflow:failed", runId, error: "One or more nodes failed", result })
+    } else {
+      logger.info("workflow run completed", {
+        runId, workflowId: def.id, durationMs,
+        ...(result.output !== undefined ? { outputPreview: truncate(result.output, 500) } : {}),
+      })
+      emit({ type: "workflow:completed", runId, result })
+    }
     return result
   }
 }
