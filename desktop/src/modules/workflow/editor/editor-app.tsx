@@ -6,7 +6,9 @@ import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/u
 import { createRendererLogger } from "@/app-shell/logging"
 // Side-effect: populate node type registry in the editor window's renderer process.
 // Without this, NodePalette.listTypes() returns [] and users cannot add nodes.
-import "../../../../workflow-nodes/register.main"
+// Use the renderer-only entry so we don't pull main-process executors into the
+// Vite bundle (they import `electron`, `node:path`, etc.).
+import "../../../../workflow-nodes/register.renderer"
 import { Button } from "@/components/ui/button"
 import { useWorkflowRun } from "../hooks/use-workflow-run"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
@@ -99,7 +101,7 @@ export function WorkflowEditorApp() {
     onNodeStarted: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "running" as const } })),
     onNodeCompleted: (nodeId, output, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "success" as const, output: String(output) } })),
     onNodeFailed: (nodeId, error, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "failed" as const, error } })),
-    onNodeSkipped: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { nodeId, input: { variables: {} }, status: "skipped" as const } })),
+    onNodeSkipped: (nodeId, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { nodeId, input: { variables: {} }, status: "skipped" as const } })),
     onCompleted: (results) => { setRunState("completed"); setRunError(null); setNodeResults(results) },
     onFailed: (error, results) => {
       setRunState("failed"); setRunError(error)

@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
+import { validateWorkflow } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 
 const logger = createMainLogger("service.workflow")
@@ -55,6 +56,11 @@ export class WorkflowService {
   }
 
   async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {
+    const validation = validateWorkflow(def)
+    if (!validation.valid) {
+      logger.warn("workflow save blocked by validation", { id: def.id, name: def.name, errorCount: validation.errors.length, errors: validation.errors })
+      return { errors: validation.errors }
+    }
     const versionHash = this.versionHash(def)
     const versioned: WorkflowDefinition = { ...def, version: versionHash, updatedAt: Date.now() }
     await mkdir(this.dir(def.id), { recursive: true })

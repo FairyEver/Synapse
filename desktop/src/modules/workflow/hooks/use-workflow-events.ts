@@ -8,7 +8,7 @@ export interface WorkflowEventCallbacks {
   onNodeStarted?: (nodeId: string) => void
   onNodeCompleted?: (nodeId: string, output: unknown, result?: NodeRunResult) => void
   onNodeFailed?: (nodeId: string, error: string, result?: NodeRunResult) => void
-  onNodeSkipped?: (nodeId: string) => void
+  onNodeSkipped?: (nodeId: string, result?: NodeRunResult) => void
   onCompleted?: (nodeResults: Record<string, NodeRunResult>) => void
   onFailed?: (error: string, nodeResults?: Record<string, NodeRunResult>) => void
   onCancelled?: (nodeResults?: Record<string, NodeRunResult>) => void
@@ -42,7 +42,7 @@ export function useWorkflowEvents(
         if (nr.status === "running") cbRef.current.onNodeStarted?.(nodeId)
         else if (nr.status === "success") cbRef.current.onNodeCompleted?.(nodeId, nr.output, nr)
         else if (nr.status === "failed") cbRef.current.onNodeFailed?.(nodeId, nr.error ?? "Unknown error", nr)
-        else if (nr.status === "skipped") cbRef.current.onNodeSkipped?.(nodeId)
+        else if (nr.status === "skipped") cbRef.current.onNodeSkipped?.(nodeId, nr)
       }
       if (skippedByLive.length > 0) {
         logger.info("hydration skipped nodes already updated by live events", { runId, skippedNodes: skippedByLive })
@@ -73,7 +73,7 @@ export function useWorkflowEvents(
         cbRef.current.onNodeFailed?.(event.nodeId, event.error, event.result)
       } else if (event.type === "node:skipped") {
         terminalNodes.add(event.nodeId)
-        cbRef.current.onNodeSkipped?.(event.nodeId)
+        cbRef.current.onNodeSkipped?.(event.nodeId, event.result)
       } else if (event.type === "workflow:completed") {
         workflowTerminal = true
         logger.info("workflow:completed — applying authoritative nodeResults", { runId, nodeCount: Object.keys(event.result.nodeResults).length })

@@ -77,8 +77,9 @@ export class WorkflowEngine {
         emit({ type: "node:skipped", runId, nodeId, result: res })
         continue
       }
-      emit({ type: "node:started", runId, nodeId })
-      const nr: NodeRunResult = { nodeId, status: "running", input: { variables: {} }, startedAt: Date.now() }
+      const nodeStartedAt = Date.now()
+      emit({ type: "node:started", runId, nodeId, startedAt: nodeStartedAt })
+      const nr: NodeRunResult = { nodeId, status: "running", input: { variables: {} }, startedAt: nodeStartedAt }
       nodeResults[nodeId] = nr
 
       try {

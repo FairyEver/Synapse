@@ -72,15 +72,10 @@ export const workflowIpcModule: IpcModule = {
       handler: async (ctx, def) => {
         const d = def as { id: string; name: string; nodes: unknown[] }
         logger.info("workflow:save requested", { id: d.id, name: d.name, nodeCount: d.nodes.length })
-        const validation = validateWorkflow(def as never)
-        if (!validation.valid) {
-          logger.warn("workflow:save blocked by validation", { id: d.id, errorCount: validation.errors.length, errors: validation.errors })
-          return { errors: validation.errors }
-        }
-        logger.info("workflow:save validation passed", { id: d.id })
+        // Validation is performed inside WorkflowService.save() — no need to validate here.
         const result = await ctx.resolve<WorkflowService>("core.workflow").save(def as never)
         if ("errors" in result) {
-          logger.warn("workflow:save failed", { id: d.id, errors: result.errors })
+          logger.warn("workflow:save blocked by validation", { id: d.id, errors: result.errors })
         } else {
           logger.info("workflow:save succeeded", { id: d.id, versionHash: result.versionHash })
         }
@@ -153,7 +148,7 @@ export const workflowIpcModule: IpcModule = {
           const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
           const nextNodeResults: Record<string, NodeRunResult> = { ...current.nodeResults }
           if (event.type === "node:started") {
-            nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running" }
+            nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
           } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
             nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: event.type === "node:skipped" ? "skipped" : "failed", input: { variables: {} } }
           }

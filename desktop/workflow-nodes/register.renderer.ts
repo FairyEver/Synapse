@@ -1,0 +1,16 @@
+// Renderer-side node registration.
+//
+// Registers manifests ONLY. Executors live next to each node in
+// `executor.main.ts` and pull in main-process modules (logging, fs, electron),
+// so importing them from a Vite-bundled renderer module fails with
+// "path is externalized" / "__dirname is not defined". This file is the
+// renderer's safe entry point: it imports each `*/manifest.ts` directly and
+// never reaches into `index.ts` or `executor.main.ts`.
+import { nodeTypeRegistry } from "./registry"
+import { promptNodeManifest } from "./prompt/manifest"
+import { switchNodeManifest } from "./switch/manifest"
+import { endNodeManifest } from "./end/manifest"
+
+nodeTypeRegistry.registerManifest(promptNodeManifest)
+nodeTypeRegistry.registerManifest(switchNodeManifest)
+nodeTypeRegistry.registerManifest(endNodeManifest)

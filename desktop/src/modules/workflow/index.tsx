@@ -2,7 +2,10 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { WorkflowList } from "./components/workflow-list"
 import { Plus } from "lucide-react"
-import "../../../workflow-nodes/register.main"
+// Renderer-side registration: manifests only. Executors live in `*.main.ts`
+// files that import main-process modules (electron, node:fs, ...) and must not
+// be pulled into the Vite renderer bundle.
+import "../../../workflow-nodes/register.renderer"
 
 export function WorkflowModule() {
   const [listKey, setListKey] = useState(0)

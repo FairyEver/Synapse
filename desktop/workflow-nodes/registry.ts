@@ -8,6 +8,9 @@ export class NodeTypeRegistry {
     this.manifests.set(manifest.type, manifest as NodeManifest)
     this.executors.set(manifest.type, executor as NodeExecutor)
   }
+  registerManifest<T>(manifest: NodeManifest<T>): void {
+    this.manifests.set(manifest.type, manifest as NodeManifest)
+  }
   getManifest(type: string): NodeManifest {
     const m = this.manifests.get(type)
     if (!m) throw new Error(`Unknown node type: ${type}`)
