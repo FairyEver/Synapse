@@ -89,9 +89,11 @@ export class WorkflowEngine {
         const nodeNames = Object.fromEntries(def.nodes.map((n) => [n.id, n.name]))
         const resolved = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs, nodeNames)
         const prompt = (cfg as Record<string, unknown>)["prompt"]
+        const template = (cfg as Record<string, unknown>)["template"]
+        const interpolatable = typeof prompt === "string" ? prompt : (typeof template === "string" ? template : undefined)
         nr.input = {
           variables: resolved,
-          ...(typeof prompt === "string" ? { prompt: interpolatePrompt(prompt, resolved) } : {}),
+          ...(interpolatable !== undefined ? { prompt: interpolatePrompt(interpolatable, resolved) } : {}),
         }
 
         logger.info("node started", {

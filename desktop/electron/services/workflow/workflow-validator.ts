@@ -59,6 +59,23 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 "${node.name}" 类型无效：${message}` })
     }
 
+    // Switch node: validate branch ID uniqueness
+    if (node.type === "switch") {
+      const branches = (node.config as Record<string, unknown>)["branches"]
+      if (Array.isArray(branches)) {
+        const branchIds = (branches as Array<{ id: string }>).map((b) => b.id)
+        const seen = new Set<string>()
+        for (const bid of branchIds) {
+          if (seen.has(bid)) {
+            errors.push({ type: "invalid_config", nodeId: node.id, message: `Switch 节点 "${node.name}" 存在重复的分支 ID "${bid}"` })
+            logger.warn("duplicate branch id detected", { workflowId: def.id, nodeId: node.id, nodeName: node.name, duplicateId: bid })
+            break
+          }
+          seen.add(bid)
+        }
+      }
+    }
+
     if (!hasCycle) {
       const anc = ancestors(node.id, def)
       const vars = (node.config as Record<string, unknown>)["variables"]

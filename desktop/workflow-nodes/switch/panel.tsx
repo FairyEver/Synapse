@@ -32,8 +32,11 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
     })
 
   const addBranch = () => {
-    const id = `branch${branches.length + 1}`
-    const next = [...branches, { id, label: `分支 ${branches.length + 1}` }]
+    const existingIds = new Set(branches.map((b) => b.id))
+    let counter = branches.length + 1
+    while (existingIds.has(`branch${counter}`)) counter++
+    const id = `branch${counter}`
+    const next = [...branches, { id, label: `分支 ${counter}` }]
     setBranches(next)
     commit({ branches: next })
   }
