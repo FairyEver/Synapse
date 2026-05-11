@@ -102,6 +102,9 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       setCreateInitialValue(request.initialValue as SynapseCreateContentPayload<T>)
       setCreateNotices(request.notices ?? [])
       setCreateSourceLabel(request.sourceLabel)
+      if (document.body.style.pointerEvents) {
+        document.body.style.pointerEvents = ""
+      }
       setIsCreateDialogOpen(true)
       onCreateDialogOpenChange?.(true)
       onPendingContentOpenRequestConsumed?.(request.requestId)
@@ -111,15 +114,13 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       pendingContentOpenRequest,
     ])
 
-    const handleSubmit = (payload: SynapseCreateContentPayload<T>) => {
+    const handleSubmit = async (payload: SynapseCreateContentPayload<T>): Promise<void> => {
       logger.info("Content create submitted.", { contentType: config.contentType, repositoryUuid: activeRepository?.uuid ?? null })
-      void promise(
-        async () => {
-          const finalPayload = config.transformCreatePayload
-            ? await config.transformCreatePayload(payload)
-            : payload
-          return createContent(finalPayload)
-        },
+      const finalPayload = config.transformCreatePayload
+        ? await config.transformCreatePayload(payload)
+        : payload
+      const result = await promise(
+        () => createContent(finalPayload),
         {
           loading: "正在保存...",
           success: (result) => {
@@ -131,17 +132,10 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           },
           error: (error) => error instanceof Error ? error.message : "保存失败。",
         },
-      ).then((result) => {
-        if (result?.status === "saved") {
-          handleCreateDialogOpenChange(false)
-        }
-        return result
-      }).catch((error) => {
-        logger.error(`${definition.singularLabel} save failed from create dialog.`, {
-          repositoryUuid: activeRepository?.uuid ?? null,
-          error,
-        })
-      })
+      )
+      if (result?.status !== "saved") {
+        throw new Error("保存未完成，请重试。")
+      }
     }
 
     const submitDisabledReason =

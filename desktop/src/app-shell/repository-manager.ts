@@ -29,6 +29,7 @@ import type {
   SynapseRepositoryUpdatedEvent,
   SynapseRepositoryValidationResult,
 } from "@/types/repository"
+import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireBridgeDomain } from "@/lib/electron-bridge"
 
 export type RepositoryOperationState = {
@@ -49,6 +50,7 @@ type RepositorySubscriber = () => void
 type OperationSubscriber = (state: RepositoryOperationState) => void
 
 const EMPTY_REPOSITORIES: SynapseRepositoryConfig[] = []
+const logger = createRendererLogger("app-shell.repository-manager")
 
 class RepositoryManager {
   // ===== 配置状态 =====
@@ -446,19 +448,27 @@ class RepositoryManager {
     payload: SynapseCreateContentPayload<T>,
   ): Promise<SynapseContentMutationResult> {
     const bridge = requireBridgeDomain("content")
+    const t0 = Date.now()
+    logger.info("createContent: calling bridge.create.", { contentType })
 
     const result = await bridge.create({ contentType, payload } as SynapseCreateContentRequest<T>)
+    logger.info("createContent: bridge.create returned.", { contentType, durationMs: Date.now() - t0, status: result.status })
 
     if (result.status === "saved") {
+      const t1 = Date.now()
+      logger.info("createContent: calling refreshContentList.", { contentType })
       await this.refreshContentList(contentType)
+      logger.info("createContent: refreshContentList done.", { contentType, durationMs: Date.now() - t1 })
 
       // 触发后台推送
       const activeRepo = this.getActiveRepository()
       if (activeRepo && result.pendingPushCount > 0) {
+        logger.info("createContent: scheduling background push.", { repositoryUuid: activeRepo.uuid })
         this.scheduleBackgroundPush(activeRepo.uuid)
       }
     }
 
+    logger.info("createContent: complete.", { contentType, totalDurationMs: Date.now() - t0 })
     return result
   }
 

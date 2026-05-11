@@ -3,6 +3,9 @@ import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapsePendingPushEntry, SynapsePendingPushState } from "../../src/types/repository"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
 import { repositoryStore } from "./repository-store"
+import { createMainLogger } from "./log-store"
+
+const logger = createMainLogger("service.pending-pushes")
 
 type PendingPushInsertParams = {
   action: string
@@ -49,24 +52,32 @@ function mapPendingPushRow(row: Record<string, unknown>): SynapsePendingPushEntr
 
 class PendingPushesService {
   private async canUsePendingPushes(repository: SynapseRepositoryConfig): Promise<boolean> {
+    const t = Date.now()
+    logger.info("canUsePendingPushes: calling getRepositoryState.", { repositoryUuid: repository.uuid })
     const repositoryState = await repositoryStore.getRepositoryState(repository)
+    logger.info("canUsePendingPushes: getRepositoryState done.", { durationMs: Date.now() - t, status: repositoryState.status, isGitRepository: repositoryState.isGitRepository, repositoryUuid: repository.uuid })
 
     return repositoryState.status === "ready" && repositoryState.isGitRepository
   }
 
   async readState(repository: SynapseRepositoryConfig): Promise<SynapsePendingPushState> {
+    const t = Date.now()
+    logger.info("readState: starting.", { repositoryUuid: repository.uuid })
     if (!(await this.canUsePendingPushes(repository))) {
+      logger.info("readState: skipped (cannotUsePendingPushes).", { repositoryUuid: repository.uuid })
       return {
         count: 0,
         items: [],
       }
     }
 
-    return withRepositoryCacheDatabase(repository.uuid, (database) => {
+    const result = await withRepositoryCacheDatabase(repository.uuid, (database) => {
       return this.readStateRows(database)
     }, {
       includePendingPushes: true,
     })
+    logger.info("readState: done.", { durationMs: Date.now() - t, count: result.count, repositoryUuid: repository.uuid })
+    return result
   }
 
   async enqueue(

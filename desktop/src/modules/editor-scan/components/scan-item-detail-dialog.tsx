@@ -211,29 +211,31 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       })
       const sourceLabel = formatQuickPublishSourceLabel(item)
 
-      if (draft.itemType === "rule") {
-        const result = buildRuleQuickPublishPayload(draft)
-        requestOpenContentCreate({
-          kind: "create",
-          requestId: createContentOpenRequestId(),
-          contentType: "rule",
-          initialValue: result.payload,
-          notices: result.notices,
-          sourceLabel,
-        })
-      } else {
-        const result = buildSkillQuickPublishPayload(draft)
-        requestOpenContentCreate({
-          kind: "create",
-          requestId: createContentOpenRequestId(),
-          contentType: "skill",
-          initialValue: result.payload,
-          notices: result.notices,
-          sourceLabel,
-        })
-      }
-
       onOpenChange(false)
+
+      setTimeout(() => {
+        if (draft.itemType === "rule") {
+          const result = buildRuleQuickPublishPayload(draft)
+          requestOpenContentCreate({
+            kind: "create",
+            requestId: createContentOpenRequestId(),
+            contentType: "rule",
+            initialValue: result.payload,
+            notices: result.notices,
+            sourceLabel,
+          })
+        } else {
+          const result = buildSkillQuickPublishPayload(draft)
+          requestOpenContentCreate({
+            kind: "create",
+            requestId: createContentOpenRequestId(),
+            contentType: "skill",
+            initialValue: result.payload,
+            notices: result.notices,
+            sourceLabel,
+          })
+        }
+      }, 300)
     } catch (error) {
       logger.error("Quick publish draft preparation failed.", { path: item.path, error })
       setQuickPublishError(error instanceof Error ? error.message : "读取本地内容失败。")
@@ -259,13 +261,17 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         return
       }
 
-      requestOpenContentDetail({
-        kind: "detail",
-        requestId: createContentOpenRequestId(),
-        contentType: item.type,
-        contentId: item.synapseContentId,
-      })
+      const { type: contentType, synapseContentId } = item
       onOpenChange(false)
+
+      setTimeout(() => {
+        requestOpenContentDetail({
+          kind: "detail",
+          requestId: createContentOpenRequestId(),
+          contentType,
+          contentId: synapseContentId,
+        })
+      }, 300)
     } catch (error) {
       logger.warn("Linked repository content is unavailable.", {
         contentId: item.synapseContentId,
@@ -364,44 +370,45 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       const sourceLabel = formatQuickPublishSourceLabel(item)
       const requestId = createContentOpenRequestId()
 
-      if (draft.itemType === "rule") {
-        requestOpenContentEditOverwrite({
-          kind: "edit-overwrite",
-          requestId,
-          contentType: "rule",
-          contentId: item.synapseContentId,
-          prefill: { contentType: "rule", content: draft.content },
-          sourceLabel,
-        })
-      } else {
-        requestOpenContentEditOverwrite({
-          kind: "edit-overwrite",
-          requestId,
-          contentType: "skill",
-          contentId: item.synapseContentId,
-          prefill: {
-            contentType: "skill",
-            content: draft.content,
-            files: draft.files.map((file) => ({
-              originalName: file.originalName,
-              size: file.size,
-              bytes: file.bytes,
-            })),
-          },
-          sourceLabel,
-        })
-      }
-
-      logger.info("Publish-to-repo overwrite dispatched.", {
-        contentId: item.synapseContentId,
-        contentType: item.type,
-        editorId: item.editorId,
-        requestId,
-        scope: item.scope,
-      })
-
       setIsPublishChoiceOpen(false)
       onOpenChange(false)
+
+      setTimeout(() => { // delay allows dialog close animations (150ms) to complete before tab switch
+        if (draft.itemType === "rule") {
+          requestOpenContentEditOverwrite({
+            kind: "edit-overwrite",
+            requestId,
+            contentType: "rule",
+            contentId: item.synapseContentId!,
+            prefill: { contentType: "rule", content: draft.content },
+            sourceLabel,
+          })
+        } else {
+          requestOpenContentEditOverwrite({
+            kind: "edit-overwrite",
+            requestId,
+            contentType: "skill",
+            contentId: item.synapseContentId!,
+            prefill: {
+              contentType: "skill",
+              content: draft.content,
+              files: draft.files.map((file) => ({
+                originalName: file.originalName,
+                size: file.size,
+                bytes: file.bytes,
+              })),
+            },
+            sourceLabel,
+          })
+        }
+        logger.info("Publish-to-repo overwrite dispatched.", {
+          contentId: item.synapseContentId,
+          contentType: item.type,
+          editorId: item.editorId,
+          requestId,
+          scope: item.scope,
+        })
+      }, 300)
     } catch (error) {
       logger.warn("Publish-to-repo overwrite failed.", {
         contentId: item.synapseContentId,

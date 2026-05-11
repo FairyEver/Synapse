@@ -336,17 +336,26 @@ class ContentSubmissionService {
       ? () => {}
       : await repositoryLockManager.acquire(repository.uuid, "push")
     try {
+      const tPush = Date.now()
+      logger.info("flushPendingPushes: pushRepository starting.", { repositoryUuid: repository.uuid })
       await pushRepository(repository, onProgress)
+      logger.info("flushPendingPushes: pushRepository done.", { durationMs: Date.now() - tPush, repositoryUuid: repository.uuid })
       await pendingPushesService.clear(repository, attemptedPendingPushIds)
+      const tFlushSync = Date.now()
       await contentIndexService.syncIndex(repository)
+      logger.info("flushPendingPushes: syncIndex done.", { durationMs: Date.now() - tFlushSync, repositoryUuid: repository.uuid })
     } catch (error) {
       const message = error instanceof Error ? error.message : "推送到仓库失败。"
 
       if (isNonFastForwardError(message)) {
         await pullWithRebase(repository, onProgress)
+        const tRetryPush = Date.now()
         await pushRepository(repository, onProgress)
+        logger.info("flushPendingPushes: retry pushRepository done.", { durationMs: Date.now() - tRetryPush, repositoryUuid: repository.uuid })
         await pendingPushesService.clear(repository, attemptedPendingPushIds)
+        const tRetrySync = Date.now()
         await contentIndexService.syncIndex(repository)
+        logger.info("flushPendingPushes: retry syncIndex done.", { durationMs: Date.now() - tRetrySync, repositoryUuid: repository.uuid })
         return
       }
 
@@ -524,22 +533,35 @@ class ContentSubmissionService {
       }
     }
 
+    const tBotId = Date.now()
     await ensureBotIdentity(repositoryState.gitRootPath ?? repository.localPath)
+    logger.info("commitAndMaybePush: ensureBotIdentity done.", { durationMs: Date.now() - tBotId, action, repositoryUuid: repository.uuid })
+
+    const tStage = Date.now()
     await stagePaths(repositoryState.gitRootPath ?? repository.localPath, writeResult.gitPaths)
+    logger.info("commitAndMaybePush: stagePaths done.", { durationMs: Date.now() - tStage, action, repositoryUuid: repository.uuid })
+
+    const tCommit = Date.now()
     const commitHash = await commitChanges(
       repositoryState.gitRootPath ?? repository.localPath,
       action,
       writeResult,
     )
+    logger.info("commitAndMaybePush: commitChanges done.", { durationMs: Date.now() - tCommit, commitHash, action, repositoryUuid: repository.uuid })
+
+    const tSyncIndex = Date.now()
     await contentIndexService.syncIndex(repository)
+    logger.info("commitAndMaybePush: syncIndex done.", { durationMs: Date.now() - tSyncIndex, action, repositoryUuid: repository.uuid })
 
     if (options.deferPush) {
+      const tEnqueue = Date.now()
       const pendingPushState = await pendingPushesService.enqueue(repository, {
         action,
         commitHash,
         targetId: writeResult.id,
         title: writeResult.title,
       })
+      logger.info("commitAndMaybePush: enqueue done.", { durationMs: Date.now() - tEnqueue, pendingCount: pendingPushState.count, repositoryUuid: repository.uuid })
 
       return {
         id: writeResult.id,

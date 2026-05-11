@@ -172,7 +172,7 @@ function RuleCreateDialog({
       <FieldContent>
         <Select
           data-track="rule-category-select"
-          value={form.category || undefined}
+          value={form.category}
           onValueChange={(value) => updateField("category", value)}
         >
           <SelectTrigger

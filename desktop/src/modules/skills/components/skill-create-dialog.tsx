@@ -296,7 +296,7 @@ function SkillCreateDialog({
       <Label htmlFor="skill-create-category">分类</Label>
       <Select
         data-track="skill-category-select"
-        value={form.category || undefined}
+        value={form.category}
         onValueChange={(value) => updateField("category", value)}
       >
         <SelectTrigger

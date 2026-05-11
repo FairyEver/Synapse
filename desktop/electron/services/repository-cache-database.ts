@@ -2,6 +2,9 @@ import { DatabaseSync } from "node:sqlite"
 import { app } from "electron"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import { createMainLogger } from "./log-store"
+
+const logger = createMainLogger("service.cache-database")
 
 function getRepositoryCacheDatabasePath(repositoryUuid: string): string {
   return path.join(app.getPath("userData"), "content-index", `${repositoryUuid}.db`)
@@ -16,14 +19,28 @@ async function withRepositoryCacheDatabase<T>(
   callback: (database: DatabaseSync) => Promise<T> | T,
   options: RepositoryCacheSchemaOptions = {},
 ): Promise<T> {
+  const t0 = Date.now()
   const databasePath = getRepositoryCacheDatabasePath(repositoryUuid)
 
   await mkdir(path.dirname(databasePath), { recursive: true })
 
+  const tOpen = Date.now()
   const database = new DatabaseSync(databasePath)
+  const tOpenDone = Date.now()
+
+  const tSchema = Date.now()
+  ensureRepositoryCacheSchema(database, options)
+  const tSchemaDone = Date.now()
+
+  if (tSchemaDone - t0 > 50) {
+    logger.warn("withRepositoryCacheDatabase: slow open+schema.", {
+      openMs: tOpenDone - tOpen,
+      schemaMs: tSchemaDone - tSchema,
+      repositoryUuid,
+    })
+  }
 
   try {
-    ensureRepositoryCacheSchema(database, options)
     return await callback(database)
   } finally {
     database.close()

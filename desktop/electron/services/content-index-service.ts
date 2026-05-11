@@ -252,9 +252,13 @@ class ContentIndexService {
   }
 
   async rebuildIndex(repository: SynapseRepositoryConfig): Promise<void> {
+    const tRebuild = Date.now()
+    logger.info("rebuildIndex: starting.", { repositoryUuid: repository.uuid })
     const allContent = await Promise.all(
       getAllContentTypeIds().map((contentType) => contentHistoryService.listContent(repository, contentType)),
     )
+    const totalItems = allContent.reduce((sum, items) => sum + items.length, 0)
+    logger.info("rebuildIndex: listContent done.", { totalItems, durationMs: Date.now() - tRebuild, repositoryUuid: repository.uuid })
     const currentHead = await this.readHeadSha(repository)
     const profileMap = await userProfileService.listRepoProfiles(repository.uuid)
 
@@ -320,6 +324,7 @@ class ContentIndexService {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(LAST_SYNCED_GIT_SHA_KEY, currentHead ?? "")
     })
+    logger.info("rebuildIndex: complete.", { totalItems, durationMs: Date.now() - tRebuild, repositoryUuid: repository.uuid })
   }
 
   async clearIndex(repository: SynapseRepositoryConfig): Promise<void> {
@@ -332,7 +337,10 @@ class ContentIndexService {
   }
 
   async syncIndex(repository: SynapseRepositoryConfig): Promise<void> {
+    const tSync = Date.now()
+    logger.info("syncIndex: starting.", { repositoryUuid: repository.uuid })
     const currentHead = await this.readHeadSha(repository)
+    logger.info("syncIndex: readHeadSha done.", { currentHead, durationMs: Date.now() - tSync, repositoryUuid: repository.uuid })
     let shouldRebuild = false
 
     await withRepositoryCacheDatabase(repository.uuid, async (database) => {
@@ -344,16 +352,20 @@ class ContentIndexService {
       const lastSyncedGitSha = lastSyncedRow?.value?.trim() ?? ""
 
       if (!currentHead || !lastSyncedGitSha) {
+        logger.info("syncIndex: no HEAD or lastSynced, will rebuild.", { currentHead, lastSyncedGitSha, repositoryUuid: repository.uuid })
         shouldRebuild = true
         return
       }
 
       if (currentHead === lastSyncedGitSha) {
+        logger.info("syncIndex: HEAD unchanged, skipping.", { currentHead, repositoryUuid: repository.uuid })
         return
       }
 
       let diffOutput: string | null = null
 
+      const tDiff = Date.now()
+      logger.info("syncIndex: running git diff.", { from: lastSyncedGitSha, to: currentHead, repositoryUuid: repository.uuid })
       try {
         diffOutput = await runGitText(repository.localPath, [
           "diff",
@@ -361,6 +373,7 @@ class ContentIndexService {
           lastSyncedGitSha,
           currentHead,
         ])
+        logger.info("syncIndex: git diff done.", { durationMs: Date.now() - tDiff, repositoryUuid: repository.uuid })
       } catch (error) {
         logger.warn("Failed to diff Git changes for content index. Falling back to rebuild.", {
           error,
@@ -376,6 +389,7 @@ class ContentIndexService {
       }
 
       const changedContentKeys = collectChangedContentKeys(repository, diffOutput ?? "")
+      logger.info("syncIndex: changed content keys.", { count: changedContentKeys.length, repositoryUuid: repository.uuid })
       const profileMap = await userProfileService.listRepoProfiles(repository.uuid)
 
       if (changedContentKeys.length === 0) {
@@ -465,6 +479,8 @@ class ContentIndexService {
 
     if (shouldRebuild) {
       await this.rebuildIndex(repository)
+    } else {
+      logger.info("syncIndex: complete.", { durationMs: Date.now() - tSync, repositoryUuid: repository.uuid })
     }
   }
 

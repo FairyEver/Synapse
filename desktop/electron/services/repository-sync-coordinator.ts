@@ -164,7 +164,10 @@ class RepositorySyncCoordinator {
     } finally {
       state.pushFinalizing = true
       try {
+        const tSnapshot = Date.now()
+        logger.info("runPushLoop: calling refreshSnapshot.", { repositoryUuid: repository.uuid })
         await this.refreshSnapshot(repository)
+        logger.info("runPushLoop: refreshSnapshot done.", { durationMs: Date.now() - tSnapshot, repositoryUuid: repository.uuid })
       } finally {
         state.pushFinalizing = false
         state.currentPromise = null
@@ -499,6 +502,8 @@ class RepositorySyncCoordinator {
         ? { skipLock: true, recordFailure: false }
         : { recordFailure: false }
 
+      const tFlush = Date.now()
+      logger.info("runPushOnce: flushPendingPushes starting.", { repositoryUuid: repository.uuid, pendingCount: pending.count })
       await contentSubmissionService.flushPendingPushes(
         repository,
         (statusText: string) => {
@@ -520,6 +525,7 @@ class RepositorySyncCoordinator {
         },
         flushOptions,
       )
+      logger.info("runPushOnce: flushPendingPushes done.", { durationMs: Date.now() - tFlush, repositoryUuid: repository.uuid })
 
       const remaining = await pendingPushesService.readState(repository)
 

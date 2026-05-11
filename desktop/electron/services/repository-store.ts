@@ -148,11 +148,12 @@ class RepositoryStore {
 
   async getRepositoryState(repository: SynapseRepositoryConfig): Promise<SynapseRepositoryLocalState> {
     const localPath = repository.localPath
-    logger.debug("Checking repository state.", {
-      repositoryUuid: repository.uuid,
-      localPath,
-    })
+    const t0 = Date.now()
+    logger.info("getRepositoryState: starting.", { repositoryUuid: repository.uuid })
+
+    const tPath = Date.now()
     const repositoryExists = await pathExists(localPath)
+    logger.info("getRepositoryState: pathExists done.", { repositoryExists, durationMs: Date.now() - tPath, repositoryUuid: repository.uuid })
 
     if (!repositoryExists) {
       logger.warn("Repository path does not exist.", {
@@ -168,12 +169,10 @@ class RepositoryStore {
       }
     }
 
+    const tGit = Date.now()
+    logger.info("getRepositoryState: calling runGitProbe.", { repositoryUuid: repository.uuid })
     const gitRootPath = await resolveGitRootPath(localPath)
-    logger.debug("Repository state resolved.", {
-      repositoryUuid: repository.uuid,
-      gitRootPath,
-      isGitRepository: gitRootPath !== null,
-    })
+    logger.info("getRepositoryState: runGitProbe done.", { gitRootPath, durationMs: Date.now() - tGit, totalDurationMs: Date.now() - t0, repositoryUuid: repository.uuid })
 
     return {
       repositoryUuid: repository.uuid,
