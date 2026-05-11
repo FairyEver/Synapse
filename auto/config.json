@@ -1,5 +1,5 @@
 {
-  "intervalMinutes": 30,
+  "intervalMinutes": 1,
   "workingDirectory": "/Users/liyang/Documents/code/github/Synapse",
   "promptFile": "./prompt.md",
   "maxLogs": 50
