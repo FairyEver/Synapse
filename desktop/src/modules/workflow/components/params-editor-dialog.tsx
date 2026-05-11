@@ -1,78 +1,27 @@
 import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2 } from "lucide-react"
 import type { WorkflowParam } from "@/types/workflow"
 
-// ─── Cell style tokens (dedicated — not shared with variable-binding-editor) ──
+// ─── WorkflowParamCard ────────────────────────────────────────────────────────
 
-const CELL_INPUT =
-  "h-full w-full bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground"
-
-const CELL_TRIGGER =
-  "h-full w-full border-0 rounded-none shadow-none bg-transparent focus-visible:ring-0 focus-visible:border-transparent text-xs px-2"
-
-// ─── WorkflowParamRow ─────────────────────────────────────────────────────────
-
-interface WorkflowParamRowProps {
+interface WorkflowParamCardProps {
   param: WorkflowParam
+  index: number
   onChange: (patch: Partial<WorkflowParam>) => void
   onDelete: () => void
 }
 
-function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) {
+function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCardProps) {
   return (
-    <div className="w-full grid grid-cols-[120px_80px_120px_1fr_32px] h-9 divide-x divide-border">
-      <div className="flex items-center">
-        <input
-          className={CELL_INPUT}
-          value={param.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="参数名"
-        />
-      </div>
-      <div className="flex items-center">
-        <Select
-          value={param.type}
-          onValueChange={(v) => onChange({ type: v as WorkflowParam["type"] })}
-        >
-          <SelectTrigger className={CELL_TRIGGER}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="text" className="text-xs">文本</SelectItem>
-            <SelectItem value="number" className="text-xs">数字</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex items-center">
-        <input
-          className={CELL_INPUT}
-          type={param.type === "number" ? "number" : "text"}
-          value={param.default ?? ""}
-          onChange={(e) =>
-            onChange({
-              default:
-                e.target.value === ""
-                  ? null
-                  : param.type === "number"
-                  ? Number(e.target.value)
-                  : e.target.value,
-            })
-          }
-          placeholder="默认值"
-        />
-      </div>
-      <div className="flex items-center overflow-hidden">
-        <input
-          className={CELL_INPUT}
-          value={param.description ?? ""}
-          onChange={(e) => onChange({ description: e.target.value || undefined })}
-          placeholder="描述（可选）"
-        />
-      </div>
-      <div className="flex items-center justify-center">
+    <div className="rounded-md border border-border p-3 grid gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">参数 {index + 1}</span>
         <Button
           type="button"
           size="icon"
@@ -82,6 +31,65 @@ function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) 
         >
           <Trash2 className="size-3" />
         </Button>
+      </div>
+      <div className="grid gap-1.5">
+        <Label className="text-xs">参数名</Label>
+        <Input
+          className="h-7 text-xs"
+          value={param.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          placeholder="param_name"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label className="text-xs">类型</Label>
+          <Select
+            value={param.type}
+            onValueChange={(v) => onChange({ type: v as WorkflowParam["type"] })}
+          >
+            <SelectTrigger className="h-7 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="text" className="text-xs">文本</SelectItem>
+              <SelectItem value="number" className="text-xs">数字</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label className="text-xs">描述</Label>
+          <Input
+            className="h-7 text-xs"
+            value={param.description ?? ""}
+            onChange={(e) => onChange({ description: e.target.value || undefined })}
+            placeholder="可选"
+          />
+        </div>
+      </div>
+      <div className="grid gap-1.5">
+        <Label className="text-xs">默认值</Label>
+        {param.type === "number" ? (
+          <Input
+            className="h-7 text-xs"
+            type="number"
+            value={param.default ?? ""}
+            onChange={(e) =>
+              onChange({ default: e.target.value === "" ? null : Number(e.target.value) })
+            }
+            placeholder="可选"
+          />
+        ) : (
+          <Textarea
+            className="text-xs resize-none"
+            rows={2}
+            value={String(param.default ?? "")}
+            onChange={(e) =>
+              onChange({ default: e.target.value === "" ? null : e.target.value })
+            }
+            placeholder="可选"
+          />
+        )}
       </div>
     </div>
   )
@@ -124,31 +132,21 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-xl">
         <DialogHeader><DialogTitle>编辑工作流参数</DialogTitle></DialogHeader>
-        <div className="grid gap-3 py-2">
+        <div className="grid gap-3 py-2 max-h-[60vh] overflow-auto pr-1">
           {draft.length === 0 && (
             <p className="text-sm text-muted-foreground">暂无参数。</p>
           )}
-          {draft.length > 0 && (
-            <div className="w-full rounded-md border border-border overflow-hidden divide-y divide-border">
-              <div className="w-full grid grid-cols-[120px_80px_120px_1fr_32px] h-7 text-xs text-muted-foreground divide-x divide-border bg-muted/50">
-                <div className="flex items-center px-2 whitespace-nowrap">参数名</div>
-                <div className="flex items-center px-2 whitespace-nowrap">类型</div>
-                <div className="flex items-center px-2 whitespace-nowrap">默认值</div>
-                <div className="flex items-center px-2 whitespace-nowrap">描述</div>
-                <div />
-              </div>
-              {draft.map((p, i) => (
-                <WorkflowParamRow
-                  key={i}
-                  param={p}
-                  onChange={(patch) => updateParam(i, patch)}
-                  onDelete={() => removeParam(i)}
-                />
-              ))}
-            </div>
-          )}
+          {draft.map((p, i) => (
+            <WorkflowParamCard
+              key={i}
+              param={p}
+              index={i}
+              onChange={(patch) => updateParam(i, patch)}
+              onDelete={() => removeParam(i)}
+            />
+          ))}
           <Button
             size="sm"
             variant="ghost"
