@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AlertCircle, X } from "lucide-react"
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, NodeRunResult, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import { WorkflowCanvas, type WorkflowCanvasHandle } from "./canvas"
 import { ExecutionOverlay } from "./execution-overlay"
 import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 
 export function WorkflowEditorApp() {
   const searchParams = new URLSearchParams(window.location.search)
@@ -19,6 +21,9 @@ export function WorkflowEditorApp() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [viewingNodeId, setViewingNodeId] = useState<string | null>(null)
   const [runErrors, setRunErrors] = useState<ValidationError[]>([])
+  const [showCloseDialog, setShowCloseDialog] = useState(false)
+  const setShowCloseDialogRef = useRef(setShowCloseDialog)
+  setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const definitionRef = useRef(definition)
   definitionRef.current = definition
@@ -49,6 +54,7 @@ export function WorkflowEditorApp() {
       if (!isDirtyRef.current) return
       e.preventDefault()
       e.returnValue = ""
+      setShowCloseDialogRef.current(true)
     }
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
@@ -108,6 +114,20 @@ export function WorkflowEditorApp() {
     setViewingNodeId(null)
   }, [runState, nodeResults])
 
+  const handleCloseDiscard = () => {
+    isDirtyRef.current = false
+    setShowCloseDialog(false)
+    window.close()
+  }
+
+  const handleCloseSave = async () => {
+    const def = definitionRef.current
+    if (def) await handleSave(def)
+    isDirtyRef.current = false
+    setShowCloseDialog(false)
+    window.close()
+  }
+
   const handleSave = async (def: WorkflowDefinition) => {
     const result = await window.synapse?.workflow.save(def)
     if (result && "errors" in result) return result
@@ -132,6 +152,7 @@ export function WorkflowEditorApp() {
   if (!definition) return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
 
   return (
+    <>
     <div className="flex flex-col h-screen">
       <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={handleRun} onCancel={cancel} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
@@ -152,12 +173,38 @@ export function WorkflowEditorApp() {
       )}
       <div className="flex-1 flex min-h-0">
         <NodePalette />
-        <div className="flex-1 relative">
-          <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} />
-          <ExecutionOverlay nodeResults={nodeResults} runState={runState} runError={runError} definition={definition} viewingNodeId={viewingNodeId} onViewClose={() => setViewingNodeId(null)} />
-        </div>
-        <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
+        <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
+          <ResizablePanel>
+            <div className="h-full relative">
+              <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} />
+              <ExecutionOverlay nodeResults={nodeResults} runState={runState} runError={runError} definition={definition} viewingNodeId={viewingNodeId} onViewClose={() => setViewingNodeId(null)} />
+            </div>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel
+            defaultSize={240}
+            minSize={200}
+            maxSize={480}
+            groupResizeBehavior="preserve-pixel-size"
+          >
+            <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
     </div>
+    <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>未保存的更改</AlertDialogTitle>
+          <AlertDialogDescription>工作流已修改，是否保存？</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <Button variant="ghost" onClick={handleCloseDiscard}>放弃</Button>
+          <Button onClick={handleCloseSave}>保存</Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
