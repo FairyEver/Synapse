@@ -7,7 +7,7 @@ export class WorkflowWindowManager {
 
   constructor(private readonly mainWindowManager?: WindowManager) {}
 
-  open(workflowId: string, baseUrl: string): BrowserWindow {
+  open(workflowId: string, baseUrl: string, runId?: string): BrowserWindow {
     const existing = this.windows.get(workflowId)
     if (existing && !existing.isDestroyed()) { existing.focus(); return existing }
 
@@ -16,7 +16,9 @@ export class WorkflowWindowManager {
       webPreferences: { preload: require.resolve("../../preload"), contextIsolation: true, sandbox: false },
     })
 
-    const url = `${baseUrl}?window=workflow-editor&workflowId=${encodeURIComponent(workflowId)}`
+    const params = new URLSearchParams({ window: "workflow-editor", workflowId })
+    if (runId) params.set("runId", runId)
+    const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
     void win.loadURL(url)
 
     const windowId = `workflow-editor:${workflowId}`

@@ -12,8 +12,8 @@ export function WorkflowList() {
     const def = await window.synapse?.workflow.get(id)
     if (!def) return
     if (def.params.length === 0) {
-      await window.synapse?.workflow.run(def.id, {})
-      void window.synapse?.workflow.openEditor(def.id)
+      const result = await window.synapse?.workflow.run(def.id, {})
+      void window.synapse?.workflow.openEditor(def.id, result?.runId)
     } else {
       setRunTarget(def)
     }
@@ -28,8 +28,8 @@ export function WorkflowList() {
     if (!runTarget) return
     const id = runTarget.id
     setRunTarget(null)
-    await window.synapse?.workflow.run(id, params)
-    void window.synapse?.workflow.openEditor(id)
+    const result = await window.synapse?.workflow.run(id, params)
+    void window.synapse?.workflow.openEditor(id, result?.runId)
     void refresh()
   }
 

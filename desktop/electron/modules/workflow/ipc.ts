@@ -125,10 +125,10 @@ export const workflowIpcModule: IpcModule = {
       handler: (ctx, { runId }: { runId: string }) => ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId) ?? null,
     },
     openEditor: {
-      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),
-      handler: (ctx, { id }: { id: string }) => {
+      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string(), runId: z.string().optional() }), response: z.void(),
+      handler: (ctx, { id, runId }: { id: string; runId?: string }) => {
         const baseUrl = process.env.VITE_DEV_SERVER_URL ?? "app://-"
-        ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").open(id, baseUrl)
+        ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").open(id, baseUrl, runId)
       },
     },
     editorState: {

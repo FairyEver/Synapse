@@ -550,7 +550,7 @@ export type SynapseBridge = {
     runHistory: (workflowId: string) => Promise<WorkflowRunSnapshot[]>
     runSnapshot: (runId: string, workflowId: string) => Promise<WorkflowRunSnapshot | null>
     runStatus: (runId: string) => Promise<WorkflowRunStatus | null>
-    openEditor: (id: string) => Promise<void>
+    openEditor: (id: string, runId?: string) => Promise<void>
     editorState: () => Promise<{ openEditors: string[] }>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void

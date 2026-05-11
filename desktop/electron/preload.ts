@@ -646,7 +646,7 @@ const synapseBridge: SynapseBridge = {
     runHistory: (workflowId: string) => invoke(IPC_CHANNELS.workflow.runHistory)({ workflowId }),
     runSnapshot: (runId: string, workflowId: string) => invoke(IPC_CHANNELS.workflow.runSnapshot)({ runId, workflowId }),
     runStatus: (runId: string) => invoke(IPC_CHANNELS.workflow.runStatus)({ runId }),
-    openEditor: (id: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id }),
+    openEditor: (id: string, runId?: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id, runId }),
     editorState: invoke(IPC_CHANNELS.workflow.editorState),
     checkCanSync: invoke(IPC_CHANNELS.workflow.checkCanSync),
     onEvent: (listener) =>

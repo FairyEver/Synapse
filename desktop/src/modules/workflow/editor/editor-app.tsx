@@ -12,7 +12,9 @@ import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
 
 export function WorkflowEditorApp() {
-  const workflowId = new URLSearchParams(window.location.search).get("workflowId") ?? ""
+  const searchParams = new URLSearchParams(window.location.search)
+  const workflowId = searchParams.get("workflowId") ?? ""
+  const initialRunId = searchParams.get("runId")
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [viewingNodeId, setViewingNodeId] = useState<string | null>(null)
@@ -21,7 +23,7 @@ export function WorkflowEditorApp() {
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
-  const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel } = useWorkflowRun(workflowId)
+  const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel, attachRun } = useWorkflowRun(workflowId, initialRunId)
   const [runError, setRunError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -51,6 +53,13 @@ export function WorkflowEditorApp() {
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
   }, [])
+
+  useEffect(() => {
+    if (!workflowId) return
+    return window.synapse?.workflow.onEvent((event) => {
+      if (event.type === "workflow:started" && event.workflowId === workflowId) attachRun(event.runId)
+    })
+  }, [workflowId, attachRun])
 
   useWorkflowEvents(runId, {
     onNodeStarted: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "running" as const } })),

@@ -34,7 +34,7 @@ export class WorkflowEngine {
       emit({ type: "workflow:cancelled", runId, result })
       return result
     }
-    emit({ type: "workflow:started", runId })
+    emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
     const order = topoOrder(def)
     const nodeResults: Record<string, NodeRunResult> = {}

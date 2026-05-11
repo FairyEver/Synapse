@@ -37,7 +37,7 @@ export interface WorkflowRunStatus {
   error?: string
 }
 export type WorkflowEvent =
-  | { type: "workflow:started"; runId: string }
+  | { type: "workflow:started"; runId: string; workflowId: string }
   | { type: "node:started"; runId: string; nodeId: string }
   | { type: "node:completed"; runId: string; nodeId: string; output: unknown; result?: NodeRunResult }
   | { type: "node:failed"; runId: string; nodeId: string; error: string; result?: NodeRunResult }
