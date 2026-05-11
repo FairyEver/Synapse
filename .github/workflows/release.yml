@@ -28,9 +28,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # - label: macOS
-          #   os: macos-latest
-          #   package_script: package:mac
+          - label: macOS
+            os: macos-latest
+            package_script: package:mac
           - label: Windows
             os: windows-latest
             package_script: package:win
@@ -52,7 +52,7 @@ jobs:
           cache: pnpm
 
       - name: Prepare Apple notarization key
-        if: false # matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest'
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
@@ -78,7 +78,7 @@ jobs:
         run: pnpm --filter @synapse/desktop run build:database
 
       - name: Package macOS installer
-        if: false # matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest'
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
