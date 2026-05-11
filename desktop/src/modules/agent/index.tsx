@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
-import { Clock, Command as CommandIcon, Copy } from "lucide-react"
+import { Clock, Command as CommandIcon, Copy, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -8,6 +8,7 @@ import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Command,
   CommandEmpty,
@@ -33,6 +34,7 @@ import { resolveAgentProjectScope } from "./project-resolution"
 import {
   agentCliLabel,
   formatAgentTranscript,
+  sessionLabel,
 } from "./utils"
 
 const logger = createRendererLogger("agent")
@@ -224,67 +226,88 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false}>
       <div className="relative flex h-full min-h-0 flex-col gap-0 bg-background">
-        <div className="flex items-center justify-between gap-3 px-0 py-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-sm font-medium">Agent</h2>
-            {selectedCliLabel ? (
-              <Badge variant="outline" className="flex items-center gap-1">
-                {selectedCliLabel}
-                {selectedSession?.platform === "scheduled" && (
-                  <Clock className="size-3 text-muted-foreground" />
-                )}
-              </Badge>
-            ) : null}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {activeProvider ? (
-              <Badge variant="secondary">{activeProvider.id}</Badge>
-            ) : null}
-            {chat.providers?.activeModel ? (
-              <Badge variant="outline">{chat.providers.activeModel}</Badge>
-            ) : null}
-            {chat.pendingPermissions.length > 0 ? (
-              <Badge variant="outline">权限 {chat.pendingPermissions.length}</Badge>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!chat.activeProjectId || chat.timeline.length === 0}
-              onClick={() => void handleCopyTranscript()}
-            >
-              <Copy data-icon="inline-start" />
-              复制
-            </Button>
-            <Popover open={paletteOpen} onOpenChange={setPaletteOpen}>
-              <PopoverTrigger asChild>
+        <TooltipProvider>
+          <div className="flex items-center justify-between gap-3 px-0 py-0">
+            {/* 左区：agent 类型 badge + 会话名称 */}
+            <div className="flex min-w-0 items-center gap-2">
+              {selectedCliLabel ? (
+                <Badge variant="secondary" className="flex shrink-0 items-center gap-1">
+                  {selectedCliLabel}
+                  {selectedSession?.platform === "scheduled" && (
+                    <Clock className="size-3 text-muted-foreground" />
+                  )}
+                </Badge>
+              ) : null}
+              <h2 className="truncate text-sm font-medium">
+                {selectedSession ? sessionLabel(selectedSession) : "Agent"}
+              </h2>
+            </div>
+
+            {/* 右区：模型信息 · 权限 · 复制 · 命令 */}
+            <div className="flex shrink-0 items-center gap-2">
+              {chat.providers?.activeModel ? (
+                <span className="text-xs text-muted-foreground">
+                  {chat.providers.activeModel}
+                  {activeProvider ? ` · ${activeProvider.id}` : ""}
+                </span>
+              ) : null}
+
+              {chat.pendingPermissions.length > 0 ? (
                 <Button type="button" variant="outline" size="sm">
-                  <CommandIcon data-icon="inline-start" />
-                  命令
+                  <ShieldAlert data-icon="inline-start" />
+                  权限 {chat.pendingPermissions.length}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-40 p-0">
-                <Command>
-                  <CommandInput placeholder="搜索命令" />
-                  <CommandList>
-                    <CommandEmpty>无命令</CommandEmpty>
-                    <CommandGroup>
-                      {(selectedAgentDefinition?.commands ?? []).map((command) => (
-                        <CommandItem
-                          key={command.name}
-                          value={`/${command.name}`}
-                          onSelect={() => handleCommandSelect(command.name)}
-                        >
-                          <span className="truncate">/{command.name}</span>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+              ) : null}
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={!chat.activeProjectId || chat.timeline.length === 0}
+                    onClick={() => void handleCopyTranscript()}
+                  >
+                    <Copy />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>复制对话</TooltipContent>
+              </Tooltip>
+
+              <Popover open={paletteOpen} onOpenChange={setPaletteOpen}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon">
+                        <CommandIcon />
+                      </Button>
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>命令</TooltipContent>
+                </Tooltip>
+                <PopoverContent align="end" className="w-40 p-0">
+                  <Command>
+                    <CommandInput placeholder="搜索命令" />
+                    <CommandList>
+                      <CommandEmpty>无命令</CommandEmpty>
+                      <CommandGroup>
+                        {(selectedAgentDefinition?.commands ?? []).map((command) => (
+                          <CommandItem
+                            key={command.name}
+                            value={`/${command.name}`}
+                            onSelect={() => handleCommandSelect(command.name)}
+                          >
+                            <span className="truncate">/{command.name}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
-        </div>
+        </TooltipProvider>
 
         {!selectedSession && chat.sessions.length === 0 && !chat.loading ? (
           <div className="flex flex-1 items-center justify-center">
