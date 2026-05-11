@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
 import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
+import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
 import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
@@ -27,12 +28,19 @@ export function SwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(NodeResultsContext)
   const status = nodeResults[id]?.status
   const name = (data as { name?: string }).name
+  const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
   return (
     <>
       <Handle type="target" position={Position.Left} />
       <SwitchNodeCard config={data as SwitchNodeConfig} name={name} selected={selected} status={status} />
-      {(data as { branches?: Array<{ id: string; label: string }> }).branches?.map((b, i, arr) => (
-        <Handle key={b.id} type="source" position={Position.Right} id={b.id} style={{ top: `${((i + 0.5) / arr.length) * 100}%` }} />
+      {branches.map((b, i) => (
+        <Handle
+          key={b.id}
+          type="source"
+          position={Position.Right}
+          id={b.id}
+          style={{ top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
+        />
       ))}
     </>
   )
