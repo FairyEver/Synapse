@@ -2,6 +2,7 @@ packages:
   - desktop
   - website
   - server
+  - auto
 
 onlyBuiltDependencies:
   - electron
