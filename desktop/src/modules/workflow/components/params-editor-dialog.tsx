@@ -23,7 +23,7 @@ interface WorkflowParamRowProps {
 
 function WorkflowParamRow({ param, onChange, onDelete }: WorkflowParamRowProps) {
   return (
-    <div className="flex items-stretch h-9 divide-x divide-border">
+    <div className="w-full flex items-stretch h-9 divide-x divide-border">
       <div className="w-[120px] shrink-0 flex items-center">
         <input
           className={CELL_INPUT}
@@ -131,12 +131,12 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
             <p className="text-sm text-muted-foreground">暂无参数。</p>
           )}
           {draft.length > 0 && (
-            <div className="rounded-md border border-border overflow-hidden divide-y divide-border">
-              <div className="flex items-center h-7 text-xs text-muted-foreground divide-x divide-border bg-muted/50">
-                <div className="w-[120px] shrink-0 px-2">参数名</div>
-                <div className="w-[80px] shrink-0 px-2">类型</div>
-                <div className="w-[120px] shrink-0 px-2">默认值</div>
-                <div className="flex-1 px-2">描述</div>
+            <div className="w-full rounded-md border border-border overflow-hidden divide-y divide-border">
+              <div className="w-full flex items-center h-7 text-xs text-muted-foreground divide-x divide-border bg-muted/50">
+                <div className="w-[120px] shrink-0 px-2 whitespace-nowrap">参数名</div>
+                <div className="w-[80px] shrink-0 px-2 whitespace-nowrap">类型</div>
+                <div className="w-[120px] shrink-0 px-2 whitespace-nowrap">默认值</div>
+                <div className="flex-1 min-w-0 px-2 whitespace-nowrap">描述</div>
                 <div className="w-8 shrink-0" />
               </div>
               {draft.map((p, i) => (
