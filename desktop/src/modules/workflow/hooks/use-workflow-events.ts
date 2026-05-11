@@ -10,8 +10,8 @@ export interface WorkflowEventCallbacks {
   onNodeFailed?: (nodeId: string, error: string, result?: NodeRunResult) => void
   onNodeSkipped?: (nodeId: string) => void
   onCompleted?: (nodeResults: Record<string, NodeRunResult>) => void
-  onFailed?: (error: string) => void
-  onCancelled?: () => void
+  onFailed?: (error: string, nodeResults?: Record<string, NodeRunResult>) => void
+  onCancelled?: (nodeResults?: Record<string, NodeRunResult>) => void
 }
 
 export function useWorkflowEvents(
@@ -49,9 +49,16 @@ export function useWorkflowEvents(
       }
       // Only apply workflow-level terminal state if the live listener hasn't already
       if (workflowTerminal) { logger.info("hydration skipped workflow terminal state (already received via live)", { runId }); return }
-      if (status.status === "completed") cbRef.current.onCompleted?.(status.nodeResults)
-      else if (status.status === "failed") cbRef.current.onFailed?.(status.error ?? "Unknown error")
-      else if (status.status === "cancelled") cbRef.current.onCancelled?.()
+      if (status.status === "completed") {
+        logger.info("hydration applying workflow:completed", { runId, nodeCount: Object.keys(status.nodeResults).length })
+        cbRef.current.onCompleted?.(status.nodeResults)
+      } else if (status.status === "failed") {
+        logger.info("hydration applying workflow:failed with authoritative nodeResults", { runId, error: status.error, nodeCount: Object.keys(status.nodeResults).length })
+        cbRef.current.onFailed?.(status.error ?? "Unknown error", status.nodeResults)
+      } else if (status.status === "cancelled") {
+        logger.info("hydration applying workflow:cancelled with authoritative nodeResults", { runId, nodeCount: Object.keys(status.nodeResults).length })
+        cbRef.current.onCancelled?.(status.nodeResults)
+      }
     })()
 
     const unsub = window.synapse?.workflow.onEvent((event: WorkflowEvent) => {
@@ -69,13 +76,18 @@ export function useWorkflowEvents(
         cbRef.current.onNodeSkipped?.(event.nodeId)
       } else if (event.type === "workflow:completed") {
         workflowTerminal = true
+        logger.info("workflow:completed — applying authoritative nodeResults", { runId, nodeCount: Object.keys(event.result.nodeResults).length })
         cbRef.current.onCompleted?.(event.result.nodeResults)
       } else if (event.type === "workflow:failed") {
         workflowTerminal = true
-        cbRef.current.onFailed?.(event.error)
+        const hasResults = !!event.result?.nodeResults
+        logger.info("workflow:failed — applying terminal state", { runId, error: event.error, hasAuthoritativeResults: hasResults, nodeCount: hasResults ? Object.keys(event.result!.nodeResults).length : 0 })
+        cbRef.current.onFailed?.(event.error, event.result?.nodeResults)
       } else if (event.type === "workflow:cancelled") {
         workflowTerminal = true
-        cbRef.current.onCancelled?.()
+        const hasResults = !!event.result?.nodeResults
+        logger.info("workflow:cancelled — applying terminal state", { runId, hasAuthoritativeResults: hasResults, nodeCount: hasResults ? Object.keys(event.result!.nodeResults).length : 0 })
+        cbRef.current.onCancelled?.(event.result?.nodeResults)
       }
     })
 

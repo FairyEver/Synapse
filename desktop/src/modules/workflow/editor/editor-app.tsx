@@ -92,8 +92,14 @@ export function WorkflowEditorApp() {
     onNodeFailed: (nodeId, error, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "failed" as const, error } })),
     onNodeSkipped: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { nodeId, input: { variables: {} }, status: "skipped" as const } })),
     onCompleted: (results) => { setRunState("completed"); setRunError(null); setNodeResults(results) },
-    onFailed: (error) => { setRunState("failed"); setRunError(error) },
-    onCancelled: () => { setRunState("cancelled"); setRunError(null) },
+    onFailed: (error, results) => {
+      setRunState("failed"); setRunError(error)
+      if (results) { logger.info("workflow failed — replacing nodeResults with authoritative data", { nodeCount: Object.keys(results).length }); setNodeResults(results) }
+    },
+    onCancelled: (results) => {
+      setRunState("cancelled"); setRunError(null)
+      if (results) { logger.info("workflow cancelled — replacing nodeResults with authoritative data", { nodeCount: Object.keys(results).length }); setNodeResults(results) }
+    },
   })
 
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {

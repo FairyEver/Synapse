@@ -188,8 +188,14 @@ export class WorkflowEngine {
       output: endNodeId ? nodeOutputs[endNodeId] : undefined,
     }
     if (overallFailed) {
-      logger.error("workflow run failed", { runId, workflowId: def.id, durationMs })
-      emit({ type: "workflow:failed", runId, error: "One or more nodes failed", result })
+      // Build a user-facing error that includes the first failing node's message
+      const failedNode = Object.values(nodeResults).find((nr) => nr.status === "failed" && nr.error)
+      const failedNodeName = failedNode ? def.nodes.find((n) => n.id === failedNode.nodeId)?.name : undefined
+      const detailedError = failedNode?.error
+        ? (failedNodeName ? `节点「${failedNodeName}」失败：${failedNode.error}` : failedNode.error)
+        : "One or more nodes failed"
+      logger.error("workflow run failed", { runId, workflowId: def.id, durationMs, firstFailedNode: failedNode?.nodeId, error: detailedError })
+      emit({ type: "workflow:failed", runId, error: detailedError, result })
     } else {
       logger.info("workflow run completed", {
         runId, workflowId: def.id, durationMs,
