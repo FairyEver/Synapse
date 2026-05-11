@@ -3,6 +3,7 @@ import { readdir, unlink, mkdir } from 'fs/promises'
 import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import type { WriteStream } from 'fs'
+import { stripAnsi, c } from './ui.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const LOGS_DIR = resolve(__dirname, '../logs')
@@ -23,18 +24,18 @@ export class RunLogger {
     this.stream.write(`# Run ${runAt.toISOString()}\n\n`)
   }
 
-  write(text: string): void {
-    process.stdout.write(text)
-    this.stream.write(text)
+  /** Write text to log file only (ANSI codes stripped). stdout is managed by caller. */
+  writeFile(text: string): void {
+    this.stream.write(stripAnsi(text))
   }
 
   async close(durationMs: number, result: string): Promise<void> {
     const footer = `\n\n---\n**Duration:** ${(durationMs / 1000).toFixed(1)}s | **Result:** ${result}\n`
     this.stream.write(footer)
     await new Promise<void>((res, rej) => {
-      this.stream.end(err => (err ? rej(err) : res()))
+      this.stream.end((err: Error | null | undefined) => (err ? rej(err) : res()))
     })
-    console.log(`\n[auto] Saved → ${this.path}`)
+    console.log(`${c.dim('→')} log saved  ${c.dim(this.path)}`)
   }
 }
 
