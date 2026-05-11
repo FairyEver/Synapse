@@ -45,4 +45,16 @@ describe("WorkflowEngine", () => {
     expect(events.some((e) => e.type === "node:failed")).toBe(true)
     expect(events.some((e) => e.type === "node:skipped")).toBe(true)
   })
+  it("does not run another start node after a failure", async () => {
+    const def: WorkflowDefinition = { id: "wf4", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, { ...nodeB, config: { ...nodeB.config, prompt: "second" } }], edges: [] }
+    const events: WorkflowEvent[] = []
+    const agent = { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: "boom", durationMs: 0 }) }
+    const engine = new WorkflowEngine(agent)
+
+    const result = await engine.run(def, {}, "run4", (e) => events.push(e))
+
+    expect(result.status).toBe("failed")
+    expect(agent.sendToAgent).toHaveBeenCalledTimes(1)
+    expect(result.nodeResults.b?.status).toBe("skipped")
+  })
 })

@@ -53,7 +53,7 @@ export class WorkflowEngine {
       const ancestors = incomingEdges.map((e) => e.from)
 
       const shouldSkip =
-        (overallFailed && ancestors.length > 0) ||
+        overallFailed ||
         (ancestors.length > 0 && !reachableNodes.has(nodeId))
       if (shouldSkip) {
         const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} } }
