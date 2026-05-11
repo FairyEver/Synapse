@@ -149,7 +149,12 @@ export function WorkflowEditorApp() {
     const saveResult = await handleSave(currentDefinition)
     if (!saveResult || "errors" in saveResult) return null
     setRunError(null)
-    return start(params)
+    const startResult = await start(params)
+    if (startResult && "errors" in startResult) {
+      setRunErrors(startResult.errors)
+      return null
+    }
+    return startResult ? startResult.runId : null
   }
 
   if (!definition) return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>

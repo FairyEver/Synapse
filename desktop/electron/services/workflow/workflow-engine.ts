@@ -35,6 +35,7 @@ export class WorkflowEngine {
     runId: string,
     emit: EventCallback,
     abortSignal?: AbortSignal,
+    projectId?: string,
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
@@ -46,7 +47,7 @@ export class WorkflowEngine {
     emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
     const order = topoOrder(def)
-    logger.info("workflow run started", { runId, workflowId: def.id, nodeCount: def.nodes.length, executionOrder: order.length, params: paramValues })
+    logger.info("workflow run started", { runId, workflowId: def.id, projectId: projectId ?? "(fallback to def.id)", nodeCount: def.nodes.length, executionOrder: order.length, params: paramValues })
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
     let overallFailed = false
@@ -101,7 +102,7 @@ export class WorkflowEngine {
 
         const execResult = await executor.execute({
           config: cfg, resolvedVariables: resolved,
-          context: { projectId: def.id, runId, abortSignal: effectiveAbortSignal },
+          context: { projectId: projectId ?? def.id, runId, abortSignal: effectiveAbortSignal },
           agentDeps: this.agentDeps,
         })
         if (effectiveAbortSignal.aborted) {
@@ -158,7 +159,27 @@ export class WorkflowEngine {
     }
 
     const durationMs = Date.now() - startMs
-    const endNodeId = def.nodes.find((n) => n.type === "end")?.id
+    const endNode = def.nodes.find((n) => n.type === "end")
+    const endNodeId = endNode?.id
+
+    // Detect skipped End node: workflow structurally completed but the End node
+    // was never reached (e.g. active Switch branch has no path to End).
+    if (!overallFailed && endNodeId && !(endNodeId in nodeOutputs)) {
+      const endResult = nodeResults[endNodeId]
+      if (!endResult || endResult.status === "skipped") {
+        overallFailed = true
+        const errorMsg = `工作流结束节点「${endNode!.name}」未被执行（当前分支路径未连接到结束节点）`
+        logger.warn("end node skipped — treating as failure", { runId, workflowId: def.id, endNodeId, durationMs })
+        if (endResult) {
+          endResult.status = "failed"
+          endResult.error = errorMsg
+        } else {
+          nodeResults[endNodeId] = { nodeId: endNodeId, status: "failed", input: { variables: {} }, error: errorMsg }
+        }
+        emit({ type: "node:failed", runId, nodeId: endNodeId, error: errorMsg, result: { ...nodeResults[endNodeId] } })
+      }
+    }
+
     const result: WorkflowRunResult = {
       status: overallFailed ? "failed" : "completed",
       nodeResults, durationMs,

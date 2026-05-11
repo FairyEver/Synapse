@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { toast } from "sonner"
 import { WorkflowCard } from "./workflow-card"
 import { RunParamsDialog } from "./run-params-dialog"
 import { useWorkflowList } from "../hooks/use-workflow-list"
@@ -13,7 +14,11 @@ export function WorkflowList() {
     if (!def) return
     if (def.params.length === 0) {
       const result = await window.synapse?.workflow.run(def.id, {})
-      if (!result || "errors" in result) return
+      if (!result) return
+      if ("errors" in result) {
+        toast.error(result.errors[0]?.message ?? "工作流校验失败")
+        return
+      }
       void window.synapse?.workflow.openEditor(def.id, result.runId)
     } else {
       setRunTarget(def)
@@ -30,7 +35,11 @@ export function WorkflowList() {
     const id = runTarget.id
     setRunTarget(null)
     const result = await window.synapse?.workflow.run(id, params)
-    if (!result || "errors" in result) return
+    if (!result) return
+    if ("errors" in result) {
+      toast.error(result.errors[0]?.message ?? "工作流校验失败")
+      return
+    }
     void window.synapse?.workflow.openEditor(id, result.runId)
     void refresh()
   }

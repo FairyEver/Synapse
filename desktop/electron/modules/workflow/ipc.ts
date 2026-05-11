@@ -9,6 +9,7 @@ import type { EventBus } from "../../runtime/event-bus"
 import { validateWorkflow } from "../../services/workflow/workflow-validator"
 import type { NodeRunResult, WorkflowRunStatus } from "../../../src/types/workflow"
 import { createMainLogger } from "../../services/log-store"
+import { configStore } from "../../services/config-store"
 
 const logger = createMainLogger("workflow.ipc")
 
@@ -141,7 +142,12 @@ export const workflowIpcModule: IpcModule = {
         abortMap.set(runId, ac)
         runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt })
 
-        logger.info("workflow:run started", { workflowId: id, runId, workflowName: def.name, nodeCount: def.nodes.length })
+        // Resolve the active project ID for the runtime context
+        const appConfig = await configStore.load()
+        const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+        const projectId = activeRepo?.uuid ?? ""
+
+        logger.info("workflow:run started", { workflowId: id, runId, workflowName: def.name, nodeCount: def.nodes.length, projectId })
 
         void engine.run(def, params, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
@@ -177,7 +183,7 @@ export const workflowIpcModule: IpcModule = {
             })
             void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params, nodeResults })
           }
-        }, ac.signal)
+        }, ac.signal, projectId)
 
         return { runId }
       },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import type { NodeRunResult } from "@/types/workflow"
+import type { NodeRunResult, ValidationError } from "@/types/workflow"
 
 export type RunState = "idle" | "running" | "completed" | "failed" | "cancelled"
 
@@ -30,11 +30,12 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
     setNodeResults({})
   }, [])
 
-  const start = useCallback(async (params: Record<string, unknown>) => {
+  const start = useCallback(async (params: Record<string, unknown>): Promise<{ runId: string } | { errors: ValidationError[] } | null> => {
     setRunState("running"); setNodeResults({})
     const result = await window.synapse?.workflow.run(workflowId, params)
-    if (!result || "errors" in result) { setRunState("idle"); return null }
-    setRunId(result.runId); return result.runId
+    if (!result) { setRunState("idle"); return null }
+    if ("errors" in result) { setRunState("idle"); return result }
+    setRunId(result.runId); return result
   }, [workflowId])
 
   const cancel = useCallback(async () => { if (runId) await window.synapse?.workflow.cancel(runId) }, [runId])
