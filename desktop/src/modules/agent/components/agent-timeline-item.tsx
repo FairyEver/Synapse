@@ -45,10 +45,13 @@ function AgentTimelineItem({
       return <AgentToolEvent item={item} profile={profile} />
     case "permissionRequest": {
       const isPending = pendingPermissions.some((p) => p.requestId === item.requestId)
+      const isLatestPending =
+        pendingPermissions[pendingPermissions.length - 1]?.requestId === item.requestId
       return (
         <AgentPermissionCard
           item={item}
           pending={isPending}
+          isLatestPending={isLatestPending}
           onRespond={onRespondPermission}
         />
       )
