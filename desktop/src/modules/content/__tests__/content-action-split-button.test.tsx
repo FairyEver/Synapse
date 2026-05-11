@@ -3,7 +3,19 @@ import type { ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
+import { createDefaultConfig } from "@/lib/config"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
+
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: createDefaultConfig(),
+    error: null,
+    isReady: true,
+    refreshConfig: vi.fn(),
+    updateConfig: vi.fn(),
+    resetKey: 0,
+  }),
+}))
 
 const useContentDownloadActionsMock = vi.hoisted(() => vi.fn())
 
