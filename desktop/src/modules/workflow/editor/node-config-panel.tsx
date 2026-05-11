@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { getPanel } from "../../../../workflow-nodes/panel-registry"
 import { useUpstreamNodes } from "../hooks/use-upstream-nodes"
@@ -18,14 +19,17 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
     <div className="h-full w-full border-l bg-background flex flex-col">
       {node ? (
         <>
-          <div className="border-b px-3 py-2 grid gap-1">
-            <Input
-              className="h-7 text-xs font-medium"
-              defaultValue={node.name}
-              key={node.id}
-              onBlur={(e) => onNameChange(node.id, e.target.value)}
-            />
+          <div className="border-b px-3 py-2 grid gap-1.5">
             <p className="text-xs text-muted-foreground capitalize">{node.type} 节点</p>
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">节点名称</Label>
+              <Input
+                className="h-7 text-xs font-medium"
+                defaultValue={node.name}
+                key={node.id}
+                onBlur={(e) => onNameChange(node.id, e.target.value)}
+              />
+            </div>
           </div>
           <div className="flex-1 overflow-auto p-3">
             {(() => {
