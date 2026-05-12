@@ -42,6 +42,7 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
                 defaultValue={node.name}
                 key={node.id}
                 onBlur={(e) => onNameChange(node.id, e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
               />
             </div>
           </div>

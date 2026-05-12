@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle, RefreshCw } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { WorkflowRunSnapshot } from "@/types/workflow"
 
@@ -18,19 +20,37 @@ interface RunHistoryDialogProps {
 export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialogProps) {
   const [snapshots, setSnapshots] = useState<WorkflowRunSnapshot[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    if (!workflowId) return
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const data = await window.synapse?.workflow.runHistory(workflowId)
+        if (cancelled) return
+        if (!data) {
+          // IPC bridge unavailable — treat as error, not empty
+          setError("无法连接到主进程，请稍后重试")
+          return
+        }
+        setSnapshots(data)
+      } catch (err) {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : "加载失败，请重试")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [workflowId])
 
   useEffect(() => {
     if (!open || !workflowId) return
-    let cancelled = false
-    setLoading(true)
-    void (async () => {
-      const data = await window.synapse?.workflow.runHistory(workflowId)
-      if (cancelled) return
-      setSnapshots(data ?? [])
-      setLoading(false)
-    })()
-    return () => { cancelled = true }
-  }, [open, workflowId])
+    return load()
+  }, [open, workflowId, load])
 
   const formatTime = (ts: number) => {
     const d = new Date(ts)
@@ -55,6 +75,16 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         <DialogHeader><DialogTitle>运行历史</DialogTitle></DialogHeader>
         {loading ? (
           <p className="text-sm text-muted-foreground py-4">加载中…</p>
+        ) : error ? (
+          <div className="py-4 space-y-3">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">{error}</AlertDescription>
+            </Alert>
+            <Button size="sm" variant="outline" onClick={load}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+            </Button>
+          </div>
         ) : snapshots.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">暂无运行记录。</p>
         ) : (

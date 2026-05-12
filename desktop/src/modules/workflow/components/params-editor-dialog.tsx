@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -93,14 +94,32 @@ interface ParamsEditorDialogProps {
   onClose: () => void
 }
 
+function paramsEqual(a: WorkflowParam[], b: WorkflowParam[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((p, i) => p.name === b[i]?.name && p.type === b[i]?.type && p.default === b[i]?.default)
+}
+
 export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEditorDialogProps) {
   const [draft, setDraft] = useState<WorkflowParam[]>(params)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
 
   useEffect(() => {
     if (open) setDraft(params)
   }, [open, params])
 
-  const handleOpenChange = (o: boolean) => { if (!o) onClose() }
+  const isDirty = useMemo(() => !paramsEqual(draft, params), [draft, params])
+
+  const handleOpenChange = (o: boolean) => {
+    if (!o) {
+      if (isDirty) { setShowCloseConfirm(true); return }
+      onClose()
+    }
+  }
+
+  const handleCancel = () => {
+    if (isDirty) { setShowCloseConfirm(true); return }
+    onClose()
+  }
 
   const addParam = () => {
     setDraft((d) => [...d, { name: "", type: "text", default: null }])
@@ -120,6 +139,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader><DialogTitle>编辑工作流参数</DialogTitle></DialogHeader>
@@ -146,10 +166,24 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
           </Button>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>取消</Button>
+          <Button variant="ghost" onClick={handleCancel}>取消</Button>
           <Button onClick={handleSave}>保存</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>未保存的参数更改</AlertDialogTitle>
+          <AlertDialogDescription>参数已修改，是否保存？</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <Button variant="ghost" onClick={() => { setShowCloseConfirm(false); onClose() }}>放弃</Button>
+          <Button onClick={() => { setShowCloseConfirm(false); handleSave() }}>保存</Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
