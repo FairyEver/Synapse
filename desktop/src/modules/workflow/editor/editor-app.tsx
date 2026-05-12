@@ -33,6 +33,7 @@ export function WorkflowEditorApp() {
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
+  const renameSignalRef = useRef<number>(0)
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
@@ -171,6 +172,12 @@ export function WorkflowEditorApp() {
     setViewingNodeId(null)
   }, [runState, nodeResults])
 
+  const handleRequestRename = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId)
+    setViewingNodeId(null)
+    renameSignalRef.current += 1
+  }, [])
+
   const handleCloseDiscard = () => {
     isDirtyRef.current = false
     setShowCloseDialog(false)
@@ -251,7 +258,7 @@ export function WorkflowEditorApp() {
         <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
           <ResizablePanel>
             <div className="h-full relative">
-              <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} />
+              <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
               <ExecutionOverlay nodeResults={nodeResults} runState={runState} runError={runError} definition={definition} viewingNodeId={viewingNodeId} onViewClose={() => setViewingNodeId(null)} />
             </div>
           </ResizablePanel>
@@ -262,7 +269,7 @@ export function WorkflowEditorApp() {
             maxSize={600}
             groupResizeBehavior="preserve-pixel-size"
           >
-            <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} />
+            <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} renameSignal={renameSignalRef.current} />
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>

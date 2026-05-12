@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { WorkflowDefinition } from "@/types/workflow"
@@ -9,11 +10,23 @@ interface NodeConfigPanelProps {
   definition: WorkflowDefinition
   onConfigChange: (nodeId: string, config: Record<string, unknown>) => void
   onNameChange: (nodeId: string, name: string) => void
+  renameSignal?: number
 }
 
-export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange, renameSignal }: NodeConfigPanelProps) {
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (renameSignal && renameSignal > 0) {
+      const timer = setTimeout(() => {
+        nameInputRef.current?.focus()
+        nameInputRef.current?.select()
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [renameSignal])
 
   return (
     <div className="h-full w-full border-l bg-background flex flex-col">
@@ -24,6 +37,7 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
             <div className="grid gap-1">
               <Label className="text-xs text-muted-foreground">节点名称</Label>
               <Input
+                ref={nameInputRef}
                 className="h-7 text-xs font-medium"
                 defaultValue={node.name}
                 key={node.id}
