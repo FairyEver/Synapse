@@ -26,6 +26,9 @@ import { nodeTypes, NodeResultsContext } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } from "@/types/workflow"
+import { createRendererLogger } from "@/app-shell/logging"
+
+const logger = createRendererLogger("workflow.editor.canvas")
 
 const edgeTypes = { branch: BranchEdge }
 
@@ -259,17 +262,42 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       offsetY = position.y - first.position.y
     }
 
-    const newNodes = clipboard.nodes.map((n) => ({
-      ...n,
-      id: idMap.get(n.id)!,
-      position: { x: n.position.x + offsetX, y: n.position.y + offsetY },
-    }))
+    let rewrittenBindings = 0
+    const newNodes = clipboard.nodes.map((n) => {
+      // Deep-clone config so rewriting variable bindings doesn't mutate the
+      // clipboard entry (which may be pasted again). Then rewrite any
+      // `variables[*].source.node` that references a node in this paste set so
+      // pasted subgraphs stay internally connected; otherwise the validator
+      // would flag them as `unreachable_reference` and block save.
+      const clonedConfig = JSON.parse(JSON.stringify(n.config)) as Record<string, unknown>
+      const vars = clonedConfig.variables
+      if (Array.isArray(vars)) {
+        for (const v of vars as Array<Record<string, unknown>>) {
+          const src = v.source as Record<string, unknown> | undefined
+          if (src?.type === "node_output" && typeof src.node === "string") {
+            const mapped = idMap.get(src.node)
+            if (mapped) { src.node = mapped; rewrittenBindings++ }
+          }
+        }
+      }
+      return {
+        ...n,
+        id: idMap.get(n.id)!,
+        position: { x: n.position.x + offsetX, y: n.position.y + offsetY },
+        config: clonedConfig,
+      }
+    })
     const newEdges = clipboard.edges.map((e) => ({
       ...e,
       id: crypto.randomUUID(),
       from: idMap.get(e.from) ?? e.from,
       to: idMap.get(e.to) ?? e.to,
     }))
+    logger.info("paste nodes", {
+      pastedNodeCount: newNodes.length,
+      pastedEdgeCount: newEdges.length,
+      rewrittenBindings,
+    })
 
     const flowNodes = newNodes.map((n) => ({
       id: n.id, type: n.type, position: n.position,

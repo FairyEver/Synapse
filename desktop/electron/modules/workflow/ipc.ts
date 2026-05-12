@@ -474,7 +474,40 @@ export const workflowIpcModule: IpcModule = {
     },
     runStatus: {
       channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: z.string() }), response: z.unknown().nullable(),
-      handler: (ctx, { runId }: { runId: string }) => ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId) ?? null,
+      handler: async (ctx, { runId }: { runId: string }) => {
+        const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
+        if (live) return live
+        // Fallback: terminal runs pruned from the in-memory map (MAX_TERMINAL_STATUSES_PER_WORKFLOW = 5)
+        // are still on disk (up to MAX = 20 snapshots per workflow). Without this, opening an
+        // older run from the history dialog would render an empty runner (no definition,
+        // no node results, stuck at "running"). Hydrate from the snapshot store instead.
+        const svc = ctx.resolve<WorkflowService>("core.workflow")
+        const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
+        const metas = await svc.list()
+        for (const meta of metas) {
+          const snap = await snapshots.get(runId, meta.id)
+          if (!snap) continue
+          const hydrated: WorkflowRunStatus = {
+            runId: snap.runId,
+            workflowId: snap.workflowId,
+            status: snap.status,
+            nodeResults: snap.nodeResults,
+            startedAt: snap.startedAt,
+            endedAt: snap.endedAt,
+            durationMs: snap.endedAt ? snap.endedAt - snap.startedAt : undefined,
+            params: snap.params,
+            definition: snap.definition,
+          }
+          logger.info("run-status hydrated from snapshot", {
+            runId, workflowId: snap.workflowId, status: snap.status,
+            nodeCount: Object.keys(snap.nodeResults).length,
+            hasDefinition: !!snap.definition,
+          })
+          return hydrated
+        }
+        logger.warn("run-status not found in memory or snapshots", { runId })
+        return null
+      },
     },
     openEditor: {
       channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string(), runId: z.string().optional() }), response: z.void(),
