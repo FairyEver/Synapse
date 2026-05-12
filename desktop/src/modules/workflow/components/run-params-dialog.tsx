@@ -5,20 +5,32 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { WorkflowParam } from "@/types/workflow"
 
-interface RunParamsDialogProps { open: boolean; params: WorkflowParam[]; onConfirm: (values: Record<string, unknown>) => void; onCancel: () => void }
+interface RunParamsDialogProps {
+  open: boolean
+  params: WorkflowParam[]
+  lastValues?: Record<string, string>
+  onConfirm: (values: Record<string, unknown>, rawValues: Record<string, string>) => void
+  onCancel: () => void
+}
 
-export function RunParamsDialog({ open, params, onConfirm, onCancel }: RunParamsDialogProps) {
+export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel }: RunParamsDialogProps) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(params.map((p) => [p.name, String(p.default ?? "")])))
 
   useEffect(() => {
-    if (open) setValues(Object.fromEntries(params.map((p) => [p.name, String(p.default ?? "")])))
-  }, [open, params])
+    if (open) {
+      // Pre-fill with last-submitted values when available; fall back to defaults
+      setValues(Object.fromEntries(params.map((p) => [
+        p.name,
+        lastValues?.[p.name] ?? String(p.default ?? ""),
+      ])))
+    }
+  }, [open, params, lastValues])
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
     const parsed: Record<string, unknown> = {}
     for (const p of params) parsed[p.name] = p.type === "number" ? Number(values[p.name]) : values[p.name]
-    onConfirm(parsed)
+    onConfirm(parsed, values)
   }
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>

@@ -163,7 +163,13 @@ export function WorkflowEditorApp() {
       }
       setRunErrors([])
       isDirtyRef.current = false
-      if ("versionHash" in result) setDefinition({ ...def, version: result.versionHash })
+      if ("versionHash" in result) {
+        const updated = { ...def, version: result.versionHash }
+        // Sync ref immediately so that async code reading definitionRef.current
+        // (e.g. handleRun after awaiting handleSave) sees the latest version.
+        definitionRef.current = updated
+        setDefinition(updated)
+      }
       return result
     } finally {
       setSaving(false)

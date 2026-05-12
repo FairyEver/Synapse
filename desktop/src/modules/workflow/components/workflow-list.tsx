@@ -84,7 +84,7 @@ export function WorkflowList() {
             onDelete={() => void handleDelete(meta.id)} />
         ))}
       </div>
-      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} onConfirm={handleConfirmRun} onCancel={() => setRunTarget(null)} />
+      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} onConfirm={(params) => { void handleConfirmRun(params) }} onCancel={() => setRunTarget(null)} />
       <RunHistoryDialog open={!!historyWorkflowId} workflowId={historyWorkflowId ?? ""} onClose={() => setHistoryWorkflowId(null)} />
     </>
   )

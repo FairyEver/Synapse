@@ -18,6 +18,9 @@ interface WorkflowToolbarProps {
 export function WorkflowToolbar({ definition, saving, running, onSave, onRun, onChange }: WorkflowToolbarProps) {
   const [paramsOpen, setParamsOpen] = useState(false)
   const [runParamsOpen, setRunParamsOpen] = useState(false)
+  // Remember the last-submitted param values so the dialog pre-fills them on
+  // subsequent opens (avoids forcing re-entry during iterative testing).
+  const [lastRunValues, setLastRunValues] = useState<Record<string, string>>({})
   const busy = saving || running
   return (
     <div className="flex items-center gap-2 border-b px-3 py-2 bg-background">
@@ -54,7 +57,8 @@ export function WorkflowToolbar({ definition, saving, running, onSave, onRun, on
       <RunParamsDialog
         open={runParamsOpen}
         params={definition.params}
-        onConfirm={(params) => { setRunParamsOpen(false); void onRun(params) }}
+        lastValues={lastRunValues}
+        onConfirm={(params, rawValues) => { setRunParamsOpen(false); setLastRunValues(rawValues); void onRun(params) }}
         onCancel={() => setRunParamsOpen(false)}
       />
     </div>
