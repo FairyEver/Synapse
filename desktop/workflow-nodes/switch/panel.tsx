@@ -9,6 +9,7 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import type { WorkflowParam } from "@/types/workflow"
 import type { SwitchNodeConfig, SwitchBranch } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
+import { AgentIcon, getAgentLabel } from "../agent-icon"
 
 const NO_DEFAULT = "__none__"
 
@@ -70,12 +71,22 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           onValueChange={(agent) => commit({ agent })}
         >
           <SelectTrigger className="h-7 text-xs">
-            <SelectValue placeholder="选择 Agent" />
+            <SelectValue placeholder="选择 Agent">
+              {config.agent ? (
+                <span className="flex items-center gap-2">
+                  <AgentIcon agentId={config.agent} />
+                  {getAgentLabel(config.agent)}
+                </span>
+              ) : null}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {agentDefinitions.map((def) => (
               <SelectItem key={def.id} value={def.id} className="text-xs">
-                {def.label}
+                <span className="flex items-center gap-2">
+                  <AgentIcon agentId={def.id} />
+                  {def.label}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>

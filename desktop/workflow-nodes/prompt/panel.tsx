@@ -6,6 +6,7 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import type { WorkflowParam } from "@/types/workflow"
 import type { PromptNodeConfig } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
+import { AgentIcon, getAgentLabel } from "../agent-icon"
 
 export interface PromptNodePanelProps {
   config: PromptNodeConfig
@@ -16,8 +17,6 @@ export interface PromptNodePanelProps {
 
 export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams }: PromptNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
-  // Track the last-committed config to avoid stale-prop overwrites when
-  // multiple fields are edited in rapid succession before re-render propagates.
   const lastCommittedRef = useRef<PromptNodeConfig>(config)
 
   const commit = (overrides?: Partial<PromptNodeConfig>) => {
@@ -35,12 +34,22 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
           onValueChange={(agent) => commit({ agent })}
         >
           <SelectTrigger className="h-7 text-xs">
-            <SelectValue placeholder="选择 Agent" />
+            <SelectValue placeholder="选择 Agent">
+              {config.agent ? (
+                <span className="flex items-center gap-2">
+                  <AgentIcon agentId={config.agent} />
+                  {getAgentLabel(config.agent)}
+                </span>
+              ) : null}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {agentDefinitions.map((def) => (
               <SelectItem key={def.id} value={def.id} className="text-xs">
-                {def.label}
+                <span className="flex items-center gap-2">
+                  <AgentIcon agentId={def.id} />
+                  {def.label}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
