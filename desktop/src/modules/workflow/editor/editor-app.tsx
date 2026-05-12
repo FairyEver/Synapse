@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { AlertCircle, RefreshCw, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
@@ -239,7 +240,19 @@ export function WorkflowEditorApp() {
     setRunning(true)
     try {
       const forceResult = await window.synapse?.workflow.runDefinition(saved, params, true)
-      if (!forceResult || "errors" in forceResult || "conflict" in forceResult) return
+      if (!forceResult) {
+        toast.error("运行失败：无法连接到主进程")
+        return
+      }
+      if ("errors" in forceResult) {
+        const errors = forceResult.errors as Array<{ message?: string }>
+        toast.error(errors[0]?.message ?? "运行失败：校验未通过")
+        return
+      }
+      if ("conflict" in forceResult) {
+        toast.error("仍有运行中的实例，请先取消")
+        return
+      }
       void window.synapse?.workflow.openRunner(saved.id, forceResult.runId)
     } finally {
       setRunning(false)

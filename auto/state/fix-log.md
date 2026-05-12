@@ -631,3 +631,27 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 工作流系统的 LLM 交互准确性（Switch 节点条件路由）和运行控制可靠性（Cancel 错误反馈）两个维度各向真正可用迈进一步。
+
+---
+
+## [2026-05-13 17:10] 第 27 次迭代
+
+### 发现的问题
+- Runner 的 loadError 警告条在 fallback 成功或 rerun 成功后永不消除：fallback 成功加载定义后用户看到 DAG 正常却同时显示"无法加载运行记录"横幅，rerun 后新运行正常但旧警告依然存在（runner-app.tsx:48 → :75 未清 loadError；:183-191 未清 loadError）
+- 编辑器和列表页 handleForceRun 三个失败路径（IPC 不可用/校验失败/仍有冲突）均静默 return 无 toast 反馈，用户点击"取消旧运行并启动"后对话框关闭但无任何结果（editor-app.tsx:242 → workflow-list.tsx:93 注释 "handled silently"）
+
+### 修复内容
+- [desktop/src/modules/workflow/runner/runner-app.tsx:75-80] fallback 成功获取定义时新增 `setLoadError(null)`
+- [desktop/src/modules/workflow/runner/runner-app.tsx:196] handleRerun 成功路径新增 `setLoadError(null)`
+- [desktop/src/modules/workflow/editor/editor-app.tsx:1,242-255] 新增 toast import；handleForceRun 的三个失败分支分别 toast.error（IPC 不可用/校验失败/仍有冲突）
+- [desktop/src/modules/workflow/components/workflow-list.tsx:92-109] handleForceRun 三个失败分支分别 toast.error + catch 块 toast.error("操作异常")，替换原有静默处理
+
+### 与历史的关系
+- 缺陷 1：独立（loadError 在第 23 轮引入但未覆盖清除逻辑）
+- 缺陷 2：独立（handleForceRun 错误处理从未被任何轮次覆盖）
+
+### 日志补充
+- 无（纯 UI 交互优化：所有修改均为渲染侧状态清除和 toast 反馈，不涉及数据流、执行路径或 IPC 契约变更）
+
+### 本次进展
+Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善即清除"；编辑器和列表页的冲突解决路径从"确认后无反馈"变为"失败有明确 toast 提示"——错误信息可消失性和操作反馈完整性两个维度向真正可用迈进。

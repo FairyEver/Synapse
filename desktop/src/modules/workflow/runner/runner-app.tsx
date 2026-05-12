@@ -72,7 +72,12 @@ export function WorkflowRunnerApp() {
     void (async () => {
       const def = await window.synapse?.workflow.get(workflowId)
       if (cancelled) return
-      if (def) setDefinition(def)
+      if (def) {
+        setDefinition(def)
+        // Fallback succeeded: clear the loadError so the warning banner
+        // doesn't persist when the DAG is now correctly rendered.
+        setLoadError(null)
+      }
     })()
     return () => { cancelled = true }
   }, [workflowId, definition, runId, loadError])
@@ -188,6 +193,7 @@ export function WorkflowRunnerApp() {
       setRunState("running")
       setNodeResults({})
       setRunError(null)
+      setLoadError(null)
       setSelectedNodeId(null)
     } finally {
       setRerunning(false)

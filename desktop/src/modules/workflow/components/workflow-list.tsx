@@ -90,11 +90,23 @@ export function WorkflowList() {
     setConflictState(null)
     try {
       const forceResult = await window.synapse?.workflow.runDefinition(def, params, true)
-      if (!forceResult || "errors" in forceResult || "conflict" in forceResult) return
+      if (!forceResult) {
+        toast.error("运行失败：无法连接到主进程")
+        return
+      }
+      if ("errors" in forceResult) {
+        const errors = forceResult.errors as Array<{ message?: string }>
+        toast.error(errors[0]?.message ?? "运行失败：校验未通过")
+        return
+      }
+      if ("conflict" in forceResult) {
+        toast.error("仍有运行中的实例，请先取消")
+        return
+      }
       void window.synapse?.workflow.openRunner(def.id, forceResult.runId)
       void refresh()
     } catch {
-      // handled silently — force-run failures are rare after a successful first attempt
+      toast.error("运行失败：操作异常")
     }
   }
 
