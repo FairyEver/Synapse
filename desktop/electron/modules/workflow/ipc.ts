@@ -13,6 +13,34 @@ import { configStore } from "../../services/config-store"
 
 const logger = createMainLogger("workflow.ipc")
 
+/**
+ * Maximum number of terminal (completed/failed/cancelled) run statuses to keep
+ * per workflow in the in-memory map. Older entries are pruned to prevent
+ * unbounded memory growth during long sessions.
+ */
+const MAX_TERMINAL_STATUSES_PER_WORKFLOW = 5
+
+/**
+ * Prune old terminal run statuses for a given workflow, keeping only the most
+ * recent MAX_TERMINAL_STATUSES_PER_WORKFLOW entries. Running entries are never pruned.
+ */
+function pruneTerminalStatuses(runStatuses: Map<string, WorkflowRunStatus>, workflowId: string): void {
+  const terminalEntries: Array<{ runId: string; endedAt: number }> = []
+  for (const [runId, status] of runStatuses) {
+    if (status.workflowId === workflowId && status.status !== "running") {
+      terminalEntries.push({ runId, endedAt: status.endedAt ?? status.startedAt })
+    }
+  }
+  if (terminalEntries.length <= MAX_TERMINAL_STATUSES_PER_WORKFLOW) return
+  // Sort oldest first, prune excess
+  terminalEntries.sort((a, b) => a.endedAt - b.endedAt)
+  const toRemove = terminalEntries.slice(0, terminalEntries.length - MAX_TERMINAL_STATUSES_PER_WORKFLOW)
+  for (const { runId } of toRemove) {
+    runStatuses.delete(runId)
+  }
+  logger.info("pruned stale run statuses", { workflowId, removed: toRemove.length, remaining: terminalEntries.length - toRemove.length })
+}
+
 const workflowDefinitionSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
@@ -179,6 +207,7 @@ export const workflowIpcModule: IpcModule = {
               ...(event.type === "workflow:failed" ? { error: event.error } : {}),
             })
             void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params, nodeResults, definition: def })
+            pruneTerminalStatuses(runStatuses, id)
           }
         }, ac.signal, projectId).catch((err) => {
           // Guard against unhandled rejection: if the engine throws before emitting
@@ -288,6 +317,7 @@ export const workflowIpcModule: IpcModule = {
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: def.id, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params, nodeResults, definition: def })
+            pruneTerminalStatuses(runStatuses, def.id)
           }
         }, ac.signal, projectId).catch((err) => {
           const errorMsg = err instanceof Error ? err.message : String(err)
@@ -398,6 +428,7 @@ export const workflowIpcModule: IpcModule = {
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: workflowId!, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def })
+            pruneTerminalStatuses(runStatuses, workflowId!)
           }
         }, ac.signal, projectId).catch((err) => {
           const errorMsg = err instanceof Error ? err.message : String(err)

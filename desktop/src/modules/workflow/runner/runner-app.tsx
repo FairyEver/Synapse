@@ -69,6 +69,12 @@ export function WorkflowRunnerApp() {
           setNodeResults({})
           setRunError(null)
           setSelectedNodeId(null)
+          // Clear definition and params so the runner shows loading state until
+          // the hydration effect fetches the new run's metadata. Without this,
+          // a stale definition (from a previous workflow version) would render
+          // an incorrect DAG topology until the async fetch completes.
+          setDefinition(null)
+          setRunParams({})
         }
       }
     })
@@ -80,6 +86,9 @@ export function WorkflowRunnerApp() {
         setNodeResults({})
         setRunError(null)
         setSelectedNodeId(null)
+        // Same rationale: clear stale definition/params from previous run
+        setDefinition(null)
+        setRunParams({})
       }
     })
     return () => { unsubEvent?.(); unsubSwitch?.() }
