@@ -7,6 +7,7 @@ export function NodePalette() {
       <p className="text-xs font-medium text-muted-foreground px-1 pb-1">节点</p>
       {types.map((type) => {
         const manifest = nodeTypeRegistry.getManifest(type)
+        const Icon = manifest.icon
         return (
           <div
             key={type}
@@ -14,6 +15,7 @@ export function NodePalette() {
             onDragStart={(e) => e.dataTransfer.setData("application/workflow-node-type", type)}
             className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-grab hover:bg-muted active:cursor-grabbing"
           >
+            <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">{manifest.title}</span>
           </div>
         )

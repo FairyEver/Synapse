@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react"
 import type { ZodType } from "zod"
 
 export interface PortDefinition { id: string; label: string }
@@ -11,7 +12,7 @@ export interface ConfigFieldDescriptor {
 export interface NodeManifest<TConfig = unknown> {
   type: string
   title: string
-  icon: string
+  icon: LucideIcon
   color: string
   ports: { inputs: PortDefinition[]; outputs: PortDefinition[] | "dynamic" }
   resolveDynamicPorts?: (config: TConfig) => PortDefinition[]
