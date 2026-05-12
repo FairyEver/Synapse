@@ -12,65 +12,74 @@
 
 ## 一、项目背景
 
-这是一个 Electron + React + TypeScript monorepo，工作流编排是其中一个半成品模块。它允许用户在可视化画布上编排多步 Prompt Chain，支持变量绑定和条件分支（Switch 节点），在本地 Electron 主进程中串行执行。
+这是一个 Electron + React + TypeScript monorepo，工作流编排是其中一个快速迭代中的模块。它允许用户在可视化画布上编排多步 Prompt Chain，支持变量绑定和条件分支（Switch 节点），在本地 Electron 主进程中串行执行。当前已有的能力包括：编辑器画布（节点拖拽、连线、右键菜单、复制粘贴）、独立的运行视图（DAG 视图 + 时间线视图 + 节点结果面板）、运行参数对话框、运行历史记录等。
+
+> **重要：代码是唯一的事实来源。** `docs/` 和 `desktop/docs/` 下的设计文档仅反映某个历史时间点的设计意图，代码可能已经超越或偏离这些文档。分析时以实际代码行为为准，设计文档仅作为理解背景意图的辅助参考，不作为审查基准。
 
 ---
 
 ## 二、必读代码范围
 
-在开始分析前，**依次完整阅读**以下所有文件（这些是本次任务的全部分析边界）：
-
-**设计规格（理解设计意图的权威文档）**
-- [desktop/docs/superpowers/specs/2026-05-10-workflow-orchestration-design.md](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/docs/superpowers/specs/2026-05-10-workflow-orchestration-design.md:0:0-0:0)
+在开始分析前，**完整阅读**以下所有文件（这些是本次任务的全部分析边界）：
 
 **类型定义**
-- [desktop/src/types/workflow.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/types/workflow.ts:0:0-0:0)
-- [desktop/workflow-nodes/types.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/types.ts:0:0-0:0)
-- [desktop/workflow-nodes/schemas/variable-binding.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/schemas/variable-binding.ts:0:0-0:0)
+- `desktop/src/types/workflow.ts`
+- `desktop/workflow-nodes/types.ts`
+- `desktop/workflow-nodes/schemas/variable-binding.ts`
 
 **节点类型插件**
-- [desktop/workflow-nodes/registry.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/registry.ts:0:0-0:0)
-- [desktop/workflow-nodes/register.main.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/register.main.ts:0:0-0:0)
-- [desktop/workflow-nodes/prompt/schema.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/prompt/schema.ts:0:0-0:0)
-- [desktop/workflow-nodes/prompt/manifest.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/prompt/manifest.ts:0:0-0:0)
-- [desktop/workflow-nodes/prompt/executor.main.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/prompt/executor.main.ts:0:0-0:0)
-- [desktop/workflow-nodes/prompt/panel.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/prompt/panel.tsx:0:0-0:0)
-- [desktop/workflow-nodes/switch/schema.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/switch/schema.ts:0:0-0:0)
-- [desktop/workflow-nodes/switch/executor.main.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/switch/executor.main.ts:0:0-0:0)
-- [desktop/workflow-nodes/switch/panel.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/switch/panel.tsx:0:0-0:0)
-- [desktop/workflow-nodes/end/schema.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/end/schema.ts:0:0-0:0)
-- [desktop/workflow-nodes/end/executor.main.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/end/executor.main.ts:0:0-0:0)
-- [desktop/workflow-nodes/end/panel.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/end/panel.tsx:0:0-0:0)
-- [desktop/workflow-nodes/variable-binding-editor.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/variable-binding-editor.tsx:0:0-0:0)
-- [desktop/workflow-nodes/panel-registry.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/workflow-nodes/panel-registry.ts:0:0-0:0)
+- `desktop/workflow-nodes/registry.ts`
+- `desktop/workflow-nodes/register.main.ts`
+- `desktop/workflow-nodes/register.renderer.ts`
+- `desktop/workflow-nodes/panel-registry.ts`
+- `desktop/workflow-nodes/variable-binding-editor.tsx`
+- `desktop/workflow-nodes/prompt/`（schema.ts, manifest.ts, executor.main.ts, panel.tsx, card.tsx, index.ts）
+- `desktop/workflow-nodes/switch/`（schema.ts, manifest.ts, executor.main.ts, panel.tsx, card.tsx, constants.ts, index.ts）
+- `desktop/workflow-nodes/end/`（schema.ts, manifest.ts, executor.main.ts, panel.tsx, card.tsx, index.ts）
 
 **主进程服务层**
-- [desktop/electron/services/workflow/workflow-service.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-service.ts:0:0-0:0)
-- [desktop/electron/services/workflow/workflow-engine.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-engine.ts:0:0-0:0)
-- [desktop/electron/services/workflow/workflow-validator.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-validator.ts:0:0-0:0)
-- [desktop/electron/services/workflow/variable-resolver.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/variable-resolver.ts:0:0-0:0)
-- [desktop/electron/services/workflow/run-snapshot-service.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/run-snapshot-service.ts:0:0-0:0)
-- [desktop/electron/services/workflow/window-manager.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/window-manager.ts:0:0-0:0)
+- `desktop/electron/services/workflow/workflow-service.ts`
+- `desktop/electron/services/workflow/workflow-engine.ts`
+- `desktop/electron/services/workflow/workflow-validator.ts`
+- `desktop/electron/services/workflow/variable-resolver.ts`
+- `desktop/electron/services/workflow/run-snapshot-service.ts`
+- `desktop/electron/services/workflow/window-manager.ts`
 
 **IPC 层 + 服务注册**
-- `desktop/electron/modules/workflow/ipc.ts` 
+- `desktop/electron/modules/workflow/ipc.ts`
 - `desktop/electron/bootstrap/descriptors.ts`（仅 workflow 相关部分）
 
-**渲染层**
-- [desktop/src/modules/workflow/index.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/index.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/editor/editor-app.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/editor/editor-app.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/editor/canvas.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/editor/canvas.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/editor/toolbar.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/editor/toolbar.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/editor/node-config-panel.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/editor/node-config-panel.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/editor/execution-overlay.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/editor/execution-overlay.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/editor/node-wrappers.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/editor/node-wrappers.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/editor/node-palette.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/editor/node-palette.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/components/workflow-list.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/components/workflow-list.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/components/workflow-card.tsx](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/components/workflow-card.tsx:0:0-0:0)
-- [desktop/src/modules/workflow/hooks/use-workflow-run.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/hooks/use-workflow-run.ts:0:0-0:0)
-- [desktop/src/modules/workflow/hooks/use-workflow-events.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/hooks/use-workflow-events.ts:0:0-0:0)
-- [desktop/src/modules/workflow/hooks/use-workflow-list.ts](cci:7://file:///Users/liyang/Documents/code/github/Synapse/desktop/src/modules/workflow/hooks/use-workflow-list.ts:0:0-0:0)
-- `desktop/src/modules/workflow/hooks/use-upstream-nodes.ts` 
+**渲染层 — 编辑器**
+- `desktop/src/modules/workflow/index.tsx`
+- `desktop/src/modules/workflow/editor/editor-app.tsx`
+- `desktop/src/modules/workflow/editor/canvas.tsx`
+- `desktop/src/modules/workflow/editor/canvas-context.ts`
+- `desktop/src/modules/workflow/editor/toolbar.tsx`
+- `desktop/src/modules/workflow/editor/node-config-panel.tsx`
+- `desktop/src/modules/workflow/editor/execution-overlay.tsx`
+- `desktop/src/modules/workflow/editor/node-wrappers.tsx`
+- `desktop/src/modules/workflow/editor/node-context-menu.tsx`
+- `desktop/src/modules/workflow/editor/node-palette.tsx`
+- `desktop/src/modules/workflow/editor/custom-edge.tsx`
+
+**渲染层 — 运行视图**
+- `desktop/src/modules/workflow/runner/runner-app.tsx`
+- `desktop/src/modules/workflow/runner/runner-toolbar.tsx`
+- `desktop/src/modules/workflow/runner/dag-view.tsx`
+- `desktop/src/modules/workflow/runner/timeline-view.tsx`
+- `desktop/src/modules/workflow/runner/node-result-panel.tsx`
+- `desktop/src/modules/workflow/runner/runner-node-wrappers.tsx`
+
+**渲染层 — 组件与 Hooks**
+- `desktop/src/modules/workflow/components/workflow-list.tsx`
+- `desktop/src/modules/workflow/components/workflow-card.tsx`
+- `desktop/src/modules/workflow/components/run-params-dialog.tsx`
+- `desktop/src/modules/workflow/components/run-history-dialog.tsx`
+- `desktop/src/modules/workflow/components/params-editor-dialog.tsx`
+- `desktop/src/modules/workflow/hooks/use-workflow-run.ts`
+- `desktop/src/modules/workflow/hooks/use-workflow-events.ts`
+- `desktop/src/modules/workflow/hooks/use-workflow-list.ts`
+- `desktop/src/modules/workflow/hooks/use-upstream-nodes.ts`
 
 在阅读上述文件时，同时留意项目已有的统一日志工具（`StructuredLogger` 或同等机制）的使用方式，作为后续代码实施阶段的日志规范参考。
 
@@ -90,7 +99,7 @@
 **审查维度参考（但不限于此）：**
 
 1. **数据流断裂**：某个状态在 A 处更新，但 B 处使用的是旧版本，导致 UI 或执行结果与用户预期不符
-2. **设计规格未实现**：设计文档明确规定的行为，在代码中未被执行
+2. **代码内部矛盾**：同一概念在不同文件中的实现假设不一致（如类型定义 vs 实际使用、IPC 契约 vs 调用侧、编辑器 vs 运行视图对同一数据结构的处理差异）
 3. **运行时崩溃路径**：某个合法的用户操作序列会导致未捕获错误或静默失败
 4. **生命周期与服务绑定**：某个服务在初始化时捕获了应该动态读取的状态，导致后续操作错误
 5. **跨组件状态不一致**：一个地方改了数据，另一个地方的展示或逻辑没有随之更新

@@ -229,6 +229,24 @@ describe("TaskFormDialog", () => {
     expect(scriptHtml).not.toContain('id="task-action-script-shell"')
   })
 
+  it("renders PATH mode toggle and posixLogin checkbox for POSIX shell", () => {
+    const html = renderDialog()
+
+    expect(html).toContain('aria-label="PATH strategy"')
+    expect(html).toContain('id="task-action-command-path-strategy-merge"')
+    expect(html).toContain('id="task-action-command-path-strategy-replace"')
+    expect(html).toContain("PATH 模式")
+    expect(html).toContain("task-action-command-posix-login")
+    expect(html).toContain("以登录 Shell 执行")
+  })
+
+  it("renders env field placeholder and description", () => {
+    const html = renderDialog()
+
+    expect(html).toContain("KEY=value")
+    expect(html).toContain("每行一个 KEY=value")
+  })
+
   it("renders HTTP method and body type as single-value toggle groups", () => {
     const html = renderDialog({
       task: createTask({
