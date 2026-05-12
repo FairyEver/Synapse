@@ -125,7 +125,15 @@ export function WorkflowEditorApp() {
 
   const handleCloseSave = async () => {
     const def = definitionRef.current
-    if (def) await handleSave(def)
+    if (def) {
+      const result = await handleSave(def)
+      // If save failed (validation errors or IPC failure), abort the close —
+      // keep the window open so the user can fix the issues and retry.
+      if (!result || "errors" in result) {
+        setShowCloseDialog(false)
+        return
+      }
+    }
     isDirtyRef.current = false
     setShowCloseDialog(false)
     window.close()

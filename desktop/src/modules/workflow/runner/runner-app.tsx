@@ -97,9 +97,9 @@ export function WorkflowRunnerApp() {
   }, [workflowId])
 
   useWorkflowEvents(runId, {
-    onNodeStarted: (nodeId) => setNodeResults((r) => ({
+    onNodeStarted: (nodeId, partial) => setNodeResults((r) => ({
       ...r,
-      [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "running" as const },
+      [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), ...partial, status: "running" as const },
     })),
     onNodeCompleted: (nodeId, output, result) => setNodeResults((r) => ({
       ...r,

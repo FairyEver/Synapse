@@ -5,7 +5,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 const logger = createRendererLogger("workflow.events")
 
 export interface WorkflowEventCallbacks {
-  onNodeStarted?: (nodeId: string) => void
+  onNodeStarted?: (nodeId: string, partial?: Partial<NodeRunResult>) => void
   onNodeCompleted?: (nodeId: string, output: unknown, result?: NodeRunResult) => void
   onNodeFailed?: (nodeId: string, error: string, result?: NodeRunResult) => void
   onNodeSkipped?: (nodeId: string, result?: NodeRunResult) => void
@@ -39,7 +39,7 @@ export function useWorkflowEvents(
       for (const [nodeId, nr] of Object.entries(status.nodeResults)) {
         // Skip hydration for nodes already updated by the live event listener
         if (terminalNodes.has(nodeId)) { skippedByLive.push(nodeId); continue }
-        if (nr.status === "running") cbRef.current.onNodeStarted?.(nodeId)
+        if (nr.status === "running") cbRef.current.onNodeStarted?.(nodeId, nr)
         else if (nr.status === "success") cbRef.current.onNodeCompleted?.(nodeId, nr.output, nr)
         else if (nr.status === "failed") cbRef.current.onNodeFailed?.(nodeId, nr.error ?? "Unknown error", nr)
         else if (nr.status === "skipped") cbRef.current.onNodeSkipped?.(nodeId, nr)
@@ -64,7 +64,7 @@ export function useWorkflowEvents(
     const unsub = window.synapse?.workflow.onEvent((event: WorkflowEvent) => {
       if (event.runId !== runId) return
       if (event.type === "node:started") {
-        cbRef.current.onNodeStarted?.(event.nodeId)
+        cbRef.current.onNodeStarted?.(event.nodeId, { startedAt: event.startedAt ?? Date.now() })
       } else if (event.type === "node:completed") {
         terminalNodes.add(event.nodeId)
         cbRef.current.onNodeCompleted?.(event.nodeId, event.output, event.result)
