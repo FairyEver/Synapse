@@ -13,12 +13,19 @@ export const RunnerNodeResultsContext = createContext<Record<string, NodeRunResu
 
 export function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
-  const status = nodeResults[id]?.status
+  const result = nodeResults[id]
   const name = (data as { name?: string }).name
   return (
     <div>
       <Handle type="target" position={Position.Left} />
-      <PromptNodeCard config={data as PromptNodeConfig} name={name} selected={selected} status={status} />
+      <PromptNodeCard
+        config={data as PromptNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
       <Handle type="source" position={Position.Right} />
     </div>
   )
@@ -26,13 +33,20 @@ export function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
 
 export function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
-  const status = nodeResults[id]?.status
+  const result = nodeResults[id]
   const name = (data as { name?: string }).name
   const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
   return (
     <div>
       <Handle type="target" position={Position.Left} />
-      <SwitchNodeCard config={data as SwitchNodeConfig} name={name} selected={selected} status={status} />
+      <SwitchNodeCard
+        config={data as SwitchNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
       {branches.map((b, i) => (
         <Handle
           key={b.id}
@@ -48,12 +62,19 @@ export function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
 
 export function RunnerEndNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
-  const status = nodeResults[id]?.status
+  const result = nodeResults[id]
   const name = (data as { name?: string }).name
   return (
     <div>
       <Handle type="target" position={Position.Left} />
-      <EndNodeCard config={data as EndNodeConfig} name={name} selected={selected} status={status} />
+      <EndNodeCard
+        config={data as EndNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
     </div>
   )
 }
