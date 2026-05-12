@@ -82,9 +82,13 @@ function VariableSourceControl({
               <SelectValue placeholder="选择节点" />
             </SelectTrigger>
             <SelectContent>
-              {upstreamNodes.map((n) => (
-                <SelectItem key={n.id} value={n.id} className="text-xs">{n.name}</SelectItem>
-              ))}
+              {upstreamNodes.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground text-center">暂无可选的上游节点</div>
+              ) : (
+                upstreamNodes.map((n) => (
+                  <SelectItem key={n.id} value={n.id} className="text-xs">{n.name}</SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         )}

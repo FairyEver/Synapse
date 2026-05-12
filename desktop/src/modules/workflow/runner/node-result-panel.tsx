@@ -75,7 +75,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         )}
         {!result.input.prompt && !result.error && !activeBranchLabel && (result.output == null || result.output === "") && (
           <p className="text-muted-foreground">
-            {result.status === "pending" ? "节点等待执行" : "（无可展示的输出）"}
+            {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : "（无可展示的输出）"}
           </p>
         )}
       </div>

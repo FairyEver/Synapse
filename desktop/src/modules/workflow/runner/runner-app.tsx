@@ -8,6 +8,8 @@ import { DagView } from "./dag-view"
 import { TimelineView } from "./timeline-view"
 import { NodeResultPanel } from "./node-result-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { Button } from "@/components/ui/button"
+import { RefreshCw } from "lucide-react"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -29,6 +31,7 @@ export function WorkflowRunnerApp() {
   const [rerunning, setRerunning] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [retrySignal, setRetrySignal] = useState(0)
 
   const runIdRef = useRef(runId)
   runIdRef.current = runId
@@ -54,7 +57,7 @@ export function WorkflowRunnerApp() {
       if (status.params) setRunParams(status.params)
     })()
     return () => { cancelled = true }
-  }, [runId])
+  }, [runId, retrySignal])
 
   useEffect(() => {
     // When there is no active run (Runner opened without a runId), or when
@@ -80,7 +83,7 @@ export function WorkflowRunnerApp() {
       }
     })()
     return () => { cancelled = true }
-  }, [workflowId, definition, runId, loadError])
+  }, [workflowId, definition, runId, loadError, retrySignal])
 
   useEffect(() => {
     if (!workflowId) return
@@ -204,6 +207,13 @@ export function WorkflowRunnerApp() {
     void window.synapse?.workflow.openEditor(workflowId)
   }, [workflowId])
 
+  const handleRetry = useCallback(() => {
+    logger.info("retry loading run", { runId, workflowId })
+    setLoadError(null)
+    setDefinition(null)
+    setRetrySignal((s) => s + 1)
+  }, [runId, workflowId])
+
   const selectedResult = selectedNodeId
     ? nodeResults[selectedNodeId] ?? { nodeId: selectedNodeId, status: "pending" as const, input: { variables: {} } }
     : null
@@ -217,6 +227,9 @@ export function WorkflowRunnerApp() {
               <p className="text-xs font-medium text-muted-foreground">无法加载运行结果</p>
               <p className="text-xs text-muted-foreground">{loadError}</p>
             </div>
+            <Button size="sm" variant="outline" onClick={handleRetry}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+            </Button>
           </div>
         </div>
       )

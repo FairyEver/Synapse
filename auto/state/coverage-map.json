@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-13T19:45:00+08:00",
-  "totalIterations": 32,
+  "lastUpdated": "2026-05-13T21:00:00+08:00",
+  "totalIterations": 33,
   "files": {
     "desktop/electron/modules/workflow/ipc.ts": {
       "lastReviewedIteration": 30,
@@ -118,11 +118,11 @@
       "lastUpdated": "2026-05-13T17:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
-      "lastReviewedIteration": 21,
-      "issuesFound": 1,
-      "issuesFixed": 1,
+      "lastReviewedIteration": 33,
+      "issuesFound": 2,
+      "issuesFixed": 2,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T03:50:00+08:00"
+      "lastUpdated": "2026-05-13T21:00:00+08:00"
     },
     "desktop/src/modules/workflow/editor/node-config-panel.tsx": {
       "lastReviewedIteration": 19,
@@ -198,17 +198,18 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/runner/node-result-panel.tsx": {
-      "lastReviewedIteration": 15,
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "healthScore": "stable"
+      "lastReviewedIteration": 33,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T21:00:00+08:00"
     },
     "desktop/src/modules/workflow/runner/runner-app.tsx": {
-      "lastReviewedIteration": 27,
-      "issuesFound": 12,
-      "issuesFixed": 12,
+      "lastReviewedIteration": 33,
+      "issuesFound": 13,
+      "issuesFixed": 13,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:10:00+08:00"
+      "lastUpdated": "2026-05-13T21:00:00+08:00"
     },
     "desktop/src/modules/workflow/runner/runner-node-wrappers.tsx": {
       "lastReviewedIteration": 20,
@@ -409,11 +410,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/variable-binding-editor.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastReviewedIteration": 33,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T21:00:00+08:00"
     }
   },
   "areas": {

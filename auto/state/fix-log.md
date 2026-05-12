@@ -767,3 +767,29 @@ Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善�
 
 ### 本次进展
 画布交互安全从"BUTTON 聚焦时 Delete 可误删节点"补齐了最后一种常见可聚焦元素的保护；列表页删除操作从"静默失败无反馈"变为"失败有明确提示+成功有确认"——交互安全性（防误操作）和操作完整度（有始有终反馈）两个维度向真正可用迈进。
+
+---
+
+## [2026-05-13 21:00] 第 33 次迭代
+
+### 发现的问题
+- Runner 错误页（runStatus 返回 null 时）无重试按钮，用户只能关闭窗口重新打开（runner-app.tsx:221-237 仅展示错误信息卡片，无可操作入口）
+- 变量绑定编辑器中 node_output 类型的 Select 在上游节点列表为空时，下拉内容为空且无解释文案，用户不知道为何没有可选项（variable-binding-editor.tsx:76-91 空数组直接 map 产生空 SelectContent）
+- Runner 的 NodeResultPanel 对 skipped（跳过）状态节点显示"（无可展示的输出）"，与真正无输出的节点无法区分；Editor 的 ExecutionOverlay 中 skipped 节点不可点击查看详情（node-result-panel.tsx:78 仅区分 pending / 其他；execution-overlay.tsx:64-65 仅允许 success/failed 状态点击）
+
+### 修复内容
+- [desktop/src/modules/workflow/runner/runner-app.tsx:12,34,60,86,210-232] 新增 retrySignal 状态、handleRetry 回调（清空 loadError + definition 后递增 retrySignal 重新触发 hydration 和 fallback 两个 effect），错误页 UI 新增"重试"按钮（Button + RefreshCw 图标），hydration effect 和 fallback effect 的依赖数组均加入 retrySignal
+- [desktop/workflow-nodes/variable-binding-editor.tsx:85-92] node_output Select 的 SelectContent 内增加空数组守卫：upstreamNodes.length === 0 时渲染"暂无可选的上游节点"说明文字，替代原先隐式的空下拉列表
+- [desktop/src/modules/workflow/runner/node-result-panel.tsx:78] 空状态文案从二态（pending / 其他）改为三态：skipped → "节点因工作流分支逻辑被跳过，未执行"；pending → "节点等待执行"；其他 → "（无可展示的输出）"
+- [desktop/src/modules/workflow/editor/execution-overlay.tsx:64-65,105] 列表项点击条件从 success/failed 扩展为 success/failed/skipped（className 和 onClick 均覆盖）；Dialog 空状态文案同步区分 skipped（与 NodeResultPanel 一致）
+
+### 与历史的关系
+- 缺陷 1：延续第 14 轮（同文件 runner-app.tsx hydration 健壮性，第 14 轮新增 loadError 状态和 fallback 回退逻辑，本轮补齐错误态的可操作入口）
+- 缺陷 2：独立（variable-binding-editor.tsx 空列表状态从未被覆盖，虽然 use-upstream-nodes hook 在 iter 20 评估为 stable）
+- 缺陷 3：与 iter 17 的 timeline-view 跳过状态 badge 互补（iter 17 确保列表页 badge 正确显示"跳过"，本轮确保 Runner 面板和 Editor 浮层对跳过节点提供差异化信息）
+
+### 日志补充
+- 无（纯 UI 交互优化：重试按钮为已有 IPC 调用的重新触发，上游节点空状态为 Select 下拉内容的渲染守卫，跳过状态为已有 status 字段的显示分支扩展）
+
+### 本次进展
+Runner 错误页从"死胡同"变为"可重试的等待室"——用户无需关闭窗口即可重新请求加载；变量绑定编辑器在无上游节点时不再是迷惑的空下拉框；跳过节点在 Runner 面板和 Editor 浮层中获得了与 pending/success/failed 对等的语义化状态说明和交互支持。

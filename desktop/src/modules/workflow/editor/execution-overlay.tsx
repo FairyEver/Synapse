@@ -61,8 +61,8 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
         {results.map((r) => (
           <div
             key={r.nodeId}
-            className={`flex items-center gap-2 ${r.status === "success" || r.status === "failed" ? "cursor-pointer hover:opacity-75" : ""}`}
-            onClick={() => { if (r.status === "success" || r.status === "failed") setSelected(r) }}
+            className={`flex items-center gap-2 ${r.status === "success" || r.status === "failed" || r.status === "skipped" ? "cursor-pointer hover:opacity-75" : ""}`}
+            onClick={() => { if (r.status === "success" || r.status === "failed" || r.status === "skipped") setSelected(r) }}
           >
             <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">{STATUS_LABEL[r.status] ?? r.status}</Badge>
             <span className="text-xs text-muted-foreground truncate max-w-32">{nameOf(r.nodeId)}</span>
@@ -101,7 +101,9 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
                 </div>
               )}
               {!dialogTarget.input.prompt && !dialogTarget.error && !dialogTarget.activeBranch && (dialogTarget.output == null || dialogTarget.output === "") && (
-                <p className="text-xs text-muted-foreground">（无可展示的输出）</p>
+                <p className="text-xs text-muted-foreground">
+                  {dialogTarget.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : "（无可展示的输出）"}
+                </p>
               )}
             </div>
           )}
