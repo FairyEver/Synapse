@@ -25,7 +25,7 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
 }) {
   const Icon = switchNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
-  const progressPadding = status === "running" ? 16 : 0
+  const progressPadding = status === "running" ? 12 : 0
   const totalHeight = SWITCH_HEADER_H + config.branches.length * SWITCH_BRANCH_H + progressPadding
   return (
     <div
