@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 
 const AGENT_ICON_CLIP_STYLE: React.CSSProperties = { clipPath: "inset(6%)" }
 
-const agentMap = new Map(agentDefinitions.map((def) => [def.id, def]))
+const agentMap = new Map<string, (typeof agentDefinitions)[number]>(agentDefinitions.map((def) => [def.id, def]))
 
 export function getAgentLabel(agentId: string): string {
   return agentMap.get(agentId)?.label ?? agentId

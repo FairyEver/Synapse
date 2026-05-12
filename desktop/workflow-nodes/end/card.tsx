@@ -1,5 +1,5 @@
-import { LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { endNodeManifest } from "./manifest"
 import type { EndNodeConfig } from "./schema"
 import type { NodeRunResult } from "@/types/workflow"
 
@@ -17,10 +17,11 @@ function statusClass(status?: NodeStatus): string {
 }
 
 export function EndNodeCard({ config, name, selected, status }: { config: EndNodeConfig; name?: string; selected?: boolean; status?: NodeStatus }) {
+  const Icon = endNodeManifest.icon
   return (
-    <div className={cn("rounded-lg border-2 bg-card px-3 py-2 w-52 shadow-sm", selected && "ring-2 ring-primary", statusClass(status))}>
+    <div className={cn("rounded-lg border-2 bg-card px-3 py-2 w-56 shadow-sm", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1">
-        <LogOut className="h-3.5 w-3.5 text-primary shrink-0" />
+        <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="text-xs font-medium text-foreground truncate">{name || "结束"}</span>
       </div>
       <p className="text-xs text-muted-foreground truncate">{config.template.slice(0, 40) || "返回文本"}</p>
