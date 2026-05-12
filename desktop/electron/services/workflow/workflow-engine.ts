@@ -109,7 +109,14 @@ export class WorkflowEngine {
         const cfg = manifest.configSchema.parse(node.config)
         const vars = (cfg as Record<string, unknown>)["variables"]
         const nodeNames = Object.fromEntries(def.nodes.map((n) => [n.id, n.name]))
-        const resolved = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs, nodeNames)
+        const allNodeIds = new Set(def.nodes.map((n) => n.id))
+        const { resolved, skippedReferences } = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs, nodeNames, allNodeIds)
+        if (skippedReferences.length > 0) {
+          logger.warn("node has variables referencing skipped upstream nodes (resolved to empty)", {
+            runId, nodeId, nodeName: node.name,
+            skippedReferences: skippedReferences.map((r) => `$${r.variableName} → ${r.sourceNodeName}`),
+          })
+        }
         const prompt = (cfg as Record<string, unknown>)["prompt"]
         const template = (cfg as Record<string, unknown>)["template"]
         const interpolatable = typeof prompt === "string" ? prompt : (typeof template === "string" ? template : undefined)

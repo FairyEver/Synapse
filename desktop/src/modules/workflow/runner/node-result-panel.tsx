@@ -27,6 +27,19 @@ export function NodeResultPanel({ result, nodeName, onClose }: NodeResultPanelPr
         </Button>
       </div>
       <div className="flex-1 overflow-auto p-3 text-xs space-y-3">
+        {Object.keys(result.input.variables).length > 0 && (
+          <div className="grid gap-1">
+            <p className="font-medium text-muted-foreground">输入变量</p>
+            <div className="bg-muted rounded p-2 space-y-0.5">
+              {Object.entries(result.input.variables).map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <span className="font-mono text-muted-foreground shrink-0">${k}</span>
+                  <span className="break-all">{v || <span className="text-muted-foreground italic">（空）</span>}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {result.input.prompt && (
           <div className="grid gap-1">
             <p className="font-medium text-muted-foreground">完整 Prompt</p>
