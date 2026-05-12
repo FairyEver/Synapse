@@ -551,3 +551,30 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 工作流系统的两个核心入口（编辑器加载、Runner 查看历史结果）在数据不可达时从"永久 loading spinner 无任何反馈"变为"有明确错误信息和降级/恢复路径"，主流程错误处理断路修复。
+
+---
+
+## [2026-05-13 15:30] 第 24 次迭代
+
+### 发现的问题
+- 取消运行后被中断节点永久显示"运行中"：引擎两处 cancel return 路径（正常 abort check + 异常 catch）均未将 `nodeResults[nodeId].status` 从 "running" 更新为终态 → timeline-view 的 `hasRunning` 永远为 true → 计时持续增长（workflow-engine.ts:142-147, 177-181 → timeline-view.tsx:31-37）
+- 工作流列表页 Play 按钮冲突无恢复路径：handleRun/handleConfirmRun 仅 toast.error 后 return，无 force-run 入口。编辑器已有 AlertDialog 冲突解决流程（editor-app.tsx:235-247），列表页缺失同等功能（workflow-list.tsx:38-40, 73-75 → ipc.ts:250 已支持 force 参数）
+
+### 修复内容
+- [desktop/electron/services/workflow/workflow-engine.ts:142-156] 正常 abort 检测路径：return cancelled 前将 `nodeResults[nodeId]` 更新为 `status: "failed", error: "运行被取消"`，设 endedAt/durationMs
+- [desktop/electron/services/workflow/workflow-engine.ts:186-199] 异常 catch 路径：同上逻辑
+- [desktop/src/modules/workflow/components/workflow-list.tsx:10] 新增 AlertDialog 组件导入
+- [desktop/src/modules/workflow/components/workflow-list.tsx:19] 新增 conflictState 状态
+- [desktop/src/modules/workflow/components/workflow-list.tsx:41-43,76-78] handleRun/handleConfirmRun 冲突分支改为 setConflictState
+- [desktop/src/modules/workflow/components/workflow-list.tsx:87-99] 新增 handleForceRun 函数
+- [desktop/src/modules/workflow/components/workflow-list.tsx:129-140] 新增 AlertDialog 冲突对话框
+
+### 与历史的关系
+- 缺陷 1：独立（引擎 cancel 路径此前未被任何轮次覆盖）
+- 缺陷 2：独立（列表页冲突路径此前未被覆盖）
+
+### 日志补充
+- 无（缺陷 1 仅修改数据状态赋值逻辑，不新增执行路径；缺陷 2 为纯 UI 交互优化）
+
+### 本次进展
+工作流"运行→取消→观测"闭环的数据完整性从"被中断节点永久标记 running"变为"全链路一致（标记 failed + 取消原因）"；列表页"运行→冲突"路径从"死胡同（仅错误 toast）"变为"可恢复（对话框 → 取消旧运行并启动新运行）"，与编辑器入口行为对齐。

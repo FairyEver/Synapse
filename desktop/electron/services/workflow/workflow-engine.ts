@@ -141,6 +141,15 @@ export class WorkflowEngine {
         })
         if (effectiveAbortSignal.aborted) {
           logger.warn("node aborted mid-execution", { runId, nodeId, nodeName: node.name })
+          // Mark the currently executing node as terminal so it doesn't appear as
+          // "running" in the cancelled workflow's results and timeline.
+          const currentNr = nodeResults[nodeId]
+          if (currentNr && currentNr.status === "running") {
+            currentNr.status = "failed"
+            currentNr.error = "运行被取消"
+            currentNr.endedAt = Date.now()
+            currentNr.durationMs = currentNr.startedAt ? currentNr.endedAt - currentNr.startedAt : undefined
+          }
           const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
           emit({ type: "workflow:cancelled", runId, result })
           return result
@@ -176,6 +185,15 @@ export class WorkflowEngine {
       } catch (err) {
         if (effectiveAbortSignal.aborted) {
           logger.warn("node aborted mid-execution (exception path)", { runId, nodeId, nodeName: node.name })
+          // Mark the currently executing node as terminal so it doesn't appear as
+          // "running" in the cancelled workflow's results and timeline.
+          const currentNr = nodeResults[nodeId]
+          if (currentNr && currentNr.status === "running") {
+            currentNr.status = "failed"
+            currentNr.error = "运行被取消"
+            currentNr.endedAt = Date.now()
+            currentNr.durationMs = currentNr.startedAt ? currentNr.endedAt - currentNr.startedAt : undefined
+          }
           const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
           emit({ type: "workflow:cancelled", runId, result })
           return result
