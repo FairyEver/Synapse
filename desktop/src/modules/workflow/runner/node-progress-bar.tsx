@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 
 export function NodeProgressBar() {
   return (
-    <div className="absolute bottom-1.5 left-2 right-2 h-[3px] rounded-sm overflow-hidden" style={{ background: "#27272a" }}>
+    <div className="absolute bottom-2 left-2 right-2 h-[3px] rounded-sm overflow-hidden" style={{ background: "#27272a" }}>
       <div
         className="absolute top-0 left-0 h-full w-[35%] rounded-sm"
         style={{

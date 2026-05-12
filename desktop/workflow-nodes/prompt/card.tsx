@@ -25,7 +25,7 @@ export function PromptNodeCard({ config, name, selected, status, progressLabel, 
   const Icon = promptNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
   return (
-    <div className={cn("relative rounded-lg border bg-card px-3 py-2 w-56 shadow-sm", selected && "ring-2 ring-primary", statusClass(status))}>
+    <div className={cn("relative rounded-lg border bg-card px-3 py-2 w-56 shadow-sm", status === "running" && "pb-5", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1.5">
         <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <span className="text-xs font-medium text-foreground truncate">{name || "Prompt"}</span>

@@ -25,7 +25,8 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
 }) {
   const Icon = switchNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
-  const totalHeight = SWITCH_HEADER_H + config.branches.length * SWITCH_BRANCH_H
+  const progressPadding = status === "running" ? 16 : 0
+  const totalHeight = SWITCH_HEADER_H + config.branches.length * SWITCH_BRANCH_H + progressPadding
   return (
     <div
       className={cn("relative rounded-lg border bg-card w-56 shadow-sm overflow-hidden flex flex-col", selected && "ring-2 ring-primary", statusClass(status))}
