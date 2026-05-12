@@ -35,6 +35,7 @@ type WorkflowFlowEdge = Edge<{ label?: string }, string>
 export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
   removeEdgesByIds: (edgeIds: string[]) => void
+  updateEdgeLabels: (sourceNodeId: string, branches: Array<{ id: string; label: string }>) => void
 }
 
 function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string | undefined {
@@ -120,6 +121,17 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       if (edgeIds.length === 0) return
       const idSet = new Set(edgeIds)
       setEdges((eds) => eds.filter((e) => !idSet.has(e.id)))
+    },
+    updateEdgeLabels: (sourceNodeId, branches) => {
+      const labelMap = new Map(branches.map((b) => [b.id, b.label]))
+      setEdges((eds) => eds.map((e) => {
+        if (e.source !== sourceNodeId || !e.sourceHandle) return e
+        const newLabel = labelMap.get(e.sourceHandle)
+        if (!newLabel) return e
+        const currentLabel = (e.data as { label?: string } | undefined)?.label
+        if (currentLabel === newLabel) return e
+        return { ...e, type: "branch", data: { ...e.data, label: newLabel } }
+      }))
     },
   }))
 

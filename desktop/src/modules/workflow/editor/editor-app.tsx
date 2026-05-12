@@ -73,11 +73,11 @@ export function WorkflowEditorApp() {
       const updatedNodes = def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n)
 
       // When a Switch node's branches change, remove edges referencing deleted branches
+      // and sync edge labels for remaining branches
       let updatedEdges = def.edges
       if (node?.type === "switch") {
-        const newBranchIds = new Set(
-          (Array.isArray(config.branches) ? config.branches as Array<{ id: string }> : []).map((b) => b.id),
-        )
+        const branches = Array.isArray(config.branches) ? config.branches as Array<{ id: string; label: string }> : []
+        const newBranchIds = new Set(branches.map((b) => b.id))
         const orphanedEdgeIds = def.edges
           .filter((e) => e.from === nodeId && e.branch && !newBranchIds.has(e.branch))
           .map((e) => e.id)
@@ -85,6 +85,9 @@ export function WorkflowEditorApp() {
           updatedEdges = def.edges.filter((e) => !orphanedEdgeIds.includes(e.id))
           canvasRef.current?.removeEdgesByIds(orphanedEdgeIds)
         }
+        // Sync edge labels to match current branch labels
+        canvasRef.current?.updateEdgeLabels(nodeId, branches)
+        logger.debug("synced switch edge labels", { nodeId, branchCount: branches.length })
       }
 
       return { ...def, nodes: updatedNodes, edges: updatedEdges }
