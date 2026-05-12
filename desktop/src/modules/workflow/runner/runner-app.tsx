@@ -199,12 +199,14 @@ export function WorkflowRunnerApp() {
               definition={definition}
               nodeResults={nodeResults}
               runState={runState}
+              selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
             />
           ) : (
             <TimelineView
               definition={definition}
               nodeResults={nodeResults}
+              selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
             />
           )}

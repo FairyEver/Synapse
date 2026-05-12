@@ -20,6 +20,7 @@ interface DagViewProps {
   definition: WorkflowDefinition
   nodeResults: Record<string, NodeRunResult>
   runState: WorkflowRunStatus["status"]
+  selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
 }
 
@@ -30,7 +31,7 @@ function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: s
   return branches?.find((b) => b.id === branchId)?.label ?? branchId
 }
 
-function DagViewInner({ definition, nodeResults, onNodeSelect }: DagViewProps) {
+function DagViewInner({ definition, nodeResults, selectedNodeId, onNodeSelect }: DagViewProps) {
   const nodes: Node[] = useMemo(() =>
     definition.nodes.map((n) => ({
       id: n.id,
@@ -39,8 +40,9 @@ function DagViewInner({ definition, nodeResults, onNodeSelect }: DagViewProps) {
       data: { ...n.config, name: n.name },
       selectable: true,
       draggable: false,
+      selected: n.id === selectedNodeId,
     })),
-    [definition],
+    [definition, selectedNodeId],
   )
 
   const edges: Edge[] = useMemo(() =>

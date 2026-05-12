@@ -10,10 +10,11 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
 interface TimelineViewProps {
   definition: WorkflowDefinition
   nodeResults: Record<string, NodeRunResult>
+  selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
 }
 
-export function TimelineView({ definition, nodeResults, onNodeSelect }: TimelineViewProps) {
+export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSelect }: TimelineViewProps) {
   const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
 
   // Combine active results (sorted by startedAt) with pending nodes (not yet in nodeResults)
@@ -45,7 +46,7 @@ export function TimelineView({ definition, nodeResults, onNodeSelect }: Timeline
         {results.map((r) => (
           <div
             key={r.nodeId}
-            className="flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors"
+            className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
             onClick={() => onNodeSelect(r.nodeId)}
           >
             <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">
