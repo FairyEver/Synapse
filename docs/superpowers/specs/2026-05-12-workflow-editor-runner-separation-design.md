@@ -232,6 +232,10 @@ const handleRun = async (params: Record<string, unknown>) => {
 
 左侧大区域：DAG 或时间线（工具栏 tab 切换）。右侧面板：节点详情（两个视图共享同一面板）。底部状态栏：总体进度摘要。
 
+### HTML 入口
+
+Runner 需要独立的 HTML 入口文件 `workflow-runner.html`（与现有 `workflow-editor.html` 平级），加载 `runner-app.tsx` 作为根组件。
+
 ### runner-app.tsx
 
 - URL 参数：`?runId=xxx`（必需）
@@ -333,6 +337,8 @@ Dialog 弹窗展示历史运行列表：
 ### 编辑器连续多次运行
 
 复用 Runner 窗口，切换到新 runId。如果旧 run 还在执行中，弹确认框：「有正在执行的运行，是否取消并启动新运行？」
+
+冲突检测机制：`workflow.runDefinition()` IPC 调用在主进程侧检查该 workflowId 是否有活跃 run。如果有，返回 `{ conflict: true, activeRunId }` 而非直接启动。编辑器收到冲突响应后展示确认对话框，用户确认后带 `force: true` 重新调用（主进程自动取消旧 run）。这是一次性请求-响应，不是状态订阅，与「编辑器不感知运行状态」不矛盾。
 
 ### 编辑器是否感知运行状态
 
