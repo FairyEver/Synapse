@@ -136,7 +136,7 @@ export const workflowIpcModule: IpcModule = {
         const runId = randomUUID()
         const startedAt = Date.now()
         abortMap.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, definition: def })
+        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params, definition: def })
 
         // Resolve the active project ID for the runtime context
         const appConfig = await configStore.load()
@@ -259,7 +259,7 @@ export const workflowIpcModule: IpcModule = {
         const runId = randomUUID()
         const startedAt = Date.now()
         abortMap.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId: def.id, status: "running", nodeResults: {}, startedAt, definition: def })
+        runStatuses.set(runId, { runId, workflowId: def.id, status: "running", nodeResults: {}, startedAt, params, definition: def })
 
         const appConfig = await configStore.load()
         const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
@@ -323,11 +323,13 @@ export const workflowIpcModule: IpcModule = {
 
         let def: import("../../../src/types/workflow").WorkflowDefinition | undefined
         let workflowId: string | undefined
+        let previousParams: Record<string, unknown> | undefined
 
         const memoryStatus = runStatuses.get(previousRunId)
         if (memoryStatus?.definition) {
           def = memoryStatus.definition
           workflowId = memoryStatus.workflowId
+          previousParams = memoryStatus.params
         } else {
           const svc = ctx.resolve<WorkflowService>("core.workflow")
           const allWorkflows = await svc.list()
@@ -336,6 +338,7 @@ export const workflowIpcModule: IpcModule = {
             if (snapshot?.definition) {
               def = snapshot.definition
               workflowId = snapshot.workflowId
+              previousParams = snapshot.params
               break
             }
           }
@@ -344,6 +347,13 @@ export const workflowIpcModule: IpcModule = {
         if (!def || !workflowId) {
           logger.error("workflow:rerun — cannot find definition for previous run", { previousRunId })
           return { errors: [{ type: "invalid_config", message: "无法找到上次运行使用的工作流定义" }] }
+        }
+
+        // Use previous run's params as fallback when caller passes empty params
+        const callerHasParams = Object.keys(params).length > 0
+        const effectiveParams = callerHasParams ? params : (previousParams ?? {})
+        if (!callerHasParams && previousParams) {
+          logger.info("workflow:rerun using previous run params", { previousRunId, paramKeys: Object.keys(previousParams) })
         }
 
         const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
@@ -364,13 +374,13 @@ export const workflowIpcModule: IpcModule = {
         const runId = randomUUID()
         const startedAt = Date.now()
         abortMap.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId, status: "running", nodeResults: {}, startedAt, definition: def })
+        runStatuses.set(runId, { runId, workflowId, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
 
         const appConfig = await configStore.load()
         const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
         const projectId = activeRepo?.uuid ?? ""
 
-        engine.run(def, params, runId, (event) => {
+        engine.run(def, effectiveParams, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: workflowId!, status: "running" as const, nodeResults: {}, startedAt, definition: def }
           const nextNodeResults: Record<string, NodeRunResult> = { ...current.nodeResults }
           if (event.type === "node:started") {
@@ -387,7 +397,7 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: workflowId!, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params, nodeResults, definition: def })
+            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def })
           }
         }, ac.signal, projectId).catch((err) => {
           const errorMsg = err instanceof Error ? err.message : String(err)
@@ -398,7 +408,7 @@ export const workflowIpcModule: IpcModule = {
             const endedAt = Date.now()
             runStatuses.set(runId, { runId, workflowId: workflowId!, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs: endedAt - startedAt, error: `引擎异常：${errorMsg}`, definition: def })
             eventBus.emit({ domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: `引擎异常：${errorMsg}`, result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt } }, timestamp: new Date().toISOString() }, { backpressure: "block" })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def })
+            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def })
           }
         })
 

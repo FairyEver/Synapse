@@ -36,6 +36,7 @@ export interface WorkflowRunStatus {
   endedAt?: number
   durationMs?: number
   error?: string
+  params?: Record<string, unknown>
   definition?: WorkflowDefinition
 }
 export type WorkflowEvent =

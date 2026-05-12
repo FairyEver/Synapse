@@ -22,6 +22,7 @@ export function WorkflowRunnerApp() {
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [runState, setRunState] = useState<WorkflowRunStatus["status"]>("running")
   const [nodeResults, setNodeResults] = useState<Record<string, NodeRunResult>>({})
+  const [runParams, setRunParams] = useState<Record<string, unknown>>({})
   const [runError, setRunError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>("dag")
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -39,6 +40,7 @@ export function WorkflowRunnerApp() {
       if (status.definition) setDefinition(status.definition)
       setNodeResults(status.nodeResults)
       setRunState(status.status)
+      if (status.params) setRunParams(status.params)
       if (status.error) setRunError(status.error)
     })()
     return () => { cancelled = true }
@@ -117,7 +119,8 @@ export function WorkflowRunnerApp() {
 
   const handleRerun = useCallback(async () => {
     if (!runId) return
-    const result = await window.synapse?.workflow.rerun(runId, {})
+    logger.info("rerun requested", { runId, paramKeys: Object.keys(runParams) })
+    const result = await window.synapse?.workflow.rerun(runId, runParams)
     if (!result) return
     if ("errors" in result) {
       logger.warn("rerun failed", { errors: result.errors })
@@ -128,7 +131,7 @@ export function WorkflowRunnerApp() {
     setNodeResults({})
     setRunError(null)
     setSelectedNodeId(null)
-  }, [runId])
+  }, [runId, runParams])
 
   const handleOpenEditor = useCallback(() => {
     void window.synapse?.workflow.openEditor(workflowId)

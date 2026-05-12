@@ -23,6 +23,13 @@ interface DagViewProps {
   onNodeSelect: (nodeId: string | null) => void
 }
 
+function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string {
+  const node = def.nodes.find((n) => n.id === fromId)
+  if (!node || node.type !== "switch") return branchId
+  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
+  return branches?.find((b) => b.id === branchId)?.label ?? branchId
+}
+
 function DagViewInner({ definition, nodeResults, onNodeSelect }: DagViewProps) {
   const nodes: Node[] = useMemo(() =>
     definition.nodes.map((n) => ({
@@ -33,19 +40,22 @@ function DagViewInner({ definition, nodeResults, onNodeSelect }: DagViewProps) {
       selectable: true,
       draggable: false,
     })),
-    [definition.nodes],
+    [definition],
   )
 
   const edges: Edge[] = useMemo(() =>
-    definition.edges.map((e) => ({
-      id: e.id,
-      source: e.from,
-      target: e.to,
-      sourceHandle: e.branch,
-      type: e.branch ? "branch" : "default",
-      data: e.branch ? { label: e.branch } : undefined,
-    })),
-    [definition.edges],
+    definition.edges.map((e) => {
+      const label = e.branch ? resolveBranchLabel(definition, e.from, e.branch) : undefined
+      return {
+        id: e.id,
+        source: e.from,
+        target: e.to,
+        sourceHandle: e.branch,
+        type: e.branch ? "branch" : "default",
+        data: label ? { label } : undefined,
+      }
+    }),
+    [definition],
   )
 
   return (
