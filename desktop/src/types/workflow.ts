@@ -36,6 +36,7 @@ export interface WorkflowRunStatus {
   endedAt?: number
   durationMs?: number
   error?: string
+  definition?: WorkflowDefinition
 }
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string; workflowId: string }
@@ -57,4 +58,5 @@ export interface WorkflowRunSnapshot {
   runId: string; workflowId: string; version: string; startedAt: number; endedAt?: number
   status: "completed" | "failed" | "cancelled"; params: Record<string, unknown>
   nodeResults: Record<string, NodeRunResult>
+  definition?: WorkflowDefinition
 }

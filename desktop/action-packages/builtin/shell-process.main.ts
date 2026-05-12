@@ -1,4 +1,4 @@
-import type { ControlledProcessRunner } from "../../electron/runtime/process"
+import type { ControlledProcessRunner, PathStrategy } from "../../electron/runtime/process"
 import { resolveShellCommand } from "../../electron/services/shell-exec"
 import type { ActionRunResult } from "../types"
 import type { ActionRuntimeContext } from "../../electron/action-runtime/action-registry"
@@ -8,6 +8,8 @@ const UNLIMITED_OUTPUT_BYTES = Number.MAX_SAFE_INTEGER
 export type ShellActionConfig = {
   readonly shell: "posix" | "cmd" | "powershell"
   readonly env?: Record<string, string>
+  readonly pathStrategy?: PathStrategy
+  readonly posixLogin?: boolean
   readonly timeoutMins?: number | null
 }
 
@@ -22,6 +24,7 @@ export async function runShellAction(input: {
   const platform = input.platform ?? process.platform
   const shell = resolveShellCommand(input.config.shell, input.content, {
     platform,
+    posixLogin: input.config.posixLogin,
     windowsDefault: "cmd",
   })
   const timeoutMs = input.config.timeoutMins === null
@@ -33,8 +36,9 @@ export async function runShellAction(input: {
     command: shell.command,
     args: [...shell.args],
     cwd: input.context.cwd,
-    env: { ...(input.baseEnv ?? process.env), ...(input.config.env ?? {}) },
+    env: input.config.env,
     envAllowlist: input.config.env ? Object.keys(input.config.env) : undefined,
+    pathStrategy: input.config.pathStrategy,
     timeoutMs,
     abortSignal: input.context.abortSignal,
     output: {
@@ -59,10 +63,13 @@ export async function runShellAction(input: {
     durationMs: result.durationMs,
     exitCode: result.exitCode,
   }
-  const outputs = {
+  const outputs: Record<string, unknown> = {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
     exitCode: result.exitCode,
+  }
+  if (result.diagnostics) {
+    outputs.diagnostics = result.diagnostics
   }
 
   if (result.timedOut) {

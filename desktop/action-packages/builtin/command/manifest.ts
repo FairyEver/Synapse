@@ -36,6 +36,21 @@ export const commandActionManifest = {
       description: "Additional environment variables.",
     },
     {
+      name: "pathStrategy",
+      kind: "enum",
+      required: false,
+      description: "How to compute PATH: merge (default) or replace.",
+      choices: ["merge", "replace"],
+      defaultValue: "merge",
+    },
+    {
+      name: "posixLogin",
+      kind: "boolean",
+      required: false,
+      description: "Launch POSIX shell as login shell (-lc). Default true.",
+      defaultValue: true,
+    },
+    {
       name: "timeoutMins",
       kind: "number",
       required: false,

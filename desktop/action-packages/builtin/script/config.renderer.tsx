@@ -1,6 +1,8 @@
+import { Checkbox } from "../../../src/components/ui/checkbox"
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "../../../src/components/ui/field"
@@ -14,6 +16,11 @@ const SHELL_OPTIONS: Array<{ label: string; value: ScriptActionConfig["shell"] }
   { label: "POSIX", value: "posix" },
   { label: "cmd", value: "cmd" },
   { label: "PowerShell", value: "powershell" },
+]
+
+const PATH_STRATEGY_OPTIONS: Array<{ label: string; value: "merge" | "replace" }> = [
+  { label: "合并", value: "merge" },
+  { label: "替换", value: "replace" },
 ]
 
 export function ScriptConfigForm({
@@ -52,6 +59,21 @@ export function ScriptConfigForm({
           </ToggleGroup>
         </FieldContent>
       </Field>
+      {value.shell === "posix" ? (
+        <Field>
+          <FieldContent>
+            <label htmlFor="task-action-script-posix-login" className="flex items-center gap-2">
+              <Checkbox
+                id="task-action-script-posix-login"
+                checked={value.posixLogin !== false}
+                onCheckedChange={(checked) => onChange({ ...value, posixLogin: checked === true })}
+              />
+              <span className="text-sm">以登录 Shell 执行（-lc）</span>
+            </label>
+            <FieldDescription>启用后加载 ~/.profile 等配置，获取完整 PATH</FieldDescription>
+          </FieldContent>
+        </Field>
+      ) : null}
       <Field>
         <FieldLabel htmlFor="task-action-script-content">脚本</FieldLabel>
         <FieldContent>
@@ -68,10 +90,40 @@ export function ScriptConfigForm({
         <FieldContent>
           <Textarea
             id="task-action-script-env"
+            placeholder={"KEY=value\nANOTHER_KEY=value"}
             rows={3}
             value={stringifyRecordText(value.env)}
             onChange={(event) => onChange({ ...value, env: parseRecordText(event.target.value) })}
           />
+          <FieldDescription>每行一个 KEY=value，会与系统允许的环境变量合并</FieldDescription>
+        </FieldContent>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="task-action-script-path-strategy">PATH 模式</FieldLabel>
+        <FieldContent>
+          <ToggleGroup
+            aria-label="PATH strategy"
+            className="w-full"
+            data-track="task-action-script-path-strategy"
+            type="single"
+            value={value.pathStrategy ?? "merge"}
+            variant="outline"
+            onValueChange={(strategy) => {
+              if (strategy) onChange({ ...value, pathStrategy: strategy as "merge" | "replace" })
+            }}
+          >
+            {PATH_STRATEGY_OPTIONS.map((option) => (
+              <ToggleGroupItem
+                key={option.value}
+                id={`task-action-script-path-strategy-${option.value}`}
+                className="flex-1"
+                value={option.value}
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <FieldDescription>合并：将 nvm/Homebrew 等路径追加到 PATH；替换：仅使用自定义 PATH</FieldDescription>
         </FieldContent>
       </Field>
       <Field>

@@ -373,6 +373,13 @@ export const installFormDefinition = {
 
 ---
 
+## 文档
+
+- [定时任务 PATH 与环境变量](../docs/scheduler/path-and-env.md) — 技术参考
+- [用户指南：定时任务环境变量](../website/advanced/scheduler-env.md) — 使用说明
+
+---
+
 ## 内容分类
 
 规则、技能、提示词各自拥有独立的分类体系。`value` 为持久化标识，一经写入不可修改。

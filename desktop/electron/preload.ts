@@ -192,6 +192,9 @@ const IPC_CHANNELS = {
     "delete": "synapse:workflow:delete",
     "validate": "synapse:workflow:validate",
     "run": "synapse:workflow:run",
+    "runDefinition": "synapse:workflow:run-definition",
+    "rerun": "synapse:workflow:rerun",
+    "openRunner": "synapse:workflow:open-runner",
     "cancel": "synapse:workflow:cancel",
     "runHistory": "synapse:workflow:run-history",
     "runSnapshot": "synapse:workflow:run-snapshot",
@@ -644,6 +647,12 @@ const synapseBridge: SynapseBridge = {
     delete: (id: string) => invoke(IPC_CHANNELS.workflow.delete)({ id }),
     validate: (def) => invoke(IPC_CHANNELS.workflow.validate)(def),
     run: (id: string, params: Record<string, unknown>) => invoke(IPC_CHANNELS.workflow.run)({ id, params }),
+    runDefinition: (def: unknown, params: Record<string, unknown>, force?: boolean) =>
+      invoke(IPC_CHANNELS.workflow.runDefinition)({ definition: def, params, force }),
+    rerun: (previousRunId: string, params: Record<string, unknown>) =>
+      invoke(IPC_CHANNELS.workflow.rerun)({ previousRunId, params }),
+    openRunner: (workflowId: string, runId: string) =>
+      invoke(IPC_CHANNELS.workflow.openRunner)({ workflowId, runId }),
     cancel: (runId: string) => invoke(IPC_CHANNELS.workflow.cancel)({ runId }),
     runHistory: (workflowId: string) => invoke(IPC_CHANNELS.workflow.runHistory)({ workflowId }),
     runSnapshot: (runId: string, workflowId: string) => invoke(IPC_CHANNELS.workflow.runSnapshot)({ runId, workflowId }),
@@ -655,6 +664,10 @@ const synapseBridge: SynapseBridge = {
       subscribe("synapse:events:workflow")((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)
       }),
+    onRunnerSwitchRun: createRawPayloadSubscription<{ runId: string }>(
+      subscribe,
+      "synapse:workflow:runner-switch-run",
+    ),
   },
   tokenUsage: {
     scan: invoke(IPC_CHANNELS["token-usage"].scan),

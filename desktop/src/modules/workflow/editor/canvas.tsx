@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   ReactFlow,
@@ -6,9 +6,11 @@ import {
   Controls,
   ReactFlowProvider,
   PanOnScrollMode,
+  SelectionMode,
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useOnSelectionChange,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
@@ -19,6 +21,7 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
+import { Clipboard } from "lucide-react"
 import { nodeTypes, NodeResultsContext } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
@@ -83,13 +86,14 @@ function flowEdgeToWorkflowEdge(edge: WorkflowFlowEdge): WorkflowEdge {
 interface WorkflowCanvasProps {
   definition: WorkflowDefinition
   nodeResults?: Record<string, NodeRunResult>
+  runState?: string
   onChange: (def: WorkflowDefinition) => void
   onNodeSelect?: (nodeId: string | null) => void
   onRequestRename?: (nodeId: string) => void
 }
 
 const CanvasContent = forwardRef<WorkflowCanvasHandle, WorkflowCanvasProps>(
-function CanvasContent({ definition, nodeResults, onChange, onNodeSelect, onRequestRename }, ref) {
+function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSelect, onRequestRename }, ref) {
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes] = useNodesState(initNodes)
   const [edges, setEdges] = useEdgesState(initEdges)
@@ -201,13 +205,18 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect, onRequ
     onChange(newDef)
   }, [screenToFlowPosition, onChange, setNodes])
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowFlowNode) => {
-    onNodeSelect?.(node.id)
-  }, [onNodeSelect])
+  const selectionChangeHandler = useCallback(({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[] }) => {
+    if (runState && runState !== "idle") return
+    onNodeSelect?.(selectedNodes.length === 1 ? selectedNodes[0].id : null)
+  }, [runState, onNodeSelect])
 
-  const onPaneClick = useCallback(() => {
-    onNodeSelect?.(null)
-  }, [onNodeSelect])
+  useOnSelectionChange({ onChange: selectionChangeHandler })
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowFlowNode) => {
+    if (runState && runState !== "idle") {
+      onNodeSelect?.(node.id)
+    }
+  }, [runState, onNodeSelect])
 
   const copyNodes = useCallback((nodeIds: string[]) => {
     const def = definitionRef.current
@@ -226,15 +235,22 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect, onRequ
     toast(`已复制 ${copiedNodes.length} 个节点`)
   }, [])
 
-  const pasteNodes = useCallback((_anchorNodeId: string) => {
+  const pasteNodes = useCallback((position?: { x: number; y: number }) => {
     if (!clipboard || clipboard.nodes.length === 0) return
     const idMap = new Map<string, string>()
     clipboard.nodes.forEach((n) => idMap.set(n.id, crypto.randomUUID()))
 
+    let offsetX = 50, offsetY = 50
+    if (position && clipboard.nodes.length > 0) {
+      const first = clipboard.nodes[0]
+      offsetX = position.x - first.position.x
+      offsetY = position.y - first.position.y
+    }
+
     const newNodes = clipboard.nodes.map((n) => ({
       ...n,
       id: idMap.get(n.id)!,
-      position: { x: n.position.x + 50, y: n.position.y + 50 },
+      position: { x: n.position.x + offsetX, y: n.position.y + offsetY },
     }))
     const newEdges = clipboard.edges.map((e) => ({
       ...e,
@@ -303,6 +319,53 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect, onRequ
     clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename,
   }), [clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename])
 
+  // Keyboard shortcuts for copy/paste
+  const copyNodesRef = useRef(copyNodes)
+  copyNodesRef.current = copyNodes
+  const pasteNodesRef = useRef(pasteNodes)
+  pasteNodesRef.current = pasteNodes
+  const getSelectedNodeIdsRef = useRef(getSelectedNodeIds)
+  getSelectedNodeIdsRef.current = getSelectedNodeIds
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod) return
+      if (e.key === "c") {
+        const ids = getSelectedNodeIdsRef.current()
+        if (ids.length > 0) copyNodesRef.current(ids)
+      } else if (e.key === "v") {
+        pasteNodesRef.current()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
+
+  const [paneMenu, setPaneMenu] = useState<{ screenX: number; screenY: number; flowX: number; flowY: number } | null>(null)
+
+  const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
+    event.preventDefault()
+    const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    setPaneMenu({ screenX: event.clientX, screenY: event.clientY, flowX: flowPos.x, flowY: flowPos.y })
+  }, [screenToFlowPosition])
+
+  const closePaneMenu = useCallback(() => setPaneMenu(null), [])
+
+  useEffect(() => {
+    if (!paneMenu) return
+    const handleClose = () => setPaneMenu(null)
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose() }
+    window.addEventListener("mousedown", handleClose)
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("mousedown", handleClose)
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [paneMenu])
+
   return (
     <CanvasActionsContext.Provider value={canvasActions}>
       <NodeResultsContext.Provider value={nodeResults ?? {}}>
@@ -310,12 +373,36 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect, onRequ
           onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange}
           onConnect={onConnect} onNodeDragStop={onNodeDragStop}
           onDrop={onDrop} onDragOver={onDragOver}
-          onNodeClick={onNodeClick} onPaneClick={onPaneClick}
+          onNodeClick={onNodeClick}
+          onPaneClick={closePaneMenu}
+          onMoveStart={closePaneMenu}
+          onPaneContextMenu={onPaneContextMenu}
           edgeTypes={edgeTypes}
+          selectionOnDrag selectionMode={SelectionMode.Partial}
           fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
           <Background />
           <Controls />
         </ReactFlow>
+        {paneMenu && (
+          <div
+            className="fixed z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+            style={{ left: paneMenu.screenX, top: paneMenu.screenY }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0"
+              disabled={!clipboard}
+              onClick={() => {
+                pasteNodes({ x: paneMenu.flowX, y: paneMenu.flowY })
+                setPaneMenu(null)
+              }}
+            >
+              <Clipboard className="size-4" />
+              粘贴
+              <span className="ml-auto text-xs tracking-widest text-muted-foreground">⌘V</span>
+            </button>
+          </div>
+        )}
       </NodeResultsContext.Provider>
     </CanvasActionsContext.Provider>
   )

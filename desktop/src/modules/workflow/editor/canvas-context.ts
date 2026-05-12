@@ -10,7 +10,7 @@ export interface CanvasActions {
   clipboard: NodeClipboard | null
   getSelectedNodeIds: () => string[]
   copyNodes: (nodeIds: string[]) => void
-  pasteNodes: (anchorNodeId: string) => void
+  pasteNodes: (position?: { x: number; y: number }) => void
   disconnectNodes: (nodeIds: string[]) => void
   deleteNodes: (nodeIds: string[]) => void
   requestRename: (nodeId: string) => void

@@ -8,6 +8,9 @@ import { InMemoryAuditSink, createPermissionGuard } from "../../security"
 import {
   ControlledProcessPermissionError,
   createControlledProcessRunner,
+  computePath,
+  splitPath,
+  dedupePath,
 } from "../controlled-runner"
 
 describe("ControlledProcessRunner (Phase 0.7)", () => {
@@ -172,7 +175,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
             HOMEDRIVE: "C:",
             HOMEPATH: "\\Users\\Ada",
             LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local",
-            Path: "C:\\Users\\Ada\\AppData\\Roaming\\npm;C:\\Windows\\System32",
+            PATH: expect.stringContaining("C:\\Users\\Ada\\AppData\\Roaming\\npm;C:\\Windows\\System32"),
             USERPROFILE: "C:\\Users\\Ada",
           }),
           shell: false,
@@ -321,5 +324,150 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
         metadata: expect.objectContaining({ longRunning: true }),
       }),
     ])
+  })
+})
+
+describe("PATH merge helpers", () => {
+  describe("splitPath", () => {
+    it("splits POSIX paths on colon", () => {
+      expect(splitPath("/usr/bin:/usr/local/bin", ":")).toEqual(["/usr/bin", "/usr/local/bin"])
+    })
+
+    it("filters empty segments", () => {
+      expect(splitPath("/usr/bin::/usr/local/bin:", ":")).toEqual(["/usr/bin", "/usr/local/bin"])
+    })
+
+    it("splits Windows paths on semicolon", () => {
+      expect(splitPath("C:\\Windows;C:\\Users\\bin", ";")).toEqual(["C:\\Windows", "C:\\Users\\bin"])
+    })
+  })
+
+  describe("dedupePath", () => {
+    it("deduplicates case-sensitively for POSIX", () => {
+      expect(dedupePath(["/usr/bin", "/usr/local/bin", "/usr/bin"], false)).toEqual([
+        "/usr/bin",
+        "/usr/local/bin",
+      ])
+    })
+
+    it("deduplicates case-insensitively for Windows", () => {
+      expect(dedupePath(["C:\\Windows", "c:\\windows", "C:\\Users"], true)).toEqual([
+        "C:\\Windows",
+        "C:\\Users",
+      ])
+    })
+  })
+
+  describe("computePath", () => {
+    it("merge: user paths first, shell paths appended, deduped", () => {
+      const result = computePath(
+        "merge",
+        "/custom/bin:/usr/bin",
+        "/usr/bin:/usr/local/bin:/opt/homebrew/bin",
+        "/fallback",
+        ":",
+        false,
+      )
+      expect(result).toBe("/custom/bin:/usr/bin:/usr/local/bin:/opt/homebrew/bin")
+    })
+
+    it("merge: no user PATH uses shell PATH only", () => {
+      const result = computePath(
+        "merge",
+        undefined,
+        "/usr/bin:/usr/local/bin",
+        "/fallback",
+        ":",
+        false,
+      )
+      expect(result).toBe("/usr/bin:/usr/local/bin")
+    })
+
+    it("merge: no shell PATH falls back", () => {
+      const result = computePath(
+        "merge",
+        "/custom/bin",
+        null,
+        "/usr/bin:/usr/local/bin",
+        ":",
+        false,
+      )
+      expect(result).toBe("/custom/bin:/usr/bin:/usr/local/bin")
+    })
+
+    it("replace: uses user PATH verbatim", () => {
+      const result = computePath(
+        "replace",
+        "/custom/bin",
+        "/usr/bin:/usr/local/bin",
+        "/fallback",
+        ":",
+        false,
+      )
+      expect(result).toBe("/custom/bin")
+    })
+
+    it("replace: no user PATH falls back to shell PATH", () => {
+      const result = computePath(
+        "replace",
+        undefined,
+        "/usr/bin:/usr/local/bin",
+        "/fallback",
+        ":",
+        false,
+      )
+      expect(result).toBe("/usr/bin:/usr/local/bin")
+    })
+
+    it("merge with Windows semicolons and case-insensitive dedup", () => {
+      const result = computePath(
+        "merge",
+        "C:\\Custom;C:\\Windows",
+        "c:\\windows;C:\\System32",
+        "fallback",
+        ";",
+        true,
+      )
+      expect(result).toBe("C:\\Custom;C:\\Windows;C:\\System32")
+    })
+  })
+})
+
+describe("diagnostics", () => {
+  it("populates diagnostics on successful run", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink })
+
+    const result = await runner.run({
+      actor: { kind: "user" },
+      action: "shell.exec",
+      command: process.execPath,
+      args: ["-e", "process.exit(0)"],
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.diagnostics).toBeDefined()
+    expect(result.diagnostics!.envKeys).toEqual(expect.arrayContaining(["PATH"]))
+    expect(result.diagnostics!.pathEntries.length).toBeGreaterThan(0)
+    expect(result.diagnostics!.shell).toBe(process.execPath)
+    expect(result.diagnostics!.args).toEqual(["-e", "process.exit(0)"])
+  })
+
+  it("populates diagnostics on failed run", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink })
+
+    const result = await runner.run({
+      actor: { kind: "user" },
+      action: "shell.exec",
+      command: process.execPath,
+      args: ["-e", "process.exit(1)"],
+    })
+
+    expect(result.exitCode).toBe(1)
+    expect(result.diagnostics).toBeDefined()
+    expect(result.diagnostics!.envKeys).toEqual(expect.arrayContaining(["PATH"]))
   })
 })

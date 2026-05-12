@@ -28,6 +28,15 @@ void (async () => {
         </AppErrorBoundary>
       </StrictMode>,
     )
+  } else if (windowType === "workflow-runner") {
+    const { WorkflowRunnerApp } = await import("@/modules/workflow/runner/runner-app")
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <WorkflowRunnerApp />
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
   } else {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

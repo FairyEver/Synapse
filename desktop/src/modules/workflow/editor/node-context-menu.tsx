@@ -56,7 +56,7 @@ export function NodeContextMenu({ nodeId, nodeType, children }: NodeContextMenuP
         <ContextMenuItem
           data-track="paste"
           disabled={!clipboard}
-          onSelect={() => pasteNodes(nodeId)}
+          onSelect={() => pasteNodes()}
         >
           <Clipboard className="size-4" />
           粘贴

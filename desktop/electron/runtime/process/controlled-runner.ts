@@ -72,6 +72,7 @@ export interface ControlledProcessRunRequest {
   readonly output?: ControlledProcessOutputOptions
   readonly onStdoutLine?: ControlledProcessLineHandler
   readonly onStderrLine?: ControlledProcessLineHandler
+  readonly pathStrategy?: PathStrategy
   readonly isolation?: ControlledProcessIsolationOptions
   readonly metadata?: Record<string, unknown>
 }
@@ -82,6 +83,14 @@ export interface ControlledProcessIsolationOptions {
   readonly envAllowlist?: readonly string[]
 }
 
+export interface ControlledProcessDiagnostics {
+  readonly envKeys: readonly string[]
+  readonly pathSummary: string
+  readonly pathEntries: readonly string[]
+  readonly shell: string
+  readonly args: readonly string[]
+}
+
 export interface ControlledProcessResult {
   readonly exitCode: number | null
   readonly signal: NodeJS.Signals | null
@@ -90,6 +99,7 @@ export interface ControlledProcessResult {
   readonly timedOut: boolean
   readonly durationMs: number
   readonly error?: string
+  readonly diagnostics?: ControlledProcessDiagnostics
 }
 
 export interface ControlledProcessSession {
@@ -219,6 +229,16 @@ export class ControlledProcessRunner {
     const output = request.output ?? {}
     const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
     const launch = buildLaunch(request)
+    const launchPathEntries = splitPath(launch.env.PATH ?? "", process.platform === "win32" ? ";" : ":")
+    const launchDiagnostics: ControlledProcessDiagnostics = {
+      envKeys: Object.keys(launch.env).sort(),
+      pathSummary: launchPathEntries.length > 0
+        ? `${launchPathEntries[0]}${launchPathEntries.length > 1 ? ` ... (${String(launchPathEntries.length)} entries)` : ""}`
+        : "(empty)",
+      pathEntries: launchPathEntries,
+      shell: launch.command,
+      args: [...launch.args],
+    }
 
     const permission = await this.permissionGuard.check({
       action: request.action,
@@ -357,6 +377,7 @@ export class ControlledProcessRunner {
       timedOut,
       durationMs,
       error,
+      diagnostics: launchDiagnostics,
     }
 
     const jsonLinesError = validateJsonLineOutput(output, result)
@@ -711,21 +732,70 @@ function resolveShellPath(): string | null {
   return null
 }
 
+export type PathStrategy = "merge" | "replace"
+
+export function splitPath(pathValue: string, delim: string): string[] {
+  return pathValue.split(delim).filter(Boolean)
+}
+
+export function dedupePath(parts: string[], caseInsensitive: boolean): string[] {
+  const seen = new Set<string>()
+  return parts.filter((p) => {
+    const key = caseInsensitive ? p.toLowerCase() : p
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+export function computePath(
+  strategy: PathStrategy,
+  userPath: string | undefined,
+  shellPath: string | null,
+  fallbackPath: string,
+  delim: string,
+  caseInsensitive: boolean,
+): string {
+  if (strategy === "replace" && userPath !== undefined) {
+    return userPath
+  }
+
+  const base = shellPath ?? fallbackPath
+  if (userPath === undefined) {
+    return base
+  }
+
+  const parts = [...splitPath(userPath, delim), ...splitPath(base, delim)]
+  return dedupePath(parts, caseInsensitive).join(delim)
+}
+
 function buildAllowedEnv(
   env: Record<string, string | undefined> | undefined,
   envAllowlist: readonly string[] | undefined,
+  pathStrategy: PathStrategy = "merge",
 ): NodeJS.ProcessEnv {
   const allowlist = new Set([...DEFAULT_ENV_ALLOWLIST, ...(envAllowlist ?? [])])
   const nextEnv: NodeJS.ProcessEnv = {}
 
   for (const key of allowlist) {
     if (!key) continue
-    let entry = findEnvEntry(env, key)
-    if (!entry && key === "PATH") {
-      // 优先使用登录 shell 的完整 PATH（Electron .app 启动时 PATH 只有系统默认值）
+    if (key === "PATH") {
+      const userEntry = findEnvEntry(env, "PATH")
       const shellPath = resolveShellPath()
-      if (shellPath) entry = { key: "PATH", value: shellPath }
+      const fallbackPath = process.env.PATH ?? ""
+      const delim = process.platform === "win32" ? ";" : ":"
+      const caseInsensitive = process.platform === "win32"
+      nextEnv.PATH = computePath(
+        pathStrategy,
+        userEntry?.value,
+        shellPath,
+        fallbackPath,
+        delim,
+        caseInsensitive,
+      )
+      continue
     }
+    let entry = findEnvEntry(env, key)
     if (!entry) entry = findEnvEntry(process.env, key)
     if (entry) nextEnv[entry.key] = entry.value
   }
@@ -758,7 +828,7 @@ interface ControlledProcessLaunch {
 
 function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLaunch {
   const args = request.args ?? []
-  const env = buildAllowedEnv(request.env, request.envAllowlist)
+  const env = buildAllowedEnv(request.env, request.envAllowlist, request.pathStrategy ?? "merge")
   const isolation = request.isolation
   if (!isolation) {
     return {

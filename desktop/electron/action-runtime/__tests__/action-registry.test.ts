@@ -83,8 +83,8 @@ describe("MainActionRegistry", () => {
     }))
 
     expect(summaries).toEqual(expect.arrayContaining([
-      { id: "builtin.command", fields: ["command", "shell", "env", "timeoutMins"] },
-      { id: "builtin.script", fields: ["script", "shell", "env", "timeoutMins"] },
+      { id: "builtin.command", fields: ["command", "shell", "env", "pathStrategy", "posixLogin", "timeoutMins"] },
+      { id: "builtin.script", fields: ["script", "shell", "env", "pathStrategy", "posixLogin", "timeoutMins"] },
       {
         id: "builtin.http-request",
         fields: ["method", "url", "headers", "query", "bodyType", "body", "timeoutMins"],

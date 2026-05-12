@@ -547,6 +547,9 @@ export type SynapseBridge = {
     delete: (id: string) => Promise<void>
     validate: (def: WorkflowDefinition) => Promise<ValidationResult>
     run: (id: string, params: Record<string, unknown>) => Promise<{ runId: string }>
+    runDefinition: (def: WorkflowDefinition, params: Record<string, unknown>, force?: boolean) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
+    rerun: (previousRunId: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
+    openRunner: (workflowId: string, runId: string) => Promise<void>
     cancel: (runId: string) => Promise<void>
     runHistory: (workflowId: string) => Promise<WorkflowRunSnapshot[]>
     runSnapshot: (runId: string, workflowId: string) => Promise<WorkflowRunSnapshot | null>
@@ -555,6 +558,7 @@ export type SynapseBridge = {
     editorState: () => Promise<{ openEditors: string[] }>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
+    onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
   }
   tokenUsage: {
     scan: () => Promise<{

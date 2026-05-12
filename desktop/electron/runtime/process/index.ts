@@ -18,6 +18,7 @@ export type {
 } from "./runtime"
 export type {
   ControlledProcessAction,
+  ControlledProcessDiagnostics,
   ControlledProcessIsolationOptions,
   ControlledProcessLineHandler,
   ControlledProcessOutputMode,
@@ -26,4 +27,5 @@ export type {
   ControlledProcessRunnerDeps,
   ControlledProcessRunRequest,
   ControlledProcessSession,
+  PathStrategy,
 } from "./controlled-runner"

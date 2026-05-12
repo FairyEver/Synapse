@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AlertCircle, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import type { WorkflowDefinition, NodeRunResult, ValidationError } from "@/types/workflow"
+import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
 import { createRendererLogger } from "@/app-shell/logging"
 // Side-effect: populate node type registry in the editor window's renderer process.
@@ -10,11 +10,8 @@ import { createRendererLogger } from "@/app-shell/logging"
 // Vite bundle (they import `electron`, `node:path`, etc.).
 import "../../../../workflow-nodes/register.renderer"
 import { Button } from "@/components/ui/button"
-import { useWorkflowRun } from "../hooks/use-workflow-run"
-import { useWorkflowEvents } from "../hooks/use-workflow-events"
 import { WorkflowToolbar } from "./toolbar"
 import { WorkflowCanvas, type WorkflowCanvasHandle } from "./canvas"
-import { ExecutionOverlay } from "./execution-overlay"
 import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
@@ -24,25 +21,17 @@ const logger = createRendererLogger("workflow.editor")
 export function WorkflowEditorApp() {
   const searchParams = new URLSearchParams(window.location.search)
   const workflowId = searchParams.get("workflowId") ?? ""
-  const initialRunId = searchParams.get("runId")
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [viewingNodeId, setViewingNodeId] = useState<string | null>(null)
   const [runErrors, setRunErrors] = useState<ValidationError[]>([])
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
-  const renameSignalRef = useRef<number>(0)
+  const [renameSignal, setRenameSignal] = useState(0)
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
-  const { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel, attachRun } = useWorkflowRun(workflowId, initialRunId)
-  const [runError, setRunError] = useState<string | null>(null)
-  // Track current runId in a ref so the workflow:started listener can avoid
-  // re-attaching (and wiping nodeResults) for a run already managed locally.
-  const runIdRef = useRef(runId)
-  runIdRef.current = runId
 
   useEffect(() => {
     if (!workflowId) return
@@ -50,26 +39,12 @@ export function WorkflowEditorApp() {
     if (!workflowApi) return
     let cancelled = false
     void (async () => {
-      const [def, snapshots] = await Promise.all([
-        workflowApi.get(workflowId),
-        workflowApi.runHistory(workflowId),
-      ])
+      const def = await workflowApi.get(workflowId)
       if (cancelled) return
       if (def) setDefinition(def)
-      // Only apply snapshot results when there is NO active run.
-      // When initialRunId is set, useWorkflowEvents handles hydration from the
-      // live run status — applying a stale snapshot here would overwrite it due
-      // to the async race (runHistory reads from disk, runStatus from memory).
-      const latest = snapshots[0]
-      if (latest && !initialRunId) {
-        logger.info("applying latest snapshot nodeResults (no active run)", { workflowId, snapshotRunId: latest.runId })
-        setNodeResults(latest.nodeResults)
-      } else if (latest && initialRunId) {
-        logger.info("skipping snapshot nodeResults — active run will hydrate via events", { workflowId, initialRunId, snapshotRunId: latest.runId })
-      }
     })()
     return () => { cancelled = true }
-  }, [workflowId, setNodeResults])
+  }, [workflowId])
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -81,38 +56,6 @@ export function WorkflowEditorApp() {
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
   }, [])
-
-  useEffect(() => {
-    if (!workflowId) return
-    return window.synapse?.workflow.onEvent((event) => {
-      if (event.type === "workflow:started" && event.workflowId === workflowId) {
-        // Skip if this run was already attached locally (e.g. initiated from this editor).
-        // Re-attaching would wipe nodeResults that useWorkflowEvents already hydrated.
-        if (runIdRef.current === event.runId) {
-          logger.info("workflow:started event skipped — run already attached", { runId: event.runId })
-          return
-        }
-        logger.info("workflow:started event — attaching external run", { runId: event.runId })
-        attachRun(event.runId)
-      }
-    })
-  }, [workflowId, attachRun])
-
-  useWorkflowEvents(runId, {
-    onNodeStarted: (nodeId) => setNodeResults((r) => ({ ...r, [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "running" as const } })),
-    onNodeCompleted: (nodeId, output, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "success" as const, output: String(output) } })),
-    onNodeFailed: (nodeId, error, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "failed" as const, error } })),
-    onNodeSkipped: (nodeId, result) => setNodeResults((r) => ({ ...r, [nodeId]: result ?? { nodeId, input: { variables: {} }, status: "skipped" as const } })),
-    onCompleted: (results) => { setRunState("completed"); setRunError(null); setNodeResults(results) },
-    onFailed: (error, results) => {
-      setRunState("failed"); setRunError(error)
-      if (results) { logger.info("workflow failed — replacing nodeResults with authoritative data", { nodeCount: Object.keys(results).length }); setNodeResults(results) }
-    },
-    onCancelled: (results) => {
-      setRunState("cancelled"); setRunError(null)
-      if (results) { logger.info("workflow cancelled — replacing nodeResults with authoritative data", { nodeCount: Object.keys(results).length }); setNodeResults(results) }
-    },
-  })
 
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
     isDirtyRef.current = true
@@ -161,21 +104,12 @@ export function WorkflowEditorApp() {
   }, [])
 
   const handleNodeSelect = useCallback((nodeId: string | null) => {
-    if (nodeId && runState !== "idle") {
-      const result = nodeResults[nodeId]
-      if (result?.status === "success" || result?.status === "failed") {
-        setViewingNodeId(nodeId)
-        return
-      }
-    }
     setSelectedNodeId(nodeId)
-    setViewingNodeId(null)
-  }, [runState, nodeResults])
+  }, [])
 
   const handleRequestRename = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId)
-    setViewingNodeId(null)
-    renameSignalRef.current += 1
+    setRenameSignal((s) => s + 1)
   }, [])
 
   const handleCloseDiscard = () => {
@@ -218,17 +152,37 @@ export function WorkflowEditorApp() {
   }
 
   const handleRun = async (params: Record<string, unknown>) => {
-    const currentDefinition = definitionRef.current
-    if (!currentDefinition) return null
-    const saveResult = await handleSave(currentDefinition)
-    if (!saveResult || "errors" in saveResult) return null
-    setRunError(null)
-    const startResult = await start(params)
-    if (startResult && "errors" in startResult) {
-      setRunErrors(startResult.errors)
+    const def = definitionRef.current
+    if (!def) return null
+    try {
+      const saveResult = await handleSave(def)
+      if (!saveResult || "errors" in saveResult) return null
+      const saved = definitionRef.current
+      if (!saved) return null
+      const result = await window.synapse?.workflow.runDefinition(saved, params)
+      if (!result) {
+        setRunErrors([{ type: "invalid_config", message: "运行失败：IPC 通道不可用" }])
+        return null
+      }
+      if ("errors" in result) {
+        setRunErrors(result.errors)
+        return null
+      }
+      if ("conflict" in result) {
+        const confirmed = window.confirm("有正在执行的运行，是否取消并启动新运行？")
+        if (!confirmed) return null
+        const forceResult = await window.synapse?.workflow.runDefinition(saved, params, true)
+        if (!forceResult || "errors" in forceResult || "conflict" in forceResult) return null
+        void window.synapse?.workflow.openRunner(saved.id, forceResult.runId)
+        return forceResult.runId
+      }
+      void window.synapse?.workflow.openRunner(saved.id, result.runId)
+      return result.runId
+    } catch (err) {
+      logger.error("handleRun failed", { error: err instanceof Error ? err.message : String(err) })
+      setRunErrors([{ type: "invalid_config", message: `运行失败：${err instanceof Error ? err.message : String(err)}` }])
       return null
     }
-    return startResult ? startResult.runId : null
   }
 
   if (!definition) return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
@@ -236,7 +190,7 @@ export function WorkflowEditorApp() {
   return (
     <>
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} runState={runState} onSave={handleSave} onRun={handleRun} onCancel={cancel} onReset={() => { setRunState("idle"); setViewingNodeId(null) }} onChange={handleDefinitionChange} />
+      <WorkflowToolbar definition={definition} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
@@ -257,10 +211,7 @@ export function WorkflowEditorApp() {
         <NodePalette />
         <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
           <ResizablePanel>
-            <div className="h-full relative">
-              <WorkflowCanvas ref={canvasRef} definition={definition} nodeResults={nodeResults} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
-              <ExecutionOverlay nodeResults={nodeResults} runState={runState} runError={runError} definition={definition} viewingNodeId={viewingNodeId} onViewClose={() => setViewingNodeId(null)} />
-            </div>
+            <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel
@@ -269,7 +220,7 @@ export function WorkflowEditorApp() {
             maxSize={600}
             groupResizeBehavior="preserve-pixel-size"
           >
-            <NodeConfigPanel nodeId={runState === "idle" ? selectedNodeId : null} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} renameSignal={renameSignalRef.current} />
+            <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} renameSignal={renameSignal} />
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
