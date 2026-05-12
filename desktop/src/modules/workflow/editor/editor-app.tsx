@@ -27,6 +27,7 @@ export function WorkflowEditorApp() {
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
+  const [conflictState, setConflictState] = useState<{ saved: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
@@ -188,12 +189,8 @@ export function WorkflowEditorApp() {
         return null
       }
       if ("conflict" in result) {
-        const confirmed = window.confirm("有正在执行的运行，是否取消并启动新运行？")
-        if (!confirmed) return null
-        const forceResult = await window.synapse?.workflow.runDefinition(saved, params, true)
-        if (!forceResult || "errors" in forceResult || "conflict" in forceResult) return null
-        void window.synapse?.workflow.openRunner(saved.id, forceResult.runId)
-        return forceResult.runId
+        setConflictState({ saved, params })
+        return null
       }
       void window.synapse?.workflow.openRunner(saved.id, result.runId)
       return result.runId
@@ -201,6 +198,20 @@ export function WorkflowEditorApp() {
       logger.error("handleRun failed", { error: err instanceof Error ? err.message : String(err) })
       setRunErrors([{ type: "invalid_config", message: `运行失败：${err instanceof Error ? err.message : String(err)}` }])
       return null
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const handleForceRun = async () => {
+    if (!conflictState) return
+    const { saved, params } = conflictState
+    setConflictState(null)
+    setRunning(true)
+    try {
+      const forceResult = await window.synapse?.workflow.runDefinition(saved, params, true)
+      if (!forceResult || "errors" in forceResult || "conflict" in forceResult) return
+      void window.synapse?.workflow.openRunner(saved.id, forceResult.runId)
     } finally {
       setRunning(false)
     }
@@ -264,6 +275,18 @@ export function WorkflowEditorApp() {
           <AlertDialogCancel>取消</AlertDialogCancel>
           <Button variant="ghost" onClick={handleCloseDiscard}>放弃</Button>
           <Button onClick={handleCloseSave}>保存</Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog open={!!conflictState} onOpenChange={(o) => { if (!o) setConflictState(null) }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>运行冲突</AlertDialogTitle>
+          <AlertDialogDescription>有正在执行的运行，是否取消并启动新运行？</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <Button onClick={handleForceRun}>取消旧运行并启动</Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

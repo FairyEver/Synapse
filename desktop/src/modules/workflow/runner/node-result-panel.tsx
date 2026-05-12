@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { X } from "lucide-react"
-import type { NodeRunResult } from "@/types/workflow"
+import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 
 const STATUS_LABEL: Record<string, string> = { pending: "等待", running: "执行中", success: "完成", failed: "失败", skipped: "跳过" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -11,10 +11,19 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
 interface NodeResultPanelProps {
   result: NodeRunResult
   nodeName: string
+  definition?: WorkflowDefinition
   onClose: () => void
 }
 
-export function NodeResultPanel({ result, nodeName, onClose }: NodeResultPanelProps) {
+export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeResultPanelProps) {
+  // Resolve activeBranch ID to user-configured label when definition is available
+  const activeBranchLabel = (() => {
+    if (!result.activeBranch || !definition) return result.activeBranch
+    const node = definition.nodes.find((n) => n.id === result.nodeId)
+    if (!node || node.type !== "switch") return result.activeBranch
+    const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
+    return branches?.find((b) => b.id === result.activeBranch)?.label ?? result.activeBranch
+  })()
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2 px-3 py-2 border-b">
@@ -58,13 +67,13 @@ export function NodeResultPanel({ result, nodeName, onClose }: NodeResultPanelPr
             <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all text-destructive">{result.error}</pre>
           </div>
         )}
-        {result.activeBranch && (
+        {activeBranchLabel && (
           <div className="grid gap-1">
             <p className="font-medium text-muted-foreground">激活分支</p>
-            <span className="font-mono">{result.activeBranch}</span>
+            <span className="font-mono">{activeBranchLabel}</span>
           </div>
         )}
-        {!result.input.prompt && !result.error && !result.activeBranch && (result.output == null || result.output === "") && (
+        {!result.input.prompt && !result.error && !activeBranchLabel && (result.output == null || result.output === "") && (
           <p className="text-muted-foreground">
             {result.status === "pending" ? "节点等待执行" : "（无可展示的输出）"}
           </p>

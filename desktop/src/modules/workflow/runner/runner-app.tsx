@@ -217,6 +217,7 @@ export function WorkflowRunnerApp() {
               <NodeResultPanel
                 result={selectedResult}
                 nodeName={definition.nodes.find((n) => n.id === selectedNodeId)?.name ?? selectedNodeId ?? ""}
+                definition={definition}
                 onClose={() => setSelectedNodeId(null)}
               />
             </ResizablePanel>

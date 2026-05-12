@@ -37,6 +37,13 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
   }
 
+  const formatDuration = (startedAt: number, endedAt?: number) => {
+    if (!endedAt) return null
+    const ms = endedAt - startedAt
+    if (ms < 1000) return `${ms}ms`
+    return `${(ms / 1000).toFixed(1)}s`
+  }
+
   const handleOpenRunner = (runId: string) => {
     void window.synapse?.workflow.openRunner(workflowId, runId)
     onClose()
@@ -64,7 +71,12 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
                 </div>
-                <span className="text-xs text-muted-foreground">
+                {formatDuration(s.startedAt, s.endedAt) && (
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {formatDuration(s.startedAt, s.endedAt)}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground shrink-0">
                   {Object.keys(s.nodeResults).length} 个节点
                 </span>
                 <Button size="sm" variant="ghost" className="shrink-0" onClick={(e) => { e.stopPropagation(); handleOpenRunner(s.runId) }}>
