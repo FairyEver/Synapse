@@ -745,3 +745,25 @@ Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善�
 
 ### 本次进展
 画布键盘交互从"SELECT 聚焦时误删节点"变为完整交互隔离；窗口管理器从系统唯一无日志 service 变为与其他 5 个 workflow service 一致的日志覆盖。两个修复均为防御性补齐——无功能变更，消除静默风险。
+
+---
+
+## [2026-05-13 19:45] 第 32 次迭代
+
+### 发现的问题
+- 画布键盘处理器未排除 BUTTON 元素，工具栏按钮聚焦时按 Delete/Backspace 误删除画布节点（canvas.tsx:389 排除列表遗漏 BUTTON）
+- 工作流列表页删除操作无错误处理，IPC 不可用时静默失败无反馈（workflow-list.tsx:56-59 handleDelete 无 try/catch）
+
+### 修复内容
+- [desktop/src/modules/workflow/editor/canvas.tsx:389] 键盘事件 guard 条件新增 `tag === "BUTTON"`，工具栏按钮获得焦点时不再误触发 Delete/Backspace 节点删除
+- [desktop/src/modules/workflow/components/workflow-list.tsx:56-65] handleDelete 包裹 try/catch，失败时 toast.error + 不刷新列表，成功时 toast.success + refresh
+
+### 与历史的关系
+- 缺陷 1：延续第 31 轮（同文件同位置 canvas.tsx:389 guard 条件，第 31 轮添加 SELECT，本轮补充 BUTTON）
+- 缺陷 2：独立（handleDelete 的错误处理从未被任何轮次覆盖，虽然同文件 handleRun/handleConfirmRun 已在 iter 21/29 补齐）
+
+### 日志补充
+- 无（纯 UI 交互优化：键盘事件 guard 为已有排除逻辑的扩展，delete handler 补充的是渲染侧 toast 反馈，均不涉及数据流、执行路径或 IPC 契约变更）
+
+### 本次进展
+画布交互安全从"BUTTON 聚焦时 Delete 可误删节点"补齐了最后一种常见可聚焦元素的保护；列表页删除操作从"静默失败无反馈"变为"失败有明确提示+成功有确认"——交互安全性（防误操作）和操作完整度（有始有终反馈）两个维度向真正可用迈进。

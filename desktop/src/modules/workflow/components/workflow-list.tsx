@@ -54,7 +54,13 @@ export function WorkflowList() {
   }
 
   const handleDelete = async (id: string) => {
-    await window.synapse?.workflow.delete(id)
+    try {
+      await window.synapse?.workflow.delete(id)
+    } catch (err) {
+      toast.error(`删除失败：${err instanceof Error ? err.message : "无法连接到主进程"}`)
+      return
+    }
+    toast.success("工作流已删除")
     void refresh()
   }
 
