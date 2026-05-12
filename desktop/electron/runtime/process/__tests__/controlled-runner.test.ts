@@ -419,6 +419,18 @@ describe("PATH merge helpers", () => {
       expect(result).toBe("/usr/bin:/usr/local/bin")
     })
 
+    it("replace with Windows semicolons", () => {
+      const result = computePath(
+        "replace",
+        "C:\\Custom;C:\\Tools",
+        "C:\\Windows;C:\\System32",
+        "fallback",
+        ";",
+        true,
+      )
+      expect(result).toBe("C:\\Custom;C:\\Tools")
+    })
+
     it("merge with Windows semicolons and case-insensitive dedup", () => {
       const result = computePath(
         "merge",
