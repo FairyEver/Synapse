@@ -41,6 +41,7 @@ export interface NodeExecutionInput<TConfig> {
   resolvedVariables: Record<string, string>
   context: WorkflowRuntimeContext
   agentDeps: AgentSendDeps
+  onProgress?: (phase: string, label: string) => void
 }
 
 export interface NodeExecutionResult {

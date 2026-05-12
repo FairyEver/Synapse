@@ -20,6 +20,7 @@ export interface NodeRunResult {
   input: { variables: Record<string, string>; prompt?: string }
   output?: string; outputs?: Record<string, unknown>; activeBranch?: string; error?: string
   startedAt?: number; endedAt?: number; durationMs?: number
+  progressLabel?: string
 }
 export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled"
@@ -42,6 +43,7 @@ export interface WorkflowRunStatus {
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string; workflowId: string }
   | { type: "node:started"; runId: string; nodeId: string; startedAt?: number }
+  | { type: "node:progress"; runId: string; nodeId: string; phase: string; label: string }
   | { type: "node:completed"; runId: string; nodeId: string; output: unknown; result?: NodeRunResult }
   | { type: "node:failed"; runId: string; nodeId: string; error: string; result?: NodeRunResult }
   | { type: "node:skipped"; runId: string; nodeId: string; result?: NodeRunResult }
