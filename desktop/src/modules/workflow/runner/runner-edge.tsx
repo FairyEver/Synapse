@@ -1,5 +1,5 @@
-import { useContext, useEffect, useRef, useState } from "react"
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react"
+import { useContext } from "react"
+import { EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react"
 import { Badge } from "@/components/ui/badge"
 import { RunnerNodeResultsContext } from "./runner-node-wrappers"
 
@@ -15,17 +15,6 @@ export function RunnerEdge({
   })
 
   const label = (data as { label?: string } | undefined)?.label
-  const [showParticle, setShowParticle] = useState(false)
-  const prevStatusRef = useRef(sourceStatus)
-
-  useEffect(() => {
-    if (prevStatusRef.current === "running" && sourceStatus === "success") {
-      setShowParticle(true)
-      const timer = setTimeout(() => setShowParticle(false), 800)
-      return () => clearTimeout(timer)
-    }
-    prevStatusRef.current = sourceStatus
-  }, [sourceStatus])
 
   return (
     <>
@@ -38,16 +27,6 @@ export function RunnerEdge({
         strokeOpacity={activated ? 0.6 : 1}
         strokeDasharray={activated ? undefined : "4 4"}
       />
-      {showParticle && (
-        <>
-          <circle r={4} fill="#60a5fa" opacity={0.9}>
-            <animateMotion dur="0.8s" fill="freeze" path={edgePath} calcMode="spline" keySplines="0.4 0 0.2 1" keyTimes="0;1" keyPoints="0;1" />
-          </circle>
-          <circle r={7} fill="#3b82f6" opacity={0.3}>
-            <animateMotion dur="0.8s" fill="freeze" path={edgePath} calcMode="spline" keySplines="0.4 0 0.2 1" keyTimes="0;1" keyPoints="0;1" />
-          </circle>
-        </>
-      )}
       {label && (
         <EdgeLabelRenderer>
           <Badge
