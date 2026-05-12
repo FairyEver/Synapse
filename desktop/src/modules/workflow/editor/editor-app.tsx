@@ -210,7 +210,15 @@ export function WorkflowEditorApp() {
           <AlertTitle className="text-xs font-medium">校验失败</AlertTitle>
           <AlertDescription className="text-xs">
             <ul className="mt-0.5 space-y-0.5 list-none">
-              {runErrors.map((e, i) => <li key={i}>{e.message}</li>)}
+              {runErrors.map((e, i) => (
+                <li
+                  key={i}
+                  className={e.nodeId ? "cursor-pointer hover:underline" : undefined}
+                  onClick={e.nodeId ? () => setSelectedNodeId(e.nodeId!) : undefined}
+                >
+                  {e.message}
+                </li>
+              ))}
             </ul>
           </AlertDescription>
           <AlertAction>

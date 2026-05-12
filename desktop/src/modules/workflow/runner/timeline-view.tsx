@@ -50,8 +50,17 @@ export function TimelineView({ definition, nodeResults, onNodeSelect }: Timeline
                 已运行 {Math.round((Date.now() - r.startedAt) / 1000)}s
               </span>
             )}
-            {r.status === "failed" && r.error && (
-              <span className="text-xs text-destructive truncate ml-auto max-w-48">{r.error}</span>
+            {r.status === "success" && r.durationMs != null && (
+              <span className="text-xs text-muted-foreground ml-auto">
+                耗时 {r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}
+              </span>
+            )}
+            {r.status === "failed" && (r.durationMs != null || r.error) && (
+              <span className="text-xs truncate ml-auto max-w-48">
+                {r.durationMs != null && <span className="text-muted-foreground">{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
+                {r.durationMs != null && r.error && <span className="text-muted-foreground mx-1">·</span>}
+                {r.error && <span className="text-destructive">{r.error}</span>}
+              </span>
             )}
           </div>
         ))}
