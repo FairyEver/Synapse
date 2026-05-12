@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react"
 import { Handle, Position, type NodeProps } from "@xyflow/react"
+import { NodeContextMenu } from "./node-context-menu"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
 import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
@@ -16,11 +17,13 @@ export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
   const status = nodeResults[id]?.status
   const name = (data as { name?: string }).name
   return (
-    <>
-      <Handle type="target" position={Position.Left} />
-      <PromptNodeCard config={data as PromptNodeConfig} name={name} selected={selected} status={status} />
-      <Handle type="source" position={Position.Right} />
-    </>
+    <NodeContextMenu nodeId={id} nodeType="prompt">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <PromptNodeCard config={data as PromptNodeConfig} name={name} selected={selected} status={status} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
   )
 }
 
@@ -30,19 +33,21 @@ export function SwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
   return (
-    <>
-      <Handle type="target" position={Position.Left} />
-      <SwitchNodeCard config={data as SwitchNodeConfig} name={name} selected={selected} status={status} />
-      {branches.map((b, i) => (
-        <Handle
-          key={b.id}
-          type="source"
-          position={Position.Right}
-          id={b.id}
-          style={{ top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
-        />
-      ))}
-    </>
+    <NodeContextMenu nodeId={id} nodeType="switch">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <SwitchNodeCard config={data as SwitchNodeConfig} name={name} selected={selected} status={status} />
+        {branches.map((b, i) => (
+          <Handle
+            key={b.id}
+            type="source"
+            position={Position.Right}
+            id={b.id}
+            style={{ top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
+          />
+        ))}
+      </div>
+    </NodeContextMenu>
   )
 }
 
@@ -51,10 +56,12 @@ export function EndNodeWrapper({ id, data, selected }: NodeProps) {
   const status = nodeResults[id]?.status
   const name = (data as { name?: string }).name
   return (
-    <>
-      <Handle type="target" position={Position.Left} />
-      <EndNodeCard config={data as EndNodeConfig} name={name} selected={selected} status={status} />
-    </>
+    <NodeContextMenu nodeId={id} nodeType="end">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <EndNodeCard config={data as EndNodeConfig} name={name} selected={selected} status={status} />
+      </div>
+    </NodeContextMenu>
   )
 }
 
