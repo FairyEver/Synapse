@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 
@@ -15,6 +16,17 @@ interface TimelineViewProps {
 export function TimelineView({ definition, nodeResults, onNodeSelect }: TimelineViewProps) {
   const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
   const results = Object.values(nodeResults)
+    .sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))
+
+  // Tick every second while any node is still running so the elapsed-time
+  // display stays up to date. Stops automatically once all nodes are terminal.
+  const hasRunning = results.some((r) => r.status === "running")
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!hasRunning) return
+    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [hasRunning])
 
   if (results.length === 0) {
     return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">等待节点开始执行…</div>
