@@ -6,6 +6,7 @@ const logger = createRendererLogger("workflow.events")
 
 export interface WorkflowEventCallbacks {
   onNodeStarted?: (nodeId: string, partial?: Partial<NodeRunResult>) => void
+  onNodeProgress?: (nodeId: string, phase: string, label: string) => void
   onNodeCompleted?: (nodeId: string, output: unknown, result?: NodeRunResult) => void
   onNodeFailed?: (nodeId: string, error: string, result?: NodeRunResult) => void
   onNodeSkipped?: (nodeId: string, result?: NodeRunResult) => void
@@ -65,6 +66,8 @@ export function useWorkflowEvents(
       if (event.runId !== runId) return
       if (event.type === "node:started") {
         cbRef.current.onNodeStarted?.(event.nodeId, { startedAt: event.startedAt ?? Date.now() })
+      } else if (event.type === "node:progress") {
+        cbRef.current.onNodeProgress?.(event.nodeId, event.phase, event.label)
       } else if (event.type === "node:completed") {
         terminalNodes.add(event.nodeId)
         cbRef.current.onNodeCompleted?.(event.nodeId, event.output, event.result)

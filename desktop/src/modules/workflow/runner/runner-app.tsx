@@ -101,6 +101,11 @@ export function WorkflowRunnerApp() {
       ...r,
       [nodeId]: { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), ...partial, status: "running" as const },
     })),
+    onNodeProgress: (nodeId, _phase, label) => setNodeResults((r) => {
+      const existing = r[nodeId]
+      if (!existing || existing.status !== "running") return r
+      return { ...r, [nodeId]: { ...existing, progressLabel: label } }
+    }),
     onNodeCompleted: (nodeId, output, result) => setNodeResults((r) => ({
       ...r,
       [nodeId]: result ?? { ...(r[nodeId] ?? { nodeId, input: { variables: {} } }), status: "success" as const, output: String(output) },
