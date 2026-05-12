@@ -1,0 +1,429 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-05-13T02:30:00+08:00",
+  "totalIterations": 19,
+  "files": {
+    "desktop/electron/modules/workflow/ipc.ts": {
+      "lastReviewedIteration": 8,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "stable"
+    },
+    "desktop/electron/services/workflow/run-snapshot-service.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/electron/services/workflow/variable-resolver.ts": {
+      "lastReviewedIteration": 3,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/electron/services/workflow/window-manager.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/electron/services/workflow/workflow-engine.ts": {
+      "lastReviewedIteration": 3,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/electron/services/workflow/workflow-service.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/electron/services/workflow/workflow-validator.ts": {
+      "lastReviewedIteration": 6,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/src/modules/workflow/components/params-editor-dialog.tsx": {
+      "lastReviewedIteration": 19,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/components/run-history-dialog.tsx": {
+      "lastReviewedIteration": 19,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/components/run-params-dialog.tsx": {
+      "lastReviewedIteration": 18,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/components/workflow-card.tsx": {
+      "lastReviewedIteration": 16,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/components/workflow-list.tsx": {
+      "lastReviewedIteration": 18,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/editor/canvas-context.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/editor/canvas.tsx": {
+      "lastReviewedIteration": 8,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable"
+    },
+    "desktop/src/modules/workflow/editor/custom-edge.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/editor/editor-app.tsx": {
+      "lastReviewedIteration": 18,
+      "issuesFound": 6,
+      "issuesFixed": 6,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/editor/node-config-panel.tsx": {
+      "lastReviewedIteration": 19,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/editor/node-context-menu.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/editor/node-palette.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/editor/node-wrappers.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/editor/toolbar.tsx": {
+      "lastReviewedIteration": 18,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/hooks/use-upstream-nodes.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/hooks/use-workflow-events.ts": {
+      "lastReviewedIteration": 14,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/src/modules/workflow/hooks/use-workflow-list.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/hooks/use-workflow-run.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/index.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/runner/dag-view.tsx": {
+      "lastReviewedIteration": 17,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/runner/node-result-panel.tsx": {
+      "lastReviewedIteration": 15,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "stable"
+    },
+    "desktop/src/modules/workflow/runner/runner-app.tsx": {
+      "lastReviewedIteration": 17,
+      "issuesFound": 9,
+      "issuesFixed": 9,
+      "healthScore": "active"
+    },
+    "desktop/src/modules/workflow/runner/runner-node-wrappers.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/src/modules/workflow/runner/runner-toolbar.tsx": {
+      "lastReviewedIteration": 10,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/src/modules/workflow/runner/timeline-view.tsx": {
+      "lastReviewedIteration": 17,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active"
+    },
+    "desktop/src/types/workflow.ts": {
+      "lastReviewedIteration": 1,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/workflow-nodes/end/card.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/end/executor.main.ts": {
+      "lastReviewedIteration": 3,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/workflow-nodes/end/index.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/end/manifest.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/end/panel.tsx": {
+      "lastReviewedIteration": 6,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/workflow-nodes/end/schema.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/panel-registry.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/prompt/card.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/prompt/executor.main.ts": {
+      "lastReviewedIteration": 2,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/workflow-nodes/prompt/index.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/prompt/manifest.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/prompt/panel.tsx": {
+      "lastReviewedIteration": 6,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/workflow-nodes/prompt/schema.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/register.main.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/register.renderer.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/registry.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/schemas/variable-binding.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/switch/card.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/switch/constants.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/switch/executor.main.ts": {
+      "lastReviewedIteration": 4,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable"
+    },
+    "desktop/workflow-nodes/switch/index.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/switch/manifest.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/switch/panel.tsx": {
+      "lastReviewedIteration": 6,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable"
+    },
+    "desktop/workflow-nodes/switch/schema.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/types.ts": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    },
+    "desktop/workflow-nodes/variable-binding-editor.tsx": {
+      "lastReviewedIteration": 0,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "untouched"
+    }
+  },
+  "areas": {
+    "editor-interactions": {
+      "status": "active",
+      "lastIteration": 18,
+      "issuesCount": 4
+    },
+    "general-ui": {
+      "status": "active",
+      "lastIteration": 19,
+      "issuesCount": 6
+    },
+    "logging-coverage": {
+      "status": "active",
+      "lastIteration": 19,
+      "issuesCount": 4
+    },
+    "memory-management": {
+      "status": "stable",
+      "lastIteration": 5,
+      "issuesCount": 1
+    },
+    "run-history": {
+      "status": "active",
+      "lastIteration": 19,
+      "issuesCount": 2
+    },
+    "run-params": {
+      "status": "active",
+      "lastIteration": 19,
+      "issuesCount": 5
+    },
+    "runner-hydration": {
+      "status": "stable",
+      "lastIteration": 14,
+      "issuesCount": 4
+    },
+    "runner-selection-state": {
+      "status": "active",
+      "lastIteration": 17,
+      "issuesCount": 3
+    },
+    "switch-branch-matching": {
+      "status": "stable",
+      "lastIteration": 7,
+      "issuesCount": 7
+    },
+    "timeline-view": {
+      "status": "stable",
+      "lastIteration": 13,
+      "issuesCount": 4
+    },
+    "toolbar-states": {
+      "status": "stable",
+      "lastIteration": 9,
+      "issuesCount": 1
+    },
+    "variable-resolution": {
+      "status": "stable",
+      "lastIteration": 8,
+      "issuesCount": 3
+    }
+  }
+}
