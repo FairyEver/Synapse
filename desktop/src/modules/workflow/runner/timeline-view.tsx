@@ -15,8 +15,15 @@ interface TimelineViewProps {
 
 export function TimelineView({ definition, nodeResults, onNodeSelect }: TimelineViewProps) {
   const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
-  const results = Object.values(nodeResults)
+
+  // Combine active results (sorted by startedAt) with pending nodes (not yet in nodeResults)
+  const activeResults = Object.values(nodeResults)
     .sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))
+  const activeNodeIds = new Set(activeResults.map((r) => r.nodeId))
+  const pendingNodes = definition.nodes
+    .filter((n) => !activeNodeIds.has(n.id))
+    .map((n) => ({ nodeId: n.id, status: "pending" as const, input: { variables: {} } }))
+  const results = [...activeResults, ...pendingNodes]
 
   // Tick every second while any node is still running so the elapsed-time
   // display stays up to date. Stops automatically once all nodes are terminal.
@@ -29,7 +36,7 @@ export function TimelineView({ definition, nodeResults, onNodeSelect }: Timeline
   }, [hasRunning])
 
   if (results.length === 0) {
-    return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">等待节点开始执行…</div>
+    return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">暂无节点</div>
   }
 
   return (

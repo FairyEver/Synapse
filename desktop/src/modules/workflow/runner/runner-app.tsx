@@ -166,7 +166,9 @@ export function WorkflowRunnerApp() {
     void window.synapse?.workflow.openEditor(workflowId)
   }, [workflowId])
 
-  const selectedResult = selectedNodeId ? nodeResults[selectedNodeId] ?? null : null
+  const selectedResult = selectedNodeId
+    ? nodeResults[selectedNodeId] ?? { nodeId: selectedNodeId, status: "pending" as const, input: { variables: {} } }
+    : null
 
   if (!definition) {
     return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>

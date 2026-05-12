@@ -3,9 +3,9 @@ import { Badge } from "@/components/ui/badge"
 import { X } from "lucide-react"
 import type { NodeRunResult } from "@/types/workflow"
 
-const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过" }
+const STATUS_LABEL: Record<string, string> = { pending: "等待", running: "执行中", success: "完成", failed: "失败", skipped: "跳过" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  running: "default", success: "secondary", failed: "destructive", skipped: "outline",
+  pending: "outline", running: "default", success: "secondary", failed: "destructive", skipped: "outline",
 }
 
 interface NodeResultPanelProps {
@@ -65,7 +65,9 @@ export function NodeResultPanel({ result, nodeName, onClose }: NodeResultPanelPr
           </div>
         )}
         {!result.input.prompt && !result.error && !result.activeBranch && (result.output == null || result.output === "") && (
-          <p className="text-muted-foreground">（无可展示的输出）</p>
+          <p className="text-muted-foreground">
+            {result.status === "pending" ? "节点等待执行" : "（无可展示的输出）"}
+          </p>
         )}
       </div>
     </div>
