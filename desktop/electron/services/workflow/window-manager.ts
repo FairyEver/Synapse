@@ -1,6 +1,9 @@
 import { BrowserWindow } from "electron"
 import type { WindowManager } from "../../runtime/window"
 import { managedBrowserWindow } from "../../runtime/window"
+import { createMainLogger } from "../log-store"
+
+const logger = createMainLogger("service.workflow.window-manager")
 
 export class WorkflowWindowManager {
   private readonly editorWindows = new Map<string, BrowserWindow>()
@@ -10,7 +13,11 @@ export class WorkflowWindowManager {
 
   open(workflowId: string, baseUrl: string, runId?: string): BrowserWindow {
     const existing = this.editorWindows.get(workflowId)
-    if (existing && !existing.isDestroyed()) { existing.focus(); return existing }
+    if (existing && !existing.isDestroyed()) {
+      logger.info("workflow editor window reused", { workflowId, runId })
+      existing.focus()
+      return existing
+    }
 
     const win = new BrowserWindow({
       width: 1200, height: 800, title: "Workflow Editor",
@@ -27,14 +34,19 @@ export class WorkflowWindowManager {
       this.mainWindowManager.attach({ id: windowId, role: "detail" }, managedBrowserWindow(win, "detail"))
     }
 
-    win.on("closed", () => this.editorWindows.delete(workflowId))
+    win.on("closed", () => {
+      logger.info("workflow editor window closed", { workflowId })
+      this.editorWindows.delete(workflowId)
+    })
     this.editorWindows.set(workflowId, win)
+    logger.info("workflow editor window opened", { workflowId, runId })
     return win
   }
 
   openRunner(workflowId: string, runId: string, baseUrl: string): BrowserWindow {
     const existing = this.runnerWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
+      logger.info("workflow runner window reused — switching run", { workflowId, newRunId: runId })
       existing.webContents.send("synapse:workflow:runner-switch-run", { runId })
       existing.focus()
       return existing
@@ -54,27 +66,39 @@ export class WorkflowWindowManager {
       this.mainWindowManager.attach({ id: windowId, role: "detail" }, managedBrowserWindow(win, "detail"))
     }
 
-    win.on("closed", () => this.runnerWindows.delete(workflowId))
+    win.on("closed", () => {
+      logger.info("workflow runner window closed", { workflowId })
+      this.runnerWindows.delete(workflowId)
+    })
     this.runnerWindows.set(workflowId, win)
+    logger.info("workflow runner window opened", { workflowId, runId })
     return win
   }
 
   focusEditor(workflowId: string): boolean {
     const win = this.editorWindows.get(workflowId)
     if (win && !win.isDestroyed()) { win.focus(); return true }
+    logger.info("workflow editor focus skipped — window not found or destroyed", { workflowId })
     return false
   }
 
   forceClose(workflowId: string): void {
     const editor = this.editorWindows.get(workflowId)
-    if (editor && !editor.isDestroyed()) editor.destroy()
+    if (editor && !editor.isDestroyed()) {
+      logger.info("workflow editor window force-closed", { workflowId })
+      editor.destroy()
+    }
     this.editorWindows.delete(workflowId)
   }
 
   forceCloseAll(workflowId: string): void {
+    logger.info("workflow force-close-all", { workflowId })
     this.forceClose(workflowId)
     const runner = this.runnerWindows.get(workflowId)
-    if (runner && !runner.isDestroyed()) runner.destroy()
+    if (runner && !runner.isDestroyed()) {
+      logger.info("workflow runner window force-closed", { workflowId })
+      runner.destroy()
+    }
     this.runnerWindows.delete(workflowId)
   }
 

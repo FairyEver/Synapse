@@ -723,3 +723,25 @@ Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善�
 
 ### 本次进展
 工作流系统的错误可追溯性（失败运行恢复后可知原因而非"Unknown error"）和显示一致性（End 节点 Timeline 时间不再硬编码为 0ms）两个维度的补齐。
+
+---
+
+## [2026-05-13 19:00] 第 31 次迭代
+
+### 发现的问题
+- 画布键盘事件处理器未排除 SELECT 元素：`handleKeyDown` 的 tagName 白名单检查仅排除 INPUT / TEXTAREA / contentEditable，遗漏 SELECT。用户在节点配置面板的 `<select>` 下拉框中按 Backspace/Delete 时，画布上的选中节点被意外删除且无撤销（canvas.tsx:389）。
+- WorkflowWindowManager 完全缺少日志：6 个公开方法（open / openRunner / focusEditor / forceClose / forceCloseAll / hasActiveRun）无一有 log 调用，窗口生命周期事件（创建、复用、关闭、销毁）均无诊断轨迹。同模块其他 5 个 service 均使用 createMainLogger（window-manager.ts:全文）。
+
+### 修复内容
+- [desktop/src/modules/workflow/editor/canvas.tsx:389] 键盘事件 guard 条件新增 `tag === "SELECT"`，SELECT 元素获得焦点时不再误触发 Delete/Backspace 节点删除
+- [desktop/electron/services/workflow/window-manager.ts:4-6,13,16,25,32,36,40,42,47,50,52-53,58,60-62,67,70-71] 新增 `createMainLogger("service.workflow.window-manager")` 导入与实例化；open / openRunner 的复用路径和新建路径分别记录 info 日志（含 workflowId / runId / newRunId）；closed 事件监听器新增 info 日志；focusEditor 未找到窗口时记录 info 日志；forceClose 和 forceCloseAll 在销毁窗口前记录 info 日志
+
+### 与历史的关系
+- 缺陷 1：独立（canvas 键盘处理此前未被任何轮次审计，属于 UI 交互保护缺口）
+- 缺陷 2：延续第 28 轮（logging-coverage area，补齐 workflow 模块最后一个无日志 service）
+
+### 日志补充
+- 新增：window-manager.ts 全程日志覆盖（6 类生命周期事件），命名空间 `service.workflow.window-manager`
+
+### 本次进展
+画布键盘交互从"SELECT 聚焦时误删节点"变为完整交互隔离；窗口管理器从系统唯一无日志 service 变为与其他 5 个 workflow service 一致的日志覆盖。两个修复均为防御性补齐——无功能变更，消除静默风险。
