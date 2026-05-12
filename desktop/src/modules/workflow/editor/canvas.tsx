@@ -39,6 +39,8 @@ export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
   removeEdgesByIds: (edgeIds: string[]) => void
   updateEdgeLabels: (sourceNodeId: string, branches: Array<{ id: string; label: string }>) => void
+  deleteNodes: (nodeIds: string[]) => void
+  copyNodes: (nodeIds: string[]) => void
 }
 
 function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string | undefined {
@@ -110,6 +112,9 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const [clipboard, setClipboard] = useState<NodeClipboard | null>(null)
+  // Refs for imperative handle — declared early so useImperativeHandle closure can access them
+  const deleteNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
+  const copyNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
 
   useImperativeHandle(ref, () => ({
     updateNodeConfig: (nodeId, config) => {
@@ -136,6 +141,8 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
         return { ...e, type: "branch", data: { ...e.data, label: newLabel } }
       }))
     },
+    deleteNodes: (nodeIds) => deleteNodesRef.current(nodeIds),
+    copyNodes: (nodeIds) => copyNodesRef.current(nodeIds),
   }))
 
   const getSelectedNodeIds = useCallback((): string[] => {
@@ -359,8 +366,8 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename,
   }), [clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename])
 
-  // Keyboard shortcuts for copy/paste
-  const copyNodesRef = useRef(copyNodes)
+  // Update refs for imperative handle and keyboard shortcuts
+  deleteNodesRef.current = deleteNodes
   copyNodesRef.current = copyNodes
   const pasteNodesRef = useRef(pasteNodes)
   pasteNodesRef.current = pasteNodes

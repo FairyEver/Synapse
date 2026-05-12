@@ -1,11 +1,11 @@
 import { useRef, useState } from "react"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import type { WorkflowParam } from "@/types/workflow"
 import type { PromptNodeConfig } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
+import { PromptEditor } from "../prompt-editor"
+import { CollapsibleSection } from "../collapsible-section"
 import { AgentIcon, getAgentLabel } from "../agent-icon"
 
 export interface PromptNodePanelProps {
@@ -25,14 +25,13 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
     onChange(next)
   }
 
+  const varSummary = config.variables.length > 0 ? `${config.variables.length}个` : undefined
+  const promptSummary = prompt.length > 0 ? `${prompt.length}字` : undefined
+
   return (
-    <div className="grid gap-3">
-      <div className="grid gap-1.5">
-        <Label className="text-xs">Agent</Label>
-        <Select
-          value={config.agent}
-          onValueChange={(agent) => commit({ agent })}
-        >
+    <div className="grid gap-2">
+      <CollapsibleSection title="执行配置">
+        <Select value={config.agent} onValueChange={(agent) => commit({ agent })}>
           <SelectTrigger className="h-7 text-xs">
             <SelectValue placeholder="选择 Agent">
               {config.agent ? (
@@ -54,24 +53,26 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <VariableBindingEditor
-        variables={config.variables}
-        onChange={(variables) => commit({ variables })}
-        upstreamNodes={upstreamNodes}
-        workflowParams={workflowParams}
-      />
-      <div className="grid gap-1.5">
-        <Label className="text-xs">Prompt</Label>
-        <Textarea
-          className="text-xs resize-none"
-          rows={8}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="输入映射" summary={varSummary}>
+        <VariableBindingEditor
+          variables={config.variables}
+          onChange={(variables) => commit({ variables })}
+          upstreamNodes={upstreamNodes}
+          workflowParams={workflowParams}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="指令" summary={promptSummary}>
+        <PromptEditor
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={setPrompt}
           onBlur={() => commit({ prompt })}
+          variables={config.variables}
           placeholder="输入提示词，用 {{变量名}} 引用变量…"
         />
-      </div>
+      </CollapsibleSection>
     </div>
   )
 }

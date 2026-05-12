@@ -1,7 +1,5 @@
 import { useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2 } from "lucide-react"
@@ -9,6 +7,8 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import type { WorkflowParam } from "@/types/workflow"
 import type { SwitchNodeConfig, SwitchBranch } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
+import { PromptEditor } from "../prompt-editor"
+import { CollapsibleSection } from "../collapsible-section"
 import { AgentIcon, getAgentLabel } from "../agent-icon"
 
 const NO_DEFAULT = "__none__"
@@ -24,8 +24,6 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
-  // Track the last-committed config to avoid stale-prop overwrites when
-  // multiple fields are edited in rapid succession before re-render propagates.
   const lastCommittedRef = useRef<SwitchNodeConfig>(config)
 
   const commit = (overrides?: Partial<SwitchNodeConfig>) => {
@@ -62,14 +60,14 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
     commit({ branches: next })
   }
 
+  const varSummary = config.variables.length > 0 ? `${config.variables.length}个` : undefined
+  const promptSummary = prompt.length > 0 ? `${prompt.length}字` : undefined
+  const branchSummary = `${branches.length}条`
+
   return (
-    <div className="grid gap-3">
-      <div className="grid gap-1.5">
-        <Label className="text-xs">Agent</Label>
-        <Select
-          value={config.agent}
-          onValueChange={(agent) => commit({ agent })}
-        >
+    <div className="grid gap-2">
+      <CollapsibleSection title="执行配置">
+        <Select value={config.agent} onValueChange={(agent) => commit({ agent })}>
           <SelectTrigger className="h-7 text-xs">
             <SelectValue placeholder="选择 Agent">
               {config.agent ? (
@@ -91,67 +89,72 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <VariableBindingEditor
-        variables={config.variables}
-        onChange={(variables) => commit({ variables })}
-        upstreamNodes={upstreamNodes}
-        workflowParams={workflowParams}
-      />
-      <div className="grid gap-1.5">
-        <Label className="text-xs">Prompt</Label>
-        <Textarea
-          className="text-xs resize-none"
-          rows={6}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onBlur={() => commit({ prompt })}
-          placeholder="输入提示词…"
+      </CollapsibleSection>
+
+      <CollapsibleSection title="输入映射" summary={varSummary}>
+        <VariableBindingEditor
+          variables={config.variables}
+          onChange={(variables) => commit({ variables })}
+          upstreamNodes={upstreamNodes}
+          workflowParams={workflowParams}
         />
-      </div>
-      <div className="grid gap-1.5">
-        <Label className="text-xs">分支</Label>
-        {branches.map((b, i) => (
-          <div key={b.id} className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground w-16 truncate">{b.id}</span>
-            <Input
-              className="h-7 text-xs flex-1"
-              value={b.label}
-              onChange={(e) => updateBranchLabel(i, e.target.value)}
-            />
-            <Button
-              size="icon" variant="ghost" className="h-7 w-7 shrink-0"
-              onClick={() => removeBranch(i)}
-              disabled={branches.length <= 1}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="判断指令" summary={promptSummary}>
+        <PromptEditor
+          value={prompt}
+          onChange={setPrompt}
+          onBlur={() => commit({ prompt })}
+          variables={config.variables}
+          placeholder="输入提示词…"
+          rows={6}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="路由规则" summary={branchSummary}>
+        <div className="grid gap-1.5">
+          {branches.map((b, i) => (
+            <div key={b.id} className="flex items-center gap-1.5">
+              <span className="text-[11px] text-muted-foreground w-14 truncate shrink-0">{b.id}</span>
+              <Input
+                className="h-7 text-xs flex-1"
+                value={b.label}
+                onChange={(e) => updateBranchLabel(i, e.target.value)}
+              />
+              <Button
+                size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+                onClick={() => removeBranch(i)}
+                disabled={branches.length <= 1}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addBranch}>
+            <Plus className="h-3 w-3 mr-1" />添加分支
+          </Button>
+          <div className="grid gap-1 mt-1">
+            <span className="text-[11px] text-muted-foreground">默认分支</span>
+            <Select
+              value={defaultBranch}
+              onValueChange={(v) => {
+                setDefaultBranch(v)
+                commit({ defaultBranch: v === NO_DEFAULT ? undefined : v })
+              }}
             >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="无（匹配失败则失败）" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_DEFAULT} className="text-xs">无（匹配失败则失败）</SelectItem>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id} className="text-xs">{b.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        ))}
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addBranch}>
-          <Plus className="h-3 w-3 mr-1" />添加分支
-        </Button>
-      </div>
-      <div className="grid gap-1.5">
-        <Label className="text-xs">默认分支</Label>
-        <Select
-          value={defaultBranch}
-          onValueChange={(v) => {
-            setDefaultBranch(v)
-            commit({ defaultBranch: v === NO_DEFAULT ? undefined : v })
-          }}
-        >
-          <SelectTrigger className="h-7 text-xs">
-            <SelectValue placeholder="无（匹配失败则失败）" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_DEFAULT} className="text-xs">无（匹配失败则失败）</SelectItem>
-            {branches.map((b) => (
-              <SelectItem key={b.id} value={b.id} className="text-xs">{b.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        </div>
+      </CollapsibleSection>
     </div>
   )
 }

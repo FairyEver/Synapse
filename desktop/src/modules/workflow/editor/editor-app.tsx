@@ -261,12 +261,20 @@ export function WorkflowEditorApp() {
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel
-            defaultSize={300}
+            defaultSize={400}
             minSize={300}
             maxSize={600}
             groupResizeBehavior="preserve-pixel-size"
           >
-            <NodeConfigPanel nodeId={selectedNodeId} definition={definition} onConfigChange={handleConfigChange} onNameChange={handleNameChange} renameSignal={renameSignal} />
+            <NodeConfigPanel
+              nodeId={selectedNodeId}
+              definition={definition}
+              onConfigChange={handleConfigChange}
+              onNameChange={handleNameChange}
+              onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
+              onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
+              renameSignal={renameSignal}
+            />
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>

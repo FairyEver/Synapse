@@ -1,9 +1,9 @@
 import { useRef, useState } from "react"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import type { WorkflowParam } from "@/types/workflow"
 import type { EndNodeConfig } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
+import { PromptEditor } from "../prompt-editor"
+import { CollapsibleSection } from "../collapsible-section"
 
 export interface EndNodePanelProps {
   config: EndNodeConfig
@@ -14,8 +14,6 @@ export interface EndNodePanelProps {
 
 export function EndNodePanel({ config, onChange, upstreamNodes, workflowParams }: EndNodePanelProps) {
   const [template, setTemplate] = useState(config.template)
-  // Track the last-committed config to avoid stale-prop overwrites when
-  // multiple fields are edited in rapid succession before re-render propagates.
   const lastCommittedRef = useRef<EndNodeConfig>(config)
 
   const commit = (overrides?: Partial<EndNodeConfig>) => {
@@ -24,25 +22,29 @@ export function EndNodePanel({ config, onChange, upstreamNodes, workflowParams }
     onChange(next)
   }
 
+  const varSummary = config.variables.length > 0 ? `${config.variables.length}个` : undefined
+  const templateSummary = template.length > 0 ? `${template.length}字` : undefined
+
   return (
-    <div className="grid gap-3">
-      <VariableBindingEditor
-        variables={config.variables}
-        onChange={(variables) => commit({ variables })}
-        upstreamNodes={upstreamNodes}
-        workflowParams={workflowParams}
-      />
-      <div className="grid gap-1.5">
-        <Label className="text-xs">返回文本</Label>
-        <Textarea
-          className="text-xs resize-none"
-          rows={8}
+    <div className="grid gap-2">
+      <CollapsibleSection title="输入映射" summary={varSummary}>
+        <VariableBindingEditor
+          variables={config.variables}
+          onChange={(variables) => commit({ variables })}
+          upstreamNodes={upstreamNodes}
+          workflowParams={workflowParams}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="输出模板" summary={templateSummary}>
+        <PromptEditor
           value={template}
-          onChange={(e) => setTemplate(e.target.value)}
+          onChange={setTemplate}
           onBlur={() => commit({ template })}
+          variables={config.variables}
           placeholder="输入返回文本，用 {{变量名}} 引用变量…"
         />
-      </div>
+      </CollapsibleSection>
     </div>
   )
 }
