@@ -306,6 +306,18 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       rewrittenBindings,
     })
 
+    const newDef = {
+      ...definitionRef.current,
+      nodes: [...definitionRef.current.nodes, ...newNodes],
+      edges: [...definitionRef.current.edges, ...newEdges],
+    }
+    // Update the ref before constructing flow edges so that branch label
+    // resolution (which looks up node configs) can find the freshly pasted
+    // Switch nodes.  Without this, resolveBranchLabel returns undefined for
+    // pasted Switch branches — edges display without label badges until the
+    // editor is reopened.
+    definitionRef.current = newDef
+
     const flowNodes = newNodes.map((n) => ({
       id: n.id, type: n.type, position: n.position,
       data: { ...n.config, name: n.name }, selected: true, deletable: n.type !== "end",
@@ -321,12 +333,6 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     })
     setEdges((eds) => eds.concat(flowEdges))
 
-    const newDef = {
-      ...definitionRef.current,
-      nodes: [...definitionRef.current.nodes, ...newNodes],
-      edges: [...definitionRef.current.edges, ...newEdges],
-    }
-    definitionRef.current = newDef
     onChange(newDef)
   }, [clipboard, onChange, setNodes, setEdges])
 

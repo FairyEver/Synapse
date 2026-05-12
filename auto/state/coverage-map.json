@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-13T02:30:00+08:00",
-  "totalIterations": 19,
+  "lastUpdated": "2026-05-13T03:10:00+08:00",
+  "totalIterations": 20,
   "files": {
     "desktop/electron/modules/workflow/ipc.ts": {
       "lastReviewedIteration": 8,
@@ -10,10 +10,11 @@
       "healthScore": "stable"
     },
     "desktop/electron/services/workflow/run-snapshot-service.ts": {
-      "lastReviewedIteration": 0,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "untouched"
+      "lastReviewedIteration": 20,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/electron/services/workflow/variable-resolver.ts": {
       "lastReviewedIteration": 3,
@@ -22,10 +23,11 @@
       "healthScore": "stable"
     },
     "desktop/electron/services/workflow/window-manager.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/electron/services/workflow/workflow-engine.ts": {
       "lastReviewedIteration": 3,
@@ -34,10 +36,11 @@
       "healthScore": "stable"
     },
     "desktop/electron/services/workflow/workflow-service.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/electron/services/workflow/workflow-validator.ts": {
       "lastReviewedIteration": 6,
@@ -76,22 +79,25 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/editor/canvas-context.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/canvas.tsx": {
-      "lastReviewedIteration": 8,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "stable"
+      "lastReviewedIteration": 20,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/custom-edge.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/editor-app.tsx": {
       "lastReviewedIteration": 18,
@@ -100,10 +106,11 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/node-config-panel.tsx": {
       "lastReviewedIteration": 19,
@@ -112,22 +119,25 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/editor/node-context-menu.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/node-palette.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/node-wrappers.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/toolbar.tsx": {
       "lastReviewedIteration": 18,
@@ -136,10 +146,11 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/hooks/use-upstream-nodes.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-events.ts": {
       "lastReviewedIteration": 14,
@@ -148,22 +159,25 @@
       "healthScore": "stable"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-list.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-run.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/index.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/runner/dag-view.tsx": {
       "lastReviewedIteration": 17,
@@ -184,10 +198,11 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/runner/runner-node-wrappers.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/runner/runner-toolbar.tsx": {
       "lastReviewedIteration": 10,
@@ -208,10 +223,11 @@
       "healthScore": "stable"
     },
     "desktop/workflow-nodes/end/card.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/end/executor.main.ts": {
       "lastReviewedIteration": 3,
@@ -220,16 +236,18 @@
       "healthScore": "stable"
     },
     "desktop/workflow-nodes/end/index.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/end/manifest.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/end/panel.tsx": {
       "lastReviewedIteration": 6,
@@ -238,22 +256,25 @@
       "healthScore": "stable"
     },
     "desktop/workflow-nodes/end/schema.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/panel-registry.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/prompt/card.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/prompt/executor.main.ts": {
       "lastReviewedIteration": 2,
@@ -262,16 +283,18 @@
       "healthScore": "stable"
     },
     "desktop/workflow-nodes/prompt/index.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/prompt/manifest.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/prompt/panel.tsx": {
       "lastReviewedIteration": 6,
@@ -280,40 +303,46 @@
       "healthScore": "stable"
     },
     "desktop/workflow-nodes/prompt/schema.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/register.main.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/register.renderer.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/registry.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/schemas/variable-binding.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/switch/card.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/switch/constants.ts": {
       "lastReviewedIteration": 0,
@@ -328,16 +357,18 @@
       "healthScore": "stable"
     },
     "desktop/workflow-nodes/switch/index.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/switch/manifest.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/switch/panel.tsx": {
       "lastReviewedIteration": 6,
@@ -346,22 +377,25 @@
       "healthScore": "stable"
     },
     "desktop/workflow-nodes/switch/schema.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/types.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/variable-binding-editor.tsx": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 20,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:10:00+08:00"
     }
   },
   "areas": {

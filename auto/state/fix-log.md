@@ -452,3 +452,27 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 工作流编辑器的参数编辑从"意外关闭静默丢数据"变为"有未保存更改时弹确认"，运行历史从"加载失败无反馈/永久卡死"变为"三态分离+重试"，节点重命名从"必须鼠标点击提交"变为"支持 Enter 键"——编辑安全、错误可见性、交互效率三个维度各进一步。
+
+---
+
+## [2026-05-13 03:10] 第 20 次迭代
+
+### 发现的问题
+- 复制粘贴 Switch 子图后分支连线标签丢失：pasteNodes 构造 ReactFlow edge 对象时使用粘贴前的旧 definitionRef.current 解析分支标签，新 paste 的 Switch 节点不存在于旧定义中导致 resolveBranchLabel 返回 undefined，edge 未设置 type:"branch" 和 label data。关闭重开编辑器后 defToFlow 重新构造才恢复标签。
+- RunSnapshotService.save() 无错误处理：save() 方法体无 try/catch，六处 IPC handler 调用均用 `void snapshots.save(...)` 吞掉 Promise rejection。磁盘满或权限异常时快照静默丢失，已完成运行在 Run History 中消失且无任何日志可追踪。
+
+### 修复内容
+- [desktop/src/modules/workflow/editor/canvas.tsx:309-336] pasteNodes 中将 newDef 构造和 definitionRef.current 更新提前到 flowNodes/flowEdges 构造之前，确保 resolveBranchLabel 查找时定义已包含新 paste 的 Switch 节点
+- [desktop/electron/services/workflow/run-snapshot-service.ts:1-6] 新增 createMainLogger 导入，初始化 logger
+- [desktop/electron/services/workflow/run-snapshot-service.ts:29-47] save() 方法体包裹 try/catch，catch 分支 logger.error 记录 runId/workflowId/error/stack
+
+### 与历史的关系
+- 缺陷 1：与第 7 轮同主题（分支标签未同步）但触发路径不同（paste 而非 rename），属于独立新缺陷
+- 缺陷 2：独立（untouched 文件首次审查）
+
+### 日志补充
+- run-snapshot-service: save 失败时 error 日志（含 runId/workflowId/error/stack），快照丢失从完全不可观测变为可追踪
+
+### 本次进展
+工作流编辑器的"复制→粘贴→确认"路径中 Switch 分支标签从"粘贴后丢失需重开编辑器"变为"即时正确显示"；运行结果快照从"IO 异常静默丢失不可观测"变为"异常有日志"，主流程视觉一致性和数据可观测性各进一步。
+

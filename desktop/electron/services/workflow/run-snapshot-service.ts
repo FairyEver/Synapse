@@ -1,6 +1,9 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
+import { createMainLogger } from "../log-store"
+
+const logger = createMainLogger("service.workflow.snapshots")
 
 const MAX = 20
 
@@ -24,14 +27,23 @@ export class RunSnapshotService {
   }
 
   async save(s: WorkflowRunSnapshot): Promise<void> {
-    const dir = this.dir(s.workflowId)
-    await mkdir(dir, { recursive: true })
-    await writeFile(path.join(dir, `${s.runId}.json`), JSON.stringify(s, null, 2), "utf-8")
-    const snapshots = await this.readSnapshotFiles(s.workflowId)
-    const stale = snapshots
-      .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
-      .slice(0, Math.max(0, snapshots.length - MAX))
-    await Promise.all(stale.map(({ file }) => rm(path.join(dir, file), { force: true })))
+    try {
+      const dir = this.dir(s.workflowId)
+      await mkdir(dir, { recursive: true })
+      await writeFile(path.join(dir, `${s.runId}.json`), JSON.stringify(s, null, 2), "utf-8")
+      const snapshots = await this.readSnapshotFiles(s.workflowId)
+      const stale = snapshots
+        .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
+        .slice(0, Math.max(0, snapshots.length - MAX))
+      await Promise.all(stale.map(({ file }) => rm(path.join(dir, file), { force: true })))
+    } catch (err) {
+      logger.error("run snapshot save failed", {
+        runId: s.runId,
+        workflowId: s.workflowId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      })
+    }
   }
 
   async list(workflowId: string): Promise<WorkflowRunSnapshot[]> {
