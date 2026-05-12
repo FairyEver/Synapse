@@ -62,14 +62,17 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     const start = Date.now()
     const { config, resolvedVariables, agentDeps, context } = input
     const ids = config.branches.map((b) => b.id)
+    input.onProgress?.("resolving_variables", "解析变量…")
     const basePrompt = interpolate(config.prompt, resolvedVariables)
     const prompt = `${basePrompt}\n\n---\n你必须只回复以下选项之一（不要包含任何其他文字）：\n${ids.map((id) => `- ${id}`).join("\n")}`
 
+    input.onProgress?.("calling_model", "调用模型…")
     logger.info("switch node executing", {
       runId: context.runId, agent: config.agent,
       branchIds: ids, defaultBranch: config.defaultBranch ?? null,
     })
 
+    input.onProgress?.("awaiting_response", "等待响应…")
     const agentResult = await agentDeps.sendToAgent({ agent: config.agent, prompt, abortSignal: context.abortSignal })
     const durationMs = Date.now() - start
 
@@ -81,6 +84,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     }
 
     const rawResponse = agentResult.response.trim()
+    input.onProgress?.("matching_branch", "匹配分支…")
     const matched = matchBranch(rawResponse, ids)
 
     if (matched) {
