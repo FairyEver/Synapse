@@ -30,18 +30,18 @@ export function WorkflowRunnerApp() {
   const runIdRef = useRef(runId)
   runIdRef.current = runId
 
+  // Hydrate metadata (definition, params) from run status.
+  // Node results and run state are exclusively managed by useWorkflowEvents
+  // to avoid a race where this IPC response overwrites more-recent live events.
   useEffect(() => {
     if (!runId) return
     let cancelled = false
     void (async () => {
       const status = await window.synapse?.workflow.runStatus(runId)
       if (cancelled || !status) return
-      logger.info("hydrated run status", { runId, status: status.status })
+      logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
       if (status.definition) setDefinition(status.definition)
-      setNodeResults(status.nodeResults)
-      setRunState(status.status)
       if (status.params) setRunParams(status.params)
-      if (status.error) setRunError(status.error)
     })()
     return () => { cancelled = true }
   }, [runId])

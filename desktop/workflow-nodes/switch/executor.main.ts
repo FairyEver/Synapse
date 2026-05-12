@@ -28,26 +28,30 @@ function normalizeResponse(raw: string): string {
 
 /**
  * Multi-strategy branch matching. Tries in order:
- * 1. Exact match on full trimmed+lowercased response
- * 2. Exact match on normalized first-line response
- * 3. Search for branch IDs within the normalized response (longest match wins)
+ * 1. Exact match on full trimmed+lowercased response vs lowercased branch IDs
+ * 2. Exact match on normalized first-line response vs lowercased branch IDs
+ * 3. Search for lowercased branch IDs within the normalized response (longest match wins)
+ *
+ * All comparisons are case-insensitive: the response is lowercased by
+ * normalizeResponse / trim().toLowerCase(), and branch IDs are lowercased at
+ * comparison time. The original branch ID is returned (preserving user casing).
  */
 function matchBranch(response: string, branchIds: string[]): string | null {
   const trimmed = response.trim().toLowerCase()
 
-  // Strategy 1: exact match on full response
-  const exact = branchIds.find((id) => id === trimmed)
+  // Strategy 1: exact match on full response (case-insensitive)
+  const exact = branchIds.find((id) => id.toLowerCase() === trimmed)
   if (exact) return exact
 
-  // Strategy 2: exact match on normalized first line
+  // Strategy 2: exact match on normalized first line (case-insensitive)
   const normalized = normalizeResponse(response)
-  const normalizedMatch = branchIds.find((id) => id === normalized)
+  const normalizedMatch = branchIds.find((id) => id.toLowerCase() === normalized)
   if (normalizedMatch) return normalizedMatch
 
-  // Strategy 3: search for branch IDs within normalized response
+  // Strategy 3: search for branch IDs within normalized response (case-insensitive)
   // Sort by length descending to prefer longest match (avoids substring false positives)
   const sorted = [...branchIds].sort((a, b) => b.length - a.length)
-  const found = sorted.find((id) => normalized.includes(id))
+  const found = sorted.find((id) => normalized.includes(id.toLowerCase()))
   if (found) return found
 
   return null
@@ -83,6 +87,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       logger.info("switch node branch matched", {
         runId: context.runId, activeBranch: matched,
         rawResponse: rawResponse.slice(0, 200), durationMs,
+        normalizedResponse: normalizeResponse(rawResponse).slice(0, 100),
       })
       return { status: "success", output: matched, activeBranch: matched, durationMs }
     }
