@@ -49,8 +49,15 @@ export function WorkflowRunnerApp() {
   }, [runId])
 
   useEffect(() => {
+    // Only fetch definition from the workflow store as a fallback when there is
+    // no active run (i.e. the Runner window was opened without a runId).
+    // When runId is set, the hydration effect (above) is the sole authority for
+    // definition — running this concurrently with hydration can cause a brief
+    // flash of the wrong DAG topology if the latest saved definition differs
+    // from the one used in the active run.
     if (definition) return
     if (!workflowId) return
+    if (runId) return
     let cancelled = false
     void (async () => {
       const def = await window.synapse?.workflow.get(workflowId)
@@ -58,7 +65,7 @@ export function WorkflowRunnerApp() {
       if (def) setDefinition(def)
     })()
     return () => { cancelled = true }
-  }, [workflowId, definition])
+  }, [workflowId, definition, runId])
 
   useEffect(() => {
     if (!workflowId) return

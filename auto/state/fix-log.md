@@ -502,3 +502,29 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 工作流列表页从"二态（loading/empty）"变为"三态（loading/error/empty）"，列表层所有用户操作（新建/运行/参数运行）从"静默失败无反馈"变为"有明确 toast 提示"；编辑器内 Switch 分支信息展示从"开发者 ID"变为"用户标签"——列表层交互完整度补齐一步，编辑/运行/观测三层的信息一致性提升一步。
+
+---
+
+## [2026-05-13 14:00] 第 22 次迭代
+
+### 发现的问题
+- 画布节点选中后按 Delete/Backspace 键无响应：`handleKeyDown` 的 `if (!mod) return` 在 canvas.tsx:389 拦截了无修饰键的 Delete/Backspace，右键菜单标注的 ⌫ 快捷键实际未绑定
+- 工作流校验器不检查 `param` 类型变量绑定的有效性：validator.ts:79-88 仅检查 `node_output` 可达性，用户删除参数后节点引用仍存在，运行时静默解析为空字符串
+- 从节点面板拖入画布的新节点未被自动选中：`onDrop` 设置 `selected: false`，用户必须额外点击才能进入配置面板；`pasteNodes` 已实现了 `selected: true` 但 `onDrop` 遗漏
+
+### 修复内容
+- [desktop/src/modules/workflow/editor/canvas.tsx:390-394] 在 `handleKeyDown` 中 `mod` 检查之前新增 Delete/Backspace 处理分支，调用 `deleteNodesRef.current(ids)`（复用已有 End 节点保护）
+- [desktop/electron/services/workflow/workflow-validator.ts:87-91] 在 node_output 检查之后新增 param 引用有效性检查，引用不存在的参数报 `invalid_config` 错误并打 warn 日志
+- [desktop/src/modules/workflow/editor/canvas.tsx:223-231] `onDrop` 将 `selected: false` 改为 `selected: true`（取消其他节点选中），并显式调用 `onNodeSelect?.(id)`，与 pasteNodes 行为对齐
+
+### 与历史的关系
+- 缺陷 1（Delete 快捷键）：独立
+- 缺陷 2（参数验证）：独立
+- 缺陷 3（拖入自动选中）：独立
+
+### 日志补充
+- workflow-validator: 参数引用不存在时 warn 日志（含 workflowId/nodeId/nodeName/missingParam）
+- 其余两项为纯 UI/交互优化，无需日志补充
+
+### 本次进展
+编辑器的键盘交互从"缺失删除快捷键"补齐到完整编辑操作，拖入→配置路径从"两步"缩短为"一步"，校验器从"仅检查节点引用"扩展到"同时检查参数引用"——编辑效率、交互流畅度、数据完整性各向前一步。

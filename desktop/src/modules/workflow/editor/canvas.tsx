@@ -220,12 +220,15 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const id = crypto.randomUUID()
     const config = defaultConfig(type)
     const name = defaultName(type)
-    setNodes((nds) => nds.concat({ id, type, position, data: { ...config, name }, selected: false }))
+    // Unselect existing nodes and add the new node as selected, matching pasteNodes
+    // behaviour so the user can immediately configure the dropped node.
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat({ id, type, position, data: { ...config, name }, selected: true, deletable: true }))
     const newWfNode: WorkflowNode = { id, name, type, position, config }
     const newDef = { ...definitionRef.current, nodes: [...definitionRef.current.nodes, newWfNode] }
     definitionRef.current = newDef
     onChange(newDef)
-  }, [screenToFlowPosition, onChange, setNodes])
+    onNodeSelect?.(id)
+  }, [screenToFlowPosition, onChange, setNodes, onNodeSelect])
 
   const selectionChangeHandler = useCallback(({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[] }) => {
     if (runState && runState !== "idle") return
@@ -384,6 +387,12 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return
+      // Delete / Backspace: remove selected nodes (guarded against End node)
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const ids = getSelectedNodeIdsRef.current()
+        if (ids.length > 0) deleteNodesRef.current(ids)
+        return
+      }
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
       if (e.key === "c") {

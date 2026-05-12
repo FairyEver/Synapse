@@ -30,7 +30,7 @@ import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
 import { configStore } from "../services/config-store"
-import { logStore } from "../services/log-store"
+import { logStore, createMainLogger } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { initDatabase, shutdownDatabase } from "../database"
@@ -861,6 +861,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   dependsOn: ["core.project-containers"],
   create(ctx) {
     const registry = ctx.registry
+    const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
     const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortSignal }) => {
       try {
         const config = await configStore.load()
@@ -875,6 +876,11 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         })
         return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
       } catch (err) {
+        engineLogger.error("engine agent call failed (infrastructure)", {
+          agent,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        })
         return { status: "failed", response: "", error: String(err), durationMs: 0 }
       }
     }

@@ -84,6 +84,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
         if (src?.["type"] === "node_output" && !anc.has(src["node"] as string)) {
           errors.push({ type: "unreachable_reference", nodeId: node.id, message: `节点 "${node.name}" 引用了不可达上游节点 "${byId.get(src["node"] as string)?.name ?? src["node"]}"` })
         }
+        if (src?.["type"] === "param" && !def.params.some((p) => p.name === src["param"])) {
+          const missingParamName = (src["param"] as string) ?? "未知"
+          errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 "${node.name}" 引用了不存在的工作流参数 "${missingParamName}"` })
+          logger.warn("variable references non-existent param", { workflowId: def.id, nodeId: node.id, nodeName: node.name, missingParam: missingParamName })
+        }
       }
     }
   }
