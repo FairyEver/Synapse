@@ -655,3 +655,26 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善即清除"；编辑器和列表页的冲突解决路径从"确认后无反馈"变为"失败有明确 toast 提示"——错误信息可消失性和操作反馈完整性两个维度向真正可用迈进。
+
+---
+
+## [2026-05-13 17:45] 第 28 次迭代
+
+### 发现的问题
+- RunSnapshotService 读取路径四个 catch 块（readdir / 单文件解析 / list / get）静默返回空结果，磁盘错误或文件损坏时运行历史静默消失，无任何日志可追踪。同服务的 save() 已在第 20 轮补齐日志，但读取侧完全空白（run-snapshot-service.ts:17-18,29-32,63-70,78-87）
+- Prompt executor 和 Switch executor 各自维护本地 `interpolate()` 函数（分别 7 行和 4 行），使用与共享 `interpolatePrompt` 等价但独立维护的正则表达式。Engine 日志用 `interpolatePrompt` 记录 prompt preview，而 executor 用本地函数发送实际 prompt，两端不一致。End executor 已使用共享函数，Prompt/Switch 未统一（prompt/executor.main.ts:9-13, switch/executor.main.ts:62 → variable-resolver.ts:37 → workflow-engine.ts:125）
+
+### 修复内容
+- [desktop/electron/services/workflow/run-snapshot-service.ts:21-26] `readdir` catch 块新增 `logger.warn("run snapshot readdir failed", { workflowId, error, stack })`
+- [desktop/electron/services/workflow/run-snapshot-service.ts:33-37] 单文件读取/解析 catch 块新增 `logger.warn("run snapshot file corrupted or unreadable, skipping", { workflowId, file, error })`
+- [desktop/electron/services/workflow/run-snapshot-service.ts:69-74] `list()` catch 块新增 `logger.warn("run snapshot list failed", { workflowId, error, stack })`
+- [desktop/electron/services/workflow/run-snapshot-service.ts:85-89] `get()` catch 块新增非 ENOENT 异常的 warn 日志（含 runId/workflowId/error/code）
+- [desktop/workflow-nodes/prompt/executor.main.ts:1-7,12] 删除本地 `interpolate()` 函数（7 行），改为 `import { interpolatePrompt }`，executor 调用共享函数
+- [desktop/workflow-nodes/switch/executor.main.ts:1-4,62] 删除本地 `interpolate()` 函数（4 行），改为 `import { interpolatePrompt }`，executor 调用共享函数
+
+### 日志补充
+- run-snapshot-service: readdir 失败时 warn（含 workflowId/error/stack）；单文件损坏时 warn（含 workflowId/file/error）；list 失败时 warn（含 workflowId/error/stack）；get 失败（非 ENOENT）时 warn（含 runId/workflowId/error/code）
+- prompt/switch executor: 无新增（已移除本地函数，日志沿用第 2 轮已添加的 executor 日志，prompt preview 日志现在与 engine 日志使用同一插值函数保证一致）
+
+### 本次进展
+工作流系统的数据可观测性（快照读取异常从完全不可追踪变为四个路径均有日志）和代码健壮性（变量插值从 Prompt/Switch/End/Engine 四处维护变为单一来源）两个维度向真正可用迈进。

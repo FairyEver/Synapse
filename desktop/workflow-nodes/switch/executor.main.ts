@@ -1,13 +1,9 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { SwitchNodeConfig } from "./schema"
+import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("workflow.node.switch-executor")
-
-function interpolate(t: string, v: Record<string, string>): string {
-  // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
-  return t.replace(/\{\{\$?([a-zA-Z0-9_一-鿿]+)\}\}/g, (match, n) => v[n] ?? match)
-}
 
 /**
  * Normalize an agent response string for branch matching.
@@ -63,7 +59,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     const { config, resolvedVariables, agentDeps, context } = input
     const ids = config.branches.map((b) => b.id)
     input.onProgress?.("resolving_variables", "解析变量…")
-    const basePrompt = interpolate(config.prompt, resolvedVariables)
+    const basePrompt = interpolatePrompt(config.prompt, resolvedVariables)
     // Include branch labels in the prompt so the LLM understands the semantic
     // meaning of each branch ID (e.g. "- branch1（正面）" instead of "- branch1").
     // This bridges the gap between user-configured labels (used in the human's

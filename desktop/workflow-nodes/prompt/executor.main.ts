@@ -1,19 +1,15 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { PromptNodeConfig } from "./schema"
+import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("workflow.node.prompt-executor")
-
-function interpolate(template: string, vars: Record<string, string>): string {
-  // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
-  return template.replace(/\{\{\$?([a-zA-Z0-9_一-鿿]+)\}\}/g, (match, n) => vars[n] ?? match)
-}
 
 export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
   async execute(input: NodeExecutionInput<PromptNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
     input.onProgress?.("resolving_variables", "解析变量…")
-    const prompt = interpolate(input.config.prompt, input.resolvedVariables)
+    const prompt = interpolatePrompt(input.config.prompt, input.resolvedVariables)
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("prompt node executing", {

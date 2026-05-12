@@ -14,12 +14,26 @@ export class RunSnapshotService {
 
   private async readSnapshotFiles(workflowId: string): Promise<Array<{ file: string; snapshot: WorkflowRunSnapshot }>> {
     const dir = this.dir(workflowId)
-    const files = (await readdir(dir)).filter((f) => f.endsWith(".json"))
+    let files: string[]
+    try {
+      files = (await readdir(dir)).filter((f) => f.endsWith(".json"))
+    } catch (err) {
+      logger.warn("run snapshot readdir failed", {
+        workflowId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      })
+      return []
+    }
     const entries = await Promise.all(files.map(async (file) => {
       try {
         const snapshot = JSON.parse(await readFile(path.join(dir, file), "utf-8")) as WorkflowRunSnapshot
         return { file, snapshot }
-      } catch {
+      } catch (err) {
+        logger.warn("run snapshot file corrupted or unreadable, skipping", {
+          workflowId, file,
+          error: err instanceof Error ? err.message : String(err),
+        })
         return null
       }
     }))
@@ -51,11 +65,30 @@ export class RunSnapshotService {
       return (await this.readSnapshotFiles(workflowId))
         .sort((a, b) => this.snapshotTime(b.snapshot) - this.snapshotTime(a.snapshot))
         .map(({ snapshot }) => snapshot)
-    } catch { return [] }
+    } catch (err) {
+      logger.warn("run snapshot list failed", {
+        workflowId,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      })
+      return []
+    }
   }
 
   async get(runId: string, workflowId: string): Promise<WorkflowRunSnapshot | null> {
-    try { return JSON.parse(await readFile(path.join(this.dir(workflowId), `${runId}.json`), "utf-8")) as WorkflowRunSnapshot }
-    catch { return null }
+    try {
+      return JSON.parse(await readFile(path.join(this.dir(workflowId), `${runId}.json`), "utf-8")) as WorkflowRunSnapshot
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      // ENOENT is expected when the snapshot simply doesn't exist — no need to warn
+      if (code !== "ENOENT") {
+        logger.warn("run snapshot get failed", {
+          runId, workflowId,
+          error: err instanceof Error ? err.message : String(err),
+          code,
+        })
+      }
+      return null
+    }
   }
 }
