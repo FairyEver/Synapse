@@ -226,7 +226,7 @@ function CanvasContent({ definition, nodeResults, onChange, onNodeSelect, onRequ
     toast(`已复制 ${copiedNodes.length} 个节点`)
   }, [])
 
-  const pasteNodes = useCallback((anchorNodeId: string) => {
+  const pasteNodes = useCallback((_anchorNodeId: string) => {
     if (!clipboard || clipboard.nodes.length === 0) return
     const idMap = new Map<string, string>()
     clipboard.nodes.forEach((n) => idMap.set(n.id, crypto.randomUUID()))
