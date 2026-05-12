@@ -67,9 +67,13 @@ function VariableSourceControl({
               <SelectValue placeholder="选择参数" />
             </SelectTrigger>
             <SelectContent>
-              {workflowParams.map((p) => (
-                <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>
-              ))}
+              {workflowParams.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground text-center">暂无可选的工作流参数，请先在工具栏 → 参数中定义</div>
+              ) : (
+                workflowParams.map((p) => (
+                  <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         )}

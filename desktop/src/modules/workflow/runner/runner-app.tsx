@@ -198,6 +198,12 @@ export function WorkflowRunnerApp() {
       setRunError(null)
       setLoadError(null)
       setSelectedNodeId(null)
+    } catch (err) {
+      logger.warn("rerun IPC call failed", {
+        runId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      setRunError("重新运行失败：无法连接到主进程，请重试")
     } finally {
       setRerunning(false)
     }

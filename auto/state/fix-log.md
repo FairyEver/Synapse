@@ -793,3 +793,25 @@ Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善�
 
 ### 本次进展
 Runner 错误页从"死胡同"变为"可重试的等待室"——用户无需关闭窗口即可重新请求加载；变量绑定编辑器在无上游节点时不再是迷惑的空下拉框；跳过节点在 Runner 面板和 Editor 浮层中获得了与 pending/success/failed 对等的语义化状态说明和交互支持。
+
+---
+
+## [2026-05-13 21:40] 第 34 次迭代
+
+### 发现的问题
+- 变量绑定编辑器中 param 类型的 Select 在工作流参数列表为空时，下拉内容为空且无解释文案，用户不知道为何没有可选项（variable-binding-editor.tsx:69-73 空数组直接 map 产生空 SelectContent）。此问题与第 33 轮修复的 node_output 空列表问题完全同构，但第 33 轮仅补了 node_output 分支。
+- Runner 的 handleRerun 只有 try/finally 没有 catch 块，当 IPC bridge 抛出异常（而非返回 null 或 { errors }）时，异常穿透到 React event boundary，用户看到的是 unhandled promise rejection 而不是友好的错误提示（runner-app.tsx:177-203 try 块直接到 finally，中间无 catch）。对比同文件的 handleCancel（157-171 行）有完整的 try/catch/finally 模式。
+
+### 修复内容
+- [desktop/workflow-nodes/variable-binding-editor.tsx:69-76] param Select 的 SelectContent 内增加空数组守卫：workflowParams.length === 0 时渲染"暂无可选的工作流参数，请先在工具栏 → 参数中定义"说明文字，替代原先隐式的空下拉列表。文案比 node_output 的提示更长，因为告诉用户如何解决问题（去工具栏→参数定义）。
+- [desktop/src/modules/workflow/runner/runner-app.tsx:201-206] handleRerun 的 try/finally 之间新增 catch 块：捕获 IPC 调用异常，记录 warn 日志（含 runId 和错误信息），设置 setRunError("重新运行失败：无法连接到主进程，请重试")。与 handleCancel（157-171 行）的 catch 模式完全一致。
+
+### 与历史的关系
+- 缺陷 1：延续第 33 轮（同文件同组件 VariableSourceControl，第 33 轮为 node_output Select 补了空数组守卫但遗漏了同结构的 param Select，本轮补齐最后一处）
+- 缺陷 2：独立（handleRerun 的 catch 块从未被任何轮次覆盖，虽然 handleCancel 已在第 26 轮补了完整的 try/catch/finally 模式，handleRerun 仅在同轮次补了 finally 中的 setRerunning(false)）
+
+### 日志补充
+- 缺陷 2 的 catch 块内使用 logger.warn 记录 rerun IPC call failed（含 runId 和 error message），与 handleCancel 的 catch 日志对称
+
+### 本次进展
+变量绑定编辑器三种 source 类型（static / param / node_output）的空列表状态现已全部覆盖，不再有任何隐式的空下拉框。Runner 重跑操作从 try/finally（异常穿透无反馈）变为 try/catch/finally（异常有日志+用户可读错误提示），与取消操作的错误处理达到一致。
