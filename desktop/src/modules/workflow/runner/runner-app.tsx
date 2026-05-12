@@ -151,6 +151,12 @@ export function WorkflowRunnerApp() {
     setCancelling(true)
     try {
       await window.synapse?.workflow.cancel(runId)
+    } catch (err) {
+      logger.warn("cancel IPC call failed", {
+        runId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      setRunError("取消失败：无法连接到主进程，请重试")
     } finally {
       setCancelling(false)
     }

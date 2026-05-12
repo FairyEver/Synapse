@@ -606,3 +606,28 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 工作流系统的"删除→清理"闭环从残缺变为完整，"保存→错误反馈"从误导变为准确，"编辑→校验"从浅层检查变为深度可达性验证——三个维度均向真正可用迈进。
+
+---
+
+## [2026-05-13 16:30] 第 26 次迭代
+
+### 发现的问题
+- Switch 节点 prompt 仅包含 raw branch IDs（如 `branch1`），不含用户配置的分支标签（如 `正面`），导致 LLM 在无语义上下文中猜测机器 ID，匹配成功率降低（switch/executor.main.ts:67 → LLM 看到 `- branch1` 而非 `- branch1（正面）`）
+- Runner handleCancel 缺少错误处理：cancel IPC 异常时无 catch 块，取消失败静默无反馈，用户看到 spinner 消失但运行仍在继续（runner-app.tsx:149-157 try/finally 无 catch）
+
+### 修复内容
+- [desktop/workflow-nodes/switch/executor.main.ts:67-72] LLM prompt 构造改为 `${config.branches.map((b) => `- ${b.id}（${b.label}）`).join("\n")}`，将分支标签附加到选项列表中
+- [desktop/workflow-nodes/switch/executor.main.ts:75-79] logger.info 新增 branchLabels 字段，便于从日志确认 LLM 收到的标签上下文
+- [desktop/src/modules/workflow/runner/runner-app.tsx:149-163] handleCancel 新增 catch 块：logger.warn 记录错误详情 + setRunError 设置用户可见错误信息
+- [desktop/src/modules/workflow/runner/runner-toolbar.tsx:37] runError 展示条件从 `isTerminal && runError` 改为 `runError`，确保取消操作在 running 态失败时错误也可见
+
+### 与历史的关系
+- 缺陷 1：独立（历史上第 1/2 轮涉及 Switch 匹配策略、第 7 轮涉及画布边标签同步、第 15/21 轮涉及结果面板/ExecutionOverlay 标签解析，但均未触及 LLM prompt 层面的标签传递）
+- 缺陷 2：独立（历史上第 10 轮添加了 Runner toolbar 的 loading 状态、第 16 轮为 rerun 添加了错误反馈，但 cancel 错误路径未被覆盖）
+
+### 日志补充
+- switch executor: 执行开始日志新增 branchLabels 字段（含 config.branches.map label），补齐此前缺失的 LLM 接收标签的可观测性
+- runner-app handleCancel: catch 分支新增 warn 日志（含 runId/error）
+
+### 本次进展
+工作流系统的 LLM 交互准确性（Switch 节点条件路由）和运行控制可靠性（Cancel 错误反馈）两个维度各向真正可用迈进一步。

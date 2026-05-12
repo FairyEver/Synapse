@@ -34,7 +34,7 @@ export function RunnerToolbar({ definition, runState, runError, viewMode, rerunn
     <div className="flex items-center gap-2 border-b px-3 py-2 bg-background">
       <span className="text-sm font-medium truncate max-w-48">{definition.name}</span>
       {badge && <Badge variant={badge.variant} className="text-xs">{badge.label}</Badge>}
-      {isTerminal && runError && (
+      {runError && (
         <span className="text-xs text-destructive truncate max-w-64">{runError}</span>
       )}
 

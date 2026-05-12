@@ -64,12 +64,18 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     const ids = config.branches.map((b) => b.id)
     input.onProgress?.("resolving_variables", "解析变量…")
     const basePrompt = interpolate(config.prompt, resolvedVariables)
-    const prompt = `${basePrompt}\n\n---\n你必须只回复以下选项之一（不要包含任何其他文字）：\n${ids.map((id) => `- ${id}`).join("\n")}`
+    // Include branch labels in the prompt so the LLM understands the semantic
+    // meaning of each branch ID (e.g. "- branch1（正面）" instead of "- branch1").
+    // This bridges the gap between user-configured labels (used in the human's
+    // judgement prompt) and machine IDs (used by the matcher), improving matching
+    // accuracy for non-trivial branch names.
+    const prompt = `${basePrompt}\n\n---\n你必须只回复以下选项之一（不要包含任何其他文字）：\n${config.branches.map((b) => `- ${b.id}（${b.label}）`).join("\n")}`
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("switch node executing", {
       runId: context.runId, agent: config.agent,
-      branchIds: ids, defaultBranch: config.defaultBranch ?? null,
+      branchIds: ids, branchLabels: config.branches.map((b) => b.label),
+      defaultBranch: config.defaultBranch ?? null,
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
