@@ -62,6 +62,7 @@ export function WorkflowList() {
     if (!runTarget) return
     const def = runTarget
     setRunTarget(null)
+    setRunningId(def.id)
     try {
       const result = await window.synapse?.workflow.runDefinition(def, params)
       if (!result) {
@@ -81,6 +82,8 @@ export function WorkflowList() {
       void refresh()
     } catch (err) {
       toast.error(`运行失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRunningId(null)
     }
   }
 

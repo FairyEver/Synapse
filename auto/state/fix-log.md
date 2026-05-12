@@ -678,3 +678,25 @@ Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善�
 
 ### 本次进展
 工作流系统的数据可观测性（快照读取异常从完全不可追踪变为四个路径均有日志）和代码健壮性（变量插值从 Prompt/Switch/End/Engine 四处维护变为单一来源）两个维度向真正可用迈进。
+
+---
+
+## [2026-05-13 04:48] 第 29 次迭代
+
+### 发现的问题
+- 工作流模块"新建"按钮无防重复点击保护：`handleCreate` 为 async 函数，快速双击可并发触发两次 `workflow.create()` IPC 调用，两次均可能成功创建两份工作流（index.tsx:14-29）。`openEditor` + `setListKey` 异步执行期间第二次点击的 create 已发出，无法被拦截。
+- 工作流列表页参数化工作流运行时 WorkflowCard 不展示 running 状态：`handleConfirmRun` 在 RunParamsDialog 确认后调用 `runDefinition`，但未设置 `runningId`，导致 WorkflowCard 的 `running={runningId === meta.id}` 始终为 false。只有 `handleRun`（无参数直跑路径）正确设置了 runningId（workflow-list.tsx:61-85）。有参数的工作流运行时 card 无任何 loading 反馈，用户可重复点击 Play 触发多个 RunParamsDialog。
+
+### 修复内容
+- [desktop/src/modules/workflow/index.tsx:5,13,16-17,32-34,40-41] 新增 Loader2 导入 + creating state；handleCreate 新增 `if (creating) return` 守卫 + `setCreating(true)` / `finally setCreating(false)` 包裹；Button 新增 `disabled={creating}` + 创建中显示 Loader2 spinner 替代 Plus 图标
+- [desktop/src/modules/workflow/components/workflow-list.tsx:65,85-87] handleConfirmRun 在提取 def 后新增 `setRunningId(def.id)`，原无 finally 块补充 `finally { setRunningId(null) }` 确保清理
+
+### 与历史的关系
+- 缺陷 1：独立（"新建"按钮的防重复保护此前从未被任何轮次覆盖）
+- 缺陷 2：延续第 16 轮（同文件同主题——列表页 runningId 保护，补齐参数化运行路径的遗漏）
+
+### 日志补充
+- 无（纯 UI 交互优化：所有修改均为渲染侧状态管理，不涉及 IPC 契约或数据流变更）
+
+### 本次进展
+工作流列表页的创建入口从"可双击创建重复工作流"变为"有防重复保护 + loading 反馈"；列表页的参数化运行路径从"无 running 状态反馈"变为"与无参数路径一致的 loading 保护"——列表层两个操作的交互完整度补齐。
