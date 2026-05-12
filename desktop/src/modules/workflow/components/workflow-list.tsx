@@ -10,8 +10,11 @@ export function WorkflowList() {
   const { items, loading, refresh } = useWorkflowList()
   const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
   const [historyWorkflowId, setHistoryWorkflowId] = useState<string | null>(null)
+  const [runningId, setRunningId] = useState<string | null>(null)
 
   const handleRun = async (id: string) => {
+    if (runningId) return
+    setRunningId(id)
     try {
       const def = await window.synapse?.workflow.get(id)
       if (!def) return
@@ -33,6 +36,8 @@ export function WorkflowList() {
       }
     } catch (err) {
       toast.error(`运行失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRunningId(null)
     }
   }
 
@@ -72,6 +77,7 @@ export function WorkflowList() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
         {items.map((meta) => (
           <WorkflowCard key={meta.id} meta={meta}
+            running={runningId === meta.id}
             onOpen={() => void window.synapse?.workflow.openEditor(meta.id)}
             onRun={() => void handleRun(meta.id)}
             onHistory={() => setHistoryWorkflowId(meta.id)}

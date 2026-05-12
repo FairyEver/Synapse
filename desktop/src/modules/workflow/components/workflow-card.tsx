@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import type { WorkflowMeta } from "@/types/workflow"
-import { GitBranch, Play, Trash2, History } from "lucide-react"
+import { GitBranch, Play, Trash2, History, Loader2 } from "lucide-react"
 
 export type WorkflowCardRunState = "running" | "completed" | "failed" | "cancelled"
 
@@ -14,9 +14,9 @@ const RUN_STATE_BADGE: Record<WorkflowCardRunState, { label: string; variant: "d
   cancelled: { label: "已取消", variant: "outline" },
 }
 
-interface WorkflowCardProps { meta: WorkflowMeta; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onHistory: () => void; onDelete: () => void }
+interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onHistory: () => void; onDelete: () => void }
 
-export function WorkflowCard({ meta, runState, onOpen, onRun, onHistory, onDelete }: WorkflowCardProps) {
+export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory, onDelete }: WorkflowCardProps) {
   const badge = runState ? RUN_STATE_BADGE[runState] : null
 
   return (
@@ -33,8 +33,8 @@ export function WorkflowCard({ meta, runState, onOpen, onRun, onHistory, onDelet
           {badge ? <Badge variant={badge.variant} className="text-xs">{badge.label}</Badge> : null}
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onRun() }}>
-            <Play className="h-3.5 w-3.5" />
+          <Button size="sm" variant="ghost" disabled={running} onClick={(e) => { e.stopPropagation(); onRun() }}>
+            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
           </Button>
           <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onHistory() }}>
             <History className="h-3.5 w-3.5" />

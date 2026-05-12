@@ -140,7 +140,11 @@ export function WorkflowRunnerApp() {
     logger.info("rerun requested", { runId, paramKeys: Object.keys(runParams) })
     try {
       const result = await window.synapse?.workflow.rerun(runId, runParams)
-      if (!result) return
+      if (!result) {
+        logger.warn("rerun returned empty result — IPC bridge unavailable", { runId })
+        setRunError("重新运行失败：IPC 通道不可用")
+        return
+      }
       if ("errors" in result) {
         const errors = result.errors as Array<{ message?: string }>
         const msg = errors[0]?.message ?? "重新运行失败：校验未通过"
