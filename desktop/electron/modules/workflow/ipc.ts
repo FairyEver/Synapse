@@ -505,6 +505,16 @@ export const workflowIpcModule: IpcModule = {
         for (const meta of metas) {
           const snap = await snapshots.get(runId, meta.id)
           if (!snap) continue
+          // When the run failed, extract a workflow-level error from the first
+          // failed node's result.  The original event-level error was not
+          // persisted to the snapshot (WorkflowRunSnapshot has no error field),
+          // so we reconstruct it from the per-node errors that ARE stored.
+          let error: string | undefined
+          if (snap.status === "failed") {
+            const failedNode = Object.values(snap.nodeResults).find((nr) => nr.status === "failed" && nr.error)
+            if (failedNode?.error) error = failedNode.error
+          }
+
           const hydrated: WorkflowRunStatus = {
             runId: snap.runId,
             workflowId: snap.workflowId,
@@ -515,11 +525,13 @@ export const workflowIpcModule: IpcModule = {
             durationMs: snap.endedAt ? snap.endedAt - snap.startedAt : undefined,
             params: snap.params,
             definition: snap.definition,
+            ...(error ? { error } : {}),
           }
           logger.info("run-status hydrated from snapshot", {
             runId, workflowId: snap.workflowId, status: snap.status,
             nodeCount: Object.keys(snap.nodeResults).length,
             hasDefinition: !!snap.definition,
+            ...(error ? { recoveredErrorFromNodeResults: true } : {}),
           })
           return hydrated
         }

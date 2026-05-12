@@ -700,3 +700,26 @@ Runner 的错误恢复体验从"误导性警告永不消失"变为"情况改善�
 
 ### 本次进展
 工作流列表页的创建入口从"可双击创建重复工作流"变为"有防重复保护 + loading 反馈"；列表页的参数化运行路径从"无 running 状态反馈"变为"与无参数路径一致的 loading 保护"——列表层两个操作的交互完整度补齐。
+
+---
+
+## [2026-05-13 18:20] 第 30 次迭代
+
+### 发现的问题
+- snapshot hydration 路径丢失工作流级别错误信息：`runStatus` IPC handler 从 `WorkflowRunSnapshot` 恢复状态时，该类型无 `error` 字段（保存侧也未写入），导致历史失败运行的 `hydrated.error` 始终为 undefined。Runner UI 的 `error` 属性始终为空，用户看到 failed 但不知原因（ipc.ts:508-535）。
+- End 节点 executor 的 `durationMs` 硬编码为 0：`endNodeExecutor.execute()` 返回 `{ status: "success", output, durationMs: 0 }`，而 Prompt 和 Switch executor 均正确计时。Runner 的 Timeline 视图中 End 节点始终显示 "0ms"，与其他节点的时间呈现不一致（end/executor.main.ts:24）。
+
+### 修复内容
+- [desktop/electron/modules/workflow/ipc.ts:508-535] snapshot hydration 路径新增错误恢复逻辑：当 `snap.status === "failed"` 时从 `snap.nodeResults` 中查找第一个 `status === "failed" && error` 的节点，提取其 error 作为 workflow-level error；通过条件展开 `...(error ? { error } : {})` 注回 hydrated 对象；日志新增 `recoveredErrorFromNodeResults: true` 字段
+- [desktop/workflow-nodes/end/executor.main.ts:10-24] 函数入口新增 `const start = Date.now()`，插值后计算 `const durationMs = Date.now() - start`，return 使用计算值替换硬编码 0，成功日志新增 `durationMs` 字段
+
+### 与历史的关系
+- 缺陷 1：延续第 20 轮（snapshot save 侧已补齐错误字段写入但 hydration 侧未读取，属于读写不对称的残留问题）
+- 缺陷 2：延续第 28 轮（End executor 使用共享 `interpolatePrompt` 但计时未统一，属于 executor 三兄弟一致性的遗漏）
+
+### 日志补充
+- ipc.ts: snapshot hydration 恢复错误时 info 日志新增 `recoveredErrorFromNodeResults: true`，声明错误来源为 nodeResults 重建而非原始字段
+- end executor: 成功日志新增 `durationMs` 字段，与其他 executor 的 log shape 对齐
+
+### 本次进展
+工作流系统的错误可追溯性（失败运行恢复后可知原因而非"Unknown error"）和显示一致性（End 节点 Timeline 时间不再硬编码为 0ms）两个维度的补齐。
