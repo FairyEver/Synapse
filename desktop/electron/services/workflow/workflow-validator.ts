@@ -106,6 +106,31 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     }
   }
 
+  // Validate that every Switch branch has at least one outgoing edge.
+  // A branch with no outgoing edge will silently cause a runtime failure when
+  // activated (the End node becomes unreachable), so catch it at validation time.
+  for (const node of def.nodes) {
+    if (node.type !== "switch") continue
+    const branches = (node.config as Record<string, unknown>)["branches"]
+    if (!Array.isArray(branches)) continue
+    const outgoingBranches = new Set(
+      def.edges.filter((e) => e.from === node.id && e.branch).map((e) => e.branch!),
+    )
+    for (const branch of branches as Array<{ id: string; label: string }>) {
+      if (!outgoingBranches.has(branch.id)) {
+        errors.push({
+          type: "invalid_switch_edge",
+          nodeId: node.id,
+          message: `Switch 节点「${node.name}」的分支「${branch.label}」没有连接到下游节点`,
+        })
+        logger.warn("switch branch has no outgoing edge", {
+          workflowId: def.id, nodeId: node.id, nodeName: node.name,
+          branchId: branch.id, branchLabel: branch.label,
+        })
+      }
+    }
+  }
+
   if (errors.length > 0) {
     logger.warn("workflow validation failed", { workflowId: def.id, errorCount: errors.length, errors: errors.map((e) => ({ type: e.type, nodeId: e.nodeId, edgeId: e.edgeId, message: e.message })) })
   }

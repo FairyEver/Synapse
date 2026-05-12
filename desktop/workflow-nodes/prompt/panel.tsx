@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -16,6 +16,15 @@ export interface PromptNodePanelProps {
 
 export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams }: PromptNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
+  // Track the last-committed config to avoid stale-prop overwrites when
+  // multiple fields are edited in rapid succession before re-render propagates.
+  const lastCommittedRef = useRef<PromptNodeConfig>(config)
+
+  const commit = (overrides?: Partial<PromptNodeConfig>) => {
+    const next: PromptNodeConfig = { ...lastCommittedRef.current, prompt, ...overrides }
+    lastCommittedRef.current = next
+    onChange(next)
+  }
 
   return (
     <div className="grid gap-3">
@@ -23,7 +32,7 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
         <Label className="text-xs">Agent</Label>
         <Select
           value={config.agent}
-          onValueChange={(agent) => onChange({ ...config, agent, prompt })}
+          onValueChange={(agent) => commit({ agent })}
         >
           <SelectTrigger className="h-7 text-xs">
             <SelectValue placeholder="选择 Agent" />
@@ -39,7 +48,7 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
       </div>
       <VariableBindingEditor
         variables={config.variables}
-        onChange={(variables) => onChange({ ...config, prompt, variables })}
+        onChange={(variables) => commit({ variables })}
         upstreamNodes={upstreamNodes}
         workflowParams={workflowParams}
       />
@@ -50,7 +59,7 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
           rows={8}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          onBlur={() => onChange({ ...config, prompt })}
+          onBlur={() => commit({ prompt })}
           placeholder="输入提示词，用 {{变量名}} 引用变量…"
         />
       </div>

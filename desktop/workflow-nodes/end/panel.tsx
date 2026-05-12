@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { WorkflowParam } from "@/types/workflow"
@@ -14,13 +14,21 @@ export interface EndNodePanelProps {
 
 export function EndNodePanel({ config, onChange, upstreamNodes, workflowParams }: EndNodePanelProps) {
   const [template, setTemplate] = useState(config.template)
-  const commit = () => onChange({ ...config, template })
+  // Track the last-committed config to avoid stale-prop overwrites when
+  // multiple fields are edited in rapid succession before re-render propagates.
+  const lastCommittedRef = useRef<EndNodeConfig>(config)
+
+  const commit = (overrides?: Partial<EndNodeConfig>) => {
+    const next: EndNodeConfig = { ...lastCommittedRef.current, template, ...overrides }
+    lastCommittedRef.current = next
+    onChange(next)
+  }
 
   return (
     <div className="grid gap-3">
       <VariableBindingEditor
         variables={config.variables}
-        onChange={(variables) => onChange({ ...config, template, variables })}
+        onChange={(variables) => commit({ variables })}
         upstreamNodes={upstreamNodes}
         workflowParams={workflowParams}
       />
@@ -31,7 +39,7 @@ export function EndNodePanel({ config, onChange, upstreamNodes, workflowParams }
           rows={8}
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
-          onBlur={commit}
+          onBlur={() => commit({ template })}
           placeholder="输入返回文本，用 {{变量名}} 引用变量…"
         />
       </div>

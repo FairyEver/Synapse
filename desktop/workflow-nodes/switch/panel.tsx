@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -23,13 +23,19 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
+  // Track the last-committed config to avoid stale-prop overwrites when
+  // multiple fields are edited in rapid succession before re-render propagates.
+  const lastCommittedRef = useRef<SwitchNodeConfig>(config)
 
-  const commit = (overrides?: Partial<SwitchNodeConfig>) =>
-    onChange({
-      ...config, prompt, branches,
+  const commit = (overrides?: Partial<SwitchNodeConfig>) => {
+    const next: SwitchNodeConfig = {
+      ...lastCommittedRef.current, prompt, branches,
       defaultBranch: defaultBranch === NO_DEFAULT ? undefined : defaultBranch,
       ...overrides,
-    })
+    }
+    lastCommittedRef.current = next
+    onChange(next)
+  }
 
   const addBranch = () => {
     const existingIds = new Set(branches.map((b) => b.id))
