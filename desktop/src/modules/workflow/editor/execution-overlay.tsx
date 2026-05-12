@@ -24,6 +24,13 @@ interface ExecutionOverlayProps {
   onViewClose?: () => void
 }
 
+function resolveActiveBranchLabel(nodeId: string, branchId: string, definition: WorkflowDefinition): string {
+  const node = definition.nodes.find((n) => n.id === nodeId)
+  if (!node || node.type !== "switch") return branchId
+  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
+  return branches?.find((b) => b.id === branchId)?.label ?? branchId
+}
+
 export function ExecutionOverlay({ nodeResults, runState, runError, definition, viewingNodeId, onViewClose }: ExecutionOverlayProps) {
   const [selected, setSelected] = useState<NodeRunResult | null>(null)
   const results = Object.values(nodeResults)
@@ -90,7 +97,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
               {dialogTarget.activeBranch && (
                 <div className="grid gap-1">
                   <p className="font-medium text-muted-foreground">激活分支</p>
-                  <span className="font-mono">{dialogTarget.activeBranch}</span>
+                  <span className="font-mono">{resolveActiveBranchLabel(dialogTarget.nodeId, dialogTarget.activeBranch, definition)}</span>
                 </div>
               )}
               {!dialogTarget.input.prompt && !dialogTarget.error && !dialogTarget.activeBranch && (dialogTarget.output == null || dialogTarget.output === "") && (

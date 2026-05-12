@@ -476,3 +476,29 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 ### 本次进展
 工作流编辑器的"复制→粘贴→确认"路径中 Switch 分支标签从"粘贴后丢失需重开编辑器"变为"即时正确显示"；运行结果快照从"IO 异常静默丢失不可观测"变为"异常有日志"，主流程视觉一致性和数据可观测性各进一步。
 
+---
+
+## [2026-05-13 03:50] 第 21 次迭代
+
+### 发现的问题
+- 工作流列表页加载失败时展示误导性空状态（"还没有工作流。"），useWorkflowList hook 无 error 状态，IPC 桥接不可用或 list() 异常时用户无法区分"加载中/加载失败/确实无数据"三种情况（use-workflow-list.ts:8-9 → workflow-list.tsx:72-73）
+- 工作流模块"新建"/列表"运行"/参数"运行"三个操作的早期 return 路径均无 toast 反馈：handleCreate 无 try/catch（index.tsx:14-16），handleRun 中 !def 静默 return（workflow-list.tsx:22-23），handleConfirmRun 中 !result 静默 return（workflow-list.tsx:55-56），用户操作无响应时不知道发生了什么
+- ExecutionOverlay 中 Switch 节点激活分支显示原始 ID（"branch1"）而非用户配置的中文标签，与 NodeResultPanel 行为不一致（execution-overlay.tsx:90-93 → node-result-panel.tsx:20-26 已有正确实现但未同步到 ExecutionOverlay）
+
+### 修复内容
+- [desktop/src/modules/workflow/hooks/use-workflow-list.ts:7,9-23,26] 新增 error state，catch 块设置错误，IPC 不可用时检查 !data 设为错误而非空；返回值新增 error 字段
+- [desktop/src/modules/workflow/components/workflow-list.tsx:3,8-9,13,84-95] 新增 Alert/Button 导入，解构 error，loading/error/empty 三态分离渲染，error 态展示 Alert + 重试按钮
+- [desktop/src/modules/workflow/components/workflow-list.tsx:23-25,29-31,64-66] handleRun 中 !def 分支新增 toast.error("工作流不存在，请刷新列表")；!result 分支新增 toast.error("运行失败：无法连接到主进程")；handleConfirmRun 同理
+- [desktop/src/modules/workflow/index.tsx:2,14-29] 新增 toast 导入，handleCreate 包裹 try/catch，!result 和 "errors" in result 分支分别 toast.error
+- [desktop/src/modules/workflow/editor/execution-overlay.tsx:27-32,100] 新增 resolveActiveBranchLabel 函数，参照 node-result-panel.tsx 的标签解析逻辑；激活分支字段使用解析后的标签
+
+### 与历史的关系
+- 缺陷 1：独立（列表页 error state 从未被覆盖）
+- 缺陷 2：独立（列表页操作的 silent 失败从未被覆盖）
+- 缺陷 3：延续第 15 轮（NodeResultPanel 的 activeBranchLabel 解析同主题但位置不同——ExecutionOverlay 而非 NodeResultPanel）
+
+### 日志补充
+- 无（纯 UI 优化：所有修改均为渲染侧错误状态补充和 toast 反馈，不涉及数据流、执行路径或 IPC 契约变更）
+
+### 本次进展
+工作流列表页从"二态（loading/empty）"变为"三态（loading/error/empty）"，列表层所有用户操作（新建/运行/参数运行）从"静默失败无反馈"变为"有明确 toast 提示"；编辑器内 Switch 分支信息展示从"开发者 ID"变为"用户标签"——列表层交互完整度补齐一步，编辑/运行/观测三层的信息一致性提升一步。

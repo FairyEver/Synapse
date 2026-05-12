@@ -1,13 +1,16 @@
 import { useState } from "react"
 import { toast } from "sonner"
+import { AlertCircle, RefreshCw } from "lucide-react"
 import { WorkflowCard } from "./workflow-card"
 import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
 import { useWorkflowList } from "../hooks/use-workflow-list"
+import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { WorkflowDefinition } from "@/types/workflow"
 
 export function WorkflowList() {
-  const { items, loading, refresh } = useWorkflowList()
+  const { items, loading, error, refresh } = useWorkflowList()
   const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
   const [historyWorkflowId, setHistoryWorkflowId] = useState<string | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
@@ -17,10 +20,16 @@ export function WorkflowList() {
     setRunningId(id)
     try {
       const def = await window.synapse?.workflow.get(id)
-      if (!def) return
+      if (!def) {
+        toast.error("工作流不存在，请刷新列表")
+        return
+      }
       if (def.params.length === 0) {
         const result = await window.synapse?.workflow.runDefinition(def, {})
-        if (!result) return
+        if (!result) {
+          toast.error("运行失败：无法连接到主进程")
+          return
+        }
         if ("errors" in result) {
           const errors = result.errors as { message?: string }[]
           toast.error(errors[0]?.message ?? "工作流校验失败")
@@ -52,7 +61,10 @@ export function WorkflowList() {
     setRunTarget(null)
     try {
       const result = await window.synapse?.workflow.runDefinition(def, params)
-      if (!result) return
+      if (!result) {
+        toast.error("运行失败：无法连接到主进程")
+        return
+      }
       if ("errors" in result) {
         const errors = result.errors as { message?: string }[]
         toast.error(errors[0]?.message ?? "工作流校验失败")
@@ -70,6 +82,17 @@ export function WorkflowList() {
   }
 
   if (loading) return <p className="text-sm text-muted-foreground p-4">加载中…</p>
+  if (error) return (
+    <div className="p-4 space-y-3">
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription className="text-xs">{error}</AlertDescription>
+      </Alert>
+      <Button size="sm" variant="outline" onClick={refresh}>
+        <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+      </Button>
+    </div>
+  )
   if (items.length === 0) return <p className="text-sm text-muted-foreground p-4">还没有工作流。</p>
 
   return (

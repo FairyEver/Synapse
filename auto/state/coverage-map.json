@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-13T03:10:00+08:00",
-  "totalIterations": 20,
+  "lastUpdated": "2026-05-13T03:50:00+08:00",
+  "totalIterations": 21,
   "files": {
     "desktop/electron/modules/workflow/ipc.ts": {
       "lastReviewedIteration": 8,
@@ -73,10 +73,11 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/components/workflow-list.tsx": {
-      "lastReviewedIteration": 18,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active"
+      "lastReviewedIteration": 21,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/src/modules/workflow/editor/canvas-context.ts": {
       "lastReviewedIteration": 20,
@@ -106,11 +107,11 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastReviewedIteration": 21,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/src/modules/workflow/editor/node-config-panel.tsx": {
       "lastReviewedIteration": 19,
@@ -159,11 +160,11 @@
       "healthScore": "stable"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-list.ts": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastReviewedIteration": 21,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-run.ts": {
       "lastReviewedIteration": 20,
@@ -173,11 +174,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/index.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastReviewedIteration": 21,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/src/modules/workflow/runner/dag-view.tsx": {
       "lastReviewedIteration": 17,
@@ -345,10 +346,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/switch/constants.ts": {
-      "lastReviewedIteration": 0,
+      "lastReviewedIteration": 21,
       "issuesFound": 0,
       "issuesFixed": 0,
-      "healthScore": "untouched"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/workflow-nodes/switch/executor.main.ts": {
       "lastReviewedIteration": 4,

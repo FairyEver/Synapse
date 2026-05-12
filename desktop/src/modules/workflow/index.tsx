@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { WorkflowList } from "./components/workflow-list"
 import { Plus } from "lucide-react"
@@ -11,10 +12,21 @@ export function WorkflowModule() {
   const [listKey, setListKey] = useState(0)
 
   const handleCreate = async () => {
-    const result = await window.synapse?.workflow.create()
-    if (!result || "errors" in result) return
-    await window.synapse?.workflow.openEditor(result.id)
-    setListKey((k) => k + 1)
+    try {
+      const result = await window.synapse?.workflow.create()
+      if (!result) {
+        toast.error("创建工作流失败：无法连接到主进程")
+        return
+      }
+      if ("errors" in result) {
+        toast.error(result.errors[0]?.message ?? "创建工作流失败：校验未通过")
+        return
+      }
+      await window.synapse?.workflow.openEditor(result.id)
+      setListKey((k) => k + 1)
+    } catch (err) {
+      toast.error(`创建工作流失败：${err instanceof Error ? err.message : String(err)}`)
+    }
   }
   return (
     <div className="flex flex-col h-full">
