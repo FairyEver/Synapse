@@ -26,6 +26,8 @@ export function WorkflowRunnerApp() {
   const [runError, setRunError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>("dag")
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [rerunning, setRerunning] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   const runIdRef = useRef(runId)
   runIdRef.current = runId
@@ -123,23 +125,41 @@ export function WorkflowRunnerApp() {
   })
 
   const handleCancel = useCallback(async () => {
-    if (runId) await window.synapse?.workflow.cancel(runId)
+    if (!runId) return
+    setCancelling(true)
+    try {
+      await window.synapse?.workflow.cancel(runId)
+    } finally {
+      setCancelling(false)
+    }
   }, [runId])
 
   const handleRerun = useCallback(async () => {
     if (!runId) return
+    setRerunning(true)
     logger.info("rerun requested", { runId, paramKeys: Object.keys(runParams) })
-    const result = await window.synapse?.workflow.rerun(runId, runParams)
-    if (!result) return
-    if ("errors" in result) {
-      logger.warn("rerun failed", { errors: result.errors })
-      return
+    try {
+      const result = await window.synapse?.workflow.rerun(runId, runParams)
+      if (!result) return
+      if ("errors" in result) {
+        const errors = result.errors as Array<{ message?: string }>
+        const msg = errors[0]?.message ?? "重新运行失败：校验未通过"
+        logger.warn("rerun failed", { errors: result.errors })
+        setRunError(msg)
+        return
+      }
+      // Clear definition and params so the runner shows loading state until
+      // hydration fetches the new run's metadata (same pattern as workflow:started).
+      setDefinition(null)
+      setRunParams({})
+      setRunId(result.runId)
+      setRunState("running")
+      setNodeResults({})
+      setRunError(null)
+      setSelectedNodeId(null)
+    } finally {
+      setRerunning(false)
     }
-    setRunId(result.runId)
-    setRunState("running")
-    setNodeResults({})
-    setRunError(null)
-    setSelectedNodeId(null)
   }, [runId, runParams])
 
   const handleOpenEditor = useCallback(() => {
@@ -159,6 +179,8 @@ export function WorkflowRunnerApp() {
         runState={runState}
         runError={runError}
         viewMode={viewMode}
+        rerunning={rerunning}
+        cancelling={cancelling}
         onViewModeChange={setViewMode}
         onCancel={handleCancel}
         onRerun={handleRerun}
