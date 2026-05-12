@@ -135,6 +135,9 @@ export class WorkflowEngine {
           config: cfg, resolvedVariables: resolved,
           context: { projectId: projectId ?? def.id, runId, abortSignal: effectiveAbortSignal },
           agentDeps: this.agentDeps,
+          onProgress: (phase, label) => {
+            emit({ type: "node:progress", runId, nodeId, phase, label })
+          },
         })
         if (effectiveAbortSignal.aborted) {
           logger.warn("node aborted mid-execution", { runId, nodeId, nodeName: node.name })
