@@ -28,6 +28,7 @@ export function WorkflowRunnerApp() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [rerunning, setRerunning] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const runIdRef = useRef(runId)
   runIdRef.current = runId
@@ -38,9 +39,16 @@ export function WorkflowRunnerApp() {
   useEffect(() => {
     if (!runId) return
     let cancelled = false
+    setLoadError(null)
     void (async () => {
       const status = await window.synapse?.workflow.runStatus(runId)
-      if (cancelled || !status) return
+      if (cancelled) return
+      if (!status) {
+        logger.warn("runner hydration failed: runStatus returned null, triggering fallback", { runId, workflowId })
+        setLoadError("无法加载运行记录（可能已被淘汰），显示最新工作流结构")
+        return
+      }
+      setLoadError(null)
       logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
       if (status.definition) setDefinition(status.definition)
       if (status.params) setRunParams(status.params)
@@ -49,15 +57,17 @@ export function WorkflowRunnerApp() {
   }, [runId])
 
   useEffect(() => {
-    // Only fetch definition from the workflow store as a fallback when there is
-    // no active run (i.e. the Runner window was opened without a runId).
-    // When runId is set, the hydration effect (above) is the sole authority for
-    // definition — running this concurrently with hydration can cause a brief
-    // flash of the wrong DAG topology if the latest saved definition differs
-    // from the one used in the active run.
+    // When there is no active run (Runner opened without a runId), or when
+    // hydration failed and set loadError (runStatus returned null), fall back
+    // to fetching the latest definition from the workflow store. This ensures
+    // the Runner shows at least the DAG structure even if the run snapshot
+    // has been pruned from disk, rather than staying on "加载中…" forever.
     if (definition) return
     if (!workflowId) return
-    if (runId) return
+    // Only skip the fallback when runId is set AND hydration succeeded
+    // (loadError is null). If loadError is set and runId exists, hydration
+    // failed — allow fallback to proceed.
+    if (runId && !loadError) return
     let cancelled = false
     void (async () => {
       const def = await window.synapse?.workflow.get(workflowId)
@@ -65,7 +75,7 @@ export function WorkflowRunnerApp() {
       if (def) setDefinition(def)
     })()
     return () => { cancelled = true }
-  }, [workflowId, definition, runId])
+  }, [workflowId, definition, runId, loadError])
 
   useEffect(() => {
     if (!workflowId) return
@@ -187,6 +197,18 @@ export function WorkflowRunnerApp() {
     : null
 
   if (!definition) {
+    if (loadError) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center space-y-3 max-w-sm">
+            <div className="rounded-lg border bg-card p-4 space-y-2 text-left">
+              <p className="text-xs font-medium text-muted-foreground">无法加载运行结果</p>
+              <p className="text-xs text-muted-foreground">{loadError}</p>
+            </div>
+          </div>
+        </div>
+      )
+    }
     return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
   }
 
@@ -204,6 +226,11 @@ export function WorkflowRunnerApp() {
         onRerun={handleRerun}
         onOpenEditor={handleOpenEditor}
       />
+      {loadError && (
+        <div className="border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+          {loadError}
+        </div>
+      )}
       <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
         <ResizablePanel>
           {viewMode === "dag" ? (

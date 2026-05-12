@@ -528,3 +528,26 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 编辑器的键盘交互从"缺失删除快捷键"补齐到完整编辑操作，拖入→配置路径从"两步"缩短为"一步"，校验器从"仅检查节点引用"扩展到"同时检查参数引用"——编辑效率、交互流畅度、数据完整性各向前一步。
+
+---
+
+## [2026-05-13 14:35] 第 23 次迭代
+
+### 发现的问题
+- 编辑器加载工作流失败时无限显示"加载中…"：editor-app.tsx:42-43 IPC bridge 不可用时静默 return、:48 get() 返回 null 时 `if (def)` 跳过不设错误，渲染层仅 loading/ready 二态（:226）。用户遇到 IPC 未就绪或工作流被删除时永久 spinner 无反馈。
+- Runner 打开被淘汰的历史运行时无限"加载中…"：runner-app.tsx:43 runStatus 返回 null 时 hydration effect 静默 return，:60 fallback effect 的 `if (runId) return` 阻止降级获取 definition，渲染层仅 loading/ready 二态（:189）。快照被淘汰（超过 20 条）时 runner 永久空白。
+
+### 修复内容
+- [desktop/src/modules/workflow/editor/editor-app.tsx:2,31,40-73,71-73,249-266] 新增 loadError state 和 loadDefinition callback（try/catch + 三条失败路径）；渲染层新增 error 三态（Alert + 重试按钮）
+- [desktop/src/modules/workflow/runner/runner-app.tsx:31,42-56,59-78,199-212,229-233] 新增 loadError state；hydration !status 分支设 loadError 并解锁 fallback effect（guard 从 `if (runId) return` → `if (runId && !loadError) return`）；渲染层新增 error 态 + fallback 成功时警告 banner
+
+### 与历史的关系
+- 缺陷 1：独立（editor-app 的 definition loading 错误态从未被任何轮次覆盖）
+- 缺陷 2：延续第 8 轮（同主题——历史运行打开 Runner，覆盖第 8 轮未处理的快照被淘汰最终退化路径）
+
+### 日志补充
+- editor-app: IPC 桥不可用时 warn 日志（含 workflowId）；get() 返回 null 时 warn 日志；加载异常时 error 日志（含 workflowId/error）
+- runner-app: hydration 失败时 warn 日志（含 runId/workflowId），触发 fallback
+
+### 本次进展
+工作流系统的两个核心入口（编辑器加载、Runner 查看历史结果）在数据不可达时从"永久 loading spinner 无任何反馈"变为"有明确错误信息和降级/恢复路径"，主流程错误处理断路修复。

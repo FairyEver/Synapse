@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { AlertCircle, X } from "lucide-react"
+import { AlertCircle, RefreshCw, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
@@ -28,6 +28,7 @@ export function WorkflowEditorApp() {
   const [running, setRunning] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [conflictState, setConflictState] = useState<{ saved: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
@@ -36,18 +37,40 @@ export function WorkflowEditorApp() {
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
 
-  useEffect(() => {
+  const loadDefinition = useCallback(() => {
     if (!workflowId) return
     const workflowApi = window.synapse?.workflow
-    if (!workflowApi) return
+    if (!workflowApi) {
+      setLoadError("无法连接到主进程，请稍后重试")
+      logger.warn("editor definition load failed: IPC bridge unavailable", { workflowId })
+      return
+    }
     let cancelled = false
+    setLoadError(null)
     void (async () => {
-      const def = await workflowApi.get(workflowId)
-      if (cancelled) return
-      if (def) setDefinition(def)
+      try {
+        const def = await workflowApi.get(workflowId)
+        if (cancelled) return
+        if (def) {
+          setDefinition(def)
+          setLoadError(null)
+        } else {
+          setLoadError("工作流不存在或已被删除")
+          logger.warn("editor definition load failed: workflow not found", { workflowId })
+        }
+      } catch (err) {
+        if (cancelled) return
+        const msg = err instanceof Error ? err.message : String(err)
+        setLoadError(`加载失败：${msg}`)
+        logger.error("editor definition load threw", { workflowId, error: msg })
+      }
     })()
     return () => { cancelled = true }
   }, [workflowId])
+
+  useEffect(() => {
+    return loadDefinition()
+  }, [loadDefinition])
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -223,7 +246,25 @@ export function WorkflowEditorApp() {
     }
   }
 
-  if (!definition) return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
+  if (!definition) {
+    if (loadError) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center space-y-3 max-w-sm">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle className="text-xs font-medium">加载失败</AlertTitle>
+              <AlertDescription className="text-xs">{loadError}</AlertDescription>
+            </Alert>
+            <Button size="sm" variant="outline" onClick={() => { void loadDefinition() }}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+            </Button>
+          </div>
+        </div>
+      )
+    }
+    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
+  }
 
   return (
     <>
