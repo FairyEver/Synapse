@@ -24,6 +24,8 @@ export function WorkflowEditorApp() {
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [runErrors, setRunErrors] = useState<ValidationError[]>([])
+  const [saving, setSaving] = useState(false)
+  const [running, setRunning] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
@@ -130,33 +132,39 @@ export function WorkflowEditorApp() {
   }
 
   const handleSave = async (def: WorkflowDefinition) => {
-    let result: Awaited<ReturnType<NonNullable<typeof window.synapse>["workflow"]["save"]>> | undefined
+    setSaving(true)
     try {
-      result = await window.synapse?.workflow.save(def)
-    } catch (err) {
-      logger.error("save IPC call threw", { workflowId: def.id, error: err instanceof Error ? err.message : String(err) })
-      setRunErrors([{ type: "invalid_config", message: "保存失败：无法连接到主进程" }])
-      return { errors: [{ type: "invalid_config" as const, message: "保存失败：无法连接到主进程" }] }
-    }
-    if (!result) {
-      logger.error("save returned undefined — IPC bridge unavailable", { workflowId: def.id })
-      setRunErrors([{ type: "invalid_config", message: "保存失败：IPC 通道不可用" }])
-      return { errors: [{ type: "invalid_config" as const, message: "保存失败：IPC 通道不可用" }] }
-    }
-    if ("errors" in result) {
-      logger.warn("save blocked by validation", { workflowId: def.id, errorCount: result.errors.length })
-      setRunErrors(result.errors)
+      let result: Awaited<ReturnType<NonNullable<typeof window.synapse>["workflow"]["save"]>> | undefined
+      try {
+        result = await window.synapse?.workflow.save(def)
+      } catch (err) {
+        logger.error("save IPC call threw", { workflowId: def.id, error: err instanceof Error ? err.message : String(err) })
+        setRunErrors([{ type: "invalid_config", message: "保存失败：无法连接到主进程" }])
+        return { errors: [{ type: "invalid_config" as const, message: "保存失败：无法连接到主进程" }] }
+      }
+      if (!result) {
+        logger.error("save returned undefined — IPC bridge unavailable", { workflowId: def.id })
+        setRunErrors([{ type: "invalid_config", message: "保存失败：IPC 通道不可用" }])
+        return { errors: [{ type: "invalid_config" as const, message: "保存失败：IPC 通道不可用" }] }
+      }
+      if ("errors" in result) {
+        logger.warn("save blocked by validation", { workflowId: def.id, errorCount: result.errors.length })
+        setRunErrors(result.errors)
+        return result
+      }
+      setRunErrors([])
+      isDirtyRef.current = false
+      if ("versionHash" in result) setDefinition({ ...def, version: result.versionHash })
       return result
+    } finally {
+      setSaving(false)
     }
-    setRunErrors([])
-    isDirtyRef.current = false
-    if ("versionHash" in result) setDefinition({ ...def, version: result.versionHash })
-    return result
   }
 
   const handleRun = async (params: Record<string, unknown>) => {
     const def = definitionRef.current
     if (!def) return null
+    setRunning(true)
     try {
       const saveResult = await handleSave(def)
       if (!saveResult || "errors" in saveResult) return null
@@ -185,6 +193,8 @@ export function WorkflowEditorApp() {
       logger.error("handleRun failed", { error: err instanceof Error ? err.message : String(err) })
       setRunErrors([{ type: "invalid_config", message: `运行失败：${err instanceof Error ? err.message : String(err)}` }])
       return null
+    } finally {
+      setRunning(false)
     }
   }
 
@@ -193,7 +203,7 @@ export function WorkflowEditorApp() {
   return (
     <>
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
+      <WorkflowToolbar definition={definition} saving={saving} running={running} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />

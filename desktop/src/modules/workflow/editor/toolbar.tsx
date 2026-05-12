@@ -1,21 +1,24 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Save, Play, SlidersHorizontal } from "lucide-react"
+import { Save, Play, SlidersHorizontal, Loader2 } from "lucide-react"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { ParamsEditorDialog } from "../components/params-editor-dialog"
 import { RunParamsDialog } from "../components/run-params-dialog"
 
 interface WorkflowToolbarProps {
   definition: WorkflowDefinition
+  saving?: boolean
+  running?: boolean
   onSave: (def: WorkflowDefinition) => Promise<unknown>
   onRun: (params: Record<string, unknown>) => Promise<string | null>
   onChange: (def: WorkflowDefinition) => void
 }
 
-export function WorkflowToolbar({ definition, onSave, onRun, onChange }: WorkflowToolbarProps) {
+export function WorkflowToolbar({ definition, saving, running, onSave, onRun, onChange }: WorkflowToolbarProps) {
   const [paramsOpen, setParamsOpen] = useState(false)
   const [runParamsOpen, setRunParamsOpen] = useState(false)
+  const busy = saving || running
   return (
     <div className="flex items-center gap-2 border-b px-3 py-2 bg-background">
       <Input
@@ -30,11 +33,17 @@ export function WorkflowToolbar({ definition, onSave, onRun, onChange }: Workflo
         placeholder="描述（可选）"
       />
       <div className="ml-auto flex items-center gap-1.5">
-        <Button size="sm" variant="ghost" onClick={() => setParamsOpen(true)}>
+        <Button size="sm" variant="ghost" onClick={() => setParamsOpen(true)} disabled={busy}>
           <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />参数
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => void onSave(definition)}><Save className="h-3.5 w-3.5 mr-1" />保存</Button>
-        <Button size="sm" onClick={() => definition.params.length === 0 ? void onRun({}) : setRunParamsOpen(true)}><Play className="h-3.5 w-3.5 mr-1" />运行</Button>
+        <Button size="sm" variant="ghost" onClick={() => void onSave(definition)} disabled={busy}>
+          {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+          保存
+        </Button>
+        <Button size="sm" onClick={() => definition.params.length === 0 ? void onRun({}) : setRunParamsOpen(true)} disabled={busy}>
+          {running ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />}
+          运行
+        </Button>
       </div>
       <ParamsEditorDialog
         open={paramsOpen}
