@@ -12,9 +12,9 @@ import {
 import "@xyflow/react/dist/style.css"
 import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
 import { RunnerNodeResultsContext, runnerNodeTypes } from "./runner-node-wrappers"
-import { BranchEdge } from "../editor/custom-edge"
+import { RunnerEdge } from "./runner-edge"
 
-const edgeTypes = { branch: BranchEdge }
+const edgeTypes = { default: RunnerEdge, branch: RunnerEdge }
 
 interface DagViewProps {
   definition: WorkflowDefinition
