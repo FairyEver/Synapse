@@ -578,3 +578,31 @@ Runner 的节点选中态从"视觉断裂（时间线无高亮、DAG 与面板�
 
 ### 本次进展
 工作流"运行→取消→观测"闭环的数据完整性从"被中断节点永久标记 running"变为"全链路一致（标记 failed + 取消原因）"；列表页"运行→冲突"路径从"死胡同（仅错误 toast）"变为"可恢复（对话框 → 取消旧运行并启动新运行）"，与编辑器入口行为对齐。
+
+---
+
+## [2026-05-13 16:00] 第 25 次迭代
+
+### 发现的问题
+- IPC delete handler 不中止正在运行的 workflow：delete 仅删文件+关窗，running 的 engine 继续执行并在完成时写入幽灵快照到已删除目录，abortMap/runStatuses 内存泄漏（ipc.ts:115-119 → workflow-service.ts delete + window-manager forceCloseAll 均不访问 abortMap）
+- workflow-service.ts save() 的 writeFile 无 try/catch：磁盘满/权限异常时异常传播至渲染侧，被 catch 块固定显示误导性"无法连接到主进程"，用户无法对症处理（workflow-service.ts:67 → editor-app.tsx:174）
+- workflow-validator 仅检查 Switch 分支出边存在性，不检查每条分支路径是否可达 End 节点：Switch→分支B→Prompt（无出边到End）保存通过但运行时才报"结束节点未被执行"，浪费 LLM 调用（workflow-validator.ts:117-137 仅检查 outgoingBranches.has → workflow-engine.ts:219-223 运行时捕获）
+
+### 修复内容
+- [desktop/electron/modules/workflow/ipc.ts:113-138] IPC delete handler 在删除文件前遍历 runStatuses 中止该 workflowId 的所有 running 运行，从 abortMap + runStatuses 中移除，新增 abortedCount 日志
+- [desktop/electron/services/workflow/workflow-service.ts:66-72] save() 的 mkdir + writeFile 包裹 try/catch，catch 中 logger.error 记录错误详情（含 stack），返回结构化 { errors: [{ message: "保存失败：磁盘空间不足或权限不足，请检查后重试" }] }
+- [desktop/electron/services/workflow/workflow-validator.ts:33-52] 新增 computeEndReachable() 函数（反向 BFS from End 节点），与引擎中 canReachEnd 逻辑等价
+- [desktop/electron/services/workflow/workflow-validator.ts:142,161-177] Switch 分支出边检查后新增 End 可达性检查：对每条已连接分支，沿边找到目标节点并检查 endReachable.has(e.to)，不可达时报 invalid_switch_edge 错误并打 warn 日志
+
+### 与历史的关系
+- 缺陷 1：独立（delete 路径从未被任何轮次覆盖）
+- 缺陷 2：独立（与第 20 轮 RunSnapshotService.save() 同模式但不同服务）
+- 缺陷 3：延续第 6 轮（同主题 Switch 分支校验深化——从"有没有边"到"边走不走得到 End"）
+
+### 日志补充
+- ipc.ts delete handler: 中止运行中的 run 时 info 日志（含 workflowId/abortedCount）
+- workflow-service save: 磁盘写入异常时 error 日志（含 id/name/error/stack），完全覆盖此前缺失的错误可观测性
+- workflow-validator: Switch 分支 End 不可达时 warn 日志（含 workflowId/nodeId/nodeName/branchId/branchLabel）
+
+### 本次进展
+工作流系统的"删除→清理"闭环从残缺变为完整，"保存→错误反馈"从误导变为准确，"编辑→校验"从浅层检查变为深度可达性验证——三个维度均向真正可用迈进。

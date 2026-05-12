@@ -30,6 +30,27 @@ function ancestors(nodeId: string, def: WorkflowDefinition): Set<string> {
   return visited
 }
 
+/**
+ * Compute which nodes can reach the End node via forward edge traversal.
+ * Uses a reverse BFS from the End node (following edges backwards).
+ * Used to validate that every Switch branch path eventually reaches End.
+ */
+function computeEndReachable(def: WorkflowDefinition): Set<string> {
+  const endNode = def.nodes.find((n) => n.type === "end")
+  if (!endNode) return new Set()
+  const reachable = new Set<string>([endNode.id])
+  const revAdj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
+  for (const e of def.edges) revAdj.get(e.to)?.push(e.from)
+  const queue = [endNode.id]
+  while (queue.length) {
+    const cur = queue.shift()!
+    for (const prev of revAdj.get(cur) ?? []) {
+      if (!reachable.has(prev)) { reachable.add(prev); queue.push(prev) }
+    }
+  }
+  return reachable
+}
+
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
 
@@ -114,6 +135,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   // Validate that every Switch branch has at least one outgoing edge.
   // A branch with no outgoing edge will silently cause a runtime failure when
   // activated (the End node becomes unreachable), so catch it at validation time.
+  //
+  // Also validate that each Switch branch's outgoing edge(s) eventually reach
+  // the End node. A branch that connects to a dead-end subgraph passes the
+  // edge-existence check but will fail at runtime with "结束节点未被执行".
+  const endReachable = computeEndReachable(def)
   for (const node of def.nodes) {
     if (node.type !== "switch") continue
     const branches = (node.config as Record<string, unknown>)["branches"]
@@ -132,6 +158,21 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
           workflowId: def.id, nodeId: node.id, nodeName: node.name,
           branchId: branch.id, branchLabel: branch.label,
         })
+      } else if (endReachable.size > 0) {
+        // Check that at least one edge from this branch leads to End
+        const branchEdges = def.edges.filter((e) => e.from === node.id && e.branch === branch.id)
+        const anyReachEnd = branchEdges.some((e) => endReachable.has(e.to))
+        if (!anyReachEnd) {
+          errors.push({
+            type: "invalid_switch_edge",
+            nodeId: node.id,
+            message: `Switch 节点「${node.name}」的分支「${branch.label}」的路径无法到达结束节点`,
+          })
+          logger.warn("switch branch cannot reach end node", {
+            workflowId: def.id, nodeId: node.id, nodeName: node.name,
+            branchId: branch.id, branchLabel: branch.label,
+          })
+        }
       }
     }
   }

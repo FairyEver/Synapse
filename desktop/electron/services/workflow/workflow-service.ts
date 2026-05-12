@@ -63,8 +63,14 @@ export class WorkflowService {
     }
     const versionHash = this.versionHash(def)
     const versioned: WorkflowDefinition = { ...def, version: versionHash, updatedAt: Date.now() }
-    await mkdir(this.dir(def.id), { recursive: true })
-    await writeFile(path.join(this.dir(def.id), `${versionHash}.json`), JSON.stringify(versioned, null, 2), "utf-8")
+    try {
+      await mkdir(this.dir(def.id), { recursive: true })
+      await writeFile(path.join(this.dir(def.id), `${versionHash}.json`), JSON.stringify(versioned, null, 2), "utf-8")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("workflow save failed — disk write error", { id: def.id, name: def.name, error: msg, stack: err instanceof Error ? err.stack : undefined })
+      return { errors: [{ type: "invalid_config", message: "保存失败：磁盘空间不足或权限不足，请检查后重试" }] }
+    }
     logger.info("workflow saved", { id: def.id, name: def.name, nodeCount: def.nodes.length, versionHash })
     return { versionHash }
   }

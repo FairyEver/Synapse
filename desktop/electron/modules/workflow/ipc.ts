@@ -114,6 +114,24 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:delete", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),
       handler: async (ctx, { id }: { id: string }) => {
         logger.info("workflow:delete requested", { id })
+        // Abort any running runs for this workflow before deleting to prevent
+        // orphaned engine processes (which would otherwise continue running,
+        // leak abort controllers / run statuses in memory, and write ghost
+        // snapshot files to the deleted workflow directory on completion).
+        const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+        const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
+        let abortedCount = 0
+        for (const [runId, status] of runStatuses) {
+          if (status.workflowId === id && status.status === "running") {
+            abortMap.get(runId)?.abort()
+            runStatuses.delete(runId)
+            abortMap.delete(runId)
+            abortedCount++
+          }
+        }
+        if (abortedCount > 0) {
+          logger.info("workflow:delete aborted running runs", { workflowId: id, abortedCount })
+        }
         await ctx.resolve<WorkflowService>("core.workflow").delete(id)
         ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").forceCloseAll(id)
         logger.info("workflow:delete done", { id })
