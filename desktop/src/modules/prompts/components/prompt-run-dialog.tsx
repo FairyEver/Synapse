@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { AlertCircle, LoaderCircle } from "lucide-react"
+import { useEffect, useState } from "react"
+import { LoaderCircle } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,10 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
-import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import { usePromptRun } from "@/modules/prompts/hooks/use-prompt-run"
 import type { SynapseContentMeta } from "@/types/content"
 
@@ -37,20 +34,6 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
   const { run, isRunning } = usePromptRun()
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
-  const [selectedAgentType, setSelectedAgentType] = useState<string>("")
-
-  const selectedProject = useMemo(
-    () => projects.find((p) => p.id === selectedProjectId),
-    [projects, selectedProjectId],
-  )
-
-  const { status: runtimeStatus } = useAgentRuntimeStatus(selectedProjectId || undefined)
-
-  const selectedAgentReady = useMemo(() => {
-    if (!runtimeStatus || !selectedAgentType) return null
-    const agent = runtimeStatus.agents.find((a) => a.id === selectedAgentType)
-    return agent?.cli.installed ?? false
-  }, [runtimeStatus, selectedAgentType])
 
   useEffect(() => {
     if (!open) return
@@ -60,26 +43,11 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
     }
   }, [open, projects])
 
-  useEffect(() => {
-    if (!selectedProject) return
-    const defaultAgent = selectedProject.defaultAgentId
-    if (defaultAgent && agentDefinitions.some((d) => d.id === defaultAgent)) {
-      setSelectedAgentType(defaultAgent)
-    } else if (agentDefinitions.length > 0) {
-      setSelectedAgentType(agentDefinitions[0].id)
-    }
-  }, [selectedProject])
-
-  const canSubmit =
-    Boolean(item) &&
-    Boolean(selectedProjectId) &&
-    Boolean(selectedAgentType) &&
-    selectedAgentReady !== false &&
-    !isRunning
+  const canSubmit = Boolean(item) && Boolean(selectedProjectId) && !isRunning
 
   const handleRun = async (navigate: boolean) => {
-    if (!item || !selectedProjectId || !selectedAgentType) return
-    const success = await run({ item, projectId: selectedProjectId, agentType: selectedAgentType, navigate })
+    if (!item || !selectedProjectId) return
+    const success = await run({ item, projectId: selectedProjectId, agentType: "claude-code", navigate })
     if (success) {
       onOpenChange(false)
     }
@@ -130,31 +98,6 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label>Agent 类型</Label>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={selectedAgentType}
-              onValueChange={(value) => {
-                if (value) setSelectedAgentType(value)
-              }}
-              className="w-full justify-start"
-            >
-              {agentDefinitions.map((agent) => (
-                <ToggleGroupItem key={agent.id} value={agent.id}>
-                  {agent.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            {selectedAgentReady === false ? (
-              <p className="flex items-center gap-1.5 text-xs text-destructive">
-                <AlertCircle className="size-3.5 shrink-0" />
-                所选 Agent 未安装
-              </p>
-            ) : null}
           </div>
         </div>
 

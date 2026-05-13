@@ -361,9 +361,7 @@ function TaskFormDialog({
                           const project = projects.find((p) => p.id === projectId)
                           const currentConfig = form.actionConfig as Record<string, unknown>
                           const patch: Record<string, unknown> = { ...currentConfig, projectId }
-                          if (project?.defaultAgentId) {
-                            patch.agentType = project.defaultAgentId
-                          }
+                          patch.agentType = "claude-code"
                           updateField("actionConfig", patch)
                         }}
                       >
