@@ -83,11 +83,8 @@ export {
 } from "./skill-registry"
 export {
   AGENT_RUNTIME_SERVICE_ID,
-  type AgentAdapter,
   type AgentAttachment,
   type AgentEvent,
-  type AgentExecutionContext,
-  type AgentExecutionResult,
   type AgentLiveSession,
   type AgentMessage,
   type AgentPendingPermission,

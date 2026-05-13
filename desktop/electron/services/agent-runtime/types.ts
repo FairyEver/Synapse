@@ -1,5 +1,4 @@
 import type { ActorIdentity } from "../../runtime/security"
-import type { ControlledProcessIsolationOptions } from "../../runtime/process"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
@@ -181,39 +180,6 @@ export type AgentEvent =
   | AgentStatusEvent
   | AgentCompactBoundaryEvent
   | AgentSdkEvent
-
-export interface AgentExecutionContext {
-  readonly projectId: string
-  readonly workDir: string
-  readonly threadId?: string
-  readonly agentSessionId?: string
-  readonly sessionEnv?: Record<string, string>
-  readonly processIsolation?: ControlledProcessIsolationOptions
-  readonly actor: ActorIdentity
-  readonly modeOverride?: string
-  readonly abortSignal?: AbortSignal
-  onEvent?(event: AgentEvent): void
-}
-
-export interface AgentExecutionResult {
-  readonly events: readonly AgentEvent[]
-  readonly resultText: string
-  readonly agentSessionId?: string
-  readonly threadId?: string
-  readonly error?: string
-}
-
-export interface AgentAdapter {
-  readonly agentType: string
-  readonly compressionCommand?: string
-  execute(
-    message: AgentMessage,
-    context: AgentExecutionContext,
-  ): Promise<AgentExecutionResult>
-  startSession?(
-    context: AgentExecutionContext,
-  ): Promise<AgentLiveSession>
-}
 
 export type AgentPermissionBehavior = "allow" | "deny"
 

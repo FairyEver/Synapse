@@ -6,18 +6,25 @@ import type {
   DataChangeListener,
   DataNamespace,
 } from "../../../runtime/data-repo"
+import type { ProviderService } from "../../provider"
 import { AgentRuntimeService } from "../agent-runtime-service"
-import type { AgentMessage } from "../types"
+import type {
+  AgentEvent,
+  AgentLiveSession,
+  AgentMessage,
+  AgentPermissionDecision,
+} from "../types"
 
 describe("AgentRuntimeService — per-conversation state isolation", () => {
   it("two conversations get independent state objects", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BlockingAdapter()
+    const sessions = new BlockingSessionFactory()
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter,
+      providerService: new FakeProviderService() as unknown as ProviderService,
+      createSession: () => sessions.create(),
       now: fixedNow,
     })
 
@@ -29,11 +36,11 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
 
     // First conversation is busy, second should be queued independently
     // Resolve first
-    adapter.resolveNext("reply-a", "thread-a")
+    sessions.resolveNext("reply-a", "thread-a")
     const r1 = await p1
 
     // Second should still be pending (different conversation, independent state)
-    adapter.resolveNext("reply-b", "thread-b")
+    sessions.resolveNext("reply-b", "thread-b")
     const r2 = await p2
 
     expect(r1.resultText).toBe("reply-a")
@@ -42,19 +49,20 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
 
   it("state is keyed by conversationId, not composite key", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BlockingAdapter()
+    const sessions = new BlockingSessionFactory()
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter,
+      providerService: new FakeProviderService() as unknown as ProviderService,
+      createSession: () => sessions.create(),
       now: fixedNow,
     })
 
     // Send a message to create a conversation
     const p1 = service.send(baseMessage("first"))
     await tick()
-    adapter.resolveNext("done-1", "thread-1")
+    sessions.resolveNext("done-1", "thread-1")
     await p1
 
     // The conversation should exist in the repository
@@ -66,24 +74,25 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
 
   it("deleting one conversation state does not affect another", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BlockingAdapter()
+    const sessions = new BlockingSessionFactory()
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter,
+      providerService: new FakeProviderService() as unknown as ProviderService,
+      createSession: () => sessions.create(),
       now: fixedNow,
     })
 
     // Create two conversations via different workspace keys
     const p1 = service.send(baseMessage("msg-a", "ws-a"))
     await tick()
-    adapter.resolveNext("reply-a", "thread-a")
+    sessions.resolveNext("reply-a", "thread-a")
     await p1
 
     const p2 = service.send(baseMessage("msg-b", "ws-b"))
     await tick()
-    adapter.resolveNext("reply-b", "thread-b")
+    sessions.resolveNext("reply-b", "thread-b")
     await p2
 
     // Find the actual conversation IDs from the namespace
@@ -100,28 +109,29 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
     // Second conversation should still work
     const p3 = service.send(baseMessage("msg-c", "ws-b"))
     await tick()
-    adapter.resolveNext("reply-c", "thread-c")
+    sessions.resolveNext("reply-c", "thread-c")
     const r3 = await p3
     expect(r3.resultText).toBe("reply-c")
   })
 })
 
-describe("AgentRuntimeService — adapter resolution always returns deps.adapter", () => {
-  it("always uses the injected adapter regardless of conversation agentType", async () => {
+describe("AgentRuntimeService — SDK session factory", () => {
+  it("uses the injected SDK session factory", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BlockingAdapter()
+    const sessions = new BlockingSessionFactory()
 
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter,
+      providerService: new FakeProviderService() as unknown as ProviderService,
+      createSession: () => sessions.create(),
       now: fixedNow,
     })
 
     const p = service.send(baseMessage("hello"))
     await tick()
-    adapter.resolveNext("reply", "thread-1")
+    sessions.resolveNext("reply", "thread-1")
     const result = await p
 
     expect(result.resultText).toBe("reply")
@@ -203,32 +213,78 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   }
 }
 
-import type { AgentExecutionContext, AgentExecutionResult, AgentAdapter } from "../types"
-
-class BlockingAdapter implements AgentAdapter {
-  readonly agentType = "claude-code"
+class BlockingSessionFactory {
   readonly started: string[] = []
-  private readonly pending: Array<(result: AgentExecutionResult) => void> = []
+  private readonly sessions: BlockingSession[] = []
 
-  execute(message: AgentMessage, _context: AgentExecutionContext): Promise<AgentExecutionResult> {
-    this.started.push(message.content)
-    return new Promise((resolve) => {
-      this.pending.push(resolve)
-    })
+  create(): AgentLiveSession {
+    const session = new BlockingSession(this)
+    this.sessions.push(session)
+    return session
   }
 
   resolveNext(resultText: string, agentSessionId: string): void {
-    const resolve = this.pending.shift()
-    if (!resolve) throw new Error("No pending execution")
-    resolve({
-      events: [
-        { type: "text", content: resultText, agentSessionId, threadId: agentSessionId },
-        { type: "result", content: resultText, done: true, agentSessionId, threadId: agentSessionId },
-      ],
-      resultText,
-      agentSessionId,
-      threadId: agentSessionId,
+    const session = this.sessions.find((candidate) => candidate.pending)
+    if (!session) throw new Error("No pending session")
+    session.emitResult(resultText, agentSessionId)
+  }
+}
+
+class BlockingSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  pending = false
+  private readonly events: AgentEvent[] = []
+  private readonly waiters: Array<(event: AgentEvent | null) => void> = []
+  private closed = false
+
+  constructor(private readonly factory: BlockingSessionFactory) {}
+
+  async send(message: AgentMessage): Promise<void> {
+    this.factory.started.push(message.content)
+    this.pending = true
+  }
+
+  async respondPermission(
+    _requestId: string,
+    _decision: AgentPermissionDecision,
+  ): Promise<void> {}
+
+  nextEvent(): Promise<AgentEvent | null> {
+    const event = this.events.shift()
+    if (event) return Promise.resolve(event)
+    if (this.closed) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      this.waiters.push(resolve)
     })
+  }
+
+  currentSessionId(): string | undefined {
+    return undefined
+  }
+
+  alive(): boolean {
+    return !this.closed
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    for (const waiter of this.waiters) waiter(null)
+    this.waiters.length = 0
+  }
+
+  emitResult(resultText: string, sdkSessionId: string): void {
+    this.pending = false
+    this.push({ type: "text", content: resultText, sdkSessionId })
+    this.push({ type: "result", content: resultText, done: true, sdkSessionId })
+  }
+
+  private push(event: AgentEvent): void {
+    const waiter = this.waiters.shift()
+    if (waiter) {
+      waiter(event)
+      return
+    }
+    this.events.push(event)
   }
 }
 
@@ -247,6 +303,16 @@ function baseMessage(content: string, workspaceKey?: string): AgentMessage {
   }
 }
 
+class FakeProviderService {
+  async getActiveProvider(): Promise<{ id: string }> {
+    return { id: "anthropic" }
+  }
+
+  async buildEnv(): Promise<Record<string, string>> {
+    return {}
+  }
+}
+
 async function tick(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
@@ -257,17 +323,18 @@ describe("AgentRuntimeService — idle session reclaim", () => {
 
   function createService() {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BlockingAdapter()
+    const sessions = new BlockingSessionFactory()
     const logger = { info: vi.fn(), warn: vi.fn(), debug: vi.fn() }
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter,
+      providerService: new FakeProviderService() as unknown as ProviderService,
+      createSession: () => sessions.create(),
       logger: logger as never,
       now: fixedNow,
     })
-    return { service, adapter, conversations, logger }
+    return { service, sessions, conversations, logger }
   }
 
   function mockLiveSession() {
@@ -283,12 +350,12 @@ describe("AgentRuntimeService — idle session reclaim", () => {
   }
 
   it("closes liveSession after 10 minutes of inactivity", async () => {
-    const { service, adapter, logger } = createService()
+    const { service, sessions, logger } = createService()
 
     // Create a conversation by sending a message
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    adapter.resolveNext("done", "thread-1")
+    sessions.resolveNext("done", "thread-1")
     await p
 
     // Inject a mock liveSession into the state
@@ -310,11 +377,11 @@ describe("AgentRuntimeService — idle session reclaim", () => {
   })
 
   it("does NOT close liveSession if activity is recent", async () => {
-    const { service, adapter } = createService()
+    const { service, sessions } = createService()
 
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    adapter.resolveNext("done", "thread-1")
+    sessions.resolveNext("done", "thread-1")
     await p
 
     const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states
@@ -331,11 +398,11 @@ describe("AgentRuntimeService — idle session reclaim", () => {
   })
 
   it("does NOT close liveSession if session is busy", async () => {
-    const { service, adapter } = createService()
+    const { service, sessions } = createService()
 
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    adapter.resolveNext("done", "thread-1")
+    sessions.resolveNext("done", "thread-1")
     await p
 
     const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states

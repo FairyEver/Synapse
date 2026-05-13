@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import type {
   ConversationEntryV1,
@@ -6,13 +6,10 @@ import type {
   DataChangeListener,
   DataNamespace,
 } from "../../../runtime/data-repo"
-import type { ScopedEventBus } from "../../../runtime/project-container"
+import type { ProviderService } from "../../provider"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
 import type {
-  AgentAdapter,
   AgentEvent,
-  AgentExecutionContext,
-  AgentExecutionResult,
   AgentLiveSession,
   AgentMessage,
   AgentPermissionDecision,
@@ -20,15 +17,15 @@ import type {
 
 describe("AgentRuntimeService cancelTurn", () => {
   it("returns no-active-turn when conversation has no busy state", async () => {
-    const service = createService(new NeverResolveAdapter())
+    const service = createService(new NeverResolveSession())
     const result = await service.cancelTurn("nonexistent")
     expect(result).toEqual({ status: "no-active-turn" })
   })
 
   it("hard-kills a live session that does not support graceful cancel", async () => {
     const session = new CancellableLiveSession({ graceful: false })
-    const adapter = new CancellableLiveAdapter(session)
-    const service = createService(adapter)
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
     await waitForBusy(service, "hello")
@@ -45,8 +42,8 @@ describe("AgentRuntimeService cancelTurn", () => {
 
   it("returns graceful-pending for a session that supports cancel", async () => {
     const session = new CancellableLiveSession({ graceful: true })
-    const adapter = new CancellableLiveAdapter(session)
-    const service = createService(adapter)
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
     await waitForBusy(service, "hello")
@@ -65,8 +62,8 @@ describe("AgentRuntimeService cancelTurn", () => {
 
   it("is idempotent — second cancelTurn returns current state", async () => {
     const session = new CancellableLiveSession({ graceful: false })
-    const adapter = new CancellableLiveAdapter(session)
-    const service = createService(adapter)
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
     await waitForBusy(service, "hello")
@@ -81,8 +78,8 @@ describe("AgentRuntimeService cancelTurn", () => {
 
   it("forceKillTurn closes live session after graceful pending", async () => {
     const session = new CancellableLiveSession({ graceful: true })
-    const adapter = new CancellableLiveAdapter(session)
-    const service = createService(adapter)
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
     await waitForBusy(service, "hello")
@@ -98,26 +95,10 @@ describe("AgentRuntimeService cancelTurn", () => {
     await sendPromise
   })
 
-  it("cancel during exec mode aborts via AbortController", async () => {
-    const adapter = new SlowExecAdapter()
-    const service = createService(adapter)
-
-    const sendPromise = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
-
-    const convId = conversationId("local", "s1", "active")
-    const cancel = await service.cancelTurn(convId)
-    expect(cancel).toEqual({ status: "hard-killed" })
-
-    adapter.resolveExec()
-    const result = await sendPromise
-    expect(result.error).toBe("cancelled")
-  })
-
   it("queue continues after cancel — next turn executes", async () => {
     const session = new CancellableLiveSession({ graceful: false })
-    const adapter = new CancellableLiveAdapter(session)
-    const service = createService(adapter)
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
 
     const send1 = service.send(baseMessage("first"))
     await waitForBusy(service, "first")
@@ -129,7 +110,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const r1 = await send1
     expect(r1.error).toBe("cancelled")
 
-    const session2 = await waitForNewSession(adapter, session)
+    const session2 = await waitForNewSession(factory, session)
     session2.emitResult("done-2")
 
     const r2 = await send2
@@ -153,24 +134,25 @@ function baseMessage(content: string): AgentMessage {
   }
 }
 
-function createService(adapter: AgentAdapter): AgentRuntimeService {
+function createService(factory: CancellableSessionFactory | AgentLiveSession): AgentRuntimeService {
   const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
   return new AgentRuntimeService({
     projectId: "project-1",
     workDir: "/repo",
     conversations,
-    adapter,
+    providerService: new FakeProviderService() as unknown as ProviderService,
+    createSession: () => factory instanceof CancellableSessionFactory ? factory.create() : factory,
     now: fixedNow,
   })
 }
 
 async function waitForNewSession(
-  adapter: CancellableLiveAdapter,
+  factory: CancellableSessionFactory,
   oldSession: CancellableLiveSession,
 ): Promise<CancellableLiveSession> {
   for (let i = 0; i < 100; i++) {
-    if (adapter.lastCreatedSession && adapter.lastCreatedSession !== oldSession) {
-      return adapter.lastCreatedSession
+    if (factory.lastCreatedSession && factory.lastCreatedSession !== oldSession) {
+      return factory.lastCreatedSession
     }
     await new Promise((r) => setTimeout(r, 5))
   }
@@ -247,8 +229,7 @@ class CancellableLiveSession implements AgentLiveSession {
   }
 }
 
-class CancellableLiveAdapter implements AgentAdapter {
-  readonly agentType = "claude-code"
+class CancellableSessionFactory {
   lastCreatedSession: CancellableLiveSession | undefined
   private readonly initialSession: CancellableLiveSession
 
@@ -256,11 +237,7 @@ class CancellableLiveAdapter implements AgentAdapter {
     this.initialSession = session
   }
 
-  async execute(): Promise<AgentExecutionResult> {
-    throw new Error("not used")
-  }
-
-  async startSession(): Promise<AgentLiveSession> {
+  create(): AgentLiveSession {
     if (!this.lastCreatedSession || this.initialSession.closed) {
       this.lastCreatedSession = this.initialSession.closed
         ? new CancellableLiveSession({ graceful: false })
@@ -270,35 +247,19 @@ class CancellableLiveAdapter implements AgentAdapter {
   }
 }
 
-class SlowExecAdapter implements AgentAdapter {
-  readonly agentType = "hermes"
-  private execResolve?: (result: AgentExecutionResult) => void
-
-  async execute(
-    _message: AgentMessage,
-    context: AgentExecutionContext,
-  ): Promise<AgentExecutionResult> {
-    return new Promise<AgentExecutionResult>((resolve, reject) => {
-      this.execResolve = resolve
-      context.abortSignal?.addEventListener("abort", () => {
-        reject(new Error("aborted"))
-      }, { once: true })
-    })
-  }
-
-  resolveExec(): void {
-    this.execResolve?.({
-      events: [],
-      resultText: "late-result",
-    })
+class NeverResolveSession extends CancellableLiveSession {
+  constructor() {
+    super({ graceful: false })
   }
 }
 
-class NeverResolveAdapter implements AgentAdapter {
-  readonly agentType = "hermes"
+class FakeProviderService {
+  async getActiveProvider(): Promise<{ id: string }> {
+    return { id: "anthropic" }
+  }
 
-  async execute(): Promise<AgentExecutionResult> {
-    return new Promise(() => {})
+  async buildEnv(): Promise<Record<string, string>> {
+    return {}
   }
 }
 
