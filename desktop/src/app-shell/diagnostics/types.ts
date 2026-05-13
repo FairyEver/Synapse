@@ -1,6 +1,6 @@
 export interface RendererLogger {
-  debug: (message: string, details?: unknown) => void
-  info: (message: string, details?: unknown) => void
-  warn: (message: string, details?: unknown) => void
-  error: (message: string, details?: unknown) => void
+  debug(message: string, meta?: unknown): void
+  info(message: string, meta?: unknown): void
+  warn(message: string, meta?: unknown): void
+  error(message: string, meta?: unknown): void
 }
