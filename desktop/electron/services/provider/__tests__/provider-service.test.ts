@@ -7,6 +7,14 @@ import type {
   ProviderEntryV1,
   SecretEntryV1,
 } from "../../../runtime/data-repo"
+import {
+  InMemoryAuditSink,
+  createPermissionGuard,
+} from "../../../runtime/security"
+import type {
+  AuditSink,
+  PermissionGuard,
+} from "../../../runtime/security"
 import { ProviderService } from "../provider-service"
 
 describe("ProviderService", () => {
@@ -80,12 +88,103 @@ describe("ProviderService", () => {
       ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-4-1",
     })
   })
+
+  it("denies secret env reads through PermissionGuard and records audit", async () => {
+    const permissionGuard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const { service } = makeProviderService({ permissionGuard, auditSink })
+
+    permissionGuard.registerPolicy({
+      id: "deny-provider-secret",
+      decide: (request) => request.action === "secret.read" ? "deny" : "defer-to-next",
+    })
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-test",
+      env: {},
+    })
+
+    await expect(service.buildEnv("anthropic", {
+      actor: { kind: "agent", id: "agent-1" },
+      projectId: "project-1",
+    })).rejects.toThrow("denied by deny-provider-secret")
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.read",
+        outcome: "denied",
+        resource: "provider:anthropic:api-key",
+        metadata: expect.objectContaining({
+          providerId: "anthropic",
+          projectId: "project-1",
+          policyId: "deny-provider-secret",
+          reason: "denied by deny-provider-secret",
+        }),
+      }),
+    ])
+  })
+
+  it("rejects activating an archived provider", async () => {
+    const { service } = makeProviderService()
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      env: {},
+    })
+    await service.createProvider({
+      id: "archived",
+      name: "Archived",
+      category: "custom",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      env: {},
+    })
+    await service.archiveProvider("archived")
+
+    await expect(service.setActiveProvider("archived")).rejects.toThrow("Cannot activate archived provider: archived")
+    await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "anthropic" })
+  })
+
+  it("rejects updating a provider to active and archived", async () => {
+    const { service, providers } = makeProviderService()
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      env: {},
+    })
+
+    await expect(service.updateProvider("anthropic", {
+      active: true,
+      archived: true,
+    })).rejects.toThrow("Provider cannot be active and archived: anthropic")
+    await expect(providers.get("anthropic")).resolves.not.toMatchObject({
+      active: true,
+      archived: true,
+    })
+  })
 })
 
-function makeProviderService() {
+function makeProviderService(deps: {
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
+} = {}) {
   const providers = new MemoryNamespace<ProviderEntryV1>("providers")
   const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-  const service = new ProviderService({ providers, secrets, now: fixedNow })
+  const service = new ProviderService({
+    providers,
+    secrets,
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
+    now: fixedNow,
+  })
 
   return { service, providers, secrets }
 }

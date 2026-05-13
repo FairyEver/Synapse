@@ -3,6 +3,11 @@ import type {
   ProviderEntryV1,
   SecretEntryV1,
 } from "../../runtime/data-repo"
+import type {
+  ActorIdentity,
+  AuditSink,
+  PermissionGuard,
+} from "../../runtime/security"
 import { ProviderSecretStore, providerApiKeySecretId } from "./provider-secret-store"
 import type {
   CCProvider,
@@ -15,7 +20,14 @@ import type {
 export interface ProviderServiceDeps {
   readonly providers: DataNamespace<ProviderEntryV1>
   readonly secrets: DataNamespace<SecretEntryV1>
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
   readonly now?: () => Date
+}
+
+export interface BuildProviderEnvContext {
+  readonly actor?: ActorIdentity
+  readonly projectId?: string
 }
 
 const PROVIDER_KIND = "cc-provider"
@@ -23,11 +35,15 @@ const PROVIDER_KIND = "cc-provider"
 export class ProviderService {
   private readonly providers: DataNamespace<ProviderEntryV1>
   private readonly secretStore: ProviderSecretStore
+  private readonly permissionGuard?: PermissionGuard
+  private readonly auditSink?: AuditSink
   private readonly now?: () => Date
 
   constructor(deps: ProviderServiceDeps) {
     this.providers = deps.providers
     this.secretStore = new ProviderSecretStore(deps.secrets)
+    this.permissionGuard = deps.permissionGuard
+    this.auditSink = deps.auditSink
     this.now = deps.now
   }
 
@@ -72,6 +88,11 @@ export class ProviderService {
 
   async updateProvider(id: string, patch: UpdateProviderInput): Promise<CCProvider> {
     const existing = await this.getProvider(id)
+    const nextActive = patch.active ?? existing.active
+    const nextArchived = patch.archived ?? existing.archived
+    if (nextActive && nextArchived) {
+      throw new Error(`Provider cannot be active and archived: ${id}`)
+    }
     const secretRef = patch.apiKey === undefined
       ? existing.secretRef
       : await this.secretStore.setApiKey(id, patch.apiKey, `${patch.name ?? existing.name} API key`)
@@ -95,6 +116,9 @@ export class ProviderService {
 
   async setActiveProvider(id: string): Promise<void> {
     const target = await this.getProvider(id)
+    if (target.archived) {
+      throw new Error(`Cannot activate archived provider: ${id}`)
+    }
     const now = this.isoNow()
     const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)
     for (const provider of providers) {
@@ -113,10 +137,13 @@ export class ProviderService {
     return active ?? null
   }
 
-  async buildEnv(providerId: string): Promise<Record<string, string>> {
+  async buildEnv(
+    providerId: string,
+    context: BuildProviderEnvContext = {},
+  ): Promise<Record<string, string>> {
     const provider = await this.getProvider(providerId)
     const secret = provider.secretRef
-      ? await this.secretStore.getSecretValue(provider.secretRef)
+      ? await this.readSecretValue(provider, context)
       : undefined
     const env: Record<string, string | undefined> = {}
 
@@ -144,6 +171,67 @@ export class ProviderService {
       throw new Error(`Provider not found: ${id}`)
     }
     return toProvider(provider)
+  }
+
+  private async readSecretValue(
+    provider: CCProvider,
+    context: BuildProviderEnvContext,
+  ): Promise<string | undefined> {
+    const secretRef = provider.secretRef
+    if (!secretRef) return undefined
+
+    const actor = context.actor ?? { kind: "user" }
+    const metadata = removeUndefined({
+      providerId: provider.id,
+      projectId: context.projectId,
+    })
+
+    if (this.permissionGuard) {
+      const permission = await this.permissionGuard.check({
+        action: "secret.read",
+        actor,
+        resource: secretRef,
+        context: metadata,
+      })
+      if (!permission.allowed) {
+        this.auditSink?.record({
+          action: "secret.read",
+          actor,
+          resource: secretRef,
+          outcome: "denied",
+          metadata: {
+            ...metadata,
+            reason: permission.reason,
+            policyId: permission.policyId,
+          },
+        })
+        throw new Error(permission.reason)
+      }
+    }
+
+    try {
+      const value = await this.secretStore.getSecretValue(secretRef)
+      this.auditSink?.record({
+        action: "secret.read",
+        actor,
+        resource: secretRef,
+        outcome: "allowed",
+        metadata,
+      })
+      return value
+    } catch (error) {
+      this.auditSink?.record({
+        action: "secret.read",
+        actor,
+        resource: secretRef,
+        outcome: "failed",
+        metadata: {
+          ...metadata,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+      throw error
+    }
   }
 
   private isoNow(): string {
