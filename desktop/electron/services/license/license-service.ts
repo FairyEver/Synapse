@@ -2,7 +2,7 @@ import type { CoreLicenseV1, DataNamespace } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import { getLicenseServerUrl, isDevLicenseServer } from "./constants"
 import { createDeviceId, createDeviceMetadata, hashDeviceId } from "./device-id"
-import { LicenseClient, normalizeLicenseServerUrl } from "./license-client"
+import { LicenseClient, LicenseClientRequestError, normalizeLicenseServerUrl } from "./license-client"
 import { verifyLicenseLease } from "./license-token"
 import { findPinnedKey } from "./pinned-keys"
 import type {
@@ -13,6 +13,8 @@ import type {
 
 const RENEW_BEFORE_EXPIRY_MS = 2 * 24 * 60 * 60 * 1000
 const LICENSE_STATUS_CHECK_INTERVAL_MS = 60 * 1000
+const MAX_BACKOFF_MS = 30 * 60 * 1000
+const CONSECUTIVE_WARN_LIMIT = 3
 
 export interface LicenseServiceDeps {
   readonly store: DataNamespace<CoreLicenseV1>
@@ -27,6 +29,8 @@ export class LicenseService {
   private readonly now: () => Date
   private readonly idFactory: () => string
   private renewTimer: NodeJS.Timeout | null = null
+  private currentDelayMs = LICENSE_STATUS_CHECK_INTERVAL_MS
+  private consecutiveFailures = 0
 
   constructor(private readonly deps: LicenseServiceDeps) {
     this.now = deps.now ?? (() => new Date())
@@ -35,20 +39,12 @@ export class LicenseService {
 
   start(): void {
     if (this.renewTimer) return
-    void this.syncWithServer().catch((error) => {
-      this.deps.logger?.warn("授权状态检查失败。", { error })
-    })
-    this.renewTimer = setInterval(() => {
-      void this.syncWithServer().catch((error) => {
-        this.deps.logger?.warn("授权状态检查失败。", { error })
-      })
-    }, LICENSE_STATUS_CHECK_INTERVAL_MS)
-    this.renewTimer.unref?.()
+    this.scheduleNext(0)
   }
 
   stop(): void {
     if (!this.renewTimer) return
-    clearInterval(this.renewTimer)
+    clearTimeout(this.renewTimer)
     this.renewTimer = null
   }
 
@@ -163,20 +159,60 @@ export class LicenseService {
     try {
       if (new Date(status.expiresAt).getTime() - this.now().getTime() <= RENEW_BEFORE_EXPIRY_MS) {
         await this.renewState(state)
-        return
+      } else {
+        await this.deps.client.validate(state.serverUrl, {
+          leaseToken: state.leaseToken,
+          device: createDeviceMetadata(state.deviceId, this.deps.appVersion),
+        })
       }
-
-      await this.deps.client.validate(state.serverUrl, {
-        leaseToken: state.leaseToken,
-        device: createDeviceMetadata(state.deviceId, this.deps.appVersion),
-      })
+      this.onSyncSuccess()
     } catch (error) {
       if (isTerminalLicenseServerError(error)) {
         await this.clearLease(state)
+        this.onSyncSuccess()
         return
       }
-      this.deps.logger?.warn("授权状态检查失败。", { error })
+      this.onSyncFailure(error)
     }
+  }
+
+  private onSyncSuccess(): void {
+    this.currentDelayMs = LICENSE_STATUS_CHECK_INTERVAL_MS
+    this.consecutiveFailures = 0
+  }
+
+  private onSyncFailure(error: unknown): void {
+    this.consecutiveFailures++
+
+    if (this.consecutiveFailures <= CONSECUTIVE_WARN_LIMIT) {
+      this.deps.logger?.warn("授权状态检查失败。", { error })
+    } else if (this.consecutiveFailures === CONSECUTIVE_WARN_LIMIT + 1) {
+      this.deps.logger?.info(
+        `授权状态检查连续失败 ${this.consecutiveFailures} 次，后续将静默退避重试。`,
+      )
+    }
+
+    const retryAfterMs =
+      error instanceof LicenseClientRequestError ? error.retryAfterMs : undefined
+
+    if (retryAfterMs) {
+      this.currentDelayMs = retryAfterMs
+    } else {
+      this.currentDelayMs = Math.min(this.currentDelayMs * 2, MAX_BACKOFF_MS)
+    }
+  }
+
+  private scheduleNext(delayMs: number): void {
+    this.renewTimer = setTimeout(() => {
+      void this.syncWithServer()
+        .catch(() => {})
+        .finally(() => {
+          if (this.renewTimer) {
+            this.scheduleNext(this.currentDelayMs)
+          }
+        })
+    }, delayMs)
+    this.renewTimer.unref?.()
   }
 
   private async clearLease(state: CoreLicenseV1): Promise<CoreLicenseV1> {

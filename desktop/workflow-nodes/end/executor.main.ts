@@ -7,7 +7,6 @@ const logger = createMainLogger("workflow.node.end-executor")
 
 export const endNodeExecutor: NodeExecutor<EndNodeConfig> = {
   async execute(input: NodeExecutionInput<EndNodeConfig>): Promise<NodeExecutionResult> {
-    const start = Date.now()
     const { config, resolvedVariables, context } = input
     logger.info("end node executing", {
       runId: context.runId,
@@ -15,12 +14,10 @@ export const endNodeExecutor: NodeExecutor<EndNodeConfig> = {
       variableCount: Object.keys(resolvedVariables).length,
     })
     const output = interpolatePrompt(config.template, resolvedVariables)
-    const durationMs = Date.now() - start
     logger.info("end node succeeded", {
       runId: context.runId,
       outputPreview: output.slice(0, 200),
-      durationMs,
     })
-    return { status: "success", output, durationMs }
+    return { status: "success", output, durationMs: 0 }
   },
 }

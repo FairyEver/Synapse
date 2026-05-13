@@ -104,7 +104,12 @@ export class LicenseClient {
       if (!response.ok) {
         this.recordAudit(url.origin, path, "failed", response.status)
         audited = true
-        throw new LicenseClientRequestError(readErrorMessage(body), response.status, readErrorCode(body))
+        throw new LicenseClientRequestError(
+          readErrorMessage(body),
+          response.status,
+          readErrorCode(body),
+          parseRetryAfterMs(response),
+        )
       }
       this.recordAudit(url.origin, path, "allowed", response.status)
       audited = true
@@ -143,6 +148,7 @@ export class LicenseClientRequestError extends Error {
     message: string,
     readonly status: number,
     readonly code?: string,
+    readonly retryAfterMs?: number,
   ) {
     super(message)
   }
@@ -184,6 +190,21 @@ function readErrorCode(body: unknown): string | undefined {
   if (body && typeof body === "object" && "code" in body) {
     const code = (body as { code: unknown }).code
     return typeof code === "string" ? code : undefined
+  }
+  return undefined
+}
+
+function parseRetryAfterMs(response: Response): number | undefined {
+  const header = response.headers.get("retry-after")
+  if (!header) return undefined
+  const seconds = Number(header)
+  if (!Number.isNaN(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, 3600_000)
+  }
+  const date = Date.parse(header)
+  if (!Number.isNaN(date)) {
+    const ms = date - Date.now()
+    return ms > 0 ? Math.min(ms, 3600_000) : undefined
   }
   return undefined
 }
