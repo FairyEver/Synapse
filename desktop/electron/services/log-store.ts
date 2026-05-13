@@ -190,7 +190,7 @@ class LogService {
   private currentFilePath: string | null = null
   private currentFileSize = 0
   private nextId = 1
-  private readonly logDirPath = path.join(app.getPath("userData"), LOG_DIR_NAME)
+  private readonly logDirPath: string
   private buffer: string[] = []
   private bufferedBytes = 0
   private flushTimer: NodeJS.Timeout | null = null
@@ -202,6 +202,7 @@ class LogService {
   private readonly maxBufferSize = 100
 
   constructor() {
+    this.logDirPath = path.join(app?.getPath?.("userData") ?? os.tmpdir(), LOG_DIR_NAME)
     this.readyPromise = this.initializeLogDirectory()
     this.startFlushTimer()
   }
