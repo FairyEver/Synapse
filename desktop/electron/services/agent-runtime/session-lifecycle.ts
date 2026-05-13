@@ -1,6 +1,7 @@
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AgentSessionRepository } from "./session-repository"
+import type { SessionManager } from "./session-manager"
 import type { AgentMessage, AgentLiveSession, AgentPendingPermission } from "./types"
 
 export interface RuntimeSessionState {
@@ -14,6 +15,7 @@ export interface RuntimeSessionState {
   liveSession?: AgentLiveSession
   pending?: PendingPermissionState
   turnAbortController?: AbortController
+  providerId?: string
   cancelState?: {
     requestedAt: number
     escalationTimer?: ReturnType<typeof setTimeout>
@@ -23,6 +25,7 @@ export interface RuntimeSessionState {
 export interface QueuedTurn {
   readonly message: AgentMessage
   readonly conversationId: string
+  readonly abortSignal?: AbortSignal
   resolve(result: unknown): void
 }
 
@@ -37,11 +40,10 @@ export interface SessionLifecycleDeps {
   readonly repository: AgentSessionRepository
   readonly states: Map<string, RuntimeSessionState>
   readonly pendingPermissions: Map<string, PendingPermissionState>
+  readonly sessionManager: SessionManager
   readonly logger?: StructuredLogger
   readonly getActiveAgentType: () => Promise<string>
 }
-
-const IDLE_TIMEOUT_MS = 10 * 60 * 1000
 
 export class SessionLifecycleManager {
   private readonly deps: SessionLifecycleDeps
@@ -100,19 +102,7 @@ export class SessionLifecycleManager {
   async deleteSession(conversationIdValue: string): Promise<boolean> {
     const conversation = await this.deps.repository.get(conversationIdValue)
     if (!conversation) return false
-    const state = this.deps.states.get(conversationIdValue)
-    if (state) {
-      if (state.pending) {
-        this.deps.pendingPermissions.delete(state.pending.requestId)
-        state.pending = undefined
-      }
-      if (state.liveSession) {
-        await state.liveSession.close()
-        state.liveSession = undefined
-      }
-      state.queue.length = 0
-      this.deps.states.delete(conversationIdValue)
-    }
+    await this.deps.sessionManager.closeState(conversationIdValue)
     await this.deps.repository.deleteSession(conversationIdValue)
     return true
   }
@@ -139,24 +129,13 @@ export class SessionLifecycleManager {
         this.deps.pendingPermissions.delete(state.pending.requestId)
         state.pending = undefined
       }
-      if (state?.liveSession) {
-        await state.liveSession.close()
-        state.liveSession = undefined
-      }
+      await this.deps.sessionManager.forceClose(conversation.id)
     }
     return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
   }
 
   async reclaimIdleSessions(): Promise<void> {
-    const now = Date.now()
-    for (const [key, state] of this.deps.states) {
-      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
-      if (!state.liveSession) continue
-      if (now - state.lastActivity < IDLE_TIMEOUT_MS) continue
-      await state.liveSession.close()
-      state.liveSession = undefined
-      this.deps.logger?.info("Reclaimed idle agent session.", { conversationId: key })
-    }
+    return this.deps.sessionManager.closeIdleSessions()
   }
 
   startIdleReclaim(): void {
@@ -176,19 +155,7 @@ export class SessionLifecycleManager {
     idleTimeoutMs: number,
     nowMs = Date.now(),
   ): Promise<readonly string[]> {
-    const cutoff = nowMs - idleTimeoutMs
-    const reaped: string[] = []
-    for (const [key, state] of this.deps.states) {
-      if (!state.workspaceKey || !state.workspacePath) continue
-      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
-      if (state.lastActivity >= cutoff) continue
-      if (state.liveSession?.alive()) {
-        await state.liveSession.close()
-      }
-      reaped.push(state.workspacePath)
-      this.deps.states.delete(key)
-    }
-    return reaped
+    return this.deps.sessionManager.reapIdleWorkspaceRuntimes(idleTimeoutMs, nowMs)
   }
 
   async closeIdleStateForConversation(
@@ -207,32 +174,10 @@ export class SessionLifecycleManager {
       this.deps.pendingPermissions.delete(state.pending.requestId)
       state.pending = undefined
     }
-    if (state.liveSession) {
-      await state.liveSession.close()
-      state.liveSession = undefined
-    }
+    await this.deps.sessionManager.forceClose(conversation.id)
   }
 
   stateForConversation(conversationIdValue: string, message?: AgentMessage): RuntimeSessionState {
-    const existing = this.deps.states.get(conversationIdValue)
-    if (existing) {
-      if (message) {
-        existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
-        existing.workspacePath = message.workspacePath ?? existing.workspacePath
-      }
-      existing.lastActivity = Date.now()
-      return existing
-    }
-    const state: RuntimeSessionState = {
-      key: conversationIdValue,
-      workspaceKey: message?.workspaceKey,
-      workspacePath: message?.workspacePath,
-      queue: [],
-      busy: false,
-      activeTurns: 0,
-      lastActivity: Date.now(),
-    }
-    this.deps.states.set(conversationIdValue, state)
-    return state
+    return this.deps.sessionManager.stateForConversation(conversationIdValue, message)
   }
 }

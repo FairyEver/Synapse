@@ -1,0 +1,201 @@
+import type { ConversationEntryV1 } from "../../runtime/data-repo"
+import type { StructuredLogger } from "../../runtime/service-registry"
+import type { ProviderService } from "../provider"
+import { ClaudeSDKSession } from "./claude-sdk-session"
+import type { AgentSessionRepository } from "./session-repository"
+import type {
+  PendingPermissionState,
+  RuntimeSessionState,
+} from "./session-lifecycle"
+import type {
+  AgentLiveSession,
+  AgentMessage,
+} from "./types"
+
+export interface CreateAgentLiveSessionInput {
+  readonly projectId: string
+  readonly conversation: ConversationEntryV1
+  readonly providerId: string
+  readonly cwd: string
+  readonly sdkSessionId?: string
+  readonly env: Record<string, string>
+  readonly mode?: string
+  readonly abortSignal?: AbortSignal
+}
+
+export type AgentLiveSessionFactory = (
+  input: CreateAgentLiveSessionInput,
+) => AgentLiveSession | Promise<AgentLiveSession>
+
+export interface SessionManagerDeps {
+  readonly projectId: string
+  readonly workDir?: string
+  readonly repository: AgentSessionRepository
+  readonly providerService: ProviderService
+  readonly states: Map<string, RuntimeSessionState>
+  readonly pendingPermissions: Map<string, PendingPermissionState>
+  readonly logger?: StructuredLogger
+  readonly now?: () => Date
+  readonly createSession?: AgentLiveSessionFactory
+}
+
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000
+
+export class SessionManager {
+  private readonly deps: SessionManagerDeps
+  private readonly createSession: AgentLiveSessionFactory
+
+  constructor(deps: SessionManagerDeps) {
+    this.deps = deps
+    this.createSession = deps.createSession ?? ((input) =>
+      new ClaudeSDKSession({
+        projectId: input.projectId,
+        conversationId: input.conversation.id,
+        providerId: input.providerId,
+        cwd: input.cwd,
+        sdkSessionId: input.sdkSessionId,
+        env: input.env,
+        mode: input.mode,
+        abortSignal: input.abortSignal,
+        now: deps.now,
+      }))
+  }
+
+  stateForConversation(conversationId: string, message?: AgentMessage): RuntimeSessionState {
+    const existing = this.deps.states.get(conversationId)
+    if (existing) {
+      if (message) {
+        existing.workspaceKey = message.workspaceKey ?? existing.workspaceKey
+        existing.workspacePath = message.workspacePath ?? existing.workspacePath
+      }
+      existing.lastActivity = Date.now()
+      return existing
+    }
+    const state: RuntimeSessionState = {
+      key: conversationId,
+      workspaceKey: message?.workspaceKey,
+      workspacePath: message?.workspacePath,
+      queue: [],
+      busy: false,
+      activeTurns: 0,
+      lastActivity: Date.now(),
+    }
+    this.deps.states.set(conversationId, state)
+    return state
+  }
+
+  async getOrCreateSession(input: {
+    readonly state: RuntimeSessionState
+    readonly conversation: ConversationEntryV1
+    readonly message: AgentMessage
+    readonly abortSignal?: AbortSignal
+  }): Promise<AgentLiveSession> {
+    const providerId = input.conversation.providerId ?? input.message.providerId
+    if (!providerId) {
+      throw new Error("Provider is required")
+    }
+    if (
+      input.state.liveSession
+      && input.state.liveSession.alive()
+      && input.state.providerId === providerId
+    ) {
+      return input.state.liveSession
+    }
+
+    if (input.state.liveSession) {
+      await input.state.liveSession.close()
+    }
+
+    const cwd = input.message.workspacePath ?? this.deps.workDir
+    if (!cwd) {
+      throw new Error("Project workspace path is required")
+    }
+    const env = await this.deps.providerService.buildEnv(providerId, {
+      actor: { kind: "user", id: input.message.userId },
+      projectId: this.deps.projectId,
+    })
+    const sdkSessionId = input.conversation.resumePolicy === "fresh"
+      ? undefined
+      : input.conversation.sdkSessionId
+    const liveSession = await this.createSession({
+      projectId: this.deps.projectId,
+      conversation: input.conversation,
+      providerId,
+      cwd,
+      sdkSessionId,
+      env,
+      mode: input.message.modeOverride,
+      abortSignal: input.abortSignal,
+    })
+    input.state.liveSession = liveSession
+    input.state.providerId = providerId
+    return liveSession
+  }
+
+  async getActiveProviderId(): Promise<string | undefined> {
+    return (await this.deps.providerService.getActiveProvider())?.id
+  }
+
+  async interrupt(conversationId: string): Promise<boolean> {
+    const state = this.deps.states.get(conversationId)
+    const liveSession = state?.liveSession
+    if (!liveSession?.cancelCurrentTurn) return false
+    try {
+      return await liveSession.cancelCurrentTurn()
+    } catch (error) {
+      this.deps.logger?.warn("Agent session interrupt failed.", {
+        conversationId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  }
+
+  async forceClose(conversationId: string): Promise<void> {
+    const state = this.deps.states.get(conversationId)
+    if (!state?.liveSession) return
+    await state.liveSession.close()
+    state.liveSession = undefined
+    state.providerId = undefined
+  }
+
+  async closeState(conversationId: string): Promise<void> {
+    const state = this.deps.states.get(conversationId)
+    if (!state) return
+    if (state.pending) {
+      this.deps.pendingPermissions.delete(state.pending.requestId)
+      state.pending = undefined
+    }
+    await this.forceClose(conversationId)
+    state.queue.length = 0
+    this.deps.states.delete(conversationId)
+  }
+
+  async closeIdleSessions(): Promise<void> {
+    const now = Date.now()
+    for (const [conversationId, state] of this.deps.states) {
+      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
+      if (!state.liveSession) continue
+      if (now - state.lastActivity < IDLE_TIMEOUT_MS) continue
+      await this.forceClose(conversationId)
+      this.deps.logger?.info("Reclaimed idle agent session.", { conversationId })
+    }
+  }
+
+  async reapIdleWorkspaceRuntimes(
+    idleTimeoutMs: number,
+    nowMs = Date.now(),
+  ): Promise<readonly string[]> {
+    const cutoff = nowMs - idleTimeoutMs
+    const reaped: string[] = []
+    for (const [conversationId, state] of this.deps.states) {
+      if (!state.workspaceKey || !state.workspacePath) continue
+      if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
+      if (state.lastActivity >= cutoff) continue
+      await this.forceClose(conversationId)
+      reaped.push(state.workspacePath)
+      this.deps.states.delete(conversationId)
+    }
+    return reaped
+  }
+}

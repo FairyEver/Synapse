@@ -30,6 +30,7 @@ export interface AgentMessage {
   readonly replyCtx?: unknown
   readonly modeOverride?: string
   readonly agentType?: string
+  readonly providerId?: string
 }
 
 interface AgentEventBase {

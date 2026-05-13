@@ -2,6 +2,7 @@ import type {
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
   ConversationEntryV1,
+  AgentEventEntryV1,
   DataNamespace,
 } from "../../runtime/data-repo"
 import type {
@@ -23,6 +24,7 @@ import { resolveShellCommand } from "../shell-exec"
 import {
   type ProviderConfigService,
 } from "../provider-config"
+import type { ProviderService } from "../provider"
 import { AgentCommandRouter } from "./command-router"
 import type {
   RegisteredPromptCommand,
@@ -39,14 +41,14 @@ import {
   AgentSessionRepository,
   conversationId,
 } from "./session-repository"
+import { SessionManager, type AgentLiveSessionFactory } from "./session-manager"
 import { SessionLifecycleManager } from "./session-lifecycle"
 import type {
   RuntimeSessionState,
   PendingPermissionState,
 } from "./session-lifecycle"
-import { MessageRouter } from "./message-router"
+import { ConversationRouter } from "./conversation-router"
 import type {
-  AgentAdapter,
   AgentEvent,
   AgentMessage,
   AgentPendingPermission,
@@ -67,9 +69,11 @@ export interface AgentRuntimeServiceDeps {
   readonly projectId: string
   readonly workDir?: string
   readonly conversations: DataNamespace<ConversationEntryV1>
-  readonly adapter: AgentAdapter
+  readonly providerService: ProviderService
+  readonly createSession?: AgentLiveSessionFactory
   readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
+  readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
   readonly now?: () => Date
@@ -108,7 +112,8 @@ export class AgentRuntimeService {
   private readonly repository: AgentSessionRepository
   private readonly commandRouter: AgentCommandRouter | undefined
   private readonly sessionLifecycle: SessionLifecycleManager
-  private readonly messageRouter: MessageRouter
+  private readonly sessionManager: SessionManager
+  private readonly conversationRouter: ConversationRouter
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
 
@@ -119,11 +124,23 @@ export class AgentRuntimeService {
       conversations: deps.conversations,
       now: deps.now,
     })
+    this.sessionManager = new SessionManager({
+      projectId: deps.projectId,
+      workDir: deps.workDir,
+      repository: this.repository,
+      providerService: deps.providerService,
+      states: this.states,
+      pendingPermissions: this.pendingPermissions,
+      logger: deps.logger,
+      now: deps.now,
+      createSession: deps.createSession,
+    })
     this.sessionLifecycle = new SessionLifecycleManager({
       projectId: deps.projectId,
       repository: this.repository,
       states: this.states,
       pendingPermissions: this.pendingPermissions,
+      sessionManager: this.sessionManager,
       logger: deps.logger,
       getActiveAgentType: () => this.getActiveAgentType(),
     })
@@ -144,55 +161,45 @@ export class AgentRuntimeService {
         runCustomCommand: (command, args, message) =>
           this.runCustomCommand(command, args, message),
         compressSession: (message, conversation) =>
-          this.messageRouter.compressSession(message, conversation),
+          this.conversationRouter.compressSession(message, conversation),
       })
       : undefined
-    this.messageRouter = new MessageRouter({
+    this.conversationRouter = new ConversationRouter({
       deps: {
         projectId: deps.projectId,
         workDir: deps.workDir,
         eventBus: deps.eventBus,
         logger: deps.logger,
         governance: deps.governance,
-        compressState: deps.compressState,
         pendingQueueLimit: deps.pendingQueueLimit,
         outbox: deps.outbox,
-        auditSink: deps.auditSink,
-        executionIsolation: deps.executionIsolation,
         replyTargets: deps.replyTargets,
+        agentEvents: deps.agentEvents,
         now: deps.now,
       },
       repository: this.repository,
+      sessionManager: this.sessionManager,
       commandRouter: this.commandRouter,
       pendingPermissions: this.pendingPermissions,
-      callbacks: {
-        stateForConversation: (id, msg) => this.stateForConversation(id, msg),
-        resolveAdapter: (agentType) => this.resolveAdapter(agentType),
-        resolveProcessIsolation: (msg) => this.resolveProcessIsolation(msg),
-        workDirFor: (msg) => this.workDirFor(msg),
-        getOrCreateCompressionState: (agentType) => this.getOrCreateCompressionState(agentType),
-        markCompressionState: (agentType, status, error) =>
-          this.markCompressionState(agentType, status, error),
-      },
     })
   }
 
   async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
-    return this.messageRouter.send(message)
+    return this.conversationRouter.send(message)
   }
 
   async sendToConversation(
     message: AgentMessage,
     conversationId: string,
   ): Promise<AgentRuntimeTurnResult> {
-    return this.messageRouter.sendToConversation(message, conversationId)
+    return this.conversationRouter.sendToConversation(message, conversationId)
   }
 
   async sendNewSession(
     message: AgentMessage,
     name: string,
   ): Promise<AgentRuntimeTurnResult> {
-    return this.messageRouter.sendNewSession(message, name)
+    return this.conversationRouter.sendNewSession(message, name)
   }
 
   async sendSideSessionWithTimeout(
@@ -200,7 +207,7 @@ export class AgentRuntimeService {
     name: string,
     timeoutMs: number,
   ): Promise<AgentRuntimeRelayResult> {
-    return this.messageRouter.sendSideSessionWithTimeout(message, name, timeoutMs)
+    return this.conversationRouter.sendSideSessionWithTimeout(message, name, timeoutMs)
   }
 
   async sendScheduled(input: ScheduledAgentSendInput): Promise<ScheduledAgentSendResult> {
@@ -237,16 +244,18 @@ export class AgentRuntimeService {
 
       if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
         const name = formatScheduledSessionName()
-        result = await this.sendNewSession(message, name)
+        result = await this.conversationRouter.sendNewSession(message, name, { abortSignal: ac.signal })
       } else {
         try {
-          result = await this.sendToConversation(message, input.lastConversationId)
+          result = await this.conversationRouter.sendToConversation(message, input.lastConversationId, {
+            abortSignal: ac.signal,
+          })
         } catch (resumeError) {
           const isNotFound = resumeError instanceof Error
             && resumeError.message.includes("not found")
           if (!isNotFound) throw resumeError
           const name = formatScheduledSessionName()
-          result = await this.sendNewSession(message, name)
+          result = await this.conversationRouter.sendNewSession(message, name, { abortSignal: ac.signal })
         }
       }
 
@@ -300,20 +309,11 @@ export class AgentRuntimeService {
       state.pending = undefined
     }
 
-    const liveSession = state.liveSession
-    if (liveSession) {
-      let gracefulSent = false
-      if (liveSession.cancelCurrentTurn) {
-        try {
-          gracefulSent = await liveSession.cancelCurrentTurn()
-        } catch {
-          gracefulSent = false
-        }
-      }
+    if (state.liveSession) {
+      const gracefulSent = await this.sessionManager.interrupt(conversationId)
       if (!gracefulSent) {
         state.turnAbortController?.abort("user-cancel")
-        await liveSession.close()
-        state.liveSession = undefined
+        await this.sessionManager.forceClose(conversationId)
         return { status: "hard-killed" }
       }
       state.cancelState.escalationTimer = setTimeout(() => {
@@ -335,12 +335,9 @@ export class AgentRuntimeService {
     if (!state || !state.busy) {
       return { status: "no-active-turn" }
     }
-    this.messageRouter.clearCancelState(state)
+    this.conversationRouter.clearCancelState(state)
     state.turnAbortController?.abort("force-kill")
-    if (state.liveSession) {
-      await state.liveSession.close()
-      state.liveSession = undefined
-    }
+    await this.sessionManager.forceClose(conversationId)
     return { status: "hard-killed" }
   }
 
@@ -767,10 +764,6 @@ export class AgentRuntimeService {
       this.deps.projectId,
       Object.keys(sessionEnv ?? {}),
     )
-  }
-
-  private async resolveAdapter(_agentTypeOverride?: string): Promise<AgentAdapter> {
-    return this.deps.adapter
   }
 
   private agentType(): string {

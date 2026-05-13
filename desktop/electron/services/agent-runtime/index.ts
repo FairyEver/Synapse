@@ -1,6 +1,7 @@
 import type {
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
+  AgentEventEntryV1,
   ConversationEntryV1,
   DataRepository,
   OutboxEntryV1,
@@ -14,9 +15,11 @@ import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
   createProviderConfigServiceFromDataRepository,
 } from "../provider-config"
+import {
+  createProviderServiceFromDataRepository,
+} from "../provider"
 import { ReplyOutboxService } from "../reply-target"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
-import { ClaudeCodeAdapter } from "./adapters/claude-code"
 import { CustomCommandRegistry } from "./command-registry"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
@@ -65,17 +68,19 @@ export {
   type SaveAgentSessionInput,
 } from "./session-repository"
 export {
+  SessionManager,
+  type AgentLiveSessionFactory,
+  type CreateAgentLiveSessionInput,
+} from "./session-manager"
+export {
+  ConversationRouter,
+  type ConversationRouterDeps,
+} from "./conversation-router"
+export {
   SkillRegistry,
   buildSkillInvocationPrompt,
   type AgentSkill,
 } from "./skill-registry"
-export {
-  ClaudeCodeAdapter,
-  buildClaudeCodeArgs,
-  type ClaudeCodeArgsOptions,
-  type ClaudeCodeOptions,
-  type ClaudeProcessRunner,
-} from "./adapters/claude-code"
 export {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentAdapter,
@@ -116,6 +121,11 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         permissionGuard,
         auditSink,
       })
+      const providerService = createProviderServiceFromDataRepository({
+        dataRepository,
+        permissionGuard,
+        auditSink,
+      })
       const replyTargets = optionalService<NonNullable<AgentRuntimeServiceDeps["replyTargets"]>>(
         ctx.globalRegistry,
         "core.side-channel",
@@ -137,7 +147,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workDir: ctx.projectMeta.workspacePath,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
-        adapter: new ClaudeCodeAdapter(runner),
+        agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
+        providerService,
         agentType: "claude-code",
         eventBus: ctx.eventBus,
         logger: ctx.logger,
