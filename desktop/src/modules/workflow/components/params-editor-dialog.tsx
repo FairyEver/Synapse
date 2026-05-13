@@ -14,13 +14,14 @@ import type { WorkflowParam } from "@/types/workflow"
 interface WorkflowParamCardProps {
   param: WorkflowParam
   index: number
+  isDuplicate?: boolean
   onChange: (patch: Partial<WorkflowParam>) => void
   onDelete: () => void
 }
 
-function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCardProps) {
+function WorkflowParamCard({ param, index, isDuplicate, onChange, onDelete }: WorkflowParamCardProps) {
   return (
-    <div className="rounded-lg bg-muted/50 p-3 grid gap-3">
+    <div className={`rounded-lg bg-muted/50 p-3 grid gap-3 ${isDuplicate ? "ring-1 ring-destructive" : ""}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">参数 {index + 1}</span>
         <Button
@@ -40,7 +41,9 @@ function WorkflowParamCard({ param, index, onChange, onDelete }: WorkflowParamCa
             value={param.name}
             onChange={(e) => onChange({ name: e.target.value })}
             placeholder="param_name"
+            className={isDuplicate ? "border-destructive" : undefined}
           />
+          {isDuplicate && <p className="text-[11px] text-destructive">参数名称重复</p>}
         </div>
         <div className="grid gap-1.5">
           <Label className="text-xs">类型</Label>
@@ -109,6 +112,21 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
 
   const isDirty = useMemo(() => !paramsEqual(draft, params), [draft, params])
 
+  // Compute duplicate param names for real-time feedback
+  const duplicateNames = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of draft) {
+      const trimmed = p.name.trim()
+      if (!trimmed) continue
+      counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1)
+    }
+    const dupes = new Set<string>()
+    for (const [name, count] of counts) { if (count > 1) dupes.add(name) }
+    return dupes
+  }, [draft])
+
+  const hasDuplicates = duplicateNames.size > 0
+
   const handleOpenChange = (o: boolean) => {
     if (!o) {
       if (isDirty) { setShowCloseConfirm(true); return }
@@ -152,6 +170,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
               key={i}
               param={p}
               index={i}
+              isDuplicate={!!p.name.trim() && duplicateNames.has(p.name.trim())}
               onChange={(patch) => updateParam(i, patch)}
               onDelete={() => removeParam(i)}
             />
@@ -167,7 +186,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={handleCancel}>取消</Button>
-          <Button onClick={handleSave}>保存</Button>
+          <Button onClick={handleSave} disabled={hasDuplicates}>保存</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -4,11 +4,16 @@ import { Badge } from "@/components/ui/badge"
 import { RunnerNodeResultsContext } from "./runner-node-wrappers"
 
 export function RunnerEdge({
-  id, source, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data,
+  id, source, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, sourceHandleId,
 }: EdgeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
-  const sourceStatus = nodeResults[source]?.status
-  const activated = sourceStatus === "success"
+  const sourceResult = nodeResults[source]
+  const sourceStatus = sourceResult?.status
+  // For Switch nodes, only the edge matching the activeBranch should be highlighted.
+  // Non-branch edges (sourceHandleId is null/undefined) activate when source succeeds.
+  const activated = sourceStatus === "success" && (
+    !sourceHandleId || sourceResult?.activeBranch === sourceHandleId
+  )
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,

@@ -866,3 +866,26 @@ Runner 错误页从"死胡同"变为"可重试的等待室"——用户无需关
 
 ### 本次进展
 Runner 详情面板从"执行中无进度信息"变为"实时显示当前执行阶段"；画布交互从"只能鼠标点空白取消选中"变为"Escape 一键取消"；列表页参数化运行从"每次重填"变为"记忆上次值"——三个修复分别补齐了执行反馈、编辑效率、重复操作便利性三个维度的体验缺口。
+
+---
+
+## [2026-05-14 00:15] 第 37 次迭代
+
+### 发现的问题
+- Runner DAG 视图中 Switch 节点所有出边均显示为"已激活"（蓝色实线），无法区分实际执行的分支（runner-edge.tsx:11-12 仅判断 sourceStatus === "success"，不检查 activeBranch 与 sourceHandleId 的匹配）
+- 工作流参数允许重复名称：ParamsEditorDialog 的 handleSave 仅过滤空名称不检查重复（params-editor-dialog.tsx:136-138），validator 全文无 params 重复校验（workflow-validator.ts:54-188），RunParamsDialog 中同名参数后者覆盖前者导致数据静默丢失（run-params-dialog.tsx:31-32）
+
+### 修复内容
+- [desktop/src/modules/workflow/runner/runner-edge.tsx:6-16] RunnerEdge 的 activated 判断从 `sourceStatus === "success"` 改为 `sourceStatus === "success" && (!sourceHandleId || sourceResult?.activeBranch === sourceHandleId)`，仅激活分支匹配的边
+- [desktop/electron/services/workflow/workflow-validator.ts:57-68] 新增 params 重复名称校验：遍历 def.params 检查 trimmed name 唯一性，重复时 push invalid_config 错误
+- [desktop/src/modules/workflow/components/params-editor-dialog.tsx:14-46,115-128,169-176,189] WorkflowParamCard 新增 isDuplicate prop（ring-1 ring-destructive 边框 + border-destructive 输入框 + 错误文字）；新增 duplicateNames useMemo 计算重复集合；保存按钮 disabled={hasDuplicates}
+
+### 与历史的关系
+- 缺陷 1：独立（runner-edge.tsx 从未被任何轮次覆盖）
+- 缺陷 2：独立（params-editor-dialog iter 19 修过 dirty 状态，validator iter 25 修过 Switch 校验，但 params 重复名称从未被覆盖）
+
+### 日志补充
+- workflow-validator.ts 新增 logger.warn("duplicate param name detected") 含 workflowId 和 duplicateName 上下文
+
+### 本次进展
+Runner DAG 视图从"所有 Switch 出边一起亮"变为"仅激活分支亮起"，用户能直接从视觉判断分支走向；参数编辑器从"允许重复名称导致静默数据丢失"变为"实时标红+禁止保存+后端兜底校验"的完整防护链。

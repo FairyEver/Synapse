@@ -54,6 +54,19 @@ function computeEndReachable(def: WorkflowDefinition): Set<string> {
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
 
+  // Validate param name uniqueness
+  const paramNamesSeen = new Set<string>()
+  for (const p of def.params) {
+    const trimmed = p.name.trim()
+    if (!trimmed) continue
+    if (paramNamesSeen.has(trimmed)) {
+      errors.push({ type: "invalid_config", message: `工作流参数名称「${trimmed}」重复，请确保每个参数名称唯一` })
+      logger.warn("duplicate param name detected", { workflowId: def.id, duplicateName: trimmed })
+      break
+    }
+    paramNamesSeen.add(trimmed)
+  }
+
   const endNodes = def.nodes.filter((n) => n.type === "end")
   if (endNodes.length === 0)
     errors.push({ type: "missing_end_node", message: "工作流必须包含一个结束节点" })
