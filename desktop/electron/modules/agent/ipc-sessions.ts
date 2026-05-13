@@ -20,7 +20,7 @@ const sessionsRequestSchema = projectRequestSchema.extend({
 const createSessionRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   name: z.string().optional(),
-  agentType: z.string().optional(),
+  agentType: z.string().default("claude-code"),
 })
 
 const switchSessionRequestSchema = projectRequestSchema.extend({

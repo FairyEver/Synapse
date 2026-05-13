@@ -97,7 +97,7 @@ const relayBindingIdSchema = z.object({
 })
 
 const compressUpdateSchema = projectRequestSchema.extend({
-  agentType: z.string().optional(),
+  agentType: z.string().default("claude-code"),
   enabled: z.boolean().optional(),
   maxTokens: z.number().optional(),
   minGapMins: z.number().optional(),
