@@ -65,4 +65,18 @@ describe("installConsoleInterceptor", () => {
     expect(meta).toHaveProperty("stack")
     cleanup()
   })
+
+  it("filters React dev-mode warnings in non-production", () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const cleanup = installConsoleInterceptor(logger)
+
+    console.warn("Warning: Each child in a list should have a unique key prop.")
+    console.error("Warning: React does not recognize the `onClick` prop")
+    console.warn("real warning from app code")
+
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+    expect(logger.warn.mock.calls[0][0]).toBe("real warning from app code")
+    expect(logger.error).not.toHaveBeenCalled()
+    cleanup()
+  })
 })

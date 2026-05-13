@@ -38,18 +38,35 @@ function formatArgs(args: unknown[]): { message: string; meta?: unknown } {
   return { message, meta: rest.length === 1 ? rest[0] : rest }
 }
 
+const REACT_DEV_PREFIXES = [
+  "Warning: ",
+  "React does not recognize",
+  "Each child in a list",
+  "Cannot update a component",
+  "Can't perform a React state update",
+]
+
+function isReactDevWarning(args: unknown[]): boolean {
+  if (process.env.NODE_ENV === "production") return false
+  const first = args[0]
+  if (typeof first !== "string") return false
+  return REACT_DEV_PREFIXES.some((prefix) => first.startsWith(prefix))
+}
+
 export function installConsoleInterceptor(logger: RendererLogger): () => void {
   const originalError = console.error
   const originalWarn = console.warn
 
   console.error = (...args: unknown[]) => {
     originalError.apply(console, args)
+    if (isReactDevWarning(args)) return
     const { message, meta } = formatArgs(args)
     guardedLog(logger, "error", message, meta)
   }
 
   console.warn = (...args: unknown[]) => {
     originalWarn.apply(console, args)
+    if (isReactDevWarning(args)) return
     const { message, meta } = formatArgs(args)
     guardedLog(logger, "warn", message, meta)
   }

@@ -16,7 +16,13 @@ const bootstrapLogger = createRendererLogger("renderer.bootstrap")
 
 bootstrapLogger.info("Renderer bootstrap started.")
 installRendererLogForwarding()
-installDiagnostics()
+const cleanupDiagnostics = installDiagnostics()
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    cleanupDiagnostics()
+  })
+}
 
 void (async () => {
   const windowType = new URLSearchParams(window.location.search).get("window")

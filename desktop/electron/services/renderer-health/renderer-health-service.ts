@@ -15,12 +15,11 @@ interface RendererHealthLogger {
 
 export interface RendererHealthServiceDeps {
   readonly logger: RendererHealthLogger
-  readonly ipcMain: IpcMain
+  readonly ipcMain?: IpcMain
 }
 
 export class RendererHealthService {
   private readonly logger: RendererHealthLogger
-  private readonly ipcMain: IpcMain
   private webContents: WebContents | null = null
   private intervalTimer: ReturnType<typeof setInterval> | null = null
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null
@@ -32,7 +31,6 @@ export class RendererHealthService {
 
   constructor(deps: RendererHealthServiceDeps) {
     this.logger = deps.logger
-    this.ipcMain = deps.ipcMain
   }
 
   attach(webContents: WebContents): void {
@@ -45,7 +43,7 @@ export class RendererHealthService {
     this.pongHandler = () => {
       this.handlePong()
     }
-    this.ipcMain.on(DIAGNOSTICS_PONG_CHANNEL, this.pongHandler)
+    webContents.ipc.on(DIAGNOSTICS_PONG_CHANNEL, this.pongHandler)
 
     this.crashHandler = (_event, details) => {
       this.logger.error("渲染进程崩溃", {
@@ -67,8 +65,8 @@ export class RendererHealthService {
       clearTimeout(this.timeoutTimer)
       this.timeoutTimer = null
     }
-    if (this.pongHandler) {
-      this.ipcMain.removeListener(DIAGNOSTICS_PONG_CHANNEL, this.pongHandler)
+    if (this.webContents && this.pongHandler) {
+      this.webContents.ipc.removeListener(DIAGNOSTICS_PONG_CHANNEL, this.pongHandler)
       this.pongHandler = null
     }
     if (this.webContents && this.crashHandler) {

@@ -2,12 +2,14 @@ import { BrowserWindow } from "electron"
 import type { WindowManager } from "../../runtime/window"
 import { managedBrowserWindow } from "../../runtime/window"
 import { createMainLogger } from "../log-store"
+import { RendererHealthService } from "../renderer-health"
 
 const logger = createMainLogger("service.workflow.window-manager")
 
 export class WorkflowWindowManager {
   private readonly editorWindows = new Map<string, BrowserWindow>()
   private readonly runnerWindows = new Map<string, BrowserWindow>()
+  private readonly healthServices = new Map<string, RendererHealthService>()
 
   constructor(private readonly mainWindowManager?: WindowManager) {}
 
@@ -34,8 +36,16 @@ export class WorkflowWindowManager {
       this.mainWindowManager.attach({ id: windowId, role: "detail" }, managedBrowserWindow(win, "detail"))
     }
 
+    const health = new RendererHealthService({
+      logger: createMainLogger(`renderer-health.editor.${workflowId}`),
+    })
+    health.attach(win.webContents)
+    this.healthServices.set(windowId, health)
+
     win.on("closed", () => {
       logger.info("workflow editor window closed", { workflowId })
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
       this.editorWindows.delete(workflowId)
     })
     this.editorWindows.set(workflowId, win)
@@ -66,8 +76,16 @@ export class WorkflowWindowManager {
       this.mainWindowManager.attach({ id: windowId, role: "detail" }, managedBrowserWindow(win, "detail"))
     }
 
+    const health = new RendererHealthService({
+      logger: createMainLogger(`renderer-health.runner.${workflowId}`),
+    })
+    health.attach(win.webContents)
+    this.healthServices.set(windowId, health)
+
     win.on("closed", () => {
       logger.info("workflow runner window closed", { workflowId })
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
       this.runnerWindows.delete(workflowId)
     })
     this.runnerWindows.set(workflowId, win)
@@ -86,6 +104,9 @@ export class WorkflowWindowManager {
     const editor = this.editorWindows.get(workflowId)
     if (editor && !editor.isDestroyed()) {
       logger.info("workflow editor window force-closed", { workflowId })
+      const windowId = `workflow-editor:${workflowId}`
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
       editor.destroy()
     }
     this.editorWindows.delete(workflowId)
@@ -97,6 +118,9 @@ export class WorkflowWindowManager {
     const runner = this.runnerWindows.get(workflowId)
     if (runner && !runner.isDestroyed()) {
       logger.info("workflow runner window force-closed", { workflowId })
+      const windowId = `workflow-runner:${workflowId}`
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
       runner.destroy()
     }
     this.runnerWindows.delete(workflowId)

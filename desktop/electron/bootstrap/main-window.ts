@@ -5,7 +5,7 @@
  * Phase 0.3 (T3.12) replaces this with WindowManager.
  */
 
-import { app, BrowserWindow, ipcMain } from "electron"
+import { app, BrowserWindow } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
 import { managedBrowserWindow, type WindowManager } from "../runtime/window"
@@ -17,7 +17,6 @@ const logger = createMainLogger("bootstrap.main-window")
 const healthLogger = createMainLogger("renderer-health")
 const rendererHealthService = new RendererHealthService({
   logger: healthLogger,
-  ipcMain,
 })
 
 export interface MainWindowState {

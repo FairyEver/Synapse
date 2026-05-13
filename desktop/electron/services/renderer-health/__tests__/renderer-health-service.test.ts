@@ -3,26 +3,23 @@ import { RendererHealthService } from "../renderer-health-service"
 import { DIAGNOSTICS_PING_CHANNEL, DIAGNOSTICS_PONG_CHANNEL } from "../constants"
 
 function createMockWebContents() {
+  const ipcHandlers = new Map<string, ((...args: unknown[]) => void)[]>()
   return {
     send: vi.fn(),
     isDestroyed: vi.fn().mockReturnValue(false),
     on: vi.fn(),
     removeListener: vi.fn(),
-  }
-}
-
-function createMockIpcMain() {
-  const handlers = new Map<string, ((...args: unknown[]) => void)[]>()
-  return {
-    on: vi.fn((channel: string, handler: (...args: unknown[]) => void) => {
-      const arr = handlers.get(channel) ?? []
-      arr.push(handler)
-      handlers.set(channel, arr)
-    }),
-    removeListener: vi.fn(),
-    _handlers: handlers,
-    simulatePong: () => {
-      const pongHandlers = handlers.get(DIAGNOSTICS_PONG_CHANNEL) ?? []
+    ipc: {
+      on: vi.fn((channel: string, handler: (...args: unknown[]) => void) => {
+        const arr = ipcHandlers.get(channel) ?? []
+        arr.push(handler)
+        ipcHandlers.set(channel, arr)
+      }),
+      removeListener: vi.fn(),
+    },
+    _ipcHandlers: ipcHandlers,
+    simulatePong() {
+      const pongHandlers = ipcHandlers.get(DIAGNOSTICS_PONG_CHANNEL) ?? []
       for (const h of pongHandlers) h({})
     },
   }
@@ -34,10 +31,9 @@ describe("RendererHealthService", () => {
 
   it("sends ping at configured interval", () => {
     const wc = createMockWebContents()
-    const ipcMain = createMockIpcMain()
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
-    const service = new RendererHealthService({ logger, ipcMain: ipcMain as never })
+    const service = new RendererHealthService({ logger })
     service.attach(wc as never)
 
     vi.advanceTimersByTime(30_000)
@@ -46,10 +42,9 @@ describe("RendererHealthService", () => {
 
   it("logs warning when pong not received within timeout", () => {
     const wc = createMockWebContents()
-    const ipcMain = createMockIpcMain()
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
-    const service = new RendererHealthService({ logger, ipcMain: ipcMain as never })
+    const service = new RendererHealthService({ logger })
     service.attach(wc as never)
 
     vi.advanceTimersByTime(30_000)
@@ -61,14 +56,13 @@ describe("RendererHealthService", () => {
 
   it("does not warn when pong received in time", () => {
     const wc = createMockWebContents()
-    const ipcMain = createMockIpcMain()
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
-    const service = new RendererHealthService({ logger, ipcMain: ipcMain as never })
+    const service = new RendererHealthService({ logger })
     service.attach(wc as never)
 
     vi.advanceTimersByTime(30_000)
-    ipcMain.simulatePong()
+    wc.simulatePong()
     vi.advanceTimersByTime(5_000)
 
     expect(logger.warn).not.toHaveBeenCalled()
@@ -76,10 +70,9 @@ describe("RendererHealthService", () => {
 
   it("logs error after 3 consecutive misses", () => {
     const wc = createMockWebContents()
-    const ipcMain = createMockIpcMain()
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
-    const service = new RendererHealthService({ logger, ipcMain: ipcMain as never })
+    const service = new RendererHealthService({ logger })
     service.attach(wc as never)
 
     for (let i = 0; i < 3; i++) {
@@ -93,10 +86,9 @@ describe("RendererHealthService", () => {
 
   it("logs recovery after freeze then pong", () => {
     const wc = createMockWebContents()
-    const ipcMain = createMockIpcMain()
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
-    const service = new RendererHealthService({ logger, ipcMain: ipcMain as never })
+    const service = new RendererHealthService({ logger })
     service.attach(wc as never)
 
     for (let i = 0; i < 3; i++) {
@@ -105,7 +97,7 @@ describe("RendererHealthService", () => {
     }
 
     vi.advanceTimersByTime(30_000)
-    ipcMain.simulatePong()
+    wc.simulatePong()
 
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining("恢复"),
@@ -115,10 +107,9 @@ describe("RendererHealthService", () => {
 
   it("stops on detach", () => {
     const wc = createMockWebContents()
-    const ipcMain = createMockIpcMain()
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
-    const service = new RendererHealthService({ logger, ipcMain: ipcMain as never })
+    const service = new RendererHealthService({ logger })
     service.attach(wc as never)
     service.detach()
 
