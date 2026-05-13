@@ -40,7 +40,7 @@ describe("ConversationRouter", () => {
 
     expect(result.resultText).toBe("done")
     expect(providerService.buildEnvCalls).toEqual([
-      { providerId: "anthropic", projectId: "project-1" },
+      { providerId: "anthropic", projectId: "project-1", actorId: "user-1" },
     ])
     expect(factoryCalls).toEqual([
       expect.objectContaining({
@@ -138,6 +138,49 @@ describe("ConversationRouter", () => {
       expect.objectContaining({ eventType: "result" }),
     ])
   })
+
+  it("closes the SDK session when a side session times out", async () => {
+    const session = new TimeoutSession()
+    const { router } = createRouter({ session })
+
+    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
+
+    expect(result.timedOut).toBe(true)
+    expect(session.closed).toBe(true)
+  })
+
+  it("keeps persisted tool metadata and event payloads bounded and sanitized", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const raw = {
+      command: "pwd",
+      secret: "sk-secret",
+      large: "x".repeat(50_000),
+    }
+    const { conversations, router } = createRouter({
+      agentEvents,
+      session: new ScriptedSession([
+        {
+          type: "toolUse",
+          toolName: "Bash",
+          toolInput: "pwd",
+          toolInputRaw: raw,
+          sdkSessionId: "sdk-1",
+        },
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const saved = await conversations.get(result.conversationId)
+    const toolEntry = saved?.history.find((entry) => entry.role === "tool")
+    const persisted = await agentEvents.list()
+
+    expect(toolEntry?.metadata).toEqual(expect.not.objectContaining({
+      toolInputRaw: expect.anything(),
+    }))
+    expect(JSON.stringify(persisted[0]?.payload)).not.toContain("sk-secret")
+    expect(JSON.stringify(persisted[0]?.payload).length).toBeLessThan(12_000)
+  })
 })
 
 function createRouter(input: {
@@ -146,6 +189,7 @@ function createRouter(input: {
   readonly activeProviderId?: string
   readonly env?: Record<string, string>
   readonly session?: AgentLiveSession
+  readonly sessions?: readonly AgentLiveSession[]
   readonly message?: AgentLiveSession
   readonly governance?: AgentGovernanceService
   readonly commandRouter?: AgentCommandRouter
@@ -165,6 +209,7 @@ function createRouter(input: {
     readonly sdkSessionId?: string
     readonly env: Record<string, string>
   }> = []
+  const sessions = [...input.sessions ?? []]
   const sessionManager = new SessionManager({
     projectId: "project-1",
     workDir: "/repo",
@@ -180,7 +225,7 @@ function createRouter(input: {
         sdkSessionId: options.sdkSessionId,
         env: options.env,
       })
-      return input.session ?? input.message ?? new ScriptedSession([
+      return sessions.shift() ?? input.session ?? input.message ?? new ScriptedSession([
         { type: "result", content: "done", done: true },
       ])
     },
@@ -232,7 +277,11 @@ function fixedNow(): Date {
 }
 
 class FakeProviderService {
-  readonly buildEnvCalls: Array<{ readonly providerId: string; readonly projectId?: string }> = []
+  readonly buildEnvCalls: Array<{
+    readonly providerId: string
+    readonly projectId?: string
+    readonly actorId?: string
+  }> = []
 
   constructor(
     private readonly activeProviderId: string,
@@ -245,9 +294,13 @@ class FakeProviderService {
 
   async buildEnv(
     providerId: string,
-    context?: { readonly projectId?: string },
+    context?: { readonly projectId?: string; readonly actor?: { readonly id?: string } },
   ): Promise<Record<string, string>> {
-    this.buildEnvCalls.push({ providerId, projectId: context?.projectId })
+    this.buildEnvCalls.push({
+      providerId,
+      projectId: context?.projectId,
+      actorId: context?.actor?.id,
+    })
     return this.env
   }
 }
@@ -281,6 +334,31 @@ class ScriptedSession implements AgentLiveSession {
 
   alive(): boolean {
     return !this.closed && this.events.length > 0
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+  }
+}
+
+class TimeoutSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  closed = false
+
+  async send(): Promise<void> {}
+  async respondPermission(): Promise<void> {}
+
+  nextEvent(): Promise<AgentEvent | null> {
+    if (this.closed) return Promise.resolve(null)
+    return new Promise(() => {})
+  }
+
+  currentSessionId(): string | undefined {
+    return "timeout-sdk"
+  }
+
+  alive(): boolean {
+    return !this.closed
   }
 
   async close(): Promise<void> {

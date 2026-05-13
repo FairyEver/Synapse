@@ -55,6 +55,9 @@ describe("AgentRuntimeService", () => {
     expect(factoryCalls).toEqual([
       { providerId: "anthropic", env: { ANTHROPIC_API_KEY: "sk-test" } },
     ])
+    expect(providerService.buildEnvCalls).toEqual([
+      { providerId: "anthropic", actorId: "user-1", projectId: "project-1" },
+    ])
     await expect(conversations.get(result.conversationId)).resolves.toMatchObject({
       providerId: "anthropic",
       sdkSessionId: "sdk-1",
@@ -90,6 +93,112 @@ describe("AgentRuntimeService", () => {
     expect(session.calls).toEqual(["interrupt", "close"])
     await expect(turn).resolves.toMatchObject({ error: "cancelled" })
   })
+
+  it("routes concurrent permission responses to their own SDK sessions", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const first = new PermissionSession("conversation-a-permission-1", "first allowed")
+    const second = new PermissionSession("conversation-b-permission-1", "second denied")
+    const sessions = [first, second]
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => {
+        const session = sessions.shift()
+        if (!session) throw new Error("unexpected session")
+        return session
+      },
+      now: fixedNow,
+    })
+
+    const firstTurn = service.send({ ...baseMessage("one"), workspaceKey: "workspace-a" })
+    const secondTurn = service.send({ ...baseMessage("two"), workspaceKey: "workspace-b" })
+    await waitFor(() => service.listPendingPermissions().length === 2)
+
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })
+    await service.respondPermission({
+      requestId: "conversation-b-permission-1",
+      behavior: "deny",
+      actor: { kind: "agent", id: "agent-1" },
+    })
+
+    await expect(firstTurn).resolves.toMatchObject({ resultText: "first allowed" })
+    await expect(secondTurn).resolves.toMatchObject({ resultText: "second denied" })
+    expect(first.responses).toEqual([{ requestId: "conversation-a-permission-1", behavior: "allow" }])
+    expect(second.responses).toEqual([{ requestId: "conversation-b-permission-1", behavior: "deny" }])
+  })
+
+  it("forceKillTurn settles a pending permission and resolves the send", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new PermissionSession("conversation-a-permission-1", "unused")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const id = conversationId("local", "s1", "active")
+
+    await expect(service.forceKillTurn(id)).resolves.toEqual({ status: "hard-killed" })
+
+    expect(service.listPendingPermissions()).toEqual([])
+    expect(session.closed).toBe(true)
+    await expect(turn).resolves.toMatchObject({ error: "cancelled" })
+  })
+
+  it("resetSession settles a pending permission and resolves the send", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new PermissionSession("conversation-a-permission-1", "unused")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await service.resetSession("s1", "local")
+
+    expect(service.listPendingPermissions()).toEqual([])
+    expect(session.closed).toBe(true)
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
+
+  it("deleteSession settles a pending permission and resolves the send", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new PermissionSession("conversation-a-permission-1", "unused")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await service.deleteSession(conversationId("local", "s1", "active"))
+
+    expect(service.listPendingPermissions()).toEqual([])
+    expect(session.closed).toBe(true)
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
 })
 
 function baseMessage(content: string): AgentMessage {
@@ -107,7 +216,11 @@ function fixedNow(): Date {
 }
 
 class FakeProviderService {
-  readonly buildEnvCalls: string[] = []
+  readonly buildEnvCalls: Array<{
+    readonly providerId: string
+    readonly actorId?: string
+    readonly projectId?: string
+  }> = []
 
   constructor(
     private readonly activeProviderId: string,
@@ -118,8 +231,15 @@ class FakeProviderService {
     return { id: this.activeProviderId }
   }
 
-  async buildEnv(providerId: string): Promise<Record<string, string>> {
-    this.buildEnvCalls.push(providerId)
+  async buildEnv(
+    providerId: string,
+    context?: { readonly actor?: { readonly id?: string }; readonly projectId?: string },
+  ): Promise<Record<string, string>> {
+    this.buildEnvCalls.push({
+      providerId,
+      actorId: context?.actor?.id,
+      projectId: context?.projectId,
+    })
     return this.env
   }
 }
@@ -196,6 +316,80 @@ class HangingSession implements AgentLiveSession {
   }
 }
 
+class PermissionSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  readonly responses: Array<{ readonly requestId: string; readonly behavior: string }> = []
+  closed = false
+  private waiter: ((event: AgentEvent | null) => void) | undefined
+  private readonly events: AgentEvent[] = []
+  private sent = false
+
+  constructor(
+    private readonly requestId: string,
+    private readonly resultText: string,
+  ) {}
+
+  async send(): Promise<void> {
+    this.sent = true
+  }
+
+  async respondPermission(
+    requestId: string,
+    decision: AgentPermissionDecision,
+  ): Promise<void> {
+    this.responses.push({ requestId, behavior: decision.behavior })
+    this.push({
+      type: "result",
+      content: this.resultText,
+      done: true,
+      sdkSessionId: requestId.replace("permission-1", "sdk-1"),
+    })
+  }
+
+  nextEvent(): Promise<AgentEvent | null> {
+    const event = this.events.shift()
+    if (event) return Promise.resolve(event)
+    if (this.closed) return Promise.resolve(null)
+    if (this.sent) {
+      this.sent = false
+      return Promise.resolve({
+        type: "permissionRequest",
+        requestId: this.requestId,
+        toolName: "Bash",
+        toolInput: "pwd",
+        toolInputRaw: { command: "pwd" },
+      })
+    }
+    return new Promise((resolve) => {
+      this.waiter = resolve
+    })
+  }
+
+  currentSessionId(): string | undefined {
+    return undefined
+  }
+
+  alive(): boolean {
+    return !this.closed
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    this.waiter?.(null)
+    this.waiter = undefined
+  }
+
+  private push(event: AgentEvent): void {
+    const waiter = this.waiter
+    if (waiter) {
+      this.waiter = undefined
+      waiter(event)
+      return
+    }
+    this.events.push(event)
+  }
+}
+
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   readonly schemaVersion = 1
   readonly backend = "json" as const
@@ -255,4 +449,13 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0))
   }
   throw new Error("Timed out waiting for condition")
+}
+
+function resolveSoon<T>(promise: Promise<T>): Promise<T | "timeout"> {
+  return Promise.race([
+    promise,
+    new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), 50)
+    }),
+  ])
 }

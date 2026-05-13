@@ -115,6 +115,35 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("generates permission request ids that are unique across conversations", async () => {
+    const first = createQueryFactory()
+    const second = createQueryFactory()
+    const sessionA = createSession(first.factory, { conversationId: "conversation-a" })
+    const sessionB = createSession(second.factory, { conversationId: "conversation-b" })
+
+    void canUseTool(first.getOptions())("Bash", { command: "pwd" }, {
+      signal: new AbortController().signal,
+    })
+    void canUseTool(second.getOptions())("Bash", { command: "pwd" }, {
+      signal: new AbortController().signal,
+    })
+
+    const eventA = await sessionA.nextEvent()
+    const eventB = await sessionB.nextEvent()
+
+    expect(eventA).toMatchObject({
+      type: "permissionRequest",
+      conversationId: "conversation-a",
+      requestId: expect.stringContaining("conversation-a"),
+    })
+    expect(eventB).toMatchObject({
+      type: "permissionRequest",
+      conversationId: "conversation-b",
+      requestId: expect.stringContaining("conversation-b"),
+    })
+    expect(eventA?.requestId).not.toBe(eventB?.requestId)
+  })
+
   it("returns an error event when the SDK query rejects", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)

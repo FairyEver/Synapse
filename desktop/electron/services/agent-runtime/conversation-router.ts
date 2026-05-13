@@ -42,6 +42,8 @@ export interface ConversationRouterDeps {
 }
 
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
+const MAX_EVENT_PAYLOAD_BYTES = 8192
+const MAX_SUMMARY_LENGTH = 1000
 
 export class ConversationRouter {
   private readonly deps: ConversationRouterDeps
@@ -229,7 +231,10 @@ export class ConversationRouter {
         if (!turn) continue
         const ac = new AbortController()
         const externalSignal = turn.abortSignal
-        const abort = () => ac.abort(externalSignal?.reason)
+        const abort = () => {
+          ac.abort(externalSignal?.reason)
+          void this.sessionManager.forceClose(turn.conversationId)
+        }
         externalSignal?.addEventListener("abort", abort, { once: true })
         state.turnAbortController = ac
         try {
@@ -293,7 +298,7 @@ export class ConversationRouter {
         message,
         abortSignal,
       })
-      const result = await this.processLiveTurn(state, message, conversation, liveSession, turnId)
+      const result = await this.processLiveTurn(state, message, conversation, liveSession, turnId, abortSignal)
 
       if (isBackgroundPlatform) {
         const tDone = this.isoNow()
@@ -323,6 +328,7 @@ export class ConversationRouter {
     conversation: ConversationEntryV1,
     liveSession: AgentLiveSession,
     turnId: string,
+    abortSignal?: AbortSignal,
   ): Promise<AgentRuntimeTurnResult> {
     const events: AgentEvent[] = []
     let resultText = ""
@@ -343,7 +349,7 @@ export class ConversationRouter {
       await this.saveEventHistory(conversation.id, event)
 
       if (event.type === "permissionRequest") {
-        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession)
+        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
         continue
       }
       if (event.type === "result") {
@@ -401,7 +407,7 @@ export class ConversationRouter {
       while (liveSession.alive()) {
         const event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
         if (!event) {
-          state.turnAbortController?.abort("relay-timeout")
+          await this.sessionManager.forceClose(conversation.id)
           return {
             conversationId: conversation.id,
             events,
@@ -485,9 +491,21 @@ export class ConversationRouter {
     conversationId: string,
     event: AgentPermissionRequestEvent,
     liveSession: AgentLiveSession,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     await new Promise<void>((resolve) => {
-      const pending: PendingPermissionState = {
+      let settled = false
+      let pending: PendingPermissionState
+      const abort = (): void => {
+        this.sessionManager.settlePendingPermission(pending)
+      }
+      const settle = (): void => {
+        if (settled) return
+        settled = true
+        abortSignal?.removeEventListener("abort", abort)
+        resolve()
+      }
+      pending = {
         requestId: event.requestId,
         projectId: this.deps.projectId,
         stateKey: state.key,
@@ -500,10 +518,12 @@ export class ConversationRouter {
         toolInputRaw: event.toolInputRaw,
         createdAt: this.isoNow(),
         liveSession,
-        resolve,
+        resolve: settle,
       }
       state.pending = pending
       this.pendingPermissions.set(event.requestId, pending)
+      abortSignal?.addEventListener("abort", abort, { once: true })
+      if (abortSignal?.aborted) abort()
     })
   }
 
@@ -561,7 +581,7 @@ export class ConversationRouter {
       conversationId,
       turnId,
       eventType: event.type,
-      payload: event as unknown as Record<string, unknown>,
+      payload: sanitizeEventPayload(event),
       createdAt: this.isoNow(),
     })
   }
@@ -737,7 +757,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
           toolName: event.toolName,
-          toolInputRaw: event.toolInputRaw,
+          toolInputSummary: truncateString(event.toolInput, MAX_SUMMARY_LENGTH),
         }),
       }
     case "toolResult":
@@ -771,8 +791,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           sdkSessionId: event.sdkSessionId,
           requestId: event.requestId,
           toolName: event.toolName,
-          toolInputRaw: event.toolInputRaw,
-          questions: event.questions,
+          toolInputSummary: truncateString(event.toolInput, MAX_SUMMARY_LENGTH),
         }),
       }
     case "error":
@@ -804,6 +823,49 @@ function compactMetadata(input: Record<string, unknown>): Record<string, unknown
   return Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== undefined),
   )
+}
+
+function sanitizeEventPayload(event: AgentEvent): Record<string, unknown> {
+  const sanitized = sanitizeValue(event)
+  if (!isRecord(sanitized)) {
+    return { type: event.type }
+  }
+  if (JSON.stringify(sanitized).length <= MAX_EVENT_PAYLOAD_BYTES) {
+    return sanitized
+  }
+  return compactMetadata({
+    type: event.type,
+    sdkSessionId: event.sdkSessionId,
+    requestId: "requestId" in event ? event.requestId : undefined,
+    toolName: "toolName" in event ? event.toolName : undefined,
+    truncated: true,
+  })
+}
+
+function sanitizeValue(value: unknown): unknown {
+  if (typeof value === "string") return truncateString(value, MAX_SUMMARY_LENGTH)
+  if (Array.isArray(value)) return value.slice(0, 20).map(sanitizeValue)
+  if (!isRecord(value)) return value
+  const output: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    const lower = key.toLowerCase()
+    if (lower.includes("raw")) continue
+    if (lower.includes("secret") || lower.includes("token") || lower.includes("password") || lower.includes("apikey")) {
+      output[key] = "[redacted]"
+      continue
+    }
+    output[key] = sanitizeValue(entry)
+  }
+  return output
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function truncateString(value: string | undefined, maxLength: number): string | undefined {
+  if (value === undefined) return undefined
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
 }
 
 async function nextLiveEventWithTimeout(

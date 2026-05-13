@@ -251,7 +251,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   private nextPermissionRequestId(): string {
     this.permissionSeq += 1
-    return `${this.providerId}-permission-${this.permissionSeq}`
+    return `${this.conversationId}-permission-${this.permissionSeq}`
   }
 
   private denyPendingPermissions(message: string): void {

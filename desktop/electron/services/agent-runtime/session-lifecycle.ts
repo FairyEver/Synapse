@@ -125,10 +125,7 @@ export class SessionLifecycleManager {
     const conversation = await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
     if (conversation) {
       const state = this.deps.states.get(conversation.id)
-      if (state?.pending) {
-        this.deps.pendingPermissions.delete(state.pending.requestId)
-        state.pending = undefined
-      }
+      this.deps.sessionManager.settlePending(state)
       await this.deps.sessionManager.forceClose(conversation.id)
     }
     return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
@@ -170,10 +167,7 @@ export class SessionLifecycleManager {
     if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
       throw new Error("Session is busy.")
     }
-    if (state.pending) {
-      this.deps.pendingPermissions.delete(state.pending.requestId)
-      state.pending = undefined
-    }
+    this.deps.sessionManager.settlePending(state)
     await this.deps.sessionManager.forceClose(conversation.id)
   }
 

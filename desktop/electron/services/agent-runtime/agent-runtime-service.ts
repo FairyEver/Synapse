@@ -303,11 +303,7 @@ export class AgentRuntimeService {
 
     state.cancelState = { requestedAt: Date.now() }
 
-    if (state.pending) {
-      this.pendingPermissions.delete(state.pending.requestId)
-      state.pending.resolve()
-      state.pending = undefined
-    }
+    this.sessionManager.settlePending(state)
 
     if (state.liveSession) {
       const gracefulSent = await this.sessionManager.interrupt(conversationId)
@@ -508,12 +504,7 @@ export class AgentRuntimeService {
       throw error
     }
 
-    this.pendingPermissions.delete(request.requestId)
-    const pendingState = this.states.get(pending.stateKey)
-    if (pendingState?.pending?.requestId === request.requestId) {
-      pendingState.pending = undefined
-    }
-    pending.resolve()
+    this.sessionManager.settlePendingPermission(pending)
   }
 
   async clearCurrentAgentSessionId(

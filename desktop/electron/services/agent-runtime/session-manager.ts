@@ -153,7 +153,9 @@ export class SessionManager {
 
   async forceClose(conversationId: string): Promise<void> {
     const state = this.deps.states.get(conversationId)
-    if (!state?.liveSession) return
+    if (!state) return
+    this.settlePending(state)
+    if (!state.liveSession) return
     await state.liveSession.close()
     state.liveSession = undefined
     state.providerId = undefined
@@ -162,13 +164,25 @@ export class SessionManager {
   async closeState(conversationId: string): Promise<void> {
     const state = this.deps.states.get(conversationId)
     if (!state) return
-    if (state.pending) {
-      this.deps.pendingPermissions.delete(state.pending.requestId)
-      state.pending = undefined
-    }
+    this.settlePending(state)
     await this.forceClose(conversationId)
     state.queue.length = 0
     this.deps.states.delete(conversationId)
+  }
+
+  settlePending(state: RuntimeSessionState | undefined): void {
+    const pending = state?.pending
+    if (!pending) return
+    this.settlePendingPermission(pending)
+  }
+
+  settlePendingPermission(pending: PendingPermissionState): void {
+    const state = this.deps.states.get(pending.stateKey)
+    if (state?.pending?.requestId === pending.requestId) {
+      state.pending = undefined
+    }
+    this.deps.pendingPermissions.delete(pending.requestId)
+    pending.resolve()
   }
 
   async closeIdleSessions(): Promise<void> {
