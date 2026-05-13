@@ -1,11 +1,3 @@
-import type {
-  ClaudeProcessRunner,
-} from "../../electron/services/agent-runtime/adapters/claude-code"
-import type { AgentAdapter } from "../../electron/services/agent-runtime/types"
-import type {
-  ProviderConfigView,
-  ProviderRuntimeView,
-} from "../../electron/services/provider-config/types"
 import type { SynapseContentAttachmentRecord, SynapseContentDetail } from "../types/content"
 import type { SynapseContentType } from "../types/content"
 import type {
@@ -90,23 +82,6 @@ export type EditorScanStrategy = {
   scanRules(rulesPath: string | null): Promise<EditorScanRuleItem[]>
 }
 
-export type AgentRuntimeProcessRunner = ClaudeProcessRunner
-
-export type AgentRuntimeEnvInput = {
-  readonly provider?: ProviderConfigView
-  readonly apiKey?: string
-  readonly model?: string
-}
-
-export type AgentRuntimeEnvResult = {
-  readonly env: Record<string, string | undefined>
-  readonly extraEnvAllowlist?: readonly string[]
-}
-
 export type AgentRuntimeDefinition = SynapseAgentBaseDefinition & {
-  createAdapter(
-    view: ProviderRuntimeView,
-    runner: AgentRuntimeProcessRunner,
-  ): AgentAdapter
-  buildEnv(input: AgentRuntimeEnvInput): AgentRuntimeEnvResult
+  runtimeKind: "claude-agent-sdk"
 }
