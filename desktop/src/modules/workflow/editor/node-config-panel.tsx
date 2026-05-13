@@ -23,6 +23,7 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const [isEditingName, setIsEditingName] = useState(false)
+  const nameCancelledRef = useRef(false)
 
   useEffect(() => {
     if (renameSignal && renameSignal > 0) {
@@ -67,12 +68,18 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
                     defaultValue={node.name}
                     key={`${node.id}-edit`}
                     onBlur={(e) => {
-                      onNameChange(node.id, e.target.value)
+                      if (!nameCancelledRef.current) {
+                        onNameChange(node.id, e.target.value)
+                      }
+                      nameCancelledRef.current = false
                       setIsEditingName(false)
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") e.currentTarget.blur()
-                      if (e.key === "Escape") setIsEditingName(false)
+                      if (e.key === "Escape") {
+                        nameCancelledRef.current = true
+                        e.currentTarget.blur()
+                      }
                     }}
                   />
                 ) : (

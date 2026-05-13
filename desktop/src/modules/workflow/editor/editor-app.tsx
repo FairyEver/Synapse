@@ -38,6 +38,7 @@ export function WorkflowEditorApp() {
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
+  const savingRef = useRef(false)
 
   const loadDefinition = useCallback(() => {
     if (!workflowId) return
@@ -89,6 +90,7 @@ export function WorkflowEditorApp() {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault()
+        if (savingRef.current) return
         const def = definitionRef.current
         if (def) void handleSave(def)
       }
@@ -181,6 +183,7 @@ export function WorkflowEditorApp() {
   }
 
   const handleSave = async (def: WorkflowDefinition, silent?: boolean) => {
+    savingRef.current = true
     setSaving(true)
     try {
       let result: Awaited<ReturnType<NonNullable<typeof window.synapse>["workflow"]["save"]>> | undefined
@@ -214,6 +217,7 @@ export function WorkflowEditorApp() {
       }
       return result
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }

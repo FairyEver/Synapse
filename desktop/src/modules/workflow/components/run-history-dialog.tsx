@@ -11,6 +11,14 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   completed: "secondary", failed: "destructive", cancelled: "outline",
 }
 
+function getFirstError(snapshot: WorkflowRunSnapshot): string | null {
+  if (snapshot.status !== "failed") return null
+  for (const r of Object.values(snapshot.nodeResults)) {
+    if (r.error) return r.error
+  }
+  return null
+}
+
 interface RunHistoryDialogProps {
   open: boolean
   workflowId: string
@@ -100,6 +108,9 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                 </Badge>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
+                  {getFirstError(s) && (
+                    <p className="text-xs text-destructive truncate mt-0.5">{getFirstError(s)}</p>
+                  )}
                 </div>
                 {formatDuration(s.startedAt, s.endedAt) && (
                   <span className="text-xs text-muted-foreground shrink-0">

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-14T00:15:00+08:00",
-  "totalIterations": 37,
+  "lastUpdated": "2026-05-14T01:00:00+08:00",
+  "totalIterations": 38,
   "files": {
     "desktop/electron/modules/workflow/ipc.ts": {
       "lastReviewedIteration": 30,
@@ -59,10 +59,11 @@
       "lastUpdated": "2026-05-14T00:15:00+08:00"
     },
     "desktop/src/modules/workflow/components/run-history-dialog.tsx": {
-      "lastReviewedIteration": 19,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active"
+      "lastReviewedIteration": 38,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:00:00+08:00"
     },
     "desktop/src/modules/workflow/components/run-params-dialog.tsx": {
       "lastReviewedIteration": 18,
@@ -112,11 +113,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/editor-app.tsx": {
-      "lastReviewedIteration": 35,
-      "issuesFound": 11,
-      "issuesFixed": 11,
+      "lastReviewedIteration": 38,
+      "issuesFound": 12,
+      "issuesFixed": 12,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:10:00+08:00"
+      "lastUpdated": "2026-05-14T01:00:00+08:00"
     },
     "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
       "lastReviewedIteration": 33,
@@ -126,10 +127,11 @@
       "lastUpdated": "2026-05-13T21:00:00+08:00"
     },
     "desktop/src/modules/workflow/editor/node-config-panel.tsx": {
-      "lastReviewedIteration": 19,
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "healthScore": "active"
+      "lastReviewedIteration": 38,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:00:00+08:00"
     },
     "desktop/src/modules/workflow/editor/node-context-menu.tsx": {
       "lastReviewedIteration": 20,
@@ -429,8 +431,8 @@
   "areas": {
     "editor-interactions": {
       "status": "active",
-      "lastIteration": 35,
-      "issuesCount": 8
+      "lastIteration": 38,
+      "issuesCount": 10
     },
     "general-ui": {
       "status": "active",
@@ -454,8 +456,8 @@
     },
     "run-history": {
       "status": "active",
-      "lastIteration": 19,
-      "issuesCount": 2
+      "lastIteration": 38,
+      "issuesCount": 3
     },
     "run-params": {
       "status": "active",

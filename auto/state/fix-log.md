@@ -889,3 +889,28 @@ Runner 详情面板从"执行中无进度信息"变为"实时显示当前执行�
 
 ### 本次进展
 Runner DAG 视图从"所有 Switch 出边一起亮"变为"仅激活分支亮起"，用户能直接从视觉判断分支走向；参数编辑器从"允许重复名称导致静默数据丢失"变为"实时标红+禁止保存+后端兜底校验"的完整防护链。
+
+---
+
+## [2026-05-14 01:00] 第 38 次迭代
+
+### 发现的问题
+- Ctrl+S 快捷键无并发保存保护：第 35 轮新增的 Ctrl+S 监听器直接调用 handleSave 而不检查当前是否正在保存。useEffect 的 `[]` 依赖意味着 handler 闭包中无法读取 `saving` state，快速连按 Ctrl+S 会触发多次并发 `workflow.save()` IPC 调用。工具栏按钮通过 `disabled={busy}` 保护，但键盘路径绕过了该保护（editor-app.tsx:88-98）。
+- 节点名称编辑 Escape 键触发保存而非取消：Input 的 onKeyDown Escape 分支调用 `setIsEditingName(false)` 导致组件卸载，卸载触发 onBlur 回调执行 `onNameChange(node.id, e.target.value)`，用户按 Escape 的意图是放弃修改但实际效果是保存当前值（node-config-panel.tsx:69-76）。
+- 运行历史对话框失败记录无错误摘要：RunHistoryDialog 的列表项仅显示 status badge / 时间 / 时长 / 节点数，failed 状态的运行不展示任何错误信息。WorkflowRunSnapshot.nodeResults 中包含 error 字段但未被提取展示，用户必须逐个点开查看才能知道失败原因（run-history-dialog.tsx:92-115）。
+
+### 修复内容
+- [desktop/src/modules/workflow/editor/editor-app.tsx:41,93,186,220] 新增 `savingRef = useRef(false)`，Ctrl+S handler 在调用 handleSave 前检查 `if (savingRef.current) return`；handleSave 入口设置 `savingRef.current = true`，finally 块重置为 false。与 toolbar 的 `disabled={busy}` 形成双重保护。
+- [desktop/src/modules/workflow/editor/node-config-panel.tsx:25,70-83] 新增 `nameCancelledRef = useRef(false)`；Escape onKeyDown 设置 `nameCancelledRef.current = true` 后调用 `e.currentTarget.blur()`（统一通过 blur 退出编辑态）；onBlur 检查 `if (!nameCancelledRef.current)` 才执行 onNameChange，之后重置 ref。
+- [desktop/src/modules/workflow/components/run-history-dialog.tsx:14-20,103-105] 新增 `getFirstError(snapshot)` 辅助函数：仅对 failed 状态遍历 nodeResults 提取第一个 error 字符串；列表项时间行下方条件渲染 `text-destructive truncate` 错误摘要。
+
+### 与历史的关系
+- 缺陷 1：延续第 35 轮（第 35 轮新增 Ctrl+S 快捷键但未加并发保护，本轮补齐 ref-based guard 使其与 toolbar 按钮的 disabled 保护对等）
+- 缺陷 2：独立（node-config-panel.tsx 的 name editing 在 iter 19 被审计但当时修复的是其他问题，Escape-triggers-save 从未被覆盖）
+- 缺陷 3：延续第 30 轮（第 30 轮修复了 Runner hydration 路径的错误恢复，本轮补齐列表页的错误可见性——同一数据的不同展示入口）
+
+### 日志补充
+- 无（纯 UI 交互优化：savingRef 为已有 saving state 的 ref 镜像用于闭包读取，nameCancelledRef 为 blur 事件的条件守卫，getFirstError 为已有 nodeResults 数据的渲染提取——均不涉及数据流、执行路径或 IPC 契约变更）
+
+### 本次进展
+编辑器 Ctrl+S 从"可并发触发多次保存"变为"ref 守卫确保单次执行"；节点名称编辑从"Escape 意外保存"变为"Escape 正确取消、Enter/blur 保存"的标准编辑模式；运行历史从"失败记录无错误信息"变为"内联显示首个错误摘要"——三个修复分别补齐了操作安全性、编辑语义正确性、错误可见性三个维度的体验缺口。
