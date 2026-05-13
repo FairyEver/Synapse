@@ -409,4 +409,24 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       }),
     ).toBe(false)
   })
+
+  it("conversations schema rejects invalid sdk usage and cost values", () => {
+    const baseConversation = {
+      id: "conv-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      history: [],
+      active: true,
+      createdAt: "2026-05-13T00:00:00.000Z",
+      updatedAt: "2026-05-13T00:00:00.000Z",
+    }
+
+    expect(conversationsSchema.validate({ ...baseConversation, usage: [] })).toBe(false)
+    expect(conversationsSchema.validate({ ...baseConversation, usage: { inputTokens: "1" } })).toBe(false)
+    expect(conversationsSchema.validate({ ...baseConversation, usage: { inputTokens: NaN } })).toBe(false)
+    expect(conversationsSchema.validate({ ...baseConversation, usage: { inputTokens: -1 } })).toBe(false)
+    expect(conversationsSchema.validate({ ...baseConversation, costUsd: Infinity })).toBe(false)
+    expect(conversationsSchema.validate({ ...baseConversation, costUsd: -0.01 })).toBe(false)
+  })
 })

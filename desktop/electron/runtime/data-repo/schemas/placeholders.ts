@@ -27,6 +27,10 @@ const isOptionalBoolean = (value: unknown): boolean =>
 const isOptionalNumber = (value: unknown): boolean =>
   value === undefined || typeof value === "number"
 
+const isPlainRecord = <T extends Record<string, unknown>>(value: unknown): value is T => {
+  return isAnyRecord<T>(value) && !Array.isArray(value)
+}
+
 const isOptionalRecord = (value: unknown): value is Record<string, unknown> | undefined =>
   value === undefined || isAnyRecord<Record<string, unknown>>(value)
 
@@ -327,7 +331,7 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && isOptionalString((v as ConversationEntryV1).providerId)
     && isOptionalString((v as ConversationEntryV1).sdkSessionId)
     && ((v as ConversationEntryV1).usage === undefined || isConversationUsage((v as ConversationEntryV1).usage))
-    && isOptionalNumber((v as ConversationEntryV1).costUsd)
+    && isOptionalNonNegativeFiniteNumber((v as ConversationEntryV1).costUsd)
     && isOptionalString((v as ConversationEntryV1).channelKey)
     && isOptionalString((v as ConversationEntryV1).workspaceKey)
     && isOptionalString((v as ConversationEntryV1).workspacePath)
@@ -1036,6 +1040,14 @@ function isConnectorWorkspaceConfig(value: unknown): value is ConnectorWorkspace
     && isOptionalNumber(value.idleTimeoutMs)
 }
 
+function isOptionalNonNegativeFiniteNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0)
+}
+
+function isOptionalNonNegativeInteger(value: unknown): boolean {
+  return value === undefined || (Number.isInteger(value) && value >= 0)
+}
+
 function isConversationHistoryEntry(value: unknown): value is ConversationHistoryEntryV1 {
   return isAnyRecord<ConversationHistoryEntryV1>(value)
     && ["user", "assistant", "system", "tool"].includes(value.role)
@@ -1045,10 +1057,10 @@ function isConversationHistoryEntry(value: unknown): value is ConversationHistor
 }
 
 function isConversationUsage(value: unknown): value is ConversationUsageV1 {
-  return isAnyRecord<ConversationUsageV1>(value)
-    && isOptionalNumber(value.inputTokens)
-    && isOptionalNumber(value.outputTokens)
-    && isOptionalNumber(value.totalTokens)
+  return isPlainRecord<ConversationUsageV1>(value)
+    && isOptionalNonNegativeInteger(value.inputTokens)
+    && isOptionalNonNegativeInteger(value.outputTokens)
+    && isOptionalNonNegativeInteger(value.totalTokens)
 }
 
 function isConversationResumePolicy(value: unknown): value is ConversationResumePolicyV1 {
