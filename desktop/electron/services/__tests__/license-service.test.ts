@@ -229,7 +229,9 @@ describe("LicenseService", () => {
 
     try {
       service.start()
-      await flushPromises()
+      await vi.waitFor(() => {
+        expect(client.validate).toHaveBeenCalledTimes(1)
+      })
 
       await expect(service.getStatus()).resolves.toMatchObject({
         status: "not_activated",
@@ -238,7 +240,6 @@ describe("LicenseService", () => {
         leaseToken: null,
         leaseExpiresAt: null,
       })
-      expect(client.validate).toHaveBeenCalledTimes(1)
       expect(client.renew).not.toHaveBeenCalled()
     } finally {
       service.stop()
@@ -378,6 +379,3 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   }
 }
 
-function flushPromises(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve))
-}
