@@ -14,6 +14,9 @@ import type {
 } from "../../services/provider"
 import { resolveProjectAgent } from "./ipc-shared"
 
+type CreateProviderIpcInput = Omit<CreateProviderInput, "env">
+type UpdateProviderIpcInput = Omit<UpdateProviderInput, "env">
+
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
 const openReferenceRequestSchema = projectRequestSchema.extend({
@@ -38,8 +41,6 @@ const providerApiKeyFieldSchema = z.enum([
   "ANTHROPIC_API_KEY",
 ]) satisfies z.ZodType<ProviderApiKeyField>
 
-const providerEnvSchema = z.record(z.string(), z.string())
-
 const createProviderInputSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -52,9 +53,8 @@ const createProviderInputSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
-  env: providerEnvSchema.default({}),
   sortIndex: z.number().optional(),
-}) satisfies z.ZodType<CreateProviderInput>
+}) satisfies z.ZodType<CreateProviderIpcInput>
 
 const updateProviderInputSchema = z.object({
   name: z.string().min(1).optional(),
@@ -67,10 +67,9 @@ const updateProviderInputSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
-  env: providerEnvSchema.optional(),
   archived: z.boolean().optional(),
   sortIndex: z.number().optional(),
-}) satisfies z.ZodType<UpdateProviderInput>
+}) satisfies z.ZodType<UpdateProviderIpcInput>
 
 const createProviderRequestSchema = projectRequestSchema.extend({
   provider: createProviderInputSchema,
@@ -238,7 +237,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     response: publicProviderSchema,
     handler: async (ctx, request: CreateProviderRequest) => {
       const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      return publicProvider(await providerService.createProvider(request.provider))
+      return publicProvider(await providerService.createProvider(request.provider as CreateProviderInput))
     },
   },
   updateProvider: {

@@ -255,7 +255,6 @@ export type SynapseCreateAgentProviderInput = {
   readonly haikuModel?: string
   readonly sonnetModel?: string
   readonly opusModel?: string
-  readonly env: Record<string, string>
   readonly sortIndex?: number
 }
 

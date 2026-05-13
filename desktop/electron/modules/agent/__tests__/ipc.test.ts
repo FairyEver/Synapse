@@ -210,7 +210,14 @@ describe("agentIpcModule", () => {
         apiKey: "sk-secret",
         active: true,
         model: "claude-sonnet-4.5",
-        env: {},
+        env: {
+          ANTHROPIC_API_KEY: "unsafe",
+          NODE_OPTIONS: "--require unsafe",
+          PATH: "/tmp/unsafe",
+        },
+        secretRef: "secret:unsafe",
+        encryptedApiKey: "encrypted-unsafe",
+        encryptedSecret: "encrypted-secret",
       },
     })
     const updateResult = await harness.invoke("synapse:agent:update-provider", {
@@ -219,6 +226,13 @@ describe("agentIpcModule", () => {
       patch: {
         name: "Anthropic Updated",
         apiKey: "sk-new-secret",
+        env: {
+          ANTHROPIC_AUTH_TOKEN: "unsafe",
+          NODE_OPTIONS: "--require unsafe",
+        },
+        secretRef: "secret:update-unsafe",
+        encryptedApiKey: "encrypted-update-unsafe",
+        encryptedSecret: "encrypted-update-secret",
       },
     })
     const archiveResult = await harness.invoke("synapse:agent:archive-provider", {
@@ -233,6 +247,14 @@ describe("agentIpcModule", () => {
     expect(listResult).toEqual([expect.objectContaining({ id: "anthropic", name: "Anthropic" })])
     expect(createProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "sk-secret" }))
     expect(updateProvider).toHaveBeenCalledWith("anthropic", expect.objectContaining({ apiKey: "sk-new-secret" }))
+    const createProviderInput = createProvider.mock.calls[0]?.[0] as Record<string, unknown>
+    const updateProviderPatch = updateProvider.mock.calls[0]?.[1] as Record<string, unknown>
+    for (const input of [createProviderInput, updateProviderPatch]) {
+      expect(input).not.toHaveProperty("env")
+      expect(input).not.toHaveProperty("secretRef")
+      expect(input).not.toHaveProperty("encryptedApiKey")
+      expect(input).not.toHaveProperty("encryptedSecret")
+    }
     expect(archiveProvider).toHaveBeenCalledWith("anthropic")
     expect(setActiveProvider).toHaveBeenCalledWith("anthropic")
     expect(archiveResult).toEqual({ ok: true })
@@ -245,6 +267,7 @@ describe("agentIpcModule", () => {
       const providers = Array.isArray(result) ? result : [result]
       for (const providerResult of providers) {
         expect(providerResult).not.toHaveProperty("apiKey")
+        expect(providerResult).not.toHaveProperty("env")
       }
     }
   })
