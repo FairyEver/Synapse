@@ -6,14 +6,11 @@ describe("agent definition registry", () => {
   it("exports sorted renderer-safe Agent runtime metadata", () => {
     expect(agentDefinitions.map((definition) => definition.id)).toEqual([
       "claude-code",
-      "codex",
-      "hermes",
     ])
   })
 
   it("declares local CLI dependencies and mode lists", () => {
     const claude = agentDefinitions.find((definition) => definition.id === "claude-code")
-    const codex = agentDefinitions.find((definition) => definition.id === "codex")
 
     expect(claude?.icon).toEqual(expect.any(String))
     expect(claude?.runtime).toEqual({ kind: "local-cli", binaries: ["claude"] })
@@ -24,14 +21,6 @@ describe("agent definition registry", () => {
       "auto",
       "bypassPermissions",
       "dontAsk",
-    ])
-    expect(codex?.icon).toEqual(expect.any(String))
-    expect(codex?.runtime).toEqual({ kind: "local-cli", binaries: ["codex"] })
-    expect(codex?.modes.map((mode) => mode.key)).toEqual([
-      "suggest",
-      "auto-edit",
-      "full-auto",
-      "yolo",
     ])
   })
 })

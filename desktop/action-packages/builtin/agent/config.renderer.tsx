@@ -9,10 +9,9 @@ import { Input } from "../../../src/components/ui/input"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { agentBaseDefinition as claudeCodeDef } from "../../../src/definitions/agent/claude-code/agent-shared"
-import { agentBaseDefinition as codexDef } from "../../../src/definitions/agent/codex/agent-shared"
 import type { AgentActionConfig } from "./schema"
 
-const AGENT_DEFINITIONS = [claudeCodeDef, codexDef] as const
+const AGENT_DEFINITIONS = [claudeCodeDef] as const
 
 export function AgentConfigForm({
   value,

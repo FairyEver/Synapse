@@ -2,7 +2,7 @@ import { z } from "zod"
 
 export const agentActionConfigSchema = z.object({
   projectId: z.string().min(1),
-  agentType: z.enum(["claude-code", "codex"]),
+  agentType: z.enum(["claude-code"]),
   mode: z.string().min(1),
   prompt: z.string().min(1),
   sessionPolicy: z.enum(["fresh", "resume"]),

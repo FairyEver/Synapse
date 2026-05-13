@@ -1,9 +1,6 @@
 import type {
   ClaudeProcessRunner,
 } from "../../electron/services/agent-runtime/adapters/claude-code"
-import type {
-  CodexProcessRunner,
-} from "../../electron/services/agent-runtime/adapters/codex-exec"
 import type { AgentAdapter } from "../../electron/services/agent-runtime/types"
 import type {
   ProviderConfigView,
@@ -93,7 +90,7 @@ export type EditorScanStrategy = {
   scanRules(rulesPath: string | null): Promise<EditorScanRuleItem[]>
 }
 
-export type AgentRuntimeProcessRunner = CodexProcessRunner & ClaudeProcessRunner
+export type AgentRuntimeProcessRunner = ClaudeProcessRunner
 
 export type AgentRuntimeEnvInput = {
   readonly provider?: ProviderConfigView

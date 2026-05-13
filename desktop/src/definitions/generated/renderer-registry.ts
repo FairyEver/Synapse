@@ -5,8 +5,6 @@ import { editorDefinition as cursorEditorDefinition } from "../editor/cursor/edi
 import { editorDefinition as hermesEditorDefinition } from "../editor/hermes/editor"
 import { editorDefinition as windsurfEditorDefinition } from "../editor/windsurf/editor"
 import { agentDefinition as claudeCodeAgentDefinition } from "../agent/claude-code/agent"
-import { agentDefinition as codexAgentDefinition } from "../agent/codex/agent"
-import { agentDefinition as hermesAgentDefinition } from "../agent/hermes/agent"
 import { mcpDefinition as antigravityMcpDefinition } from "../editor/antigravity/mcp"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../editor/claude-code/mcp"
 import { mcpDefinition as codexMcpDefinition } from "../editor/codex/mcp"
@@ -35,8 +33,6 @@ export const editorDefinitions = [
 
 export const agentDefinitions = [
   claudeCodeAgentDefinition,
-  codexAgentDefinition,
-  hermesAgentDefinition,
 ].sort((left, right) => left.order - right.order) satisfies SynapseAgentDefinition[]
 
 export const mcpDefinitions = [

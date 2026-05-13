@@ -5,8 +5,6 @@ import { editorAdapter as cursorEditorAdapter } from "../../../../src/definition
 import { editorAdapter as hermesEditorAdapter } from "../../../../src/definitions/editor/hermes/adapter"
 import { editorAdapter as windsurfEditorAdapter } from "../../../../src/definitions/editor/windsurf/adapter"
 import { agentRuntimeDefinition as claudeCodeAgentRuntimeDefinition } from "../../../../src/definitions/agent/claude-code/agent-main"
-import { agentRuntimeDefinition as codexAgentRuntimeDefinition } from "../../../../src/definitions/agent/codex/agent-main"
-import { agentRuntimeDefinition as hermesAgentRuntimeDefinition } from "../../../../src/definitions/agent/hermes/agent-main"
 import { mcpDefinition as antigravityMcpDefinition } from "../../../../src/definitions/editor/antigravity/mcp"
 import { mcpDefinition as claudeCodeMcpDefinition } from "../../../../src/definitions/editor/claude-code/mcp"
 import { mcpDefinition as codexMcpDefinition } from "../../../../src/definitions/editor/codex/mcp"
@@ -48,8 +46,6 @@ export const editorAdapterById = new Map(
 
 export const agentRuntimeDefinitions = [
   claudeCodeAgentRuntimeDefinition,
-  codexAgentRuntimeDefinition,
-  hermesAgentRuntimeDefinition,
 ].sort((left, right) => left.order - right.order) satisfies AgentRuntimeDefinition[]
 
 export const agentRuntimeDefinitionById = new Map<string, AgentRuntimeDefinition>(
