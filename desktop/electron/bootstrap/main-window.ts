@@ -5,14 +5,20 @@
  * Phase 0.3 (T3.12) replaces this with WindowManager.
  */
 
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, ipcMain } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
 import { managedBrowserWindow, type WindowManager } from "../runtime/window"
 import { getWindowIconPath } from "../services/app-icon-service"
 import { createMainLogger } from "../services/log-store"
+import { RendererHealthService } from "../services/renderer-health"
 
 const logger = createMainLogger("bootstrap.main-window")
+const healthLogger = createMainLogger("renderer-health")
+const rendererHealthService = new RendererHealthService({
+  logger: healthLogger,
+  ipcMain,
+})
 
 export interface MainWindowState {
   current: BrowserWindow | null
@@ -49,6 +55,7 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
   })
 
   deps.state.current = window
+  rendererHealthService.attach(window.webContents)
   deps.windowManager?.attach({ id: "main", role: "main" }, managedBrowserWindow(window, "main"))
 
   window.webContents.on("preload-error", (_event, preloadPath, error) => {
@@ -68,6 +75,7 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
   })
 
   window.on("closed", () => {
+    rendererHealthService.detach()
     logger.info("Main window closed.")
     deps.state.current = null
   })
