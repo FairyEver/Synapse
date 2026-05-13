@@ -124,6 +124,7 @@ export interface AgentResultEvent extends AgentEventBase {
 export interface AgentErrorEvent extends AgentEventBase {
   readonly type: "error"
   readonly message: string
+  readonly payload?: Record<string, unknown>
 }
 
 export interface AgentSessionInitEvent extends AgentEventBase {

@@ -229,6 +229,13 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       case "toolResult":
         await this.sendProgress(adapter, target, turn, event)
         break
+      case "sessionInit":
+      case "assistant":
+      case "stream":
+      case "status":
+      case "compactBoundary":
+      case "sdkEvent":
+        break
       default: {
         const exhaustive: never = event
         throw new Error(`Unsupported agent event ${(exhaustive as AgentEvent).type}`)

@@ -1,4 +1,4 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { describe, expect, it } from "vitest"
 
 import { bridgeSdkMessage } from "../sdk-event-bridge"
@@ -46,6 +46,30 @@ describe("SDK event bridge", () => {
     })
   })
 
+  it("bridges SDK result error messages to error events", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      session_id: "sdk-err",
+      errors: ["boom"],
+      stop_reason: "tool failed",
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: expect.stringContaining("boom"),
+      sdkSessionId: "sdk-err",
+      payload: expect.objectContaining({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        session_id: "sdk-err",
+        errors: ["boom"],
+        stop_reason: "tool failed",
+      }),
+      ...baseEnvelope,
+    })
+  })
+
   it("bridges unknown SDK messages to generic SDK events with plain JSON payloads", () => {
     const event = bridgeSdkMessage({
       type: "future_message",
@@ -70,5 +94,47 @@ describe("SDK event bridge", () => {
       ...baseEnvelope,
     })
     expect((event as { payload: Record<string, unknown> }).payload.callback).toBeUndefined()
+  })
+
+  it("sanitizes circular SDK payloads without dropping enumerable data", () => {
+    class Fixture {
+      readonly classField = "kept"
+    }
+
+    const fixture = new Fixture()
+    const message = {
+      type: "future_message",
+      subtype: "future_subtype",
+      session_id: "sdk-cycle",
+      keep: "yes",
+      omit: undefined,
+      callback: () => "drop me",
+      symbolValue: Symbol("drop me"),
+      array: [undefined, 1n, fixture],
+      fixture,
+    } as Record<string, unknown>
+    message.self = message
+
+    const event = bridgeSdkMessage(message as unknown as SDKMessage, baseEnvelope)
+
+    expect(event).toMatchObject({
+      type: "sdkEvent",
+      sdkType: "future_message",
+      sdkSubtype: "future_subtype",
+      payload: {
+        type: "future_message",
+        subtype: "future_subtype",
+        session_id: "sdk-cycle",
+        keep: "yes",
+        self: "[Circular]",
+        array: [null, "1", { classField: "kept" }],
+        fixture: { classField: "kept" },
+      },
+      ...baseEnvelope,
+    })
+    const payload = (event as { payload: Record<string, unknown> }).payload
+    expect(payload.omit).toBeUndefined()
+    expect(payload.callback).toBeUndefined()
+    expect(payload.symbolValue).toBeUndefined()
   })
 })

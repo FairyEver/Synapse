@@ -1,4 +1,4 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 
 import type { AgentEvent } from "./types"
 
@@ -18,9 +18,19 @@ export function bridgeSdkMessage(
   const sdkSessionId = stringValue(raw.session_id)
 
   if (raw.type === "result") {
+    if (raw.subtype !== "success" || raw.is_error === true) {
+      return {
+        type: "error",
+        message: resultErrorMessage(raw),
+        sdkSessionId,
+        payload,
+        ...envelope,
+      }
+    }
+
     return {
       type: "result",
-      content: resultContent(raw),
+      content: typeof raw.result === "string" ? raw.result : "",
       done: true,
       sdkSessionId,
       costUsd: numberValue(raw.total_cost_usd),
@@ -90,32 +100,18 @@ export function bridgeSdkMessage(
   }
 }
 
-function resultContent(message: Record<string, unknown>): string {
-  if (message.subtype === "success" && typeof message.result === "string") {
-    return message.result
-  }
-
+function resultErrorMessage(message: Record<string, unknown>): string {
   const errors = Array.isArray(message.errors)
     ? message.errors.filter((error): error is string => typeof error === "string")
     : []
   if (errors.length > 0) return errors.join("\n")
 
-  return stringValue(message.stop_reason) ?? ""
+  return stringValue(message.stop_reason) ?? "SDK result failed"
 }
 
 function toPlainJson(value: unknown): Record<string, unknown> {
-  try {
-    const json = JSON.stringify(value, (_key, item: unknown) => {
-      if (typeof item === "function" || typeof item === "symbol") return undefined
-      if (typeof item === "bigint") return item.toString()
-      return item
-    })
-    if (!json) return {}
-    const parsed = JSON.parse(json) as unknown
-    return isRecord(parsed) ? parsed : { value: parsed }
-  } catch {
-    return { value: String(value) }
-  }
+  const sanitized = sanitizeJsonValue(value, new WeakSet<object>())
+  return isRecord(sanitized) ? sanitized : { value: sanitized }
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
@@ -140,6 +136,33 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined
+}
+
+function sanitizeJsonValue(value: unknown, seen: WeakSet<object>): unknown {
+  if (value === null) return null
+  if (value === undefined) return undefined
+  if (typeof value === "function" || typeof value === "symbol") return undefined
+  if (typeof value === "bigint") return value.toString()
+  if (typeof value !== "object") return value
+  if (seen.has(value)) return "[Circular]"
+
+  seen.add(value)
+  if (Array.isArray(value)) {
+    const array = value.map((item) => {
+      const sanitized = sanitizeJsonValue(item, seen)
+      return sanitized === undefined ? null : sanitized
+    })
+    seen.delete(value)
+    return array
+  }
+
+  const record: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    const sanitized = sanitizeJsonValue(item, seen)
+    if (sanitized !== undefined) record[key] = sanitized
+  }
+  seen.delete(value)
+  return record
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

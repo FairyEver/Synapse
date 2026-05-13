@@ -119,6 +119,14 @@ function payloadFromAgentEvent(event: AgentEvent): OutboxPayloadV1 {
       return eventPayload("event", event.content ?? event.toolName, event)
     case "permissionRequest":
       return eventPayload("event", event.toolName, event)
+    case "sessionInit":
+      return eventPayload("event", event.sdkSessionId, event)
+    case "assistant":
+    case "stream":
+    case "status":
+    case "compactBoundary":
+    case "sdkEvent":
+      return eventPayload("event", undefined, event)
     default: {
       const exhaustive: never = event
       return eventPayload("event", "unknown", exhaustive)

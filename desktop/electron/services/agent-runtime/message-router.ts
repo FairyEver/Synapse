@@ -1306,6 +1306,12 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
       }
     case "text":
     case "result":
+    case "sessionInit":
+    case "assistant":
+    case "stream":
+    case "status":
+    case "compactBoundary":
+    case "sdkEvent":
       return null
     default: {
       const exhaustive: never = event
@@ -1391,7 +1397,6 @@ function appendRelayText(current: string, event: AgentEvent): string {
   if (event.type === "error" && !current) return event.message
   return current
 }
-
 
 
 
