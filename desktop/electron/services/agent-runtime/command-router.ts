@@ -1,6 +1,6 @@
-import type { AgentCommandEntryV1, ConversationEntryV1, ProviderModelEntryV1 } from "../../runtime/data-repo"
+import type { AgentCommandEntryV1, ConversationEntryV1 } from "../../runtime/data-repo"
 import { isShellKind, type ShellKind } from "../shell-exec"
-import type { ProviderConfigService } from "../provider-config"
+import type { CCProvider, ProviderService } from "../provider"
 import { agentRuntimeDefinitionById } from "../definitions/generated/main-registry"
 import type {
   AgentEvent,
@@ -24,7 +24,7 @@ export interface AgentCommandRouterDeps {
   readonly projectId: string
   readonly agentType: string
   resolveAgentType?(): Promise<string> | string
-  readonly providerConfig: ProviderConfigService
+  readonly providerService: ProviderService
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
@@ -61,6 +61,11 @@ export type AgentCommandRouterResult = AgentRuntimeTurnResult | AgentPromptComma
 interface ModeOption {
   readonly key: string
   readonly label: string
+}
+
+interface ModelOption {
+  readonly id: string
+  readonly aliases: readonly string[]
 }
 
 export class AgentCommandRouter {
@@ -163,22 +168,22 @@ export class AgentCommandRouter {
     conversation: ConversationEntryV1,
     args: readonly string[],
   ): Promise<AgentRuntimeTurnResult> {
-    const agentType = await this.resolveAgentType()
-    const state = await this.deps.providerConfig.getProjectProviderState(
-      this.deps.projectId,
-      agentType,
-    )
+    const provider = await this.deps.providerService.getActiveProvider()
+    const models = modelOptionsForProvider(provider)
     if (args.length === 0) {
-      return commandResult(conversation.id, formatModelList(state.activeModel, state.activeProvider?.models ?? []))
+      return commandResult(conversation.id, formatModelList(provider?.model, models))
     }
 
     const targetInput = parseModelSwitchArgs(args)
     if (!targetInput) {
       return commandResult(conversation.id, modelUsage(), true)
     }
+    if (!provider) {
+      return commandResult(conversation.id, "No active provider configured.", true)
+    }
 
-    const target = resolveModelTarget(targetInput, state.activeProvider?.models ?? [])
-    await this.deps.providerConfig.setActiveModel(this.deps.projectId, target, agentType)
+    const target = resolveModelTarget(targetInput, models)
+    await this.deps.providerService.updateProvider(provider.id, { model: target })
     const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
@@ -195,12 +200,8 @@ export class AgentCommandRouter {
   ): Promise<AgentRuntimeTurnResult> {
     const agentType = await this.resolveAgentType()
     const modes = modesForAgent(agentType)
-    const state = await this.deps.providerConfig.getProjectProviderState(
-      this.deps.projectId,
-      agentType,
-    )
     if (args.length === 0) {
-      return commandResult(conversation.id, formatModeList(state.activeMode, modes))
+      return commandResult(conversation.id, formatModeList(undefined, modes))
     }
 
     const target = resolveModeTarget(args[0] ?? "", modes)
@@ -208,14 +209,7 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, modeUsage(modes), true)
     }
 
-    await this.deps.providerConfig.setActiveMode(this.deps.projectId, target, agentType)
-    const reset = await this.deps.resetSession(message)
-    return commandResult(
-      reset?.id ?? conversation.id,
-      `Mode changed: ${target}`,
-      false,
-      reset?.agentSessionId,
-    )
+    return commandResult(conversation.id, "Mode switching is unavailable.", true)
   }
 
   private async handleNew(
@@ -233,19 +227,25 @@ export class AgentCommandRouter {
 
   private async handleStatus(conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult> {
     const agentType = await this.resolveAgentType()
-    const state = await this.deps.providerConfig.getProjectProviderState(
-      this.deps.projectId,
-      agentType,
-    )
+    const provider = await this.currentProviderForConversation(conversation)
     const lines = [
       `Agent: ${agentType}`,
-      `Provider: ${state.activeProvider?.id ?? "default"}`,
-      `Model: ${state.activeModel ?? "default"}`,
-      `Mode: ${state.activeMode ?? "default"}`,
+      `Provider: ${provider?.id ?? conversation.providerId ?? "default"}`,
+      `Model: ${provider?.model ?? "default"}`,
+      "Mode: default",
       `Conversation: ${conversation.id}`,
       `Agent session: ${conversation.agentSessionId ?? "none"}`,
     ]
     return commandResult(conversation.id, lines.join("\n"), false, conversation.agentSessionId)
+  }
+
+  private async currentProviderForConversation(conversation: ConversationEntryV1): Promise<CCProvider | null> {
+    if (conversation.providerId) {
+      const providers = await this.deps.providerService.listProviders()
+      const provider = providers.find((item) => item.id === conversation.providerId)
+      if (provider) return provider
+    }
+    return this.deps.providerService.getActiveProvider()
   }
 
   private async resolveAgentType(): Promise<string> {
@@ -478,7 +478,7 @@ export function parseModelSwitchArgs(args: readonly string[]): string | null {
 
 export function resolveModelTarget(
   input: string,
-  models: readonly ProviderModelEntryV1[],
+  models: readonly ModelOption[],
 ): string {
   const trimmed = input.trim()
   const index = Number.parseInt(trimmed, 10)
@@ -486,7 +486,7 @@ export function resolveModelTarget(
     return models[index - 1]?.id ?? trimmed
   }
   const alias = models.find((model) =>
-    model.alias && model.alias.toLowerCase() === trimmed.toLowerCase())
+    model.aliases.some((value) => value.toLowerCase() === trimmed.toLowerCase()))
   if (alias) return alias.id
   const exact = models.find((model) => model.id.toLowerCase() === trimmed.toLowerCase())
   return exact?.id ?? trimmed
@@ -513,7 +513,7 @@ function resolveModeTarget(input: string, modes: readonly ModeOption[]): string 
 
 function formatModelList(
   current: string | undefined,
-  models: readonly ProviderModelEntryV1[],
+  models: readonly ModelOption[],
 ): string {
   const lines = [`Current model: ${current ?? "default"}`, "Models:"]
   if (models.length === 0) {
@@ -522,13 +522,36 @@ function formatModelList(
     for (let index = 0; index < models.length; index += 1) {
       const model = models[index]
       if (!model) continue
-      const alias = model.alias ? ` (${model.alias})` : ""
+      const alias = model.aliases.length > 0 ? ` (${model.aliases.join(", ")})` : ""
       const marker = model.id === current ? "*" : "-"
       lines.push(`${marker} ${index + 1}. ${model.id}${alias}`)
     }
   }
   lines.push(modelUsage())
   return lines.join("\n")
+}
+
+function modelOptionsForProvider(provider: CCProvider | null): readonly ModelOption[] {
+  if (!provider) return []
+  const options = new Map<string, string[]>()
+  addModelOption(options, provider.model, [])
+  addModelOption(options, provider.haikuModel, ["haiku"])
+  addModelOption(options, provider.sonnetModel, ["sonnet"])
+  addModelOption(options, provider.opusModel, ["opus"])
+  return [...options.entries()].map(([id, aliases]) => ({ id, aliases }))
+}
+
+function addModelOption(
+  options: Map<string, string[]>,
+  id: string | undefined,
+  aliases: readonly string[],
+): void {
+  if (!id) return
+  const current = options.get(id) ?? []
+  for (const alias of aliases) {
+    if (!current.includes(alias)) current.push(alias)
+  }
+  options.set(id, current)
 }
 
 function formatModeList(current: string | undefined, modes: readonly ModeOption[]): string {

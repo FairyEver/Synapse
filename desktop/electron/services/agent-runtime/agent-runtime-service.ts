@@ -21,9 +21,6 @@ import type { ReplyOutboxService } from "../reply-target"
 import type { ReplyTarget } from "../reply-target"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import { resolveShellCommand } from "../shell-exec"
-import {
-  type ProviderConfigService,
-} from "../provider-config"
 import type { ProviderService } from "../provider"
 import { AgentCommandRouter } from "./command-router"
 import type {
@@ -82,7 +79,6 @@ export interface AgentRuntimeServiceDeps {
   readonly auditSink?: AuditSink
   readonly outbox?: ReplyOutboxService
   readonly governance?: AgentGovernanceService
-  readonly providerConfig?: ProviderConfigService
   readonly compressState?: DataNamespace<AgentCompressStateEntryV1>
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
@@ -110,7 +106,7 @@ export interface AgentRuntimeStatus {
 export class AgentRuntimeService {
   private readonly deps: AgentRuntimeServiceDeps
   private readonly repository: AgentSessionRepository
-  private readonly commandRouter: AgentCommandRouter | undefined
+  private readonly commandRouter: AgentCommandRouter
   private readonly sessionLifecycle: SessionLifecycleManager
   private readonly sessionManager: SessionManager
   private readonly conversationRouter: ConversationRouter
@@ -144,26 +140,24 @@ export class AgentRuntimeService {
       logger: deps.logger,
       getActiveAgentType: () => this.getActiveAgentType(),
     })
-    this.commandRouter = deps.providerConfig
-      ? new AgentCommandRouter({
-        projectId: deps.projectId,
-        agentType: this.agentType(),
-        resolveAgentType: () => this.getActiveAgentType(),
-        providerConfig: deps.providerConfig,
-        registeredPromptCommands: deps.registeredPromptCommands,
-        agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
-        unknownSlashBehavior: deps.unknownSlashBehavior,
-        customCommands: deps.customCommands,
-        skills: deps.skills,
-        resetSession: (message) => this.resetMessageSession(message),
-        showReference: (message, args) => this.showReferenceForMessage(message, args),
-        listCommands: (message) => this.listPublishedCommands(message.platform),
-        runCustomCommand: (command, args, message) =>
-          this.runCustomCommand(command, args, message),
-        compressSession: (message, conversation) =>
-          this.conversationRouter.compressSession(message, conversation),
-      })
-      : undefined
+    this.commandRouter = new AgentCommandRouter({
+      projectId: deps.projectId,
+      agentType: this.agentType(),
+      resolveAgentType: () => this.getActiveAgentType(),
+      providerService: deps.providerService,
+      registeredPromptCommands: deps.registeredPromptCommands,
+      agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
+      unknownSlashBehavior: deps.unknownSlashBehavior,
+      customCommands: deps.customCommands,
+      skills: deps.skills,
+      resetSession: (message) => this.resetMessageSession(message),
+      showReference: (message, args) => this.showReferenceForMessage(message, args),
+      listCommands: (message) => this.listPublishedCommands(message.platform),
+      runCustomCommand: (command, args, message) =>
+        this.runCustomCommand(command, args, message),
+      compressSession: (message, conversation) =>
+        this.conversationRouter.compressSession(message, conversation),
+    })
     this.conversationRouter = new ConversationRouter({
       deps: {
         projectId: deps.projectId,

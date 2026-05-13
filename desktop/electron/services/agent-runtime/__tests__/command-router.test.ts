@@ -9,32 +9,30 @@ import type {
   ProviderEntryV1,
   SecretEntryV1,
 } from "../../../runtime/data-repo"
-import { ProviderConfigService } from "../../provider-config"
+import { ProviderService } from "../../provider"
 import { AgentCommandRouter, modesForAgent } from "../command-router"
 import { CustomCommandRegistry } from "../command-registry"
 import type { AgentMessage } from "../types"
 
 describe("AgentCommandRouter", () => {
   it("lists and switches models by alias and index, then resets the session", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
-    await providerConfig.upsertGlobalProvider({
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
       id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
       model: "claude-sonnet-4.5",
-      models: [
-        { id: "claude-sonnet-4.5", alias: "main" },
-        { id: "claude-haiku-3.5", alias: "fast" },
-      ],
-      agentTypes: ["claude-code"],
+      haikuModel: "claude-haiku-3.5",
+      sonnetModel: "claude-sonnet-4.5",
+      env: {},
     })
-    await providerConfig.setProjectProviderRefs("project-1", ["anthropic"])
-    await providerConfig.setActiveProvider("project-1", "anthropic")
     const resets: string[] = []
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
       resetSession: async (message) => {
         resets.push(message.sessionKey)
         return { ...conversation, agentSessionId: undefined }
@@ -44,29 +42,37 @@ describe("AgentCommandRouter", () => {
 
     const list = expectRuntimeResult(await router.handle(baseMessage("/model"), conversation))
     expect(list.resultText).toContain("claude-sonnet-4.5")
-    expect(list.resultText).toContain("claude-haiku-3.5 (fast)")
+    expect(list.resultText).toContain("claude-haiku-3.5 (haiku)")
 
     const byAlias = expectRuntimeResult(
-      await router.handle(baseMessage("/model switch fast"), conversation),
+      await router.handle(baseMessage("/model switch haiku"), conversation),
     )
     expect(byAlias.resultText).toBe("Model changed: claude-haiku-3.5")
-    expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeModel)
-      .toBe("claude-haiku-3.5")
+    await expect(providerService.getActiveProvider()).resolves.toMatchObject({
+      model: "claude-haiku-3.5",
+    })
 
-    const byIndex = expectRuntimeResult(await router.handle(baseMessage("/model 1"), conversation))
+    const byIndex = expectRuntimeResult(await router.handle(baseMessage("/model 2"), conversation))
     expect(byIndex.resultText).toBe("Model changed: claude-sonnet-4.5")
     expect(resets).toEqual(["s1", "s1"])
   })
 
-  it("lists and switches modes, handles /new and /status, and rejects unknown commands", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+  it("lists modes, handles /new and /status, and rejects mode switches and unknown commands", async () => {
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      model: "claude-sonnet-4.5",
+      env: {},
+    })
     const resets: string[] = []
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
       resetSession: async (message) => {
         resets.push(message.sessionKey)
         return { ...baseConversation(), agentSessionId: undefined }
@@ -76,33 +82,31 @@ describe("AgentCommandRouter", () => {
     const list = expectRuntimeResult(await router.handle(baseMessage("/mode"), baseConversation()))
     expect(list.resultText).toContain("acceptEdits")
 
-    const switched = expectRuntimeResult(
+    const rejected = expectRuntimeResult(
       await router.handle(baseMessage("/mode acceptEdits"), baseConversation()),
     )
-    expect(switched.resultText).toBe("Mode changed: acceptEdits")
-    expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeMode)
-      .toBe("acceptEdits")
+    expect(rejected.error).toBe("Mode switching is unavailable.")
 
     const next = expectRuntimeResult(await router.handle(baseMessage("/new"), baseConversation()))
     expect(next.resultText).toBe("New session will start on the next message.")
 
     const status = expectRuntimeResult(await router.handle(baseMessage("/status"), baseConversation()))
     expect(status.resultText).toContain("Agent: claude-code")
+    expect(status.resultText).toContain("Provider: anthropic")
+    expect(status.resultText).toContain("Model: claude-sonnet-4.5")
     expect(status.resultText).toContain("Agent session: thread-1")
 
     const unknown = expectRuntimeResult(await router.handle(baseMessage("/unknown"), baseConversation()))
     expect(unknown.error).toBe("Unsupported command: /unknown")
-    expect(resets).toEqual(["s1", "s1"])
+    expect(resets).toEqual(["s1"])
   })
 
   it("routes registered prompt commands and explicit agent-native slash passthrough", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
       registeredPromptCommands: [{
         name: "explain",
         buildPrompt: (args) => `Explain: ${args.join(" ")}`,
@@ -119,9 +123,7 @@ describe("AgentCommandRouter", () => {
   })
 
   it("routes custom prompt and exec commands", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
     const registry = new CustomCommandRegistry({
       projectId: "project-1",
@@ -133,7 +135,7 @@ describe("AgentCommandRouter", () => {
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
       customCommands: registry,
       resetSession: async () => baseConversation(),
       runCustomCommand: async (command, args) => `${command.name}:${args.join(",")}`,
@@ -150,9 +152,7 @@ describe("AgentCommandRouter", () => {
   })
 
   it("stores the requested shell for admin exec commands", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
     const registry = new CustomCommandRegistry({
       projectId: "project-1",
@@ -162,7 +162,7 @@ describe("AgentCommandRouter", () => {
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
       customCommands: registry,
       resetSession: async () => baseConversation(),
     })
@@ -182,13 +182,11 @@ describe("AgentCommandRouter", () => {
   })
 
   it("routes builtin /compress to the runtime callback", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
       resetSession: async () => baseConversation(),
       compressSession: async (_message, conversation) => ({
         conversationId: conversation.id,
@@ -262,6 +260,14 @@ function baseConversation(): ConversationEntryV1 {
     active: true,
     createdAt: "2026-04-26T00:00:00.000Z",
     updatedAt: "2026-04-26T00:00:00.000Z",
+  }
+}
+
+function makeProviderService(): { providerService: ProviderService } {
+  const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+  const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+  return {
+    providerService: new ProviderService({ providers, secrets, now: fixedNow }),
   }
 }
 

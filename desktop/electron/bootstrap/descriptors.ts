@@ -42,7 +42,6 @@ import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService, AgentRuntimeService, AGENT_RUNTIME_SERVICE_ID } from "../services/agent-runtime"
-import { createProviderConfigProjectService } from "../services/provider-config"
 import { createProviderProjectService } from "../services/provider"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { FeishuConnectorService } from "../services/connectors"
@@ -542,7 +541,6 @@ export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectCo
       globalDataRepo: ctx.registry.get<DataRepository>("core.data-repository"),
       buildLogger: (projectId) => ctx.logger.child(`project.${projectId}`),
     })
-    registry.registerService(createProviderConfigProjectService())
     registry.registerService(createProviderProjectService())
     registry.registerService(createAgentRuntimeProjectService())
     return registry

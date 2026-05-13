@@ -13,9 +13,6 @@ import {
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
-  createProviderConfigServiceFromDataRepository,
-} from "../provider-config"
-import {
   createProviderServiceFromDataRepository,
 } from "../provider"
 import { ReplyOutboxService } from "../reply-target"
@@ -113,11 +110,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         outbox: ctx.dataRepo.namespace<OutboxEntryV1>("outbox"),
         logger: ctx.logger,
       })
-      const providerConfig = createProviderConfigServiceFromDataRepository({
-        dataRepository,
-        permissionGuard,
-        auditSink,
-      })
       const providerService = createProviderServiceFromDataRepository({
         dataRepository,
         permissionGuard,
@@ -152,7 +144,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         permissionGuard,
         auditSink,
         outbox,
-        providerConfig,
         replyTargets,
         executionIsolation,
         customCommands,
