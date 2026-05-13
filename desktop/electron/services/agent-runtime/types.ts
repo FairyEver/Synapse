@@ -40,9 +40,20 @@ interface AgentEventBase {
     | "toolResult"
     | "permissionRequest"
     | "result"
+    | "sessionInit"
+    | "assistant"
+    | "stream"
+    | "status"
+    | "compactBoundary"
+    | "sdkEvent"
     | "error"
   readonly agentSessionId?: string
   readonly threadId?: string
+  readonly conversationId?: string
+  readonly turnId?: string
+  readonly providerId?: string
+  readonly sdkSessionId?: string
+  readonly timestamp?: string
 }
 
 export interface AgentTextEvent extends AgentEventBase {
@@ -105,11 +116,52 @@ export interface AgentResultEvent extends AgentEventBase {
   readonly content: string
   readonly done: true
   readonly metadata?: AgentResultMetadata
+  readonly costUsd?: number
+  readonly usage?: Record<string, unknown>
+  readonly payload?: Record<string, unknown>
 }
 
 export interface AgentErrorEvent extends AgentEventBase {
   readonly type: "error"
   readonly message: string
+}
+
+export interface AgentSessionInitEvent extends AgentEventBase {
+  readonly type: "sessionInit"
+  readonly tools?: readonly string[]
+  readonly mcpServers?: readonly Record<string, unknown>[]
+  readonly model?: string
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentAssistantEvent extends AgentEventBase {
+  readonly type: "assistant"
+  readonly message: Record<string, unknown>
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentStreamEvent extends AgentEventBase {
+  readonly type: "stream"
+  readonly event: Record<string, unknown>
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentStatusEvent extends AgentEventBase {
+  readonly type: "status"
+  readonly status?: string | null
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentCompactBoundaryEvent extends AgentEventBase {
+  readonly type: "compactBoundary"
+  readonly payload: Record<string, unknown>
+}
+
+export interface AgentSdkEvent extends AgentEventBase {
+  readonly type: "sdkEvent"
+  readonly sdkType: string
+  readonly sdkSubtype?: string
+  readonly payload: Record<string, unknown>
 }
 
 export type AgentEvent =
@@ -120,6 +172,12 @@ export type AgentEvent =
   | AgentPermissionRequestEvent
   | AgentResultEvent
   | AgentErrorEvent
+  | AgentSessionInitEvent
+  | AgentAssistantEvent
+  | AgentStreamEvent
+  | AgentStatusEvent
+  | AgentCompactBoundaryEvent
+  | AgentSdkEvent
 
 export interface AgentExecutionContext {
   readonly projectId: string
