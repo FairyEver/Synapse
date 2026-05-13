@@ -125,9 +125,7 @@ export class SessionLifecycleManager {
   ): Promise<ConversationEntryV1 | null> {
     const conversation = await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
     if (conversation) {
-      const state = this.deps.states.get(conversation.id)
-      this.deps.sessionManager.settlePending(state)
-      await this.deps.sessionManager.forceClose(conversation.id)
+      await this.deps.sessionManager.closeState(conversation.id)
     }
     return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
   }
@@ -169,7 +167,7 @@ export class SessionLifecycleManager {
       throw new Error("Session is busy.")
     }
     this.deps.sessionManager.settlePending(state)
-    await this.deps.sessionManager.forceClose(conversation.id)
+    await this.deps.sessionManager.closeCurrentTurn(conversation.id)
   }
 
   stateForConversation(conversationIdValue: string, message?: AgentMessage): RuntimeSessionState {

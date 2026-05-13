@@ -153,11 +153,10 @@ export class SessionManager {
     }
   }
 
-  async forceClose(conversationId: string): Promise<void> {
+  async closeCurrentTurn(conversationId: string): Promise<void> {
     const state = this.deps.states.get(conversationId)
     if (!state) return
     this.settlePending(state)
-    this.settleQueued(state)
     if (!state.liveSession) return
     await state.liveSession.close()
     state.liveSession = undefined
@@ -169,7 +168,8 @@ export class SessionManager {
     if (!state) return
     state.closing = true
     this.settlePending(state)
-    await this.forceClose(conversationId)
+    this.settleQueued(state)
+    await this.closeCurrentTurn(conversationId)
     this.deps.states.delete(conversationId)
   }
 
@@ -202,7 +202,7 @@ export class SessionManager {
       if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
       if (!state.liveSession) continue
       if (now - state.lastActivity < IDLE_TIMEOUT_MS) continue
-      await this.forceClose(conversationId)
+      await this.closeCurrentTurn(conversationId)
       this.deps.logger?.info("Reclaimed idle agent session.", { conversationId })
     }
   }
@@ -217,7 +217,7 @@ export class SessionManager {
       if (!state.workspaceKey || !state.workspacePath) continue
       if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
       if (state.lastActivity >= cutoff) continue
-      await this.forceClose(conversationId)
+      await this.closeCurrentTurn(conversationId)
       reaped.push(state.workspacePath)
       this.deps.states.delete(conversationId)
     }

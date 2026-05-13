@@ -233,7 +233,7 @@ export class ConversationRouter {
         const externalSignal = turn.abortSignal
         const abort = () => {
           ac.abort(externalSignal?.reason)
-          void this.sessionManager.forceClose(turn.conversationId)
+          void this.sessionManager.closeCurrentTurn(turn.conversationId)
         }
         externalSignal?.addEventListener("abort", abort, { once: true })
         state.turnAbortController = ac
@@ -411,7 +411,7 @@ export class ConversationRouter {
       while (liveSession.alive()) {
         const event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
         if (!event) {
-          await this.sessionManager.forceClose(conversation.id)
+          await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
             conversationId: conversation.id,
             events,

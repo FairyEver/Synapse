@@ -95,6 +95,34 @@ describe("AgentRuntimeService cancelTurn", () => {
     await sendPromise
   })
 
+  it("forceKillTurn preserves queued turns after closing the active session", async () => {
+    const session = new CancellableLiveSession({ graceful: true })
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
+
+    const firstTurn = service.send(baseMessage("first"))
+    await waitForBusy(service, "first")
+    const secondTurn = service.send(baseMessage("second"))
+    await waitForQueued(service)
+
+    const convId = conversationId("local", "s1", "active")
+    await service.cancelTurn(convId)
+
+    const force = await service.forceKillTurn(convId)
+    expect(force).toEqual({ status: "hard-killed" })
+    expect(session.closed).toBe(true)
+
+    const firstResult = await firstTurn
+    expect(firstResult.error).toBe("cancelled")
+
+    const nextSession = await waitForNewSession(factory, session)
+    nextSession.emitResult("done-2")
+
+    const secondResult = await secondTurn
+    expect(secondResult.resultText).toBe("done-2")
+    expect(secondResult.error).toBeUndefined()
+  })
+
   it("queue continues after cancel — next turn executes", async () => {
     const session = new CancellableLiveSession({ graceful: false })
     const factory = new CancellableSessionFactory(session)
@@ -166,6 +194,14 @@ async function waitForBusy(service: AgentRuntimeService, _hint: string): Promise
     await new Promise((r) => setTimeout(r, 5))
   }
   throw new Error("Timed out waiting for busy state")
+}
+
+async function waitForQueued(service: AgentRuntimeService): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    if (service.getStatus().queuedTurns > 0) return
+    await new Promise((r) => setTimeout(r, 5))
+  }
+  throw new Error("Timed out waiting for queued turn")
 }
 
 class CancellableLiveSession implements AgentLiveSession {

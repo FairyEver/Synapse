@@ -309,7 +309,7 @@ export class AgentRuntimeService {
       const gracefulSent = await this.sessionManager.interrupt(conversationId)
       if (!gracefulSent) {
         state.turnAbortController?.abort("user-cancel")
-        await this.sessionManager.forceClose(conversationId)
+        await this.sessionManager.closeCurrentTurn(conversationId)
         return { status: "hard-killed" }
       }
       state.cancelState.escalationTimer = setTimeout(() => {
@@ -333,7 +333,7 @@ export class AgentRuntimeService {
     }
     this.conversationRouter.clearCancelState(state)
     state.turnAbortController?.abort("force-kill")
-    await this.sessionManager.forceClose(conversationId)
+    await this.sessionManager.closeCurrentTurn(conversationId)
     return { status: "hard-killed" }
   }
 
