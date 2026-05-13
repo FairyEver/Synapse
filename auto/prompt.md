@@ -10,6 +10,7 @@
 - SDK session、conversation、message、tool/result、usage、error、abort/timeout 等事件能被正确桥接到 Synapse 内部事件。
 - 定时任务、automation ingress、side channel 等后台触发 Agent 的路径不会丢消息、重复执行、卡住或误报成功。
 - 与 Claude Code SDK 相关的失败必须有足够日志，用户给出日志后能还原：谁触发、哪个会话、哪个任务、哪个 SDK 事件、失败发生在哪个边界。
+- 如果发现和上述链路直接相关、且能用小改动修掉的 UI 瑕疵，也可以处理：例如消息块顺序或状态展示不清、loading/error/empty/disabled 状态缺失、按钮可点性错误、任务卡片状态误导、错误文案无法行动、滚动或选中态导致用户看不到当前结果。
 
 ## 并行原则
 
@@ -80,7 +81,7 @@
 1. P0：崩溃、白屏、主进程未捕获异常、SDK session 卡死、消息完全丢失、任务重复执行或无法停止。
 2. P1：对话 UI 展示错乱、流式消息顺序错误、resume/fresh 会话路由错误、SDK error/result/tool 事件被误映射、后台任务误报成功。
 3. P2：关键日志不足，无法把一次用户操作或定时任务触发关联到 SDK session/message/run/task。
-4. P3：局部 loading/error/empty/disabled 状态不完整，但必须和 SDK/Agent/调度链路直接相关。
+4. P3：局部 UI 可用性瑕疵或 loading/error/empty/disabled 状态不完整，但必须和 SDK/Agent/调度链路直接相关，且能在 1 到 3 个文件内小幅修复。
 
 ## 结构化审查方法
 
@@ -106,6 +107,14 @@
 - IPC handler 是否记录失败 channel、耗时、输入摘要、错误 stack。
 - Renderer 操作是否有 `track` 或 data-track 能还原最近用户动作。
 - diagnostics 导出是否包含 Agent runtime、scheduler、recent actions、renderer health、SDK session 相关日志。
+- UI 是否有真实使用障碍：消息正在生成但没有可见状态、错误只停留在控制台或日志里、任务运行/等待/失败状态让用户误判、操作按钮在非法状态仍可点击、当前会话或当前消息没有稳定焦点、长消息或工具结果撑破布局。
+
+UI 瑕疵只在满足以下条件时处理：
+
+- 它会影响用户完成发送消息、查看结果、恢复会话、管理任务或判断错误。
+- 它可以通过现有 shadcn/ui 组件、Tailwind token、现有 hooks/utils 做小修。
+- 不引入自定义颜色、内联样式、装饰性视觉、营销文案、卡片套卡片或独立新视图。
+- 不把 UI 微调伪装成“体验优化”；必须有代码证据和用户影响。
 
 ## 日志补齐要求
 
@@ -185,7 +194,7 @@ claim 格式：
 
 ```text
 ### 缺陷 N：<一句话定性>
-- 类型：<SDK缺陷 / 对话UI缺陷 / 调度缺陷 / 消息事件缺陷 / 日志缺口 / 回归>
+- 类型：<SDK缺陷 / 对话UI缺陷 / 调度缺陷 / 消息事件缺陷 / UI可用性瑕疵 / 日志缺口 / 回归>
 - 优先级：<P0/P1/P2/P3>
 - 并行范围：<计划 claim 的文件或符号>
 - 触发路径：<用户操作或后台触发 → 代码链 → 错误结果或复盘缺口>
@@ -293,7 +302,7 @@ coverage-map：
 - Agent ID。
 - 本轮处理的问题或“无可安全修复问题”。
 - 修改文件。
-- SDK/对话/调度/消息事件日志补齐点。
+- SDK/对话/调度/消息事件日志补齐点；若处理了 UI 瑕疵，说明用户现在能更清楚地看到什么状态或结果。
 - 验证命令与结果。
 - 是否跳过提交及原因。
 - 剩余风险或既有阻塞。
