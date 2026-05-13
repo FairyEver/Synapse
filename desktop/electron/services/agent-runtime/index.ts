@@ -13,31 +13,17 @@ import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
   createProviderConfigServiceFromDataRepository,
-  type ProviderRuntimeView,
 } from "../provider-config"
-import {
-  agentRuntimeDefinitionById,
-} from "../definitions/generated/main-registry"
-import type {
-  AgentRuntimeDefinition,
-  AgentRuntimeProcessRunner,
-} from "../../../src/definitions/main-types"
 import { ReplyOutboxService } from "../reply-target"
-import type { AgentAdapter } from "./types"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
-import { whichBin } from "./binary-detect-service"
+import { ClaudeCodeAdapter } from "./adapters/claude-code"
 import { CustomCommandRegistry } from "./command-registry"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
-const agentRuntimeDefinitionsByStringId: ReadonlyMap<string, AgentRuntimeDefinition> = new Map(
-  agentRuntimeDefinitionById,
-)
-
 export {
   AgentRuntimeService,
   conversationId,
-  type AgentAdapterFactory,
   type AgentRuntimeStatus,
   type AgentRuntimeServiceDeps,
 } from "./agent-runtime-service"
@@ -83,16 +69,6 @@ export {
   buildSkillInvocationPrompt,
   type AgentSkill,
 } from "./skill-registry"
-export {
-  CodexExecAdapter,
-  CodexJsonLineParser,
-  buildCodexExecArgs,
-  parseCodexJsonLines,
-  type CodexExecArgsOptions,
-  type CodexExecOptions,
-  type CodexParseResult,
-  type CodexProcessRunner,
-} from "./adapters/codex-exec"
 export {
   ClaudeCodeAdapter,
   buildClaudeCodeArgs,
@@ -161,16 +137,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workDir: ctx.projectMeta.workspacePath,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
-        adapter: createAdapterFromRuntimeDefinition({
-          projectId: ctx.projectId,
-          agentType: "codex",
-          providers: [],
-          env: {},
-          envAllowlist: [],
-        }, runner),
-        agentType: "codex",
-        adapterFactory: async (view) =>
-          createAdapterFromRuntimeDefinition(await resolveRuntimeCommand(view), runner),
+        adapter: new ClaudeCodeAdapter(runner),
+        agentType: "claude-code",
         eventBus: ctx.eventBus,
         logger: ctx.logger,
         permissionGuard,
@@ -187,25 +155,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       return service
     },
   }
-}
-
-export function createAdapterFromRuntimeDefinition(
-  view: ProviderRuntimeView,
-  runner: AgentRuntimeProcessRunner,
-): AgentAdapter {
-  const definition = agentRuntimeDefinitionsByStringId.get(view.agentType)
-  if (!definition) {
-    throw new Error(`Unknown agent runtime: ${view.agentType}`)
-  }
-  return definition.createAdapter(view, runner)
-}
-
-async function resolveRuntimeCommand(view: ProviderRuntimeView): Promise<ProviderRuntimeView> {
-  const definition = agentRuntimeDefinitionsByStringId.get(view.agentType)
-  const binary = definition?.runtime.binaries[0]
-  if (!binary) return view
-  const runtimeCommand = await whichBin(binary)
-  return runtimeCommand ? { ...view, runtimeCommand } : view
 }
 
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {
