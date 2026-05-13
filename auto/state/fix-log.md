@@ -815,3 +815,29 @@ Runner 错误页从"死胡同"变为"可重试的等待室"——用户无需关
 
 ### 本次进展
 变量绑定编辑器三种 source 类型（static / param / node_output）的空列表状态现已全部覆盖，不再有任何隐式的空下拉框。Runner 重跑操作从 try/finally（异常穿透无反馈）变为 try/catch/finally（异常有日志+用户可读错误提示），与取消操作的错误处理达到一致。
+
+---
+
+## [2026-05-13 22:10] 第 35 次迭代
+
+### 发现的问题
+- 编辑器无 Ctrl+S / Cmd+S 键盘快捷键：用户只能通过工具栏按钮保存，无法使用通用快捷键。画布 keydown handler 仅处理 Delete/Backspace/Ctrl+C/Ctrl+V，保存操作完全依赖鼠标点击（editor-app.tsx 全文无 Ctrl+S 监听；canvas.tsx:386-407 仅处理 4 种快捷键）。
+- 保存成功无 toast 反馈：handleSave 成功路径仅清除 runErrors + 更新 definition，用户点击保存后无任何视觉确认。对比 handleForceRun 的三个失败路径均有 toast.error，成功路径的反馈缺失导致用户不确定保存是否完成（editor-app.tsx:188-196 成功分支无 toast）。
+- 编辑器无"未保存"状态指示：isDirtyRef 仅用于 beforeunload 拦截，工具栏无任何视觉标记告知用户当前有未保存更改。用户修改节点配置后，保存按钮外观与未修改时完全一致，无法区分是否需要保存（toolbar.tsx 全文无 dirty 相关 prop 或 UI）。
+
+### 修复内容
+- [desktop/src/modules/workflow/editor/editor-app.tsx:88-98] 新增 useEffect 注册 window-level keydown 监听器，捕获 Ctrl+S / Cmd+S 并调用 handleSave(definitionRef.current)，e.preventDefault() 阻止浏览器默认保存行为
+- [desktop/src/modules/workflow/editor/editor-app.tsx:30,101-103,107,126,137,190-191,209] 新增 `dirty` state（与 isDirtyRef 并行，isDirtyRef 保留用于 beforeunload 同步访问）；handleDefinitionChange / handleConfigChange / handleNameChange 中 setDirty(true)；handleSave 成功路径 setDirty(false) + `if (!silent) toast.success("已保存")`
+- [desktop/src/modules/workflow/editor/editor-app.tsx:167,209,296] handleSave 签名新增 `silent?: boolean` 参数；handleRun 调用 handleSave 时传入 `silent: true` 避免"保存→运行"连续操作产生多余 toast；toolbar 传入 dirty prop
+- [desktop/src/modules/workflow/editor/toolbar.tsx:12,14,19,43-47] WorkflowToolbarProps 新增 `dirty?: boolean`；onSave 签名更新为 `(def, silent?) => Promise<unknown>`；保存按钮新增 `className="relative"` + 条件渲染 `<span>` 圆点指示器（bg-primary, 1.5x1.5, absolute top-1 right-1），dirty && !saving 时显示
+
+### 与历史的关系
+- 缺陷 1：独立（编辑器键盘快捷键从未被任何轮次覆盖，canvas.tsx 的 keydown 处理在 iter 31/32 补齐了 guard 条件但未涉及保存快捷键）
+- 缺陷 2：独立（handleSave 成功反馈从未被覆盖，虽然 iter 27 为 handleForceRun 补了失败 toast）
+- 缺陷 3：独立（dirty 状态可视化从未被覆盖，isDirtyRef 在 iter 20 评估为 stable 但仅用于 beforeunload）
+
+### 日志补充
+- 无（纯 UI 交互优化：键盘快捷键为已有 handleSave 的新入口，toast 为渲染侧反馈，dirty 指示器为已有状态的可视化——均不涉及数据流、执行路径或 IPC 契约变更）
+
+### 本次进展
+编辑器保存体验从"仅鼠标点击+无反馈+无状态指示"变为"快捷键+成功 toast+未保存圆点指示器"的完整闭环——三个缺陷共同构成"保存工作流"这一高频操作的体验补齐。

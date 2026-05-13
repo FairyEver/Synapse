@@ -27,6 +27,7 @@ export function WorkflowEditorApp() {
   const [runErrors, setRunErrors] = useState<ValidationError[]>([])
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
+  const [dirty, setDirty] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [conflictState, setConflictState] = useState<{ saved: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -84,14 +85,28 @@ export function WorkflowEditorApp() {
     return () => window.removeEventListener("beforeunload", handler)
   }, [])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault()
+        const def = definitionRef.current
+        if (def) void handleSave(def)
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [])
+
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
     isDirtyRef.current = true
+    setDirty(true)
     setRunErrors([])
     setDefinition(def)
   }, [])
 
   const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
     isDirtyRef.current = true
+    setDirty(true)
     canvasRef.current?.updateNodeConfig(nodeId, config)
     setRunErrors([])
     setDefinition((def) => {
@@ -123,6 +138,7 @@ export function WorkflowEditorApp() {
 
   const handleNameChange = useCallback((nodeId: string, name: string) => {
     isDirtyRef.current = true
+    setDirty(true)
     setRunErrors([])
     setDefinition((def) => {
       if (!def) return def
@@ -164,7 +180,7 @@ export function WorkflowEditorApp() {
     window.close()
   }
 
-  const handleSave = async (def: WorkflowDefinition) => {
+  const handleSave = async (def: WorkflowDefinition, silent?: boolean) => {
     setSaving(true)
     try {
       let result: Awaited<ReturnType<NonNullable<typeof window.synapse>["workflow"]["save"]>> | undefined
@@ -187,6 +203,8 @@ export function WorkflowEditorApp() {
       }
       setRunErrors([])
       isDirtyRef.current = false
+      setDirty(false)
+      if (!silent) toast.success("已保存")
       if ("versionHash" in result) {
         const updated = { ...def, version: result.versionHash }
         // Sync ref immediately so that async code reading definitionRef.current
@@ -205,7 +223,7 @@ export function WorkflowEditorApp() {
     if (!def) return null
     setRunning(true)
     try {
-      const saveResult = await handleSave(def)
+      const saveResult = await handleSave(def, true)
       if (!saveResult || "errors" in saveResult) return null
       const saved = definitionRef.current
       if (!saved) return null
@@ -282,7 +300,7 @@ export function WorkflowEditorApp() {
   return (
     <>
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} saving={saving} running={running} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
+      <WorkflowToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />

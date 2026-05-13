@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-13T21:40:00+08:00",
-  "totalIterations": 34,
+  "lastUpdated": "2026-05-13T22:10:00+08:00",
+  "totalIterations": 35,
   "files": {
     "desktop/electron/modules/workflow/ipc.ts": {
       "lastReviewedIteration": 30,
@@ -111,11 +111,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/editor-app.tsx": {
-      "lastReviewedIteration": 27,
-      "issuesFound": 8,
-      "issuesFixed": 8,
+      "lastReviewedIteration": 35,
+      "issuesFound": 11,
+      "issuesFixed": 11,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:10:00+08:00"
+      "lastUpdated": "2026-05-13T22:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
       "lastReviewedIteration": 33,
@@ -152,10 +152,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/toolbar.tsx": {
-      "lastReviewedIteration": 18,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active"
+      "lastReviewedIteration": 35,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T22:10:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-upstream-nodes.ts": {
       "lastReviewedIteration": 20,
@@ -420,8 +421,8 @@
   "areas": {
     "editor-interactions": {
       "status": "active",
-      "lastIteration": 31,
-      "issuesCount": 5
+      "lastIteration": 35,
+      "issuesCount": 8
     },
     "general-ui": {
       "status": "active",

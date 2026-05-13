@@ -6,7 +6,8 @@
 
 - 错误处理：节点执行失败后的恢复路径、用户反馈、重试机制
 - 执行引擎：超时处理、取消机制、异常边界
-- untouched 文件：workflow-service.ts、window-manager.ts、run-snapshot-service.ts 等从未被审查的服务层
+- 编辑器体验：撤销/重做、批量操作、拖拽交互边界
+- Runner 体验：长时间运行的进度反馈、大输出的性能
 
 ## 允许的小优化范围
 

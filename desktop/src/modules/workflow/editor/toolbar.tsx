@@ -10,12 +10,13 @@ interface WorkflowToolbarProps {
   definition: WorkflowDefinition
   saving?: boolean
   running?: boolean
-  onSave: (def: WorkflowDefinition) => Promise<unknown>
+  dirty?: boolean
+  onSave: (def: WorkflowDefinition, silent?: boolean) => Promise<unknown>
   onRun: (params: Record<string, unknown>) => Promise<string | null>
   onChange: (def: WorkflowDefinition) => void
 }
 
-export function WorkflowToolbar({ definition, saving, running, onSave, onRun, onChange }: WorkflowToolbarProps) {
+export function WorkflowToolbar({ definition, saving, running, dirty, onSave, onRun, onChange }: WorkflowToolbarProps) {
   const [paramsOpen, setParamsOpen] = useState(false)
   const [runParamsOpen, setRunParamsOpen] = useState(false)
   // Remember the last-submitted param values so the dialog pre-fills them on
@@ -39,9 +40,10 @@ export function WorkflowToolbar({ definition, saving, running, onSave, onRun, on
         <Button size="sm" variant="ghost" onClick={() => setParamsOpen(true)} disabled={busy}>
           <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />参数
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => void onSave(definition)} disabled={busy}>
+        <Button size="sm" variant="ghost" onClick={() => void onSave(definition)} disabled={busy} className="relative">
           {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
           保存
+          {dirty && !saving && <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />}
         </Button>
         <Button size="sm" onClick={() => definition.params.length === 0 ? void onRun({}) : setRunParamsOpen(true)} disabled={busy}>
           {running ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />}
