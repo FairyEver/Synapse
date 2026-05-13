@@ -168,7 +168,7 @@ export class AgentCommandRouter {
     conversation: ConversationEntryV1,
     args: readonly string[],
   ): Promise<AgentRuntimeTurnResult> {
-    const provider = await this.deps.providerService.getActiveProvider()
+    const provider = await this.currentProviderForConversation(conversation)
     const models = modelOptionsForProvider(provider)
     if (args.length === 0) {
       return commandResult(conversation.id, formatModelList(provider?.model, models))
@@ -179,7 +179,13 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, modelUsage(), true)
     }
     if (!provider) {
-      return commandResult(conversation.id, "No active provider configured.", true)
+      return commandResult(
+        conversation.id,
+        conversation.providerId
+          ? `Provider not found: ${conversation.providerId}`
+          : "No active provider configured.",
+        true,
+      )
     }
 
     const target = resolveModelTarget(targetInput, models)
@@ -209,7 +215,7 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, modeUsage(modes), true)
     }
 
-    return commandResult(conversation.id, "Mode switching is unavailable.", true)
+    return commandResult(conversation.id, "Mode switching is unavailable in SDK sessions.", true)
   }
 
   private async handleNew(
@@ -241,9 +247,11 @@ export class AgentCommandRouter {
 
   private async currentProviderForConversation(conversation: ConversationEntryV1): Promise<CCProvider | null> {
     if (conversation.providerId) {
-      const providers = await this.deps.providerService.listProviders()
-      const provider = providers.find((item) => item.id === conversation.providerId)
-      if (provider) return provider
+      try {
+        return await this.deps.providerService.getProvider(conversation.providerId)
+      } catch {
+        return null
+      }
     }
     return this.deps.providerService.getActiveProvider()
   }
@@ -562,7 +570,6 @@ function formatModeList(current: string | undefined, modes: readonly ModeOption[
     const marker = mode.key === current ? "*" : "-"
     lines.push(`${marker} ${index + 1}. ${mode.key} - ${mode.label}`)
   }
-  lines.push(modeUsage(modes))
   return lines.join("\n")
 }
 

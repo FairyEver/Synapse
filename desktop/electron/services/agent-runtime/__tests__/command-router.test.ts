@@ -57,6 +57,51 @@ describe("AgentCommandRouter", () => {
     expect(resets).toEqual(["s1", "s1"])
   })
 
+  it("switches the conversation-bound provider model instead of the active provider", async () => {
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      model: "claude-sonnet-4.5",
+      env: {},
+    })
+    await providerService.createProvider({
+      id: "deepseek",
+      name: "DeepSeek",
+      category: "third_party",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      active: false,
+      model: "deepseek-chat",
+      haikuModel: "deepseek-fast",
+      env: {},
+    })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => baseConversation(),
+    })
+    const conversation = { ...baseConversation(), providerId: "deepseek" }
+
+    const list = expectRuntimeResult(await router.handle(baseMessage("/model"), conversation))
+    expect(list.resultText).toContain("deepseek-chat")
+    expect(list.resultText).toContain("deepseek-fast (haiku)")
+
+    const switched = expectRuntimeResult(await router.handle(baseMessage("/model haiku"), conversation))
+
+    expect(switched.resultText).toBe("Model changed: deepseek-fast")
+    await expect(providerService.getProvider("deepseek")).resolves.toMatchObject({
+      model: "deepseek-fast",
+    })
+    await expect(providerService.getActiveProvider()).resolves.toMatchObject({
+      id: "anthropic",
+      model: "claude-sonnet-4.5",
+    })
+  })
+
   it("lists modes, handles /new and /status, and rejects mode switches and unknown commands", async () => {
     const { providerService } = makeProviderService()
     await providerService.createProvider({
@@ -85,7 +130,7 @@ describe("AgentCommandRouter", () => {
     const rejected = expectRuntimeResult(
       await router.handle(baseMessage("/mode acceptEdits"), baseConversation()),
     )
-    expect(rejected.error).toBe("Mode switching is unavailable.")
+    expect(rejected.error).toBe("Mode switching is unavailable in SDK sessions.")
 
     const next = expectRuntimeResult(await router.handle(baseMessage("/new"), baseConversation()))
     expect(next.resultText).toBe("New session will start on the next message.")

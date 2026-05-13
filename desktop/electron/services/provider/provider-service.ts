@@ -137,6 +137,14 @@ export class ProviderService {
     return active ?? null
   }
 
+  async getProvider(id: string): Promise<CCProvider> {
+    const provider = await this.providers.get(id)
+    if (!provider || provider.kind !== PROVIDER_KIND) {
+      throw new Error(`Provider not found: ${id}`)
+    }
+    return toProvider(provider)
+  }
+
   async buildEnv(
     providerId: string,
     context: BuildProviderEnvContext = {},
@@ -163,14 +171,6 @@ export class ProviderService {
       ...env,
       ...provider.env,
     })
-  }
-
-  private async getProvider(id: string): Promise<CCProvider> {
-    const provider = await this.providers.get(id)
-    if (!provider || provider.kind !== PROVIDER_KIND) {
-      throw new Error(`Provider not found: ${id}`)
-    }
-    return toProvider(provider)
   }
 
   private async readSecretValue(
