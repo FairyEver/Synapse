@@ -9,11 +9,13 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import { TaskCard } from "./task-card"
 
 type TaskCardGridProps = {
   tasks: ScheduledTask[]
+  projects: readonly SynapseProjectConfig[]
   busy: boolean
   onRun: (task: ScheduledTask) => void
   onStop: (task: ScheduledTask) => void
@@ -26,6 +28,7 @@ type TaskCardGridProps = {
 
 function TaskCardGrid({
   tasks,
+  projects,
   busy,
   onRun,
   onStop,
@@ -56,11 +59,12 @@ function TaskCardGrid({
   }
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {tasks.map((task) => (
         <TaskCard
           key={task.id}
           task={task}
+          projects={projects}
           busy={busy}
           onRun={() => onRun(task)}
           onStop={() => onStop(task)}

@@ -243,6 +243,7 @@ function TaskSchedulerModule() {
           {!loading && !error ? (
             <TaskCardGrid
               busy={busy}
+              projects={config.global.projects}
               tasks={tasks}
               onCreateNew={() => {
                 setFormState({ mode: "create" })

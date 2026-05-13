@@ -1,23 +1,38 @@
 import {
-  Pencil,
   History,
-  Trash2,
+  MoreHorizontal,
+  Pencil,
   Play,
   Square,
+  Trash2,
 } from "lucide-react"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTask } from "@/types/task-scheduler"
-import { formatTaskTrigger, formatTaskDate } from "../utils"
+import {
+  formatTaskDate,
+  formatTaskScope,
+  formatTaskStatus,
+  formatTaskTrigger,
+} from "../utils"
 
 type TaskCardProps = {
   task: ScheduledTask
+  projects: readonly SynapseProjectConfig[]
   busy: boolean
   onRun: () => void
   onStop: () => void
@@ -27,14 +42,34 @@ type TaskCardProps = {
   onDelete: () => void
 }
 
-function getStatusDotClass(task: ScheduledTask): string {
-  if (!task.enabled) return "bg-muted-foreground"
-  if (task.lastStatus === "failed" || task.lastStatus === "timeout") return "bg-destructive"
-  return "bg-green-500"
+function getStatusBadge(task: ScheduledTask): {
+  label: string
+  variant: "default" | "secondary" | "destructive" | "outline"
+} {
+  if (!task.enabled) {
+    return { label: "已停用", variant: "outline" }
+  }
+  if (task.lastStatus === "failed" || task.lastStatus === "timeout") {
+    return { label: "上次失败", variant: "destructive" }
+  }
+  return { label: "已启用", variant: "secondary" }
+}
+
+function getPrimaryActionLabel(task: ScheduledTask, busy: boolean): string {
+  if (busy) return "停止"
+  if (task.lastStatus === "failed" || task.lastStatus === "timeout") return "重试"
+  return "运行"
+}
+
+function formatLastRun(task: ScheduledTask): string {
+  const date = formatTaskDate(task.lastRunAt, "—")
+  if (!task.lastStatus) return date
+  return `${date} · ${formatTaskStatus(task.lastStatus)}`
 }
 
 function TaskCard({
   task,
+  projects,
   busy,
   onRun,
   onStop,
@@ -44,19 +79,18 @@ function TaskCard({
   onDelete,
 }: TaskCardProps) {
   const disabled = !task.enabled
+  const badge = getStatusBadge(task)
+  const primaryLabel = getPrimaryActionLabel(task, busy)
+  const nextRun = disabled ? "停用中" : formatTaskDate(task.nextRunAt, "—")
+  const lastRun = formatLastRun(task)
+  const scope = formatTaskScope(task, projects)
 
   return (
     <div
-      className={`rounded-lg bg-background px-4 py-4 hover:ring-2 hover:ring-muted-foreground/25 transition-shadow ${disabled ? "opacity-60" : ""}`}
+      className={`rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted/40 ${disabled ? "opacity-70" : ""}`}
     >
-      {/* Header: 状态 + 标题 + 开关 */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={`size-2 shrink-0 rounded-full ${getStatusDotClass(task)}`}
-          />
-          <span className="truncate font-medium text-sm">{task.name}</span>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <Badge variant={badge.variant}>{badge.label}</Badge>
         <Switch
           size="sm"
           checked={task.enabled}
@@ -64,78 +98,88 @@ function TaskCard({
         />
       </div>
 
-      {/* Info area */}
-      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-        <div className="flex justify-between">
-          <span>触发</span>
-          <span className="text-foreground">{formatTaskTrigger(task)}</span>
+      <div className="mt-4 min-w-0">
+        <h3 className="truncate text-sm font-medium">{task.name}</h3>
+        {task.description ? (
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {task.description}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/50 p-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">下次执行</p>
+          <p className="mt-1 truncate text-sm font-medium">{nextRun}</p>
         </div>
-        <div className="flex justify-between">
-          <span>上次</span>
-          <span className="text-foreground">
-            {formatTaskDate(task.lastRunAt, "—")}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span>下次</span>
-          <span className="text-foreground">
-            {disabled ? "—" : formatTaskDate(task.nextRunAt, "—")}
-          </span>
+        <div className="min-w-0 border-l border-border pl-3">
+          <p className="text-xs text-muted-foreground">计划</p>
+          <p className="mt-1 truncate text-sm font-medium">
+            {formatTaskTrigger(task)}
+          </p>
         </div>
       </div>
 
-      {/* Footer: 操作按钮图标，靠右显示 */}
-      <div className="mt-3 flex items-center justify-end gap-1 border-t pt-3">
+      <div className="mt-4 grid gap-1 text-xs">
+        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2">
+          <span className="text-muted-foreground">上次</span>
+          <span className="truncate">{lastRun}</span>
+        </div>
+        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2">
+          <span className="text-muted-foreground">范围</span>
+          <span className="truncate">{scope}</span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-end gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
             {busy ? (
               <Button
-                variant="ghost"
-                size="icon-sm"
+                variant="outline"
+                size="sm"
                 onClick={onStop}
               >
                 <Square className="size-3.5" />
+                {primaryLabel}
               </Button>
             ) : (
               <Button
-                variant="ghost"
-                size="icon-sm"
+                variant={task.lastStatus === "failed" || task.lastStatus === "timeout" ? "default" : "secondary"}
+                size="sm"
                 disabled={disabled}
                 onClick={onRun}
               >
                 <Play className="size-3.5" />
+                {primaryLabel}
               </Button>
             )}
           </TooltipTrigger>
-          <TooltipContent>{busy ? "停止" : "运行"}</TooltipContent>
+          <TooltipContent>{primaryLabel}</TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" onClick={onEdit}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm">
+              <MoreHorizontal className="size-3.5" />
+              <span className="sr-only">更多操作</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onEdit}>
               <Pencil className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>编辑</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" onClick={onHistory}>
+              编辑
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onHistory}>
               <History className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>历史</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" onClick={onDelete}>
+              历史
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
               <Trash2 className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>删除</TooltipContent>
-        </Tooltip>
+              删除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )

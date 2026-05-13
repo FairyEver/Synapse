@@ -10,7 +10,13 @@ vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
     config: {
       global: {
-        projects: [],
+        projects: [
+          {
+            id: "project-1",
+            name: "Synapse",
+            path: "/Users/liyang/Documents/code/github/Synapse",
+          },
+        ],
       },
     },
   }),
@@ -88,6 +94,90 @@ describe("TaskSchedulerModule", () => {
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
     expect(html).toContain("每 1 分钟")
+  })
+
+  it("renders enabled task card status, next run, description, and primary run action", () => {
+    useTaskSchedulerTasksMock.mockReturnValue({
+      tasks: [
+        createTask({
+          name: "同步项目工作日志",
+          description: "Codex 工作日志汇总",
+          scope: { type: "project", projectId: "project-1" },
+          nextRunAt: "2026-05-13T10:30:00.000Z",
+          lastRunAt: "2026-05-13T01:00:00.000Z",
+          lastStatus: "success",
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<TaskSchedulerModule />)
+
+    expect(html).toContain("已启用")
+    expect(html).toContain("同步项目工作日志")
+    expect(html).toContain("Codex 工作日志汇总")
+    expect(html).toContain("下次执行")
+    expect(html).toContain("运行")
+    expect(html).toContain("上次")
+    expect(html).toContain("成功")
+    expect(html).toContain("范围")
+    expect(html).toContain("Synapse")
+  })
+
+  it("renders failed task card as retryable", () => {
+    useTaskSchedulerTasksMock.mockReturnValue({
+      tasks: [
+        createTask({
+          name: "仓库健康检查",
+          lastStatus: "failed",
+          lastRunAt: "2026-05-13T02:12:00.000Z",
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<TaskSchedulerModule />)
+
+    expect(html).toContain("上次失败")
+    expect(html).toContain("重试")
+    expect(html).toContain("失败")
+  })
+
+  it("renders disabled task card with stopped schedule state", () => {
+    useTaskSchedulerTasksMock.mockReturnValue({
+      tasks: [
+        createTask({
+          name: "夜间归档",
+          enabled: false,
+          nextRunAt: "2026-05-13T18:00:00.000Z",
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<TaskSchedulerModule />)
+
+    expect(html).toContain("已停用")
+    expect(html).toContain("停用中")
+  })
+
+  it("renders secondary actions behind the task card more-actions trigger", () => {
+    useTaskSchedulerTasksMock.mockReturnValue({
+      tasks: [createTask({ name: "Backup" })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<TaskSchedulerModule />)
+
+    expect(html).toContain("更多操作")
   })
 })
 
