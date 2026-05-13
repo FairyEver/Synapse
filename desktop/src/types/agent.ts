@@ -253,6 +253,7 @@ export interface SynapseAgentSessionSummary {
   readonly sourceLabel?: string
   readonly agentType?: string
   readonly agentSessionId?: string
+  readonly providerId?: string
   readonly active: boolean
   readonly historyCount: number
   readonly createdAt: string

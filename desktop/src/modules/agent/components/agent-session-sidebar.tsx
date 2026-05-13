@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +18,7 @@ import {
 import { requestOpenSettingsTab } from "@/app-shell/navigation"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { ArchivedGroup } from "./archived-group"
+import { ProviderSelectDialog } from "./provider-select-dialog"
 import { ProjectGroup } from "./project-group"
 
 type ProjectOption = {
@@ -33,7 +35,7 @@ type AgentSessionSidebarProps = {
   selectedConversationId?: string
   followFeishu: boolean
   unreadByConversationId: Record<string, number>
-  onCreateSession: (projectId: string) => void
+  onCreateSession: (projectId: string, providerId?: string) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
@@ -57,6 +59,7 @@ function AgentSessionSidebar({
   onFollowFeishuChange,
 }: AgentSessionSidebarProps) {
   const sessionsByProject = groupSessionsByProject(sessions)
+  const [createProject, setCreateProject] = useState<ProjectOption | null>(null)
 
   return (
     <ModuleSidebar variant="bare">
@@ -99,7 +102,7 @@ function AgentSessionSidebar({
                 selectedProjectId={selectedProjectId}
                 selectedConversationId={selectedConversationId}
                 unreadByConversationId={unreadByConversationId}
-                onCreateSession={() => onCreateSession(project.id)}
+                onCreateSession={() => setCreateProject(project)}
                 onSelect={onSelect}
                 onDelete={onDelete}
                 onDeleteOthers={onDeleteOthers}
@@ -120,6 +123,13 @@ function AgentSessionSidebar({
           </>
         )}
       </ModuleSidebarList>
+      <ProviderSelectDialog
+        open={createProject !== null}
+        projectId={createProject?.id}
+        projectName={createProject?.name}
+        onOpenChange={(open) => { if (!open) setCreateProject(null) }}
+        onCreate={(projectId, providerId) => onCreateSession(projectId, providerId)}
+      />
     </ModuleSidebar>
   )
 }

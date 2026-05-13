@@ -24,7 +24,6 @@ import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
-import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
@@ -66,11 +65,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const projectScope = useMemo(() =>
     resolveAgentProjectScope(activeRepository, config.global.projects, platform),
   [activeRepository, config.global.projects, platform])
-  const { status: runtimeStatus, loading: runtimeLoading } = useAgentRuntimeStatus()
-  const hasAvailableCli = useMemo(() => {
-    if (!runtimeStatus) return null
-    return runtimeStatus.agents.some((agent) => agent.cli.installed)
-  }, [runtimeStatus])
   const [draft, setDraft] = useState("")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -167,10 +161,14 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     }
   }
 
-  const activeProvider = chat.providers?.providers.find((provider) => provider.active)
   const selectedSession = chat.sessions.find((session) =>
     session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
     ?? chat.sessions.find((session) => session.active)
+  const activeProvider = chat.providers?.providers.find((provider) => provider.active)
+  const selectedProvider = selectedSession?.providerId
+    ? chat.providers?.providers.find((provider) => provider.id === selectedSession.providerId)
+    : undefined
+  const headerProvider = selectedProvider ?? activeProvider
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
@@ -182,16 +180,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     void getSynapseBridge()?.agent.openReference({ projectId, reference })
   }
 
-  if (!runtimeLoading && hasAvailableCli === false) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-muted-foreground">
-          未检测到可用的 Agent CLI，请在设置中确认安装状态
-        </p>
-      </div>
-    )
-  }
-
   const sidebar = (
     <AgentSessionSidebar
       sessions={chat.sessions}
@@ -201,7 +189,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       selectedConversationId={chat.selectedConversationId}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
-      onCreateSession={(projectId) => void chat.createSession(projectId)}
+      onCreateSession={(projectId, providerId) => void chat.createSession(projectId, providerId)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onDeleteOthers={(keep) => {
@@ -240,7 +228,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               {chat.currentConversationModel ? (
                 <span className="text-xs text-muted-foreground">
                   {chat.currentConversationModel}
-                  {activeProvider ? ` · ${activeProvider.id}` : ""}
+                  {headerProvider ? ` · ${headerProvider.display ?? headerProvider.id}` : ""}
+                </span>
+              ) : headerProvider ? (
+                <span className="text-xs text-muted-foreground">
+                  {headerProvider.display ?? headerProvider.id}
                 </span>
               ) : null}
 
