@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,6 +38,7 @@ function ProviderSelectDialog({
   const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
 
   const visibleProviders = useMemo(
     () => providers.filter((provider) => !provider.archived),
@@ -45,6 +46,8 @@ function ProviderSelectDialog({
   )
 
   const loadProviders = useCallback(async () => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     if (!projectId) {
       setProviders([])
       setSelectedProviderId(undefined)
@@ -55,18 +58,25 @@ function ProviderSelectDialog({
     setError(null)
     try {
       const nextProviders = await requireSynapseBridge().agent.listProviders(projectId)
+      if (requestId !== requestIdRef.current) return
       setProviders(nextProviders)
       const visible = nextProviders.filter((provider) => !provider.archived)
       setSelectedProviderId(visible.find((provider) => provider.active)?.id ?? visible[0]?.id)
     } catch (rawError) {
+      if (requestId !== requestIdRef.current) return
       setError(rawError instanceof Error ? rawError.message : "读取 Provider 失败")
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [projectId])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      requestIdRef.current += 1
+      return
+    }
     void loadProviders()
   }, [loadProviders, open])
 

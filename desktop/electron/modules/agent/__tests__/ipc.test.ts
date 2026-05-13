@@ -611,6 +611,7 @@ describe("agentIpcModule", () => {
       sessionKey: "local:renderer",
       name: "新会话",
       platform: "local-renderer",
+      providerId: "deepseek",
       active: true,
       history: [],
       createdAt: "2026-04-26T00:00:00.000Z",
@@ -640,6 +641,7 @@ describe("agentIpcModule", () => {
       id: "conv-2",
       sessionKey: "local:renderer",
       name: "新会话",
+      providerId: "deepseek",
       active: true,
       historyCount: 0,
     }))
@@ -659,6 +661,7 @@ describe("agentIpcModule", () => {
       id: "conv-1",
       sessionKey: "local:renderer",
       name: "旧会话",
+      providerId: "deepseek",
       active: true,
       historyCount: 0,
     }))

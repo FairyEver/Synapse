@@ -51,9 +51,11 @@ describe("ToolsPanel", () => {
       <ProviderPanelView
         projectId="project-1"
         projectName="Test Project"
+        projects={[{ id: "project-1", name: "Test Project" }]}
         providers={providers}
         loading={false}
         error={null}
+        onProjectChange={vi.fn()}
         onAdd={vi.fn()}
         onEdit={vi.fn()}
         onArchive={vi.fn()}

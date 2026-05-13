@@ -75,12 +75,19 @@ type ProviderFormValues = {
   sortIndex: string
 }
 
+type ProviderProjectOption = {
+  id: string
+  name: string
+}
+
 type ProviderPanelViewProps = {
   readonly projectId?: string
   readonly projectName?: string
+  readonly projects: readonly ProviderProjectOption[]
   readonly providers: SynapseAgentProvider[]
   readonly loading: boolean
   readonly error: string | null
+  readonly onProjectChange: (projectId: string) => void
   readonly onAdd: () => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
@@ -90,7 +97,12 @@ type ProviderPanelViewProps = {
 
 function ProviderPanel() {
   const { config } = useAppConfig()
-  const project = config.global.projects[0]
+  const projects = config.global.projects.map((project) => ({
+    id: project.id,
+    name: project.name,
+  }))
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(() => projects[0]?.id)
+  const project = projects.find((item) => item.id === selectedProjectId) ?? projects[0]
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -98,6 +110,11 @@ function ProviderPanel() {
   const [formOpen, setFormOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formValues, setFormValues] = useState<ProviderFormValues>(() => emptyProviderForm())
+
+  useEffect(() => {
+    if (project || !selectedProjectId) return
+    setSelectedProjectId(projects[0]?.id)
+  }, [project, projects, selectedProjectId])
 
   const refresh = useCallback(async () => {
     if (!project?.id) {
@@ -201,9 +218,11 @@ function ProviderPanel() {
       <ProviderPanelView
         projectId={project?.id}
         projectName={project?.name}
+        projects={projects}
         providers={providers}
         loading={loading}
         error={error}
+        onProjectChange={setSelectedProjectId}
         onAdd={openAddDialog}
         onEdit={openEditDialog}
         onArchive={handleArchive}
@@ -226,9 +245,11 @@ function ProviderPanel() {
 function ProviderPanelView({
   projectId,
   projectName,
+  projects,
   providers,
   loading,
   error,
+  onProjectChange,
   onAdd,
   onEdit,
   onArchive,
@@ -245,7 +266,24 @@ function ProviderPanelView({
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <CardTitle className="text-base">Provider</CardTitle>
-          {projectName ? <Badge variant="secondary">{projectName}</Badge> : null}
+          {projects.length > 1 && projectId ? (
+            <Select value={projectId} onValueChange={onProjectChange}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          ) : projectName ? (
+            <Badge variant="secondary">{projectName}</Badge>
+          ) : null}
         </div>
         <Button type="button" size="sm" disabled={!projectId} onClick={onAdd}>
           <Plus data-icon="inline-start" />
