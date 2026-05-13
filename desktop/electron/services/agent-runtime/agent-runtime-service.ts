@@ -21,9 +21,7 @@ import type { ReplyTarget } from "../reply-target"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import { resolveShellCommand } from "../shell-exec"
 import {
-  prepareCodexRuntime,
   type ProviderConfigService,
-  type ProviderRuntimeView,
 } from "../provider-config"
 import { AgentCommandRouter } from "./command-router"
 import type {
@@ -70,7 +68,6 @@ export interface AgentRuntimeServiceDeps {
   readonly workDir?: string
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly adapter: AgentAdapter
-  readonly adapterFactory?: AgentAdapterFactory
   readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
   readonly eventBus?: ScopedEventBus
@@ -96,8 +93,6 @@ export interface AgentRuntimeServiceDeps {
     getAgentEnv(projectId: string, sessionKey: string): Record<string, string> | undefined
   }
 }
-
-export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter | Promise<AgentAdapter>
 
 export interface AgentRuntimeStatus {
   readonly projectId: string
@@ -406,8 +401,7 @@ export class AgentRuntimeService {
   }
 
   async getActiveAgentType(): Promise<string> {
-    if (!this.deps.providerConfig) return this.agentType()
-    return this.deps.providerConfig.getActiveAgentType(this.deps.projectId, this.agentType())
+    return "claude-code"
   }
 
   async listSessions(): Promise<readonly ConversationEntryV1[]> {
@@ -775,28 +769,12 @@ export class AgentRuntimeService {
     )
   }
 
-  private async resolveAdapter(agentTypeOverride?: string): Promise<AgentAdapter> {
-    if (!this.deps.providerConfig || !this.deps.adapterFactory) {
-      return this.deps.adapter
-    }
-    const agentType = agentTypeOverride ?? await this.getActiveAgentType()
-    const view = await this.deps.providerConfig.resolveRuntimeConfig(
-      this.deps.projectId,
-      agentType,
-      { actor: { kind: "user" } },
-    )
-    if (view.agentType === "codex") {
-      await prepareCodexRuntime(view, {
-        permissionGuard: this.deps.permissionGuard,
-        auditSink: this.deps.auditSink,
-        actor: { kind: "user" },
-      })
-    }
-    return this.deps.adapterFactory(view)
+  private async resolveAdapter(_agentTypeOverride?: string): Promise<AgentAdapter> {
+    return this.deps.adapter
   }
 
   private agentType(): string {
-    return this.deps.agentType ?? this.deps.adapter.agentType
+    return "claude-code"
   }
 
   private isoNow(): string {
