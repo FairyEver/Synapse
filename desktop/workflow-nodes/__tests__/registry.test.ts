@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { NodeTypeRegistry } from "../registry"
 import { z } from "zod"
+import { Square } from "lucide-react"
 import type { NodeManifest, NodeExecutor } from "../types"
 
 const stub: NodeManifest<{ t: string }> = {
-  type: "stub", title: "Stub", icon: "square", color: "bg-muted",
+  type: "stub", title: "Stub", icon: Square, color: "bg-muted",
   ports: { inputs: [{ id: "in", label: "In" }], outputs: [{ id: "out", label: "Out" }] },
   cardSummary: (c) => ({ title: c.t, subtitle: "" }),
   configFields: [],
