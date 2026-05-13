@@ -201,7 +201,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       selectedConversationId={chat.selectedConversationId}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
-      onCreateSession={(projectId) => void chat.createSession(projectId, "claude-code")}
+      onCreateSession={(projectId) => void chat.createSession(projectId)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onDeleteOthers={(keep) => {

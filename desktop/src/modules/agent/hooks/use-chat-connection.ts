@@ -45,7 +45,7 @@ type ChatConnectionResult = {
   readonly refreshProjectMeta: (projectId: string | undefined) => Promise<void>
   readonly refreshConversationSnapshot: (target: TimelineTarget) => Promise<void>
   readonly refresh: () => Promise<void>
-  readonly createSession: (projectId: string, agentType: string) => Promise<void>
+  readonly createSession: (projectId: string) => Promise<void>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly sendMessage: (content: string) => Promise<void>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
@@ -312,8 +312,8 @@ function useChatConnection(
     setSelectedSession,
   ])
 
-  const createSession = useCallback(async (projectId: string, agentType: string) => {
-    if (!projectId || !agentType) return
+  const createSession = useCallback(async (projectId: string) => {
+    if (!projectId) return
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
@@ -323,7 +323,7 @@ function useChatConnection(
         projectId,
         sessionKey: DEFAULT_LOCAL_SESSION_KEY,
         name: `新会话 ${formatSessionNameTime(new Date())}`,
-        agentType,
+        agentType: "claude-code",
       })
       const session = normalizeSessionProject(created, projectId)
       if (requestId !== selectRequestIdRef.current) {
