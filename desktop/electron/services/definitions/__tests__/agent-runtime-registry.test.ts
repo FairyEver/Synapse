@@ -19,19 +19,9 @@ describe("agent runtime main registry", () => {
     expect(agentRuntimeDefinitionById.get("claude-code")?.runtime.binaries).toEqual(["claude"])
   })
 
-  it("creates an adapter with the expected agent type", () => {
-    const runner = {
-      run: vi.fn(),
-      start: vi.fn(),
-    }
-    const claude = agentRuntimeDefinitionById.get("claude-code")?.createAdapter({
-      projectId: "project-1",
-      agentType: "claude-code",
-      providers: [],
-      env: {},
-      envAllowlist: [],
-    }, runner)
-
-    expect(claude?.agentType).toBe("claude-code")
+  it("exports the Claude Code runtime metadata", () => {
+    expect(agentRuntimeDefinitionById.get("claude-code")?.runtimeKind).toBe(
+      "claude-agent-sdk",
+    )
   })
 })
