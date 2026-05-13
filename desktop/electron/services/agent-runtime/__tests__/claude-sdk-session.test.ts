@@ -141,6 +141,11 @@ describe("ClaudeSDKSession", () => {
       conversationId: "conversation-b",
       requestId: expect.stringContaining("conversation-b"),
     })
+    expect(eventA?.type).toBe("permissionRequest")
+    expect(eventB?.type).toBe("permissionRequest")
+    if (eventA?.type !== "permissionRequest" || eventB?.type !== "permissionRequest") {
+      throw new Error("Expected permission request events")
+    }
     expect(eventA?.requestId).not.toBe(eventB?.requestId)
   })
 
