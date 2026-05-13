@@ -238,6 +238,10 @@ const EVENT_CHANNELS = {
   installStatus: {
     changed: "synapse:events:install-status",
   },
+  diagnostics: {
+    ping: "synapse:diagnostics:ping",
+    pong: "synapse:diagnostics:pong",
+  },
 }
 
 // Database channels (not yet migrated to IpcModule)
@@ -695,6 +699,16 @@ const synapseBridge: SynapseBridge = {
     cursorSync: invoke(IPC_CHANNELS["token-usage"].cursorSync),
     cursorValidate: (params: { sessionToken: string }) =>
       invoke(IPC_CHANNELS["token-usage"].cursorValidate)(params),
+  },
+  diagnostics: {
+    onPing: (listener: () => void) => {
+      const wrapped = () => listener()
+      ipcRenderer.on(EVENT_CHANNELS.diagnostics.ping, wrapped)
+      return () => { ipcRenderer.removeListener(EVENT_CHANNELS.diagnostics.ping, wrapped) }
+    },
+    pong: () => {
+      ipcRenderer.send(EVENT_CHANNELS.diagnostics.pong)
+    },
   },
 }
 

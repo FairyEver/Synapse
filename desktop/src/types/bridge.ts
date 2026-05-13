@@ -622,4 +622,8 @@ export type SynapseBridge = {
     cursorSync: () => Promise<{ synced: boolean; rows: number; error?: string }>
     cursorValidate: (params: { sessionToken: string }) => Promise<{ valid: boolean; membershipType?: string; error?: string }>
   }
+  diagnostics?: {
+    onPing: (listener: () => void) => () => void
+    pong: () => void
+  }
 }
