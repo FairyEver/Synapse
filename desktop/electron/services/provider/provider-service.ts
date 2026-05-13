@@ -127,8 +127,10 @@ export class ProviderService {
     } else {
       env.ANTHROPIC_API_KEY = secret
     }
-    if (provider.haikuModel) env.ANTHROPIC_SMALL_FAST_MODEL = provider.haikuModel
     if (provider.model) env.ANTHROPIC_MODEL = provider.model
+    if (provider.haikuModel) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = provider.haikuModel
+    if (provider.sonnetModel) env.ANTHROPIC_DEFAULT_SONNET_MODEL = provider.sonnetModel
+    if (provider.opusModel) env.ANTHROPIC_DEFAULT_OPUS_MODEL = provider.opusModel
 
     return compactEnv({
       ...env,

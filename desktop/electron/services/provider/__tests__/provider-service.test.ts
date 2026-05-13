@@ -55,6 +55,31 @@ describe("ProviderService", () => {
       ANTHROPIC_MODEL: "deepseek-chat",
     })
   })
+
+  it("builds default model env vars from provider model fields", async () => {
+    const { service } = makeProviderService()
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      model: "claude-sonnet-4-5",
+      env: {},
+    })
+    await service.updateProvider("anthropic", {
+      haikuModel: "claude-haiku-3-5",
+      sonnetModel: "claude-sonnet-4-5",
+      opusModel: "claude-opus-4-1",
+    })
+
+    await expect(service.buildEnv("anthropic")).resolves.toMatchObject({
+      ANTHROPIC_MODEL: "claude-sonnet-4-5",
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude-haiku-3-5",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-sonnet-4-5",
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-4-1",
+    })
+  })
 })
 
 function makeProviderService() {
