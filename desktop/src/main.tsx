@@ -7,6 +7,7 @@ import { AppConfigProvider } from "@/app-shell/config"
 import { IdentityProvider } from "@/app-shell/identity-context"
 import { LicenseProvider } from "@/app-shell/license"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
+import { installDiagnostics } from "@/app-shell/diagnostics"
 import { AppNotificationsProvider } from "@/app-shell/notifications"
 import { RepositoryManagerProvider } from "@/app-shell/repository"
 import "@/styles/globals.css"
@@ -15,6 +16,7 @@ const bootstrapLogger = createRendererLogger("renderer.bootstrap")
 
 bootstrapLogger.info("Renderer bootstrap started.")
 installRendererLogForwarding()
+installDiagnostics()
 
 void (async () => {
   const windowType = new URLSearchParams(window.location.search).get("window")
