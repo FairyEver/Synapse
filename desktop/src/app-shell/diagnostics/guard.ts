@@ -1,18 +1,20 @@
 import type { RendererLogger } from "./types"
 
+let _writing = false
+
 export function guardedLog(
   logger: RendererLogger,
   level: "debug" | "info" | "warn" | "error",
   message: string,
   meta?: unknown,
 ): void {
+  if (_writing) return
+  _writing = true
   try {
-    if (meta !== undefined) {
-      logger[level](message, meta)
-    } else {
-      logger[level](message)
-    }
+    logger[level](message, meta)
   } catch {
-    // Swallow errors from the logger itself to avoid infinite loops
+    // Logging must never break the app
+  } finally {
+    _writing = false
   }
 }
