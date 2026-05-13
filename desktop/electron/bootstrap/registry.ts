@@ -48,6 +48,7 @@ import {
   coreWorkflowRunStatusesDescriptor,
   coreWorkflowEngineDescriptor,
   coreWorkflowWindowManagerDescriptor,
+  providerServiceDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
@@ -73,6 +74,7 @@ export function buildServiceRegistry(
   registry.register(coreDataRepositoryDescriptor)
   registry.register(corePermissionGuardDescriptor)
   registry.register(coreAuditSinkDescriptor)
+  registry.register(providerServiceDescriptor)
   registry.register(coreLicenseDescriptor)
   registry.register(coreProcessRuntimeDescriptor)
   registry.register(coreNetworkRegistryDescriptor)

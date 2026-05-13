@@ -348,8 +348,11 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("stream"),
+    blockIndex: z.number().optional(),
     deltaType: z.string().optional(),
     text: z.string().optional(),
+    thinking: z.string().optional(),
+    partialJson: z.string().optional(),
     event: jsonRecordSchema.optional(),
   }),
   z.object({

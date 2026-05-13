@@ -33,6 +33,25 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("requests partial SDK messages so renderer can stream tokens", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory)
+
+    expect(getOptions()).toMatchObject({
+      includePartialMessages: true,
+    })
+  })
+
+  it("passes provider env together with the host process env to the SDK", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, { env: { FOO: "bar" } })
+
+    expect(getOptions().env).toEqual(expect.objectContaining({
+      PATH: process.env.PATH,
+      FOO: "bar",
+    }))
+  })
+
   it("nextEvent returns bridged SDK messages", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)

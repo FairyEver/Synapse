@@ -9,6 +9,9 @@
  */
 
 import { useCallback, useEffect, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
+
+const logger = createRendererLogger("app.active-project")
 
 export interface ActiveProjectMetadata {
   readonly id: string
@@ -70,8 +73,7 @@ export class InMemoryActiveProjectBridge implements ActiveProjectBridge {
       try {
         listener(this.active)
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[active-project] listener threw", err)
+        logger.error("Active project listener failed.", err)
       }
     }
   }

@@ -37,8 +37,10 @@ function ProviderSelectDialog({
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
+  const autoCreateKeyRef = useRef<string | null>(null)
 
   const visibleProviders = useMemo(
     () => providers.filter((provider) => !provider.archived),
@@ -48,43 +50,58 @@ function ProviderSelectDialog({
   const loadProviders = useCallback(async () => {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
-    if (!projectId) {
-      setProviders([])
-      setSelectedProviderId(undefined)
-      setError(null)
-      return
-    }
     setLoading(true)
+    setLoaded(false)
     setError(null)
     try {
-      const nextProviders = await requireSynapseBridge().agent.listProviders(projectId)
+      const nextProviders = await requireSynapseBridge().agent.listProviders()
       if (requestId !== requestIdRef.current) return
       setProviders(nextProviders)
       const visible = nextProviders.filter((provider) => !provider.archived)
       setSelectedProviderId(visible.find((provider) => provider.active)?.id ?? visible[0]?.id)
+      setLoaded(true)
     } catch (rawError) {
       if (requestId !== requestIdRef.current) return
       setError(rawError instanceof Error ? rawError.message : "读取 Provider 失败")
+      setLoaded(true)
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false)
       }
     }
-  }, [projectId])
+  }, [])
 
   useEffect(() => {
     if (!open) {
       requestIdRef.current += 1
+      autoCreateKeyRef.current = null
+      setLoaded(false)
       return
     }
     void loadProviders()
   }, [loadProviders, open])
+
+  useEffect(() => {
+    if (!open || !loaded || loading || error || !projectId || visibleProviders.length !== 1) return
+    const providerId = visibleProviders[0]?.id
+    if (!providerId) return
+    const autoCreateKey = `${projectId}:${providerId}:${requestIdRef.current}`
+    if (autoCreateKeyRef.current === autoCreateKey) return
+    autoCreateKeyRef.current = autoCreateKey
+    onCreate(projectId, providerId)
+    onOpenChange(false)
+  }, [error, loaded, loading, onCreate, onOpenChange, open, projectId, visibleProviders])
 
   const handleCreate = useCallback(() => {
     if (!projectId || !selectedProviderId) return
     onCreate(projectId, selectedProviderId)
     onOpenChange(false)
   }, [onCreate, onOpenChange, projectId, selectedProviderId])
+
+  const shouldAutoCreate = Boolean(
+    open && loaded && !loading && !error && projectId && visibleProviders.length === 1,
+  )
+  if (open && (!loaded || loading || shouldAutoCreate)) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,6 +147,7 @@ function ProviderSelectDialog({
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="truncate font-medium">{provider.name}</span>
+                          {provider.readonly ? <Badge variant="secondary">本机</Badge> : null}
                           {provider.active ? <Badge variant="secondary">默认</Badge> : null}
                         </div>
                       </TableCell>

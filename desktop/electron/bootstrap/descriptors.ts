@@ -42,7 +42,12 @@ import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService, AgentRuntimeService, AGENT_RUNTIME_SERVICE_ID } from "../services/agent-runtime"
-import { createProviderProjectService } from "../services/provider"
+import {
+  createProviderProjectService,
+  createProviderServiceFromDataRepository,
+  PROVIDER_SERVICE_ID,
+  type ProviderService,
+} from "../services/provider"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { FeishuConnectorService } from "../services/connectors"
 import { SideChannelService } from "../services/side-channel"
@@ -386,6 +391,23 @@ export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
   },
 }
 
+export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
+  id: PROVIDER_SERVICE_ID,
+  criticality: "fatal",
+  dependsOn: [
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
+  create(ctx) {
+    return createProviderServiceFromDataRepository({
+      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+    })
+  },
+}
+
 export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = {
   id: "core.diagnostics",
   criticality: "degraded",
@@ -446,7 +468,7 @@ export const coreLicenseDescriptor: ServiceDescriptor<LicenseService> = {
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     return new LicenseService({
       store: ctx.registry.get<DataRepository>("core.data-repository").namespace("core.license"),
-      client: new LicenseClient({ permissionGuard, auditSink }),
+      client: new LicenseClient({ permissionGuard, auditSink, logger: ctx.logger.child("license.http") }),
       appVersion: app.getVersion(),
       logger: ctx.logger.child("license"),
     })

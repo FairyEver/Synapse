@@ -39,4 +39,18 @@ describe("AgentThinkingEvent", () => {
     expect(html).toContain("w-full")
     expect(html).toContain("hover:bg-transparent")
   })
+
+  it("renders thinking content when the profile defaults to expanded", () => {
+    const html = renderToStaticMarkup(<AgentThinkingEvent
+      item={{
+        id: "thinking-expanded",
+        kind: "thinking",
+        timestamp: "2026-05-13T00:00:00.000Z",
+        content: "visible thinking",
+      }}
+      profile={{ ...profile, thinkingDefaultCollapsed: false }}
+    />)
+
+    expect(html).toContain("visible thinking")
+  })
 })

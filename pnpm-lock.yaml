@@ -9,10 +9,6 @@ importers:
   .: {}
 
   auto:
-    dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.138
-        version: 0.2.138(zod@4.3.6)
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

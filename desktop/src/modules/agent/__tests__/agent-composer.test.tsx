@@ -48,4 +48,66 @@ describe("AgentComposer", () => {
 
     expect(html).toContain("disabled")
   })
+
+  it("renders queued and failed messages above the input", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={true}
+        cancelPhase="idle"
+        pendingMessages={[
+          {
+            id: "pending-1",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "queued message",
+            createdAt: "2026-05-13T10:00:00.000Z",
+            status: "queued",
+          },
+          {
+            id: "pending-2",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "sending message",
+            createdAt: "2026-05-13T10:00:01.000Z",
+            status: "sending",
+          },
+          {
+            id: "pending-3",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "failed message",
+            createdAt: "2026-05-13T10:00:02.000Z",
+            status: "failed",
+            error: "发送失败",
+          },
+        ]}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+        onRemovePendingMessage={vi.fn()}
+        onRetryPendingMessage={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("queued message")
+    expect(html).toContain("failed message")
+    expect(html).toContain("发送失败")
+    expect(html).not.toContain("sending message")
+    expect(html).toContain('aria-label="删除待发送消息"')
+    expect(html).toContain('aria-label="重试发送"')
+  })
 })

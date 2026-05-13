@@ -16,6 +16,7 @@ export {
   type ProviderServiceDeps,
 } from "./provider-service"
 export {
+  LOCAL_CLAUDE_CODE_PROVIDER_ID,
   PROVIDER_SERVICE_ID,
   type CCProvider,
   type CreateProviderInput,

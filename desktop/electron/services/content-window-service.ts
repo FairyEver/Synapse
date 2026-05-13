@@ -5,9 +5,32 @@ import { buildContentWindowSearchParams } from "../../src/lib/content-window"
 import type { SynapseOpenContentWindowPayload } from "../../src/types/content"
 import { getWindowIconPath } from "./app-icon-service"
 import { createMainLogger } from "./log-store"
+import { RendererHealthService } from "./renderer-health"
 
 const logger = createMainLogger("content-window")
 const contentWindows = new Set<BrowserWindow>()
+const contentWindowHealthServices = new WeakMap<BrowserWindow, ContentWindowHealth>()
+
+type ContentWindowLogger = {
+  info: (message: string, meta?: unknown) => void
+  warn: (message: string, meta?: unknown) => void
+  error: (message: string, meta?: unknown) => void
+}
+
+type ContentWindowHealth = {
+  attach: (webContents: Electron.WebContents) => void
+  detach: () => void
+}
+
+type ContentWindowServiceDeps = {
+  createWindow: (options: Electron.BrowserWindowConstructorOptions) => BrowserWindow
+  createHealthService: (payload: SynapseOpenContentWindowPayload) => ContentWindowHealth
+  getAppPath: () => string
+  getIconPath: () => string | null
+  getPreloadPath: () => string
+  logger: ContentWindowLogger
+  loadWindow?: (window: BrowserWindow, payload: SynapseOpenContentWindowPayload) => Promise<void>
+}
 
 async function loadContentWindow(
   window: BrowserWindow,
@@ -32,45 +55,63 @@ async function loadContentWindow(
   })
 }
 
-const contentWindowService = {
-  async openDetailWindow(payload: SynapseOpenContentWindowPayload): Promise<void> {
-    const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
-    const icon = getWindowIconPath()
-    const window = new BrowserWindow({
-      width,
-      height,
-      minWidth,
-      minHeight,
-      show: false,
-      title: payload.title,
-      ...(icon ? { icon } : {}),
-      webPreferences: {
-        preload: path.join(__dirname, "../preload.js"),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    })
-
-    contentWindows.add(window)
-
-    window.webContents.on("preload-error", (_event, preloadPath, error) => {
-      logger.error("Content window preload script failed.", {
-        error,
-        preloadPath,
+function createContentWindowService(deps: ContentWindowServiceDeps) {
+  return {
+    async openDetailWindow(payload: SynapseOpenContentWindowPayload): Promise<void> {
+      const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
+      const icon = deps.getIconPath()
+      const window = deps.createWindow({
+        width,
+        height,
+        minWidth,
+        minHeight,
+        show: false,
+        title: payload.title,
+        ...(icon ? { icon } : {}),
+        webPreferences: {
+          preload: deps.getPreloadPath(),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+        },
       })
-    })
 
-    window.once("ready-to-show", () => {
-      window.show()
-    })
+      contentWindows.add(window)
+      const health = deps.createHealthService(payload)
+      health.attach(window.webContents)
+      contentWindowHealthServices.set(window, health)
 
-    window.on("closed", () => {
-      contentWindows.delete(window)
-    })
+      window.webContents.on("preload-error", (_event, preloadPath, error) => {
+        deps.logger.error("Content window preload script failed.", {
+          error,
+          preloadPath,
+        })
+      })
 
-    await loadContentWindow(window, payload)
-  },
+      window.once("ready-to-show", () => {
+        window.show()
+      })
+
+      window.on("closed", () => {
+        health.detach()
+        contentWindowHealthServices.delete(window)
+        contentWindows.delete(window)
+      })
+
+      await (deps.loadWindow ?? loadContentWindow)(window, payload)
+    },
+  }
 }
 
-export { contentWindowService }
+const contentWindowService = createContentWindowService({
+  createWindow: (options) => new BrowserWindow(options),
+  createHealthService: (payload) => new RendererHealthService({
+    logger: createMainLogger(`renderer-health.content.${payload.contentType}.${payload.id}`),
+  }),
+  getAppPath: () => app.getAppPath(),
+  getIconPath: () => getWindowIconPath() ?? null,
+  getPreloadPath: () => path.join(__dirname, "../preload.js"),
+  logger,
+})
+
+export { contentWindowService, createContentWindowService }

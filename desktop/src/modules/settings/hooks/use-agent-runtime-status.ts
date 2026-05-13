@@ -4,6 +4,11 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseAgentRuntimeStatus } from "@/types/agent"
 
 const logger = createRendererLogger("settings.agent-runtime")
+const AGENT_RUNTIME_AUTO_REFRESH_INTERVAL_MS = 5_000
+
+type AgentRuntimeRefreshOptions = {
+  readonly showLoading?: boolean
+}
 
 function createLatestRequestGuard() {
   let activeRequestId = 0
@@ -14,6 +19,7 @@ function createLatestRequestGuard() {
       const requestId = activeRequestId
 
       return {
+        id: requestId,
         isActive() {
           return requestId === activeRequestId
         },
@@ -30,27 +36,38 @@ function useAgentRuntimeStatus(projectId?: string) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const requestGuardRef = useRef(createLatestRequestGuard())
+  const loadingRequestIdRef = useRef(0)
+  const loadingRefreshPendingRef = useRef(false)
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((options: AgentRuntimeRefreshOptions = {}) => {
     const request = requestGuardRef.current.begin()
-    setLoading(true)
-    setError(null)
+    const showLoading = options.showLoading ?? true
+    if (showLoading) {
+      loadingRequestIdRef.current = request.id
+      loadingRefreshPendingRef.current = true
+      setLoading(true)
+      setError(null)
+    }
     Promise.resolve()
       .then(() => requireSynapseBridge().agent.getRuntimeStatus({ projectId }))
       .then((nextStatus) => {
         if (request.isActive()) {
           setStatus(nextStatus)
+          setError(null)
         }
       })
       .catch((err) => {
         if (request.isActive()) {
           logger.error("Failed to load agent runtime status.", err)
-          setStatus(null)
-          setError("加载 Agent 运行时状态失败")
+          if (showLoading) {
+            setStatus(null)
+            setError("加载智能体运行时状态失败")
+          }
         }
       })
       .finally(() => {
-        if (request.isActive()) {
+        if (showLoading && loadingRequestIdRef.current === request.id) {
+          loadingRefreshPendingRef.current = false
           setLoading(false)
         }
       })
@@ -60,6 +77,23 @@ function useAgentRuntimeStatus(projectId?: string) {
     refresh()
     return () => {
       requestGuardRef.current.cancel()
+    }
+  }, [refresh])
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "hidden") return
+      if (loadingRefreshPendingRef.current) return
+      refresh({ showLoading: false })
+    }
+    const timer = window.setInterval(refreshWhenVisible, AGENT_RUNTIME_AUTO_REFRESH_INTERVAL_MS)
+    window.addEventListener("focus", refreshWhenVisible)
+    document.addEventListener("visibilitychange", refreshWhenVisible)
+
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refreshWhenVisible)
+      document.removeEventListener("visibilitychange", refreshWhenVisible)
     }
   }, [refresh])
 

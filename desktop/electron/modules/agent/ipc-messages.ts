@@ -33,6 +33,7 @@ function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string):
 
 const sendRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
+  conversationId: z.string().min(1).optional(),
   content: z.string().min(1),
   clientSubmittedAt: z.string().optional(),
   providerId: z.string().min(1).optional(),
@@ -153,6 +154,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           runId,
           projectId: request.projectId,
           sessionKey,
+          conversationId: request.conversationId,
           phase: "submitted",
           status: "done",
           startedAt: submittedAt,
@@ -169,6 +171,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           runId,
           projectId: request.projectId,
           sessionKey,
+          conversationId: request.conversationId,
           phase: "received",
           status: "in-progress",
           startedAt: t_recv,
@@ -178,7 +181,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       })
 
       try {
-        const result = await agent.send({
+        const message = {
           projectId: request.projectId,
           sessionKey,
           platform: LOCAL_RENDERER_PLATFORM,
@@ -191,7 +194,10 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             projectId: request.projectId,
             sessionKey,
           },
-        })
+        }
+        const result = request.conversationId
+          ? await agent.sendToConversation(message, request.conversationId)
+          : await agent.send(message)
         const t_done = new Date().toISOString()
         eventBus.emit({
           domain: "agent",
@@ -246,6 +252,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             runId,
             projectId: request.projectId,
             sessionKey,
+            conversationId: request.conversationId,
             phase: "failed",
             status: "failed",
             startedAt: t_recv,

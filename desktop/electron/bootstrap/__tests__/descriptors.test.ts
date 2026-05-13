@@ -139,6 +139,17 @@ describe("bootstrap descriptors (T1.5)", () => {
     ])
   })
 
+  it("providerServiceDescriptor registers global provider storage", async () => {
+    const { providerServiceDescriptor } = await importBootstrap()
+    expect(providerServiceDescriptor.id).toBe("provider")
+    expect(providerServiceDescriptor.criticality).toBe("fatal")
+    expect(providerServiceDescriptor.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+  })
+
   it("coreUpdateDescriptor is degraded and depends on core.config + core.window-manager", async () => {
     const { coreUpdateDescriptor } = await importBootstrap()
     expect(coreUpdateDescriptor.id).toBe("core.update")

@@ -1,4 +1,5 @@
 import { createRendererLogger } from "@/app-shell/logging"
+import { recordDiagnosticBreadcrumb } from "@/lib/diagnostic-context"
 
 const logger = createRendererLogger("ui.tracking")
 
@@ -49,7 +50,21 @@ const PATH_TRACK_FIELD_PATTERN =
   /(path|dir|directory|folder|file|base[-_ ]?dir|source[-_ ]?path|target[-_ ]?path|export[-_ ]?path)/i
 
 export function track(details: TrackDetails): void {
-  logger.info(`${details.name}:${details.action}`, details)
+  const safeDetails = sanitizeTrackRecord({
+    ...details,
+    value: details.value,
+    metadata: details.metadata,
+  })
+  recordDiagnosticBreadcrumb({
+    action: details.action,
+    component: details.component,
+    name: details.name,
+    value: safeDetails.value,
+    metadata: typeof safeDetails.metadata === "object" && safeDetails.metadata !== null && !Array.isArray(safeDetails.metadata)
+      ? safeDetails.metadata
+      : undefined,
+  })
+  logger.info(`${details.name}:${details.action}`, safeDetails)
 }
 
 export function sanitizeTrackValue(fieldName: string, value: unknown): SanitizedTrackValue {

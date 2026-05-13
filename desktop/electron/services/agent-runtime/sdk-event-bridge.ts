@@ -53,20 +53,24 @@ export function bridgeSdkMessage(
   }
 
   if (raw.type === "assistant") {
+    const message = recordValue(raw.message) ?? {}
     return {
       type: "assistant",
       sdkSessionId,
-      message: recordValue(raw.message) ?? {},
+      message,
+      contentBlocks: Array.isArray(message.content) ? message.content : undefined,
       payload,
       ...envelope,
     }
   }
 
   if (raw.type === "stream_event") {
+    const event = recordValue(raw.event) ?? {}
     return {
       type: "stream",
       sdkSessionId,
-      event: recordValue(raw.event) ?? {},
+      event,
+      ...streamDeltaFields(event),
       payload,
       ...envelope,
     }
@@ -116,6 +120,24 @@ function toPlainJson(value: unknown): Record<string, unknown> {
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? toPlainJson(value) : undefined
+}
+
+function streamDeltaFields(event: Record<string, unknown>): {
+  readonly blockIndex?: number
+  readonly deltaType?: string
+  readonly text?: string
+  readonly thinking?: string
+  readonly partialJson?: string
+} {
+  const delta = recordValue(event.delta)
+  const deltaType = stringValue(delta?.type)
+  return {
+    blockIndex: numberValue(event.index),
+    deltaType,
+    text: deltaType === "text_delta" ? stringValue(delta?.text) : undefined,
+    thinking: deltaType === "thinking_delta" ? stringValue(delta?.thinking) : undefined,
+    partialJson: deltaType === "input_json_delta" ? stringValue(delta?.partial_json) : undefined,
+  }
 }
 
 function recordListValue(value: unknown): readonly Record<string, unknown>[] | undefined {

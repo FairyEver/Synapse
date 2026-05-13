@@ -139,12 +139,19 @@ export interface AgentSessionInitEvent extends AgentEventBase {
 export interface AgentAssistantEvent extends AgentEventBase {
   readonly type: "assistant"
   readonly message: Record<string, unknown>
+  readonly contentBlocks?: readonly unknown[]
+  readonly content?: string
   readonly payload?: Record<string, unknown>
 }
 
 export interface AgentStreamEvent extends AgentEventBase {
   readonly type: "stream"
   readonly event: Record<string, unknown>
+  readonly blockIndex?: number
+  readonly deltaType?: string
+  readonly text?: string
+  readonly thinking?: string
+  readonly partialJson?: string
   readonly payload?: Record<string, unknown>
 }
 

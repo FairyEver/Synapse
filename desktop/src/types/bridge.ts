@@ -230,6 +230,10 @@ export type SynapseAgentProvider = {
   readonly id: string
   readonly name: string
   readonly category: SynapseAgentProviderCategory
+  readonly source?: "local" | "user"
+  readonly readonly?: boolean
+  readonly configured?: boolean
+  readonly configPath?: string
   readonly baseUrl?: string
   readonly apiKeyField: SynapseAgentProviderApiKeyField
   readonly active?: boolean
@@ -491,7 +495,14 @@ export type SynapseBridge = {
       args: { projectId: string; conversationId: string; name: string },
     ) => Promise<{ ok: boolean }>
     send: (
-      args: { projectId: string; sessionKey?: string; content: string; clientSubmittedAt?: string; providerId?: string },
+      args: {
+        projectId: string
+        sessionKey?: string
+        conversationId?: string
+        content: string
+        clientSubmittedAt?: string
+        providerId?: string
+      },
     ) => Promise<SynapseAgentSendResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
     respondPermission: (
@@ -503,19 +514,19 @@ export type SynapseBridge = {
     forceKillTurn: (
       args: { projectId: string; conversationId: string },
     ) => Promise<SynapseAgentCancelTurnResult>
-    getProviders: (projectId: string) => Promise<SynapseAgentProviderState>
-    listProviders: (projectId: string) => Promise<SynapseAgentProvider[]>
+    getProviders: () => Promise<SynapseAgentProviderState>
+    listProviders: () => Promise<SynapseAgentProvider[]>
     createProvider: (
-      args: { projectId: string; provider: SynapseCreateAgentProviderInput },
+      args: { provider: SynapseCreateAgentProviderInput },
     ) => Promise<SynapseAgentProvider>
     updateProvider: (
-      args: { projectId: string; providerId: string; patch: SynapseUpdateAgentProviderInput },
+      args: { providerId: string; patch: SynapseUpdateAgentProviderInput },
     ) => Promise<SynapseAgentProvider>
     archiveProvider: (
-      args: { projectId: string; providerId: string },
+      args: { providerId: string },
     ) => Promise<{ ok: true }>
     setActiveProvider: (
-      args: { projectId: string; providerId: string },
+      args: { providerId: string },
     ) => Promise<{ ok: true }>
     getRuntimeStatus: (
       request: { projectId?: string },

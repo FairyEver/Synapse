@@ -20,9 +20,19 @@ export type IpcProtocolVersion = typeof IPC_PROTOCOL_VERSION
 
 export type IpcMethodKind = "invoke" | "send"
 
+export interface IpcHandlerLogger {
+  child(name: string): {
+    info?: (message: string, meta?: unknown) => void
+    warn?: (message: string, meta?: unknown) => void
+    error: (message: string, meta?: unknown) => void
+  }
+}
+
 export interface IpcHandlerContext {
   /** Module id from IpcModule.id. Useful for logging and metrics. */
   readonly moduleId: string
+  /** Optional logger used by transport/runtime adapters. */
+  readonly logger?: IpcHandlerLogger
   /**
    * Ad-hoc service lookup hook so the IPC handler can pull other services
    * out of ServiceRegistry without depending on it directly. Wired by the

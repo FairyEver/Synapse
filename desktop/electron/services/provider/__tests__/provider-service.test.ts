@@ -16,8 +16,95 @@ import type {
   PermissionGuard,
 } from "../../../runtime/security"
 import { ProviderService } from "../provider-service"
+import { LOCAL_CLAUDE_CODE_PROVIDER_ID } from "../types"
 
 describe("ProviderService", () => {
+  it("exposes local Claude Code as the default read-only provider", async () => {
+    const { service } = makeProviderService({
+      localClaudeSettingsPath: "/Users/test/.claude/settings.json",
+      readTextFile: async () => JSON.stringify({
+        env: {
+          ANTHROPIC_BASE_URL: "https://api.example.test",
+          ANTHROPIC_AUTH_TOKEN: "sk-hidden",
+          ANTHROPIC_MODEL: "claude-sonnet-4-5",
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude-haiku-3-5",
+        },
+      }),
+    })
+
+    await expect(service.listProviders()).resolves.toEqual([
+      expect.objectContaining({
+        id: LOCAL_CLAUDE_CODE_PROVIDER_ID,
+        name: "本机 Claude Code",
+        source: "local",
+        readonly: true,
+        active: true,
+        configured: true,
+        configPath: "/Users/test/.claude/settings.json",
+        baseUrl: "https://api.example.test",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "claude-sonnet-4-5",
+        haikuModel: "claude-haiku-3-5",
+        env: {},
+      }),
+    ])
+    await expect(service.getActiveProvider()).resolves.toMatchObject({
+      id: LOCAL_CLAUDE_CODE_PROVIDER_ID,
+      active: true,
+    })
+    await expect(service.buildEnv(LOCAL_CLAUDE_CODE_PROVIDER_ID)).resolves.toEqual({})
+  })
+
+  it("lets user providers override and then clear the active provider", async () => {
+    const { service, providers } = makeProviderService()
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      env: {},
+    })
+
+    await expect(service.listProviders()).resolves.toEqual([
+      expect.objectContaining({
+        id: LOCAL_CLAUDE_CODE_PROVIDER_ID,
+        active: false,
+      }),
+      expect.objectContaining({
+        id: "anthropic",
+        active: true,
+      }),
+    ])
+
+    await service.setActiveProvider(LOCAL_CLAUDE_CODE_PROVIDER_ID)
+
+    await expect(providers.get("anthropic")).resolves.toMatchObject({
+      active: false,
+    })
+    await expect(service.getActiveProvider()).resolves.toMatchObject({
+      id: LOCAL_CLAUDE_CODE_PROVIDER_ID,
+      active: true,
+    })
+  })
+
+  it("rejects mutating the built-in local Claude Code provider", async () => {
+    const { service } = makeProviderService()
+
+    await expect(service.createProvider({
+      id: LOCAL_CLAUDE_CODE_PROVIDER_ID,
+      name: "Local",
+      category: "official",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      env: {},
+    })).rejects.toThrow("built in")
+    await expect(service.updateProvider(LOCAL_CLAUDE_CODE_PROVIDER_ID, {
+      name: "Changed",
+    })).rejects.toThrow("cannot be edited")
+    await expect(service.archiveProvider(LOCAL_CLAUDE_CODE_PROVIDER_ID)).rejects.toThrow("cannot be archived")
+  })
+
   it("stores API keys only in the encrypted secrets namespace", async () => {
     const { service, providers, secrets } = makeProviderService()
 
@@ -175,6 +262,8 @@ describe("ProviderService", () => {
 function makeProviderService(deps: {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
+  readonly localClaudeSettingsPath?: string
+  readonly readTextFile?: (filePath: string) => Promise<string>
 } = {}) {
   const providers = new MemoryNamespace<ProviderEntryV1>("providers")
   const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
@@ -183,6 +272,8 @@ function makeProviderService(deps: {
     secrets,
     permissionGuard: deps.permissionGuard,
     auditSink: deps.auditSink,
+    localClaudeSettingsPath: deps.localClaudeSettingsPath,
+    readTextFile: deps.readTextFile,
     now: fixedNow,
   })
 

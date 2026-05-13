@@ -195,6 +195,13 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       const wfEdges: WorkflowEdge[] = updated.map(flowEdgeToWorkflowEdge)
       const newDef = { ...definitionRef.current, edges: wfEdges }
       definitionRef.current = newDef
+      logger.info("edge connected", {
+        source: connection.source,
+        sourceHandle: connection.sourceHandle,
+        target: connection.target,
+        targetHandle: connection.targetHandle,
+        edgeCount: wfEdges.length,
+      })
       onChange(newDef)
       return updated
     })
@@ -204,6 +211,10 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const wfNodes: WorkflowNode[] = nodesRef.current.map(flowNodeToWorkflowNode)
     const newDef = { ...definitionRef.current, nodes: wfNodes }
     definitionRef.current = newDef
+    logger.info("node drag stopped", {
+      nodeCount: wfNodes.length,
+      selectedNodeIds: nodesRef.current.filter((node) => node.selected).map((node) => node.id),
+    })
     onChange(newDef)
   }, [onChange])
 
@@ -226,12 +237,22 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const newWfNode: WorkflowNode = { id, name, type, position, config }
     const newDef = { ...definitionRef.current, nodes: [...definitionRef.current.nodes, newWfNode] }
     definitionRef.current = newDef
+    logger.info("node dropped", {
+      nodeId: id,
+      type,
+      position,
+      nodeCount: newDef.nodes.length,
+    })
     onChange(newDef)
     onNodeSelect?.(id)
   }, [screenToFlowPosition, onChange, setNodes, onNodeSelect])
 
   const selectionChangeHandler = useCallback(({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[] }) => {
     if (runState && runState !== "idle") return
+    logger.info("selection changed", {
+      selectedNodeIds: selectedNodes.map((node) => node.id),
+      selectedCount: selectedNodes.length,
+    })
     onNodeSelect?.(selectedNodes.length === 1 ? selectedNodes[0].id : null)
   }, [runState, onNodeSelect])
 
@@ -257,6 +278,11 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const copiedNodes = def.nodes.filter((n) => idSet.has(n.id))
     const copiedEdges = def.edges.filter((e) => idSet.has(e.from) && idSet.has(e.to))
     setClipboard({ nodes: copiedNodes, edges: copiedEdges })
+    logger.info("copy nodes", {
+      copiedNodeIds: copiedNodes.map((node) => node.id),
+      copiedNodeCount: copiedNodes.length,
+      copiedEdgeCount: copiedEdges.length,
+    })
     toast(`已复制 ${copiedNodes.length} 个节点`)
   }, [])
 
@@ -345,6 +371,11 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       const updated = currentEdges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target))
       const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
       definitionRef.current = newDef
+      logger.info("disconnect nodes", {
+        nodeIds,
+        removedEdgeCount: currentEdges.length - updated.length,
+        remainingEdgeCount: updated.length,
+      })
       onChange(newDef)
       return updated
     })
@@ -362,6 +393,10 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     if (deletableIds.length < nodeIds.length) {
       toast("结束节点已跳过")
     }
+    logger.info("delete nodes", {
+      requestedNodeIds: nodeIds,
+      deletedNodeIds: deletableIds,
+    })
     const changes: NodeChange<WorkflowFlowNode>[] = deletableIds.map((id) => ({ type: "remove", id }))
     handleNodesChange(changes)
   }, [handleNodesChange])
@@ -419,6 +454,10 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
     event.preventDefault()
     const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    logger.info("pane context menu opened", {
+      flowX: flowPos.x,
+      flowY: flowPos.y,
+    })
     setPaneMenu({ screenX: event.clientX, screenY: event.clientY, flowX: flowPos.x, flowY: flowPos.y })
   }, [screenToFlowPosition])
 

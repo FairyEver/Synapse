@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { Clock, Command as CommandIcon, Copy, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
@@ -29,6 +29,16 @@ import { AgentSessionSidebar, type ProjectOption } from "./components/agent-sess
 import { AgentTimeline } from "./components/agent-timeline"
 import { useAgentChat } from "./hooks/use-agent-chat"
 import { useStickToBottom } from "./hooks/use-stick-to-bottom"
+import {
+  enqueuePendingMessage,
+  firstQueuedMessageForIdleTarget,
+  markPendingMessageFailed,
+  markPendingMessageSending,
+  pendingMessagesForTarget,
+  removePendingMessage,
+  replacePendingMessage,
+} from "./pending-message-queue"
+import type { PendingMessage, PendingMessageTarget } from "./pending-message-queue"
 import { resolveAgentProjectScope } from "./project-resolution"
 import {
   agentCliLabel,
@@ -40,7 +50,7 @@ const logger = createRendererLogger("agent")
 
 const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
   agentLabel: "Agent",
-  thinkingDefaultCollapsed: true,
+  thinkingDefaultCollapsed: false,
   toolDefaultCollapsed: "auto",
   toolPreviewLines: 6,
   toolPreviewChars: 1200,
@@ -68,6 +78,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const [draft, setDraft] = useState("")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
+  const pendingSessionRefreshKeyRef = useRef<string | null>(null)
+  const pendingMessageIdRef = useRef(0)
   const latestEntry = chat.timeline.at(-1)
   const stick = useStickToBottom({
     contentSignal: [
@@ -86,6 +99,17 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       path: project.path,
     })),
   [config.global.projects])
+  const selectedSession = chat.sessions.find((session) =>
+    session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
+    ?? chat.sessions.find((session) => session.active)
+  const selectedTarget: PendingMessageTarget | undefined = selectedSession
+    ? {
+        projectId: selectedSession.projectId,
+        conversationId: selectedSession.id,
+        sessionKey: selectedSession.sessionKey,
+      }
+    : undefined
+  const selectedPendingMessages = pendingMessagesForTarget(pendingMessages, selectedTarget)
 
   useEffect(() => {
     stick.forcePin()
@@ -94,12 +118,16 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }, [chat.selectedProjectId, chat.selectedConversationId, chat.selectedSessionKey])
 
   useEffect(() => {
-    if (!pendingAgentSession) return
+    if (!pendingAgentSession) {
+      pendingSessionRefreshKeyRef.current = null
+      return
+    }
     const target = chat.sessions.find(
       (s) => s.id === pendingAgentSession.conversationId
         && s.projectId === pendingAgentSession.projectId,
     )
     if (target) {
+      pendingSessionRefreshKeyRef.current = null
       const prompt = pendingAgentSession.prompt
       void chat.selectSession(target).then(() => {
         if (prompt) {
@@ -107,15 +135,66 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         }
       })
       onPendingAgentSessionConsumed?.()
+      return
     }
-  }, [pendingAgentSession, chat.sessions, chat.selectSession, chat.sendMessage, onPendingAgentSessionConsumed])
 
-  const submitDraft = () => {
-    const content = draft.trim()
-    if (!content || !chat.activeProjectId) return
+    const pendingKey = `${pendingAgentSession.projectId}:${pendingAgentSession.conversationId}`
+    if (chat.loading || pendingSessionRefreshKeyRef.current === pendingKey) {
+      return
+    }
+    pendingSessionRefreshKeyRef.current = pendingKey
+    void chat.refresh().catch((rawError) => {
+      pendingSessionRefreshKeyRef.current = null
+      logger.error("Agent pending session refresh failed.", rawError)
+    })
+  }, [
+    pendingAgentSession,
+    chat.loading,
+    chat.refresh,
+    chat.sessions,
+    chat.selectSession,
+    chat.sendMessage,
+    onPendingAgentSessionConsumed,
+  ])
+
+  useEffect(() => {
+    const next = firstQueuedMessageForIdleTarget(pendingMessages, chat.sendingConversationIds)
+    if (!next) return
+    const sendingMessage = markPendingMessageSending(next)
+    setPendingMessages((current) => replacePendingMessage(current, sendingMessage))
+    void chat.sendMessage(sendingMessage.content, sendingMessage.target).then((sent) => {
+      setPendingMessages((current) => sent
+        ? removePendingMessage(current, sendingMessage.id)
+        : replacePendingMessage(current, markPendingMessageFailed(sendingMessage, "发送失败")))
+    })
+  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages])
+
+  const queueMessage = (content: string, target: PendingMessageTarget) => {
+    pendingMessageIdRef.current += 1
+    setPendingMessages((current) => [
+      ...current,
+      enqueuePendingMessage({
+        id: `pending:${Date.now()}:${pendingMessageIdRef.current}`,
+        content,
+        target,
+        createdAt: new Date().toISOString(),
+      }),
+    ])
+  }
+
+  const submitContent = (content: string) => {
+    if (!content || !selectedTarget) return
     setDraft("")
     stick.forcePin()
-    void chat.sendMessage(content)
+    if (chat.sending) {
+      queueMessage(content, selectedTarget)
+      return
+    }
+    void chat.sendMessage(content, selectedTarget)
+  }
+
+  const submitDraft = () => {
+    submitContent(draft.trim())
   }
 
   const handleSubmit = (event: FormEvent) => {
@@ -136,10 +215,18 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }
 
   const handleCommandSelect = (name: string) => {
-    if (!chat.activeProjectId) return
     setDraft("")
     setPaletteOpen(false)
-    void chat.sendMessage(`/${name}`)
+    submitContent(`/${name}`)
+  }
+
+  const handleRemovePendingMessage = (id: string) => {
+    setPendingMessages((current) => removePendingMessage(current, id))
+  }
+
+  const handleRetryPendingMessage = (id: string) => {
+    setPendingMessages((current) => current.map((message) =>
+      message.id === id ? enqueuePendingMessage(message) : message))
   }
 
   const handleCopyTranscript = async () => {
@@ -161,9 +248,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     }
   }
 
-  const selectedSession = chat.sessions.find((session) =>
-    session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
-    ?? chat.sessions.find((session) => session.active)
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
   const selectedProvider = selectedSession?.providerId
     ? chat.providers?.providers.find((provider) => provider.id === selectedSession.providerId)
@@ -329,6 +413,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onSubmit={handleSubmit}
               onCancelTurn={() => void chat.cancelTurn()}
               onForceKillTurn={() => void chat.forceKillTurn()}
+              pendingMessages={selectedPendingMessages}
+              onRemovePendingMessage={handleRemovePendingMessage}
+              onRetryPendingMessage={handleRetryPendingMessage}
             />
           </>
         )}

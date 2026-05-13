@@ -64,8 +64,11 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
     }
   | {
       type: "stream"
+      blockIndex?: number
       deltaType?: string
       text?: string
+      thinking?: string
+      partialJson?: string
       event?: Record<string, unknown>
     }
   | {
@@ -275,13 +278,14 @@ export interface SynapseAgentProviderSummary {
   readonly id: string
   readonly display?: string
   readonly active: boolean
+  readonly readonly?: boolean
   readonly model?: string
   readonly baseUrl?: string
   readonly scope: "global" | "project"
 }
 
 export interface SynapseAgentProviderState {
-  readonly projectId: string
+  readonly projectId?: string
   readonly agentType: string
   readonly providers: SynapseAgentProviderSummary[]
   readonly activeProviderId?: string

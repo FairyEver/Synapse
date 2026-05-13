@@ -336,6 +336,7 @@ export class ConversationRouter {
   ): Promise<AgentRuntimeTurnResult> {
     const events: AgentEvent[] = []
     let resultText = ""
+    let latestAssistantText = ""
     let error: string | undefined
 
     await liveSession.send(message)
@@ -352,12 +353,15 @@ export class ConversationRouter {
       await this.saveEventSdkSession(conversation.id, event, liveSession)
       await this.saveEventHistory(conversation.id, event)
 
+      const assistantText = assistantEventText(event)
+      if (assistantText) latestAssistantText = assistantText
+
       if (event.type === "permissionRequest") {
         await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
         continue
       }
       if (event.type === "result") {
-        resultText = event.content
+        resultText = latestAssistantText || event.content
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: event.usage as ConversationEntryV1["usage"] | undefined,
@@ -398,6 +402,7 @@ export class ConversationRouter {
     const events: AgentEvent[] = []
     let partialText = ""
     let resultText = ""
+    let latestAssistantText = ""
     let error: string | undefined
     try {
       const savedConversation = await this.repository.appendHistory(conversation.id, "user", message.content)
@@ -428,6 +433,8 @@ export class ConversationRouter {
         await this.persistAgentEvent(conversation.id, turnId, events.length, event)
         await this.saveEventSdkSession(conversation.id, event, liveSession)
         await this.saveEventHistory(conversation.id, event)
+        const assistantText = assistantEventText(event)
+        if (assistantText) latestAssistantText = assistantText
         if (event.type === "permissionRequest") {
           await liveSession.respondPermission(event.requestId, {
             behavior: "deny",
@@ -437,7 +444,8 @@ export class ConversationRouter {
           break
         }
         if (event.type === "result") {
-          resultText = event.content
+          resultText = latestAssistantText || event.content
+          partialText = resultText || partialText
           break
         }
         if (event.type === "error") {
@@ -872,6 +880,26 @@ function truncateString(value: string | undefined, maxLength: number): string | 
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
 }
 
+function assistantEventText(event: AgentEvent): string | undefined {
+  if (event.type !== "assistant") return undefined
+  const blocks = Array.isArray(event.contentBlocks)
+    ? event.contentBlocks
+    : Array.isArray(event.message.content)
+      ? event.message.content
+      : undefined
+  const text = textFromBlocks(blocks)
+  return text.trim().length > 0 ? text : undefined
+}
+
+function textFromBlocks(blocks: readonly unknown[] | undefined): string {
+  if (!blocks) return ""
+  return blocks.map((block) => {
+    if (typeof block === "string") return block
+    if (!isRecord(block)) return ""
+    return typeof block.text === "string" ? block.text : ""
+  }).join("")
+}
+
 async function nextLiveEventWithTimeout(
   liveSession: AgentLiveSession,
   timeoutMs: number,
@@ -890,9 +918,9 @@ async function nextLiveEventWithTimeout(
 }
 
 function appendRelayText(current: string, event: AgentEvent): string {
-  if (event.type === "text" || event.type === "result") {
-    return `${current}${event.content}`
-  }
+  if (event.type === "assistant") return assistantEventText(event) ?? current
+  if (event.type === "text") return `${current}${event.content}`
+  if (event.type === "result") return current || event.content
   if (event.type === "error" && !current) return event.message
   return current
 }

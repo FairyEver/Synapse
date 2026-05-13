@@ -101,6 +101,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.run-statuses",
         "core.workflow.snapshots",
         "core.workflow.window-manager",
+        "provider",
         "repo.maintenance",
         "repo.pending-pushes",
         "repo.sync-coordinator",
@@ -114,6 +115,11 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.logging")?.dependsOn).toEqual([])
     expect(byId.get("core.audit-sink")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
+    expect(byId.get("provider")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
     expect(byId.get("core.permission-guard")?.dependsOn).toEqual([])
     expect(byId.get("core.process-runtime")?.dependsOn).toEqual([])
@@ -258,6 +264,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.process-runtime",
       "core.project-containers",
       "core.window-manager",
+      "provider",
     ].sort())
   })
 })

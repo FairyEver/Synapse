@@ -35,7 +35,7 @@ export const agentBaseDefinition = {
   },
   displayProfile: {
     agentLabel: "Claude Code",
-    thinkingDefaultCollapsed: true,
+    thinkingDefaultCollapsed: false,
     toolDefaultCollapsed: "auto",
     toolPreviewLines: 6,
     toolPreviewChars: 1200,

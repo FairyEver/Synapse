@@ -1,4 +1,5 @@
 export const PROVIDER_SERVICE_ID = "provider"
+export const LOCAL_CLAUDE_CODE_PROVIDER_ID = "local-claude-code"
 
 export type ProviderCategory =
   | "official"
@@ -14,6 +15,10 @@ export interface CCProvider {
   id: string
   name: string
   category: ProviderCategory
+  source?: "local" | "user"
+  readonly?: boolean
+  configured?: boolean
+  configPath?: string
   baseUrl?: string
   apiKeyField: ProviderApiKeyField
   active?: boolean

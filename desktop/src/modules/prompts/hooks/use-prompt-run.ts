@@ -12,6 +12,7 @@ type PromptRunArgs = {
   item: SynapseContentMeta<"prompt">
   projectId: string
   agentType: string
+  providerId: string
   navigate: boolean
 }
 
@@ -19,7 +20,7 @@ function usePromptRun() {
   const [isRunning, setIsRunning] = useState(false)
 
   const run = useCallback(async (args: PromptRunArgs): Promise<boolean> => {
-    const { item, projectId, agentType, navigate } = args
+    const { item, projectId, agentType, providerId, navigate } = args
     setIsRunning(true)
 
     try {
@@ -42,6 +43,7 @@ function usePromptRun() {
           projectId,
           name: `${item.title} ${now}`,
           agentType,
+          providerId,
         })
       } catch (error) {
         logger.error("Prompt run: create session failed.", error)
@@ -58,6 +60,7 @@ function usePromptRun() {
           sessionKey: session.sessionKey,
           content,
           clientSubmittedAt: now,
+          providerId,
         }).catch((error) => {
           logger.error("Prompt run: send message failed.", error)
           toast.error("发送失败")

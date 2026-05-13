@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { createRendererLogger } from "@/app-shell/logging"
+import { getDiagnosticSnapshot } from "@/lib/diagnostic-context"
 
 const logger = createRendererLogger("error-boundary")
 
@@ -28,7 +29,9 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     logger.error("Uncaught render error.", {
       error: error.message,
+      stack: error.stack,
       componentStack: info.componentStack,
+      diagnostics: getDiagnosticSnapshot(),
     })
   }
 

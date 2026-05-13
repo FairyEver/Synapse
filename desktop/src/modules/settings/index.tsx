@@ -17,6 +17,7 @@ import { AboutPanel } from "@/modules/settings/components/about-panel"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
 import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
+import { ClaudeCodePanel } from "@/modules/settings/components/claude-code-panel"
 import { ToolsPanel } from "@/modules/settings/components/tools-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
@@ -261,6 +262,7 @@ function SettingsModule() {
         ) : null}
 
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}
+        {isReady && activeCategory === "claude-code" ? <ClaudeCodePanel /> : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
         {isReady && activeCategory === "services" ? <ServicesPanel /> : null}
         {isReady && activeCategory === "troubleshooting" ? <TroubleshootingPanel /> : null}

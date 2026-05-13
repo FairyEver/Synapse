@@ -139,6 +139,58 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("uses SDK assistant text as the canonical turn result over result content", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "assistant",
+          contentBlocks: [{ type: "text", text: "你好！有什么可以帮助你的吗？" }],
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "你好！有什么可以帮助你的吗？" }],
+          },
+          sdkSessionId: "sdk-1",
+        },
+        {
+          type: "result",
+          content: "你好可以你的?",
+          done: true,
+          metadata: { model: "claude-sonnet-4-5" },
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("你好"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(result.resultText).toBe("你好！有什么可以帮助你的吗？")
+    expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
+      expect.objectContaining({ content: "你好！有什么可以帮助你的吗？" }),
+    ])
+  })
+
+  it("falls back to SDK result content when no assistant message was emitted", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "fallback answer",
+          done: true,
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(result.resultText).toBe("fallback answer")
+    expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
+      expect.objectContaining({ content: "fallback answer" }),
+    ])
+  })
+
   it("closes the SDK session when a side session times out", async () => {
     const session = new TimeoutSession()
     const { router } = createRouter({ session })

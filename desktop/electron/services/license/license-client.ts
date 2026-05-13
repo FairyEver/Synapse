@@ -12,6 +12,10 @@ export interface LicenseClientDeps {
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly fetchImpl?: FetchLike
+  readonly logger?: {
+    warn: (message: string, meta?: unknown) => void
+    error: (message: string, meta?: unknown) => void
+  }
 }
 
 export class LicenseClient {
@@ -90,6 +94,7 @@ export class LicenseClient {
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15_000)
+    const startedAt = performance.now()
     let audited = false
     try {
       const response = await this.fetchImpl(url, {
@@ -102,6 +107,13 @@ export class LicenseClient {
       })
       const body = await readResponseBody(response)
       if (!response.ok) {
+        this.deps.logger?.warn("License HTTP request failed.", {
+          path,
+          status: response.status,
+          statusText: response.statusText,
+          url: url.toString(),
+          elapsedMs: Math.round(performance.now() - startedAt),
+        })
         this.recordAudit(url.origin, path, "failed", response.status)
         audited = true
         throw new LicenseClientRequestError(
@@ -121,7 +133,13 @@ export class LicenseClient {
       if (error instanceof LicenseClientRequestError) {
         throw error
       }
-      throw new Error("授权服务器请求失败。")
+      this.deps.logger?.error("License HTTP request errored.", {
+        path,
+        url: url.toString(),
+        elapsedMs: Math.round(performance.now() - startedAt),
+        error,
+      })
+      throw new Error("授权服务器请求失败。", { cause: error })
     } finally {
       clearTimeout(timeout)
     }

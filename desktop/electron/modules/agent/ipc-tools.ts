@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
+import type { DataRepository } from "../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
 import type {
@@ -10,8 +11,10 @@ import type {
   CreateProviderInput,
   ProviderApiKeyField,
   ProviderCategory,
+  ProviderService,
   UpdateProviderInput,
 } from "../../services/provider"
+import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "../../services/provider"
 import { resolveProjectAgent } from "./ipc-shared"
 
 type CreateProviderIpcInput = Omit<CreateProviderInput, "env">
@@ -71,16 +74,18 @@ const updateProviderInputSchema = z.object({
   sortIndex: z.number().optional(),
 }) satisfies z.ZodType<UpdateProviderIpcInput>
 
-const createProviderRequestSchema = projectRequestSchema.extend({
+const providerRequestSchema = z.object({})
+
+const createProviderRequestSchema = z.object({
   provider: createProviderInputSchema,
 })
 
-const updateProviderRequestSchema = projectRequestSchema.extend({
+const updateProviderRequestSchema = z.object({
   providerId: z.string().min(1),
   patch: updateProviderInputSchema,
 })
 
-const providerIdRequestSchema = projectRequestSchema.extend({
+const providerIdRequestSchema = z.object({
   providerId: z.string().min(1),
 })
 
@@ -104,13 +109,14 @@ const providerSummarySchema = z.object({
   id: z.string(),
   display: z.string().optional(),
   active: z.boolean(),
+  readonly: z.boolean().optional(),
   model: z.string().optional(),
   baseUrl: z.string().optional(),
   scope: z.enum(["global", "project"]),
 })
 
 const providerStateSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().optional(),
   agentType: z.string(),
   providers: z.array(providerSummarySchema),
   activeProviderId: z.string().optional(),
@@ -122,6 +128,10 @@ const publicProviderSchema = z.object({
   id: z.string(),
   name: z.string(),
   category: providerCategorySchema,
+  source: z.enum(["local", "user"]).optional(),
+  readonly: z.boolean().optional(),
+  configured: z.boolean().optional(),
+  configPath: z.string().optional(),
   baseUrl: z.string().optional(),
   apiKeyField: providerApiKeyFieldSchema,
   active: z.boolean().optional(),
@@ -165,6 +175,7 @@ const runtimeStatusSchema = z.object({
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type OpenReferenceRequest = z.infer<typeof openReferenceRequestSchema>
+type ProviderRequest = z.infer<typeof providerRequestSchema>
 type CreateProviderRequest = z.infer<typeof createProviderRequestSchema>
 type UpdateProviderRequest = z.infer<typeof updateProviderRequestSchema>
 type ProviderIdRequest = z.infer<typeof providerIdRequestSchema>
@@ -174,6 +185,10 @@ function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSche
     id: provider.id,
     name: provider.name,
     category: provider.category,
+    source: provider.source,
+    readonly: provider.readonly,
+    configured: provider.configured,
+    configPath: provider.configPath,
     baseUrl: provider.baseUrl,
     apiKeyField: provider.apiKeyField,
     active: provider.active,
@@ -193,10 +208,27 @@ function providerSummary(provider: CCProvider, activeProviderId?: string): z.inf
     id: provider.id,
     display: provider.name,
     active: provider.id === activeProviderId || Boolean(provider.active),
+    readonly: provider.readonly,
     model: provider.model,
     baseUrl: provider.baseUrl,
     scope: "global",
   }
+}
+
+function resolveGlobalProviderService(resolve: <T>(serviceId: string) => T) {
+  try {
+    return resolve<ProviderService>(PROVIDER_SERVICE_ID)
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith("Unknown service:")) {
+      throw error
+    }
+  }
+
+  return createProviderServiceFromDataRepository({
+    dataRepository: resolve<DataRepository>("core.data-repository"),
+    permissionGuard: resolve<PermissionGuard>("core.permission-guard"),
+    auditSink: resolve<AuditSink>("core.audit-sink"),
+  })
 }
 
 // ─── Tool/utility method descriptors ─────────────────────────────────────────
@@ -205,14 +237,13 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   getProviders: {
     kind: "invoke",
     channel: "synapse:agent:get-providers",
-    request: projectRequestSchema,
+    request: providerRequestSchema,
     response: providerStateSchema,
-    handler: async (ctx, request: ProjectRequest) => {
-      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
       const providers = await providerService.listProviders()
       const activeProvider = await providerService.getActiveProvider()
       return {
-        projectId: request.projectId,
         agentType: "claude-code",
         activeProviderId: activeProvider?.id,
         activeModel: activeProvider?.model,
@@ -223,10 +254,10 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   listProviders: {
     kind: "invoke",
     channel: "synapse:agent:list-providers",
-    request: projectRequestSchema,
+    request: providerRequestSchema,
     response: z.array(publicProviderSchema),
-    handler: async (ctx, request: ProjectRequest) => {
-      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
       return (await providerService.listProviders()).map(publicProvider)
     },
   },
@@ -236,7 +267,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: createProviderRequestSchema,
     response: publicProviderSchema,
     handler: async (ctx, request: CreateProviderRequest) => {
-      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const providerService = resolveGlobalProviderService(ctx.resolve)
       return publicProvider(await providerService.createProvider(request.provider as CreateProviderInput))
     },
   },
@@ -246,7 +277,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: updateProviderRequestSchema,
     response: publicProviderSchema,
     handler: async (ctx, request: UpdateProviderRequest) => {
-      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const providerService = resolveGlobalProviderService(ctx.resolve)
       return publicProvider(await providerService.updateProvider(request.providerId, request.patch))
     },
   },
@@ -256,7 +287,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: providerIdRequestSchema,
     response: okResultSchema,
     handler: async (ctx, request: ProviderIdRequest) => {
-      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const providerService = resolveGlobalProviderService(ctx.resolve)
       await providerService.archiveProvider(request.providerId)
       return { ok: true }
     },
@@ -267,7 +298,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: providerIdRequestSchema,
     response: okResultSchema,
     handler: async (ctx, request: ProviderIdRequest) => {
-      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const providerService = resolveGlobalProviderService(ctx.resolve)
       await providerService.setActiveProvider(request.providerId)
       return { ok: true }
     },
@@ -278,17 +309,13 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: runtimeStatusRequestSchema,
     response: runtimeStatusSchema,
     handler: async (ctx, request: { projectId?: string }) => {
-      const providerService = request.projectId
-        ? (await resolveProjectAgent(ctx.resolve, request.projectId)).providerService
-        : undefined
-      const providers = providerService ? await providerService.listProviders() : []
-      const activeProvider = providerService
-        ? await providerService.getActiveProvider()
-        : undefined
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      const providers = await providerService.listProviders()
+      const activeProvider = await providerService.getActiveProvider()
       const providerConfigured = Boolean(activeProvider && providers.length > 0)
       const issues: string[] = []
-      if (request.projectId && !providerConfigured) issues.push("provider-not-configured")
-      if (request.projectId && activeProvider && !activeProvider.model) issues.push("model-not-selected")
+      if (!providerConfigured) issues.push("provider-not-configured")
+      if (activeProvider && !activeProvider.model) issues.push("model-not-selected")
       return {
         projectId: request.projectId,
         agents: [{
@@ -300,12 +327,12 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
             installed: true,
             path: null,
           },
-          provider: request.projectId ? {
+          provider: {
             projectId: request.projectId,
             configured: providerConfigured,
             activeProviderId: activeProvider?.id,
             activeModel: activeProvider?.model,
-          } : undefined,
+          },
           issues,
         }],
       }

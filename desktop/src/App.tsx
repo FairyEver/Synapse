@@ -12,6 +12,7 @@ import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { createRendererLogger } from "@/app-shell/logging"
+import { updateDiagnosticContext } from "@/lib/diagnostic-context"
 import {
   type OpenAgentSessionPayload,
   publishActiveAppTab,
@@ -104,6 +105,14 @@ function MainApp() {
 
   const activeTabRef = useRef(activeTab)
   activeTabRef.current = activeTab
+
+  useEffect(() => {
+    updateDiagnosticContext({
+      activeRepositoryUuid: activeRepository?.uuid,
+      activeTab,
+      windowType: "main",
+    })
+  }, [activeRepository?.uuid, activeTab])
 
   const setActiveTab = useCallback(
     (nextTab: AppTabId, source: "navigation" | "shortcut" | "notification" | "sync-status") => {

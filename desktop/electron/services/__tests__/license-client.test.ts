@@ -29,4 +29,41 @@ describe("LicenseClient", () => {
       message: "激活码暂不可用，请联系管理员。",
     } satisfies Partial<LicenseClientRequestError>)
   })
+
+  it("logs failed license HTTP status with sanitized request metadata", async () => {
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const client = new LicenseClient({
+      permissionGuard: { check: vi.fn().mockResolvedValue({ allowed: true }) },
+      auditSink: { record: vi.fn() },
+      fetchImpl: vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        code: "NOPE",
+        message: "failed",
+      }), {
+        status: 500,
+        statusText: "Server Error",
+        headers: { "content-type": "application/json" },
+      })),
+      logger,
+    } as never)
+
+    await expect(client.renew("http://localhost:3000?token=secret", {
+      leaseToken: "lease-secret",
+      device: {
+        deviceId: "device-1",
+        name: "MacBook",
+        platform: "darwin",
+        appVersion: "0.2.54",
+      },
+    })).rejects.toThrow("failed")
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "License HTTP request failed.",
+      expect.objectContaining({
+        path: "/v1/licenses/renew",
+        status: 500,
+        statusText: "Server Error",
+        url: "http://localhost:3000/v1/licenses/renew",
+      }),
+    )
+  })
 })

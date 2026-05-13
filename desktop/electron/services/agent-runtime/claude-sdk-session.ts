@@ -149,7 +149,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private buildQueryOptions(options: ClaudeSDKSessionOptions): Record<string, unknown> {
     const queryOptions: Partial<Options> = {
       cwd: options.cwd,
-      env: options.env,
+      env: {
+        ...process.env,
+        ...options.env,
+      },
+      includePartialMessages: true,
       canUseTool: (toolName, input, context) => this.canUseTool(toolName, input, context),
     }
 

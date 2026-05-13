@@ -336,8 +336,61 @@ function createRawPayloadSubscription<TPayload>(
     })
 }
 
+const SENSITIVE_IPC_FIELD_PATTERN =
+  /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
+
+function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return value
+  if (typeof value === "number" || typeof value === "boolean") return value
+  if (typeof value === "string") {
+    if (SENSITIVE_IPC_FIELD_PATTERN.test(fieldName)) return "[redacted]"
+    return value.length > 300 ? `${value.slice(0, 120)}...[truncated ${value.length} chars]` : value
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeIpcPayload(fieldName, item, depth + 1))
+  }
+  if (typeof value === "object") {
+    if (depth >= 3) return "[object]"
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        sanitizeIpcPayload(key, item, depth + 1),
+      ]),
+    )
+  }
+  return String(value)
+}
+
+function describeIpcError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function writeRendererIpcFailureLog(channel: string, args: unknown, error: unknown, durationMs: number): void {
+  void ipcRenderer.invoke(IPC_CHANNELS.log.write, {
+    level: "error",
+    category: "renderer.ipc",
+    message: "IPC invoke failed.",
+    details: {
+      channel,
+      durationMs,
+      error: describeIpcError(error),
+      request: sanitizeIpcPayload("request", args),
+    },
+  }).catch(() => undefined)
+}
+
 // Helper to create invoke wrapper
-const invoke = (channel: string) => (args?: unknown) => ipcRenderer.invoke(channel, args)
+const invoke = (channel: string) => async (args?: unknown) => {
+  const startedAt = performance.now()
+  try {
+    return await ipcRenderer.invoke(channel, args)
+  } catch (error) {
+    if (channel !== IPC_CHANNELS.log.write) {
+      writeRendererIpcFailureLog(channel, args, error, Math.round(performance.now() - startedAt))
+    }
+    throw error
+  }
+}
 
 // Helper to create subscription
 const subscribe = (channel: string) => (listener: (payload: unknown) => void) => {
@@ -589,8 +642,8 @@ const synapseBridge: SynapseBridge = {
     respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),
     cancelTurn: (args) => invoke(IPC_CHANNELS.agent.cancelTurn)(args),
     forceKillTurn: (args) => invoke(IPC_CHANNELS.agent.forceKillTurn)(args),
-    getProviders: (projectId) => invoke(IPC_CHANNELS.agent.getProviders)({ projectId }),
-    listProviders: (projectId) => invoke(IPC_CHANNELS.agent.listProviders)({ projectId }),
+    getProviders: () => invoke(IPC_CHANNELS.agent.getProviders)({}),
+    listProviders: () => invoke(IPC_CHANNELS.agent.listProviders)({}),
     createProvider: (args) => invoke(IPC_CHANNELS.agent.createProvider)(args),
     updateProvider: (args) => invoke(IPC_CHANNELS.agent.updateProvider)(args),
     archiveProvider: (args) => invoke(IPC_CHANNELS.agent.archiveProvider)(args),

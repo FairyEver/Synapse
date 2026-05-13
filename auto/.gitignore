@@ -1,3 +1,6 @@
-logs/*.md
+logs/**
+!logs/.gitkeep
+state/ui-config.json
+state/parallel/
 node_modules/
 dist/

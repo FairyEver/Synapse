@@ -1,321 +1,301 @@
----
+你正在对 Synapse 中今天白天大改后新引入的 Claude/Cloud Code SDK 相关链路做一次并行安全的小步修复。这里的 SDK 以代码里的真实命名为准，重点包括 `@anthropic-ai/claude-agent-sdk`、`claude-agent-sdk` runtime、conversation/session 路由、Agent 对话 UI、任务调度、消息事件桥接和日志诊断。
 
-你正在对一个 Electron + React 桌面应用（Synapse）的工作流编排子系统进行独立迭代。你的任务是：**纯粹从代码层面**找出该系统在真实使用时的可用性与体验缺陷——既包括逻辑走不通的断路问题，也包括**流程部分的 UI 不完善与交互方式不顺畅的问题**——自主完成从问题分析到代码修复的全流程。
+本提示词会被 5 个 Agent 在同一工作目录中并行循环执行。每个 Agent 每轮只处理一个真实问题：要么修复 1 个可证明的缺陷，要么补齐 1 组同一链路上的关键日志缺口。不要做大重构，不要做新功能。
 
-**禁止事项**
-- 不得启动任何开发服务器
-- 不得运行任何脚本、测试或 shell / npm / pnpm 命令
-- 所有分析和修复必须通过阅读和编写源代码完成
-- 终端命令仅允许在最终阶段执行 `git add` / `git commit`（见 Step 6）
-- **不得新增节点类型**
-- **不得新增 UI 页面或独立视图**
-- **不得新增 IPC channel**（除非修复缺陷必需且无替代方案）
-- **不得改变数据模型结构**（WorkflowDefinition / WorkflowRunStatus 等核心类型的字段增删）
+## 本轮总目标
 
-**允许的优化范围**
-- 给现有功能补充缺失的状态处理（error / loading / empty / disabled）
-- 修复交互断路（操作无反馈、无入口、状态不清）
-- 完善日志覆盖（关键执行路径无日志）
-- 修复数据流不一致（状态更新未同步到所有消费方）
-- 修复运行时崩溃路径（合法操作序列导致未捕获错误或静默失败）
-- 修复跨组件状态不一致
+让新 SDK 接入后的主链路更稳定、更可复盘：
 
----
+- 用户在 Agent/对话 UI 里发送消息、查看流式输出、恢复会话、切换模型/模式时，不白屏、不静默失败、不显示错乱状态。
+- SDK session、conversation、message、tool/result、usage、error、abort/timeout 等事件能被正确桥接到 Synapse 内部事件。
+- 定时任务、automation ingress、side channel 等后台触发 Agent 的路径不会丢消息、重复执行、卡住或误报成功。
+- 与 Claude Code SDK 相关的失败必须有足够日志，用户给出日志后能还原：谁触发、哪个会话、哪个任务、哪个 SDK 事件、失败发生在哪个边界。
 
-## 一、项目背景
+## 并行原则
 
-这是一个 Electron + React + TypeScript monorepo，工作流编排是其中一个快速迭代中的模块。它允许用户在可视化画布上编排多步 Prompt Chain，支持变量绑定和条件分支（Switch 节点），在本地 Electron 主进程中串行执行。当前已有的能力包括：编辑器画布（节点拖拽、连线、右键菜单、复制粘贴）、独立的运行视图（DAG 视图 + 时间线视图 + 节点结果面板）、运行参数对话框、运行历史记录等。
+- 外部已经有 5 个 Agent 并行。单个 Agent 不得再启动子 Agent。
+- 每轮最多修复 1 个缺陷，或补齐 1 组同一链路日志。
+- 修改前先声明写入范围并加锁；没有 claim/lock 的文件不得编辑。
+- 默认文件级写锁。只有不改 imports/exports/props/共享类型时，才可对大文件使用符号级锁。
+- 如果目标文件已被其他 Agent claim 或 lock，换一个问题。
+- 宁可本轮无修复，也不要抢同一处代码。
 
-> **重要：代码是唯一的事实来源。** `docs/` 和 `desktop/docs/` 下的设计文档仅反映某个历史时间点的设计意图，代码可能已经超越或偏离这些文档。分析时以实际代码行为为准，设计文档仅作为理解背景意图的辅助参考，不作为审查基准。
+## 禁止事项
 
----
+- 不得启动 dev server、Electron app、浏览器、Chrome、Playwright 或任何运行态调试页面。
+- 不得新增依赖。
+- 不得新增大功能、页面、视图、架构层或新的日志系统。
+- 不得新增 IPC channel，除非修复 P0/P1 且无替代路径。
+- 不得修改核心数据模型字段，除非有测试证明现有模型无法表达 SDK 必需状态。
+- 不得使用 `git add .`、`git add -A`、`git commit -a`、`git reset --hard`、`git checkout --`、强推或覆盖其他 Agent/用户变更。
+- 不得做全文件格式化、批量重排 imports、顺手重构相邻代码。
+- 不得把 prompt、message、token、secret、authorization、cookie、完整路径、超长 Markdown/源码写进日志。
 
-## 二、必读代码范围
+## 必读入口
 
-在开始分析前，**完整阅读**以下所有文件（这些是本次任务的全部分析边界）：
+先按候选方向阅读，不要一次性展开无关文件。
 
-**类型定义**
-- `desktop/src/types/workflow.ts`
-- `desktop/workflow-nodes/types.ts`
-- `desktop/workflow-nodes/schemas/variable-binding.ts`
+### SDK 与 Agent Runtime
 
-**节点类型插件**
-- `desktop/workflow-nodes/registry.ts`
-- `desktop/workflow-nodes/register.main.ts`
-- `desktop/workflow-nodes/register.renderer.ts`
-- `desktop/workflow-nodes/panel-registry.ts`
-- `desktop/workflow-nodes/variable-binding-editor.tsx`
-- `desktop/workflow-nodes/prompt/`（schema.ts, manifest.ts, executor.main.ts, panel.tsx, card.tsx, index.ts）
-- `desktop/workflow-nodes/switch/`（schema.ts, manifest.ts, executor.main.ts, panel.tsx, card.tsx, constants.ts, index.ts）
-- `desktop/workflow-nodes/end/`（schema.ts, manifest.ts, executor.main.ts, panel.tsx, card.tsx, index.ts）
+- `desktop/package.json`
+- `desktop/src/definitions/agent/claude-code/`
+- `desktop/src/definitions/main-types.ts`
+- `desktop/electron/services/agent-runtime/claude-sdk-session.ts`
+- `desktop/electron/services/agent-runtime/sdk-event-bridge.ts`
+- `desktop/electron/services/agent-runtime/session-manager.ts`
+- `desktop/electron/services/agent-runtime/agent-runtime-service.ts`
+- `desktop/electron/services/agent-runtime/types.ts`
+- `desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`
+- `desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts`
+- `desktop/electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts`
 
-**主进程服务层**
-- `desktop/electron/services/workflow/workflow-service.ts`
-- `desktop/electron/services/workflow/workflow-engine.ts`
-- `desktop/electron/services/workflow/workflow-validator.ts`
-- `desktop/electron/services/workflow/variable-resolver.ts`
-- `desktop/electron/services/workflow/run-snapshot-service.ts`
-- `desktop/electron/services/workflow/window-manager.ts`
+### 对话 UI 与消息展示
 
-**IPC 层 + 服务注册**
-- `desktop/electron/modules/workflow/ipc.ts`
-- `desktop/electron/bootstrap/descriptors.ts`（仅 workflow 相关部分）
+- `desktop/src/modules/agent/`
+- `desktop/electron/modules/agent/`
+- `desktop/electron/modules/ops/ipc.ts`
+- 所有与 conversation、message、session、agent event、streaming output、tool/result rendering 相关的组件、hook、utils 和测试。
 
-**渲染层 — 编辑器**
-- `desktop/src/modules/workflow/index.tsx`
-- `desktop/src/modules/workflow/editor/editor-app.tsx`
-- `desktop/src/modules/workflow/editor/canvas.tsx`
-- `desktop/src/modules/workflow/editor/canvas-context.ts`
-- `desktop/src/modules/workflow/editor/toolbar.tsx`
-- `desktop/src/modules/workflow/editor/node-config-panel.tsx`
-- `desktop/src/modules/workflow/editor/execution-overlay.tsx`
-- `desktop/src/modules/workflow/editor/node-wrappers.tsx`
-- `desktop/src/modules/workflow/editor/node-context-menu.tsx`
-- `desktop/src/modules/workflow/editor/node-palette.tsx`
-- `desktop/src/modules/workflow/editor/custom-edge.tsx`
+### 任务调度与后台触发
 
-**渲染层 — 运行视图**
-- `desktop/src/modules/workflow/runner/runner-app.tsx`
-- `desktop/src/modules/workflow/runner/runner-toolbar.tsx`
-- `desktop/src/modules/workflow/runner/dag-view.tsx`
-- `desktop/src/modules/workflow/runner/timeline-view.tsx`
-- `desktop/src/modules/workflow/runner/node-result-panel.tsx`
-- `desktop/src/modules/workflow/runner/runner-node-wrappers.tsx`
+- `desktop/src/modules/task-scheduler/`
+- `desktop/electron/modules/task-scheduler/`
+- `desktop/electron/services/task-scheduler/`
+- `desktop/electron/services/automation-ingress/automation-ingress-service.ts`
+- `desktop/electron/services/side-channel/`
 
-**渲染层 — 组件与 Hooks**
-- `desktop/src/modules/workflow/components/workflow-list.tsx`
-- `desktop/src/modules/workflow/components/workflow-card.tsx`
-- `desktop/src/modules/workflow/components/run-params-dialog.tsx`
-- `desktop/src/modules/workflow/components/run-history-dialog.tsx`
-- `desktop/src/modules/workflow/components/params-editor-dialog.tsx`
-- `desktop/src/modules/workflow/hooks/use-workflow-run.ts`
-- `desktop/src/modules/workflow/hooks/use-workflow-events.ts`
-- `desktop/src/modules/workflow/hooks/use-workflow-list.ts`
-- `desktop/src/modules/workflow/hooks/use-upstream-nodes.ts`
+### 日志与诊断基础设施
 
-在阅读上述文件时，同时留意项目已有的统一日志工具（`StructuredLogger` 或同等机制）的使用方式，作为代码实施阶段的日志规范参考（详见第五节）。
+- `createMainLogger`
+- `createRendererLogger`
+- `track`
+- diagnostics / logStore / RendererHealthService
+- EventBus / WindowBroadcaster
+- preload 暴露的 `window.synapse.*` 边界
 
----
+## 优先级
 
-## 三、State 机制
+优先处理今天新 SDK 接入后最容易坏、最难复盘的地方：
 
-本迭代系统使用 `auto/state/` 目录维护跨轮次状态，包含以下文件：
+1. P0：崩溃、白屏、主进程未捕获异常、SDK session 卡死、消息完全丢失、任务重复执行或无法停止。
+2. P1：对话 UI 展示错乱、流式消息顺序错误、resume/fresh 会话路由错误、SDK error/result/tool 事件被误映射、后台任务误报成功。
+3. P2：关键日志不足，无法把一次用户操作或定时任务触发关联到 SDK session/message/run/task。
+4. P3：局部 loading/error/empty/disabled 状态不完整，但必须和 SDK/Agent/调度链路直接相关。
 
-### `auto/state/fix-log.md`
-追加式迭代历史记录。每轮在 Step 5 追加一条。
+## 结构化审查方法
 
-### `auto/state/coverage-map.json`
-结构化记录每个文件和功能区域的审查覆盖度。字段说明：
-- `files[path].healthScore`：`untouched`（从未审查）/ `active`（近期有修复）/ `stable`（修复后无回归）
-- `files[path].lastReviewedIteration`：最后一次被修复的迭代号
-- `areas[name].status`：功能区域的整体健康状态
+每个候选都必须先写出证据链：
 
-### `auto/state/focus.md`
-当前关注方向和允许/禁止范围。人工可编辑，提示词在 Step 0.5 读取。
-
----
-
-## 四、任务执行流程
-
-完成所有文件阅读后，严格按照以下步骤执行。
-
-### Step 0：读取历史迭代记录
-
-读取 `auto/state/fix-log.md`：
-
-- 若文件不存在或为空：标记本轮为**第 1 次迭代**，跳过本步剩余内容，直接进入 Step 0.5。
-- 若文件存在：
-  1. **提取索引**：列出此前所有迭代的"修复内容"中涉及的 `文件:行号` 与"发现的问题"中的问题主题。
-  2. **回归抽样验证**：从历史修复中**抽取最近 3-5 项**，在当前代码中确认对应修复**仍然成立**（仅读代码，不运行）。判定标准：修复点对应的逻辑、判断、调用顺序与历史记录中"修复内容"描述一致。
-  3. **输出固定格式两段**（在 Step 0.5 之前展示）：
-     - **历史摘要**：曾覆盖的模块或文件范围（一句话级别）
-     - **回归清单**：哪些历史修复在当前代码中已不再成立（含 `文件:行号` 和回归说明）；若无则写"无回归"
-
-**回归优先级**：若回归清单非空，本轮 Step 1 必须把回归项作为候选缺陷之一，**优先级高于新发现的缺陷**。
-
-### Step 0.5：读取覆盖度与关注方向
-
-1. 读取 `auto/state/coverage-map.json`，提取：
-   - `untouched` 文件列表（从未被审查）
-   - `active` 文件列表（近期有修复，可能仍有关联问题）
-   - `stable` 文件列表（已稳定，低优先级）
-
-2. 读取 `auto/state/focus.md`，了解当前关注方向和允许/禁止范围。
-
-3. **审查优先级决策**：基于 coverage-map，本轮优先深入审查 `untouched` 文件。若 `untouched` 文件中未发现问题，再审查 `active` 文件。`stable` 文件仅在回归验证中涉及。
-
-### Step 1：缺陷发现（结构化静态审查）
-
-从**真实可用性**角度，在代码层面发现 1 到 3 个最严重的缺陷。
-
-**筛选优先级（按序）**：
-1. Step 0 标记的回归项
-2. `untouched` 文件中的主流程断路问题
-3. 主流程（创建 → 编辑 → 保存 → 运行 → 查看结果）中的断路问题
-4. Switch 节点分支逻辑中的语义错误
-5. UI 状态与执行状态的不一致问题
-6. 流程部分的 UI 完备性缺失（loading / empty / error / disabled / 无权限等关键状态缺失或信息不清；空画布、空历史、空结果等场景缺乏引导）
-7. 流程部分的交互断路（关键操作无入口、缺少反馈、危险操作无确认、键鼠与快捷键行为不一致、焦点与选中态不清）
-
-**审查维度参考（启发用，不必穷举）**：
-
-1. **数据流断裂**：状态在 A 处更新，但 B 处使用旧版本，UI 或结果与用户预期不符
-2. **代码内部矛盾**：同一概念在不同文件中的实现假设不一致（类型 vs 实际、IPC 契约 vs 调用侧、编辑器 vs 运行视图）
-3. **运行时崩溃路径**：合法的用户操作序列导致未捕获错误或静默失败
-4. **生命周期与服务绑定**：服务初始化时捕获了本该动态读取的状态
-5. **跨组件状态不一致**：一处改了数据，另一处展示或逻辑没有跟上
-6. **分支语义漏洞**：Switch 分支激活、可达性判断、变量解析在某些 DAG 结构下行为错误
-7. **UI 完备性**：编辑器、运行视图、对话框在 loading / empty / error / disabled / 无权限等关键状态下是否有清晰可见的反馈；空画布、空历史、空结果、长耗时操作的进度是否成体系
-8. **交互顺畅度**：按钮点击反馈、拖拽手柄可见性、右键菜单完整度、键盘快捷键（删除、撤销、复制粘贴、Esc 关闭、Enter 确认）、危险操作确认、错误信息可否直接定位到具体节点
-9. **信息架构**：关键操作是否有明显入口、当前选中态与焦点态是否清晰、视图之间切换时上下文是否保留
-
-**方法论硬约束（不满足则该条作废，不得作为缺陷提交）**：
-
-- **先路径后结论**：不先写出完整"用户操作 → 代码执行链 → 错误结果或体验缺陷"的触发路径，不得给出缺陷判断。对于 UI/交互类缺陷，"错误结果"可表述为"无反馈 / 无入口 / 状态不清 / 与心智预期不符"，但必须说明用户此刻期望看到什么、实际看到什么。
-- **代码自证**：触发路径上的每一环必须引用具体 `文件:行号`，缺一环视为"证据不足，放弃此条"。
-- **真实可用性论证**：必须说明为什么这是用户在正常使用时会碰到的问题，而不是理论风险或极端边缘情况。
-- **空结果合法**：若严格筛选后所有候选都未通过上述约束，如实报告"本轮无可安全修复的问题"，直接跳到 Step 5（按"无修复"格式追加条目），**跳过 Step 6 提交**。
-
-### Step 2：结构化分析与方案（每个缺陷一张卡片）
-
-对 Step 1 通过筛选的每个缺陷，**严格按以下统一字段输出一张缺陷卡片**，不得用自由段落替代：
-
+```text
+用户操作或后台触发
+→ renderer/preload/main/SDK/调度中的代码链
+→ 错误结果或日志复盘缺口
 ```
+
+每一环引用具体 `文件:行号`。如果需要运行 app 才能确认，放弃该候选。
+
+重点查：
+
+- SDK event 是否完整桥接：assistant/user/result/error/system/tool/use/permission/usage/unknown future event。
+- `sdkSessionId` 是否在 fresh/resume、streaming update、result、error、conversation persistence 中一致。
+- Abort、timeout、close、dispose、duplicate send、concurrent send 是否会留下悬挂 session 或错误状态。
+- 对话 UI 是否能稳定展示 partial text、final result、tool/result/error、空输出和异常退出。
+- 消息排序、去重、合并、done 状态、last message、conversation route 是否有边界错误。
+- Task Scheduler 手动/定时/错过运行/重复运行/禁用任务路径是否正确记录 run result。
+- Automation ingress 和 side channel 调 Agent 时，messageId/sessionKey/reply target/agent event 是否能关联。
+- IPC handler 是否记录失败 channel、耗时、输入摘要、错误 stack。
+- Renderer 操作是否有 `track` 或 data-track 能还原最近用户动作。
+- diagnostics 导出是否包含 Agent runtime、scheduler、recent actions、renderer health、SDK session 相关日志。
+
+## 日志补齐要求
+
+改到 Claude/Cloud Code SDK、Agent runtime、对话 UI、任务调度、automation ingress 或 side channel 时，必须同时检查日志。
+
+新增日志应至少回答其中一个问题：
+
+- 谁触发了这次动作：用户点击、IPC、定时任务、automation ingress、side channel？
+- 处理的是哪个对象：conversationId、messageId、sessionId、sdkSessionId、taskId、runId、agentType、providerId？
+- 哪个边界失败：renderer、preload、IPC、main service、SDK query、event bridge、scheduler execution？
+- 失败类型是什么：abort、timeout、SDK error、validation error、permission denied、unknown event、persistence failure？
+- 这条日志能否和最近用户操作、窗口、仓库、任务、会话、消息关联？
+
+优先复用：
+
+1. `createMainLogger`
+2. `createRendererLogger`
+3. `track({ component, name, action, value })`
+4. `data-track="stable-semantic-name"`
+5. diagnostics / logStore / RendererHealthService
+6. 既有 EventBus、notification、promise 日志机制
+
+脱敏规则：
+
+- prompt/message/content：只记录长度、角色、消息类型、最多 120 字符摘要。
+- token/secret/apiKey/cookie/authorization/password/credential：一律 `[redacted]` 或只记录是否存在。
+- 文件路径：只记录 basename、长度或 `[path redacted]`。
+- URL：保留 protocol/host/path 摘要，去掉 query。
+- SDK raw event：不要整包落日志；记录 type、subtype、session_id、usage 摘要、错误摘要和已知字段 keys。
+
+禁止添加“进入函数”式噪声日志。每条新增日志都要服务复盘。
+
+## 写锁协议
+
+运行开始生成 Agent ID：
+
+```text
+agentId = AUTO_AGENT_ID 环境变量；否则 "agent-" + 当前时间戳 + "-" + 4 位随机后缀
+```
+
+共享状态：
+
+- `auto/state/fix-log.md`
+- `auto/state/coverage-map.json`
+- `auto/state/focus.md`
+- `auto/state/parallel/claims.jsonl`
+- `auto/state/parallel/locks/`
+- `auto/state/parallel/agent-notes/`
+
+编辑前：
+
+1. 读取最近 fix-log、coverage-map、focus、claims、locks。
+2. 选择一个未被占用的 work item。
+3. 获得 `claims.lock`，向 `claims.jsonl` 追加 planned claim。
+4. 获得目标文件 lock。
+5. 重新读取目标文件，确认未被其他 Agent 改动。
+
+claim 格式：
+
+```json
+{"agentId":"...","iteration":N,"status":"planned","scope":"file|symbol|state|git","path":"...","symbol":"...","reason":"...","startedAt":"YYYY-MM-DD HH:mm:ss +0800","expiresAt":"YYYY-MM-DD HH:mm:ss +0800"}
+```
+
+锁目录用原子 mkdir 创建：
+
+- `auto/state/parallel/locks/file__<path-hash>.lock/`
+- `auto/state/parallel/locks/symbol__<path-hash>__<symbol-hash>.lock/`
+- `auto/state/parallel/locks/claims.lock/`
+- `auto/state/parallel/locks/state.lock/`
+- `auto/state/parallel/locks/git.lock/`
+
+锁默认 90 分钟过期。不确定是否 stale 就避开。
+
+## 缺陷卡片
+
+最终只选 1 个问题，实施前输出：
+
+```text
 ### 缺陷 N：<一句话定性>
-- 触发路径：<用户操作 → 代码链 → 错误结果或体验缺陷，每一环可追踪到行号>
+- 类型：<SDK缺陷 / 对话UI缺陷 / 调度缺陷 / 消息事件缺陷 / 日志缺口 / 回归>
+- 优先级：<P0/P1/P2/P3>
+- 并行范围：<计划 claim 的文件或符号>
+- 触发路径：<用户操作或后台触发 → 代码链 → 错误结果或复盘缺口>
 - 代码证据：
-  - `文件路径:行号` —— <最小必要片段或一句话说明>
-  - …（视复杂度列 2-5 条）
-- 非边缘性论证：<为什么是真实可用性问题>
-- 历史关联：<独立 / 延续第 X 轮 / 修复第 X 轮的回归 / 与第 X 轮同主题但位置不同>
-- 根因：<一段，精确定位到行为或假设>
+  - `文件路径:行号`：<说明>
+  - `文件路径:行号`：<说明>
+- 非边缘性论证：<为什么正常使用会遇到>
+- 根因：<精确定位到行为或假设>
 - 候选方案：
-  - 方案 A：<做法> —— 利：…；弊：…
-  - 方案 B：<做法> —— 利：…；弊：…
-  - （可选 方案 C）
-- 选定方案：<A/B/C> —— 理由：<对架构的侵入、是否符合设计意图、实施复杂度>
-- 产品行为：<修复后用户操作序列的预期结果；是否改变 UI、数据模型、IPC>
+  - 方案 A：<做法>；利：...；弊：...
+  - 方案 B：<做法>；利：...；弊：...
+- 选定方案：<A/B>，理由：<侵入性、复杂度、并行安全性>
+- 产品行为：<修复后用户看到什么，日志能复盘什么>
 - Breaking Change：<无 / 有 + 兼容策略>
 ```
 
-**历史关联字段强制要求**：若新缺陷与某次历史修复在**同文件同主题**重叠，必须显式说明本次属于"覆盖、延续、还是独立"，禁止留空或仅写"无"。
+## 实施规则
 
-### Step 3：代码实施
+- 先写聚焦测试，并确认修复前应失败；无法跑红灯时说明原因。
+- 再实现最小修复。
+- 改动限制在已 claim 范围内。
+- 不新增依赖，不扩散 `any`，不做无关重构。
+- UI 改动遵守 `AGENTS.md`、`.claude/rules/design.md`、`.claude/rules/ui-rules.md`：不写自定义颜色、内联样式、卡片套卡片、废话文案。
+- Renderer 只能通过 `window.synapse.*` 使用 Electron 能力。
+- 主进程敏感操作必须经过现有 PermissionGuard / AuditSink。
+- 修改后重新阅读改动文件，确认没有误碰未 claim 范围、没有吞错、没有空 catch、没有 console.log 日志。
 
-按以下规则直接编写修复代码：
+## 验证
 
-- **行内编辑方式**（`edit` / `multi_edit` 工具），不输出代码块给用户，直接修改源文件
-- 每次修改最小化：只改缺陷所在的最小代码范围
-- 遵守现有代码风格、命名惯例、模块边界
-- UI/交互相关修改必须遵循 `AGENTS.md` 与 `.claude/rules/design.md` 的设计指引：优先复用 `desktop/src/components/ui/` 的 shadcn/ui 组件与现有 Tailwind token，不得引入自定义色板、自定义阴影系统或新的视觉语言；新增状态（loading/empty/error）优先用既有原语组合
-- 多文件修改按依赖顺序（先底层后上层）
-- 不新增依赖，不新建不必要的文件
-- 不修改与本次缺陷无关的任何代码
-- 修改后**重新阅读被修改的文件**，确认修改正确且未引入新问题
-- 所有新增或修改的代码必须遵循**第六节 · 日志规范**
+允许：
 
-### Step 4：回顾确认
+- `rg`、`sed`、`git diff`、`git status`
+- 与本轮修改直接相关的测试
+- 目标文件 lint/typecheck
+- `pnpm --filter @synapse/desktop run check:hard-constraints`
 
-完整描述：
+禁止：
 
-- 修改了哪些文件的哪些行（精确到 `文件:行号`）
-- 修改前行为 vs 修改后行为
-- 本轮与历史的关系：独立修复 / 延续第 X 轮 / 修复第 X 轮的回归
-- 本次修复使工作流系统在哪个使用维度上向"真正可用"迈进了一步
+- dev server
+- Electron app
+- 浏览器预览
+- Playwright
+- 全量长耗时测试，除非没有更小验证方式
 
-### Step 5：更新 State
+完成前至少尝试：
 
-#### 5a. 追加 fix-log
+1. 聚焦测试。
+2. 目标文件 lint 或 typecheck。
+3. `pnpm --filter @synapse/desktop run check:hard-constraints`。
 
-将本轮迭代摘要追加到 `auto/state/fix-log.md`。
+如果失败来自既有问题，记录证据，不要修无关问题。
 
-**写入规则：**
-- 若文件不存在：创建并写入；本轮编号 **N = 1**。
-- 若文件存在：**仅在文件末尾追加**，不得修改任何已有内容。
-- N 的计数：统计文件全文中以 `## [` 开头的行数，本轮 N = 已有数 + 1。
-- 时间使用当前实际时间（UTC+8）。
-- 若本轮为"无修复"（Step 1 空结果），仍按下面格式追加，无对应内容的字段填"无"。
+## State 收尾
 
-**追加内容格式（严格遵循此结构）：**
+先写：
 
-```
+`auto/state/parallel/agent-notes/<agentId>-iteration-N.md`
+
+再获得 `state.lock`，追加更新：
+
+- `auto/state/fix-log.md`
+- `auto/state/coverage-map.json`
+
+fix-log 追加格式：
+
+```text
 ---
 
 ## [YYYY-MM-DD HH:mm] 第 N 次迭代
 
+### Agent
+- <agentId>
+
 ### 发现的问题
-- [问题1简述，含触发路径要点]
-- [问题2简述，如有]
+- <问题简述，含触发路径要点>
 
 ### 修复内容
 - [文件路径:行号] 修改说明
-- [文件路径:行号] 修改说明
-
-### 与历史的关系
-- [独立 / 延续第 X 轮 / 修复第 X 轮的回归 / 无修复]
 
 ### 日志补充
-- [描述本次在哪些关键路径新增了日志覆盖]
+- <新增了哪些 SDK/对话/调度/消息事件日志；无则说明原因>
+
+### 并行范围
+- <claim / lock 范围>
+
+### 验证结果
+- <命令>：<结果>
 
 ### 本次进展
-[一句话总结：工作流系统在哪个维度向可用迈进了一步]
+<一句话总结>
 ```
 
-#### 5b. 更新 coverage-map
+coverage-map：
 
-读取 `auto/state/coverage-map.json`，对本轮修改涉及的文件更新以下字段：
-- `lastReviewedIteration`：设为本轮迭代号
-- `issuesFound`：+= 本轮在该文件发现的问题数
-- `issuesFixed`：+= 本轮在该文件修复的问题数
-- `healthScore`：设为 `active`
-- `lastUpdated`：设为当前时间
-- `totalIterations`：设为本轮迭代号
+- 修改文件：`lastReviewedIteration = N`，`issuesFound += 1`，`issuesFixed += 1`，`healthScore = active`，`lastUpdated = 当前时间`。
+- 深读但未修复的文件可标记为 `stable`。
+- `totalIterations = N`。
 
-对本轮**深入阅读但未发现问题**的 `untouched` 文件，将其 `healthScore` 从 `untouched` 改为 `stable`（表示已审查、无问题）。
+提交可选。若提交，必须拿 `git.lock`，只 stage 本 Agent 修改文件，禁止 `git add .`。并行环境中默认可以跳过提交并说明原因。
 
-写回文件。
+## 最终输出
 
-### Step 6：提交代码
+最终回复简洁包含：
 
-**前置条件：**
-- 若本轮为"无修复"（Step 1 空结果或全部候选未通过方法论硬约束），**跳过本步**。
-- 否则按下面执行。
+- Agent ID。
+- 本轮处理的问题或“无可安全修复问题”。
+- 修改文件。
+- SDK/对话/调度/消息事件日志补齐点。
+- 验证命令与结果。
+- 是否跳过提交及原因。
+- 剩余风险或既有阻塞。
 
-使用 `run_command` 工具在项目根目录 `/Users/liyang/Documents/code/github/Synapse` 依次执行：
-
-1. `git add -A`
-2. `git commit -m "<message>"`
-
-**Commit message 规则：**
-- 普通修复：`fix(workflow): <本次修复的核心内容，不超过 60 字符，中英文皆可>`
-- 修复历史回归：`fix(workflow): regress <历史问题简述>`
-- UI 完备性或交互优化：`feat(workflow): polish <UI/交互优化简述>`
-- 必须准确反映本次实际修改内容，禁止 `fix bugs` / `update code` 等泛化描述
-- 只提交，不推送（不执行 `git push`）
-- 若 `git add -A` 后 `git status` 无任何变更，跳过本步，在 Step 4 回顾中说明原因
-
----
-
-## 五、工作质量要求
-
-- 分析必须基于代码事实，不依赖假设或推测
-- 每个结论必须有代码引用支撑（`文件:行号`）
-- 不修复你没有完全理解的问题
-- 不为"看起来完整"而添加多余注释、文档或无关改动
-- 若一个问题需要运行才能确认，跳过它，寻找下一个
-- 优先修复常见操作路径下必然触发的问题，而非极端边缘情况
-
----
-
-## 六、日志规范
-
-工作流模块目前处于开发阶段，为便于复盘问题，**所有新增或修改的代码必须使用项目统一日志工具**（`StructuredLogger` 或代码库中等效机制）补充日志。
-
-- **主进程侧**（executor / service / engine / validator 等）的关键执行路径必须打日志：节点进入与退出、分支选择、变量解析、错误捕获
-- **级别**：参照现有代码风格，使用 `info` / `warn` / `error`
-- **上下文**：日志内容须包含足够上下文（如 `workflowId` / `runId` / `nodeId` / 关键变量值或错误详情），保证仅凭日志文件即可还原现场
-- **渲染侧**：不使用 `console.log`；关键状态变更或 IPC 调用失败通过已有日志通道记录
-- **禁止占位**：不得仅为满足规范而添加无意义日志，日志必须对应真实执行事件
-- **纯 UI 优化例外**：若本轮修改仅为视觉呈现或交互反馈调整（不改变数据流、执行路径或 IPC 契约），无需强行补充日志；Step 5 的"日志补充"字段如实填"无（纯 UI 优化）"
-
-每次执行本提示词，目标是：工作流模块的真实可用性向前推进至少一步。
+不要输出大段代码，不要泛泛建议，不要把未验证的事说成已完成。

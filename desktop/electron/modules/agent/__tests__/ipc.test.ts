@@ -221,7 +221,6 @@ describe("agentIpcModule", () => {
     })
 
     expect(result).toEqual({
-      projectId: "project-1",
       agentType: "claude-code",
       activeProviderId: "anthropic",
       activeModel: "claude-sonnet-4.5",
@@ -709,6 +708,30 @@ describe("agentIpcModule", () => {
       ])
     })
 
+    it("routes sends with a conversation id to that conversation", async () => {
+      const send = vi.fn()
+      const sendToConversation = vi.fn().mockResolvedValue({
+        conversationId: "conv-queued",
+        resultText: "ok",
+        events: [],
+      })
+      const harness = createHarness({ agent: { send, sendToConversation } })
+
+      await harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conv-queued",
+        content: "queued",
+      })
+
+      expect(send).not.toHaveBeenCalled()
+      expect(sendToConversation).toHaveBeenCalledWith(expect.objectContaining({
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        content: "queued",
+      }), "conv-queued")
+    })
+
     it("clamps a client clock that is ahead of the server", async () => {
       const send = vi.fn().mockResolvedValue({
         conversationId: "conv-1",
@@ -794,6 +817,7 @@ function createHarness(overrides: {
     switchSession: vi.fn(),
     deleteSession: vi.fn(),
     send: vi.fn(),
+    sendToConversation: vi.fn(),
     listPendingPermissions: vi.fn().mockReturnValue([]),
     respondPermission: vi.fn().mockResolvedValue(undefined),
     ...overrides.agent,
@@ -833,6 +857,7 @@ function createHarness(overrides: {
   const resolve: IpcHandlerContext["resolve"] = <T>(serviceId: string): T => {
     if (serviceId === "core.project-containers") return projectContainers as T
     if (serviceId === "core.event-bus") return eventBus as T
+    if (serviceId === PROVIDER_SERVICE_ID) return providerService as T
     throw new Error(`Unknown service: ${serviceId}`)
   }
   harness.registry.register(agentIpcModule, {

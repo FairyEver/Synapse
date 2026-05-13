@@ -2,19 +2,10 @@ import { createElement, type ComponentType } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
+import { ClaudeCodePanel } from "@/modules/settings/components/claude-code-panel"
 import { ToolsPanel } from "@/modules/settings/components/tools-panel"
 import { ProviderPanelView } from "@/modules/settings/components/provider-panel"
 import type { SynapseAgentProvider } from "@/types/bridge"
-
-vi.mock("@/app-shell/config", () => ({
-  useAppConfig: () => ({
-    config: {
-      global: {
-        projects: [{ id: "project-1", name: "Test Project", path: "/tmp/test" }],
-      },
-    },
-  }),
-}))
 
 vi.mock("@/modules/settings/components/editor-directories-panel", () => ({
   EditorDirectoriesContent: () => <div>IDE</div>,
@@ -27,9 +18,16 @@ vi.mock("@/modules/settings/components/agent-runtime-panel", () => ({
 }))
 
 describe("ToolsPanel", () => {
-  it("renders Agent runtime status globally", () => {
+  it("renders editor settings without Agent runtime status", () => {
     const LegacyToolsPanel = ToolsPanel as ComponentType<{ readonly projectId?: string }>
     const html = renderToStaticMarkup(createElement(LegacyToolsPanel, { projectId: "project-1" }))
+
+    expect(html).toContain("IDE")
+    expect(html).not.toContain("Agent project:")
+  })
+
+  it("renders Claude Code Agent runtime status globally", () => {
+    const html = renderToStaticMarkup(<ClaudeCodePanel />)
 
     expect(html).toContain("Agent project: global")
   })
@@ -49,13 +47,9 @@ describe("ToolsPanel", () => {
     }] as unknown as SynapseAgentProvider[]
     const html = renderToStaticMarkup(
       <ProviderPanelView
-        projectId="project-1"
-        projectName="Test Project"
-        projects={[{ id: "project-1", name: "Test Project" }]}
         providers={providers}
         loading={false}
         error={null}
-        onProjectChange={vi.fn()}
         onAdd={vi.fn()}
         onEdit={vi.fn()}
         onArchive={vi.fn()}

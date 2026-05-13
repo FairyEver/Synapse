@@ -31,4 +31,55 @@ describe("sendOutboundHttpRequest", () => {
       body: "hello",
     }))
   })
+
+  it("logs failed responses without sensitive headers", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const fetchImpl = vi.fn(async () => new Response("nope", {
+      status: 503,
+      statusText: "Service Unavailable",
+    }))
+
+    await sendOutboundHttpRequest({
+      method: "GET",
+      url: "https://example.com/api?token=secret&query=ok",
+      headers: { Authorization: "Bearer token", Accept: "application/json" },
+      fetchImpl,
+      logger,
+    })
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Outbound HTTP request failed.",
+      expect.objectContaining({
+        method: "GET",
+        status: 503,
+        statusText: "Service Unavailable",
+        url: "https://example.com/api?token=%5BREDACTED%5D&query=ok",
+        requestHeaders: { Authorization: "[redacted]", Accept: "application/json" },
+      }),
+    )
+  })
+
+  it("logs network errors and rethrows them", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const failure = new Error("offline")
+    const fetchImpl = vi.fn(async () => {
+      throw failure
+    })
+
+    await expect(sendOutboundHttpRequest({
+      method: "POST",
+      url: "https://example.com/api",
+      fetchImpl,
+      logger,
+    })).rejects.toThrow("offline")
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "Outbound HTTP request errored.",
+      expect.objectContaining({
+        method: "POST",
+        url: "https://example.com/api",
+        error: failure,
+      }),
+    )
+  })
 })

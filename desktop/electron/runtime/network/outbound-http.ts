@@ -6,6 +6,10 @@ export type OutboundHttpRequest = {
   readonly timeoutMs?: number
   readonly abortSignal?: AbortSignal
   readonly fetchImpl?: typeof fetch
+  readonly logger?: {
+    warn: (message: string, meta?: unknown) => void
+    error: (message: string, meta?: unknown) => void
+  }
 }
 
 export type OutboundHttpResponse = {
@@ -24,6 +28,7 @@ export async function sendOutboundHttpRequest(
     : setTimeout(() => controller.abort(), request.timeoutMs)
   const onAbort = () => controller.abort()
   request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+  const startedAt = performance.now()
   try {
     const response = await (request.fetchImpl ?? fetch)(request.url, {
       method: request.method,
@@ -31,14 +36,61 @@ export async function sendOutboundHttpRequest(
       body: request.body,
       signal: controller.signal,
     })
+    const elapsedMs = Math.round(performance.now() - startedAt)
+    if (!response.ok) {
+      request.logger?.warn("Outbound HTTP request failed.", {
+        method: request.method,
+        url: sanitizeUrl(request.url),
+        status: response.status,
+        statusText: response.statusText,
+        elapsedMs,
+        requestHeaders: sanitizeHeaders(request.headers),
+      })
+    }
     return {
       status: response.status,
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers.entries()),
       body: await response.text(),
     }
+  } catch (error) {
+    request.logger?.error("Outbound HTTP request errored.", {
+      method: request.method,
+      url: sanitizeUrl(request.url),
+      elapsedMs: Math.round(performance.now() - startedAt),
+      error,
+      requestHeaders: sanitizeHeaders(request.headers),
+    })
+    throw error
   } finally {
     if (timeout) clearTimeout(timeout)
     request.abortSignal?.removeEventListener("abort", onAbort)
   }
+}
+
+const SENSITIVE_PARAM_NAMES = new Set(["token", "key", "secret", "password", "auth", "api_key", "apikey", "access_token"])
+const SENSITIVE_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key|x-auth-token)$/i
+
+function sanitizeUrl(raw: string): string {
+  try {
+    const url = new URL(raw)
+    for (const param of url.searchParams.keys()) {
+      if (SENSITIVE_PARAM_NAMES.has(param.toLowerCase())) {
+        url.searchParams.set(param, "[REDACTED]")
+      }
+    }
+    return url.toString()
+  } catch {
+    return raw
+  }
+}
+
+function sanitizeHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!headers) return undefined
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [
+      key,
+      SENSITIVE_HEADER_PATTERN.test(key) ? "[redacted]" : value,
+    ]),
+  )
 }

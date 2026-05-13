@@ -66,6 +66,7 @@ if (!gotSingleInstanceLock) {
       // Register new IpcModules (Phase 0.3)
       const ipcCtx: IpcHandlerContext = {
         moduleId: "main",
+        logger,
         resolve: (serviceId) => registry.get(serviceId),
       }
       createIpcRegistry(ipcCtx)

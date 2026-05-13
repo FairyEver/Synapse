@@ -46,6 +46,95 @@ describe("SDK event bridge", () => {
     })
   })
 
+  it("normalizes SDK text deltas without losing raw payload", () => {
+    expect(bridgeSdkMessage({
+      type: "stream_event",
+      session_id: "sdk-1",
+      uuid: "uuid-1",
+      parent_tool_use_id: null,
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "lo" },
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "stream",
+      sdkSessionId: "sdk-1",
+      blockIndex: 0,
+      deltaType: "text_delta",
+      text: "lo",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "lo" },
+      },
+      ...baseEnvelope,
+    })
+  })
+
+  it("normalizes SDK thinking deltas", () => {
+    expect(bridgeSdkMessage({
+      type: "stream_event",
+      session_id: "sdk-1",
+      uuid: "uuid-2",
+      parent_tool_use_id: null,
+      event: {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "thinking_delta", thinking: "I should answer briefly." },
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "stream",
+      blockIndex: 1,
+      deltaType: "thinking_delta",
+      thinking: "I should answer briefly.",
+      ...baseEnvelope,
+    })
+  })
+
+  it("normalizes SDK tool input JSON deltas", () => {
+    expect(bridgeSdkMessage({
+      type: "stream_event",
+      session_id: "sdk-1",
+      uuid: "uuid-3",
+      parent_tool_use_id: null,
+      event: {
+        type: "content_block_delta",
+        index: 2,
+        delta: { type: "input_json_delta", partial_json: "{\"cmd\"" },
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "stream",
+      blockIndex: 2,
+      deltaType: "input_json_delta",
+      partialJson: "{\"cmd\"",
+      ...baseEnvelope,
+    })
+  })
+
+  it("exposes assistant content blocks for final reconciliation", () => {
+    expect(bridgeSdkMessage({
+      type: "assistant",
+      session_id: "sdk-1",
+      uuid: "uuid-4",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "summary", signature: "sig" },
+          { type: "text", text: "final answer" },
+        ],
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "assistant",
+      sdkSessionId: "sdk-1",
+      contentBlocks: [
+        { type: "thinking", thinking: "summary", signature: "sig" },
+        { type: "text", text: "final answer" },
+      ],
+      ...baseEnvelope,
+    })
+  })
+
   it("bridges SDK result error messages to error events", () => {
     expect(bridgeSdkMessage({
       type: "result",

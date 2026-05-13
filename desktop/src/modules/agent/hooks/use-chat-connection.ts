@@ -22,6 +22,8 @@ type TimelineTarget = {
   readonly conversationId?: string
 }
 
+type SendMessageTarget = TimelineTarget
+
 type ChatConnectionRefs = {
   readonly projectIdsRef: React.RefObject<string[]>
   readonly defaultProjectIdRef: React.RefObject<string | undefined>
@@ -47,7 +49,7 @@ type ChatConnectionResult = {
   readonly refresh: () => Promise<void>
   readonly createSession: (projectId: string, providerId?: string) => Promise<void>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
-  readonly sendMessage: (content: string) => Promise<void>
+  readonly sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
@@ -201,7 +203,7 @@ function useChatConnection(
     const bridge = requireSynapseBridge()
     const [nextStatus, nextProviders, nextCommands] = await Promise.all([
       bridge.agent.status(projectId),
-      bridge.agent.getProviders(projectId),
+      bridge.agent.getProviders(),
       bridge.agent.listCommands(projectId),
     ])
     dispatch({ type: "SET_STATUS", status: nextStatus })
@@ -415,32 +417,45 @@ function useChatConnection(
     }
   }, [clearTimeline, dispatch, loadTimeline, refreshProjectMeta, selectRequestIdRef, setSelectedSession, state.sessions])
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, target?: SendMessageTarget) => {
     const trimmed = content.trim()
-    if (!trimmed) return
-    const selected = findSessionByRef(
-      state.sessions,
-      selectedProjectIdRef.current,
-      selectedConversationIdRef.current,
-    )
-    const projectId = selected?.projectId ?? getDefaultProjectId()
-    if (!projectId) return
-    const conversationId = selected?.id
-    const bridge = requireSynapseBridge()
-    const sessionKey = selected?.sessionKey ?? selectedSessionKeyRef.current
+    if (!trimmed) return false
+    const selected = target
+      ? findSessionByRef(state.sessions, target.projectId, target.conversationId)
+      : findSessionByRef(
+        state.sessions,
+        selectedProjectIdRef.current,
+        selectedConversationIdRef.current,
+      )
+    const projectId = target?.projectId ?? selected?.projectId ?? getDefaultProjectId()
+    if (!projectId) return false
+    const conversationId = target?.conversationId ?? selected?.id
+    const sessionKey = target?.sessionKey ?? selected?.sessionKey ?? selectedSessionKeyRef.current
     const now = new Date().toISOString()
-    updateTimeline((current) => [
-      ...current,
-      localUserTimelineItem(trimmed, now, current.length),
-    ])
+    if (isSelectedTimelineTarget(target ?? {
+      projectId,
+      sessionKey,
+      conversationId,
+    }, {
+      projectId: selectedProjectIdRef.current,
+      conversationId: selectedConversationIdRef.current,
+      sessionKey: selectedSessionKeyRef.current,
+    })) {
+      updateTimeline((current) => [
+        ...current,
+        localUserTimelineItem(trimmed, now, current.length),
+      ])
+    }
     if (conversationId) {
       dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId })
     }
     dispatch({ type: "SET_ERROR", error: null })
     try {
+      const bridge = requireSynapseBridge()
       await bridge.agent.send({
         projectId,
         sessionKey,
+        conversationId,
         content: trimmed,
         clientSubmittedAt: now,
       })
@@ -458,7 +473,9 @@ function useChatConnection(
       if (conversationId) {
         dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId })
       }
+      return false
     }
+    return true
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, state.sessions, updateTimeline])
 
   const deleteSession = useCallback(async (target: SynapseAgentSessionSummary) => {
@@ -628,7 +645,7 @@ function useChatConnection(
 }
 
 export { useChatConnection }
-export type { ChatConnectionRefs, ChatConnectionResult, TimelineTarget }
+export type { ChatConnectionRefs, ChatConnectionResult, SendMessageTarget, TimelineTarget }
 
 function normalizeSessionProject(
   session: SynapseAgentSessionSummary,
@@ -657,6 +674,21 @@ function isSameSession(
   right: Pick<SynapseAgentSessionSummary, "projectId" | "id">,
 ): boolean {
   return left.projectId === right.projectId && left.id === right.id
+}
+
+function isSelectedTimelineTarget(
+  target: SendMessageTarget,
+  selected: {
+    readonly projectId?: string
+    readonly conversationId?: string
+    readonly sessionKey: string
+  },
+): boolean {
+  if (target.projectId !== selected.projectId) return false
+  if (target.conversationId && selected.conversationId) {
+    return target.conversationId === selected.conversationId
+  }
+  return target.sessionKey === selected.sessionKey
 }
 
 function sessionSnapshotForLog(

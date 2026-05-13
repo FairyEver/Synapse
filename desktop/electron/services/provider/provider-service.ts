@@ -1,3 +1,7 @@
+import { promises as fs } from "node:fs"
+import os from "node:os"
+import path from "node:path"
+
 import type {
   DataNamespace,
   ProviderEntryV1,
@@ -16,6 +20,7 @@ import type {
   ProviderCategory,
   UpdateProviderInput,
 } from "./types"
+import { LOCAL_CLAUDE_CODE_PROVIDER_ID as LOCAL_PROVIDER_ID } from "./types"
 
 export interface ProviderServiceDeps {
   readonly providers: DataNamespace<ProviderEntryV1>
@@ -23,6 +28,8 @@ export interface ProviderServiceDeps {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly now?: () => Date
+  readonly localClaudeSettingsPath?: string
+  readonly readTextFile?: (filePath: string) => Promise<string>
 }
 
 export interface BuildProviderEnvContext {
@@ -38,6 +45,8 @@ export class ProviderService {
   private readonly permissionGuard?: PermissionGuard
   private readonly auditSink?: AuditSink
   private readonly now?: () => Date
+  private readonly localClaudeSettingsPath: string
+  private readonly readTextFile: (filePath: string) => Promise<string>
 
   constructor(deps: ProviderServiceDeps) {
     this.providers = deps.providers
@@ -45,17 +54,26 @@ export class ProviderService {
     this.permissionGuard = deps.permissionGuard
     this.auditSink = deps.auditSink
     this.now = deps.now
+    this.localClaudeSettingsPath = deps.localClaudeSettingsPath ?? path.join(os.homedir(), ".claude", "settings.json")
+    this.readTextFile = deps.readTextFile ?? ((filePath) => fs.readFile(filePath, "utf8"))
   }
 
   async listProviders(): Promise<readonly CCProvider[]> {
-    const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)
-    return providers
+    const providers = (await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>))
       .map(toProvider)
       .filter((provider) => !provider.archived)
       .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
+    const hasActiveUserProvider = providers.some((provider) => provider.active)
+    return [
+      await this.localClaudeCodeProvider(!hasActiveUserProvider),
+      ...providers,
+    ]
   }
 
   async createProvider(input: CreateProviderInput): Promise<CCProvider> {
+    if (input.id === LOCAL_PROVIDER_ID) {
+      throw new Error("The local Claude Code provider is built in and cannot be created.")
+    }
     const now = this.isoNow()
     const secretRef = input.apiKey === undefined
       ? undefined
@@ -87,6 +105,9 @@ export class ProviderService {
   }
 
   async updateProvider(id: string, patch: UpdateProviderInput): Promise<CCProvider> {
+    if (id === LOCAL_PROVIDER_ID) {
+      throw new Error("The local Claude Code provider cannot be edited.")
+    }
     const existing = await this.getProvider(id)
     const nextActive = patch.active ?? existing.active
     const nextArchived = patch.archived ?? existing.archived
@@ -111,10 +132,17 @@ export class ProviderService {
   }
 
   async archiveProvider(id: string): Promise<void> {
+    if (id === LOCAL_PROVIDER_ID) {
+      throw new Error("The local Claude Code provider cannot be archived.")
+    }
     await this.updateProvider(id, { active: false, archived: true })
   }
 
   async setActiveProvider(id: string): Promise<void> {
+    if (id === LOCAL_PROVIDER_ID) {
+      await this.clearActiveUserProvider()
+      return
+    }
     const target = await this.getProvider(id)
     if (target.archived) {
       throw new Error(`Cannot activate archived provider: ${id}`)
@@ -134,10 +162,14 @@ export class ProviderService {
   async getActiveProvider(): Promise<CCProvider | null> {
     const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)
     const active = providers.map(toProvider).find((provider) => provider.active && !provider.archived)
-    return active ?? null
+    return active ?? this.localClaudeCodeProvider(true)
   }
 
   async getProvider(id: string): Promise<CCProvider> {
+    if (id === LOCAL_PROVIDER_ID) {
+      const active = await this.getActiveProvider()
+      return this.localClaudeCodeProvider(active?.id === LOCAL_PROVIDER_ID)
+    }
     const provider = await this.providers.get(id)
     if (!provider || provider.kind !== PROVIDER_KIND) {
       throw new Error(`Provider not found: ${id}`)
@@ -149,6 +181,9 @@ export class ProviderService {
     providerId: string,
     context: BuildProviderEnvContext = {},
   ): Promise<Record<string, string>> {
+    if (providerId === LOCAL_PROVIDER_ID) {
+      return {}
+    }
     const provider = await this.getProvider(providerId)
     const secret = provider.secretRef
       ? await this.readSecretValue(provider, context)
@@ -237,6 +272,90 @@ export class ProviderService {
   private isoNow(): string {
     return (this.now?.() ?? new Date()).toISOString()
   }
+
+  private async clearActiveUserProvider(): Promise<void> {
+    const now = this.isoNow()
+    const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)
+    for (const provider of providers) {
+      const current = toProvider(provider)
+      if (!current.active) continue
+      await this.providers.upsert(toProviderEntry({
+        ...current,
+        active: false,
+        updatedAt: now,
+      }))
+    }
+  }
+
+  private async localClaudeCodeProvider(active: boolean): Promise<CCProvider> {
+    const settings = await this.readLocalClaudeSettings()
+    const env = settings.env
+    return {
+      id: LOCAL_PROVIDER_ID,
+      name: "本机 Claude Code",
+      category: "official",
+      source: "local",
+      readonly: true,
+      configured: true,
+      configPath: this.localClaudeSettingsPath,
+      baseUrl: env.ANTHROPIC_BASE_URL,
+      apiKeyField: env.ANTHROPIC_API_KEY ? "ANTHROPIC_API_KEY" : "ANTHROPIC_AUTH_TOKEN",
+      active,
+      model: env.ANTHROPIC_MODEL ?? settings.model,
+      haikuModel: env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+      sonnetModel: env.ANTHROPIC_DEFAULT_SONNET_MODEL,
+      opusModel: env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+      env: {},
+      sortIndex: -10000,
+      createdAt: "",
+      updatedAt: "",
+    }
+  }
+
+  private async readLocalClaudeSettings(): Promise<{
+    readonly env: Record<string, string>
+    readonly model?: string
+  }> {
+    try {
+      const raw = await this.readTextFile(this.localClaudeSettingsPath)
+      const parsed = JSON.parse(raw) as unknown
+      if (!isRecord(parsed)) return { env: {} }
+      const envRaw = isRecord(parsed.env) ? parsed.env : {}
+      const env = pickStringEnv(envRaw, [
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+      ])
+      return {
+        env,
+        model: stringValue(parsed.model),
+      }
+    } catch (_error) {
+      return { env: {} }
+    }
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function pickStringEnv(
+  input: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const key of keys) {
+    const value = input[key]
+    if (typeof value === "string" && value.trim()) {
+      env[key] = value
+    }
+  }
+  return env
 }
 
 function toProviderEntry(provider: CCProvider): ProviderEntryV1 {

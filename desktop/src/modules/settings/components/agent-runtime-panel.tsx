@@ -10,6 +10,7 @@ import type { SynapseAgentRuntimeStatusItem } from "@/types/agent"
 
 type AgentRuntimePanelProps = {
   readonly projectId?: string
+  readonly onRefresh?: () => void
 }
 
 type AgentRuntimeRowProps = {
@@ -68,7 +69,7 @@ function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
   )
 }
 
-function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
+function AgentRuntimePanel({ projectId, onRefresh }: AgentRuntimePanelProps) {
   const { status, loading, error, refresh } = useAgentRuntimeStatus(projectId)
   const agents = status?.agents ?? []
 
@@ -76,12 +77,15 @@ function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base">Agent</CardTitle>
+          <CardTitle className="text-base">智能体</CardTitle>
           <Button
             variant="ghost"
             size="sm"
             disabled={loading}
-            onClick={refresh}
+            onClick={() => {
+              refresh()
+              onRefresh?.()
+            }}
           >
             <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
             重新检测
@@ -95,7 +99,7 @@ function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
           </div>
         ) : agents.length === 0 && !loading ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            未检测到 Agent 运行时
+            未检测到智能体运行时
           </div>
         ) : (
           agents.map((item, index) => (

@@ -1,5 +1,6 @@
 import type { SynapseLogLevel } from "@/types/log"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { getDiagnosticSnapshot } from "@/lib/diagnostic-context"
 
 type RendererLogger = {
   debug: (message: string, details?: unknown) => void
@@ -42,7 +43,6 @@ function emitRendererLog(
 ): void {
   void writeRendererLog(level, category, message, details).catch((error) => {
     // Logging should never break the user flow, but we log to console in development.
-    // eslint-disable-next-line no-console
     console.error("Failed to write renderer log.", { level, category, message, error })
   })
 }
@@ -65,11 +65,15 @@ function installRendererLogForwarding(): () => void {
       lineno: event.lineno,
       colno: event.colno,
       stack: event.error instanceof Error ? event.error.stack : null,
+      diagnostics: getDiagnosticSnapshot(),
     })
   }
 
   const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-    logger.error("Unhandled promise rejection in renderer.", event.reason)
+    logger.error("Unhandled promise rejection in renderer.", {
+      reason: event.reason,
+      diagnostics: getDiagnosticSnapshot(),
+    })
   }
 
   window.addEventListener("error", handleError)

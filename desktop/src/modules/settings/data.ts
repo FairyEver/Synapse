@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bot,
   Blocks,
   Braces,
   FolderGit2,
@@ -32,13 +33,19 @@ const settingsCategories: SettingsCategory[] = [
     id: "projects",
     icon: FolderOpen,
     label: "项目",
-    description: "项目与 Agent 配置。",
+    description: "本地项目。",
   },
   {
     id: "tools",
     icon: Blocks,
     label: "工具",
-    description: "编辑器与 Agent。",
+    description: "编辑器。",
+  },
+  {
+    id: "claude-code",
+    icon: Bot,
+    label: "智能体",
+    description: "智能体与 Provider。",
   },
   {
     id: "variables",

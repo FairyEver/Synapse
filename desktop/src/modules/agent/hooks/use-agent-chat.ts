@@ -13,6 +13,7 @@ import type { UnreadState } from "../live-sync"
 import { chatReducer, initialChatState } from "./use-chat-reducer"
 import type { ChatState } from "./use-chat-reducer"
 import { useChatConnection } from "./use-chat-connection"
+import type { SendMessageTarget } from "./use-chat-connection"
 import { useChatEvents } from "./use-chat-events"
 
 const logger = createRendererLogger("agent")
@@ -34,6 +35,7 @@ type UseAgentChatState = {
   activeProjectId?: string
   loading: boolean
   sending: boolean
+  sendingConversationIds: ReadonlySet<string>
   cancelPhase: ChatState["cancelPhase"]
   error: string | null
   currentConversationModel: string | undefined
@@ -42,7 +44,7 @@ type UseAgentChatState = {
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
   respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
   cancelTurn: () => Promise<void>
   forceKillTurn: () => Promise<void>
@@ -159,6 +161,7 @@ function useAgentChat(
     activeProjectId,
     loading,
     sending: selectedConversationId ? sendingConversationIds.has(selectedConversationId) : false,
+    sendingConversationIds,
     cancelPhase,
     error,
     currentConversationModel,

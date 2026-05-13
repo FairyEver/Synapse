@@ -59,6 +59,9 @@ function useChatEvents(
       }
       if (domainEvent.type === "phase.update") {
         const payload = domainEvent.payload
+        if (isTerminalPhase(payload.phase, payload.status) && payload.conversationId) {
+          dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
+        }
         const selectedProject = selectedProjectIdRef.current
         const selectedConv = selectedConversationIdRef.current
         const selectedSession = selectedSessionKeyRef.current
@@ -99,9 +102,6 @@ function useChatEvents(
           // All terminal phases reset cancelPhase back to idle so the next
           // turn starts with a clean state.
           dispatch({ type: "CANCEL_RESET" })
-          if (payload.conversationId) {
-            dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
-          }
         }
         return
       }
@@ -227,6 +227,10 @@ function useChatEvents(
 
 export { useChatEvents }
 export type { ChatEventRefs }
+
+function isTerminalPhase(phase: string, status: string): boolean {
+  return phase === "cancelled" || phase === "failed" || (phase === "completed" && status === "done")
+}
 
 function matchesSelectedEvent(
   domainEvent: SynapseAgentDomainEvent,

@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
-    "once": "tsx src/index.ts --once"
+    "once": "tsx src/index.ts --once",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.138"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.19.2",

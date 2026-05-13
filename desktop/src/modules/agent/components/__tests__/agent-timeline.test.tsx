@@ -110,6 +110,73 @@ describe("AgentTimeline", () => {
     ])
   })
 
+  it("appends SDK text deltas exactly without suffix dedupe", () => {
+    const first = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 0,
+      deltaType: "text_delta",
+      text: "lo",
+      event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "lo" } },
+    }, "2026-05-13T00:00:00.000Z", "claude")
+    const second = appendAgentTimelineEvent(first, {
+      type: "stream",
+      blockIndex: 0,
+      deltaType: "text_delta",
+      text: "o",
+      event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "o" } },
+    }, "2026-05-13T00:00:01.000Z", "claude")
+    const third = appendAgentTimelineEvent(second, {
+      type: "stream",
+      blockIndex: 0,
+      deltaType: "text_delta",
+      text: " ",
+      event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: " " } },
+    }, "2026-05-13T00:00:02.000Z", "claude")
+
+    expect(third.filter((item) => item.kind === "message" && item.role === "assistant")).toEqual([
+      expect.objectContaining({ content: "loo " }),
+    ])
+  })
+
+  it("appends thinking stream text to the current thinking block", () => {
+    const first = appendAgentTimelineEvent([], {
+      type: "stream",
+      event: { delta: { thinking: "I" } },
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const second = appendAgentTimelineEvent(first, {
+      type: "stream",
+      event: { delta: { thinking: " respond" } },
+    }, "2026-05-12T00:00:01.000Z", "claude")
+
+    expect(second).toEqual([
+      expect.objectContaining({
+        kind: "thinking",
+        content: "I respond",
+      }),
+    ])
+  })
+
+  it("appends SDK thinking deltas exactly into one thinking item", () => {
+    const first = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 1,
+      deltaType: "thinking_delta",
+      thinking: "The user says ",
+      event: { type: "content_block_delta", index: 1, delta: { type: "thinking_delta", thinking: "The user says " } },
+    }, "2026-05-13T00:01:00.000Z", "claude")
+    const second = appendAgentTimelineEvent(first, {
+      type: "stream",
+      blockIndex: 1,
+      deltaType: "thinking_delta",
+      thinking: "hello.",
+      event: { type: "content_block_delta", index: 1, delta: { type: "thinking_delta", thinking: "hello." } },
+    }, "2026-05-13T00:01:01.000Z", "claude")
+
+    expect(second.filter((item) => item.kind === "thinking")).toEqual([
+      expect.objectContaining({ content: "The user says hello." }),
+    ])
+  })
+
   it("renders assistant content blocks as text", () => {
     const items = appendAgentTimelineEvent([], {
       type: "assistant",
@@ -140,6 +207,62 @@ describe("AgentTimeline", () => {
       role: "assistant",
       content: "hello",
     }))
+  })
+
+  it("replaces streamed assistant draft with final assistant text across thinking blocks", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      text: "你好有什么可以你的",
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const thinking = appendAgentTimelineEvent(streamed, {
+      type: "stream",
+      event: { delta: { thinking: "briefly" } },
+    }, "2026-05-12T00:00:01.000Z", "claude")
+    const reconciled = appendAgentTimelineEvent(thinking, {
+      type: "assistant",
+      contentBlocks: [{ type: "text", text: "你好！有什么可以帮助你的吗？" }],
+    }, "2026-05-12T00:00:02.000Z", "claude")
+
+    expect(reconciled.filter((item) => item.kind === "message" && item.role === "assistant")).toEqual([
+      expect.objectContaining({
+        content: "你好！有什么可以帮助你的吗？",
+      }),
+    ])
+  })
+
+  it("replaces streamed assistant draft with final assistant content across thinking items", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 0,
+      deltaType: "text_delta",
+      text: "你好可以你的?",
+      event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "你好可以你的?" } },
+    }, "2026-05-13T00:02:00.000Z", "claude")
+    const withThinking = appendAgentTimelineEvent(streamed, {
+      type: "stream",
+      blockIndex: 1,
+      deltaType: "thinking_delta",
+      thinking: "Respond naturally.",
+      event: { type: "content_block_delta", index: 1, delta: { type: "thinking_delta", thinking: "Respond naturally." } },
+    }, "2026-05-13T00:02:01.000Z", "claude")
+    const final = appendAgentTimelineEvent(withThinking, {
+      type: "assistant",
+      contentBlocks: [
+        { type: "thinking", thinking: "Respond naturally.", signature: "sig" },
+        { type: "text", text: "你好！有什么可以帮助你的吗？" },
+      ],
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Respond naturally.", signature: "sig" },
+          { type: "text", text: "你好！有什么可以帮助你的吗？" },
+        ],
+      },
+    }, "2026-05-13T00:02:02.000Z", "claude")
+
+    expect(final.filter((item) => item.kind === "message" && item.role === "assistant")).toEqual([
+      expect.objectContaining({ content: "你好！有什么可以帮助你的吗？" }),
+    ])
   })
 
   it("replaces partial stream content with assistant full text", () => {
@@ -182,6 +305,57 @@ describe("AgentTimeline", () => {
       metadata: expect.objectContaining({
         model: "claude-sonnet-4-5",
       }),
+    }))
+  })
+
+  it("merges matching result content into the latest assistant message across sdk events", () => {
+    const withAssistant = appendAgentTimelineEvent([], {
+      type: "assistant",
+      contentBlocks: [{ type: "text", text: "hello world" }],
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const withSdkEvent = appendAgentTimelineEvent(withAssistant, {
+      type: "sdkEvent",
+      sdkType: "system",
+      sdkSubtype: "notification",
+      payload: {},
+    }, "2026-05-12T00:00:01.000Z", "claude")
+    const reconciled = appendAgentTimelineEvent(withSdkEvent, {
+      type: "result",
+      content: "hello world",
+      done: true,
+      metadata: {
+        model: "claude-sonnet-4-5",
+      },
+    }, "2026-05-12T00:00:02.000Z", "claude")
+
+    expect(reconciled.filter((item) => item.kind === "message" && item.role === "assistant")).toHaveLength(1)
+    expect(reconciled[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "hello world",
+      metadata: expect.objectContaining({
+        model: "claude-sonnet-4-5",
+      }),
+    }))
+  })
+
+  it("treats result content as metadata when an assistant message already exists", () => {
+    const withAssistant = appendAgentTimelineEvent([], {
+      type: "assistant",
+      contentBlocks: [{ type: "text", text: "final answer" }],
+      message: { role: "assistant", content: [{ type: "text", text: "final answer" }] },
+    }, "2026-05-13T00:03:00.000Z", "claude")
+    const withResult = appendAgentTimelineEvent(withAssistant, {
+      type: "result",
+      content: "final answer",
+      done: true,
+      metadata: { model: "claude-sonnet-4-5" },
+    }, "2026-05-13T00:03:01.000Z", "claude")
+
+    expect(withResult.filter((item) => item.kind === "message" && item.role === "assistant")).toHaveLength(1)
+    expect(withResult[0]).toEqual(expect.objectContaining({
+      content: "final answer",
+      metadata: expect.objectContaining({ model: "claude-sonnet-4-5" }),
     }))
   })
 

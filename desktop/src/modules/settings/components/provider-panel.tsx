@@ -1,7 +1,6 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
-import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -45,6 +44,7 @@ import type {
 } from "@/types/bridge"
 
 const logger = createRendererLogger("settings.providers")
+const PROVIDER_AUTO_REFRESH_INTERVAL_MS = 5_000
 
 const PROVIDER_CATEGORIES: Array<{ value: SynapseAgentProviderCategory; label: string }> = [
   { value: "official", label: "官方" },
@@ -75,19 +75,10 @@ type ProviderFormValues = {
   sortIndex: string
 }
 
-type ProviderProjectOption = {
-  id: string
-  name: string
-}
-
 type ProviderPanelViewProps = {
-  readonly projectId?: string
-  readonly projectName?: string
-  readonly projects: readonly ProviderProjectOption[]
   readonly providers: SynapseAgentProvider[]
   readonly loading: boolean
   readonly error: string | null
-  readonly onProjectChange: (projectId: string) => void
   readonly onAdd: () => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
@@ -95,14 +86,15 @@ type ProviderPanelViewProps = {
   readonly onRetry: () => void
 }
 
-function ProviderPanel() {
-  const { config } = useAppConfig()
-  const projects = config.global.projects.map((project) => ({
-    id: project.id,
-    name: project.name,
-  }))
-  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(() => projects[0]?.id)
-  const project = projects.find((item) => item.id === selectedProjectId) ?? projects[0]
+type ProviderRefreshOptions = {
+  readonly showLoading?: boolean
+}
+
+type ProviderPanelProps = {
+  readonly refreshKey?: number
+}
+
+function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -110,34 +102,64 @@ function ProviderPanel() {
   const [formOpen, setFormOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formValues, setFormValues] = useState<ProviderFormValues>(() => emptyProviderForm())
+  const requestIdRef = useRef(0)
+  const loadingRequestIdRef = useRef(0)
+  const loadingRefreshPendingRef = useRef(false)
 
-  useEffect(() => {
-    if (project || !selectedProjectId) return
-    setSelectedProjectId(projects[0]?.id)
-  }, [project, projects, selectedProjectId])
-
-  const refresh = useCallback(async () => {
-    if (!project?.id) {
-      setProviders([])
+  const refresh = useCallback(async (options: ProviderRefreshOptions = {}) => {
+    requestIdRef.current += 1
+    const requestId = requestIdRef.current
+    const showLoading = options.showLoading ?? true
+    if (showLoading) {
+      loadingRequestIdRef.current = requestId
+      loadingRefreshPendingRef.current = true
+      setLoading(true)
       setError(null)
-      return
     }
-    setLoading(true)
-    setError(null)
     try {
-      const nextProviders = await requireSynapseBridge().agent.listProviders(project.id)
-      setProviders(nextProviders)
+      const nextProviders = await requireSynapseBridge().agent.listProviders()
+      if (requestId === requestIdRef.current) {
+        setProviders(nextProviders)
+        setError(null)
+      }
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "读取 Provider 失败"
       logger.error("Provider list failed.", rawError)
-      setError(message)
+      if (requestId === requestIdRef.current && showLoading) {
+        setError(message)
+      }
     } finally {
-      setLoading(false)
+      if (showLoading && loadingRequestIdRef.current === requestId) {
+        loadingRefreshPendingRef.current = false
+        setLoading(false)
+      }
     }
-  }, [project?.id])
+  }, [])
 
   useEffect(() => {
     void refresh()
+  }, [refresh])
+
+  useEffect(() => {
+    if (!refreshKey) return
+    void refresh({ showLoading: false })
+  }, [refresh, refreshKey])
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "hidden") return
+      if (loadingRefreshPendingRef.current) return
+      void refresh({ showLoading: false })
+    }
+    const timer = window.setInterval(refreshWhenVisible, PROVIDER_AUTO_REFRESH_INTERVAL_MS)
+    window.addEventListener("focus", refreshWhenVisible)
+    document.addEventListener("visibilitychange", refreshWhenVisible)
+
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refreshWhenVisible)
+      document.removeEventListener("visibilitychange", refreshWhenVisible)
+    }
   }, [refresh])
 
   const openAddDialog = useCallback(() => {
@@ -154,18 +176,15 @@ function ProviderPanel() {
 
   const handleSubmit = useCallback(async (event: FormEvent) => {
     event.preventDefault()
-    if (!project?.id) return
     setSaving(true)
     try {
       if (editingProvider) {
         await requireSynapseBridge().agent.updateProvider({
-          projectId: project.id,
           providerId: editingProvider.id,
           patch: buildUpdateInput(formValues),
         })
       } else {
         await requireSynapseBridge().agent.createProvider({
-          projectId: project.id,
           provider: buildCreateInput(formValues),
         })
       }
@@ -179,13 +198,11 @@ function ProviderPanel() {
     } finally {
       setSaving(false)
     }
-  }, [editingProvider, formValues, project?.id, refresh])
+  }, [editingProvider, formValues, refresh])
 
   const handleArchive = useCallback(async (provider: SynapseAgentProvider) => {
-    if (!project?.id) return
     try {
       await requireSynapseBridge().agent.archiveProvider({
-        projectId: project.id,
         providerId: provider.id,
       })
       await refresh()
@@ -195,13 +212,11 @@ function ProviderPanel() {
       logger.error("Provider archive failed.", rawError)
       toast(message)
     }
-  }, [project?.id, refresh])
+  }, [refresh])
 
   const handleSetActive = useCallback(async (provider: SynapseAgentProvider) => {
-    if (!project?.id) return
     try {
       await requireSynapseBridge().agent.setActiveProvider({
-        projectId: project.id,
         providerId: provider.id,
       })
       await refresh()
@@ -211,18 +226,14 @@ function ProviderPanel() {
       logger.error("Provider activate failed.", rawError)
       toast(message)
     }
-  }, [project?.id, refresh])
+  }, [refresh])
 
   return (
     <>
       <ProviderPanelView
-        projectId={project?.id}
-        projectName={project?.name}
-        projects={projects}
         providers={providers}
         loading={loading}
         error={error}
-        onProjectChange={setSelectedProjectId}
         onAdd={openAddDialog}
         onEdit={openEditDialog}
         onArchive={handleArchive}
@@ -243,13 +254,9 @@ function ProviderPanel() {
 }
 
 function ProviderPanelView({
-  projectId,
-  projectName,
-  projects,
   providers,
   loading,
   error,
-  onProjectChange,
   onAdd,
   onEdit,
   onArchive,
@@ -266,34 +273,14 @@ function ProviderPanelView({
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <CardTitle className="text-base">Provider</CardTitle>
-          {projects.length > 1 && projectId ? (
-            <Select value={projectId} onValueChange={onProjectChange}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          ) : projectName ? (
-            <Badge variant="secondary">{projectName}</Badge>
-          ) : null}
         </div>
-        <Button type="button" size="sm" disabled={!projectId} onClick={onAdd}>
+        <Button type="button" size="sm" onClick={onAdd}>
           <Plus data-icon="inline-start" />
           添加
         </Button>
       </CardHeader>
       <CardContent>
-        {!projectId ? (
-          <p className="text-sm text-muted-foreground">请先添加项目</p>
-        ) : error ? (
+        {error ? (
           <div className="flex items-center gap-3">
             <p className="text-sm text-destructive">{error}</p>
             <Button type="button" variant="outline" size="sm" onClick={onRetry}>
@@ -328,6 +315,7 @@ function ProviderPanelView({
                   <TableCell>
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-medium">{provider.name}</span>
+                      {provider.readonly ? <Badge variant="secondary">本机</Badge> : null}
                       {provider.active ? <Badge variant="secondary">默认</Badge> : null}
                     </div>
                   </TableCell>
@@ -335,7 +323,13 @@ function ProviderPanelView({
                   <TableCell>{provider.apiKeyField}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => onEdit(provider)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={Boolean(provider.readonly)}
+                        onClick={() => onEdit(provider)}
+                      >
                         编辑
                       </Button>
                       <Button
@@ -347,7 +341,13 @@ function ProviderPanelView({
                       >
                         设为默认
                       </Button>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => onArchive(provider)}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={Boolean(provider.readonly)}
+                        onClick={() => onArchive(provider)}
+                      >
                         归档
                       </Button>
                     </div>

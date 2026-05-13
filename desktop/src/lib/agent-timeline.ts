@@ -188,29 +188,89 @@ export function appendAgentTimelineEvent(
     timestamp,
     agentType,
   })
-  if (isEmptyTimelineItem(item)) return [...current]
   const last = current.at(-1)
-  if ((event.type === "text" || event.type === "stream") && last?.kind === "message" && last.role === "assistant") {
-    const content = item.kind === "message" ? item.content : ""
-    if (last.content === content || last.content.endsWith(content)) return [...current]
-    return [...current.slice(0, -1), { ...last, content: `${last.content}${content}`, timestamp }]
+  if (event.type === "stream") {
+    const kind = streamKind(event)
+    if (kind === "text" && item.kind === "message") {
+      const assistantIndex = latestAssistantDraftIndex(current)
+      if (assistantIndex !== -1) {
+        const assistant = current[assistantIndex]
+        if (assistant.kind === "message" && assistant.role === "assistant") {
+          return [
+            ...current.slice(0, assistantIndex),
+            { ...assistant, content: `${assistant.content}${item.content}`, timestamp },
+            ...current.slice(assistantIndex + 1),
+          ]
+        }
+      }
+      return [...current, item]
+    }
+
+    if (kind === "thinking" && item.kind === "thinking") {
+      const thinkingIndex = latestThinkingDraftIndex(current)
+      if (thinkingIndex !== -1) {
+        const thinking = current[thinkingIndex]
+        if (thinking.kind === "thinking") {
+          return [
+            ...current.slice(0, thinkingIndex),
+            { ...thinking, content: `${thinking.content}${item.content}`, timestamp },
+            ...current.slice(thinkingIndex + 1),
+          ]
+        }
+      }
+      return [...current, item]
+    }
+
+    return [...current]
+  }
+  if (isEmptyTimelineItem(item)) return [...current]
+  if (event.type === "text" && item.kind === "message" && last?.kind === "message" && last.role === "assistant") {
+    return [...current.slice(0, -1), { ...last, content: `${last.content}${item.content}`, timestamp }]
   }
   if (event.type === "assistant" && item.kind === "message" && last?.kind === "message" && last.role === "assistant") {
+    if (isStreamedAssistantDraft(last)) {
+      return [...current.slice(0, -1), { ...last, content: item.content, timestamp }]
+    }
     if (last.content === item.content) return [...current]
     if (item.content.startsWith(last.content)) {
       return [...current.slice(0, -1), { ...last, content: item.content, timestamp }]
     }
     return [...current, item]
   }
+  if (event.type === "assistant" && item.kind === "message") {
+    const assistantIndex = latestAssistantDraftIndex(current)
+    const assistant = assistantIndex === -1 ? undefined : current[assistantIndex]
+    if (assistant?.kind === "message" && assistant.role === "assistant") {
+      return [
+        ...current.slice(0, assistantIndex),
+        { ...assistant, content: item.content, timestamp },
+        ...current.slice(assistantIndex + 1),
+      ]
+    }
+    const latestAssistantIndex = latestAssistantMessageIndex(current)
+    const latestAssistant = latestAssistantIndex === -1 ? undefined : current[latestAssistantIndex]
+    if (latestAssistant?.kind === "message" && latestAssistant.role === "assistant" && latestAssistant.content === item.content) {
+      return [...current]
+    }
+    return [...current, item]
+  }
   if (event.type === "result" && last?.kind === "message" && last.role === "assistant") {
     const metadata = resultMetadata(event)
-    if (event.content.trim().length === 0) {
-      return metadata ? [...current.slice(0, -1), { ...last, metadata, timestamp }] : [...current]
+    return metadata ? [...current.slice(0, -1), { ...last, metadata, timestamp }] : [...current]
+  }
+  if (event.type === "result") {
+    const assistantIndex = latestAssistantMessageIndex(current)
+    const assistant = assistantIndex === -1 ? undefined : current[assistantIndex]
+    if (assistant?.kind === "message" && assistant.role === "assistant") {
+      const metadata = resultMetadata(event)
+      return metadata
+        ? [
+            ...current.slice(0, assistantIndex),
+            { ...assistant, metadata, timestamp },
+            ...current.slice(assistantIndex + 1),
+          ]
+        : [...current]
     }
-    if (last.content === event.content) {
-      return metadata ? [...current.slice(0, -1), { ...last, metadata, timestamp }] : [...current]
-    }
-    return [...current.slice(0, -1), { ...last, content: event.content, metadata, timestamp }]
   }
   if (item.kind === "result" && item.content.trim().length === 0) return [...current]
   if (item.kind === "result") {
@@ -228,6 +288,37 @@ export function appendAgentTimelineEvent(
     }]
   }
   return [...current, item]
+}
+
+function latestAssistantMessageIndex(items: readonly SynapseAgentTimelineItem[]): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind === "message" && item.role === "assistant") return index
+    if (item?.kind === "message" && item.role === "user") return -1
+  }
+  return -1
+}
+
+function latestAssistantDraftIndex(items: readonly SynapseAgentTimelineItem[]): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind === "message" && item.role === "assistant" && isStreamedAssistantDraft(item)) return index
+    if (item?.kind === "message" && item.role === "user") return -1
+  }
+  return -1
+}
+
+function latestThinkingDraftIndex(items: readonly SynapseAgentTimelineItem[]): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind === "thinking" && item.id.includes(":stream:")) return index
+    if (item?.kind === "message" && item.role === "user") return -1
+  }
+  return -1
+}
+
+function isStreamedAssistantDraft(item: SynapseAgentTimelineItem): boolean {
+  return item.kind === "message" && item.role === "assistant" && item.id.includes(":stream:")
 }
 
 export function localUserTimelineItem(
@@ -296,14 +387,23 @@ function streamText(event: Extract<SynapseAgentEvent, { type: "stream" }>): stri
   if (typeof event.text === "string") return event.text
   const rawEvent = event.event
   const delta = recordValue(rawEvent?.delta)
+  if (stringValue(delta?.type) === "text_delta") return stringValue(delta?.text) ?? ""
   return stringValue(delta?.text)
     ?? stringValue(rawEvent?.text)
     ?? ""
 }
 
 function streamThinking(event: Extract<SynapseAgentEvent, { type: "stream" }>): string {
+  if (typeof event.thinking === "string") return event.thinking
   const delta = recordValue(event.event?.delta)
+  if (stringValue(delta?.type) === "thinking_delta") return stringValue(delta?.thinking) ?? ""
   return stringValue(delta?.thinking) ?? ""
+}
+
+function streamKind(event: Extract<SynapseAgentEvent, { type: "stream" }>): "text" | "thinking" | "other" {
+  if (event.deltaType === "text_delta" || streamText(event).length > 0) return "text"
+  if (event.deltaType === "thinking_delta" || streamThinking(event).length > 0) return "thinking"
+  return "other"
 }
 
 function textFromBlocks(blocks: readonly unknown[] | undefined): string {
