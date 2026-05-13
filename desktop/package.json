@@ -40,6 +40,7 @@
     "url": "git+https://github.com/FairyEver/Synapse.git"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.138",
     "@fontsource-variable/geist": "^5.2.8",
     "@larksuiteoapi/node-sdk": "^1.62.0",
     "@xyflow/react": "^12.10.2",

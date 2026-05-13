@@ -1079,6 +1079,7 @@ class DenyingAdapter implements AgentAdapter {
       action: "agent.spawn",
       actor: context.actor ?? { kind: "user" },
       resource: "claude",
+      context: {},
     })
     if (!permission.allowed) {
       this.auditSink.record({

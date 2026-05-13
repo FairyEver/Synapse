@@ -26,6 +26,9 @@ importers:
 
   desktop:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.138
+        version: 0.2.138(zod@4.3.6)
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8
