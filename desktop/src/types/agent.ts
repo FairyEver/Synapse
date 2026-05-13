@@ -48,7 +48,11 @@ export type SynapseAgentEvent =
         contextRemainingPercent?: number
         workDir?: string
         cancelled?: boolean
+        usage?: Record<string, unknown>
+        costUsd?: number
       }
+      usage?: Record<string, unknown>
+      costUsd?: number
       agentSessionId?: string
       threadId?: string
     }
@@ -57,6 +61,45 @@ export type SynapseAgentEvent =
       message: string
       agentSessionId?: string
       threadId?: string
+    }
+  | {
+      type: "assistant"
+      contentBlocks?: unknown[]
+      content?: string
+      message?: Record<string, unknown>
+      sdkSessionId?: string
+      agentSessionId?: string
+      threadId?: string
+    }
+  | {
+      type: "stream"
+      deltaType?: string
+      text?: string
+      event?: Record<string, unknown>
+      sdkSessionId?: string
+      agentSessionId?: string
+      threadId?: string
+    }
+  | {
+      type: "sessionInit"
+      sdkSessionId?: string
+      tools?: string[]
+      model?: string
+    }
+  | {
+      type: "status"
+      status?: string | null
+      message?: string
+    }
+  | {
+      type: "compactBoundary"
+      sdkSessionId?: string
+    }
+  | {
+      type: "sdkEvent"
+      sdkType: string
+      sdkSubtype?: string
+      payload: Record<string, unknown>
     }
 
 export type SynapseAgentPhaseValue =
@@ -83,14 +126,26 @@ export type SynapseAgentTimelineKind =
   | "error"
   | "result"
   | "phase"
+  | "sdkEvent"
 
 interface SynapseAgentTimelineBase {
   readonly id: string
   readonly kind: SynapseAgentTimelineKind
   readonly timestamp: string
   readonly agentType?: string
+  readonly sdkSessionId?: string
   readonly agentSessionId?: string
   readonly threadId?: string
+}
+
+export interface SynapseAgentResultMetadata {
+  readonly model?: string
+  readonly effort?: string
+  readonly contextRemainingPercent?: number
+  readonly workDir?: string
+  readonly cancelled?: boolean
+  readonly usage?: Record<string, unknown>
+  readonly costUsd?: number
 }
 
 export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {
@@ -98,6 +153,7 @@ export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBas
   readonly role: "user" | "assistant" | "system" | "tool"
   readonly content: string
   readonly legacy?: boolean
+  readonly metadata?: SynapseAgentResultMetadata
 }
 
 export interface SynapseAgentThinkingTimelineItem extends SynapseAgentTimelineBase {
@@ -137,13 +193,7 @@ export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase 
 export interface SynapseAgentResultTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "result"
   readonly content: string
-  readonly metadata?: {
-    readonly model?: string
-    readonly effort?: string
-    readonly contextRemainingPercent?: number
-    readonly workDir?: string
-    readonly cancelled?: boolean
-  }
+  readonly metadata?: SynapseAgentResultMetadata
 }
 
 export type SynapseAgentCancelTurnResult = {
@@ -160,6 +210,14 @@ export interface SynapseAgentPhaseTimelineItem extends SynapseAgentTimelineBase 
   readonly errorMessage?: string
 }
 
+export interface SynapseAgentSdkEventTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "sdkEvent"
+  readonly sdkType: string
+  readonly sdkSubtype?: string
+  readonly label: string
+  readonly summary?: string
+}
+
 export type SynapseAgentTimelineItem =
   | SynapseAgentMessageTimelineItem
   | SynapseAgentThinkingTimelineItem
@@ -169,6 +227,7 @@ export type SynapseAgentTimelineItem =
   | SynapseAgentErrorTimelineItem
   | SynapseAgentResultTimelineItem
   | SynapseAgentPhaseTimelineItem
+  | SynapseAgentSdkEventTimelineItem
 
 export type SynapseAgentToolCollapseDefault = "expanded" | "collapsed" | "auto"
 

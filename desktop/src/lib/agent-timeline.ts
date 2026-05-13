@@ -1,5 +1,6 @@
 import type {
   SynapseAgentEvent,
+  SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
 } from "../types/agent"
 
@@ -26,12 +27,17 @@ export function agentEventToTimelineItem(
     id: context.id,
     timestamp: context.timestamp,
     agentType: context.agentType,
-    agentSessionId: event.agentSessionId,
-    threadId: event.threadId,
+    sdkSessionId: eventId(event, "sdkSessionId"),
+    agentSessionId: eventId(event, "agentSessionId"),
+    threadId: eventId(event, "threadId"),
   }
   switch (event.type) {
     case "text":
       return { ...base, kind: "message", role: "assistant", content: event.content }
+    case "stream":
+      return { ...base, kind: "message", role: "assistant", content: streamText(event) }
+    case "assistant":
+      return { ...base, kind: "message", role: "assistant", content: assistantText(event) }
     case "thinking":
       return { ...base, kind: "thinking", content: event.content }
     case "toolUse":
@@ -66,10 +72,42 @@ export function agentEventToTimelineItem(
         ...base,
         kind: "result",
         content: event.content,
-        metadata: event.metadata,
+        metadata: resultMetadata(event),
       }
     case "error":
       return { ...base, kind: "error", message: event.message }
+    case "sessionInit":
+      return {
+        ...base,
+        kind: "sdkEvent",
+        sdkType: "sessionInit",
+        label: "SDK event",
+        summary: event.model ?? event.tools?.join(", "),
+      }
+    case "status":
+      return {
+        ...base,
+        kind: "sdkEvent",
+        sdkType: "status",
+        label: "SDK event",
+        summary: event.message ?? event.status ?? undefined,
+      }
+    case "compactBoundary":
+      return {
+        ...base,
+        kind: "sdkEvent",
+        sdkType: "compactBoundary",
+        label: "SDK event",
+        summary: "compact boundary",
+      }
+    case "sdkEvent":
+      return {
+        ...base,
+        kind: "sdkEvent",
+        sdkType: event.sdkType,
+        sdkSubtype: event.sdkSubtype,
+        label: "SDK event",
+      }
     default: {
       const exhaustive: never = event
       return exhaustive
@@ -147,13 +185,17 @@ export function appendAgentTimelineEvent(
   })
   if (isEmptyTimelineItem(item)) return [...current]
   const last = current.at(-1)
-  if (event.type === "text" && last?.kind === "message" && last.role === "assistant") {
-    if (last.content === event.content || last.content.endsWith(event.content)) return [...current]
-    return [...current.slice(0, -1), { ...last, content: `${last.content}${event.content}`, timestamp }]
+  if ((event.type === "text" || event.type === "stream") && last?.kind === "message" && last.role === "assistant") {
+    const content = item.kind === "message" ? item.content : ""
+    if (last.content === content || last.content.endsWith(content)) return [...current]
+    return [...current.slice(0, -1), { ...last, content: `${last.content}${content}`, timestamp }]
   }
   if (event.type === "result" && last?.kind === "message" && last.role === "assistant") {
-    if (last.content === event.content) return [...current]
-    return [...current.slice(0, -1), { ...last, content: event.content, timestamp }]
+    const metadata = resultMetadata(event)
+    if (last.content === event.content) {
+      return metadata ? [...current.slice(0, -1), { ...last, metadata, timestamp }] : [...current]
+    }
+    return [...current.slice(0, -1), { ...last, content: event.content, metadata, timestamp }]
   }
   if (item.kind === "result" && item.content.trim().length === 0) return [...current]
   if (item.kind === "result") {
@@ -164,8 +206,10 @@ export function appendAgentTimelineEvent(
       content: item.content,
       timestamp: item.timestamp,
       agentType: item.agentType,
+      sdkSessionId: item.sdkSessionId,
       agentSessionId: item.agentSessionId,
       threadId: item.threadId,
+      metadata: item.metadata,
     }]
   }
   return [...current, item]
@@ -216,4 +260,56 @@ function recordMetadata(metadata: Record<string, unknown> | undefined, key: stri
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
+}
+
+function eventId(event: SynapseAgentEvent, key: "sdkSessionId" | "agentSessionId" | "threadId"): string | undefined {
+  return stringValue(recordValue(event)?.[key])
+}
+
+function resultMetadata(event: Extract<SynapseAgentEvent, { type: "result" }>): SynapseAgentResultMetadata | undefined {
+  const metadata = {
+    ...event.metadata,
+    usage: event.metadata?.usage ?? event.usage,
+    costUsd: event.metadata?.costUsd ?? event.costUsd,
+  }
+  return Object.values(metadata).some((value) => value !== undefined) ? metadata : undefined
+}
+
+function assistantText(event: Extract<SynapseAgentEvent, { type: "assistant" }>): string {
+  if (typeof event.content === "string") return event.content
+  const blocks = event.contentBlocks ?? arrayValue(event.message?.content)
+  return textFromBlocks(blocks)
+}
+
+function streamText(event: Extract<SynapseAgentEvent, { type: "stream" }>): string {
+  if (typeof event.text === "string") return event.text
+  const rawEvent = event.event
+  const delta = recordValue(rawEvent?.delta)
+  return stringValue(delta?.text)
+    ?? stringValue(delta?.thinking)
+    ?? stringValue(rawEvent?.text)
+    ?? ""
+}
+
+function textFromBlocks(blocks: readonly unknown[] | undefined): string {
+  if (!blocks) return ""
+  return blocks.map((block) => {
+    if (typeof block === "string") return block
+    const record = recordValue(block)
+    return stringValue(record?.text) ?? ""
+  }).join("")
+}
+
+function arrayValue(value: unknown): unknown[] | undefined {
+  return Array.isArray(value) ? value : undefined
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined
 }

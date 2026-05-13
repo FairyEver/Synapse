@@ -3,6 +3,7 @@ import { createRef } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
+import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
 
@@ -85,5 +86,77 @@ describe("AgentTimeline", () => {
   it("does not render the legacy 正在处理 spinner row even when sending=true", () => {
     const html = renderTimeline({ sending: true })
     expect(html).not.toContain("正在处理")
+  })
+
+  it("appends stream text to the current assistant message", () => {
+    const first = appendAgentTimelineEvent([], {
+      type: "stream",
+      text: "hello",
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const second = appendAgentTimelineEvent(first, {
+      type: "stream",
+      text: " world",
+    }, "2026-05-12T00:00:01.000Z", "claude")
+
+    expect(second).toEqual([
+      expect.objectContaining({
+        kind: "message",
+        role: "assistant",
+        content: "hello world",
+      }),
+    ])
+  })
+
+  it("renders assistant content blocks as text", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "assistant",
+      contentBlocks: [
+        { type: "text", text: "first" },
+        { type: "text", text: " second" },
+      ],
+    }, "2026-05-12T00:00:00.000Z", "claude")
+
+    const html = renderTimeline({ items })
+
+    expect(html).toContain("first second")
+  })
+
+  it("renders sdk events as compact generic rows", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "sdkEvent",
+      sdkType: "system",
+      sdkSubtype: "init",
+      payload: { cwd: "/tmp/project" },
+    }, "2026-05-12T00:00:00.000Z", "claude")
+
+    const html = renderTimeline({ items })
+
+    expect(html).toContain("SDK event")
+    expect(html).toContain("system")
+    expect(html).toContain("init")
+  })
+
+  it("preserves result model, usage, and cost metadata", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "result",
+      content: "done",
+      done: true,
+      metadata: {
+        model: "claude-sonnet-4-5",
+        usage: { inputTokens: 10, outputTokens: 5 },
+        costUsd: 0.05,
+      },
+    }, "2026-05-12T00:00:00.000Z", "claude")
+
+    expect(items[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "done",
+      metadata: expect.objectContaining({
+        model: "claude-sonnet-4-5",
+        usage: { inputTokens: 10, outputTokens: 5 },
+        costUsd: 0.05,
+      }),
+    }))
   })
 })

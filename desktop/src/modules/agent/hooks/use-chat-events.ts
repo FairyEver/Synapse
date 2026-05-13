@@ -200,8 +200,9 @@ function useChatEvents(
       updateTimeline((current) =>
         appendAgentTimelineEvent(current, domainEvent.payload.event, domainEvent.timestamp, agentType))
       const event = domainEvent.payload.event
-      if (event.type === "result" && event.metadata?.model) {
-        dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: event.metadata.model })
+      const resultModel = event.type === "result" ? event.metadata?.model : undefined
+      if (resultModel) {
+        dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: resultModel })
       }
       void refreshPendingPermissions()
     })

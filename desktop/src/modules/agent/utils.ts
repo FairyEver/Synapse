@@ -71,6 +71,8 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
       return "结果"
     case "phase":
       return "阶段"
+    case "sdkEvent":
+      return "SDK"
     default: {
       const exhaustive: never = entry
       return exhaustive
@@ -94,6 +96,10 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       return entry.message
     case "phase":
       return entry.errorMessage ?? entry.phase
+    case "sdkEvent":
+      return [entry.sdkType, entry.sdkSubtype, entry.summary]
+        .filter((part): part is string => Boolean(part))
+        .join(" ")
     default: {
       const exhaustive: never = entry
       return exhaustive
