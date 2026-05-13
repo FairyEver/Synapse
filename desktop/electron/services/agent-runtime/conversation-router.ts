@@ -239,6 +239,10 @@ export class ConversationRouter {
         state.turnAbortController = ac
         try {
           if (externalSignal?.aborted) ac.abort(externalSignal.reason)
+          if (state.closing || ac.signal.aborted) {
+            turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
+            continue
+          }
           const result = await this.processTurn(state, turn.message, turn.conversationId, ac.signal)
           if (ac.signal.aborted) {
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))

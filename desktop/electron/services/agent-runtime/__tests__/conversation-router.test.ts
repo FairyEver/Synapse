@@ -149,6 +149,26 @@ describe("ConversationRouter", () => {
     expect(session.closed).toBe(true)
   })
 
+  it("does not create an SDK session for a queued turn that already aborted", async () => {
+    const first = new ControlledSession("sdk-1")
+    const second = new ControlledSession("sdk-2")
+    const { router, factoryCalls } = createRouter({ sessions: [first, second] })
+
+    const firstTurn = router.send(baseMessage("first"))
+    await waitFor(() => first.sent.includes("first"))
+
+    const abortController = new AbortController()
+    const secondTurn = router.send(baseMessage("second"), { abortSignal: abortController.signal })
+    abortController.abort("timeout")
+
+    first.emitResult("done")
+
+    await expect(firstTurn).resolves.toMatchObject({ resultText: "done" })
+    await expect(secondTurn).resolves.toMatchObject({ error: "cancelled" })
+    expect(factoryCalls).toHaveLength(1)
+    expect(second.sent).toEqual([])
+  })
+
   it("keeps persisted tool metadata and event payloads bounded and sanitized", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const raw = {
@@ -366,6 +386,58 @@ class TimeoutSession implements AgentLiveSession {
   }
 }
 
+class ControlledSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  readonly sent: string[] = []
+  private readonly events: AgentEvent[] = []
+  private readonly waiters: Array<(event: AgentEvent | null) => void> = []
+  private closed = false
+
+  constructor(private readonly sessionId: string) {}
+
+  async send(message: AgentMessage): Promise<void> {
+    this.sent.push(message.content)
+  }
+
+  async respondPermission(): Promise<void> {}
+
+  nextEvent(): Promise<AgentEvent | null> {
+    const event = this.events.shift()
+    if (event) return Promise.resolve(event)
+    if (this.closed) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      this.waiters.push(resolve)
+    })
+  }
+
+  currentSessionId(): string | undefined {
+    return this.sessionId
+  }
+
+  alive(): boolean {
+    return !this.closed
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    for (const waiter of this.waiters) waiter(null)
+    this.waiters.length = 0
+  }
+
+  emitResult(content: string): void {
+    this.push({ type: "result", content, done: true, sdkSessionId: this.sessionId })
+  }
+
+  private push(event: AgentEvent): void {
+    const waiter = this.waiters.shift()
+    if (waiter) {
+      waiter(event)
+      return
+    }
+    this.events.push(event)
+  }
+}
+
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   readonly schemaVersion = 1
   readonly backend = "json" as const
@@ -417,4 +489,12 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   private emit(event: DataChangeEvent<T>): void {
     for (const listener of this.listeners) listener(event)
   }
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let i = 0; i < 50; i += 1) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error("Timed out waiting for condition")
 }

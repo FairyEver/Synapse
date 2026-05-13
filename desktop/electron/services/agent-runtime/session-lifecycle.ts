@@ -16,6 +16,7 @@ export interface RuntimeSessionState {
   pending?: PendingPermissionState
   turnAbortController?: AbortController
   providerId?: string
+  closing?: boolean
   cancelState?: {
     requestedAt: number
     escalationTimer?: ReturnType<typeof setTimeout>

@@ -8,8 +8,10 @@ import type {
   RuntimeSessionState,
 } from "./session-lifecycle"
 import type {
+  AgentEvent,
   AgentLiveSession,
   AgentMessage,
+  AgentRuntimeTurnResult,
 } from "./types"
 
 export interface CreateAgentLiveSessionInput {
@@ -155,6 +157,7 @@ export class SessionManager {
     const state = this.deps.states.get(conversationId)
     if (!state) return
     this.settlePending(state)
+    this.settleQueued(state)
     if (!state.liveSession) return
     await state.liveSession.close()
     state.liveSession = undefined
@@ -164,9 +167,9 @@ export class SessionManager {
   async closeState(conversationId: string): Promise<void> {
     const state = this.deps.states.get(conversationId)
     if (!state) return
+    state.closing = true
     this.settlePending(state)
     await this.forceClose(conversationId)
-    state.queue.length = 0
     this.deps.states.delete(conversationId)
   }
 
@@ -183,6 +186,14 @@ export class SessionManager {
     }
     this.deps.pendingPermissions.delete(pending.requestId)
     pending.resolve()
+  }
+
+  settleQueued(state: RuntimeSessionState | undefined): void {
+    if (!state) return
+    const queued = state.queue.splice(0)
+    for (const turn of queued) {
+      turn.resolve(cancelledTurnResult(turn.conversationId))
+    }
   }
 
   async closeIdleSessions(): Promise<void> {
@@ -211,5 +222,20 @@ export class SessionManager {
       this.deps.states.delete(conversationId)
     }
     return reaped
+  }
+}
+
+function cancelledTurnResult(conversationId: string): AgentRuntimeTurnResult {
+  const event: AgentEvent = {
+    type: "result",
+    content: "",
+    done: true,
+    metadata: { cancelled: true },
+  }
+  return {
+    conversationId,
+    events: [event],
+    resultText: "",
+    error: "cancelled",
   }
 }

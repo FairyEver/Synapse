@@ -199,6 +199,29 @@ describe("AgentRuntimeService", () => {
     expect(session.closed).toBe(true)
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
+
+  it("deleteSession resolves queued sends for a busy conversation", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new HangingSession()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const firstTurn = service.send(baseMessage("first"))
+    await waitFor(() => session.sent.length === 1)
+    const secondTurn = service.send(baseMessage("second"))
+    await waitFor(() => service.getStatus().queuedTurns === 1)
+
+    await service.deleteSession(conversationId("local", "s1", "active"))
+
+    await expect(resolveSoon(secondTurn)).resolves.toMatchObject({ error: "cancelled" })
+    await expect(resolveSoon(firstTurn)).resolves.not.toBe("timeout")
+  })
 })
 
 function baseMessage(content: string): AgentMessage {
