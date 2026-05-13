@@ -1,12 +1,11 @@
 import type {
-  ProviderCodexOptionsV1,
   ProviderModelEntryV1,
 } from "../../runtime/data-repo"
 import type { ActorIdentity } from "../../runtime/security"
 
 export const PROVIDER_CONFIG_SERVICE_ID = "provider.config"
 
-export type AgentRuntimeAgentType = "codex" | "claude-code" | string
+export type AgentRuntimeAgentType = "claude-code" | string
 
 export interface ProviderConfigInput {
   readonly id: string
@@ -24,7 +23,6 @@ export interface ProviderConfigInput {
   readonly endpoints?: Record<string, string>
   readonly agentModels?: Record<string, string>
   readonly agentModelLists?: Record<string, readonly ProviderModelEntryV1[]>
-  readonly codex?: ProviderCodexOptionsV1
 }
 
 export interface ProviderConfigView {
@@ -39,7 +37,6 @@ export interface ProviderConfigView {
   readonly env: Record<string, string>
   readonly thinking?: string
   readonly effort?: string
-  readonly codex?: ProviderCodexOptionsV1
   readonly scope: "global" | "project"
 }
 

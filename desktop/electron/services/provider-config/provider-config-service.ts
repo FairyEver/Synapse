@@ -373,7 +373,6 @@ function providerEntryFromInput(
       endpoints: input.endpoints,
       agentModels: input.agentModels,
       agentModelLists: modelLists,
-      codex: input.codex,
     }),
     createdAt: options.existing?.createdAt ?? options.now,
     updatedAt: options.now,
@@ -413,7 +412,6 @@ function toProviderView(
     },
     thinking: options.thinking ?? entry.thinking,
     effort: options.effort,
-    codex: options.codex,
     scope: entry.scope,
   }
 }
