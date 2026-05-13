@@ -47,6 +47,11 @@ interface PendingPermission {
   readonly cleanup: () => void
 }
 
+interface ForwardedAbortController {
+  readonly controller: AbortController
+  cleanup(): void
+}
+
 export class ClaudeSDKSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
 
@@ -59,6 +64,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly permissions = new Map<string, PendingPermission>()
   private readonly query: QueryLike
   private readonly abortController: AbortController | undefined
+  private readonly abortCleanup: (() => void) | undefined
+  private readonly pumpPromise: Promise<void>
   private closed = false
   private finished = false
   private sdkSessionId: string | undefined
@@ -70,14 +77,16 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.providerId = options.providerId
     this.sdkSessionId = options.sdkSessionId
     this.now = options.now ?? (() => new Date())
-    this.abortController = createForwardedAbortController(options.abortSignal)
+    const forwardedAbort = createForwardedAbortController(options.abortSignal)
+    this.abortController = forwardedAbort?.controller
+    this.abortCleanup = forwardedAbort?.cleanup
 
     const queryFactory = options.queryFactory ?? defaultQueryFactory
     this.query = queryFactory({
       prompt: this.inputQueue,
       options: this.buildQueryOptions(options),
     })
-    void this.pumpQueryEvents()
+    this.pumpPromise = this.pumpQueryEvents()
   }
 
   async send(message: AgentMessage): Promise<void> {
@@ -118,6 +127,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   async cancelCurrentTurn(): Promise<boolean> {
     if (!this.alive()) return false
+    this.denyPendingPermissions("Current turn was cancelled before permission was resolved.")
     await this.query.interrupt()
     return true
   }
@@ -125,10 +135,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.finished = true
     this.inputQueue.close()
     this.denyPendingPermissions("Session closed before permission was resolved.")
-    await Promise.resolve(this.query.close())
+    this.abortController?.abort()
+    this.abortCleanup?.()
     this.eventQueue.close()
+    void Promise.resolve()
+      .then(() => this.query.close())
+      .catch(() => undefined)
   }
 
   private buildQueryOptions(options: ClaudeSDKSessionOptions): Record<string, unknown> {
@@ -154,9 +169,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
     input: Record<string, unknown>,
     context: { signal: AbortSignal },
   ): Promise<PermissionResult> {
-    if (this.closed) {
-      return { behavior: "deny", message: "Session is closed." }
-    }
+    if (this.closed) return { behavior: "deny", message: "Session is closed." }
+    if (context.signal.aborted) return permissionCancelledResult()
 
     const requestId = this.nextPermissionRequestId()
     const timestamp = this.now().toISOString()
@@ -185,6 +199,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         resolve,
         cleanup: () => context.signal.removeEventListener("abort", abort),
       })
+      if (context.signal.aborted) abort()
     })
   }
 
@@ -197,11 +212,25 @@ export class ClaudeSDKSession implements AgentLiveSession {
           this.eventQueue.push(event)
         }
       }
+    } catch (error) {
+      if (!this.closed) this.eventQueue.push(this.errorEvent(error))
     } finally {
       this.finished = true
       this.inputQueue.close()
       this.denyPendingPermissions("SDK query finished before permission was resolved.")
+      this.abortCleanup?.()
       this.eventQueue.close()
+    }
+  }
+
+  private errorEvent(error: unknown): AgentEvent {
+    return {
+      type: "error",
+      message: errorMessage(error),
+      conversationId: this.conversationId,
+      providerId: this.providerId,
+      sdkSessionId: this.sdkSessionId,
+      timestamp: this.now().toISOString(),
     }
   }
 
@@ -287,17 +316,21 @@ function parsePermissionMode(mode: string | undefined): PermissionMode | undefin
   return permissionModes.has(mode as PermissionMode) ? mode as PermissionMode : undefined
 }
 
-function createForwardedAbortController(signal: AbortSignal | undefined): AbortController | undefined {
+function createForwardedAbortController(signal: AbortSignal | undefined): ForwardedAbortController | undefined {
   if (!signal) return undefined
   const controller = new AbortController()
   if (signal.aborted) {
     controller.abort(signal.reason)
-    return controller
+    return { controller, cleanup: () => undefined }
   }
-  signal.addEventListener("abort", () => {
+  const abort = (): void => {
     controller.abort(signal.reason)
-  }, { once: true })
-  return controller
+  }
+  signal.addEventListener("abort", abort, { once: true })
+  return {
+    controller,
+    cleanup: () => signal.removeEventListener("abort", abort),
+  }
 }
 
 function toPermissionResult(decision: AgentPermissionDecision): PermissionResult {
@@ -313,6 +346,15 @@ function toPermissionResult(decision: AgentPermissionDecision): PermissionResult
     message: decision.message
       ?? "The user denied this tool use. Stop and wait for the user's instructions.",
   }
+}
+
+function permissionCancelledResult(): PermissionResult {
+  return { behavior: "deny", message: "Permission request was cancelled." }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return typeof error === "string" ? error : "SDK query failed"
 }
 
 function summarizeToolInput(toolName: string, input: Record<string, unknown>): string | undefined {

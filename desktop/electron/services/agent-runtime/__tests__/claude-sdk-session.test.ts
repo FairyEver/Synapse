@@ -114,9 +114,89 @@ describe("ClaudeSDKSession", () => {
       updatedInput: { command: "pwd" },
     })
   })
+
+  it("returns an error event when the SDK query rejects", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    const event = session.nextEvent()
+    query.rejectNext(new Error("sdk exploded"))
+
+    await expect(event).resolves.toMatchObject({
+      type: "error",
+      message: "sdk exploded",
+      conversationId: "conversation-1",
+      providerId: "claude-sdk",
+      timestamp: "2026-05-13T00:00:00.000Z",
+    })
+    await expect(session.nextEvent()).resolves.toBeNull()
+  })
+
+  it("releases event waiters when SDK close throws", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+    query.close.mockImplementation(() => {
+      throw new Error("close failed")
+    })
+
+    const event = session.nextEvent()
+    await expect(session.close()).resolves.toBeUndefined()
+
+    await expect(event).resolves.toBeNull()
+    expect(query.close).toHaveBeenCalledOnce()
+    expect(session.alive()).toBe(false)
+  })
+
+  it("settles pending permission requests when cancelling the current turn", async () => {
+    const { factory, getOptions, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    const permission = canUseTool(getOptions())("Bash", { command: "pwd" }, {
+      signal: new AbortController().signal,
+    })
+    const event = await session.nextEvent()
+
+    await expect(session.cancelCurrentTurn()).resolves.toBe(true)
+
+    expect(event?.type).toBe("permissionRequest")
+    expect(query.interrupt).toHaveBeenCalledOnce()
+    await expect(resolveSoon(permission)).resolves.toEqual({
+      behavior: "deny",
+      message: "Current turn was cancelled before permission was resolved.",
+    })
+  })
+
+  it("cleans up forwarded abort listeners on close", async () => {
+    const abortController = new AbortController()
+    const remove = vi.spyOn(abortController.signal, "removeEventListener")
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { abortSignal: abortController.signal })
+
+    await session.close()
+
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function))
+    expect((getOptions().abortController as AbortController).signal.aborted).toBe(true)
+  })
+
+  it("denies immediately when permission signal is already aborted", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+    const abortController = new AbortController()
+    abortController.abort()
+
+    await expect(resolveSoon(canUseTool(getOptions())("Bash", { command: "pwd" }, {
+      signal: abortController.signal,
+    }))).resolves.toEqual({
+      behavior: "deny",
+      message: "Permission request was cancelled.",
+    })
+  })
 })
 
-function createSession(queryFactory: QueryFactory): ClaudeSDKSession {
+function createSession(
+  queryFactory: QueryFactory,
+  overrides: Partial<ConstructorParameters<typeof ClaudeSDKSession>[0]> = {},
+): ClaudeSDKSession {
   return new ClaudeSDKSession({
     projectId: "project-1",
     conversationId: "conversation-1",
@@ -125,7 +205,20 @@ function createSession(queryFactory: QueryFactory): ClaudeSDKSession {
     env: { FOO: "bar" },
     queryFactory,
     now: () => new Date("2026-05-13T00:00:00.000Z"),
+    ...overrides,
   })
+}
+
+function canUseTool(options: Record<string, unknown>): (
+  toolName: string,
+  input: Record<string, unknown>,
+  context: { signal: AbortSignal },
+) => Promise<PermissionResult> {
+  return options.canUseTool as (
+    toolName: string,
+    input: Record<string, unknown>,
+    context: { signal: AbortSignal },
+  ) => Promise<PermissionResult>
 }
 
 function message(content: string): AgentMessage {
@@ -135,6 +228,15 @@ function message(content: string): AgentMessage {
     platform: "test",
     content,
   }
+}
+
+function resolveSoon<T>(promise: Promise<T>): Promise<T | "timeout"> {
+  return Promise.race([
+    promise,
+    new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), 20)
+    }),
+  ])
 }
 
 function createQueryFactory(): {
@@ -172,6 +274,7 @@ class FakeQuery implements QueryLike {
 
   private readonly messages: SDKMessage[] = []
   private readonly waiters: Array<(value: IteratorResult<SDKMessage, void>) => void> = []
+  private readonly rejecters: Array<(error: unknown) => void> = []
 
   push(message: SDKMessage): void {
     const waiter = this.waiters.shift()
@@ -185,8 +288,15 @@ class FakeQuery implements QueryLike {
   next(): Promise<IteratorResult<SDKMessage, void>> {
     const message = this.messages.shift()
     if (message) return Promise.resolve({ done: false, value: message })
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.waiters.push(resolve)
+      this.rejecters.push(reject)
     })
+  }
+
+  rejectNext(error: unknown): void {
+    const reject = this.rejecters.shift()
+    this.waiters.shift()
+    if (reject) reject(error)
   }
 }
