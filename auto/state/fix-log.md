@@ -841,3 +841,28 @@ Runner 错误页从"死胡同"变为"可重试的等待室"——用户无需关
 
 ### 本次进展
 编辑器保存体验从"仅鼠标点击+无反馈+无状态指示"变为"快捷键+成功 toast+未保存圆点指示器"的完整闭环——三个缺陷共同构成"保存工作流"这一高频操作的体验补齐。
+
+---
+
+## [2026-05-13 23:00] 第 36 次迭代
+
+### 发现的问题
+- Runner 的 NodeResultPanel 不显示 progressLabel：节点执行中时 DAG 卡片上显示进度文字（如"调用模型中…"），但用户点击节点打开详情面板后，面板仅显示"执行中" Badge 和空内容区域"（无可展示的输出）"，丢失了 progressLabel 信息。数据已通过 onNodeProgress 写入 nodeResults 并传递到面板，但面板未渲染该字段（node-result-panel.tsx:28-83 全文无 progressLabel 引用）。
+- 画布无 Escape 键取消选中：用户选中节点后，无法通过 Escape 键取消选中（只能点击空白区域）。keydown handler 仅处理 Delete/Backspace/Ctrl+C/Ctrl+V，缺少 Escape → deselect 逻辑。这是画布编辑器的标准交互模式缺失（canvas.tsx:386-407 无 Escape 分支）。
+- 工作流列表页 RunParamsDialog 不记忆上次参数值：toolbar.tsx 正确维护 lastRunValues 状态并传递给 RunParamsDialog，但 workflow-list.tsx 的同一对话框未传递 lastValues prop，导致用户从列表页重复运行同一工作流时每次都要重新填写参数（workflow-list.tsx:148 缺少 lastValues prop）。
+
+### 修复内容
+- [desktop/src/modules/workflow/runner/node-result-panel.tsx:31-35,79] Badge 后新增条件渲染：status === "running" && progressLabel 时显示 animate-pulse 的进度文字；空状态文案从二态扩展为三态，running 状态显示"节点正在执行…"
+- [desktop/src/modules/workflow/editor/canvas.tsx:385,393-397] 新增 onNodeSelectRef 跟踪 onNodeSelect prop；keydown handler 在 Delete/Backspace 之后、mod 检查之前新增 Escape 分支：setNodes 清除所有 selected + onNodeSelectRef.current(null)
+- [desktop/src/modules/workflow/components/workflow-list.tsx:20,69,149] 新增 lastRunValues 状态；RunParamsDialog onConfirm 回调中通过 rawValues 记录上次参数值并传递 lastValues prop
+
+### 与历史的关系
+- 缺陷 1：独立（NodeResultPanel 的 progressLabel 渲染从未被覆盖，虽然 iter 33 为同文件补了 skipped 状态文案）
+- 缺陷 2：独立（Escape 键取消选中从未被覆盖，iter 31/32 补的是 guard 条件排除可聚焦元素，iter 35 补的是 Ctrl+S）
+- 缺陷 3：独立（toolbar.tsx 的 lastRunValues 在 iter 21 引入，但 workflow-list.tsx 的同一对话框从未获得该功能）
+
+### 日志补充
+- 无（纯 UI 交互优化：progressLabel 为已有数据的渲染补齐，Escape 为已有 setNodes 的新触发入口，lastRunValues 为渲染侧状态记忆——均不涉及数据流、执行路径或 IPC 契约变更）
+
+### 本次进展
+Runner 详情面板从"执行中无进度信息"变为"实时显示当前执行阶段"；画布交互从"只能鼠标点空白取消选中"变为"Escape 一键取消"；列表页参数化运行从"每次重填"变为"记忆上次值"——三个修复分别补齐了执行反馈、编辑效率、重复操作便利性三个维度的体验缺口。

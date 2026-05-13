@@ -382,6 +382,8 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   pasteNodesRef.current = pasteNodes
   const getSelectedNodeIdsRef = useRef(getSelectedNodeIds)
   getSelectedNodeIdsRef.current = getSelectedNodeIds
+  const onNodeSelectRef = useRef(onNodeSelect)
+  onNodeSelectRef.current = onNodeSelect
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -391,6 +393,12 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       if (e.key === "Delete" || e.key === "Backspace") {
         const ids = getSelectedNodeIdsRef.current()
         if (ids.length > 0) deleteNodesRef.current(ids)
+        return
+      }
+      // Escape: deselect all nodes
+      if (e.key === "Escape") {
+        setNodes((nds) => nds.map((n) => (n.selected ? { ...n, selected: false } : n)))
+        onNodeSelectRef.current?.(null)
         return
       }
       const mod = e.metaKey || e.ctrlKey

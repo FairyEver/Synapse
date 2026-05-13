@@ -31,6 +31,9 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         <Badge variant={STATUS_VARIANT[result.status] ?? "outline"} className="text-xs">
           {STATUS_LABEL[result.status] ?? result.status}
         </Badge>
+        {result.status === "running" && result.progressLabel && (
+          <span className="text-xs text-muted-foreground animate-pulse">{result.progressLabel}</span>
+        )}
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onClose}>
           <X className="h-3.5 w-3.5" />
         </Button>
@@ -75,7 +78,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         )}
         {!result.input.prompt && !result.error && !activeBranchLabel && (result.output == null || result.output === "") && (
           <p className="text-muted-foreground">
-            {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : "（无可展示的输出）"}
+            {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : result.status === "running" ? "节点正在执行…" : "（无可展示的输出）"}
           </p>
         )}
       </div>
