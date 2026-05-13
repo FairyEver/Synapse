@@ -277,11 +277,21 @@ export interface ConversationUserMetaV1 extends Record<string, unknown> {
 
 export type ConversationResumePolicyV1 = "resume" | "fresh" | "continue"
 
+export interface ConversationUsageV1 extends Record<string, unknown> {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
+
 export interface ConversationEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
   projectId: string
   sessionKey: string
+  providerId?: string
+  sdkSessionId?: string
+  usage?: ConversationUsageV1
+  costUsd?: number
   platform?: string
   channelKey?: string
   workspaceKey?: string
@@ -314,6 +324,10 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).id === "string"
     && typeof (v as ConversationEntryV1).projectId === "string"
     && typeof (v as ConversationEntryV1).sessionKey === "string"
+    && isOptionalString((v as ConversationEntryV1).providerId)
+    && isOptionalString((v as ConversationEntryV1).sdkSessionId)
+    && ((v as ConversationEntryV1).usage === undefined || isConversationUsage((v as ConversationEntryV1).usage))
+    && isOptionalNumber((v as ConversationEntryV1).costUsd)
     && isOptionalString((v as ConversationEntryV1).channelKey)
     && isOptionalString((v as ConversationEntryV1).workspaceKey)
     && isOptionalString((v as ConversationEntryV1).workspacePath)
@@ -326,6 +340,34 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && isOptionalRecord((v as ConversationEntryV1).userMeta)
     && typeof (v as ConversationEntryV1).createdAt === "string"
     && typeof (v as ConversationEntryV1).updatedAt === "string",
+}
+
+export interface AgentEventEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  conversationId: string
+  turnId: string
+  eventType: string
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export const agentEventsSchema: NamespaceSchema<AgentEventEntryV1> = {
+  name: "agent.events",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AgentEventEntryV1 =>
+    isAnyRecord<AgentEventEntryV1>(v)
+    && (v as AgentEventEntryV1).schemaVersion === 1
+    && typeof (v as AgentEventEntryV1).id === "string"
+    && typeof (v as AgentEventEntryV1).projectId === "string"
+    && typeof (v as AgentEventEntryV1).conversationId === "string"
+    && typeof (v as AgentEventEntryV1).turnId === "string"
+    && typeof (v as AgentEventEntryV1).eventType === "string"
+    && isAnyRecord((v as AgentEventEntryV1).payload)
+    && typeof (v as AgentEventEntryV1).createdAt === "string",
 }
 
 export interface AuditActorV1 extends Record<string, unknown> {
@@ -1000,6 +1042,13 @@ function isConversationHistoryEntry(value: unknown): value is ConversationHistor
     && typeof value.content === "string"
     && typeof value.timestamp === "string"
     && isOptionalRecord(value.metadata)
+}
+
+function isConversationUsage(value: unknown): value is ConversationUsageV1 {
+  return isAnyRecord<ConversationUsageV1>(value)
+    && isOptionalNumber(value.inputTokens)
+    && isOptionalNumber(value.outputTokens)
+    && isOptionalNumber(value.totalTokens)
 }
 
 function isConversationResumePolicy(value: unknown): value is ConversationResumePolicyV1 {

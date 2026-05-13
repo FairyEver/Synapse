@@ -5,6 +5,7 @@ import {
   agentCompressStateSchema,
   agentCommandSettingsSchema,
   agentCommandsSchema,
+  agentEventsSchema,
   connectorsSchema,
   conversationsSchema,
   coreConfigSchema,
@@ -37,6 +38,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.command-settings",
         "agent.commands",
         "agent.compress_state",
+        "agent.events",
         "connectors",
         "conversations",
         "core.config",
@@ -95,6 +97,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(relayBindingsSchema.backend).toBe("json")
     expect(relayRunsSchema.backend).toBe("sqlite")
     expect(agentCompressStateSchema.backend).toBe("json")
+    expect(agentEventsSchema.backend).toBe("sqlite")
     expect(opsDiagnosticsSchema.backend).toBe("jsonl")
   })
 
@@ -206,6 +209,34 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         active: true,
         createdAt: "2026-04-25T00:00:00Z",
         updatedAt: "2026-04-25T00:00:00Z",
+      }),
+    ).toBe(true)
+    expect(
+      conversationsSchema.validate({
+        id: "conv-1",
+        schemaVersion: 1,
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        providerId: "anthropic",
+        sdkSessionId: "sdk-session-1",
+        usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+        costUsd: 0.01,
+        history: [],
+        active: true,
+        createdAt: "2026-05-13T00:00:00.000Z",
+        updatedAt: "2026-05-13T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(
+      agentEventsSchema.validate({
+        id: "event-1",
+        schemaVersion: 1,
+        projectId: "project-1",
+        conversationId: "conv-1",
+        turnId: "turn-1",
+        eventType: "assistant",
+        payload: { type: "assistant" },
+        createdAt: "2026-05-13T00:00:00.000Z",
       }),
     ).toBe(true)
     expect(
