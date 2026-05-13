@@ -73,8 +73,10 @@ Phase 2 不再以兼容旧 spawn CLI 架构为目标。它以 Agent SDK 的能�
 采用 Hybrid 模式：
 
 - 主路径使用 SDK Streaming Input Mode。它是 SDK 推荐模式，支持长生命周期会话、队列消息、中断、图片、权限请求、hook、MCP 与后续扩展。
-- 空闲会话可释放。再次进入对话时用 SDK session id 恢复，避免长期占用进程。
-- SDK session 异常退出时进入 recovering 状态，用已持久化 session id 恢复。
+- 每个 conversation 持有自己的 SDK `Query`。主进程通过 async input queue / `streamInput()` 给该 query 继续喂消息。
+- `startup()` 只作为会话级 warm handle 使用。`WarmQuery.query()` 只能调用一次，不能作为全局常驻 session 池。
+- 空闲会话可 `query.close()` 释放。再次进入对话时用已捕获的 SDK `session_id` 通过 `resume` 恢复，避免长期占用进程。
+- SDK session 异常退出时进入 recovering 状态，用已持久化 `session_id` 恢复。
 - 对一次性后台任务或超时任务，可用 `maxTurns` + `AbortController` 创建短生命周期执行。
 
 状态机：
@@ -150,6 +152,7 @@ electron/services/agent-runtime/
 - 保留 SDK 原始语义和主要字段，不降级成旧的 7 类事件。
 - 高频 partial message 可按帧合并，避免 IPC 洪泛。
 - SDK 新增消息类型时优先落到 `sdkRaw` 或 `unknown` 分支，避免前端崩溃。
+- 前端先完整渲染核心事件；Meta 事件先进入通用 `sdkEvent` timeline/log 分支，后续按使用频率逐个做专门 UI。
 
 事件分层：
 
@@ -174,6 +177,18 @@ electron/services/agent-runtime/
 
 这意味着对话中仍会弹出权限确认；只是实现通道从旧的自定义 pending permission 队列换成 SDK 的 `canUseTool` callback。
 
+#### Definitions 与生成体系
+
+Phase 2 删除 adapter 后，`src/definitions/main-types.ts` 和 `src/definitions/agent/claude-code/agent-main.ts` 不能继续暴露 `createAdapter()`、`AgentAdapter`、`ClaudeProcessRunner`、`ProviderRuntimeView`。
+
+调整方向：
+
+- renderer definition 保留：`agent-shared.ts`、`agent.ts` 仍提供 label、icon、commands、displayProfile。
+- main runtime definition 精简为 SDK metadata，不再创建 adapter。
+- Claude Code provider env 构建迁移到 `electron/services/provider/provider-service.ts`。
+- `getRuntimeStatus` 不再检测系统 `claude` CLI 是否存在；SDK binary 随依赖分发，状态改为检查 SDK/provider/key/model 是否可用。
+- 继续运行 `generate:definitions-registry`，但生成结果不应再引用 adapter 类型。
+
 ### Provider 模块重写
 
 **删除：** `electron/services/provider-config/` 整个目录
@@ -183,7 +198,7 @@ electron/services/agent-runtime/
 ```
 electron/services/provider/
 ├── provider-service.ts       — Provider CRUD + 活跃选择 + buildEnv(providerId)
-├── provider-secret-store.ts  — safeStorage 加密存取 API Key
+├── provider-secret-store.ts  — 基于 DataRepository secrets namespace 读写 API Key
 ├── provider-presets.ts       — 内置预设列表（参考 CC Switch）
 └── types.ts                  — 类型定义
 ```
@@ -242,11 +257,12 @@ type ProviderCategory =
 
 #### 存储策略
 
-采用 SQLite 单一存储：
+采用现有 DataRepository 边界，不绕过仓库的 schema、备份和 project scope 迁移体系：
 
-- Provider 明文元数据存普通列或 JSON 列。
-- API Key 由 `safeStorage.encryptString()` 加密后存 SQLite blob。
-- active provider 记录在 provider 表中，保证同一时间只有一个 active。
+- Provider 明文元数据存 `providers` namespace。当前实现是 JSON backend；Phase 2 可扩展 schema 字段，不直接创建裸 SQLite 表。
+- API Key 存 `secrets` namespace。该 namespace 已是 `encrypted-json` backend，由 Electron `safeStorage` 加密。
+- Provider 记录只保存 `secretRef`，不直接保存密钥明文或密文 blob。
+- active provider 记录在 provider state 中，保证同一时间只有一个 active。
 - 删除 provider 前检查是否被 conversation 引用；已被引用的 provider 不物理删除，改为 archived，保证历史对话可恢复 env 元数据。
 
 CC Switch 的做法是把 provider 与 key 明文写入本地 JSON，并切换时写入 Claude Code settings。Synapse 是运行时宿主，不做全局写文件切换，因此不沿用该存储方式。
@@ -255,18 +271,17 @@ CC Switch 的做法是把 provider 与 key 明文写入本地 JSON，并切换�
 
 ```typescript
 // provider-secret-store.ts
-import { safeStorage } from "electron"
+import type { DataNamespace, SecretEntryV1 } from "../../runtime/data-repo"
 
 class ProviderSecretStore {
-  // 加密存储：safeStorage.encryptString(apiKey) → Buffer → 写入 SQLite blob
-  // 解密读取：safeStorage.decryptString(buffer) → string
+  // secrets namespace 底层负责 safeStorage 加密
   async setApiKey(providerId: string, apiKey: string): Promise<void>
   async getApiKey(providerId: string): Promise<string | undefined>
   async deleteApiKey(providerId: string): Promise<void>
 }
 ```
 
-如果 `safeStorage.isEncryptionAvailable()` 为 false，ProviderSecretStore 返回明确错误，UI 提示用户当前系统环境不支持安全保存密钥；Phase 2 不落回明文。
+如果 `safeStorage.isEncryptionAvailable()` 为 false，`secrets` backend 会返回明确错误，UI 提示用户当前系统环境不支持安全保存密钥；Phase 2 不落回明文。
 
 #### 对话级 Provider 绑定
 
@@ -279,7 +294,7 @@ query({
   prompt,
   options: {
     cwd,
-    sessionId,
+    resume: conversation.sdkSessionId,
     env: providerService.buildEnv(conversation.providerId),
   },
 })
@@ -290,50 +305,43 @@ query({
 
 #### Conversation 数据模型
 
-Phase 2 使用新的 SQLite 表记录 SDK 对话，和旧 data-repo conversation entry 隔离。旧数据不迁移，旧字段保留用于兼容读取。
+Phase 2 不新建平行主 conversation 表。现有 `conversations` namespace 已是 SQLite-backed DataRepository，且被 Agent UI、Feishu、bridge adapter、relay、scheduler、prompt-run 共同消费。直接换表会让这些入口断开。
+
+调整现有 `ConversationEntryV1`：
 
 ```text
-agent_conversations
-├── id              TEXT PRIMARY KEY
-├── project_id      TEXT NOT NULL
-├── title           TEXT NOT NULL
-├── provider_id     TEXT NOT NULL
-├── sdk_session_id  TEXT
-├── status          TEXT NOT NULL      -- active | archived
-├── message_count   INTEGER NOT NULL
-├── total_tokens    INTEGER NOT NULL
-├── total_cost_usd  REAL NOT NULL
-├── created_at      TEXT NOT NULL
-└── updated_at      TEXT NOT NULL
-
-agent_conversation_messages
-├── id              TEXT PRIMARY KEY
-├── conversation_id TEXT NOT NULL
-├── role            TEXT NOT NULL      -- user | assistant | system | tool
-├── content         TEXT NOT NULL
-├── content_blocks  TEXT               -- JSON, SDK bridge blocks
-├── thinking        TEXT
-├── tool_uses       TEXT               -- JSON array
-├── usage           TEXT               -- JSON object
-├── cost_usd        REAL
-└── created_at      TEXT NOT NULL
-
-agent_conversation_events
-├── id              TEXT PRIMARY KEY
-├── conversation_id TEXT NOT NULL
-├── turn_id         TEXT NOT NULL
-├── event_type      TEXT NOT NULL
-├── payload         TEXT NOT NULL      -- JSON, bridge event payload
-└── created_at      TEXT NOT NULL
+ConversationEntryV1
+├── providerId?: string
+├── sdkSessionId?: string
+├── usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+├── costUsd?: number
+└── history[].metadata may include sdkEventType, sdkContentBlocks, usage, costUsd
 ```
+
+新增可选 event namespace：
+
+```text
+agent.events
+├── id              TEXT/string key
+├── schemaVersion   1
+├── projectId       string
+├── conversationId  string
+├── turnId          string
+├── eventType       string
+├── payload         Record<string, unknown>
+└── createdAt       string
+```
+
+`agent.events` 用 DataRepository namespace 实现，不直接创建裸 SQLite 表。第一版可只持久化核心 timeline 事件到 `history`，同时把完整 bridge payload 存到 `agent.events` 供后续重放、调试和增强 UI。
 
 设计要点：
 
-- `provider_id` 创建后不可改。
-- `sdk_session_id` 捕获 SDK 初始化结果，用于恢复。
-- message 表存可展示的归并结果，event 表存细粒度 SDK bridge 事件，方便后续重放、调试和增强 UI。
-- 成本与 token 由 SDK result 消息累加。
-- 后续扩展多供应商运营字段时优先扩 provider 表，不污染 conversation 表。
+- `providerId` 创建后不可改。
+- `sdkSessionId` 捕获 SDK init/result 的 `session_id`，用于恢复。
+- `history` 继续服务现有 timeline UI 和外部集成，避免一次性重写所有消费者。
+- `agent.events` 存细粒度 SDK bridge 事件，后续可逐步替代 history 的弱结构。
+- 成本与 token 由 SDK result 消息累加到 conversation，同时保存到对应 turn metadata。
+- 后续扩展多供应商运营字段时优先扩 provider schema，不污染 conversation 主字段。
 
 ### 前端 Provider UI
 
@@ -356,11 +364,13 @@ UI 遵守当前 shadcn/Radix baseline，不新增自定义颜色或视觉体系�
 ### 实施顺序
 
 1. 安装 SDK，建立 `ClaudeSDKSession`、bridge 类型和基础测试。
-2. 重写 agent runtime：删除 adapters 和 `message-router.ts`，拆出 `SessionManager` 与 `ConversationRouter`。
-3. 新建 provider service、secret store、presets 和 SQLite 存储。
-4. 加入 conversation provider 绑定和 SDK env 注入。
-5. 重做 IPC 与前端 Provider UI。
-6. 删除旧 provider-config 调用点，补齐类型检查、单元测试和 hard constraints 检查。
+2. 调整 definitions/main registry，删除 adapter/process runner 类型，保留 renderer metadata。
+3. 新建 provider service、secret store、presets，并复用 DataRepository `providers` / `secrets` namespaces。
+4. 扩展 conversation schema 与可选 `agent.events` namespace，加入 provider 绑定和 SDK session id。
+5. 重写 agent runtime：删除 adapters 和 `message-router.ts`，拆出 `SessionManager` 与 `ConversationRouter`。
+6. 接入 SDK env 注入、权限 callback、cancel/interrupt、scheduled/relay timeout。
+7. 重做 IPC 与前端 Provider UI，核心事件先完整渲染，Meta 事件进入通用 `sdkEvent`。
+8. 删除旧 provider-config 调用点，补齐类型检查、单元测试和 hard constraints 检查。
 
 ## 风险与缓解
 
@@ -371,10 +381,11 @@ UI 遵守当前 shadcn/Radix baseline，不新增自定义颜色或视觉体系�
 | SDK 消息类型持续扩展 | bridge 层保留 unknown/sdkRaw 分支，前端不会因未知类型崩溃 |
 | streaming input 常驻资源 | `SessionManager` 做 idle 回收，恢复时使用 sdk session id |
 | 权限 callback 长时间等待 | 使用 AbortController 取消；后续需要跨进程长期挂起时再补 defer hook |
-| safeStorage 在 Linux 上需要 libsecret | Phase 2 不明文 fallback；UI 明确提示安全存储不可用 |
-| 已有对话数据的 agentType 字段 | 保留旧字段，SDK 新表和旧 data-repo entry 隔离 |
+| safeStorage 在 Linux 上需要 libsecret | 复用 encrypted `secrets` namespace；Phase 2 不明文 fallback；UI 明确提示安全存储不可用 |
+| 已有对话数据的 agentType 字段 | 保留旧字段，扩展现有 `ConversationEntryV1`，不做破坏性迁移 |
 | Provider 预设需要持续维护 | 预设转换源参考 CC Switch，Synapse 保留自定义 provider |
 | MessageRouter 重写范围大 | 先用单元测试锁住 governance、slash command、eventBus、cancel、provider env 等行为 |
+| 新建平行存储破坏现有入口 | 不新建裸表；通过 DataRepository namespaces 扩展，保持备份、迁移和消费者兼容 |
 
 ## 不在范围内
 
