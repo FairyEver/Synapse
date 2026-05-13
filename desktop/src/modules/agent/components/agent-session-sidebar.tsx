@@ -15,7 +15,7 @@ import {
   ModuleSidebarList,
 } from "@/components/module-sidebar"
 import { requestOpenSettingsTab } from "@/app-shell/navigation"
-import type { SynapseAgentAvailability, SynapseAgentSessionSummary } from "@/types/agent"
+import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { ArchivedGroup } from "./archived-group"
 import { ProjectGroup } from "./project-group"
 
@@ -29,12 +29,11 @@ type AgentSessionSidebarProps = {
   sessions: SynapseAgentSessionSummary[]
   archivedSessions: SynapseAgentSessionSummary[]
   projects: ProjectOption[]
-  availableAgents: SynapseAgentAvailability[]
   selectedProjectId?: string
   selectedConversationId?: string
   followFeishu: boolean
   unreadByConversationId: Record<string, number>
-  onCreateSession: (projectId: string, agentType: string) => void
+  onCreateSession: (projectId: string) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
@@ -46,7 +45,6 @@ function AgentSessionSidebar({
   sessions,
   archivedSessions,
   projects,
-  availableAgents,
   selectedProjectId,
   selectedConversationId,
   followFeishu,
@@ -98,11 +96,10 @@ function AgentSessionSidebar({
                 key={project.id}
                 project={project}
                 sessions={sessionsByProject.get(project.id) ?? []}
-                availableAgents={availableAgents}
                 selectedProjectId={selectedProjectId}
                 selectedConversationId={selectedConversationId}
                 unreadByConversationId={unreadByConversationId}
-                onCreateSession={(agentType) => onCreateSession(project.id, agentType)}
+                onCreateSession={() => onCreateSession(project.id)}
                 onSelect={onSelect}
                 onDelete={onDelete}
                 onDeleteOthers={onDeleteOthers}

@@ -23,7 +23,7 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
-import type { SynapseAgentAvailability, SynapseAgentDisplayProfile } from "@/types/agent"
+import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
@@ -72,7 +72,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     return runtimeStatus.agents.some((agent) => agent.cli.installed)
   }, [runtimeStatus])
   const [draft, setDraft] = useState("")
-  const [availableAgents, setAvailableAgents] = useState<SynapseAgentAvailability[]>([])
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
   const latestEntry = chat.timeline.at(-1)
@@ -93,12 +92,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       path: project.path,
     })),
   [config.global.projects])
-
-  useEffect(() => {
-    const bridge = getSynapseBridge()
-    if (!bridge) return
-    void bridge.agent.getAvailableAgents().then(setAvailableAgents)
-  }, [])
 
   useEffect(() => {
     stick.forcePin()
@@ -204,12 +197,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       sessions={chat.sessions}
       archivedSessions={chat.archivedSessions}
       projects={projectOptions}
-      availableAgents={availableAgents}
       selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
-      onCreateSession={(projectId, agentType) => void chat.createSession(projectId, agentType)}
+      onCreateSession={(projectId) => void chat.createSession(projectId, "claude-code")}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onDeleteOthers={(keep) => {

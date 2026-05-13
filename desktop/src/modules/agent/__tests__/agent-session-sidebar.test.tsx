@@ -20,7 +20,6 @@ describe("AgentSessionSidebar", () => {
         }]}
         archivedSessions={[]}
         projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
-        availableAgents={[]}
         selectedProjectId="project-local"
         selectedConversationId="local-conv"
         followFeishu={true}
