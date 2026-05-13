@@ -122,7 +122,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   }
 
   alive(): boolean {
-    return !this.closed && !this.finished
+    return !this.closed && (!this.finished || this.eventQueue.hasValues())
   }
 
   async cancelCurrentTurn(): Promise<boolean> {
@@ -387,6 +387,10 @@ class AsyncQueue<T> implements AsyncIterable<T> {
         resolve(result.done ? null : result.value)
       })
     })
+  }
+
+  hasValues(): boolean {
+    return this.values.length > 0
   }
 
   close(): void {

@@ -132,6 +132,21 @@ describe("ClaudeSDKSession", () => {
     await expect(session.nextEvent()).resolves.toBeNull()
   })
 
+  it("stays alive until queued terminal events are drained", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    query.rejectNext(new Error("sdk exploded"))
+    await waitFor(() => !query.hasWaiters())
+
+    expect(session.alive()).toBe(true)
+    await expect(session.nextEvent()).resolves.toMatchObject({
+      type: "error",
+      message: "sdk exploded",
+    })
+    expect(session.alive()).toBe(false)
+  })
+
   it("releases event waiters when SDK close throws", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)
@@ -239,6 +254,16 @@ function resolveSoon<T>(promise: Promise<T>): Promise<T | "timeout"> {
   ])
 }
 
+async function waitFor(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (condition()) return
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0)
+    })
+  }
+  throw new Error("condition was not met")
+}
+
 function createQueryFactory(): {
   readonly factory: QueryFactory
   readonly query: FakeQuery
@@ -298,5 +323,9 @@ class FakeQuery implements QueryLike {
     const reject = this.rejecters.shift()
     this.waiters.shift()
     if (reject) reject(error)
+  }
+
+  hasWaiters(): boolean {
+    return this.waiters.length > 0
   }
 }
