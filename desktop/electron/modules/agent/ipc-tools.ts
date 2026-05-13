@@ -5,9 +5,6 @@ import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
-import { whichBin } from "../../services/agent-runtime/binary-detect-service"
-import { AgentAvailabilityService } from "../../services/agent-runtime/agent-availability-service"
-import { agentRuntimeDefinitions } from "../../services/definitions/generated/main-registry"
 import { resolveProjectAgent } from "./ipc-shared"
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
@@ -116,34 +113,40 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: runtimeStatusRequestSchema,
     response: runtimeStatusSchema,
     handler: async (ctx, request: { projectId?: string }) => {
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const execFileAsync = promisify(execFile)
+      let claudePath: string | null = null
+      try {
+        const { stdout } = await execFileAsync("which", ["claude"])
+        const trimmed = stdout.trim()
+        if (trimmed.length > 0) claudePath = trimmed
+      } catch {
+        claudePath = null
+      }
       const providerConfig = request.projectId
         ? (await resolveProjectAgent(ctx.resolve, request.projectId)).providerConfig
         : undefined
-      const agents = await Promise.all(agentRuntimeDefinitions.map(async (definition) => {
-        const binary = definition.runtime.binaries[0]
-        const path = binary ? await whichBin(binary) : null
-        const provider = request.projectId && providerConfig
-          ? await providerConfig.getProjectProviderState(request.projectId, definition.id)
-          : undefined
-        const activeProvider = provider?.activeProvider
-        const providerConfigured = Boolean(provider && provider.providers.length > 0)
-        const issues: string[] = []
-        if (binary && !path) issues.push("cli-not-installed")
-        if (request.projectId && !providerConfigured) {
-          issues.push("provider-not-configured")
-        }
-        if (request.projectId && activeProvider && !provider.activeModel) {
-          issues.push("model-not-selected")
-        }
-        return {
-          id: definition.id,
-          label: definition.label,
+      const provider = request.projectId && providerConfig
+        ? await providerConfig.getProjectProviderState(request.projectId, "claude-code")
+        : undefined
+      const activeProvider = provider?.activeProvider
+      const providerConfigured = Boolean(provider && provider.providers.length > 0)
+      const issues: string[] = []
+      if (!claudePath) issues.push("cli-not-installed")
+      if (request.projectId && !providerConfigured) issues.push("provider-not-configured")
+      if (request.projectId && activeProvider && !provider?.activeModel) issues.push("model-not-selected")
+      return {
+        projectId: request.projectId,
+        agents: [{
+          id: "claude-code",
+          label: "Claude Code",
           ready: issues.length === 0,
           cli: {
-            required: definition.runtime.kind === "local-cli",
-            binary,
-            installed: path !== null,
-            path,
+            required: true,
+            binary: "claude",
+            installed: claudePath !== null,
+            path: claudePath,
           },
           provider: request.projectId ? {
             projectId: request.projectId,
@@ -152,11 +155,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
             activeModel: activeProvider ? provider?.activeModel : undefined,
           } : undefined,
           issues,
-        }
-      }))
-      return {
-        projectId: request.projectId,
-        agents,
+        }],
       }
     },
   },
@@ -171,15 +170,24 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       binaryPath: z.string().optional(),
     })),
     handler: async () => {
-      const service = new AgentAvailabilityService({
-        whichBin,
-        definitions: agentRuntimeDefinitions.map((def) => ({
-          id: def.id,
-          label: def.label,
-          runtime: def.runtime,
-        })),
-      })
-      return await service.detectAll()
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const execFileAsync = promisify(execFile)
+      let binaryPath: string | undefined
+      let available = false
+      try {
+        const { stdout } = await execFileAsync("which", ["claude"])
+        binaryPath = stdout.trim()
+        available = binaryPath.length > 0
+      } catch {
+        available = false
+      }
+      return [{
+        agentType: "claude-code",
+        label: "Claude Code",
+        available,
+        binaryPath,
+      }]
     },
   },
   listCommands: {

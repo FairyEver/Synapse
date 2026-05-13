@@ -170,13 +170,6 @@ export type SynapseAgentTimelineItem =
   | SynapseAgentResultTimelineItem
   | SynapseAgentPhaseTimelineItem
 
-export interface SynapseAgentAvailability {
-  readonly agentType: string
-  readonly label: string
-  readonly available: boolean
-  readonly binaryPath?: string
-}
-
 export type SynapseAgentToolCollapseDefault = "expanded" | "collapsed" | "auto"
 
 export interface SynapseAgentToolDisplayRule {
