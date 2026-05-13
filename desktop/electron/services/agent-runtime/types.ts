@@ -52,6 +52,7 @@ interface AgentEventBase {
   readonly conversationId?: string
   readonly turnId?: string
   readonly providerId?: string
+  readonly projectId?: string
   readonly sdkSessionId?: string
   readonly timestamp?: string
 }
