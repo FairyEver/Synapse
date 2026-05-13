@@ -121,6 +121,85 @@ describe("AgentTimeline", () => {
     expect(html).toContain("first second")
   })
 
+  it("dedupes assistant full text after matching stream chunks", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      text: "hello",
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const reconciled = appendAgentTimelineEvent(streamed, {
+      type: "assistant",
+      contentBlocks: [{ type: "text", text: "hello" }],
+    }, "2026-05-12T00:00:01.000Z", "claude")
+
+    expect(reconciled).toHaveLength(1)
+    expect(reconciled[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "hello",
+    }))
+  })
+
+  it("replaces partial stream content with assistant full text", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      text: "hello",
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const reconciled = appendAgentTimelineEvent(streamed, {
+      type: "assistant",
+      contentBlocks: [{ type: "text", text: "hello world" }],
+    }, "2026-05-12T00:00:01.000Z", "claude")
+
+    expect(reconciled).toHaveLength(1)
+    expect(reconciled[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "hello world",
+    }))
+  })
+
+  it("keeps assistant text when result content is blank and preserves metadata", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      text: "hello world",
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const reconciled = appendAgentTimelineEvent(streamed, {
+      type: "result",
+      content: "",
+      done: true,
+      metadata: {
+        model: "claude-sonnet-4-5",
+      },
+    }, "2026-05-12T00:00:01.000Z", "claude")
+
+    expect(reconciled).toHaveLength(1)
+    expect(reconciled[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "hello world",
+      metadata: expect.objectContaining({
+        model: "claude-sonnet-4-5",
+      }),
+    }))
+  })
+
+  it("extracts assistant text from nested message content arrays", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "nested" },
+          { type: "text", text: " content" },
+        ],
+      },
+    }, "2026-05-12T00:00:00.000Z", "claude")
+
+    expect(items[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "nested content",
+    }))
+  })
+
   it("renders sdk events as compact generic rows", () => {
     const items = appendAgentTimelineEvent([], {
       type: "sdkEvent",
@@ -158,5 +237,42 @@ describe("AgentTimeline", () => {
         costUsd: 0.05,
       }),
     }))
+  })
+
+  it("preserves top-level result usage and cost metadata", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "result",
+      content: "done",
+      done: true,
+      usage: { inputTokens: 10, outputTokens: 5 },
+      costUsd: 0.05,
+    }, "2026-05-12T00:00:00.000Z", "claude")
+
+    expect(items[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      metadata: expect.objectContaining({
+        usage: { inputTokens: 10, outputTokens: 5 },
+        costUsd: 0.05,
+      }),
+    }))
+  })
+
+  it("does not render sdk event payload values", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "sdkEvent",
+      sdkType: "system",
+      payload: {
+        token: "secret-token-value",
+        large: "x".repeat(500),
+      },
+    }, "2026-05-12T00:00:00.000Z", "claude")
+
+    const html = renderTimeline({ items })
+
+    expect(html).toContain("SDK event")
+    expect(html).toContain("system")
+    expect(html).not.toContain("secret-token-value")
+    expect(html).not.toContain("xxxxxxxxxxxxxxxxxxxx")
   })
 })

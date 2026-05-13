@@ -27,9 +27,9 @@ export function agentEventToTimelineItem(
     id: context.id,
     timestamp: context.timestamp,
     agentType: context.agentType,
-    sdkSessionId: eventId(event, "sdkSessionId"),
-    agentSessionId: eventId(event, "agentSessionId"),
-    threadId: eventId(event, "threadId"),
+    sdkSessionId: event.sdkSessionId,
+    agentSessionId: event.agentSessionId,
+    threadId: event.threadId,
   }
   switch (event.type) {
     case "text":
@@ -190,8 +190,18 @@ export function appendAgentTimelineEvent(
     if (last.content === content || last.content.endsWith(content)) return [...current]
     return [...current.slice(0, -1), { ...last, content: `${last.content}${content}`, timestamp }]
   }
+  if (event.type === "assistant" && item.kind === "message" && last?.kind === "message" && last.role === "assistant") {
+    if (last.content === item.content) return [...current]
+    if (item.content.startsWith(last.content)) {
+      return [...current.slice(0, -1), { ...last, content: item.content, timestamp }]
+    }
+    return [...current, item]
+  }
   if (event.type === "result" && last?.kind === "message" && last.role === "assistant") {
     const metadata = resultMetadata(event)
+    if (event.content.trim().length === 0) {
+      return metadata ? [...current.slice(0, -1), { ...last, metadata, timestamp }] : [...current]
+    }
     if (last.content === event.content) {
       return metadata ? [...current.slice(0, -1), { ...last, metadata, timestamp }] : [...current]
     }
@@ -260,10 +270,6 @@ function recordMetadata(metadata: Record<string, unknown> | undefined, key: stri
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
-}
-
-function eventId(event: SynapseAgentEvent, key: "sdkSessionId" | "agentSessionId" | "threadId"): string | undefined {
-  return stringValue(recordValue(event)?.[key])
 }
 
 function resultMetadata(event: Extract<SynapseAgentEvent, { type: "result" }>): SynapseAgentResultMetadata | undefined {

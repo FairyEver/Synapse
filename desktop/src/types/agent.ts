@@ -1,23 +1,25 @@
-export type SynapseAgentEvent =
+export interface SynapseAgentEventBase {
+  readonly sdkSessionId?: string
+  readonly agentSessionId?: string
+  readonly threadId?: string
+  readonly timestamp?: string
+  readonly payload?: Record<string, unknown>
+}
+
+export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
       type: "text"
       content: string
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "thinking"
       content: string
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "toolUse"
       toolName: string
       toolInput?: string
       toolInputRaw?: Record<string, unknown>
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "toolResult"
@@ -26,8 +28,6 @@ export type SynapseAgentEvent =
       status?: string
       exitCode?: number
       success?: boolean
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "permissionRequest"
@@ -35,8 +35,6 @@ export type SynapseAgentEvent =
       toolName: string
       toolInput?: string
       toolInputRaw?: Record<string, unknown>
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "result"
@@ -53,36 +51,25 @@ export type SynapseAgentEvent =
       }
       usage?: Record<string, unknown>
       costUsd?: number
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "error"
       message: string
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "assistant"
       contentBlocks?: unknown[]
       content?: string
       message?: Record<string, unknown>
-      sdkSessionId?: string
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "stream"
       deltaType?: string
       text?: string
       event?: Record<string, unknown>
-      sdkSessionId?: string
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "sessionInit"
-      sdkSessionId?: string
       tools?: string[]
       model?: string
     }
@@ -93,7 +80,6 @@ export type SynapseAgentEvent =
     }
   | {
       type: "compactBoundary"
-      sdkSessionId?: string
     }
   | {
       type: "sdkEvent"
@@ -101,6 +87,7 @@ export type SynapseAgentEvent =
       sdkSubtype?: string
       payload: Record<string, unknown>
     }
+)
 
 export type SynapseAgentPhaseValue =
   | "submitted"
