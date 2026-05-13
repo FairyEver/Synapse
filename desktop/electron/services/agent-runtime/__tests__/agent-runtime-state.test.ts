@@ -106,189 +106,25 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
   })
 })
 
-describe("AgentRuntimeService — per-conversation adapter resolution", () => {
-  it("resolves adapter using conversation agentType instead of project default", async () => {
+describe("AgentRuntimeService — adapter resolution always returns deps.adapter", () => {
+  it("always uses the injected adapter regardless of conversation agentType", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const adapter = new BlockingAdapter()
-
-    // Track what agentType the adapterFactory receives
-    const factoryCalls: string[] = []
-    const adapterFactory = vi.fn((view: { agentType: string }) => {
-      factoryCalls.push(view.agentType)
-      return adapter
-    })
-
-    // Mock providerConfig that returns a view with whatever agentType is passed in
-    const providerConfig = {
-      getActiveAgentType: vi.fn().mockResolvedValue("codex"),
-      resolveRuntimeConfig: vi.fn((_projectId: string, agentType: string) =>
-        Promise.resolve({
-          projectId: "project-1",
-          agentType,
-          providers: [],
-          env: {},
-          envAllowlist: [],
-        }),
-      ),
-    }
-
-    // Pre-seed a conversation with agentType "claude-code"
-    const convId = "conv-cc-1"
-    await conversations.upsert({
-      id: convId,
-      schemaVersion: 1,
-      projectId: "project-1",
-      sessionKey: "s1",
-      platform: "local",
-      agentType: "claude-code",
-      history: [],
-      active: true,
-      createdAt: "2026-04-26T00:00:00.000Z",
-      updatedAt: "2026-04-26T00:00:00.000Z",
-    })
 
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
       adapter,
-      agentType: "codex",
-      providerConfig: providerConfig as never,
-      adapterFactory,
       now: fixedNow,
     })
 
     const p = service.send(baseMessage("hello"))
     await tick()
     adapter.resolveNext("reply", "thread-1")
-    await p
+    const result = await p
 
-    // The adapter factory should have been called with "claude-code" (conversation's type),
-    // not "codex" (the project default from getActiveAgentType)
-    expect(factoryCalls).toEqual(["claude-code"])
-    expect(providerConfig.resolveRuntimeConfig).toHaveBeenCalledWith(
-      "project-1",
-      "claude-code",
-      expect.anything(),
-    )
-    // getActiveAgentType should NOT have been called since the override was provided
-    expect(providerConfig.getActiveAgentType).not.toHaveBeenCalled()
-  })
-
-  it("falls back to project default when conversation has no agentType", async () => {
-    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BlockingAdapter()
-
-    const factoryCalls: string[] = []
-    const adapterFactory = vi.fn((view: { agentType: string }) => {
-      factoryCalls.push(view.agentType)
-      return adapter
-    })
-
-    const providerConfig = {
-      getActiveAgentType: vi.fn().mockResolvedValue("codex"),
-      resolveRuntimeConfig: vi.fn((_projectId: string, agentType: string) =>
-        Promise.resolve({
-          projectId: "project-1",
-          agentType,
-          providers: [],
-          env: {},
-          envAllowlist: [],
-        }),
-      ),
-    }
-
-    // Pre-seed a conversation WITHOUT agentType
-    const convId = "conv-no-type"
-    await conversations.upsert({
-      id: convId,
-      schemaVersion: 1,
-      projectId: "project-1",
-      sessionKey: "s1",
-      platform: "local",
-      history: [],
-      active: true,
-      createdAt: "2026-04-26T00:00:00.000Z",
-      updatedAt: "2026-04-26T00:00:00.000Z",
-    })
-
-    const service = new AgentRuntimeService({
-      projectId: "project-1",
-      workDir: "/repo",
-      conversations,
-      adapter,
-      agentType: "codex",
-      providerConfig: providerConfig as never,
-      adapterFactory,
-      now: fixedNow,
-    })
-
-    const p = service.send(baseMessage("hello"))
-    await tick()
-    adapter.resolveNext("reply", "thread-1")
-    await p
-
-    // Should fall back to getActiveAgentType since conversation.agentType is undefined
-    expect(factoryCalls).toEqual(["codex"])
-    expect(providerConfig.getActiveAgentType).toHaveBeenCalled()
-  })
-
-  it("lazily writes back resolved agentType to legacy conversation record", async () => {
-    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BlockingAdapter()
-
-    const factoryCalls: string[] = []
-    const adapterFactory = vi.fn((view: { agentType: string }) => {
-      factoryCalls.push(view.agentType)
-      return adapter
-    })
-
-    const providerConfig = {
-      getActiveAgentType: vi.fn().mockResolvedValue("codex"),
-      resolveRuntimeConfig: vi.fn((_projectId: string, agentType: string) =>
-        Promise.resolve({
-          projectId: "project-1",
-          agentType,
-          providers: [],
-          env: {},
-          envAllowlist: [],
-        }),
-      ),
-    }
-
-    // Pre-seed a legacy conversation WITHOUT agentType
-    const convId = "conv-legacy-writeback"
-    await conversations.upsert({
-      id: convId,
-      schemaVersion: 1,
-      projectId: "project-1",
-      sessionKey: "s1",
-      platform: "local",
-      history: [],
-      active: true,
-      createdAt: "2026-04-26T00:00:00.000Z",
-      updatedAt: "2026-04-26T00:00:00.000Z",
-    } as ConversationEntryV1)
-
-    const service = new AgentRuntimeService({
-      projectId: "project-1",
-      workDir: "/repo",
-      conversations,
-      adapter,
-      agentType: "codex",
-      providerConfig: providerConfig as never,
-      adapterFactory,
-      now: fixedNow,
-    })
-
-    const p = service.send(baseMessage("hello"))
-    await tick()
-    adapter.resolveNext("reply", "thread-1")
-    await p
-
-    // After the turn, the conversation record should have agentType written back
-    const updated = await conversations.get(convId)
-    expect(updated!.agentType).toBe("codex")
+    expect(result.resultText).toBe("reply")
   })
 })
 
@@ -370,7 +206,7 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 import type { AgentExecutionContext, AgentExecutionResult, AgentAdapter } from "../types"
 
 class BlockingAdapter implements AgentAdapter {
-  readonly agentType = "codex"
+  readonly agentType = "claude-code"
   readonly started: string[] = []
   private readonly pending: Array<(result: AgentExecutionResult) => void> = []
 
@@ -436,7 +272,7 @@ describe("AgentRuntimeService — idle session reclaim", () => {
 
   function mockLiveSession() {
     return {
-      agentType: "codex",
+      agentType: "claude-code",
       close: vi.fn().mockResolvedValue(undefined),
       alive: vi.fn().mockReturnValue(true),
       send: vi.fn(),

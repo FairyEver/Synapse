@@ -127,31 +127,27 @@ describe("agentIpcModule", () => {
   it("returns Agent runtime readiness without exposing secrets", async () => {
     const harness = createHarness({
       providerConfig: {
-        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, agentType: string) => ({
+        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, _agentType: string) => ({
           projectId: "project-1",
-          agentType,
-          activeProviderId: "openai",
-          activeModel: "gpt-5.4",
-          activeProvider: agentType === "codex"
-            ? {
-                id: "openai",
-                display: "OpenAI",
-                model: "gpt-5.4",
-                baseUrl: "https://api.example.test",
-                secretRef: "secret:openai",
-                scope: "global",
-              }
-            : undefined,
-          providers: agentType === "codex"
-            ? [{
-                id: "openai",
-                display: "OpenAI",
-                model: "gpt-5.4",
-                baseUrl: "https://api.example.test",
-                secretRef: "secret:openai",
-                scope: "global",
-              }]
-            : [],
+          agentType: "claude-code",
+          activeProviderId: "anthropic",
+          activeModel: "claude-sonnet-4.5",
+          activeProvider: {
+            id: "anthropic",
+            display: "Anthropic",
+            model: "claude-sonnet-4.5",
+            baseUrl: "https://api.example.test",
+            secretRef: "secret:anthropic",
+            scope: "global",
+          },
+          providers: [{
+            id: "anthropic",
+            display: "Anthropic",
+            model: "claude-sonnet-4.5",
+            baseUrl: "https://api.example.test",
+            secretRef: "secret:anthropic",
+            scope: "global",
+          }],
         })),
       },
     })
@@ -171,62 +167,44 @@ describe("agentIpcModule", () => {
       }[]
     }
 
-    expect(result.agents.map((agent) => agent.id)).toEqual(["claude-code", "codex", "hermes"])
-    expect(result.agents.find((agent) => agent.id === "codex")).toEqual(expect.objectContaining({
+    expect(result.agents.map((agent) => agent.id)).toEqual(["claude-code"])
+    expect(result.agents.find((agent) => agent.id === "claude-code")).toEqual(expect.objectContaining({
       ready: expect.any(Boolean),
       provider: {
-        activeProviderId: "openai",
-        activeModel: "gpt-5.4",
+        activeProviderId: "anthropic",
+        activeModel: "claude-sonnet-4.5",
         configured: true,
         projectId: "project-1",
       },
     }))
-    expect(result.agents.find((agent) => agent.id === "claude-code")?.issues).toContain("provider-not-configured")
-    expect(result.agents.find((agent) => agent.id === "claude-code")?.provider).toEqual({
-      activeProviderId: undefined,
-      activeModel: undefined,
-      configured: false,
-      projectId: "project-1",
-    })
-    expect(JSON.stringify(result)).not.toContain("secret:openai")
+    expect(JSON.stringify(result)).not.toContain("secret:anthropic")
     expect(JSON.stringify(result)).not.toContain("secretRef")
   })
 
   it("does not mark an agent provider as unconfigured when matching providers exist", async () => {
     const harness = createHarness({
       providerConfig: {
-        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, agentType: string) => ({
+        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, _agentType: string) => ({
           projectId: "project-1",
-          agentType,
-          activeProviderId: "openai",
-          activeModel: "gpt-5.4",
-          activeProvider: agentType === "codex"
-            ? {
-                id: "openai",
-                display: "OpenAI",
-                model: "gpt-5.4",
-                baseUrl: "https://api.example.test",
-                secretRef: "secret:openai",
-                scope: "global",
-              }
-            : undefined,
-          providers: agentType === "codex"
-            ? [{
-                id: "openai",
-                display: "OpenAI",
-                model: "gpt-5.4",
-                baseUrl: "https://api.example.test",
-                secretRef: "secret:openai",
-                scope: "global",
-              }]
-            : [{
-                id: "anthropic",
-                display: "Anthropic",
-                model: "claude-sonnet-4.5",
-                baseUrl: "https://api.anthropic.example.test",
-                secretRef: "secret:anthropic",
-                scope: "global",
-              }],
+          agentType: "claude-code",
+          activeProviderId: "anthropic",
+          activeModel: "claude-sonnet-4.5",
+          activeProvider: {
+            id: "anthropic",
+            display: "Anthropic",
+            model: "claude-sonnet-4.5",
+            baseUrl: "https://api.anthropic.example.test",
+            secretRef: "secret:anthropic",
+            scope: "global",
+          },
+          providers: [{
+            id: "anthropic",
+            display: "Anthropic",
+            model: "claude-sonnet-4.5",
+            baseUrl: "https://api.anthropic.example.test",
+            secretRef: "secret:anthropic",
+            scope: "global",
+          }],
         })),
       },
     })
@@ -249,8 +227,8 @@ describe("agentIpcModule", () => {
 
     expect(claude?.issues).not.toContain("provider-not-configured")
     expect(claude?.provider).toEqual({
-      activeProviderId: undefined,
-      activeModel: undefined,
+      activeProviderId: "anthropic",
+      activeModel: "claude-sonnet-4.5",
       configured: true,
       projectId: "project-1",
     })
@@ -411,6 +389,7 @@ describe("agentIpcModule", () => {
       sessionKey: "local:renderer",
       platform: "local-renderer",
       name: "新会话",
+      agentType: "claude-code",
     })
 
     expect(await harness.invoke("synapse:agent:switch-session", {
@@ -541,7 +520,7 @@ function createHarness(overrides: {
   const agent = {
     getStatus: () => ({
       projectId: "project-1",
-      agentType: "codex",
+      agentType: "claude-code",
       liveSessions: 0,
       busySessions: 0,
       queuedTurns: 0,
@@ -560,7 +539,7 @@ function createHarness(overrides: {
   const providerConfig = {
     getProjectProviderState: vi.fn().mockResolvedValue({
       projectId: "project-1",
-      agentType: "codex",
+      agentType: "claude-code",
       providers: [],
     }),
     ...overrides.providerConfig,

@@ -18,49 +18,49 @@ describe("ProviderConfigService", () => {
     const service = new ProviderConfigService({ providers, secrets, now: fixedNow })
 
     await service.upsertGlobalProvider({
-      id: "openai",
-      kind: "openai-compatible",
-      baseUrl: "https://global.example/v1",
-      model: "global-model",
-      models: [{ id: "global-model", alias: "global" }],
-      agentTypes: ["codex"],
-    })
-    await service.upsertGlobalProvider({
       id: "anthropic",
       kind: "anthropic",
-      model: "claude-sonnet",
-      models: [{ id: "claude-sonnet" }],
+      baseUrl: "https://global.example/v1",
+      model: "claude-sonnet-4.5",
+      models: [{ id: "claude-sonnet-4.5", alias: "main" }],
       agentTypes: ["claude-code"],
     })
-    await service.setProjectProviderRefs("project-1", ["openai", "anthropic"])
-    await service.upsertProjectProvider("project-1", {
-      id: "openai",
-      kind: "openai-compatible",
-      baseUrl: "https://inline.example/v1",
-      model: "inline-model",
-      models: [{ id: "inline-model", alias: "fast" }],
-      agentTypes: ["codex"],
+    await service.upsertGlobalProvider({
+      id: "anthropic-alt",
+      kind: "anthropic",
+      model: "claude-haiku-3.5",
+      models: [{ id: "claude-haiku-3.5" }],
+      agentTypes: ["claude-code"],
     })
-    await service.setActiveProvider("project-1", "openai")
-    await service.setActiveMode("project-1", "auto-edit", "codex")
-
-    const codexState = await service.getProjectProviderState("project-1", "codex")
-    expect(codexState.providers.map((provider) => provider.id)).toEqual(["openai"])
-    expect(codexState.activeProvider).toEqual(
-      expect.objectContaining({
-        id: "openai",
-        scope: "project",
-        baseUrl: "https://inline.example/v1",
-        model: "inline-model",
-      }),
-    )
-    expect(codexState.activeModel).toBe("inline-model")
-    expect(codexState.activeMode).toBe("auto-edit")
+    await service.setProjectProviderRefs("project-1", ["anthropic", "anthropic-alt"])
+    await service.upsertProjectProvider("project-1", {
+      id: "anthropic",
+      kind: "anthropic",
+      baseUrl: "https://inline.example/v1",
+      model: "claude-sonnet-4.5-inline",
+      models: [{ id: "claude-sonnet-4.5-inline", alias: "fast" }],
+      agentTypes: ["claude-code"],
+    })
+    await service.setActiveProvider("project-1", "anthropic")
+    await service.setActiveMode("project-1", "acceptEdits", "claude-code")
 
     const claudeState = await service.getProjectProviderState("project-1", "claude-code")
-    expect(claudeState.providers.map((provider) => provider.id)).toEqual(["anthropic"])
-    expect(claudeState.activeProvider).toBeUndefined()
-    expect(await service.getActiveAgentType("project-1")).toBe("codex")
+    expect(claudeState.providers.map((provider) => provider.id)).toEqual(
+      expect.arrayContaining(["anthropic", "anthropic-alt"]),
+    )
+    expect(claudeState.providers).toHaveLength(2)
+    expect(claudeState.activeProvider).toEqual(
+      expect.objectContaining({
+        id: "anthropic",
+        scope: "project",
+        baseUrl: "https://inline.example/v1",
+        model: "claude-sonnet-4.5-inline",
+      }),
+    )
+    expect(claudeState.activeModel).toBe("claude-sonnet-4.5-inline")
+    expect(claudeState.activeMode).toBe("acceptEdits")
+
+    expect(await service.getActiveAgentType("project-1")).toBe("claude-code")
   })
 
   it("resolves the active agent type from project state or a single-agent provider", async () => {
@@ -89,21 +89,21 @@ describe("ProviderConfigService", () => {
     const service = new ProviderConfigService({ providers, secrets, now: fixedNow })
 
     await service.upsertGlobalProvider({
-      id: "openai",
+      id: "anthropic",
       model: "old-model",
       models: [{ id: "old-model" }, { id: "new-model", alias: "new" }],
-      agentTypes: ["codex"],
+      agentTypes: ["claude-code"],
     })
-    await service.setProjectProviderRefs("project-1", ["openai"])
-    await service.setActiveProvider("project-1", "openai")
-    await service.setActiveModel("project-1", "new-model", "codex")
+    await service.setProjectProviderRefs("project-1", ["anthropic"])
+    await service.setActiveProvider("project-1", "anthropic")
+    await service.setActiveModel("project-1", "new-model", "claude-code")
 
-    expect((await service.getProjectProviderState("project-1", "codex")).activeModel).toBe("new-model")
-    expect((await providers.get("openai"))?.activeModel).toBe("new-model")
+    expect((await service.getProjectProviderState("project-1", "claude-code")).activeModel).toBe("new-model")
+    expect((await providers.get("anthropic"))?.activeModel).toBe("new-model")
 
     await service.setActiveProvider("project-1", null)
-    await service.setActiveModel("project-1", "project-default", "codex")
-    expect((await service.getProjectProviderState("project-1", "codex")).activeModel).toBe("project-default")
+    await service.setActiveModel("project-1", "project-default", "claude-code")
+    expect((await service.getProjectProviderState("project-1", "claude-code")).activeModel).toBe("project-default")
   })
 
   it("resolves secrets only into runtime env and keeps provider state secretRef-only", async () => {
@@ -119,37 +119,38 @@ describe("ProviderConfigService", () => {
     })
 
     await secrets.upsert({
-      id: "secret-openai",
+      id: "secret-anthropic",
       schemaVersion: 1,
       kind: "api-key",
       value: "sk-secret",
     })
     await service.upsertGlobalProvider({
-      id: "openai",
+      id: "anthropic",
       baseUrl: "https://api.example/v1",
-      secretRef: "secret-openai",
-      model: "gpt-5.4",
-      agentTypes: ["codex"],
+      secretRef: "secret-anthropic",
+      model: "claude-sonnet-4.5",
+      agentTypes: ["claude-code"],
       env: { CUSTOM_PROVIDER_ENV: "enabled" },
     })
-    await service.setProjectProviderRefs("project-1", ["openai"])
-    await service.setActiveProvider("project-1", "openai")
+    await service.setProjectProviderRefs("project-1", ["anthropic"])
+    await service.setActiveProvider("project-1", "anthropic")
 
-    const state = await service.getProjectProviderState("project-1", "codex")
+    const state = await service.getProjectProviderState("project-1", "claude-code")
     expect(JSON.stringify(state)).not.toContain("sk-secret")
-    expect(state.activeProvider?.secretRef).toBe("secret-openai")
+    expect(state.activeProvider?.secretRef).toBe("secret-anthropic")
 
-    const runtime = await service.resolveRuntimeConfig("project-1", "codex")
+    const runtime = await service.resolveRuntimeConfig("project-1", "claude-code")
     expect(runtime.apiKey).toBe("sk-secret")
     expect(runtime.env).toEqual(
       expect.objectContaining({
-        OPENAI_API_KEY: "sk-secret",
-        OPENAI_BASE_URL: "https://api.example/v1",
+        ANTHROPIC_BASE_URL: "https://api.example/v1",
+        ANTHROPIC_AUTH_TOKEN: "sk-secret",
+        ANTHROPIC_API_KEY: "",
         CUSTOM_PROVIDER_ENV: "enabled",
       }),
     )
     expect(auditSink.list()).toEqual([
-      expect.objectContaining({ action: "secret.read", outcome: "allowed", resource: "secret-openai" }),
+      expect.objectContaining({ action: "secret.read", outcome: "allowed", resource: "secret-anthropic" }),
     ])
   })
 

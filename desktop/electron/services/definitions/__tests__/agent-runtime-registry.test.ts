@@ -12,28 +12,18 @@ import {
 } from "../generated/main-registry"
 
 describe("agent runtime main registry", () => {
-  it("exports Codex and Claude Code runtime definitions", () => {
+  it("exports only the Claude Code runtime definition", () => {
     expect(agentRuntimeDefinitions.map((definition) => definition.id)).toEqual([
       "claude-code",
-      "codex",
-      "hermes",
     ])
-    expect(agentRuntimeDefinitionById.get("codex")?.runtime.binaries).toEqual(["codex"])
     expect(agentRuntimeDefinitionById.get("claude-code")?.runtime.binaries).toEqual(["claude"])
   })
 
-  it("creates adapters with the expected agent types", () => {
+  it("creates an adapter with the expected agent type", () => {
     const runner = {
       run: vi.fn(),
       start: vi.fn(),
     }
-    const codex = agentRuntimeDefinitionById.get("codex")?.createAdapter({
-      projectId: "project-1",
-      agentType: "codex",
-      providers: [],
-      env: {},
-      envAllowlist: [],
-    }, runner)
     const claude = agentRuntimeDefinitionById.get("claude-code")?.createAdapter({
       projectId: "project-1",
       agentType: "claude-code",
@@ -42,7 +32,6 @@ describe("agent runtime main registry", () => {
       envAllowlist: [],
     }, runner)
 
-    expect(codex?.agentType).toBe("codex")
     expect(claude?.agentType).toBe("claude-code")
   })
 })

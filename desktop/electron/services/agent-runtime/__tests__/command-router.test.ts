@@ -20,20 +20,20 @@ describe("AgentCommandRouter", () => {
     const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
     const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
     await providerConfig.upsertGlobalProvider({
-      id: "openai",
-      model: "gpt-5.4",
+      id: "anthropic",
+      model: "claude-sonnet-4.5",
       models: [
-        { id: "gpt-5.4", alias: "main" },
-        { id: "gpt-5.3-codex", alias: "codex" },
+        { id: "claude-sonnet-4.5", alias: "main" },
+        { id: "claude-haiku-3.5", alias: "fast" },
       ],
-      agentTypes: ["codex"],
+      agentTypes: ["claude-code"],
     })
-    await providerConfig.setProjectProviderRefs("project-1", ["openai"])
-    await providerConfig.setActiveProvider("project-1", "openai")
+    await providerConfig.setProjectProviderRefs("project-1", ["anthropic"])
+    await providerConfig.setActiveProvider("project-1", "anthropic")
     const resets: string[] = []
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
+      agentType: "claude-code",
       providerConfig,
       resetSession: async (message) => {
         resets.push(message.sessionKey)
@@ -43,18 +43,18 @@ describe("AgentCommandRouter", () => {
     const conversation = baseConversation()
 
     const list = expectRuntimeResult(await router.handle(baseMessage("/model"), conversation))
-    expect(list.resultText).toContain("gpt-5.4")
-    expect(list.resultText).toContain("gpt-5.3-codex (codex)")
+    expect(list.resultText).toContain("claude-sonnet-4.5")
+    expect(list.resultText).toContain("claude-haiku-3.5 (fast)")
 
     const byAlias = expectRuntimeResult(
-      await router.handle(baseMessage("/model switch codex"), conversation),
+      await router.handle(baseMessage("/model switch fast"), conversation),
     )
-    expect(byAlias.resultText).toBe("Model changed: gpt-5.3-codex")
-    expect((await providerConfig.getProjectProviderState("project-1", "codex")).activeModel)
-      .toBe("gpt-5.3-codex")
+    expect(byAlias.resultText).toBe("Model changed: claude-haiku-3.5")
+    expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeModel)
+      .toBe("claude-haiku-3.5")
 
     const byIndex = expectRuntimeResult(await router.handle(baseMessage("/model 1"), conversation))
-    expect(byIndex.resultText).toBe("Model changed: gpt-5.4")
+    expect(byIndex.resultText).toBe("Model changed: claude-sonnet-4.5")
     expect(resets).toEqual(["s1", "s1"])
   })
 
@@ -101,7 +101,7 @@ describe("AgentCommandRouter", () => {
     const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
+      agentType: "claude-code",
       providerConfig,
       registeredPromptCommands: [{
         name: "explain",
@@ -132,7 +132,7 @@ describe("AgentCommandRouter", () => {
     await registry.addExec({ name: "local-build", exec: "pnpm build" })
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
+      agentType: "claude-code",
       providerConfig,
       customCommands: registry,
       resetSession: async () => baseConversation(),
@@ -161,7 +161,7 @@ describe("AgentCommandRouter", () => {
     })
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
+      agentType: "claude-code",
       providerConfig,
       customCommands: registry,
       resetSession: async () => baseConversation(),
@@ -204,16 +204,18 @@ describe("AgentCommandRouter", () => {
 })
 
 describe("modesForAgent", () => {
-  it("reads Codex modes from Agent definitions", () => {
-    expect(modesForAgent("codex").map((mode) => mode.key)).toEqual([
-      "suggest",
-      "auto-edit",
-      "full-auto",
-      "yolo",
+  it("reads Claude Code modes from Agent definitions", () => {
+    expect(modesForAgent("claude-code").map((mode) => mode.key)).toEqual([
+      "default",
+      "acceptEdits",
+      "plan",
+      "auto",
+      "bypassPermissions",
+      "dontAsk",
     ])
   })
 
-  it("reads Claude Code modes from Agent definitions", () => {
+  it("normalizes underscore variant to claude-code", () => {
     expect(modesForAgent("claude_code").map((mode) => mode.key)).toEqual([
       "default",
       "acceptEdits",
@@ -254,7 +256,7 @@ function baseConversation(): ConversationEntryV1 {
     projectId: "project-1",
     sessionKey: "s1",
     platform: "local",
-    agentType: "codex",
+    agentType: "claude-code",
     agentSessionId: "thread-1",
     history: [],
     active: true,

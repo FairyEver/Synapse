@@ -10,14 +10,12 @@ import type {
   SecretEntryV1,
 } from "../../../runtime/data-repo"
 import {
-  createControlledProcessRunner,
   type ControlledProcessResult,
   type ControlledProcessRunRequest,
 } from "../../../runtime/process"
 import { createRecordingLogger } from "../../../runtime/lib/test-helpers"
 import { InMemoryAuditSink, createPermissionGuard } from "../../../runtime/security"
 import type { ScopedEventBus } from "../../../runtime/project-container"
-import { CodexExecAdapter, type CodexProcessRunner } from "../adapters/codex-exec"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
 import { ProviderConfigService } from "../../provider-config"
 import { ReplyOutboxService, type ReplyTarget } from "../../reply-target"
@@ -32,7 +30,7 @@ import type {
 } from "../types"
 
 describe("AgentRuntimeService", () => {
-  it("sends a prompt through Codex exec JSONL and persists the thread id", async () => {
+  it("sends a prompt and persists the thread id", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const outboxService = new ReplyOutboxService({
@@ -57,7 +55,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter: new CodexExecAdapter(runner),
+      adapter: new FakeExecAdapter(runner),
       outbox: outboxService,
       now: fixedNow,
     })
@@ -77,7 +75,7 @@ describe("AgentRuntimeService", () => {
     expect(runner.requests[0]).toEqual(
       expect.objectContaining({
         action: "agent.spawn",
-        command: "codex",
+        command: "claude",
         cwd: "/repo",
         stdin: "hello\nworld",
       }),
@@ -97,7 +95,7 @@ describe("AgentRuntimeService", () => {
         projectId: "project-1",
         sessionKey: "local:user-1",
         platform: "local",
-        agentType: "codex",
+        agentType: "claude-code",
         agentSessionId: "thread-1",
         userMeta: expect.objectContaining({
           userId: "user-1",
@@ -134,7 +132,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       sessionKey: "s1",
       platform: "local",
-      agentType: "codex",
+      agentType: "claude-code",
       agentSessionId: "thread-1",
       history: [],
       active: true,
@@ -153,7 +151,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter: new CodexExecAdapter(runner),
+      adapter: new FakeExecAdapter(runner),
       now: fixedNow,
     })
 
@@ -205,7 +203,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter: new CodexExecAdapter(runner),
+      adapter: new FakeExecAdapter(runner),
       now: fixedNow,
     })
 
@@ -260,7 +258,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter: new CodexExecAdapter(runner),
+      adapter: new FakeExecAdapter(runner),
       outbox: outboxService,
       replyTargets,
     })
@@ -316,7 +314,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter: new CodexExecAdapter(runner),
+      adapter: new FakeExecAdapter(runner),
       eventBus: {
         projectId: "project-1",
         emit: (event) => {
@@ -385,7 +383,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter: new CodexExecAdapter(runner),
+      adapter: new FakeExecAdapter(runner),
       eventBus: {
         projectId: "project-1",
         emit: (event) => {
@@ -512,23 +510,23 @@ describe("AgentRuntimeService", () => {
     const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
     const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
     await providerConfig.upsertGlobalProvider({
-      id: "openai",
-      model: "gpt-5.4",
+      id: "anthropic",
+      model: "claude-sonnet-4.5",
       models: [
-        { id: "gpt-5.4" },
-        { id: "gpt-5.3-codex", alias: "fast" },
+        { id: "claude-sonnet-4.5" },
+        { id: "claude-haiku-3.5", alias: "fast" },
       ],
-      agentTypes: ["codex"],
+      agentTypes: ["claude-code"],
     })
-    await providerConfig.setProjectProviderRefs("project-1", ["openai"])
-    await providerConfig.setActiveProvider("project-1", "openai")
+    await providerConfig.setProjectProviderRefs("project-1", ["anthropic"])
+    await providerConfig.setActiveProvider("project-1", "anthropic")
     await conversations.upsert({
       id: conversationId("local", "s1", "active"),
       schemaVersion: 1,
       projectId: "project-1",
       sessionKey: "s1",
       platform: "local",
-      agentType: "codex",
+      agentType: "claude-code",
       agentSessionId: "thread-1",
       history: [],
       active: true,
@@ -541,14 +539,14 @@ describe("AgentRuntimeService", () => {
       workDir: "/repo",
       conversations,
       adapter,
-      agentType: "codex",
+      agentType: "claude-code",
       providerConfig,
       now: fixedNow,
     })
 
     const result = await service.send(baseMessage("/model switch fast"))
 
-    expect(result.resultText).toBe("Model changed: gpt-5.3-codex")
+    expect(result.resultText).toBe("Model changed: claude-haiku-3.5")
     expect(adapter.started).toEqual([])
     expect((await conversations.get(conversationId("local", "s1", "active")))).toEqual(
       expect.objectContaining({
@@ -556,8 +554,8 @@ describe("AgentRuntimeService", () => {
         pastAgentSessionIds: ["thread-1"],
       }),
     )
-    expect((await providerConfig.getProjectProviderState("project-1", "codex")).activeModel)
-      .toBe("gpt-5.3-codex")
+    expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeModel)
+      .toBe("claude-haiku-3.5")
   })
 
   it("routes slash commands through the active agent type", async () => {
@@ -572,7 +570,7 @@ describe("AgentRuntimeService", () => {
       workDir: "/repo",
       conversations,
       adapter,
-      agentType: "codex",
+      agentType: "claude-code",
       providerConfig,
       now: fixedNow,
     })
@@ -599,7 +597,7 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       sessionKey: "s1",
       platform: "local",
-      agentType: "codex",
+      agentType: "claude-code",
       agentSessionId: "thread-1",
       history: [],
       active: true,
@@ -612,7 +610,7 @@ describe("AgentRuntimeService", () => {
       workDir: "/repo",
       conversations,
       adapter,
-      agentType: "codex",
+      agentType: "claude-code",
       providerConfig,
       now: fixedNow,
     })
@@ -629,23 +627,18 @@ describe("AgentRuntimeService", () => {
 
   it("does not spawn when permission is denied and records audit", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const auditSink = new InMemoryAuditSink()
     const guard = createPermissionGuard()
     guard.registerPolicy({
       id: "deny-agent-spawn",
       decide: (request) => request.action === "agent.spawn" ? "deny" : "defer-to-next",
     })
-    const auditSink = new InMemoryAuditSink()
-    const spawnImpl = vi.fn()
-    const runner = createControlledProcessRunner({
-      permissionGuard: guard,
-      auditSink,
-      spawnImpl,
-    })
+    const adapter = new DenyingAdapter(guard, auditSink)
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
-      adapter: new CodexExecAdapter(runner),
+      adapter,
       now: fixedNow,
     })
 
@@ -656,7 +649,6 @@ describe("AgentRuntimeService", () => {
       content: "hello",
     })
 
-    expect(spawnImpl).not.toHaveBeenCalled()
     expect(result.events).toEqual([
       expect.objectContaining({
         type: "error",
@@ -667,29 +659,9 @@ describe("AgentRuntimeService", () => {
       expect.objectContaining({
         action: "agent.spawn",
         outcome: "denied",
-        resource: "codex",
+        resource: "claude",
       }),
     ])
-  })
-
-  it("falls back to exec when a live Codex session breaks during startup", async () => {
-    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const adapter = new BrokenLiveAdapter()
-    const service = new AgentRuntimeService({
-      projectId: "project-1",
-      workDir: "/repo",
-      conversations,
-      adapter,
-      now: fixedNow,
-    })
-
-    const result = await service.send(baseMessage("hello"))
-
-    expect(adapter.liveStarts).toBe(1)
-    expect(adapter.execStarted).toEqual(["hello"])
-    expect(result.resultText).toBe("fallback done")
-    expect((await conversations.get(result.conversationId))?.history.map((entry) => entry.content))
-      .toEqual(["hello", "fallback done"])
   })
 
   it("serializes same-session turns and drains queued messages in order", async () => {
@@ -892,9 +864,9 @@ describe("AgentRuntimeService", () => {
     ])
   })
 
-  it("pauses and resumes Codex live turns through pending permissions", async () => {
+  it("pauses and resumes live turns through pending permissions", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const liveSession = new FakeLiveSession("codex", "codex-1")
+    const liveSession = new FakeLiveSession("claude-code", "claude-1")
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
@@ -925,13 +897,94 @@ describe("AgentRuntimeService", () => {
       { requestId: "perm-1", decision: { behavior: "allow", updatedInput: { command: "pwd" } } },
     ])
     expect((await conversations.get(conversationId("local", "s1", "active")))).toEqual(
-      expect.objectContaining({ agentType: "codex", agentSessionId: "codex-1" }),
+      expect.objectContaining({ agentType: "claude-code", agentSessionId: "claude-1" }),
     )
   })
 })
 
-class FakeRunner implements CodexProcessRunner {
+/**
+ * FakeExecAdapter replaces the deleted CodexExecAdapter for testing.
+ * It parses JSONL event lines and produces AgentExecutionResult with the same
+ * event structure the service expects.
+ */
+class FakeExecAdapter implements AgentAdapter {
+  readonly agentType = "claude-code"
   readonly requests: ControlledProcessRunRequest[] = []
+  private readonly runner: FakeRunner
+
+  constructor(runner: FakeRunner) {
+    this.runner = runner
+  }
+
+  async execute(message: AgentMessage, context: AgentExecutionContext): Promise<AgentExecutionResult> {
+    const args = context.agentSessionId
+      ? ["exec", "resume", "--skip-git-repo-check", context.agentSessionId, "--json", "-"]
+      : ["exec", "--skip-git-repo-check", "--json", "--cd", context.workDir, "-"]
+    const request: ControlledProcessRunRequest = {
+      actor: context.actor,
+      action: "agent.spawn",
+      command: "claude",
+      args,
+      cwd: context.workDir,
+      stdin: message.content,
+      env: context.sessionEnv,
+      envAllowlist: context.sessionEnv ? Object.keys(context.sessionEnv) : undefined,
+    }
+    const result = await this.runner.run(request)
+    if (result.exitCode !== 0 && result.exitCode !== null) {
+      return {
+        events: [{ type: "error", message: `denied by ${result.stderr || "unknown"}` }],
+        resultText: "",
+      }
+    }
+    return this.parseJsonlEvents(this.runner.lastLines)
+  }
+
+  private parseJsonlEvents(lines: readonly string[]): AgentExecutionResult {
+    const events: AgentEvent[] = []
+    let threadId: string | undefined
+    let resultText = ""
+
+    for (const line of lines) {
+      const parsed = JSON.parse(line)
+      if (parsed.type === "thread.started") {
+        threadId = parsed.thread_id
+      } else if (parsed.type === "item.started" && parsed.item?.type === "command_execution") {
+        events.push({
+          type: "toolUse",
+          toolName: "Bash",
+          toolInput: parsed.item.command,
+          agentSessionId: threadId,
+          threadId,
+        })
+      } else if (parsed.type === "item.completed" && parsed.item?.type === "command_execution") {
+        events.push({
+          type: "toolResult",
+          toolName: "Bash",
+          content: parsed.item.aggregated_output ?? "",
+          exitCode: parsed.item.exit_code,
+          success: parsed.item.exit_code === 0,
+          agentSessionId: threadId,
+          threadId,
+        })
+      } else if (parsed.type === "item.completed" && parsed.item?.type === "agent_message") {
+        const text = parsed.item.content
+          ?.filter((c: { type: string }) => c.type === "output_text")
+          .map((c: { text: string }) => c.text)
+          .join("") ?? ""
+        resultText = text
+        events.push({ type: "text", content: text, agentSessionId: threadId, threadId })
+        events.push({ type: "result", content: text, done: true, agentSessionId: threadId, threadId })
+      }
+    }
+
+    return { events, resultText, agentSessionId: threadId, threadId }
+  }
+}
+
+class FakeRunner {
+  readonly requests: ControlledProcessRunRequest[] = []
+  lastLines: readonly string[] = []
   private readonly lines: readonly string[]
 
   constructor(lines: readonly string[]) {
@@ -940,6 +993,7 @@ class FakeRunner implements CodexProcessRunner {
 
   async run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult> {
     this.requests.push(request)
+    this.lastLines = this.lines
     for (const line of this.lines) {
       request.onStdoutLine?.(line)
     }
@@ -984,7 +1038,7 @@ class BlockingAdapter implements AgentAdapter {
 }
 
 class BrokenLiveAdapter implements AgentAdapter {
-  readonly agentType = "codex"
+  readonly agentType = "claude-code"
   readonly execStarted: string[] = []
   liveStarts = 0
 
@@ -1004,6 +1058,42 @@ class BrokenLiveAdapter implements AgentAdapter {
   async startSession(): Promise<AgentLiveSession> {
     this.liveStarts += 1
     throw new Error("write EPIPE")
+  }
+}
+
+class DenyingAdapter implements AgentAdapter {
+  readonly agentType = "claude-code"
+  private readonly guard: ReturnType<typeof createPermissionGuard>
+  private readonly auditSink: InstanceType<typeof InMemoryAuditSink>
+
+  constructor(
+    guard: ReturnType<typeof createPermissionGuard>,
+    auditSink: InstanceType<typeof InMemoryAuditSink>,
+  ) {
+    this.guard = guard
+    this.auditSink = auditSink
+  }
+
+  async execute(_message: AgentMessage, context: AgentExecutionContext): Promise<AgentExecutionResult> {
+    const permission = await this.guard.check({
+      action: "agent.spawn",
+      actor: context.actor ?? { kind: "user" },
+      resource: "claude",
+    })
+    if (!permission.allowed) {
+      this.auditSink.record({
+        action: "agent.spawn",
+        actor: context.actor ?? { kind: "user" },
+        resource: "claude",
+        outcome: "denied",
+        metadata: { policyId: permission.policyId },
+      })
+      return {
+        events: [{ type: "error", message: `denied by ${permission.policyId}` }],
+        resultText: "",
+      }
+    }
+    return { events: [], resultText: "" }
   }
 }
 
