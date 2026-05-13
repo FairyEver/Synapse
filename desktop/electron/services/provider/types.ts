@@ -1,0 +1,62 @@
+export const PROVIDER_SERVICE_ID = "provider"
+
+export type ProviderCategory =
+  | "official"
+  | "cn_official"
+  | "cloud_provider"
+  | "aggregator"
+  | "third_party"
+  | "custom"
+
+export type ProviderApiKeyField = "ANTHROPIC_AUTH_TOKEN" | "ANTHROPIC_API_KEY"
+
+export interface CCProvider {
+  id: string
+  name: string
+  category: ProviderCategory
+  baseUrl?: string
+  apiKeyField: ProviderApiKeyField
+  active?: boolean
+  model?: string
+  haikuModel?: string
+  sonnetModel?: string
+  opusModel?: string
+  env: Record<string, string>
+  secretRef?: string
+  archived?: boolean
+  sortIndex?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateProviderInput {
+  readonly id: string
+  readonly name: string
+  readonly category: ProviderCategory
+  readonly baseUrl?: string
+  readonly apiKeyField: ProviderApiKeyField
+  readonly apiKey?: string
+  readonly active?: boolean
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly env: Record<string, string>
+  readonly sortIndex?: number
+}
+
+export interface UpdateProviderInput {
+  readonly name?: string
+  readonly category?: ProviderCategory
+  readonly baseUrl?: string
+  readonly apiKeyField?: ProviderApiKeyField
+  readonly apiKey?: string
+  readonly active?: boolean
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly env?: Record<string, string>
+  readonly archived?: boolean
+  readonly sortIndex?: number
+}
