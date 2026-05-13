@@ -61,7 +61,7 @@ import type {
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
 
-export interface AgentCommandProcessRunner {
+interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
 }
 
@@ -89,7 +89,7 @@ export interface AgentRuntimeServiceDeps {
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
-  readonly commandRunner?: AgentCommandProcessRunner
+  readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
