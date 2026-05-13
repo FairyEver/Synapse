@@ -7,9 +7,9 @@ import {
   AGENT_RUNTIME_SERVICE_ID,
 } from "../../services/agent-runtime"
 import {
-  ProviderConfigService,
-  PROVIDER_CONFIG_SERVICE_ID,
-} from "../../services/provider-config"
+  ProviderService,
+  PROVIDER_SERVICE_ID,
+} from "../../services/provider"
 import { configStore } from "../../services/config-store"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
@@ -140,7 +140,7 @@ export async function resolveProjectAgent(
   projectId: string,
 ): Promise<{
   readonly agent: AgentRuntimeService
-  readonly providerConfig: ProviderConfigService
+  readonly providerService: ProviderService
   readonly project: { readonly uuid: string; readonly name: string; readonly localPath: string }
 }> {
   const config = await configStore.load()
@@ -156,7 +156,7 @@ export async function resolveProjectAgent(
   })
   return {
     agent: container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID),
-    providerConfig: container.get<ProviderConfigService>(PROVIDER_CONFIG_SERVICE_ID),
+    providerService: container.get<ProviderService>(PROVIDER_SERVICE_ID),
     project,
   }
 }

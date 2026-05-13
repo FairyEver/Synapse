@@ -21,6 +21,7 @@ const createSessionRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   name: z.string().optional(),
   agentType: z.string().default("claude-code"),
+  providerId: z.string().min(1).optional(),
 })
 
 const switchSessionRequestSchema = projectRequestSchema.extend({
@@ -115,12 +116,14 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: CreateSessionRequest) => {
       const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
       const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
-      const session = await agent.createSession({
+      const input = {
         sessionKey,
         platform: LOCAL_RENDERER_PLATFORM,
         name: request.name?.trim() || undefined,
         agentType: request.agentType?.trim() || undefined,
-      })
+        providerId: request.providerId,
+      }
+      const session = await agent.createSession(input)
       return sessionSummary(session)
     },
   },

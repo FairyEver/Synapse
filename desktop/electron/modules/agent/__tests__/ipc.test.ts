@@ -4,12 +4,18 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
-import { PROVIDER_CONFIG_SERVICE_ID } from "../../../services/provider-config"
+import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { agentIpcModule } from "../ipc"
 import { configStore } from "../../../services/config-store"
 
 vi.mock("../../../services/agent-runtime/binary-detect-service", () => ({
   whichBin: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock("node:child_process", () => ({
+  execFile: vi.fn((_command: string, _args: readonly string[], callback: (error: Error | null) => void) => {
+    callback(new Error("missing"))
+  }),
 }))
 
 vi.mock("../../../services/config-store", () => ({
@@ -79,26 +85,60 @@ describe("agentIpcModule", () => {
     })
   })
 
-  it("returns provider summaries without secrets", async () => {
-    const getProjectProviderState = vi.fn().mockResolvedValue({
-      projectId: "project-1",
-      agentType: "claude-code",
-      activeProviderId: "anthropic",
-      activeModel: "claude-sonnet-4.5",
-      activeMode: "plan",
-      providers: [{
-        id: "anthropic",
-        display: "Anthropic",
-        model: "claude-sonnet-4.5",
-        baseUrl: "https://api.anthropic.example.test",
-        secretRef: "secret:anthropic",
-        scope: "global",
-      }],
+  it("passes optional providerId through local renderer sends", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
     })
     const harness = createHarness({
-      providerConfig: {
-        getActiveAgentType: vi.fn().mockResolvedValue("claude-code"),
-        getProjectProviderState,
+      agent: {
+        send,
+      },
+    })
+
+    await harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "hello",
+      providerId: "deepseek",
+    })
+
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "deepseek",
+    }))
+  })
+
+  it("returns provider summaries without secrets", async () => {
+    const listProviders = vi.fn().mockResolvedValue([{
+      id: "anthropic",
+      name: "Anthropic",
+      category: "official",
+      active: true,
+      model: "claude-sonnet-4.5",
+      baseUrl: "https://api.anthropic.example.test",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      secretRef: "secret:anthropic",
+      env: { ANTHROPIC_API_KEY: "sk-secret" },
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    }])
+    const getActiveProvider = vi.fn().mockResolvedValue({
+      id: "anthropic",
+      name: "Anthropic",
+      category: "official",
+      active: true,
+      model: "claude-sonnet-4.5",
+      baseUrl: "https://api.anthropic.example.test",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      secretRef: "secret:anthropic",
+      env: { ANTHROPIC_API_KEY: "sk-secret" },
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    })
+    const harness = createHarness({
+      providerService: {
+        listProviders,
+        getActiveProvider,
       },
     })
 
@@ -111,7 +151,6 @@ describe("agentIpcModule", () => {
       agentType: "claude-code",
       activeProviderId: "anthropic",
       activeModel: "claude-sonnet-4.5",
-      activeMode: "plan",
       providers: [{
         id: "anthropic",
         display: "Anthropic",
@@ -121,34 +160,124 @@ describe("agentIpcModule", () => {
         scope: "global",
       }],
     })
-    expect(getProjectProviderState).toHaveBeenCalledWith("project-1", "claude-code")
+    expect(listProviders).toHaveBeenCalled()
+    expect(getActiveProvider).toHaveBeenCalled()
+    expect(JSON.stringify(result)).not.toContain("sk-secret")
+    expect(JSON.stringify(result)).not.toContain("secret:anthropic")
+    expect(JSON.stringify(result)).not.toContain("secretRef")
+  })
+
+  it("exposes provider CRUD IPC without returning secrets", async () => {
+    const provider = {
+      id: "anthropic",
+      name: "Anthropic",
+      category: "official",
+      active: true,
+      model: "claude-sonnet-4.5",
+      baseUrl: "https://api.anthropic.example.test",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      secretRef: "secret:anthropic",
+      env: { ANTHROPIC_API_KEY: "sk-secret" },
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    }
+    const listProviders = vi.fn().mockResolvedValue([provider])
+    const createProvider = vi.fn().mockResolvedValue(provider)
+    const updateProvider = vi.fn().mockResolvedValue({ ...provider, name: "Anthropic Updated" })
+    const archiveProvider = vi.fn().mockResolvedValue(undefined)
+    const setActiveProvider = vi.fn().mockResolvedValue(undefined)
+    const harness = createHarness({
+      providerService: {
+        listProviders,
+        createProvider,
+        updateProvider,
+        archiveProvider,
+        setActiveProvider,
+      },
+    })
+
+    const listResult = await harness.invoke("synapse:agent:list-providers", {
+      projectId: "project-1",
+    })
+    const createResult = await harness.invoke("synapse:agent:create-provider", {
+      projectId: "project-1",
+      provider: {
+        id: "anthropic",
+        name: "Anthropic",
+        category: "official",
+        baseUrl: "https://api.anthropic.example.test",
+        apiKeyField: "ANTHROPIC_API_KEY",
+        apiKey: "sk-secret",
+        active: true,
+        model: "claude-sonnet-4.5",
+        env: {},
+      },
+    })
+    const updateResult = await harness.invoke("synapse:agent:update-provider", {
+      projectId: "project-1",
+      providerId: "anthropic",
+      patch: {
+        name: "Anthropic Updated",
+        apiKey: "sk-new-secret",
+      },
+    })
+    const archiveResult = await harness.invoke("synapse:agent:archive-provider", {
+      projectId: "project-1",
+      providerId: "anthropic",
+    })
+    const activeResult = await harness.invoke("synapse:agent:set-active-provider", {
+      projectId: "project-1",
+      providerId: "anthropic",
+    })
+
+    expect(listResult).toEqual([expect.objectContaining({ id: "anthropic", name: "Anthropic" })])
+    expect(createProvider).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "sk-secret" }))
+    expect(updateProvider).toHaveBeenCalledWith("anthropic", expect.objectContaining({ apiKey: "sk-new-secret" }))
+    expect(archiveProvider).toHaveBeenCalledWith("anthropic")
+    expect(setActiveProvider).toHaveBeenCalledWith("anthropic")
+    expect(archiveResult).toEqual({ ok: true })
+    expect(activeResult).toEqual({ ok: true })
+    for (const result of [listResult, createResult, updateResult]) {
+      expect(JSON.stringify(result)).not.toContain("sk-secret")
+      expect(JSON.stringify(result)).not.toContain("sk-new-secret")
+      expect(JSON.stringify(result)).not.toContain("secret:anthropic")
+      expect(JSON.stringify(result)).not.toContain("secretRef")
+      const providers = Array.isArray(result) ? result : [result]
+      for (const providerResult of providers) {
+        expect(providerResult).not.toHaveProperty("apiKey")
+      }
+    }
   })
 
   it("returns Agent runtime readiness without exposing secrets", async () => {
     const harness = createHarness({
-      providerConfig: {
-        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, _agentType: string) => ({
-          projectId: "project-1",
-          agentType: "claude-code",
-          activeProviderId: "anthropic",
-          activeModel: "claude-sonnet-4.5",
-          activeProvider: {
-            id: "anthropic",
-            display: "Anthropic",
-            model: "claude-sonnet-4.5",
-            baseUrl: "https://api.example.test",
-            secretRef: "secret:anthropic",
-            scope: "global",
-          },
-          providers: [{
-            id: "anthropic",
-            display: "Anthropic",
-            model: "claude-sonnet-4.5",
-            baseUrl: "https://api.example.test",
-            secretRef: "secret:anthropic",
-            scope: "global",
-          }],
-        })),
+      providerService: {
+        listProviders: vi.fn().mockResolvedValue([{
+          id: "anthropic",
+          name: "Anthropic",
+          category: "official",
+          active: true,
+          model: "claude-sonnet-4.5",
+          baseUrl: "https://api.example.test",
+          apiKeyField: "ANTHROPIC_API_KEY",
+          secretRef: "secret:anthropic",
+          env: { ANTHROPIC_API_KEY: "sk-secret" },
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        }]),
+        getActiveProvider: vi.fn().mockResolvedValue({
+          id: "anthropic",
+          name: "Anthropic",
+          category: "official",
+          active: true,
+          model: "claude-sonnet-4.5",
+          baseUrl: "https://api.example.test",
+          apiKeyField: "ANTHROPIC_API_KEY",
+          secretRef: "secret:anthropic",
+          env: { ANTHROPIC_API_KEY: "sk-secret" },
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        }),
       },
     })
 
@@ -178,34 +307,65 @@ describe("agentIpcModule", () => {
       },
     }))
     expect(JSON.stringify(result)).not.toContain("secret:anthropic")
+    expect(JSON.stringify(result)).not.toContain("sk-secret")
     expect(JSON.stringify(result)).not.toContain("secretRef")
+  })
+
+  it("does not report missing system claude as a runtime issue", async () => {
+    const harness = createHarness({
+      providerService: {
+        listProviders: vi.fn().mockResolvedValue([]),
+        getActiveProvider: vi.fn().mockResolvedValue(null),
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:get-runtime-status", {
+      projectId: "project-1",
+    }) as {
+      readonly agents: readonly {
+        readonly cli: { readonly required: boolean; readonly installed: boolean; readonly path: string | null }
+        readonly issues: readonly string[]
+      }[]
+    }
+
+    const claude = result.agents.find((agent) => agent.issues.includes("provider-not-configured"))
+    expect(claude?.issues).not.toContain("cli-not-installed")
+    expect(claude?.cli).toEqual({
+      required: false,
+      installed: true,
+      path: null,
+    })
   })
 
   it("does not mark an agent provider as unconfigured when matching providers exist", async () => {
     const harness = createHarness({
-      providerConfig: {
-        getProjectProviderState: vi.fn().mockImplementation(async (_projectId: string, _agentType: string) => ({
-          projectId: "project-1",
-          agentType: "claude-code",
-          activeProviderId: "anthropic",
-          activeModel: "claude-sonnet-4.5",
-          activeProvider: {
-            id: "anthropic",
-            display: "Anthropic",
-            model: "claude-sonnet-4.5",
-            baseUrl: "https://api.anthropic.example.test",
-            secretRef: "secret:anthropic",
-            scope: "global",
-          },
-          providers: [{
-            id: "anthropic",
-            display: "Anthropic",
-            model: "claude-sonnet-4.5",
-            baseUrl: "https://api.anthropic.example.test",
-            secretRef: "secret:anthropic",
-            scope: "global",
-          }],
-        })),
+      providerService: {
+        listProviders: vi.fn().mockResolvedValue([{
+          id: "anthropic",
+          name: "Anthropic",
+          category: "official",
+          active: true,
+          model: "claude-sonnet-4.5",
+          baseUrl: "https://api.anthropic.example.test",
+          apiKeyField: "ANTHROPIC_API_KEY",
+          secretRef: "secret:anthropic",
+          env: {},
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        }]),
+        getActiveProvider: vi.fn().mockResolvedValue({
+          id: "anthropic",
+          name: "Anthropic",
+          category: "official",
+          active: true,
+          model: "claude-sonnet-4.5",
+          baseUrl: "https://api.anthropic.example.test",
+          apiKeyField: "ANTHROPIC_API_KEY",
+          secretRef: "secret:anthropic",
+          env: {},
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        }),
       },
     })
 
@@ -377,6 +537,7 @@ describe("agentIpcModule", () => {
     expect(await harness.invoke("synapse:agent:create-session", {
       projectId: "project-1",
       name: "新会话",
+      providerId: "deepseek",
     })).toEqual(expect.objectContaining({
       projectId: "project-1",
       id: "conv-2",
@@ -390,6 +551,7 @@ describe("agentIpcModule", () => {
       platform: "local-renderer",
       name: "新会话",
       agentType: "claude-code",
+      providerId: "deepseek",
     })
 
     expect(await harness.invoke("synapse:agent:switch-session", {
@@ -515,7 +677,7 @@ describe("agentIpcModule", () => {
 
 function createHarness(overrides: {
   readonly agent?: Record<string, unknown>
-  readonly providerConfig?: Record<string, unknown>
+  readonly providerService?: Record<string, unknown>
 }) {
   const agent = {
     getStatus: () => ({
@@ -536,19 +698,20 @@ function createHarness(overrides: {
     respondPermission: vi.fn().mockResolvedValue(undefined),
     ...overrides.agent,
   }
-  const providerConfig = {
-    getProjectProviderState: vi.fn().mockResolvedValue({
-      projectId: "project-1",
-      agentType: "claude-code",
-      providers: [],
-    }),
-    ...overrides.providerConfig,
+  const providerService = {
+    listProviders: vi.fn().mockResolvedValue([]),
+    getActiveProvider: vi.fn().mockResolvedValue(null),
+    createProvider: vi.fn(),
+    updateProvider: vi.fn(),
+    archiveProvider: vi.fn(),
+    setActiveProvider: vi.fn(),
+    ...overrides.providerService,
   }
   const container: ProjectContainer = {
     projectId: "project-1",
     get: <T>(id: string): T => {
       if (id === AGENT_RUNTIME_SERVICE_ID) return agent as T
-      if (id === PROVIDER_CONFIG_SERVICE_ID) return providerConfig as T
+      if (id === PROVIDER_SERVICE_ID) return providerService as T
       throw new Error(`Unknown service: ${id}`)
     },
     inspect: () => [],

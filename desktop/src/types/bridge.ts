@@ -216,6 +216,53 @@ export type SynapseRunAsCheckResult = Record<string, unknown>
 export type SynapseWebhookStatus = NonNullable<SynapseOpsDiagnostics["webhook"]>
 export type SynapseOpsRecord = Record<string, unknown>
 
+export type SynapseAgentProviderCategory =
+  | "official"
+  | "cn_official"
+  | "cloud_provider"
+  | "aggregator"
+  | "third_party"
+  | "custom"
+
+export type SynapseAgentProviderApiKeyField = "ANTHROPIC_AUTH_TOKEN" | "ANTHROPIC_API_KEY"
+
+export type SynapseAgentProvider = {
+  readonly id: string
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly active?: boolean
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly archived?: boolean
+  readonly sortIndex?: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export type SynapseCreateAgentProviderInput = {
+  readonly id: string
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly apiKey?: string
+  readonly active?: boolean
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly env: Record<string, string>
+  readonly sortIndex?: number
+}
+
+export type SynapseUpdateAgentProviderInput = Partial<Omit<SynapseCreateAgentProviderInput, "id">> & {
+  readonly archived?: boolean
+}
+
 export type SynapseBridge = {
   platform: string
   versions: {
@@ -433,7 +480,7 @@ export type SynapseBridge = {
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
     createSession: (
-      args: { projectId: string; sessionKey?: string; name?: string; agentType?: string },
+      args: { projectId: string; sessionKey?: string; name?: string; agentType?: string; providerId?: string },
     ) => Promise<SynapseAgentSessionSummary>
     switchSession: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
@@ -445,7 +492,7 @@ export type SynapseBridge = {
       args: { projectId: string; conversationId: string; name: string },
     ) => Promise<{ ok: boolean }>
     send: (
-      args: { projectId: string; sessionKey?: string; content: string; clientSubmittedAt?: string },
+      args: { projectId: string; sessionKey?: string; content: string; clientSubmittedAt?: string; providerId?: string },
     ) => Promise<SynapseAgentSendResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
     respondPermission: (
@@ -458,6 +505,19 @@ export type SynapseBridge = {
       args: { projectId: string; conversationId: string },
     ) => Promise<SynapseAgentCancelTurnResult>
     getProviders: (projectId: string) => Promise<SynapseAgentProviderState>
+    listProviders: (projectId: string) => Promise<SynapseAgentProvider[]>
+    createProvider: (
+      args: { projectId: string; provider: SynapseCreateAgentProviderInput },
+    ) => Promise<SynapseAgentProvider>
+    updateProvider: (
+      args: { projectId: string; providerId: string; patch: SynapseUpdateAgentProviderInput },
+    ) => Promise<SynapseAgentProvider>
+    archiveProvider: (
+      args: { projectId: string; providerId: string },
+    ) => Promise<{ ok: true }>
+    setActiveProvider: (
+      args: { projectId: string; providerId: string },
+    ) => Promise<{ ok: true }>
     getRuntimeStatus: (
       request: { projectId?: string },
     ) => Promise<SynapseAgentRuntimeStatus>

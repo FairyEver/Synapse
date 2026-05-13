@@ -5,6 +5,13 @@ import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
+import type {
+  CCProvider,
+  CreateProviderInput,
+  ProviderApiKeyField,
+  ProviderCategory,
+  UpdateProviderInput,
+} from "../../services/provider"
 import { resolveProjectAgent } from "./ipc-shared"
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
@@ -15,6 +22,67 @@ const openReferenceRequestSchema = projectRequestSchema.extend({
 
 const runtimeStatusRequestSchema = z.object({
   projectId: z.string().optional(),
+})
+
+const providerCategorySchema = z.enum([
+  "official",
+  "cn_official",
+  "cloud_provider",
+  "aggregator",
+  "third_party",
+  "custom",
+]) satisfies z.ZodType<ProviderCategory>
+
+const providerApiKeyFieldSchema = z.enum([
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+]) satisfies z.ZodType<ProviderApiKeyField>
+
+const providerEnvSchema = z.record(z.string(), z.string())
+
+const createProviderInputSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  category: providerCategorySchema,
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  apiKey: z.string().optional(),
+  active: z.boolean().optional(),
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  env: providerEnvSchema.default({}),
+  sortIndex: z.number().optional(),
+}) satisfies z.ZodType<CreateProviderInput>
+
+const updateProviderInputSchema = z.object({
+  name: z.string().min(1).optional(),
+  category: providerCategorySchema.optional(),
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema.optional(),
+  apiKey: z.string().optional(),
+  active: z.boolean().optional(),
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  env: providerEnvSchema.optional(),
+  archived: z.boolean().optional(),
+  sortIndex: z.number().optional(),
+}) satisfies z.ZodType<UpdateProviderInput>
+
+const createProviderRequestSchema = projectRequestSchema.extend({
+  provider: createProviderInputSchema,
+})
+
+const updateProviderRequestSchema = projectRequestSchema.extend({
+  providerId: z.string().min(1),
+  patch: updateProviderInputSchema,
+})
+
+const providerIdRequestSchema = projectRequestSchema.extend({
+  providerId: z.string().min(1),
 })
 
 // ─── Response schemas ─────────────────────────────────────────────────────────
@@ -51,6 +119,27 @@ const providerStateSchema = z.object({
   activeMode: z.string().optional(),
 })
 
+const publicProviderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: providerCategorySchema,
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  active: z.boolean().optional(),
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  archived: z.boolean().optional(),
+  sortIndex: z.number().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+const okResultSchema = z.object({
+  ok: z.literal(true),
+})
+
 const runtimeStatusSchema = z.object({
   projectId: z.string().optional(),
   agents: z.array(z.object({
@@ -77,6 +166,39 @@ const runtimeStatusSchema = z.object({
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type OpenReferenceRequest = z.infer<typeof openReferenceRequestSchema>
+type CreateProviderRequest = z.infer<typeof createProviderRequestSchema>
+type UpdateProviderRequest = z.infer<typeof updateProviderRequestSchema>
+type ProviderIdRequest = z.infer<typeof providerIdRequestSchema>
+
+function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSchema> {
+  return {
+    id: provider.id,
+    name: provider.name,
+    category: provider.category,
+    baseUrl: provider.baseUrl,
+    apiKeyField: provider.apiKeyField,
+    active: provider.active,
+    model: provider.model,
+    haikuModel: provider.haikuModel,
+    sonnetModel: provider.sonnetModel,
+    opusModel: provider.opusModel,
+    archived: provider.archived,
+    sortIndex: provider.sortIndex,
+    createdAt: provider.createdAt,
+    updatedAt: provider.updatedAt,
+  }
+}
+
+function providerSummary(provider: CCProvider, activeProviderId?: string): z.infer<typeof providerSummarySchema> {
+  return {
+    id: provider.id,
+    display: provider.name,
+    active: provider.id === activeProviderId || Boolean(provider.active),
+    model: provider.model,
+    baseUrl: provider.baseUrl,
+    scope: "global",
+  }
+}
 
 // ─── Tool/utility method descriptors ─────────────────────────────────────────
 
@@ -87,24 +209,68 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: projectRequestSchema,
     response: providerStateSchema,
     handler: async (ctx, request: ProjectRequest) => {
-      const { providerConfig } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      const agentType = await providerConfig.getActiveAgentType(request.projectId, "codex")
-      const state = await providerConfig.getProjectProviderState(request.projectId, agentType)
+      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const providers = await providerService.listProviders()
+      const activeProvider = await providerService.getActiveProvider()
       return {
-        projectId: state.projectId,
-        agentType: state.agentType,
-        activeProviderId: state.activeProviderId,
-        activeModel: state.activeModel,
-        activeMode: state.activeMode,
-        providers: state.providers.map((provider) => ({
-          id: provider.id,
-          display: provider.display,
-          active: provider.id === state.activeProviderId,
-          model: provider.model,
-          baseUrl: provider.baseUrl,
-          scope: provider.scope,
-        })),
+        projectId: request.projectId,
+        agentType: "claude-code",
+        activeProviderId: activeProvider?.id,
+        activeModel: activeProvider?.model,
+        providers: providers.map((provider) => providerSummary(provider, activeProvider?.id)),
       }
+    },
+  },
+  listProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:list-providers",
+    request: projectRequestSchema,
+    response: z.array(publicProviderSchema),
+    handler: async (ctx, request: ProjectRequest) => {
+      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return (await providerService.listProviders()).map(publicProvider)
+    },
+  },
+  createProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:create-provider",
+    request: createProviderRequestSchema,
+    response: publicProviderSchema,
+    handler: async (ctx, request: CreateProviderRequest) => {
+      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return publicProvider(await providerService.createProvider(request.provider))
+    },
+  },
+  updateProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:update-provider",
+    request: updateProviderRequestSchema,
+    response: publicProviderSchema,
+    handler: async (ctx, request: UpdateProviderRequest) => {
+      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return publicProvider(await providerService.updateProvider(request.providerId, request.patch))
+    },
+  },
+  archiveProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:archive-provider",
+    request: providerIdRequestSchema,
+    response: okResultSchema,
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      await providerService.archiveProvider(request.providerId)
+      return { ok: true }
+    },
+  },
+  setActiveProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:set-active-provider",
+    request: providerIdRequestSchema,
+    response: okResultSchema,
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const { providerService } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      await providerService.setActiveProvider(request.providerId)
+      return { ok: true }
     },
   },
   getRuntimeStatus: {
@@ -113,29 +279,17 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: runtimeStatusRequestSchema,
     response: runtimeStatusSchema,
     handler: async (ctx, request: { projectId?: string }) => {
-      const { execFile } = await import("node:child_process")
-      const { promisify } = await import("node:util")
-      const execFileAsync = promisify(execFile)
-      let claudePath: string | null = null
-      try {
-        const { stdout } = await execFileAsync("which", ["claude"])
-        const trimmed = stdout.trim()
-        if (trimmed.length > 0) claudePath = trimmed
-      } catch {
-        claudePath = null
-      }
-      const providerConfig = request.projectId
-        ? (await resolveProjectAgent(ctx.resolve, request.projectId)).providerConfig
+      const providerService = request.projectId
+        ? (await resolveProjectAgent(ctx.resolve, request.projectId)).providerService
         : undefined
-      const provider = request.projectId && providerConfig
-        ? await providerConfig.getProjectProviderState(request.projectId, "claude-code")
+      const providers = providerService ? await providerService.listProviders() : []
+      const activeProvider = providerService
+        ? await providerService.getActiveProvider()
         : undefined
-      const activeProvider = provider?.activeProvider
-      const providerConfigured = Boolean(provider && provider.providers.length > 0)
+      const providerConfigured = Boolean(activeProvider && providers.length > 0)
       const issues: string[] = []
-      if (!claudePath) issues.push("cli-not-installed")
       if (request.projectId && !providerConfigured) issues.push("provider-not-configured")
-      if (request.projectId && activeProvider && !provider?.activeModel) issues.push("model-not-selected")
+      if (request.projectId && activeProvider && !activeProvider.model) issues.push("model-not-selected")
       return {
         projectId: request.projectId,
         agents: [{
@@ -143,16 +297,15 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
           label: "Claude Code",
           ready: issues.length === 0,
           cli: {
-            required: true,
-            binary: "claude",
-            installed: claudePath !== null,
-            path: claudePath,
+            required: false,
+            installed: true,
+            path: null,
           },
           provider: request.projectId ? {
             projectId: request.projectId,
             configured: providerConfigured,
             activeProviderId: activeProvider?.id,
-            activeModel: activeProvider ? provider?.activeModel : undefined,
+            activeModel: activeProvider?.model,
           } : undefined,
           issues,
         }],
@@ -170,23 +323,10 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       binaryPath: z.string().optional(),
     })),
     handler: async () => {
-      const { execFile } = await import("node:child_process")
-      const { promisify } = await import("node:util")
-      const execFileAsync = promisify(execFile)
-      let binaryPath: string | undefined
-      let available = false
-      try {
-        const { stdout } = await execFileAsync("which", ["claude"])
-        binaryPath = stdout.trim()
-        available = binaryPath.length > 0
-      } catch {
-        available = false
-      }
       return [{
         agentType: "claude-code",
         label: "Claude Code",
-        available,
-        binaryPath,
+        available: true,
       }]
     },
   },

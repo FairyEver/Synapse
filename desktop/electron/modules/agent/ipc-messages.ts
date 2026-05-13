@@ -35,6 +35,7 @@ const sendRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   content: z.string().min(1),
   clientSubmittedAt: z.string().optional(),
+  providerId: z.string().min(1).optional(),
 })
 
 const respondPermissionRequestSchema = projectRequestSchema.extend({
@@ -184,6 +185,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           userId: "renderer",
           userName: "Renderer",
           content: request.content,
+          providerId: request.providerId,
           replyCtx: {
             kind: LOCAL_RENDERER_PLATFORM,
             projectId: request.projectId,
