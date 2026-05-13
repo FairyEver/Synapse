@@ -35,9 +35,21 @@ const timelineBaseSchema = {
   id: z.string(),
   timestamp: z.string(),
   agentType: z.string().optional(),
+  sdkSessionId: z.string().optional(),
   agentSessionId: z.string().optional(),
   threadId: z.string().optional(),
 }
+
+const jsonRecordSchema = z.record(z.string(), z.unknown())
+const resultMetadataSchema = z.object({
+  model: z.string().optional(),
+  effort: z.string().optional(),
+  contextRemainingPercent: z.number().optional(),
+  workDir: z.string().optional(),
+  cancelled: z.boolean().optional(),
+  usage: jsonRecordSchema.optional(),
+  costUsd: z.number().optional(),
+})
 
 export const timelineItemSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -46,6 +58,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     role: z.enum(["user", "assistant", "system", "tool"]),
     content: z.string(),
     legacy: z.boolean().optional(),
+    metadata: resultMetadataSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -57,7 +70,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     kind: z.literal("toolCall"),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -74,7 +87,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     requestId: z.string(),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -85,13 +98,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     ...timelineBaseSchema,
     kind: z.literal("result"),
     content: z.string(),
-    metadata: z.object({
-      model: z.string().optional(),
-      effort: z.string().optional(),
-      contextRemainingPercent: z.number().optional(),
-      workDir: z.string().optional(),
-      cancelled: z.boolean().optional(),
-    }).optional(),
+    metadata: resultMetadataSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -114,6 +121,14 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     startedAt: z.string(),
     completedAt: z.string().optional(),
     errorMessage: z.string().optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("sdkEvent"),
+    sdkType: z.string(),
+    sdkSubtype: z.string().optional(),
+    label: z.string(),
+    summary: z.string().optional(),
   }),
 ])
 
@@ -255,8 +270,11 @@ export function historyEntry(
 // ─── Shared event schemas (used in main ipc.ts) ───────────────────────────────
 
 const agentEventBaseSchema = {
+  sdkSessionId: z.string().optional(),
   agentSessionId: z.string().optional(),
   threadId: z.string().optional(),
+  timestamp: z.string().optional(),
+  payload: jsonRecordSchema.optional(),
 }
 
 export const agentEventTypeSchema = z.enum([
@@ -267,6 +285,12 @@ export const agentEventTypeSchema = z.enum([
   "permissionRequest",
   "result",
   "error",
+  "sessionInit",
+  "assistant",
+  "stream",
+  "status",
+  "compactBoundary",
+  "sdkEvent",
 ])
 
 export const agentEventSchema = z.discriminatedUnion("type", [
@@ -277,7 +301,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     type: z.literal("toolUse"),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...agentEventBaseSchema,
@@ -294,22 +318,55 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     requestId: z.string(),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("result"),
     content: z.string(),
     done: z.literal(true),
-    metadata: z.object({
-      model: z.string().optional(),
-      effort: z.string().optional(),
-      contextRemainingPercent: z.number().optional(),
-      workDir: z.string().optional(),
-      cancelled: z.boolean().optional(),
-    }).optional(),
+    metadata: resultMetadataSchema.optional(),
+    usage: jsonRecordSchema.optional(),
+    costUsd: z.number().optional(),
   }),
   z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("sessionInit"),
+    tools: z.array(z.string()).optional(),
+    model: z.string().optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("assistant"),
+    contentBlocks: z.array(z.unknown()).optional(),
+    content: z.string().optional(),
+    message: jsonRecordSchema.optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("stream"),
+    deltaType: z.string().optional(),
+    text: z.string().optional(),
+    event: jsonRecordSchema.optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("status"),
+    status: z.string().nullable().optional(),
+    message: z.string().optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("compactBoundary"),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("sdkEvent"),
+    sdkType: z.string(),
+    sdkSubtype: z.string().optional(),
+    payload: jsonRecordSchema,
+  }),
 ])
 
 export const agentEventScopeSchema = z.object({

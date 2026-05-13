@@ -108,6 +108,80 @@ describe("agentIpcModule", () => {
     }))
   })
 
+  it("validates SDK events in local renderer send responses", async () => {
+    const sdkEvents = [
+      {
+        type: "sessionInit",
+        sdkSessionId: "sdk-1",
+        tools: ["Read"],
+        model: "claude-sonnet-4-5",
+        payload: { type: "system", subtype: "init" },
+      },
+      {
+        type: "assistant",
+        sdkSessionId: "sdk-1",
+        message: {
+          content: [{ type: "text", text: "hello" }],
+        },
+        payload: { type: "assistant" },
+      },
+      {
+        type: "stream",
+        sdkSessionId: "sdk-1",
+        event: {
+          delta: { text: "hello" },
+        },
+        payload: { type: "stream_event" },
+      },
+      {
+        type: "status",
+        sdkSessionId: "sdk-1",
+        status: "running",
+        payload: { type: "system", subtype: "status" },
+      },
+      {
+        type: "compactBoundary",
+        sdkSessionId: "sdk-1",
+        payload: { type: "system", subtype: "compact_boundary" },
+      },
+      {
+        type: "sdkEvent",
+        sdkSessionId: "sdk-1",
+        sdkType: "system",
+        sdkSubtype: "unknown",
+        payload: { type: "system", secret: "not-rendered-here" },
+      },
+      {
+        type: "result",
+        content: "",
+        done: true,
+        sdkSessionId: "sdk-1",
+        usage: { inputTokens: 1, outputTokens: 2 },
+        costUsd: 0.01,
+        payload: { type: "result" },
+      },
+    ]
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "",
+      events: sdkEvents,
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "hello",
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      events: sdkEvents,
+    }))
+  })
+
   it("returns provider summaries without secrets", async () => {
     const listProviders = vi.fn().mockResolvedValue([{
       id: "anthropic",

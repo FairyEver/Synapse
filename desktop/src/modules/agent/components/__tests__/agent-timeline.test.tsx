@@ -3,7 +3,10 @@ import { createRef } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
-import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
+import {
+  appendAgentTimelineEvent,
+  historyRecordToTimelineItem,
+} from "@/lib/agent-timeline"
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
 
@@ -274,5 +277,50 @@ describe("AgentTimeline", () => {
     expect(html).toContain("system")
     expect(html).not.toContain("secret-token-value")
     expect(html).not.toContain("xxxxxxxxxxxxxxxxxxxx")
+  })
+
+  it("keeps SDK thinking stream out of assistant answer text", () => {
+    const thinking = appendAgentTimelineEvent([], {
+      type: "stream",
+      event: {
+        delta: {
+          thinking: "private chain of thought",
+        },
+      },
+    }, "2026-05-12T00:00:00.000Z", "claude")
+    const final = appendAgentTimelineEvent(thinking, {
+      type: "assistant",
+      contentBlocks: [{ type: "text", text: "final answer" }],
+    }, "2026-05-12T00:00:01.000Z", "claude")
+
+    expect(final).toHaveLength(2)
+    expect(final[0]).toEqual(expect.objectContaining({
+      kind: "thinking",
+      content: "private chain of thought",
+    }))
+    expect(final.filter((item) => item.kind === "message" && item.role === "assistant")).toEqual([
+      expect.objectContaining({
+        content: "final answer",
+      }),
+    ])
+  })
+
+  it("preserves sdkSessionId from history metadata", () => {
+    const item = historyRecordToTimelineItem("session-1", {
+      role: "assistant",
+      content: "done",
+      timestamp: "2026-05-12T00:00:00.000Z",
+      metadata: {
+        sdkSessionId: "sdk-1",
+        agentSessionId: "agent-1",
+        threadId: "thread-1",
+      },
+    }, 0, "claude")
+
+    expect(item).toEqual(expect.objectContaining({
+      sdkSessionId: "sdk-1",
+      agentSessionId: "agent-1",
+      threadId: "thread-1",
+    }))
   })
 })

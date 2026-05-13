@@ -34,8 +34,12 @@ export function agentEventToTimelineItem(
   switch (event.type) {
     case "text":
       return { ...base, kind: "message", role: "assistant", content: event.content }
-    case "stream":
-      return { ...base, kind: "message", role: "assistant", content: streamText(event) }
+    case "stream": {
+      const thinking = streamThinking(event)
+      return thinking
+        ? { ...base, kind: "thinking", content: thinking }
+        : { ...base, kind: "message", role: "assistant", content: streamText(event) }
+    }
     case "assistant":
       return { ...base, kind: "message", role: "assistant", content: assistantText(event) }
     case "thinking":
@@ -126,6 +130,7 @@ export function historyRecordToTimelineItem(
     id: `${sessionId}:history:${index}`,
     timestamp: entry.timestamp,
     agentType,
+    sdkSessionId: stringMetadata(metadata, "sdkSessionId"),
     agentSessionId: stringMetadata(metadata, "agentSessionId"),
     threadId: stringMetadata(metadata, "threadId"),
   }
@@ -292,9 +297,13 @@ function streamText(event: Extract<SynapseAgentEvent, { type: "stream" }>): stri
   const rawEvent = event.event
   const delta = recordValue(rawEvent?.delta)
   return stringValue(delta?.text)
-    ?? stringValue(delta?.thinking)
     ?? stringValue(rawEvent?.text)
     ?? ""
+}
+
+function streamThinking(event: Extract<SynapseAgentEvent, { type: "stream" }>): string {
+  const delta = recordValue(event.event?.delta)
+  return stringValue(delta?.thinking) ?? ""
 }
 
 function textFromBlocks(blocks: readonly unknown[] | undefined): string {
