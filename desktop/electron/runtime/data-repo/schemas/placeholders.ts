@@ -1045,7 +1045,7 @@ function isOptionalNonNegativeFiniteNumber(value: unknown): boolean {
 }
 
 function isOptionalNonNegativeInteger(value: unknown): boolean {
-  return value === undefined || (Number.isInteger(value) && value >= 0)
+  return value === undefined || (typeof value === "number" && Number.isInteger(value) && value >= 0)
 }
 
 function isConversationHistoryEntry(value: unknown): value is ConversationHistoryEntryV1 {
