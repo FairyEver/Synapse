@@ -668,7 +668,7 @@ git commit -m "feat: adapt claude provider presets"
 - Test: `desktop/electron/services/provider/__tests__/provider-service.test.ts`
 - Test: `desktop/electron/modules/agent/__tests__/ipc.test.ts`
 
-- [ ] **Step 1: Add failing ProviderService preset API tests**
+- [x] **Step 1: Add failing ProviderService preset API tests**
 
 Append to `desktop/electron/services/provider/__tests__/provider-service.test.ts`:
 
@@ -724,7 +724,7 @@ Append to `desktop/electron/services/provider/__tests__/provider-service.test.ts
   })
 ```
 
-- [ ] **Step 2: Add failing IPC tests**
+- [x] **Step 2: Add failing IPC tests**
 
 Append to `desktop/electron/modules/agent/__tests__/ipc.test.ts` near the provider IPC tests:
 
@@ -791,7 +791,7 @@ Append to `desktop/electron/modules/agent/__tests__/ipc.test.ts` near the provid
   })
 ```
 
-- [ ] **Step 3: Run failing service and IPC tests**
+- [x] **Step 3: Run failing service and IPC tests**
 
 Run:
 
@@ -801,7 +801,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: FAIL because service and IPC methods do not exist.
 
-- [ ] **Step 4: Add public preset types**
+- [x] **Step 4: Add public preset types**
 
 In `desktop/electron/services/provider/types.ts`, add:
 
@@ -839,7 +839,7 @@ export interface CreateProviderFromPresetInput {
 }
 ```
 
-- [ ] **Step 5: Implement ProviderService methods**
+- [x] **Step 5: Implement ProviderService methods**
 
 In `desktop/electron/services/provider/provider-service.ts`, import:
 
@@ -911,7 +911,7 @@ function isSensitiveTemplateKey(key: string): boolean {
 }
 ```
 
-- [ ] **Step 6: Export preset APIs**
+- [x] **Step 6: Export preset APIs**
 
 In `desktop/electron/services/provider/index.ts`, export the adapter and preset types:
 
@@ -928,7 +928,7 @@ export {
 } from "./provider-preset-adapter"
 ```
 
-- [ ] **Step 7: Add IPC schemas and handlers**
+- [x] **Step 7: Add IPC schemas and handlers**
 
 In `desktop/electron/modules/agent/ipc-tools.ts`, extend imports with:
 
@@ -1001,7 +1001,7 @@ Add handlers to `toolMethods`:
   },
 ```
 
-- [ ] **Step 8: Add bridge types**
+- [x] **Step 8: Add bridge types**
 
 In `desktop/src/types/bridge.ts`, add renderer types matching the public preset schemas:
 
@@ -1048,7 +1048,7 @@ Add to `SynapseBridge["agent"]`:
     ) => Promise<SynapseAgentProvider>
 ```
 
-- [ ] **Step 9: Regenerate IPC bridge code**
+- [x] **Step 9: Regenerate IPC bridge code**
 
 Run:
 
@@ -1058,7 +1058,7 @@ pnpm --filter @synapse/desktop run generate:ipc
 
 Expected: generated IPC channel/preload files include the two new provider preset methods.
 
-- [ ] **Step 10: Run service and IPC tests**
+- [x] **Step 10: Run service and IPC tests**
 
 Run:
 
@@ -1068,7 +1068,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: PASS.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 Run:
 

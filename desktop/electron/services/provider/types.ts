@@ -69,3 +69,35 @@ export interface UpdateProviderInput {
   readonly archived?: boolean
   readonly sortIndex?: number
 }
+
+export interface ProviderPresetTemplateValue {
+  readonly key: string
+  readonly label: string
+  readonly placeholder: string
+  readonly defaultValue?: string
+  readonly sensitive: boolean
+}
+
+export interface CCProviderPreset {
+  readonly name: string
+  readonly category: ProviderCategory
+  readonly websiteUrl?: string
+  readonly apiKeyUrl?: string
+  readonly baseUrl?: string
+  readonly apiKeyField: ProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly templateValues: readonly ProviderPresetTemplateValue[]
+}
+
+export interface CreateProviderFromPresetInput {
+  readonly presetName: string
+  readonly providerId?: string
+  readonly name?: string
+  readonly apiKey?: string
+  readonly templateValues?: Record<string, string>
+  readonly active?: boolean
+  readonly sortIndex?: number
+}

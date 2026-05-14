@@ -16,12 +16,25 @@ export {
   type ProviderServiceDeps,
 } from "./provider-service"
 export {
+  getClaudeProviderPreset,
+  isClaudeProviderPresetSupported,
+  listClaudeProviderPresets,
+  type ProviderPreset,
+} from "./claude-provider-presets"
+export {
+  buildProviderInputFromClaudePreset,
+  providerIdFromPresetName,
+} from "./provider-preset-adapter"
+export {
   LOCAL_CLAUDE_CODE_PROVIDER_ID,
   PROVIDER_SERVICE_ID,
   type CCProvider,
+  type CCProviderPreset,
+  type CreateProviderFromPresetInput,
   type CreateProviderInput,
   type ProviderApiKeyField,
   type ProviderCategory,
+  type ProviderPresetTemplateValue,
   type UpdateProviderInput,
 } from "./types"
 

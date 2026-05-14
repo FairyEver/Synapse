@@ -165,6 +165,56 @@ describe("ProviderService", () => {
     })
   })
 
+  it("lists public supported provider presets", async () => {
+    const { service } = makeProviderService()
+
+    await expect(service.listProviderPresets()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "PackyCode",
+          category: "third_party",
+          baseUrl: "https://www.packyapi.com",
+          apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        }),
+        expect.objectContaining({
+          name: "AWS Bedrock (AKSK)",
+          category: "cloud_provider",
+          templateValues: expect.arrayContaining([
+            expect.objectContaining({ key: "AWS_REGION" }),
+            expect.objectContaining({ key: "AWS_SECRET_ACCESS_KEY", sensitive: true }),
+          ]),
+        }),
+      ]),
+    )
+    const names = (await service.listProviderPresets()).map((preset) => preset.name)
+    expect(names).not.toContain("GitHub Copilot")
+    expect(names).not.toContain("Codex")
+  })
+
+  it("creates a provider from a preset through the existing provider path", async () => {
+    const { service } = makeProviderService()
+
+    const provider = await service.createProviderFromPreset({
+      presetName: "PackyCode",
+      apiKey: "sk-packy",
+      active: true,
+    })
+
+    expect(provider).toMatchObject({
+      id: "packycode",
+      name: "PackyCode",
+      category: "third_party",
+      active: true,
+      baseUrl: "https://www.packyapi.com",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+    })
+    await expect(service.buildEnv("packycode")).resolves.toMatchObject({
+      ANTHROPIC_BASE_URL: "https://www.packyapi.com",
+      ANTHROPIC_AUTH_TOKEN: "sk-packy",
+      ANTHROPIC_API_KEY: "",
+    })
+  })
+
   it("uses ANTHROPIC_AUTH_TOKEN for baseUrl providers", async () => {
     const { service } = makeProviderService()
 

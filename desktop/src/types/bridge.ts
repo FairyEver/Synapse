@@ -267,6 +267,38 @@ export type SynapseUpdateAgentProviderInput = Partial<Omit<SynapseCreateAgentPro
   readonly archived?: boolean
 }
 
+export type SynapseAgentProviderPresetTemplateValue = {
+  readonly key: string
+  readonly label: string
+  readonly placeholder: string
+  readonly defaultValue?: string
+  readonly sensitive: boolean
+}
+
+export type SynapseAgentProviderPreset = {
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly websiteUrl?: string
+  readonly apiKeyUrl?: string
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly templateValues: readonly SynapseAgentProviderPresetTemplateValue[]
+}
+
+export type SynapseCreateProviderFromPresetInput = {
+  readonly presetName: string
+  readonly providerId?: string
+  readonly name?: string
+  readonly apiKey?: string
+  readonly templateValues?: Record<string, string>
+  readonly active?: boolean
+  readonly sortIndex?: number
+}
+
 export type SynapseBridge = {
   platform: string
   versions: {
@@ -524,8 +556,12 @@ export type SynapseBridge = {
     ) => Promise<SynapseAgentCancelTurnResult>
     getProviders: () => Promise<SynapseAgentProviderState>
     listProviders: () => Promise<SynapseAgentProvider[]>
+    listProviderPresets: () => Promise<SynapseAgentProviderPreset[]>
     createProvider: (
       args: { provider: SynapseCreateAgentProviderInput },
+    ) => Promise<SynapseAgentProvider>
+    createProviderFromPreset: (
+      args: SynapseCreateProviderFromPresetInput,
     ) => Promise<SynapseAgentProvider>
     updateProvider: (
       args: { providerId: string; patch: SynapseUpdateAgentProviderInput },

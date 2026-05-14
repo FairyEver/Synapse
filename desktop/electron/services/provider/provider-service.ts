@@ -15,11 +15,20 @@ import type {
 import { ProviderSecretStore, providerApiKeySecretId } from "./provider-secret-store"
 import type {
   CCProvider,
+  CCProviderPreset,
+  CreateProviderFromPresetInput,
   CreateProviderInput,
   ProviderApiKeyField,
   ProviderCategory,
   UpdateProviderInput,
 } from "./types"
+import {
+  getClaudeProviderPreset,
+  isClaudeProviderPresetSupported,
+  listClaudeProviderPresets,
+  type ProviderPreset,
+} from "./claude-provider-presets"
+import { buildProviderInputFromClaudePreset } from "./provider-preset-adapter"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID as LOCAL_PROVIDER_ID } from "./types"
 
 export interface ProviderServiceDeps {
@@ -68,6 +77,31 @@ export class ProviderService {
       await this.localClaudeCodeProvider(!hasActiveUserProvider),
       ...providers,
     ]
+  }
+
+  async listProviderPresets(): Promise<readonly CCProviderPreset[]> {
+    return listClaudeProviderPresets().map(publicPreset)
+  }
+
+  async createProviderFromPreset(input: CreateProviderFromPresetInput): Promise<CCProvider> {
+    const preset = getClaudeProviderPreset(input.presetName)
+    if (!preset) {
+      throw new Error(`Provider preset not found: ${input.presetName}`)
+    }
+    if (!isClaudeProviderPresetSupported(preset)) {
+      throw new Error(`Provider preset is not supported: ${input.presetName}`)
+    }
+    const existingIds = new Set((await this.listProviders()).map((provider) => provider.id))
+    return this.createProvider(buildProviderInputFromClaudePreset({
+      preset,
+      providerId: input.providerId,
+      name: input.name,
+      apiKey: input.apiKey,
+      templateValues: input.templateValues,
+      active: input.active,
+      sortIndex: input.sortIndex,
+      existingIds,
+    }))
   }
 
   async createProvider(input: CreateProviderInput): Promise<CCProvider> {
@@ -444,6 +478,35 @@ function toProvider(entry: ProviderEntryV1): CCProvider {
     createdAt: entry.createdAt ?? "",
     updatedAt: entry.updatedAt ?? "",
   }
+}
+
+function publicPreset(preset: ProviderPreset): CCProviderPreset {
+  const env = isRecord(preset.settingsConfig) && isRecord(preset.settingsConfig.env)
+    ? preset.settingsConfig.env
+    : {}
+  return {
+    name: preset.name,
+    category: preset.category ?? "custom",
+    websiteUrl: preset.websiteUrl,
+    apiKeyUrl: preset.apiKeyUrl,
+    baseUrl: stringValue(env.ANTHROPIC_BASE_URL),
+    apiKeyField: preset.apiKeyField ?? (typeof env.ANTHROPIC_API_KEY === "string" ? "ANTHROPIC_API_KEY" : "ANTHROPIC_AUTH_TOKEN"),
+    model: stringValue(env.ANTHROPIC_MODEL),
+    haikuModel: stringValue(env.ANTHROPIC_DEFAULT_HAIKU_MODEL),
+    sonnetModel: stringValue(env.ANTHROPIC_DEFAULT_SONNET_MODEL),
+    opusModel: stringValue(env.ANTHROPIC_DEFAULT_OPUS_MODEL),
+    templateValues: Object.entries(preset.templateValues ?? {}).map(([key, value]) => ({
+      key,
+      label: value.label,
+      placeholder: value.placeholder,
+      defaultValue: value.defaultValue ?? value.editorValue,
+      sensitive: isSensitiveTemplateKey(key),
+    })),
+  }
+}
+
+function isSensitiveTemplateKey(key: string): boolean {
+  return /(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY)/i.test(key)
 }
 
 function compactEnv(env: Record<string, string | undefined>): Record<string, string> {

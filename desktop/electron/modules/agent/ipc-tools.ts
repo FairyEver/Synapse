@@ -8,6 +8,7 @@ import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
 import type {
   CCProvider,
+  CreateProviderFromPresetInput,
   CreateProviderInput,
   ProviderApiKeyField,
   ProviderCategory,
@@ -89,6 +90,16 @@ const providerIdRequestSchema = z.object({
   providerId: z.string().min(1),
 })
 
+const createProviderFromPresetRequestSchema = z.object({
+  presetName: z.string().min(1),
+  providerId: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  apiKey: z.string().optional(),
+  templateValues: z.record(z.string(), z.string()).optional(),
+  active: z.boolean().optional(),
+  sortIndex: z.number().optional(),
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const publishedCommandSchema = z.object({
@@ -145,6 +156,28 @@ const publicProviderSchema = z.object({
   updatedAt: z.string(),
 })
 
+const providerPresetTemplateValueSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  placeholder: z.string(),
+  defaultValue: z.string().optional(),
+  sensitive: z.boolean(),
+})
+
+const publicProviderPresetSchema = z.object({
+  name: z.string(),
+  category: providerCategorySchema,
+  websiteUrl: z.string().optional(),
+  apiKeyUrl: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  templateValues: z.array(providerPresetTemplateValueSchema),
+})
+
 const okResultSchema = z.object({
   ok: z.literal(true),
 })
@@ -179,6 +212,7 @@ type ProviderRequest = z.infer<typeof providerRequestSchema>
 type CreateProviderRequest = z.infer<typeof createProviderRequestSchema>
 type UpdateProviderRequest = z.infer<typeof updateProviderRequestSchema>
 type ProviderIdRequest = z.infer<typeof providerIdRequestSchema>
+type CreateProviderFromPresetRequest = z.infer<typeof createProviderFromPresetRequestSchema>
 
 function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSchema> {
   return {
@@ -261,6 +295,16 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       return (await providerService.listProviders()).map(publicProvider)
     },
   },
+  listProviderPresets: {
+    kind: "invoke",
+    channel: "synapse:agent:list-provider-presets",
+    request: providerRequestSchema,
+    response: z.array(publicProviderPresetSchema),
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return providerService.listProviderPresets()
+    },
+  },
   createProvider: {
     kind: "invoke",
     channel: "synapse:agent:create-provider",
@@ -269,6 +313,16 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: CreateProviderRequest) => {
       const providerService = resolveGlobalProviderService(ctx.resolve)
       return publicProvider(await providerService.createProvider(request.provider as CreateProviderInput))
+    },
+  },
+  createProviderFromPreset: {
+    kind: "invoke",
+    channel: "synapse:agent:create-provider-from-preset",
+    request: createProviderFromPresetRequestSchema,
+    response: publicProviderSchema,
+    handler: async (ctx, request: CreateProviderFromPresetRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return publicProvider(await providerService.createProviderFromPreset(request as CreateProviderFromPresetInput))
     },
   },
   updateProvider: {

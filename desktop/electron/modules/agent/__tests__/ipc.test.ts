@@ -359,6 +359,67 @@ describe("agentIpcModule", () => {
     }
   })
 
+  it("lists provider presets through IPC without secrets", async () => {
+    const listProviderPresets = vi.fn().mockResolvedValue([{
+      name: "PackyCode",
+      category: "third_party",
+      websiteUrl: "https://www.packyapi.com",
+      apiKeyUrl: "https://www.packyapi.com/register?aff=cc-switch",
+      baseUrl: "https://www.packyapi.com",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      model: undefined,
+      templateValues: [],
+    }])
+    const harness = createHarness({
+      providerService: {
+        listProviderPresets,
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:list-provider-presets", {})
+
+    expect(listProviderPresets).toHaveBeenCalled()
+    expect(result).toEqual([expect.objectContaining({
+      name: "PackyCode",
+      baseUrl: "https://www.packyapi.com",
+    })])
+    expect(JSON.stringify(result)).not.toContain("sk-")
+  })
+
+  it("creates a provider from a preset through IPC", async () => {
+    const createProviderFromPreset = vi.fn().mockResolvedValue({
+      id: "packycode",
+      name: "PackyCode",
+      category: "third_party",
+      baseUrl: "https://www.packyapi.com",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      active: false,
+      env: {},
+      createdAt: "2026-05-14T00:00:00.000Z",
+      updatedAt: "2026-05-14T00:00:00.000Z",
+    })
+    const harness = createHarness({
+      providerService: {
+        createProviderFromPreset,
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:create-provider-from-preset", {
+      presetName: "PackyCode",
+      apiKey: "sk-packy",
+    })
+
+    expect(createProviderFromPreset).toHaveBeenCalledWith({
+      presetName: "PackyCode",
+      apiKey: "sk-packy",
+    })
+    expect(result).toEqual(expect.objectContaining({
+      id: "packycode",
+      name: "PackyCode",
+    }))
+    expect(JSON.stringify(result)).not.toContain("sk-packy")
+  })
+
   it("returns Agent runtime readiness without exposing secrets", async () => {
     const harness = createHarness({
       providerService: {
