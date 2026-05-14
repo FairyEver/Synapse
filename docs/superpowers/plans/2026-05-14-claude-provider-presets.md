@@ -421,7 +421,7 @@ git commit -m "feat: support encrypted provider env secrets"
 - Create: `desktop/electron/services/provider/provider-preset-adapter.ts`
 - Test: `desktop/electron/services/provider/__tests__/provider-preset-adapter.test.ts`
 
-- [ ] **Step 1: Write failing adapter tests**
+- [x] **Step 1: Write failing adapter tests**
 
 Create `desktop/electron/services/provider/__tests__/provider-preset-adapter.test.ts`:
 
@@ -504,7 +504,7 @@ describe("provider preset adapter", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing adapter test**
+- [x] **Step 2: Run the failing adapter test**
 
 Run:
 
@@ -514,7 +514,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: FAIL because the adapter does not exist.
 
-- [ ] **Step 3: Implement the adapter**
+- [x] **Step 3: Implement the adapter**
 
 Create `desktop/electron/services/provider/provider-preset-adapter.ts`:
 
@@ -638,7 +638,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 ```
 
-- [ ] **Step 4: Run adapter tests**
+- [x] **Step 4: Run adapter tests**
 
 Run:
 
@@ -648,7 +648,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
