@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react"
 import { Check, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
-function formatRelativeTime(timestamp: string): string {
+function formatRelativeTime(timestamp: string): string | undefined {
   const now = Date.now()
   const then = new Date(timestamp).getTime()
+  if (!Number.isFinite(then)) return undefined
   const diffMs = now - then
   if (diffMs < 0) return "刚刚"
 
@@ -39,6 +40,7 @@ function SessionTrailing({
   const [armed, setArmed] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const relativeTime = updatedAt ? formatRelativeTime(updatedAt) : undefined
 
   useEffect(() => {
     if (!armed) return undefined
@@ -63,9 +65,9 @@ function SessionTrailing({
           <span className="sr-only"> 条未读</span>
         </Badge>
       ) : null}
-      {updatedAt ? (
+      {relativeTime ? (
         <span className="text-xs text-muted-foreground group-hover/item:hidden">
-          {formatRelativeTime(updatedAt)}
+          {relativeTime}
         </span>
       ) : null}
       {canDelete ? (

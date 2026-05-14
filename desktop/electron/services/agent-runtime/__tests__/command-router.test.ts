@@ -102,6 +102,134 @@ describe("AgentCommandRouter", () => {
     })
   })
 
+  it("logs conversation provider lookup failures with command context", async () => {
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const providerService = {
+      getProvider: async () => {
+        throw Object.assign(new Error("provider store unavailable"), { code: "EIO" })
+      },
+      getActiveProvider: async () => null,
+      updateProvider: async () => {
+        throw new Error("unexpected update")
+      },
+    } as unknown as ProviderService
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/model haiku"), { ...baseConversation(), providerId: "anthropic" }),
+    )
+
+    expect(result.error).toBe("Provider not found: anthropic")
+    expect(records).toEqual([{
+      message: "Agent command provider lookup failed.",
+      meta: expect.objectContaining({
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "s1",
+        agentType: "claude-code",
+        providerId: "anthropic",
+        command: "/model",
+        errorName: "Error",
+        errorCode: "EIO",
+        error: "provider store unavailable",
+      }),
+    }])
+  })
+
+  it("redacts Windows paths in provider lookup diagnostics", async () => {
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const providerService = {
+      getProvider: async () => {
+        throw Object.assign(
+          new Error("EACCES: permission denied, open C:\\Users\\liyang\\secret\\providers.json"),
+          { code: "EACCES" },
+        )
+      },
+      getActiveProvider: async () => null,
+      updateProvider: async () => {
+        throw new Error("unexpected update")
+      },
+    } as unknown as ProviderService
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/model haiku"), { ...baseConversation(), providerId: "anthropic" }),
+    )
+
+    expect(result.error).toBe("Provider not found: anthropic")
+    expect(records[0]?.meta).toEqual(expect.objectContaining({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "s1",
+      providerId: "anthropic",
+      command: "/model",
+      errorName: "Error",
+      errorCode: "EACCES",
+      error: "EACCES: permission denied, open [path redacted]",
+    }))
+    expect(JSON.stringify(records)).not.toContain("C:\\Users\\liyang")
+  })
+
+  it("redacts secret-shaped values in provider lookup diagnostics", async () => {
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const providerService = {
+      getProvider: async () => {
+        throw Object.assign(
+          new Error("request failed token=sk-secret authorization=BearerSecret cookie=session-id"),
+          { code: "EAUTH" },
+        )
+      },
+      getActiveProvider: async () => null,
+      updateProvider: async () => {
+        throw new Error("unexpected update")
+      },
+    } as unknown as ProviderService
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/status"), { ...baseConversation(), providerId: "anthropic" }),
+    )
+
+    expect(result.resultText).toContain("Provider: anthropic")
+    expect(records[0]?.meta).toEqual(expect.objectContaining({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "s1",
+      providerId: "anthropic",
+      command: "/status",
+      errorName: "Error",
+      errorCode: "EAUTH",
+      error: "request failed token=[redacted] authorization=[redacted] cookie=[redacted]",
+    }))
+    expect(JSON.stringify(records)).not.toContain("sk-secret")
+    expect(JSON.stringify(records)).not.toContain("BearerSecret")
+    expect(JSON.stringify(records)).not.toContain("session-id")
+  })
+
   it("lists modes, handles /new and /status, and rejects mode switches and unknown commands", async () => {
     const { providerService } = makeProviderService()
     await providerService.createProvider({

@@ -63,7 +63,10 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
       setSelectedProviderId(visible.find((provider) => provider.active)?.id ?? visible[0]?.id ?? "")
     } catch (rawError) {
       if (requestId !== providerRequestIdRef.current) return
-      logger.error("Prompt run: load providers failed.", rawError)
+      logger.error("Prompt run: load providers failed.", {
+        boundary: "renderer.prompt-run.load-providers",
+        ...errorLogMeta(rawError),
+      })
       setProviders([])
       setSelectedProviderId("")
       setProvidersError(rawError instanceof Error ? rawError.message : "读取 Provider 失败")
@@ -216,6 +219,14 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
       </DialogContent>
     </Dialog>
   )
+}
+
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { PromptRunDialog }

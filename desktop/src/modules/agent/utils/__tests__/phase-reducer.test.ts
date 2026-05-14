@@ -112,6 +112,26 @@ describe("reducePhaseEvent", () => {
     expect(findPhase(next, "failed")).toMatchObject({ status: "failed", errorMessage: "boom" })
   })
 
+  it("closes cancel escalation when the terminal event uses the turn runId", () => {
+    const start: SynapseAgentTimelineItem[] = [
+      mkItem({ id: "p1", runId: "run-1", phase: "streaming", status: "in-progress" }),
+      mkItem({ id: "p2", runId: "c", phase: "cancel_pending", status: "in-progress" }),
+    ]
+    const next = reducePhaseEvent(
+      start,
+      mkEvent({
+        runId: "run-1",
+        phase: "failed",
+        status: "failed",
+        errorMessage: "cancelled",
+        timestamp: "2026-05-10T00:00:04.000Z",
+      }),
+    )
+
+    expect(findPhase(next, "streaming")).toMatchObject({ status: "failed", errorMessage: "cancelled" })
+    expect(findPhase(next, "cancel_pending")).toMatchObject({ status: "failed", errorMessage: "cancelled" })
+  })
+
   it("is idempotent on duplicate in-progress events", () => {
     const start: SynapseAgentTimelineItem[] = [mkItem({ id: "p1", phase: "received", status: "in-progress" })]
     const next = reducePhaseEvent(start, mkEvent({ phase: "received", status: "in-progress" }))

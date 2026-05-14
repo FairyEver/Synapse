@@ -16,6 +16,7 @@ export interface RuntimeSessionState {
   pending?: PendingPermissionState
   turnAbortController?: AbortController
   providerId?: string
+  modeOverride?: string
   closing?: boolean
   cancelState?: {
     requestedAt: number
@@ -138,7 +139,13 @@ export class SessionLifecycleManager {
 
   startIdleReclaim(): void {
     this.reclaimInterval = setInterval(() => {
-      void this.reclaimIdleSessions()
+      void this.reclaimIdleSessions().catch((error) => {
+        this.deps.logger?.warn("Agent idle reclaim failed.", {
+          projectId: this.deps.projectId,
+          boundary: "agent-runtime-idle-reclaim",
+          ...errorDiagnostic(error),
+        })
+      })
     }, 60_000)
   }
 
@@ -174,5 +181,13 @@ export class SessionLifecycleManager {
 
   stateForConversation(conversationIdValue: string, message?: AgentMessage): RuntimeSessionState {
     return this.deps.sessionManager.stateForConversation(conversationIdValue, message)
+  }
+}
+
+function errorDiagnostic(error: unknown): Record<string, unknown> {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
   }
 }

@@ -16,8 +16,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseAgentProvider } from "@/types/bridge"
+
+const logger = createRendererLogger("agent")
 
 type ProviderSelectDialogProps = {
   readonly open: boolean
@@ -53,6 +56,8 @@ function ProviderSelectDialog({
     setLoading(true)
     setLoaded(false)
     setError(null)
+    setProviders([])
+    setSelectedProviderId(undefined)
     try {
       const nextProviders = await requireSynapseBridge().agent.listProviders()
       if (requestId !== requestIdRef.current) return
@@ -62,14 +67,23 @@ function ProviderSelectDialog({
       setLoaded(true)
     } catch (rawError) {
       if (requestId !== requestIdRef.current) return
-      setError(rawError instanceof Error ? rawError.message : "读取 Provider 失败")
+      logger.warn("Agent provider list failed.", {
+        boundary: "renderer.provider-select",
+        projectId: projectId ?? null,
+        hasProjectName: Boolean(projectName),
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessageLength(rawError),
+      })
+      setProviders([])
+      setSelectedProviderId(undefined)
+      setError("读取 Provider 失败")
       setLoaded(true)
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false)
       }
     }
-  }, [])
+  }, [projectId, projectName])
 
   useEffect(() => {
     if (!open) {
@@ -92,11 +106,15 @@ function ProviderSelectDialog({
     onOpenChange(false)
   }, [error, loaded, loading, onCreate, onOpenChange, open, projectId, visibleProviders])
 
+  const selectedProviderAvailable = Boolean(
+    selectedProviderId && visibleProviders.some((provider) => provider.id === selectedProviderId),
+  )
+
   const handleCreate = useCallback(() => {
-    if (!projectId || !selectedProviderId) return
+    if (!projectId || !selectedProviderId || !selectedProviderAvailable || error || loading) return
     onCreate(projectId, selectedProviderId)
     onOpenChange(false)
-  }, [onCreate, onOpenChange, projectId, selectedProviderId])
+  }, [error, loading, onCreate, onOpenChange, projectId, selectedProviderAvailable, selectedProviderId])
 
   const shouldAutoCreate = Boolean(
     open && loaded && !loading && !error && projectId && visibleProviders.length === 1,
@@ -173,13 +191,22 @@ function ProviderSelectDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <Button type="button" disabled={!selectedProviderId || loading} onClick={handleCreate}>
+          <Button
+            type="button"
+            disabled={!selectedProviderAvailable || loading || Boolean(error)}
+            onClick={handleCreate}
+          >
             创建
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
+}
+
+function errorMessageLength(error: unknown): number {
+  if (error instanceof Error) return error.message.length
+  return String(error).length
 }
 
 export { ProviderSelectDialog }

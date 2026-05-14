@@ -48,14 +48,26 @@ export function createAgentAction(deps: {
         lastConversationId,
         abortSignal: input.context.abortSignal,
       })
+      const status = result.status === "error"
+        ? input.context.abortSignal.aborted ? "cancelled" : "failed"
+        : result.status
 
       return {
-        status: result.status === "success" ? "success" : "failed",
+        status,
         summary: result.summary,
-        error: result.error,
+        error: persistableAgentError(status, result.error),
         outputs: { conversationId: result.conversationId },
         metrics: { durationMs: result.durationMs },
       }
     },
   }
+}
+
+function persistableAgentError(
+  status: "success" | "failed" | "timeout" | "cancelled",
+  error: string | undefined,
+): string | undefined {
+  if (!error) return undefined
+  if (status !== "failed") return error
+  return `Agent runtime error (${error.length} chars)`
 }

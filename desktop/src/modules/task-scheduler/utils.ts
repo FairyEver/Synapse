@@ -6,10 +6,12 @@ import type {
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 import type { SynapseProjectConfig } from "@/types/config"
+import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import type { TaskExportFile, TaskFormState } from "./types"
 
 const DEFAULT_ACTION_TYPE = "builtin.command"
+const logger = createRendererLogger("task-scheduler.utils")
 
 const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   name: "",
@@ -116,7 +118,15 @@ function formatTaskTrigger(task: Pick<ScheduledTask, "trigger">): string {
 function formatTaskAction(task: ScheduledTask): string {
   try {
     return rendererActionRegistry.summarize(task.action.type, task.action.config)
-  } catch {
+  } catch (error) {
+    logger.warn("Task action summary render failed.", {
+      boundary: "task-scheduler.action-summary",
+      taskId: task.id,
+      actionType: task.action.type,
+      configKeys: Object.keys(task.action.config).sort(),
+      errorName: getErrorName(error),
+      errorLength: getErrorLength(error),
+    })
     return task.action.type
   }
 }
@@ -168,6 +178,23 @@ function readPositiveInteger(value: string, label: string): number {
     throw new Error(`${label}需为正整数`)
   }
   return numberValue
+}
+
+function getErrorName(error: unknown): string {
+  if (error instanceof Error) {
+    return error.name
+  }
+  return typeof error
+}
+
+function getErrorLength(error: unknown): number {
+  if (error instanceof Error) {
+    return error.message.length
+  }
+  if (typeof error === "string") {
+    return error.length
+  }
+  return 0
 }
 
 function serializeTasksForExport(tasks: ScheduledTask[]): TaskExportFile {

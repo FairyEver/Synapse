@@ -13,15 +13,11 @@ type AgentPermissionCardProps = {
 }
 
 function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: AgentPermissionCardProps) {
-  const [resolved, setResolved] = useState<"allow" | "deny" | null>(null)
   const [codeCollapsed, setCodeCollapsed] = useState(false)
   const body = item.toolInput ?? formatRawInput(item.toolInputRaw)
-  const showActions = pending && resolved === null
-  const isAllowed = resolved === "allow"
-  const isDenied = resolved === "deny"
+  const showActions = pending
 
   function handleRespond(behavior: "allow" | "deny") {
-    setResolved(behavior)
     onRespond(item.requestId, behavior)
   }
 
@@ -37,26 +33,10 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
         className={cn("flex items-center gap-2 bg-muted/30 px-3 py-2", body && "cursor-pointer select-none")}
         onClick={body ? () => setCodeCollapsed(!codeCollapsed) : undefined}
       >
-        {isAllowed ? (
-          <ShieldCheck className="size-4 shrink-0 text-green-500" />
-        ) : isDenied ? (
-          <ShieldX className="size-4 shrink-0 text-destructive" />
-        ) : (
-          <ShieldAlert className="size-4 shrink-0 text-muted-foreground" />
-        )}
+        <ShieldAlert className="size-4 shrink-0 text-muted-foreground" />
         <span className="text-sm font-semibold">{item.toolName}</span>
         <div className="ml-auto flex items-center gap-1.5">
-          {isAllowed ? (
-            <Badge variant="secondary" className="gap-1 border-green-200 bg-green-50 text-green-600">
-              <ShieldCheck className="size-3" />
-              已允许
-            </Badge>
-          ) : isDenied ? (
-            <Badge variant="destructive" className="gap-1">
-              <ShieldX className="size-3" />
-              已拒绝
-            </Badge>
-          ) : !pending && resolved === null ? (
+          {!pending ? (
             <Badge variant="secondary">已处理</Badge>
           ) : null}
         </div>

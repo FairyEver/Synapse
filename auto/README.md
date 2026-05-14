@@ -45,7 +45,7 @@ state/ui-config.json
 - 批次间隔
 - 单 worker 超时
 - 日志保留数量
-- Codex command / model / sandbox / approval policy
+- Codex command / model / sandbox / approval policy / MCP 开关
 
 ## 并行行为
 

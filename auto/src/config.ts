@@ -17,6 +17,7 @@ export interface CodexConfig {
   sandbox: SandboxMode
   approvalPolicy: ApprovalPolicy
   json: boolean
+  disableMcp?: boolean
 }
 
 export interface UiConfig {
@@ -42,6 +43,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
     sandbox: 'danger-full-access',
     approvalPolicy: 'never',
     json: true,
+    disableMcp: true,
   },
 }
 
@@ -114,6 +116,7 @@ export function validateUiConfig(raw: unknown): UiConfig {
       sandbox: sandboxValue(merged.codex.sandbox),
       approvalPolicy: approvalValue(merged.codex.approvalPolicy),
       json: booleanValue(merged.codex.json, 'codex.json'),
+      disableMcp: booleanValue(merged.codex.disableMcp, 'codex.disableMcp'),
     },
   }
 }

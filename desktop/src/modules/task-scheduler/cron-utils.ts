@@ -23,6 +23,8 @@ export type ParsedCronExpression = {
   readonly day: ReadonlySet<number>
   readonly month: ReadonlySet<number>
   readonly weekday: ReadonlySet<number>
+  readonly dayWildcard: boolean
+  readonly weekdayWildcard: boolean
 }
 
 export type CronValidationResult =
@@ -149,13 +151,17 @@ function parseCronExpression(expr: string): ParsedCronExpression {
   if (parts.length !== 5) {
     throw new Error("Cron 必须包含 5 段")
   }
+  const day = parseField(parts[2] ?? "", FIELD_SPECS[2])
+  const weekday = parseField(parts[4] ?? "", FIELD_SPECS[4])
 
   return {
     minute: parseField(parts[0] ?? "", FIELD_SPECS[0]),
     hour: parseField(parts[1] ?? "", FIELD_SPECS[1]),
-    day: parseField(parts[2] ?? "", FIELD_SPECS[2]),
+    day,
     month: parseField(parts[3] ?? "", FIELD_SPECS[3]),
-    weekday: parseField(parts[4] ?? "", FIELD_SPECS[4]),
+    weekday,
+    dayWildcard: isFullField(day, FIELD_SPECS[2]),
+    weekdayWildcard: isFullField(weekday, FIELD_SPECS[4]),
   }
 }
 
@@ -209,9 +215,15 @@ function nextCronRun(expr: string, from = new Date()): Date {
 function matchesCron(parsed: ParsedCronExpression, date: Date): boolean {
   return parsed.minute.has(date.getMinutes())
     && parsed.hour.has(date.getHours())
-    && parsed.day.has(date.getDate())
     && parsed.month.has(date.getMonth() + 1)
-    && parsed.weekday.has(date.getDay())
+    && matchesDayFields(parsed, date.getDate(), date.getDay())
+}
+
+function matchesDayFields(parsed: ParsedCronExpression, day: number, weekday: number): boolean {
+  const dayMatches = parsed.day.has(day)
+  const weekdayMatches = parsed.weekday.has(weekday)
+  if (!parsed.dayWildcard && !parsed.weekdayWildcard) return dayMatches || weekdayMatches
+  return dayMatches && weekdayMatches
 }
 
 function parseField(field: string, spec: FieldSpec): ReadonlySet<number> {
@@ -225,6 +237,13 @@ function parseField(field: string, spec: FieldSpec): ReadonlySet<number> {
 
   if (values.size === 0) throw new Error(`${spec.label}没有有效值`)
   return new Set([...values].sort((a, b) => a - b))
+}
+
+function isFullField(values: ReadonlySet<number>, spec: FieldSpec): boolean {
+  for (let value = spec.min; value <= spec.max; value += 1) {
+    if (!values.has(spec.normalize?.(value) ?? value)) return false
+  }
+  return true
 }
 
 function addSegment(values: Set<number>, segment: string, spec: FieldSpec): void {

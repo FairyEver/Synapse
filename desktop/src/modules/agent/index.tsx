@@ -129,12 +129,26 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     if (target) {
       pendingSessionRefreshKeyRef.current = null
       const prompt = pendingAgentSession.prompt
-      void chat.selectSession(target).then(() => {
-        if (prompt) {
-          void chat.sendMessage(prompt)
+      void (async () => {
+        try {
+          await chat.selectSession(target)
+          if (prompt) {
+            await chat.sendMessage(prompt)
+          }
+          onPendingAgentSessionConsumed?.()
+        } catch (rawError) {
+          logger.error("Agent pending session handoff failed.", {
+            boundary: "renderer.agent.pending-session-handoff",
+            projectId: pendingAgentSession.projectId,
+            conversationId: pendingAgentSession.conversationId,
+            sessionKey: chat.selectedSessionKey,
+            targetSessionKey: target.sessionKey,
+            hasPrompt: Boolean(prompt),
+            promptLength: prompt?.length ?? 0,
+            ...errorDiagnostic(rawError),
+          })
         }
-      })
-      onPendingAgentSessionConsumed?.()
+      })()
       return
     }
 
@@ -145,12 +159,19 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     pendingSessionRefreshKeyRef.current = pendingKey
     void chat.refresh().catch((rawError) => {
       pendingSessionRefreshKeyRef.current = null
-      logger.error("Agent pending session refresh failed.", rawError)
+      logger.error("Agent pending session refresh failed.", {
+        boundary: "renderer.agent.pending-session-refresh",
+        projectId: pendingAgentSession.projectId,
+        conversationId: pendingAgentSession.conversationId,
+        sessionKey: chat.selectedSessionKey,
+        ...errorDiagnostic(rawError),
+      })
     })
   }, [
     pendingAgentSession,
     chat.loading,
     chat.refresh,
+    chat.selectedSessionKey,
     chat.sessions,
     chat.selectSession,
     chat.sendMessage,
@@ -243,7 +264,13 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       await window.navigator.clipboard.writeText(transcript)
       toast("已复制")
     } catch (rawError) {
-      logger.error("Agent transcript copy failed.", rawError)
+      logger.error("Agent transcript copy failed.", {
+        boundary: "renderer.agent.transcript-copy",
+        projectId,
+        conversationId: chat.selectedConversationId,
+        sessionKey: chat.selectedSessionKey,
+        ...errorDiagnostic(rawError),
+      })
       toast("复制失败")
     }
   }
@@ -422,6 +449,14 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       </div>
     </SidebarContentLayout>
   )
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { AgentComposer, AgentModule }

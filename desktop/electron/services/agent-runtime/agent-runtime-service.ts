@@ -150,6 +150,7 @@ export class AgentRuntimeService {
       unknownSlashBehavior: deps.unknownSlashBehavior,
       customCommands: deps.customCommands,
       skills: deps.skills,
+      logger: deps.logger,
       resetSession: (message) => this.resetMessageSession(message),
       showReference: (message, args) => this.showReferenceForMessage(message, args),
       listCommands: (message) => this.listPublishedCommands(message.platform),
@@ -220,12 +221,15 @@ export class AgentRuntimeService {
     const externalSignal = input.abortSignal
 
     if (externalSignal?.aborted) {
-      return {
+      const durationMs = Date.now() - startMs
+      const result: ScheduledAgentSendResult = {
         conversationId: "",
         status: "error",
         error: "Aborted before execution",
-        durationMs: Date.now() - startMs,
+        durationMs,
       }
+      this.logScheduledAgentFailure(input, message, result)
+      return result
     }
 
     const onExternalAbort = () => ac.abort()
@@ -248,6 +252,7 @@ export class AgentRuntimeService {
           const isNotFound = resumeError instanceof Error
             && resumeError.message.includes("not found")
           if (!isNotFound) throw resumeError
+          this.logScheduledResumeFallback(input, message, resumeError)
           const name = formatScheduledSessionName()
           result = await this.conversationRouter.sendNewSession(message, name, { abortSignal: ac.signal })
         }
@@ -255,24 +260,30 @@ export class AgentRuntimeService {
 
       const timedOut = ac.signal.aborted && !externalSignal?.aborted
       if (timedOut) {
-        return {
+        const scheduledResult: ScheduledAgentSendResult = {
           conversationId: result.conversationId,
           status: "timeout",
           error: `Execution exceeded ${input.timeoutMs}ms timeout`,
           durationMs: Date.now() - startMs,
         }
+        this.logScheduledAgentFailure(input, message, scheduledResult)
+        return scheduledResult
       }
 
-      return {
+      const scheduledResult: ScheduledAgentSendResult = {
         conversationId: result.conversationId,
         status: result.error ? "error" : "success",
         summary: result.resultText || undefined,
         error: result.error,
         durationMs: Date.now() - startMs,
       }
+      if (scheduledResult.status !== "success") {
+        this.logScheduledAgentFailure(input, message, scheduledResult)
+      }
+      return scheduledResult
     } catch (error) {
       const isTimeout = ac.signal.aborted && !externalSignal?.aborted
-      return {
+      const scheduledResult: ScheduledAgentSendResult = {
         conversationId: "",
         status: isTimeout ? "timeout" : "error",
         error: isTimeout
@@ -280,6 +291,8 @@ export class AgentRuntimeService {
           : error instanceof Error ? error.message : String(error),
         durationMs: Date.now() - startMs,
       }
+      this.logScheduledAgentFailure(input, message, scheduledResult)
+      return scheduledResult
     } finally {
       clearTimeout(timeout)
       externalSignal?.removeEventListener("abort", onExternalAbort)
@@ -306,8 +319,10 @@ export class AgentRuntimeService {
         await this.sessionManager.closeCurrentTurn(conversationId)
         return { status: "hard-killed" }
       }
+      const conversation = await this.repository.get(conversationId)
+      const sessionKey = conversation?.sessionKey ?? ""
       state.cancelState.escalationTimer = setTimeout(() => {
-        this.emitCancelEscalation(conversationId)
+        this.emitCancelEscalation(conversationId, sessionKey)
       }, 5000)
       return { status: "graceful-pending" }
     }
@@ -331,20 +346,22 @@ export class AgentRuntimeService {
     return { status: "hard-killed" }
   }
 
-  private emitCancelEscalation(conversationId: string): void {
+  private emitCancelEscalation(conversationId: string, sessionKey: string): void {
+    const timestamp = this.isoNow()
     this.deps.eventBus?.emit({
       domain: "agent",
       type: "phase.update",
       payload: {
         runId: conversationId,
         projectId: this.deps.projectId,
-        sessionKey: "",
+        sessionKey,
+        conversationId,
         phase: "cancel_pending",
         status: "in-progress",
-        startedAt: new Date().toISOString(),
+        startedAt: timestamp,
       },
       scope: { sessionId: conversationId },
-      timestamp: new Date().toISOString(),
+      timestamp,
     })
   }
 
@@ -490,10 +507,9 @@ export class AgentRuntimeService {
         { behavior: request.behavior },
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
       this.recordPermissionAudit(action, request.actor, resource, "failed", pending, {
         behavior: request.behavior,
-        error: message,
+        ...summarizePermissionResponseError(error),
       })
       throw error
     }
@@ -759,6 +775,49 @@ export class AgentRuntimeService {
   private isoNow(): string {
     return (this.deps.now?.() ?? new Date()).toISOString()
   }
+
+  private logScheduledAgentFailure(
+    input: ScheduledAgentSendInput,
+    message: AgentMessage,
+    result: ScheduledAgentSendResult,
+  ): void {
+    this.deps.logger?.warn("Scheduled agent send failed.", {
+      boundary: "agent-runtime.scheduled-send",
+      source: "scheduled",
+      projectId: input.projectId,
+      sessionKey: message.sessionKey,
+      conversationId: result.conversationId || undefined,
+      agentType: input.agentType,
+      mode: input.mode,
+      sessionPolicy: input.sessionPolicy,
+      resumeConversationId: input.lastConversationId,
+      status: result.status,
+      errorLength: result.error?.length,
+      timeoutMs: input.timeoutMs,
+      durationMs: result.durationMs,
+      promptLength: input.prompt.length,
+    })
+  }
+
+  private logScheduledResumeFallback(
+    input: ScheduledAgentSendInput,
+    message: AgentMessage,
+    error: unknown,
+  ): void {
+    this.deps.logger?.warn("Scheduled agent resume fallback.", {
+      boundary: "agent-runtime.scheduled-resume",
+      source: "scheduled",
+      projectId: input.projectId,
+      sessionKey: message.sessionKey,
+      resumeConversationId: input.lastConversationId,
+      agentType: input.agentType,
+      mode: input.mode,
+      sessionPolicy: input.sessionPolicy,
+      fallback: "fresh-session",
+      ...summarizeScheduledResumeError(error),
+      promptLength: input.prompt.length,
+    })
+  }
 }
 
 export { conversationId }
@@ -799,6 +858,34 @@ function formatCommandResult(name: string, result: ControlledProcessResult): str
       ? `Command completed: /${name}`
       : `Command failed: /${name} (${String(result.exitCode ?? result.signal ?? "unknown")})`
   return output ? `${status}\n\n${truncateRunes(output, 4000)}` : status
+}
+
+function summarizePermissionResponseError(error: unknown): { errorName: string; errorLength: number } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name || "Error",
+      errorLength: error.message.length,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+  }
+}
+
+function summarizeScheduledResumeError(error: unknown): { errorName: string; errorLength: number } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name || "Error",
+      errorLength: error.message.length,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+  }
 }
 
 function truncateRunes(value: string, maxRunes: number): string {

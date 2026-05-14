@@ -401,7 +401,25 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
         })
         throw new Error(permission.reason)
       }
-      const error = await shell.openPath(reference.path)
+      let error: string
+      try {
+        error = await shell.openPath(reference.path)
+      } catch (openError) {
+        auditSink.record({
+          action: "fs.read.outside-userdata",
+          actor,
+          resource: reference.path,
+          outcome: "failed",
+          metadata: {
+            projectId: request.projectId,
+            command: "open-reference",
+            line: reference.line,
+            boundary: "agent.ipc.open-reference.shell",
+            ...shellOpenErrorMetadata(openError),
+          },
+        })
+        throw openError
+      }
       auditSink.record({
         action: "fs.read.outside-userdata",
         actor,
@@ -418,4 +436,12 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       return { ok: true, path: reference.path }
     },
   },
+}
+
+function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }

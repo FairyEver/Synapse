@@ -1,6 +1,8 @@
 import { z } from "zod"
 
 const metadataSchema = z.record(z.string(), z.unknown()).optional()
+const SENSITIVE_METADATA_VALUE_PATTERN =
+  /\b(token|secret|authorization|password|credential|apiKey|api_key|cookie)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^,;]+?)(?=\s+\b(?:token|secret|authorization|password|credential|apiKey|api_key|cookie)\b\s*[:=]|$|[,;])/gi
 
 export const bridgeRegisterSchema = z.object({
   type: z.literal("register"),
@@ -141,6 +143,10 @@ export function sanitizeBridgeMetadata(
 function sanitizeMetadataValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sanitizeMetadataValue)
+  }
+  if (typeof value === "string") {
+    return value.replace(SENSITIVE_METADATA_VALUE_PATTERN, (_match, key: string, separator: string) =>
+      `${key}${separator}[redacted]`)
   }
   if (typeof value === "object" && value !== null) {
     return sanitizeBridgeMetadata(value as Record<string, unknown>)

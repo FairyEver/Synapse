@@ -32,6 +32,7 @@ import {
 import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
+  ScheduledTaskRun,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 import { TaskCardGrid } from "./components/task-card-grid"
@@ -57,6 +58,10 @@ import {
 } from "./utils"
 
 const logger = createRendererLogger("task-scheduler")
+
+function isAcceptedManualRun(run: ScheduledTaskRun | null): run is ScheduledTaskRun {
+  return run !== null && run.status !== "skipped"
+}
 
 function TaskSchedulerModule() {
   const { config } = useAppConfig()
@@ -187,6 +192,47 @@ function TaskSchedulerModule() {
     )
   }
 
+  async function handleRunTask(task: ScheduledTask) {
+    try {
+      const run = await runTask(task.id)
+      if (!isAcceptedManualRun(run)) {
+        logger.warn("Task run was not accepted.", {
+          action: "runTask",
+          boundary: "renderer.task-scheduler.runTask",
+          taskId: task.id,
+          taskName: task.name,
+          actionType: task.action.type,
+          runId: run?.id,
+          runStatus: run?.status ?? "missing",
+        })
+        notify({ message: "触发失败", tone: "destructive" })
+        return
+      }
+      if (task.action.type === "builtin.agent") {
+        const projectId = task.action.config["projectId"]
+        if (typeof projectId === "string" && projectId) {
+          requestWatchNextAgentSession({ projectId })
+        }
+      }
+      logger.info("Task run triggered.", {
+        taskId: task.id,
+        taskName: task.name,
+        actionType: task.action.type,
+        runId: run?.id,
+        runStatus: run?.status,
+      })
+      notify({ message: "任务已触发", tone: "success" })
+    } catch (err) {
+      logger.error("Failed to run task.", {
+        error: err,
+        taskId: task.id,
+        taskName: task.name,
+        actionType: task.action.type,
+      })
+      notify({ message: "触发失败", tone: "destructive" })
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col gap-2.5 bg-surface px-2 py-2.5">
@@ -256,16 +302,7 @@ function TaskSchedulerModule() {
               }}
               onHistory={(task) => setHistoryTask(task)}
               onRun={(task) => {
-                if (task.action.type === "builtin.agent") {
-                  const projectId = task.action.config["projectId"]
-                  if (typeof projectId === "string" && projectId) {
-                    requestWatchNextAgentSession({ projectId })
-                  }
-                }
-                runTask(task.id).catch((err) => {
-                  logger.error("Failed to run task.", { error: err, taskId: task.id })
-                })
-                notify({ message: "任务已触发", tone: "success" })
+                void handleRunTask(task)
               }}
               onStop={(task) => {
                 void runMutation(

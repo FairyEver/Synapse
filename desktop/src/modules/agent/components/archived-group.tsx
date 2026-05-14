@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Archive } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
@@ -42,8 +42,19 @@ function ArchivedGroup({
   onDelete,
   onRename,
 }: ArchivedGroupProps) {
+  const selectedArchived = sessions.some((session) => (
+    session.projectId === selectedProjectId
+      && session.id === selectedConversationId
+  ))
+  const [open, setOpen] = useState(selectedArchived)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
   const [renameValue, setRenameValue] = useState("")
+
+  useEffect(() => {
+    if (selectedArchived) {
+      setOpen(true)
+    }
+  }, [selectedArchived])
 
   function handleRenameOpen(session: SynapseAgentSessionSummary) {
     setRenameTarget(session)
@@ -59,7 +70,7 @@ function ArchivedGroup({
 
   return (
     <>
-      <Collapsible defaultOpen={false} data-track="agent-archived-group">
+      <Collapsible open={open} onOpenChange={setOpen} data-track="agent-archived-group">
         <CollapsibleTrigger className="flex h-8 w-full items-center rounded-lg px-3 text-sm font-medium text-foreground/80 outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
           <span className="flex min-w-0 items-center gap-2 text-left">
             <Archive className="size-4 shrink-0" />

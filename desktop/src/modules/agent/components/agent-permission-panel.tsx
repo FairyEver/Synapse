@@ -26,7 +26,7 @@ function AgentPermissionPanel({
         <Alert key={permission.requestId}>
           <AlertTitle>{permission.toolName}</AlertTitle>
           {permission.toolInput ? (
-            <AlertDescription className="whitespace-pre-wrap">
+            <AlertDescription className="whitespace-pre-wrap break-words">
               {permission.toolInput}
             </AlertDescription>
           ) : null}

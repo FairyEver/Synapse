@@ -11,6 +11,10 @@ import type { SynapseContentMeta } from "@/types/content"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const runMock = vi.hoisted(() => vi.fn())
+const rendererLogger = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+}))
 
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
@@ -31,6 +35,10 @@ vi.mock("@/modules/prompts/hooks/use-prompt-run", () => ({
 
 vi.mock("@/modules/content/components/content-item-icon", () => ({
   ContentItemIcon: () => <span data-testid="content-item-icon" />,
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
 }))
 
 let roots: Root[] = []
@@ -104,6 +112,50 @@ describe("PromptRunDialog", () => {
       navigate: true,
     })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("logs provider load failures with sanitized renderer boundary context", async () => {
+    const listProviders = vi.fn().mockRejectedValue(
+      new Error("Authorization: Bearer sk-test failed while loading providers"),
+    )
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PromptRunDialog
+          open={true}
+          onOpenChange={vi.fn()}
+          item={promptItem}
+        />,
+      )
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith(
+      "Prompt run: load providers failed.",
+      {
+        boundary: "renderer.prompt-run.load-providers",
+        errorLength: 60,
+        errorName: "Error",
+      },
+    )
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("Bearer")
   })
 })
 

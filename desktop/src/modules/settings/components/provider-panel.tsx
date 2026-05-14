@@ -123,10 +123,13 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         setError(null)
       }
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "读取 Provider 失败"
-      logger.error("Provider list failed.", rawError)
+      logger.error("Provider list failed.", {
+        boundary: "settings.providers.list",
+        action: "listProviders",
+        ...providerErrorDiagnostic(rawError),
+      })
       if (requestId === requestIdRef.current && showLoading) {
-        setError(message)
+        setError("读取 Provider 失败")
       }
     } finally {
       if (showLoading && loadingRequestIdRef.current === requestId) {
@@ -192,9 +195,14 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       await refresh()
       toast("Provider 已保存")
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "保存 Provider 失败"
-      logger.error("Provider save failed.", rawError)
-      toast(message)
+      const action = editingProvider ? "updateProvider" : "createProvider"
+      logger.error("Provider save failed.", {
+        boundary: "settings.providers.save",
+        action,
+        providerId: editingProvider?.id ?? optionalTrimmed(formValues.id),
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast("保存 Provider 失败")
     } finally {
       setSaving(false)
     }
@@ -208,9 +216,13 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       await refresh()
       toast("Provider 已归档")
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "归档失败"
-      logger.error("Provider archive failed.", rawError)
-      toast(message)
+      logger.error("Provider archive failed.", {
+        boundary: "settings.providers.archive",
+        action: "archiveProvider",
+        providerId: provider.id,
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast("归档失败")
     }
   }, [refresh])
 
@@ -222,9 +234,13 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       await refresh()
       toast("已设为默认")
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "切换失败"
-      logger.error("Provider activate failed.", rawError)
-      toast(message)
+      logger.error("Provider activate failed.", {
+        boundary: "settings.providers.activate",
+        action: "setActiveProvider",
+        providerId: provider.id,
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast("切换失败")
     }
   }, [refresh])
 
@@ -611,6 +627,18 @@ function optionalNumber(value: string): number | undefined {
   if (!trimmed) return undefined
   const parsed = Number(trimmed)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function providerErrorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { ProviderPanel, ProviderPanelView }

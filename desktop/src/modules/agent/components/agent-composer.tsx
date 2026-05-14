@@ -51,6 +51,7 @@ function AgentComposer({
   return (
     <form
       className="agent-composer absolute inset-x-4 bottom-5 z-10 mx-auto max-w-2xl md:inset-x-20"
+      data-track="agent-composer"
       onSubmit={onSubmit}
     >
       <div
@@ -77,6 +78,7 @@ function AgentComposer({
                     variant="ghost"
                     size="icon-xs"
                     aria-label="重试发送"
+                    data-track="agent-pending-message-retry"
                     onClick={() => onRetryPendingMessage?.(message.id)}
                   >
                     <RotateCcw />
@@ -87,6 +89,7 @@ function AgentComposer({
                   variant="ghost"
                   size="icon-xs"
                   aria-label="删除待发送消息"
+                  data-track="agent-pending-message-remove"
                   onClick={() => onRemovePendingMessage?.(message.id)}
                 >
                   <Trash2 />
@@ -113,6 +116,7 @@ function AgentComposer({
               size="icon-sm"
               onClick={cancelPhase === "cancel_pending" ? onForceKillTurn : onCancelTurn}
               aria-label={cancelPhase === "cancel_pending" ? "强制停止" : "停止"}
+              data-track={cancelPhase === "cancel_pending" ? "agent-turn-force-stop" : "agent-turn-stop"}
             >
               <Square size={12} strokeWidth={0} fill="currentColor" />
             </Button>
@@ -123,6 +127,7 @@ function AgentComposer({
               size="icon-sm"
               disabled={!canSend}
               aria-label="发送"
+              data-track="agent-message-send"
             >
               <ArrowUp size={14} strokeWidth={2.5} />
             </Button>

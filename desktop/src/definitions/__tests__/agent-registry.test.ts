@@ -22,5 +22,6 @@ describe("agent definition registry", () => {
       "bypassPermissions",
       "dontAsk",
     ])
+    expect(claude?.commands.find((command) => command.name === "mode")?.description).toBe("List modes")
   })
 })

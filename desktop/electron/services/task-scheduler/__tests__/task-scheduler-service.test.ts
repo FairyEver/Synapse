@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   MainActionRegistry,
@@ -8,6 +8,7 @@ import {
 } from "../../../action-runtime/action-registry"
 import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
+import type { StructuredLogger } from "../../../runtime/service-registry"
 import { TaskSchedulerExecutionService } from "../execution-service"
 import { ScheduledTaskRunRepository } from "../run-repository"
 import { ScheduledTaskRepository } from "../task-repository"
@@ -62,11 +63,37 @@ describe("TaskSchedulerService", () => {
 
     expect(await harness.runs.get(running!.id)).toEqual(expect.objectContaining({ status: "cancelled" }))
   })
+
+  it("logs missed-run background failures with sanitized task context", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ logger })
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      missedRunPolicy: "run_once",
+      nextRunAt: "2026-04-29T09:59:00.000Z",
+    }))
+    harness.tasks.markScheduled = async () => {
+      throw new Error("mark schedule failed")
+    }
+
+    await harness.service.start()
+    await waitFor(() => logger.warn.mock.calls.length > 0)
+
+    expect(logger.warn).toHaveBeenCalledWith("Scheduled task background run failed.", {
+      taskId: "task:1",
+      triggeredBy: "missed_run",
+      boundary: "task-scheduler-background-run",
+      errorName: "Error",
+      errorLength: "mark schedule failed".length,
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("mark schedule failed")
+  })
 })
 
 function createHarness(options: {
   readonly action?: MainActionDefinition
   readonly permissionGuard?: PermissionGuard
+  readonly logger?: StructuredLogger
 } = {}) {
   const taskItems = new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks")
   const runItems = new MemoryNamespace<ScheduledTaskRunEntry>("task-scheduler.runs")
@@ -90,15 +117,18 @@ function createHarness(options: {
     auditSink: auditSink(),
     defaultCwd: "/tmp",
   })
+  const serviceDeps = {
+    tasks,
+    runs,
+    execution,
+    defaultCwd: "/tmp",
+    now: () => new Date("2026-04-29T10:00:00.000Z"),
+    logger: options.logger,
+  }
   return {
-    service: new TaskSchedulerService({
-      tasks,
-      runs,
-      execution,
-      defaultCwd: "/tmp",
-      now: () => new Date("2026-04-29T10:00:00.000Z"),
-    }),
+    service: new TaskSchedulerService(serviceDeps),
     taskItems,
+    tasks,
     runs,
   }
 }
@@ -171,6 +201,20 @@ function auditSink(): AuditSink {
     list: () => [],
     clearForTests: () => {},
   }
+}
+
+function structuredLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn> } {
+  const logger = {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(),
+  }
+  logger.child.mockReturnValue(logger)
+  return logger
 }
 
 async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {

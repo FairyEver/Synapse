@@ -42,6 +42,16 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("enables the SDK bypass permission confirmation for bypass mode", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, { mode: "bypassPermissions" })
+
+    expect(getOptions()).toMatchObject({
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+    })
+  })
+
   it("passes provider env together with the host process env to the SDK", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, { env: { FOO: "bar" } })
@@ -134,6 +144,37 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("redacts and bounds permission request tool input summaries", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+
+    void canUseTool(getOptions())("HttpRequest", {
+      authorization: "Bearer sk-live",
+      headers: { cookie: "sid=secret" },
+      nested: { password: "pass-1", value: "safe" },
+      body: "x".repeat(400),
+    }, {
+      signal: new AbortController().signal,
+    })
+
+    const event = await session.nextEvent()
+
+    expect(event?.type).toBe("permissionRequest")
+    if (event?.type !== "permissionRequest") {
+      throw new Error("expected permission request")
+    }
+    expect(event.toolInput).toContain("[redacted]")
+    expect(event.toolInput).toContain("\"value\":\"safe\"")
+    expect(event.toolInput).not.toContain("Bearer sk-live")
+    expect(event.toolInput).not.toContain("sid=secret")
+    expect(event.toolInput).not.toContain("pass-1")
+    expect(event.toolInput).not.toContain("x".repeat(200))
+    expect(event.toolInputRaw).toMatchObject({
+      authorization: "Bearer sk-live",
+      headers: { cookie: "sid=secret" },
+    })
+  })
+
   it("generates permission request ids that are unique across conversations", async () => {
     const first = createQueryFactory()
     const second = createQueryFactory()
@@ -185,6 +226,59 @@ describe("ClaudeSDKSession", () => {
     await expect(session.nextEvent()).resolves.toBeNull()
   })
 
+  it("sanitizes SDK query rejection messages before publishing error events", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory, { sdkSessionId: "sdk-1" })
+
+    const event = session.nextEvent()
+    query.rejectNext(
+      new Error(
+        "Authorization: Bearer sk-secret failed in /Users/liyang/private/project/file.ts",
+      ),
+    )
+
+    await expect(event).resolves.toMatchObject({
+      type: "error",
+      message: expect.stringContaining("[redacted]"),
+      conversationId: "conversation-1",
+      providerId: "claude-sdk",
+      sdkSessionId: "sdk-1",
+      timestamp: "2026-05-13T00:00:00.000Z",
+    })
+    const resolved = await event
+    expect(JSON.stringify(resolved)).not.toContain("sk-secret")
+    expect(JSON.stringify(resolved)).not.toContain("/Users/liyang/private")
+  })
+
+  it("logs SDK query rejection failures with session context", async () => {
+    const { factory, query } = createQueryFactory()
+    const logger = { warn: vi.fn() }
+    const session = createSession(factory, {
+      logger,
+      sdkSessionId: "sdk-1",
+    })
+
+    const event = session.nextEvent()
+    query.rejectNext(new Error("sdk exploded"))
+
+    await expect(event).resolves.toMatchObject({
+      type: "error",
+      message: "sdk exploded",
+    })
+    await waitFor(() => logger.warn.mock.calls.length > 0)
+
+    expect(logger.warn).toHaveBeenCalledWith("Claude SDK query failed.", {
+      boundary: "claude-sdk-query",
+      conversationId: "conversation-1",
+      errorLength: 12,
+      errorName: "Error",
+      projectId: "project-1",
+      providerId: "claude-sdk",
+      sdkSessionId: "sdk-1",
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sdk exploded")
+  })
+
   it("stays alive until queued terminal events are drained", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)
@@ -213,6 +307,30 @@ describe("ClaudeSDKSession", () => {
     await expect(event).resolves.toBeNull()
     expect(query.close).toHaveBeenCalledOnce()
     expect(session.alive()).toBe(false)
+  })
+
+  it("logs SDK query close failures with session context", async () => {
+    const { factory, query } = createQueryFactory()
+    const logger = { warn: vi.fn() }
+    const session = createSession(factory, {
+      logger,
+      sdkSessionId: "sdk-1",
+    })
+    query.close.mockImplementation(() => {
+      throw new Error("close failed")
+    })
+
+    await session.close()
+    await waitFor(() => logger.warn.mock.calls.length > 0)
+
+    expect(logger.warn).toHaveBeenCalledWith("Claude SDK query close failed.", {
+      conversationId: "conversation-1",
+      errorLength: 12,
+      errorName: "Error",
+      projectId: "project-1",
+      providerId: "claude-sdk",
+      sdkSessionId: "sdk-1",
+    })
   })
 
   it("settles pending permission requests when cancelling the current turn", async () => {

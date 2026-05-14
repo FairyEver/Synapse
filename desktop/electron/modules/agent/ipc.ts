@@ -13,11 +13,23 @@ import { toolMethods } from "./ipc-tools"
 
 // ─── Event schemas ────────────────────────────────────────────────────────────
 
+const agentEventEnvelopeSchema = z.object({
+  conversationId: z.string().optional(),
+  turnId: z.string().optional(),
+  providerId: z.string().optional(),
+  projectId: z.string().optional(),
+})
+
+const agentEventWithEnvelopeSchema = z.intersection(
+  agentEventSchema,
+  agentEventEnvelopeSchema,
+)
+
 const agentStreamDomainEventSchema = z.object({
   domain: z.literal("agent"),
   type: agentEventTypeSchema,
   payload: z.object({
-    event: agentEventSchema,
+    event: agentEventWithEnvelopeSchema,
     projectId: z.string(),
     sessionKey: z.string(),
     platform: z.string(),

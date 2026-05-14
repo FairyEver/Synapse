@@ -115,7 +115,9 @@ function thinkingIndicatorText(frame: number): string {
 function agentCliLabel(agentType: string | undefined): string | undefined {
   const normalized = agentType?.trim()
   if (!normalized) return undefined
-  if (normalized === "claude-code") return "claudecode"
+  if (normalized === "claude-code" || normalized === "claude-sdk" || normalized === "claude-agent-sdk") {
+    return "claudecode"
+  }
   return normalized
 }
 

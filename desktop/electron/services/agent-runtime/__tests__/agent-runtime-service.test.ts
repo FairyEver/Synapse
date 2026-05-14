@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   AgentCompressStateEntryV1,
@@ -94,6 +94,53 @@ describe("AgentRuntimeService", () => {
     await expect(turn).resolves.toMatchObject({ error: "cancelled" })
   })
 
+  it("emits cancel escalation with conversation correlation", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new HangingSession()
+    const eventBus = {
+      projectId: "project-1",
+      emit: vi.fn(),
+      on: vi.fn(),
+      underlying: {},
+    }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      eventBus: eventBus as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("wait"))
+    await waitFor(() => session.sent.length === 1)
+    const id = conversationId("local", "s1", "active")
+
+    vi.useFakeTimers()
+    try {
+      await expect(service.cancelTurn(id)).resolves.toEqual({ status: "graceful-pending" })
+      await vi.advanceTimersByTimeAsync(5000)
+
+      expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+        domain: "agent",
+        type: "phase.update",
+        payload: expect.objectContaining({
+          projectId: "project-1",
+          conversationId: id,
+          sessionKey: "s1",
+          phase: "cancel_pending",
+          status: "in-progress",
+        }),
+      }))
+    } finally {
+      vi.useRealTimers()
+    }
+
+    await service.forceKillTurn(id)
+    await expect(turn).resolves.toMatchObject({ error: "cancelled" })
+  })
+
   it("routes concurrent permission responses to their own SDK sessions", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const first = new PermissionSession("conversation-a-permission-1", "first allowed")
@@ -131,6 +178,49 @@ describe("AgentRuntimeService", () => {
     await expect(secondTurn).resolves.toMatchObject({ resultText: "second denied" })
     expect(first.responses).toEqual([{ requestId: "conversation-a-permission-1", behavior: "allow" }])
     expect(second.responses).toEqual([{ requestId: "conversation-b-permission-1", behavior: "deny" }])
+  })
+
+  it("redacts permission response failure audit metadata", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const auditSink = { record: vi.fn() }
+    const rawError = "backend leaked token sk-secret and sensitive prompt content"
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new PermissionFailureSession("conversation-a-permission-1", rawError),
+      auditSink: auditSink as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await expect(service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })).rejects.toThrow(rawError)
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        behavior: "allow",
+        errorName: "Error",
+        errorLength: rawError.length,
+        projectId: "project-1",
+        sessionKey: "s1",
+        conversationId: conversationId("local", "s1", "active"),
+        requestId: "conversation-a-permission-1",
+        toolName: "Bash",
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain(rawError)
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
+
+    await service.forceKillTurn(conversationId("local", "s1", "active"))
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
 
   it("forceKillTurn settles a pending permission and resolves the send", async () => {
@@ -221,6 +311,102 @@ describe("AgentRuntimeService", () => {
 
     await expect(resolveSoon(secondTurn)).resolves.toMatchObject({ error: "cancelled" })
     await expect(resolveSoon(firstTurn)).resolves.not.toBe("timeout")
+  })
+
+  it("logs scheduled agent failures with correlation context", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "error", message: "sdk failed with sensitive prompt content", sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      logger: logger as never,
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "sensitive prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      status: "error",
+      error: "sdk failed with sensitive prompt content",
+    }))
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Scheduled agent send failed.",
+      expect.objectContaining({
+        boundary: "agent-runtime.scheduled-send",
+        source: "scheduled",
+        projectId: "project-1",
+        sessionKey: expect.stringMatching(/^scheduled:project-1:/),
+        conversationId: result.conversationId,
+        agentType: "claude-code",
+        mode: "plan",
+        sessionPolicy: "fresh",
+        status: "error",
+        errorLength: "sdk failed with sensitive prompt content".length,
+        promptLength: "sensitive prompt".length,
+        timeoutMs: 120_000,
+        durationMs: expect.any(Number),
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sensitive prompt")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sensitive prompt content")
+  })
+
+  it("logs scheduled resume fallback without prompt content", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      logger: logger as never,
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "sensitive scheduled prompt",
+      sessionPolicy: "resume",
+      lastConversationId: "missing-conversation",
+      timeoutMs: 120_000,
+    })
+
+    expect(result.status).toBe("success")
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Scheduled agent resume fallback.",
+      expect.objectContaining({
+        boundary: "agent-runtime.scheduled-resume",
+        source: "scheduled",
+        projectId: "project-1",
+        sessionKey: expect.stringMatching(/^scheduled:project-1:/),
+        resumeConversationId: "missing-conversation",
+        agentType: "claude-code",
+        mode: "plan",
+        sessionPolicy: "resume",
+        fallback: "fresh-session",
+        errorName: "Error",
+        errorLength: expect.any(Number),
+        promptLength: "sensitive scheduled prompt".length,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sensitive scheduled prompt")
   })
 })
 
@@ -410,6 +596,57 @@ class PermissionSession implements AgentLiveSession {
       return
     }
     this.events.push(event)
+  }
+}
+
+class PermissionFailureSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  private waiter: ((event: AgentEvent | null) => void) | undefined
+  private sent = false
+  private closed = false
+
+  constructor(
+    private readonly requestId: string,
+    private readonly failureMessage: string,
+  ) {}
+
+  async send(): Promise<void> {
+    this.sent = true
+  }
+
+  async respondPermission(): Promise<void> {
+    throw new Error(this.failureMessage)
+  }
+
+  nextEvent(): Promise<AgentEvent | null> {
+    if (this.closed) return Promise.resolve(null)
+    if (this.sent) {
+      this.sent = false
+      return Promise.resolve({
+        type: "permissionRequest",
+        requestId: this.requestId,
+        toolName: "Bash",
+        toolInput: "pwd",
+        toolInputRaw: { command: "pwd" },
+      })
+    }
+    return new Promise((resolve) => {
+      this.waiter = resolve
+    })
+  }
+
+  currentSessionId(): string | undefined {
+    return "sdk-1"
+  }
+
+  alive(): boolean {
+    return !this.closed
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    this.waiter?.(null)
+    this.waiter = undefined
   }
 }
 

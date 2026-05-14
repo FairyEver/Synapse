@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
 import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
@@ -24,8 +33,13 @@ vi.mock("../../../services/config-store", () => ({
   },
 }))
 
+vi.mock("../../../services/log-store", () => ({
+  createMainLogger: vi.fn(() => logStoreMock.logger),
+}))
+
 describe("agentIpcModule", () => {
   beforeEach(() => {
+    logStoreMock.logger.warn.mockClear()
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -520,6 +534,40 @@ describe("agentIpcModule", () => {
     expect(result.entries[0]).toEqual(expect.objectContaining({
       content: "message 1",
     }))
+  })
+
+  it("logs timeline runtime fallback with sanitized correlation context", async () => {
+    const rawError = Object.assign(
+      new Error("runtime timeline unavailable for /Users/example/project; prompt: deploy secret-token"),
+      { code: "SDK_TIMELINE_FAILED" },
+    )
+    const listSessions = vi.fn().mockRejectedValue(rawError)
+    const harness = createHarness({
+      agent: { listSessions },
+    })
+
+    await expect(harness.invoke("synapse:agent:get-timeline", {
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      limit: 10,
+    })).rejects.toThrow("找不到当前项目")
+
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+      "Agent timeline runtime lookup failed; trying repository fallback.",
+      expect.objectContaining({
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        hasConversationId: false,
+        limit: 10,
+        boundary: "agent.timeline.runtime",
+        errorName: "Error",
+        errorCode: "SDK_TIMELINE_FAILED",
+        errorLength: rawError.message.length,
+      }),
+    )
+    const details = logStoreMock.logger.warn.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(JSON.stringify(details)).not.toContain("/Users/example/project")
+    expect(JSON.stringify(details)).not.toContain("deploy secret-token")
   })
 
   it("returns readable source labels for Feishu sessions", async () => {

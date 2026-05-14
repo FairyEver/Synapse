@@ -15,6 +15,31 @@ const mocks = vi.hoisted(() => ({
   chat: null as unknown,
   useAgentChat: vi.fn(),
   forcePin: vi.fn(),
+  bridge: {
+    agent: {
+      getTimeline: vi.fn(),
+    },
+  },
+  toast: vi.fn(),
+  rendererLogger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => mocks.rendererLogger,
+}))
+
+vi.mock("@/lib/electron-bridge", () => ({
+  getSynapseBridge: () => mocks.bridge,
+  requireSynapseBridge: () => mocks.bridge,
+}))
+
+vi.mock("sonner", () => ({
+  toast: mocks.toast,
 }))
 
 vi.mock("@/app-shell/config", () => ({
@@ -148,6 +173,143 @@ describe("AgentModule pending prompt sessions", () => {
     expect(selectSession).toHaveBeenCalledWith(targetSession)
     expect(sendMessage).toHaveBeenCalledWith("Run this prompt")
     expect(onPendingAgentSessionConsumed).toHaveBeenCalledTimes(1)
+  })
+
+  it("logs pending session refresh failures with sanitized conversation context", async () => {
+    const refreshError = new Error("secret pending prompt text")
+    const refresh = vi.fn().mockRejectedValue(refreshError)
+    mocks.chat = createChatState({ refresh })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentModule
+          pendingAgentSession={{
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            prompt: "Run this prompt",
+          }}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(mocks.rendererLogger.error).toHaveBeenCalledWith(
+      "Agent pending session refresh failed.",
+      {
+        boundary: "renderer.agent.pending-session-refresh",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        errorName: "Error",
+        errorLength: refreshError.message.length,
+      },
+    )
+    expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("secret pending prompt text")
+  })
+
+  it("logs pending session handoff failures without consuming the prompt", async () => {
+    const selectError = new Error("secret select prompt detail")
+    const selectSession = vi.fn().mockRejectedValue(selectError)
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const onPendingAgentSessionConsumed = vi.fn()
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectSession,
+      sendMessage,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentModule
+          pendingAgentSession={{
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            prompt: "Run this prompt",
+          }}
+          onPendingAgentSessionConsumed={onPendingAgentSessionConsumed}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(selectSession).toHaveBeenCalledWith(targetSession)
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(onPendingAgentSessionConsumed).not.toHaveBeenCalled()
+    expect(mocks.rendererLogger.error).toHaveBeenCalledWith(
+      "Agent pending session handoff failed.",
+      {
+        boundary: "renderer.agent.pending-session-handoff",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        targetSessionKey: "local:renderer",
+        hasPrompt: true,
+        promptLength: 15,
+        errorName: "Error",
+        errorLength: selectError.message.length,
+      },
+    )
+    expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("secret select prompt detail")
+    expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("Run this prompt")
+  })
+
+  it("logs transcript copy failures with sanitized conversation context", async () => {
+    const transcriptError = new Error("secret transcript IPC detail")
+    mocks.bridge.agent.getTimeline.mockRejectedValue(transcriptError)
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{ id: "entry-1", timestamp: "2026-05-13T00:00:00.000Z" }],
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button")?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.bridge.agent.getTimeline).toHaveBeenCalledWith({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+    })
+    expect(mocks.rendererLogger.error).toHaveBeenCalledWith(
+      "Agent transcript copy failed.",
+      {
+        boundary: "renderer.agent.transcript-copy",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        errorName: "Error",
+        errorLength: transcriptError.message.length,
+      },
+    )
+    expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("secret transcript IPC detail")
+    expect(mocks.toast).toHaveBeenCalledWith("复制失败")
   })
 })
 

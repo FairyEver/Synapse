@@ -1,13 +1,29 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   buildTaskCreateInput,
   createTaskFormState,
   DEFAULT_TASK_FORM_STATE,
+  formatTaskAction,
 } from "../utils"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
+const rendererLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
+}))
+
 describe("task scheduler utils", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it("builds a cron command task payload", () => {
     const payload = buildTaskCreateInput({
       ...DEFAULT_TASK_FORM_STATE,
@@ -122,5 +138,50 @@ describe("task scheduler utils", () => {
     })
 
     expect(payload.scope).toEqual({ type: "project", projectId: "project-1" })
+  })
+
+  it("logs action summary failures without config values", () => {
+    const task: ScheduledTask = {
+      id: "task-agent-1",
+      schemaVersion: 2,
+      name: "Agent Task",
+      scope: { type: "project", projectId: "project-1" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      action: {
+        type: "builtin.agent.future",
+        config: {
+          projectId: "project-1",
+          agentType: "claude-code",
+          prompt: "run deployment with TOKEN=secret-value",
+          sessionPolicy: "fresh",
+        },
+      },
+      enabled: true,
+      missedRunPolicy: "skip",
+      overlapPolicy: "skip",
+      createdAt: "2026-04-29T00:00:00.000Z",
+      updatedAt: "2026-04-29T00:00:00.000Z",
+      runCount: 0,
+    }
+
+    expect(formatTaskAction(task)).toBe("builtin.agent.future")
+    expect(rendererLogger.warn).toHaveBeenCalledWith(
+      "Task action summary render failed.",
+      expect.objectContaining({
+        taskId: "task-agent-1",
+        actionType: "builtin.agent.future",
+        boundary: "task-scheduler.action-summary",
+        configKeys: ["agentType", "projectId", "prompt", "sessionPolicy"],
+        errorName: "Error",
+        errorLength: expect.any(Number),
+      }),
+    )
+    expect(rendererLogger.warn).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        prompt: expect.any(String),
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret-value")
   })
 })

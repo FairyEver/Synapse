@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -28,6 +28,10 @@ function TaskImportDialog({
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(entries.map((_, i) => i)),
   )
+
+  useEffect(() => {
+    setSelected(new Set(entries.map((_, i) => i)))
+  }, [entries])
 
   const allSelected = selected.size === entries.length && entries.length > 0
   const someSelected = selected.size > 0 && selected.size < entries.length

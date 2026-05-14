@@ -99,11 +99,81 @@ describe("task scheduler external api", () => {
     await expect(dispatchSchedulerAction(service, actions, "scheduler.task.list", { enabled: true }))
       .resolves.toEqual({ ok: true, data: [toPublicTaskSummary(baseTask)], total: 1 })
     await expect(dispatchSchedulerAction(service, actions, "scheduler.task.get", { taskId: "task:1" }))
-      .resolves.toEqual({ ok: true, data: baseTask })
+      .resolves.toEqual({ ok: true, data: toPublicTaskSummary(baseTask) })
     await dispatchSchedulerAction(service, actions, "scheduler.task.enable", { taskId: "task:1" })
     await dispatchSchedulerAction(service, actions, "scheduler.task.disable", { taskId: "task:1" })
     expect(service.schedulerTaskEnable).toHaveBeenCalledWith("task:1")
     expect(service.schedulerTaskDisable).toHaveBeenCalledWith("task:1")
+  })
+
+  it("does not expose scheduled agent prompt config from task get", async () => {
+    const service = serviceMock()
+    const agentTask: ScheduledTaskEntry = {
+      ...baseTask,
+      action: {
+        type: "builtin.agent",
+        config: {
+          projectId: "project:1",
+          agentType: "claude-code",
+          mode: "plan",
+          prompt: "summarize private repository context",
+        },
+      },
+    }
+    vi.mocked(service.schedulerTaskGet).mockResolvedValueOnce(agentTask)
+
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.get", {
+      taskId: "task:1",
+    })
+
+    expect(result).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(JSON.stringify(result)).not.toContain("summarize private repository context")
+  })
+
+  it("does not expose scheduled agent prompt config from task mutations", async () => {
+    const service = serviceMock()
+    const action = {
+      type: "builtin.agent",
+      config: {
+        projectId: "project:1",
+        agentType: "claude-code",
+        mode: "plan",
+        prompt: "summarize private repository context",
+      },
+    }
+    const agentTask: ScheduledTaskEntry = { ...baseTask, action }
+    vi.mocked(service.schedulerTaskUpdate).mockResolvedValueOnce(agentTask)
+    vi.mocked(service.schedulerTaskEnable).mockResolvedValueOnce(agentTask)
+    vi.mocked(service.schedulerTaskDisable).mockResolvedValueOnce(agentTask)
+
+    const createResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "Agent task",
+      description: "Send summary",
+      scope: { type: "global" },
+      schedule: { type: "interval", everyMinutes: 30, anchor: "created_at" },
+      action,
+      enabled: true,
+    })
+    const enableResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.enable", {
+      taskId: "task:1",
+    })
+    const disableResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.disable", {
+      taskId: "task:1",
+    })
+    const updateResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.update", {
+      taskId: "task:1",
+      name: "Updated Agent task",
+    })
+
+    expect(createResult).toEqual({
+      ok: true,
+      data: toPublicTaskSummary({ ...baseTask, name: "Agent task", action, id: "task:new" }),
+    })
+    expect(enableResult).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(disableResult).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(updateResult).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(JSON.stringify([createResult, enableResult, disableResult, updateResult]))
+      .not.toContain("summarize private repository context")
   })
 
   it("lists run summaries without log payloads", async () => {

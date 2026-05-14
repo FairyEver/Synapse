@@ -74,6 +74,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
       type: "sessionInit"
       tools?: string[]
+      mcpServers?: Record<string, unknown>[]
       model?: string
     }
   | {

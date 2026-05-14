@@ -40,6 +40,11 @@ function closeItem(
   return { ...item, status, completedAt, errorMessage: errorMessage ?? item.errorMessage }
 }
 
+function matchesTerminalScope(item: SynapseAgentPhaseTimelineItem, event: PhaseReducerEvent): boolean {
+  return item.runId === event.runId
+    || (item.phase === "cancel_pending" && Boolean(event.conversationId) && item.runId === event.conversationId)
+}
+
 export function reducePhaseEvent(
   current: readonly SynapseAgentTimelineItem[],
   event: PhaseReducerEvent,
@@ -60,7 +65,7 @@ export function reducePhaseEvent(
   if (event.phase === "completed") {
     return current.map((item) => {
       if (!isPhaseItem(item)) return item
-      if (item.runId !== event.runId) return item
+      if (!matchesTerminalScope(item, event)) return item
       if (item.status !== "in-progress") return item
       return closeItem(item, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage)
     })
@@ -70,7 +75,7 @@ export function reducePhaseEvent(
   if (event.phase === "failed") {
     const closed = current.map((item) => {
       if (!isPhaseItem(item)) return item
-      if (item.runId !== event.runId) return item
+      if (!matchesTerminalScope(item, event)) return item
       if (item.status !== "in-progress") return item
       return closeItem(item, "failed", event.completedAt ?? event.eventTimestamp, event.errorMessage)
     })

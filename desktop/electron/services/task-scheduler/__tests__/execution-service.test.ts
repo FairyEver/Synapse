@@ -1,5 +1,9 @@
 import { z } from "zod"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => ({ warn: vi.fn() }),
+}))
 
 import { MainActionRegistry, type MainActionDefinition } from "../../../action-runtime/action-registry"
 import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
@@ -60,9 +64,142 @@ describe("TaskSchedulerExecutionService", () => {
       }),
     ])
   })
+
+  it("logs permission guard exceptions before the action starts", async () => {
+    const logger = { warn: vi.fn() }
+    const harness = await createExecutionHarness({
+      logger,
+      permissionGuard: {
+        registerPolicy: () => () => {},
+        check: async () => {
+          throw new Error("permission backend leaked secret prompt")
+        },
+      },
+    })
+
+    const run = await harness.service.runTask(harness.task, "schedule")
+
+    expect(run.status).toBe("failed")
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Scheduled task preparation failed.",
+      expect.objectContaining({
+        source: "task-scheduler",
+        boundary: "task-scheduler-pre-execution",
+        taskId: "task:1",
+        runId: "run:1",
+        actionType: "builtin.test",
+        triggeredBy: "schedule",
+        status: "failed",
+        errorName: "Error",
+        errorLength: "permission backend leaked secret prompt".length,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+  })
+
+  it("records action exceptions with audit and log context", async () => {
+    const logger = { warn: vi.fn() }
+    const harness = await createExecutionHarness({
+      action: throwingAction,
+      logger,
+    })
+
+    const run = await harness.service.runTask(harness.task, "schedule")
+
+    expect(run.status).toBe("failed")
+    expect(harness.auditEvents).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        outcome: "allowed",
+      }),
+      expect.objectContaining({
+        action: "shell.exec",
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          source: "task-scheduler",
+          taskId: "task:1",
+          runId: "run:1",
+          actionType: "builtin.test",
+          triggeredBy: "schedule",
+          boundary: "task-scheduler-action",
+          status: "failed",
+          errorName: "Error",
+          errorLength: "sdk unavailable for secret prompt".length,
+        }),
+      }),
+    ])
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Scheduled task action threw.",
+      expect.objectContaining({
+        source: "task-scheduler",
+        taskId: "task:1",
+        runId: "run:1",
+        actionType: "builtin.test",
+        triggeredBy: "schedule",
+        boundary: "task-scheduler-action",
+        status: "failed",
+        errorName: "Error",
+        errorLength: "sdk unavailable for secret prompt".length,
+      }),
+    )
+    expect(JSON.stringify(harness.auditEvents)).not.toContain("secret prompt")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+  })
+
+  it("records returned action failures without leaking raw error text", async () => {
+    const logger = { warn: vi.fn() }
+    const harness = await createExecutionHarness({
+      action: failedResultAction,
+      logger,
+    })
+
+    const run = await harness.service.runTask(harness.task, "schedule")
+
+    expect(run.status).toBe("failed")
+    expect(run.error).toBe("sdk failed for secret prompt")
+    expect(harness.auditEvents).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        outcome: "allowed",
+      }),
+      expect.objectContaining({
+        action: "shell.exec",
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          source: "task-scheduler",
+          taskId: "task:1",
+          runId: "run:1",
+          actionType: "builtin.test",
+          triggeredBy: "schedule",
+          boundary: "task-scheduler-action",
+          status: "failed",
+          errorName: "string",
+          errorLength: "sdk failed for secret prompt".length,
+        }),
+      }),
+    ])
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Scheduled task action failed.",
+      expect.objectContaining({
+        source: "task-scheduler",
+        taskId: "task:1",
+        runId: "run:1",
+        actionType: "builtin.test",
+        triggeredBy: "schedule",
+        boundary: "task-scheduler-action",
+        status: "failed",
+        errorName: "string",
+        errorLength: "sdk failed for secret prompt".length,
+      }),
+    )
+    expect(JSON.stringify(harness.auditEvents)).not.toContain("secret prompt")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+  })
 })
 
 async function createExecutionHarness(options: {
+  readonly action?: MainActionDefinition<TestActionConfig>
+  readonly logger?: { warn: (message: string, metadata: Record<string, unknown>) => void }
   readonly permissionGuard?: PermissionGuard
 } = {}) {
   const tasks = new ScheduledTaskRepository({
@@ -82,9 +219,9 @@ async function createExecutionHarness(options: {
     action: { type: "builtin.test", config: { message: "ok" } },
   })
   const actions = new MainActionRegistry()
-  actions.register(testAction)
+  actions.register(options.action ?? testAction)
   const auditEvents: Parameters<AuditSink["record"]>[0][] = []
-  const service = new TaskSchedulerExecutionService({
+  const deps = {
     tasks,
     runs,
     actions,
@@ -97,7 +234,9 @@ async function createExecutionHarness(options: {
       clearForTests: () => {},
     },
     defaultCwd: "/tmp",
-  })
+    logger: options.logger ?? { warn: () => {} },
+  }
+  const service = new TaskSchedulerExecutionService(deps)
   return { service, task, tasks, runs, auditEvents }
 }
 
@@ -122,6 +261,22 @@ const testAction: MainActionDefinition<TestActionConfig> = {
     status: "success",
     summary: "ok",
     outputs: { stdout: "ok" },
+  }),
+}
+
+const throwingAction: MainActionDefinition<TestActionConfig> = {
+  ...testAction,
+  execute: async () => {
+    throw new Error("sdk unavailable for secret prompt")
+  },
+}
+
+const failedResultAction: MainActionDefinition<TestActionConfig> = {
+  ...testAction,
+  execute: async () => ({
+    status: "failed",
+    error: "sdk failed for secret prompt",
+    summary: "failed",
   }),
 }
 

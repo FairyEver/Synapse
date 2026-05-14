@@ -166,7 +166,10 @@ export class AutomationIngressService {
       }
       void promise.catch((error) => {
         this.deps.logger?.warn("Webhook background run failed.", {
-          error: error instanceof Error ? error.message : String(error),
+          boundary: "webhook-background",
+          path: config.path,
+          mode,
+          ...errorDiagnostic(error),
         })
       })
       return jsonResponse(202, true, { status: "queued" })
@@ -202,21 +205,54 @@ export class AutomationIngressService {
       const result = prompt
         ? await this.executePrompt(run, project, body, prompt)
         : await this.executeShell(run, project, body, exec ?? "")
-      await this.finishRun(run, "success", { resultText: stringValue(result.resultText) })
-      this.recordAudit("allowed", `webhook:${path}`, {
+      const resultStatus = stringValue(result.status)
+      const finalStatus: WebhookRunEntryV1["status"] = resultStatus === "failed" || resultStatus === "timeout"
+        ? resultStatus
+        : "success"
+      const resultBoundary = run.kind === "prompt" ? "agent-runtime" : "process-runner"
+      const resultError = stringValue(result.error)
+      const resultDiagnostic = errorDiagnostic(resultError ?? resultStatus ?? finalStatus)
+      await this.finishRun(run, finalStatus, {
+        resultText: stringValue(result.resultText),
+        lastError: finalStatus === "success" ? undefined : resultError ?? resultStatus,
+      })
+      if (finalStatus !== "success") {
+        this.deps.logger?.warn("Webhook prompt run completed with agent error.", {
+          runId: run.id,
+          projectId: project.projectId,
+          kind: run.kind,
+          sessionKey: run.sessionKey,
+          status: finalStatus,
+          boundary: resultBoundary,
+          ...resultDiagnostic,
+        })
+      }
+      const auditMetadata = {
         runId: run.id,
         projectId: project.projectId,
         kind: run.kind,
-      })
+      }
+      this.recordAudit(finalStatus === "success" ? "allowed" : "failed", `webhook:${path}`, finalStatus === "success"
+        ? auditMetadata
+        : { ...auditMetadata, status: finalStatus, boundary: resultBoundary, ...resultDiagnostic })
       return { runId: run.id, ...result }
     } catch (error) {
       const message = errorMessage(error)
+      const diagnostic = errorDiagnostic(error)
       await this.finishRun(run, "failed", { lastError: message })
+      this.deps.logger?.warn("Webhook run threw.", {
+        runId: run.id,
+        projectId: project.projectId,
+        kind: run.kind,
+        sessionKey: run.sessionKey,
+        boundary: run.kind === "prompt" ? "agent-runtime" : "process-runner",
+        ...diagnostic,
+      })
       this.recordAudit("failed", `webhook:${path}`, {
         runId: run.id,
         projectId: project.projectId,
         kind: run.kind,
-        error: message,
+        ...diagnostic,
       })
       throw error
     }
@@ -240,6 +276,7 @@ export class AutomationIngressService {
       projectId: project.projectId,
       sessionKey,
       platform: "webhook",
+      messageId: stringValue(body.messageId),
       userId: "webhook",
       userName: "webhook",
       content,
@@ -631,6 +668,18 @@ function timingSafeEqualText(a: string, b: string): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function errorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: errorMessage(error).length,
+    ...(error instanceof WebhookError ? { errorCode: error.code } : {}),
+  }
 }
 
 class WebhookError extends Error {

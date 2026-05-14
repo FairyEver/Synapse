@@ -29,7 +29,11 @@ function usePromptRun() {
         const file = await readContent("prompt", item.id)
         content = file.content
       } catch (error) {
-        logger.error("Prompt run: read content failed.", error)
+        logger.error("Prompt run: read content failed.", {
+          promptId: item.id,
+          boundary: "renderer.prompt-run.read-content",
+          ...errorLogMeta(error),
+        })
         toast.error("读取提示词失败")
         return false
       }
@@ -46,7 +50,14 @@ function usePromptRun() {
           providerId,
         })
       } catch (error) {
-        logger.error("Prompt run: create session failed.", error)
+        logger.error("Prompt run: create session failed.", {
+          promptId: item.id,
+          projectId,
+          agentType,
+          providerId,
+          boundary: "renderer.prompt-run.create-session",
+          ...errorLogMeta(error),
+        })
         toast.error("创建会话失败")
         return false
       }
@@ -58,11 +69,21 @@ function usePromptRun() {
         bridge.agent.send({
           projectId,
           sessionKey: session.sessionKey,
+          conversationId: session.id,
           content,
           clientSubmittedAt: now,
           providerId,
         }).catch((error) => {
-          logger.error("Prompt run: send message failed.", error)
+          logger.error("Prompt run: send message failed.", {
+            promptId: item.id,
+            projectId,
+            conversationId: session.id,
+            sessionKey: session.sessionKey,
+            agentType,
+            providerId,
+            boundary: "renderer.prompt-run.agent-send",
+            ...errorLogMeta(error),
+          })
           toast.error("发送失败")
         })
       }
@@ -74,6 +95,14 @@ function usePromptRun() {
   }, [])
 
   return { run, isRunning }
+}
+
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { usePromptRun }

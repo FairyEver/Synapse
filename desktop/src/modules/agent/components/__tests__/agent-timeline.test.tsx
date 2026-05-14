@@ -91,6 +91,12 @@ describe("AgentTimeline", () => {
     expect(html).not.toContain("正在处理")
   })
 
+  it("shows a pending status while sending before the first timeline event", () => {
+    const html = renderTimeline({ sending: true })
+    expect(html).toContain("Agent 正在启动")
+    expect(html).not.toContain("暂无消息")
+  })
+
   it("appends stream text to the current assistant message", () => {
     const first = appendAgentTimelineEvent([], {
       type: "stream",
@@ -136,6 +142,34 @@ describe("AgentTimeline", () => {
     expect(third.filter((item) => item.kind === "message" && item.role === "assistant")).toEqual([
       expect.objectContaining({ content: "loo " }),
     ])
+  })
+
+  it("keeps streamed text after tool use in timeline order", () => {
+    const beforeTool = appendAgentTimelineEvent([], {
+      type: "stream",
+      text: "I'll inspect it.",
+    }, "2026-05-13T00:00:00.000Z", "claude")
+    const withTool = appendAgentTimelineEvent(beforeTool, {
+      type: "toolUse",
+      toolName: "Read",
+      toolInput: "package.json",
+    }, "2026-05-13T00:00:01.000Z", "claude")
+    const afterTool = appendAgentTimelineEvent(withTool, {
+      type: "stream",
+      text: "The package uses pnpm.",
+    }, "2026-05-13T00:00:02.000Z", "claude")
+
+    expect(afterTool.map((item) => item.kind)).toEqual(["message", "toolCall", "message"])
+    expect(afterTool[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "I'll inspect it.",
+    }))
+    expect(afterTool[2]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "The package uses pnpm.",
+    }))
   })
 
   it("appends thinking stream text to the current thinking block", () => {

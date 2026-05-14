@@ -20,6 +20,9 @@ import type {
   Unsubscribe,
 } from "../../electron/runtime/event-bus/types"
 import { channelForDomain } from "../../electron/runtime/event-bus/bus"
+import { createRendererLogger } from "@/app-shell/logging"
+
+const logger = createRendererLogger("event-bus-client")
 
 export interface EventBusTransport {
   /**
@@ -103,11 +106,16 @@ export class EventBusClientImpl implements EventBusClient {
       if (!predicate(event)) return
       try {
         listener(event)
-      } catch (err) {
-        // Renderer-side: log + continue. The main-process EventBus already
-        // isolates server-side listener throws; this guards renderer ones.
-        // eslint-disable-next-line no-console
-        console.error(`[event-bus-client:${domain}] listener threw`, err)
+      } catch (error) {
+        logger.warn("Renderer event listener failed.", {
+          boundary: "renderer.event-bus.listener",
+          domain,
+          eventType: event.type,
+          projectId: event.scope?.projectId,
+          repositoryId: event.scope?.repositoryId,
+          sessionId: event.scope?.sessionId,
+          ...eventListenerErrorMeta(error),
+        })
       }
     }
     sub.listeners.add(wrapped)
@@ -148,6 +156,17 @@ function scopeMatches(want: EventScope, got: EventScope | undefined): boolean {
   if (want.sessionId && got.sessionId !== want.sessionId) return false
   if (want.repositoryId && got.repositoryId !== want.repositoryId) return false
   return true
+}
+
+function eventListenerErrorMeta(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export function createEventBusClient(transport: EventBusTransport): EventBusClient {

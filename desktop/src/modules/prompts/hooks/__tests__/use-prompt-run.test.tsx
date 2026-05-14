@@ -15,8 +15,19 @@ const mocks = vi.hoisted(() => ({
   requestOpenAgentSession: vi.fn(),
 }))
 
+const rendererLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
 vi.mock("@/app-shell/content", () => ({
   readContent: mocks.readContent,
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
 }))
 
 vi.mock("@/app-shell/navigation", () => ({
@@ -33,6 +44,10 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  rendererLogger.debug.mockClear()
+  rendererLogger.error.mockClear()
+  rendererLogger.info.mockClear()
+  rendererLogger.warn.mockClear()
   vi.restoreAllMocks()
 })
 
@@ -68,7 +83,7 @@ describe("usePromptRun", () => {
     })
   })
 
-  it("passes the selected provider to background sends", async () => {
+  it("routes background sends to the created conversation", async () => {
     mocks.readContent.mockResolvedValue({ content: "Prompt body" })
     const send = vi.fn().mockResolvedValue({
       projectId: "project-1",
@@ -95,9 +110,49 @@ describe("usePromptRun", () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "project-1",
       sessionKey: "local:renderer",
+      conversationId: "conversation-1",
       content: "Prompt body",
       providerId: "provider-1",
     }))
+  })
+
+  it("logs background send failures with conversation context", async () => {
+    mocks.readContent.mockResolvedValue({ content: "Secret prompt body" })
+    const send = vi.fn().mockRejectedValue(new Error("secret backend detail"))
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          createSession: vi.fn().mockResolvedValue({
+            id: "conversation-1",
+            sessionKey: "local:renderer",
+          }),
+          send,
+        },
+      },
+    })
+
+    await renderRunProbe({ navigate: false })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith(
+      "Prompt run: send message failed.",
+      expect.objectContaining({
+        promptId: "prompt-1",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        agentType: "claude-code",
+        providerId: "provider-1",
+        boundary: "renderer.prompt-run.agent-send",
+        errorName: "Error",
+        errorLength: "secret backend detail".length,
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("Secret prompt body")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret backend detail")
   })
 })
 

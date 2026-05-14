@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   DataChangeEvent,
@@ -83,6 +83,82 @@ describe("ReplyOutboxService", () => {
       }),
     }))
   })
+
+  it("records Agent event correlation metadata for diagnostics", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox,
+      idFactory: () => "outbox-3",
+    })
+
+    service.recordAgentEvent({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conv-1",
+      transport: { kind: "local-renderer" },
+    }, {
+      type: "result",
+      content: "done",
+      done: true,
+      agentSessionId: "thread-1",
+      threadId: "thread-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      providerId: "claude-code",
+      projectId: "project-1",
+      sdkSessionId: "sdk-1",
+    })
+    await service.flushForTests()
+
+    expect((await outbox.list())[0]?.payload.metadata).toEqual(expect.objectContaining({
+      eventType: "result",
+      agentSessionId: "thread-1",
+      threadId: "thread-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      providerId: "claude-code",
+      projectId: "project-1",
+      sdkSessionId: "sdk-1",
+    }))
+  })
+
+  it("logs outbox persistence failures without raw error text", async () => {
+    const logger = { warn: vi.fn() }
+    const service = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox: new FailingNamespace<OutboxEntryV1>(
+        "outbox",
+        new Error("SDK failed for secret prompt at /Users/liyang/token.txt"),
+      ),
+      logger,
+      idFactory: () => "outbox-4",
+    })
+
+    service.recordAgentEvent({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      transport: { kind: "local-renderer" },
+    }, {
+      type: "result",
+      content: "done",
+      done: true,
+    })
+    await service.flushForTests()
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Outbox persistence failed.",
+      expect.objectContaining({
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        errorName: "Error",
+        errorLength: "SDK failed for secret prompt at /Users/liyang/token.txt".length,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/liyang")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("token.txt")
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
@@ -151,5 +227,15 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
   private emit(event: DataChangeEvent<T>): void {
     for (const listener of this.listeners) listener(event)
+  }
+}
+
+class FailingNamespace<T extends { id: string }> extends MemoryNamespace<T> {
+  constructor(name: string, private readonly error: Error) {
+    super(name)
+  }
+
+  override async upsert(): Promise<void> {
+    throw this.error
   }
 }

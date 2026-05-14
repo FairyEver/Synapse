@@ -1,9 +1,17 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createEventBusClient,
   type EventBusTransport,
 } from "../event-bus-client"
 import type { DomainEvent, Unsubscribe } from "../../../electron/runtime/event-bus/types"
+
+const rendererLogger = vi.hoisted(() => ({
+  warn: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
+}))
 
 const makeTransport = () => {
   const subs = new Map<string, Set<(event: DomainEvent) => void>>()
@@ -45,6 +53,10 @@ const event = (
 })
 
 describe("EventBusClient (T4.4)", () => {
+  beforeEach(() => {
+    rendererLogger.warn.mockClear()
+  })
+
   it("on(domain) receives every event in the domain", () => {
     const t = makeTransport()
     const client = createEventBusClient(t.transport)
@@ -90,24 +102,37 @@ describe("EventBusClient (T4.4)", () => {
   it("listener errors do not poison siblings", () => {
     const t = makeTransport()
     const client = createEventBusClient(t.transport)
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     const seen: string[] = []
-    client.on("repository", () => {
-      throw new Error("boom")
+    client.on("agent", () => {
+      throw new Error("secret prompt detail")
     })
-    client.on("repository", (e) => seen.push(e.type))
-    t.push("synapse:events:repository", event("updated"))
-    expect(seen).toEqual(["updated"])
-    expect(consoleSpy).toHaveBeenCalled()
-    consoleSpy.mockRestore()
+    client.on("agent", (e) => seen.push(e.type))
+    t.push("synapse:events:agent", {
+      domain: "agent",
+      type: "stream",
+      payload: {},
+      timestamp: "2026-04-25T00:00:00Z",
+      scope: { sessionId: "conversation-1" },
+    })
+    expect(seen).toEqual(["stream"])
+    expect(rendererLogger.warn).toHaveBeenCalledWith("Renderer event listener failed.", {
+      boundary: "renderer.event-bus.listener",
+      domain: "agent",
+      eventType: "stream",
+      projectId: undefined,
+      repositoryId: undefined,
+      sessionId: "conversation-1",
+      errorName: "Error",
+      errorLength: "secret prompt detail".length,
+    })
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret prompt detail")
   })
 
   it("unsubscribe inside a listener does not break the remaining dispatch", () => {
     const t = makeTransport()
     const client = createEventBusClient(t.transport)
     const seen: string[] = []
-    let unsubA: Unsubscribe
-    unsubA = client.on("repository", () => {
+    const unsubA: Unsubscribe = client.on("repository", () => {
       seen.push("a")
       unsubA?.()
     })

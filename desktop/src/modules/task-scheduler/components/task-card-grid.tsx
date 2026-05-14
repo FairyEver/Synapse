@@ -49,7 +49,7 @@ function TaskCardGrid({
           <EmptyDescription>新建任务后会按计划执行。</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button size="sm" onClick={onCreateNew}>
+          <Button size="sm" disabled={busy} onClick={onCreateNew}>
             <Plus />
             新建任务
           </Button>

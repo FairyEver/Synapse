@@ -11,6 +11,7 @@ import {
   createControlledProcessRunner,
 } from "../../runtime/process"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { ServiceNotFoundError } from "../../runtime/service-registry"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
   createProviderServiceFromDataRepository,
@@ -127,9 +128,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         projectId: ctx.projectId,
         commands: ctx.dataRepo.namespace<AgentCommandEntryV1>("agent.commands"),
         workspacePath: ctx.projectMeta.workspacePath,
+        logger: ctx.logger,
       })
       const skills = new SkillRegistry({
+        projectId: ctx.projectId,
         workspacePath: ctx.projectMeta.workspacePath,
+        logger: ctx.logger,
       })
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
@@ -159,7 +163,10 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {
   try {
     return registry.get<T>(id)
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ServiceNotFoundError)) {
+      throw error
+    }
     return undefined
   }
 }

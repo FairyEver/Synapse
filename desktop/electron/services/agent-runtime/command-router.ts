@@ -1,4 +1,5 @@
 import type { AgentCommandEntryV1, ConversationEntryV1 } from "../../runtime/data-repo"
+import type { StructuredLogger } from "../../runtime/logging"
 import { isShellKind, type ShellKind } from "../shell-exec"
 import type { CCProvider, ProviderService } from "../provider"
 import { agentRuntimeDefinitionById } from "../definitions/generated/main-registry"
@@ -30,6 +31,7 @@ export interface AgentCommandRouterDeps {
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
+  readonly logger?: Pick<StructuredLogger, "warn">
   listCommands?(message: AgentMessage): Promise<readonly PublishedAgentCommand[]>
   runCustomCommand?(
     command: AgentCommandEntryV1,
@@ -168,7 +170,7 @@ export class AgentCommandRouter {
     conversation: ConversationEntryV1,
     args: readonly string[],
   ): Promise<AgentRuntimeTurnResult> {
-    const provider = await this.currentProviderForConversation(conversation)
+    const provider = await this.currentProviderForConversation(conversation, "/model")
     const models = modelOptionsForProvider(provider)
     if (args.length === 0) {
       return commandResult(conversation.id, formatModelList(provider?.model, models))
@@ -233,7 +235,7 @@ export class AgentCommandRouter {
 
   private async handleStatus(conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult> {
     const agentType = await this.resolveAgentType()
-    const provider = await this.currentProviderForConversation(conversation)
+    const provider = await this.currentProviderForConversation(conversation, "/status")
     const lines = [
       `Agent: ${agentType}`,
       `Provider: ${provider?.id ?? conversation.providerId ?? "default"}`,
@@ -245,11 +247,25 @@ export class AgentCommandRouter {
     return commandResult(conversation.id, lines.join("\n"), false, conversation.agentSessionId)
   }
 
-  private async currentProviderForConversation(conversation: ConversationEntryV1): Promise<CCProvider | null> {
+  private async currentProviderForConversation(
+    conversation: ConversationEntryV1,
+    command: string,
+  ): Promise<CCProvider | null> {
     if (conversation.providerId) {
       try {
         return await this.deps.providerService.getProvider(conversation.providerId)
-      } catch {
+      } catch (error) {
+        this.deps.logger?.warn("Agent command provider lookup failed.", {
+          projectId: this.deps.projectId,
+          conversationId: conversation.id,
+          sessionKey: conversation.sessionKey,
+          agentType: conversation.agentType ?? this.deps.agentType,
+          providerId: conversation.providerId,
+          command,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: errorCode(error),
+          error: errorMessage(error),
+        })
         return null
       }
     }
@@ -363,6 +379,29 @@ export class AgentCommandRouter {
     const skills = await this.deps.skills?.listPublished() ?? []
     return [...BUILTIN_COMMANDS, ...custom, ...skills]
   }
+}
+
+function errorCode(error: unknown): string | undefined {
+  const code = (error as { readonly code?: unknown } | null)?.code
+  return typeof code === "string" ? code : undefined
+}
+
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return truncateRunes(
+    message
+      .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
+      .replace(/(?:[A-Za-z]:)?\/[^\s'"`]+/g, "[path redacted]")
+      .replace(
+        /\b(token|secret|api[_-]?key|apikey|authorization|cookie|password|credential)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|`[^`]*`|[^\s'",`;]+)/gi,
+        "$1$2[redacted]",
+      ),
+    240,
+  )
+}
+
+function truncateRunes(value: string, maxLength: number): string {
+  return [...value].slice(0, maxLength).join("")
 }
 
 export function parseCommand(content: string): ParsedCommand | null {

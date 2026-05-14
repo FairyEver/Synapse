@@ -19,6 +19,13 @@ describe("computeIsPinned", () => {
     expect(computeIsPinned({ scrollTop, scrollHeight, clientHeight })).toBe(true)
   })
 
+  it("treats the exact threshold distance as pinned", () => {
+    const clientHeight = 600
+    const scrollHeight = 2000
+    const scrollTop = scrollHeight - clientHeight - PINNED_THRESHOLD_PX
+    expect(computeIsPinned({ scrollTop, scrollHeight, clientHeight })).toBe(true)
+  })
+
   it("returns false when the user is further than PINNED_THRESHOLD_PX from the bottom", () => {
     const clientHeight = 600
     const scrollHeight = 2000

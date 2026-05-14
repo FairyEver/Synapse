@@ -70,4 +70,15 @@ describe("task scheduler schedule calculator", () => {
       now: new Date("2026-04-29T09:00:00.000Z"),
     })).toEqual({ action: "run_missed_once" })
   })
+
+  it("does not run missed tasks when persisted nextRunAt is invalid", () => {
+    expect(resolveStartupSchedule({
+      enabled: true,
+      nextRunAt: "not-a-date",
+      missedRunPolicy: "run_once",
+      trigger: { type: "builtin.interval", config: { everyMinutes: 60 } },
+      createdAt: "2026-04-29T00:00:00.000Z",
+      now: new Date("2026-04-29T09:00:00.000Z"),
+    })).toEqual({ action: "schedule_next" })
+  })
 })

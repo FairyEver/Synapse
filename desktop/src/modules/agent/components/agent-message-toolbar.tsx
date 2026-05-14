@@ -1,6 +1,9 @@
 import { useState } from "react"
 import { Check, Clipboard } from "lucide-react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
+
+const logger = createRendererLogger("agent")
 
 interface AgentMessageToolbarProps {
   readonly timestamp?: string
@@ -10,19 +13,26 @@ interface AgentMessageToolbarProps {
 
 function AgentMessageToolbar({ timestamp, content, className }: AgentMessageToolbarProps) {
   const [copied, setCopied] = useState(false)
+  const formattedTimestamp = timestamp ? formatTime(timestamp) : undefined
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(content).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
+    }).catch((rawError: unknown) => {
+      logger.error("Agent message copy failed.", {
+        boundary: "renderer.agent.message-toolbar",
+        contentLength: content.length,
+        ...errorLogMeta(rawError),
+      })
     })
   }
 
   return (
     <div className={cn("flex items-center justify-end gap-2", className)}>
-      {timestamp ? (
+      {formattedTimestamp ? (
         <time className="text-xs text-muted-foreground">
-          {formatTime(timestamp)}
+          {formattedTimestamp}
         </time>
       ) : null}
       <button
@@ -39,11 +49,24 @@ function AgentMessageToolbar({ timestamp, content, className }: AgentMessageTool
   )
 }
 
-function formatTime(timestamp: string): string {
+function formatTime(timestamp: string): string | undefined {
   const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return undefined
   const hours = date.getHours().toString().padStart(2, "0")
   const minutes = date.getMinutes().toString().padStart(2, "0")
   return `${hours}:${minutes}`
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+  }
 }
 
 export { AgentMessageToolbar }

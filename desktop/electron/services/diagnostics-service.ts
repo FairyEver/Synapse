@@ -135,6 +135,7 @@ type DiagnosticsServiceDeps = {
 const RECENT_LOG_FILE_LIMIT = 3
 const RECENT_LOG_SAMPLE_LIMIT = 5
 const LIFECYCLE_LOG_SAMPLE_LIMIT = 5
+const AGENT_LOG_SAMPLE_LIMIT = 5
 
 type RecentLogSnapshot = {
   scannedFiles: string[]
@@ -440,6 +441,20 @@ class DiagnosticsService {
       return signals.warningCount + signals.errorCount > 0
         ? this.degraded("logs.recent-signals", "日志与配置", "近期日志", "近期日志包含警告或错误", details)
         : this.ok("logs.recent-signals", "日志与配置", "近期日志", "未发现近期警告", details)
+    })
+
+    await this.capture(checks, "logs.agent-runtime", "日志与配置", "Agent 日志", async () => {
+      const { scannedFiles, content } = await readRecentLogSnapshot()
+      const signals = summarizeAgentRuntimeLogSignals(content)
+      const details = {
+        logPath: this.deps.logStore.getLogDirectory(),
+        scannedFiles,
+        ...signals,
+      }
+
+      return signals.errorCount + signals.warningCount > 0
+        ? this.degraded("logs.agent-runtime", "日志与配置", "Agent 日志", "近期日志包含 Agent/SDK 风险信号", details)
+        : this.ok("logs.agent-runtime", "日志与配置", "Agent 日志", "未发现 Agent/SDK 风险日志", details)
     })
 
     await this.capture(checks, "logs.lifecycle", "日志与配置", "启动与重启", async () => {
@@ -1074,6 +1089,115 @@ function summarizeLogSignals(content: string): {
   }
 
   return { warningCount, errorCount, samples }
+}
+
+function summarizeAgentRuntimeLogSignals(content: string): {
+  signalCount: number
+  warningCount: number
+  errorCount: number
+  boundaries: string[]
+  components: string[]
+  correlation: Record<"conversationId" | "messageId" | "sessionId" | "sdkSessionId" | "taskId" | "runId", number>
+  samples: string[]
+} {
+  const boundaries = new Set<string>()
+  const components = new Set<string>()
+  const samples: string[] = []
+  const correlation = {
+    conversationId: 0,
+    messageId: 0,
+    sessionId: 0,
+    sdkSessionId: 0,
+    taskId: 0,
+    runId: 0,
+  }
+  let signalCount = 0
+  let warningCount = 0
+  let errorCount = 0
+  let previousLevel: "error" | "warning" | undefined
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || !isAgentRuntimeLogLine(line)) continue
+
+    signalCount += 1
+    addAgentBoundaries(line, boundaries)
+    countAgentCorrelation(line, correlation)
+
+    const component = parseLogComponent(line)
+    if (component) components.add(component)
+
+    const level = parseLogLevel(line) ?? (line.startsWith("{") ? previousLevel : undefined)
+    if (level === "error") {
+      errorCount += 1
+    } else if (level === "warning") {
+      warningCount += 1
+    }
+    previousLevel = level ?? previousLevel
+
+    if (samples.length < AGENT_LOG_SAMPLE_LIMIT) {
+      samples.push(sanitizeAgentRuntimeLogSample(line))
+    }
+  }
+
+  return {
+    signalCount,
+    warningCount,
+    errorCount,
+    boundaries: [...boundaries].sort(),
+    components: [...components].sort(),
+    correlation,
+    samples,
+  }
+}
+
+function isAgentRuntimeLogLine(line: string): boolean {
+  return /\b(AgentRuntime|Claude SDK|claude-agent-sdk|sdkSessionId|agentSessionId|conversationId|messageId|taskId|runId)\b/i.test(line)
+    || /\b(service\.agent-runtime|service\.task-scheduler|side-channel|automation-ingress|Scheduled Agent|Agent action|SDK event)\b/i.test(line)
+}
+
+function addAgentBoundaries(line: string, boundaries: Set<string>): void {
+  if (/\b(service\.agent-runtime|AgentRuntime|Claude SDK|claude-agent-sdk)\b/i.test(line)) boundaries.add("agent-runtime")
+  if (/\b(sdkSessionId|SDK event)\b/i.test(line)) boundaries.add("sdk-session")
+  if (/\b(service\.task-scheduler|Scheduled Agent|taskId|runId)\b/i.test(line)) boundaries.add("task-scheduler")
+  if (/\b(side-channel)\b/i.test(line)) boundaries.add("side-channel")
+  if (/\b(automation-ingress)\b/i.test(line)) boundaries.add("automation-ingress")
+}
+
+function countAgentCorrelation(
+  line: string,
+  correlation: Record<"conversationId" | "messageId" | "sessionId" | "sdkSessionId" | "taskId" | "runId", number>,
+): void {
+  for (const key of Object.keys(correlation) as Array<keyof typeof correlation>) {
+    if (new RegExp(`\\b${key}\\b`).test(line)) correlation[key] += 1
+  }
+}
+
+function parseLogLevel(line: string): "error" | "warning" | undefined {
+  if (/\[ERROR\s*\]/.test(line) || /\b(error|exception|uncaught|unhandled)\b/i.test(line)) return "error"
+  if (/\[WARN\s*\]/.test(line) || /\b(warn|warning|timeout|failed|denied)\b/i.test(line)) return "warning"
+  return undefined
+}
+
+function parseLogComponent(line: string): string | undefined {
+  return /^\[[^\]]+]\s+\[[^\]]+]\s+\[(?<component>[^\]]+)]/.exec(line)?.groups?.component
+}
+
+function sanitizeAgentRuntimeLogSample(line: string): string {
+  if (line.startsWith("{")) {
+    const fields = ["conversationId", "messageId", "sessionId", "sdkSessionId", "taskId", "runId"]
+      .filter((key) => new RegExp(`\\b${key}\\b`).test(line))
+    return fields.length > 0
+      ? `[details redacted] fields=${fields.join(",")}`
+      : "[details redacted]"
+  }
+
+  const sample = line
+    .replace(
+      /\b(prompt|message|content|authorization|token|secret|apiKey|cookie|password|credential)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|`[^`]*`|[^,\]}]+)/gi,
+      "$1=[redacted]",
+    )
+  return sample.length > 240 ? `${sample.slice(0, 240)}...` : sample
 }
 
 function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {

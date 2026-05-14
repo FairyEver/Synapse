@@ -57,6 +57,31 @@ describe("ScheduledTaskRunRepository", () => {
     expect(await repo.listByTask("task:1")).toHaveLength(100)
     expect(await repo.get("run:task:1:1")).toBeNull()
   })
+
+  it("keeps the just-finished run when rapid runs share a timestamp", async () => {
+    const repo = new ScheduledTaskRunRepository({
+      runs: new MemoryNamespace<ScheduledTaskRunEntry>("task-scheduler.runs"),
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: (taskId, index) => `run:${taskId}:${index}`,
+    })
+
+    for (let i = 0; i < 101; i += 1) {
+      await repo.start("task:1", "manual")
+      await repo.finish(`run:task:1:${i + 1}`, {
+        status: "success",
+        result: {
+          status: "success",
+          summary: String(i),
+        },
+      })
+    }
+
+    expect(await repo.listByTask("task:1")).toHaveLength(100)
+    expect(await repo.get("run:task:1:101")).toEqual(expect.objectContaining({
+      id: "run:task:1:101",
+      status: "success",
+    }))
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

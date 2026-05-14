@@ -57,6 +57,7 @@ export function buildCodexArgs(config: CodexConfig, workingDirectory: string): s
     '--cd', workingDirectory,
   ]
   if (config.model) args.push('--model', config.model)
+  if (config.disableMcp !== false) args.push('-c', 'mcp_servers={}')
   args.push('--sandbox', config.sandbox)
   if (config.approvalPolicy === 'never') {
     args.push('--dangerously-bypass-approvals-and-sandbox')

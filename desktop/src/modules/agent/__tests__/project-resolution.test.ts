@@ -32,6 +32,21 @@ describe("resolveAgentProjectScope", () => {
     })
   })
 
+  it("uses the active repository id as default when no configured project path matches", () => {
+    expect(resolveAgentProjectScope({
+      uuid: "repo-1",
+      name: "Active Repository",
+      localPath: "/Users/liyang/Active",
+    }, [
+      { id: "project-1", name: "Other", path: "/Users/liyang/Other" },
+    ])).toEqual({
+      defaultProjectId: "repo-1",
+      projectIds: ["project-1", "repo-1"],
+      repositoryId: "repo-1",
+      repositoryName: "Active Repository",
+    })
+  })
+
   it("matches Windows paths case-insensitively", () => {
     expect(resolveAgentProjectScope({
       uuid: "repo-1",

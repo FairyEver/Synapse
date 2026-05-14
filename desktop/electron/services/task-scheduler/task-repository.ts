@@ -63,7 +63,7 @@ export class ScheduledTaskRepository {
     const existing = await this.require(id)
     const trigger = normalizeTrigger(patch.trigger ?? existing.trigger)
     const enabled = patch.enabled ?? existing.enabled
-    const next: ScheduledTaskEntry = {
+    const candidate: ScheduledTaskEntry = {
       ...existing,
       ...definedPatch({
         name: patch.name,
@@ -75,12 +75,15 @@ export class ScheduledTaskRepository {
         enabled: patch.enabled,
       }),
       action: patch.action === undefined ? existing.action : patch.action,
+      updatedAt: this.isoNow(),
+    }
+    validateTask(candidate)
+    const next: ScheduledTaskEntry = {
+      ...candidate,
       nextRunAt: enabled
         ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt }).toISOString()
         : undefined,
-      updatedAt: this.isoNow(),
     }
-    validateTask(next)
     await this.tasks.upsert(next)
     return next
   }

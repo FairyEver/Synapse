@@ -255,9 +255,11 @@ export class ConversationRouter {
           } else {
             const messageText = error instanceof Error ? error.message : String(error)
             this.deps.logger?.warn("AgentRuntime queued turn failed.", {
-              error: messageText,
+              boundary: "agent-runtime.queued-turn",
               projectId: this.deps.projectId,
               sessionKey: turn.message.sessionKey,
+              conversationId: turn.conversationId,
+              ...queuedTurnFailureMetadata(error),
             })
             turn.resolve(this.finishWithError(turn.message, turn.conversationId, messageText))
           }
@@ -337,6 +339,7 @@ export class ConversationRouter {
     const events: AgentEvent[] = []
     let resultText = ""
     let latestAssistantText = ""
+    let streamedText = ""
     let error: string | undefined
 
     await liveSession.send(message)
@@ -355,13 +358,14 @@ export class ConversationRouter {
 
       const assistantText = assistantEventText(event)
       if (assistantText) latestAssistantText = assistantText
+      else streamedText = appendStreamedText(streamedText, event)
 
       if (event.type === "permissionRequest") {
         await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
         continue
       }
       if (event.type === "result") {
-        resultText = latestAssistantText || event.content
+        resultText = latestAssistantText || streamedText || event.content
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: event.usage as ConversationEntryV1["usage"] | undefined,
@@ -444,7 +448,7 @@ export class ConversationRouter {
           break
         }
         if (event.type === "result") {
-          resultText = latestAssistantText || event.content
+          resultText = latestAssistantText || partialText || event.content
           partialText = resultText || partialText
           break
         }
@@ -675,6 +679,7 @@ export class ConversationRouter {
         completedAt,
         errorMessage,
       },
+      scope: { sessionId: conversationId },
       timestamp: this.isoNow(),
     })
   }
@@ -862,13 +867,32 @@ function sanitizeValue(value: unknown): unknown {
   for (const [key, entry] of Object.entries(value)) {
     const lower = key.toLowerCase()
     if (lower.includes("raw")) continue
-    if (lower.includes("secret") || lower.includes("token") || lower.includes("password") || lower.includes("apikey")) {
+    if (
+      lower.includes("secret")
+      || lower.includes("token")
+      || lower.includes("password")
+      || lower.includes("apikey")
+      || lower.includes("authorization")
+      || lower.includes("cookie")
+      || lower.includes("credential")
+    ) {
       output[key] = "[redacted]"
       continue
     }
     output[key] = sanitizeValue(entry)
   }
   return output
+}
+
+function queuedTurnFailureMetadata(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -882,6 +906,7 @@ function truncateString(value: string | undefined, maxLength: number): string | 
 
 function assistantEventText(event: AgentEvent): string | undefined {
   if (event.type !== "assistant") return undefined
+  if (typeof event.content === "string" && event.content.trim().length > 0) return event.content
   const blocks = Array.isArray(event.contentBlocks)
     ? event.contentBlocks
     : Array.isArray(event.message.content)
@@ -920,7 +945,14 @@ async function nextLiveEventWithTimeout(
 function appendRelayText(current: string, event: AgentEvent): string {
   if (event.type === "assistant") return assistantEventText(event) ?? current
   if (event.type === "text") return `${current}${event.content}`
+  if (event.type === "stream" && event.text) return `${current}${event.text}`
   if (event.type === "result") return current || event.content
   if (event.type === "error" && !current) return event.message
+  return current
+}
+
+function appendStreamedText(current: string, event: AgentEvent): string {
+  if (event.type === "text") return `${current}${event.content}`
+  if (event.type === "stream" && event.text) return `${current}${event.text}`
   return current
 }

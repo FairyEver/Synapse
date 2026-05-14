@@ -26,7 +26,7 @@ function resolveAgentProjectScope(
 
   return {
     projectIds: scopedProjectIds,
-    defaultProjectId: matchedProject?.id ?? scopedProjectIds[0],
+    defaultProjectId: matchedProject?.id ?? fallbackRepositoryId ?? scopedProjectIds[0],
     repositoryId: activeRepository?.uuid,
     repositoryName: activeRepository?.name,
   }

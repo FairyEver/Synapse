@@ -13,7 +13,7 @@ export function computeIsPinned(metrics: {
     return true
   }
   const distanceFromBottom = scrollHeight - clientHeight - scrollTop
-  return distanceFromBottom < PINNED_THRESHOLD_PX
+  return distanceFromBottom <= PINNED_THRESHOLD_PX
 }
 
 export function isLatestEntryNew(input: {

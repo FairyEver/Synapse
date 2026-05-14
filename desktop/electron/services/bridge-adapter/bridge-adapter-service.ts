@@ -31,7 +31,6 @@ import {
   parseBridgePreviewAck,
   parseBridgeRegister,
   sanitizeBridgeMetadata,
-  type BridgeCardAction,
   type BridgeMessage,
   type BridgeRegister,
 } from "./bridge-protocol"
@@ -414,19 +413,24 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       )
       return
     }
+    let projectId = message.project
+    let boundary: "project.resolve" | "agent.send" = "project.resolve"
     try {
       const { project, agent } = await this.resolveProjectAgent(message.project)
+      projectId = project.projectId
       const agentMessage = this.toAgentMessage(project.projectId, adapter, message)
+      boundary = "agent.send"
       await agent.send(agentMessage)
       this.recordAdapterAudit("allowed", adapter.platform, "message", {
         projectId: project.projectId,
         sessionKey: message.session_key,
       })
     } catch (error) {
+      this.recordInboundAgentMessageFailure(adapter, message, projectId, boundary, error)
       this.sendProtocolError(
         adapter,
         error instanceof BridgeAdapterError ? error.code : "message_failed",
-        error instanceof Error ? error.message : String(error),
+        bridgeProtocolErrorMessage(error, "Agent message failed"),
         message.session_key,
         message.reply_ctx,
       )
@@ -683,8 +687,9 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       if (!turn.previewHandle && turn.previewPending) {
         try {
           turn.previewHandle = await turn.previewPending
-        } catch {
+        } catch (error) {
           turn.previewFailed = true
+          this.recordPreviewAckFailure(adapter, target, "final", error)
         }
       }
       if (turn.previewHandle) {
@@ -735,8 +740,9 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     if (turn.previewPending) {
       try {
         turn.previewHandle = await turn.previewPending
-      } catch {
+      } catch (error) {
         turn.previewFailed = true
+        this.recordPreviewAckFailure(adapter, target, "pending", error)
       }
       return false
     }
@@ -753,8 +759,9 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     try {
       turn.previewHandle = await turn.previewPending
       return true
-    } catch {
+    } catch (error) {
       turn.previewFailed = true
+      this.recordPreviewAckFailure(adapter, target, "preview_start", error)
       return false
     } finally {
       turn.previewPending = undefined
@@ -771,6 +778,41 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         reject(new Error(`preview ack timed out for ${refId}`))
       }, PREVIEW_ACK_TIMEOUT_MS)
       adapter.previewAcks.set(refId, { resolve, reject, timeout })
+    })
+  }
+
+  private recordPreviewAckFailure(
+    adapter: BridgeAdapterConnection,
+    target: ReplyTarget,
+    stage: "preview_start" | "pending" | "final",
+    error: unknown,
+  ): void {
+    this.deps.logger?.warn("Bridge preview ack failed; falling back to reply.", {
+      projectId: target.projectId,
+      conversationId: target.conversationId,
+      sessionKey: target.sessionKey,
+      adapterId: adapter.id,
+      platform: adapter.platform,
+      stage,
+      failureType: previewAckFailureType(error),
+      error: previewAckErrorSummary(error),
+    })
+  }
+
+  private recordInboundAgentMessageFailure(
+    adapter: BridgeAdapterConnection,
+    message: BridgeMessage,
+    projectId: string | undefined,
+    boundary: "project.resolve" | "agent.send",
+    error: unknown,
+  ): void {
+    this.deps.logger?.warn("Bridge inbound Agent message failed.", {
+      projectId,
+      sessionKey: message.session_key,
+      messageId: message.msg_id,
+      platform: adapter.platform,
+      boundary,
+      ...errorDiagnostic(error),
     })
   }
 
@@ -886,7 +928,8 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     } catch (error) {
       this.deps.logger?.warn("Bridge capabilities command listing failed.", {
         projectId: project.projectId,
-        error: error instanceof Error ? error.message : String(error),
+        platform,
+        ...errorDiagnostic(error),
       })
       return []
     }
@@ -1037,6 +1080,34 @@ function parsePermissionAction(action: string):
   const match = /^perm:([^:]+):(allow|deny)$/.exec(action)
   if (!match?.[1] || !match[2]) return null
   return { requestId: match[1], behavior: match[2] as "allow" | "deny" }
+}
+
+function previewAckFailureType(error: unknown): "timeout" | "error" {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.toLowerCase().includes("timed out") ? "timeout" : "error"
+}
+
+function previewAckErrorSummary(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.toLowerCase().includes("timed out")) return "preview ack timed out"
+  return message.replace(/\s+/g, " ").trim().slice(0, 120)
+}
+
+function bridgeProtocolErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof BridgeAdapterError ? error.message : fallback
+}
+
+function errorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+    ...(error instanceof BridgeAdapterError ? { errorCode: error.code } : {}),
+  }
 }
 
 function platformFromSessionKey(sessionKey: string): string | undefined {

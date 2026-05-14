@@ -88,7 +88,7 @@ async function readAttachmentInput(
   const inline = input.dataBase64 ?? input.data
   if (inline !== undefined) {
     return {
-      bytes: Buffer.from(inline, "base64"),
+      bytes: decodeInlineAttachment(inline),
       fileName: sanitizeAttachmentFileName(input.fileName ?? input.file_name),
     }
   }
@@ -96,7 +96,7 @@ async function readAttachmentInput(
     throw new AttachmentPolicyError("attachment_source_required", "attachment path or data is required")
   }
   await assertPathAllowed(input.path, options)
-  const bytes = await readFile(input.path)
+  const bytes = await readAttachmentFile(input.path)
   return {
     bytes,
     fileName: sanitizeAttachmentFileName(input.fileName ?? input.file_name ?? input.path),
@@ -108,11 +108,11 @@ async function assertPathAllowed(
   options: PrepareAttachmentOptions,
 ): Promise<void> {
   const target = path.resolve(rawPath)
-  const linkInfo = await lstat(target)
+  const linkInfo = await statPath(target, lstat)
   if (linkInfo.isSymbolicLink()) {
     throw new AttachmentPolicyError("path_symlink_rejected", "attachment path must not be a symlink")
   }
-  const info = await stat(target)
+  const info = await statPath(target, stat)
   if (!info.isFile()) {
     throw new AttachmentPolicyError("path_not_file", "attachment path must be a file")
   }
@@ -132,6 +132,42 @@ async function assertPathAllowed(
     "path_escape_rejected",
     decision?.reason ?? "attachment path is outside allowed roots",
   )
+}
+
+async function statPath(
+  target: string,
+  readStat: typeof lstat,
+): Promise<Awaited<ReturnType<typeof lstat>>> {
+  try {
+    return await readStat(target)
+  } catch (error) {
+    throw attachmentFileSystemError(error)
+  }
+}
+
+async function readAttachmentFile(target: string): Promise<Buffer> {
+  try {
+    return await readFile(target)
+  } catch (error) {
+    throw attachmentFileSystemError(error)
+  }
+}
+
+function attachmentFileSystemError(error: unknown): AttachmentPolicyError {
+  const code = fileSystemErrorCode(error)
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return new AttachmentPolicyError("attachment_not_found", "attachment path was not found")
+  }
+  if (code === "EACCES" || code === "EPERM") {
+    return new AttachmentPolicyError("attachment_not_readable", "attachment path is not readable")
+  }
+  return new AttachmentPolicyError("attachment_read_failed", "attachment path could not be read")
+}
+
+function fileSystemErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined
+  const code = (error as { readonly code?: unknown }).code
+  return typeof code === "string" ? code : undefined
 }
 
 async function isInsideAnyRoot(target: string, roots: readonly string[]): Promise<boolean> {
@@ -176,6 +212,24 @@ function assertMime(kind: "image" | "file", mimeType: string): void {
 
 function normalizeMimeType(value: string): string {
   return value.split(";")[0]?.trim().toLowerCase() || "application/octet-stream"
+}
+
+function decodeInlineAttachment(value: string): Buffer {
+  const normalized = value.replace(/\s+/g, "")
+  if (!isValidBase64(normalized)) {
+    throw new AttachmentPolicyError("invalid_attachment_data", "attachment data must be valid base64")
+  }
+  return Buffer.from(normalized, "base64")
+}
+
+function isValidBase64(value: string): boolean {
+  if (!value) return false
+  if (/[^A-Za-z0-9+/=]/.test(value)) return false
+  const padding = value.match(/=+$/)?.[0].length ?? 0
+  if (padding > 2) return false
+  if (value.slice(0, value.length - padding).includes("=")) return false
+  if (value.length % 4 === 1) return false
+  return padding === 0 || value.length % 4 === 0
 }
 
 function detectMimeType(fileName: string, bytes: Buffer): string {

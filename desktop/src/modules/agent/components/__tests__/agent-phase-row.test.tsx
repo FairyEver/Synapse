@@ -63,6 +63,26 @@ describe("AgentPhaseRow", () => {
     expect(html).toContain("CLI exited 1")
   })
 
+  it("renders cancellation labels instead of internal phase names", () => {
+    const stopping = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({ phase: "cancel_pending", status: "in-progress" })}
+        now={Date.parse("2026-05-10T00:00:00.500Z")}
+      />,
+    )
+    const stopped = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({ phase: "cancelled", status: "done", completedAt: "2026-05-10T00:00:00.500Z" })}
+        now={Date.parse("2026-05-10T00:00:01.000Z")}
+      />,
+    )
+
+    expect(stopping).toContain("正在停止")
+    expect(stopped).toContain("已停止")
+    expect(stopping).not.toMatch(/>cancel_pending</)
+    expect(stopped).not.toMatch(/>cancelled</)
+  })
+
   it("uses the destructive token color on failed", () => {
     const html = renderToStaticMarkup(
       <AgentPhaseRow

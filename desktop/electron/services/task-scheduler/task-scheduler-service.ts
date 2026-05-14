@@ -1,5 +1,6 @@
 import { computeNextRunAt, resolveStartupSchedule } from "./schedule-calculator"
 import type { TaskSchedulerExecutionService } from "./execution-service"
+import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ScheduledTaskRunRepository } from "./run-repository"
 import type { ScheduledTaskRepository } from "./task-repository"
 import type {
@@ -17,6 +18,7 @@ export interface TaskSchedulerServiceDeps {
   readonly runs: ScheduledTaskRunRepository
   readonly execution: TaskSchedulerExecutionService
   readonly defaultCwd: string
+  readonly logger?: StructuredLogger
   readonly now?: () => Date
 }
 
@@ -130,7 +132,7 @@ export class TaskSchedulerService {
     })
     if (decision.action === "none") return
     if (decision.action === "run_missed_once") {
-      void this.runScheduled(task.id, "missed_run")
+      this.runScheduledInBackground(task.id, "missed_run")
       return
     }
     await this.schedule(task.id, task.nextRunAt)
@@ -147,9 +149,20 @@ export class TaskSchedulerService {
       Math.max(0, nextRunAt.getTime() - this.now().getTime()),
     )
     const timer = setTimeout(() => {
-      void this.runScheduled(id, "schedule")
+      this.runScheduledInBackground(id, "schedule")
     }, delayMs)
     this.timers.set(id, timer)
+  }
+
+  private runScheduledInBackground(id: string, triggeredBy: ScheduledTaskRunTrigger): void {
+    void this.runScheduled(id, triggeredBy).catch((error) => {
+      this.deps.logger?.warn("Scheduled task background run failed.", {
+        taskId: id,
+        triggeredBy,
+        boundary: "task-scheduler-background-run",
+        ...errorMetadata(error),
+      })
+    })
   }
 
   private async runScheduled(
@@ -226,5 +239,13 @@ export class TaskSchedulerService {
 
   private now(): Date {
     return this.deps.now?.() ?? new Date()
+  }
+}
+
+function errorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
   }
 }

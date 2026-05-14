@@ -5,6 +5,7 @@ import os from "node:os"
 import path from "node:path"
 
 import type { AgentCommandEntryV1, DataNamespace } from "../../runtime/data-repo"
+import type { StructuredLogger } from "../../runtime/logging"
 import type { ShellKind } from "../shell-exec"
 import type { AgentMessage } from "./types"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
@@ -26,6 +27,7 @@ export interface CustomCommandRegistryDeps {
   readonly commands: DataNamespace<AgentCommandEntryV1>
   readonly workspacePath?: string
   readonly now?: () => Date
+  readonly logger?: Pick<StructuredLogger, "warn">
 }
 
 export interface AddCustomCommandInput {
@@ -152,13 +154,34 @@ export class CustomCommandRegistry {
     const roots = commandDirs(this.deps.workspacePath)
     const found: AgentCommandEntryV1[] = []
     for (const root of roots) {
-      const files = await listMarkdownFiles(root)
+      const files = await listMarkdownFiles(root, (dir, error) => {
+        this.deps.logger?.warn("Agent command directory skipped.", {
+          projectId: this.deps.projectId,
+          directoryName: path.basename(dir),
+          rootName: path.basename(root),
+          error: errorSummary(error),
+          errorCode: errorCode(error),
+        })
+      })
       for (const filePath of files) {
-        const content = await fs.readFile(filePath, "utf8")
-        const body = stripFrontmatter(content).trim()
         const relative = path.relative(root, filePath)
         const name = normalizeCommandName(relative.replace(/\.md$/i, ""))
-        if (!name || !body) continue
+        if (!name) continue
+        let content: string
+        try {
+          content = await fs.readFile(filePath, "utf8")
+        } catch (error) {
+          this.deps.logger?.warn("Agent command file skipped.", {
+            projectId: this.deps.projectId,
+            commandName: name,
+            fileName: path.basename(filePath),
+            error: errorSummary(error),
+            errorCode: errorCode(error),
+          })
+          continue
+        }
+        const body = stripFrontmatter(content).trim()
+        if (!body) continue
         found.push({
           id: `agent-command-file:${filePath}`,
           schemaVersion: 1,
@@ -245,13 +268,17 @@ function commandDirs(workspacePath: string | undefined): readonly string[] {
   return roots
 }
 
-async function listMarkdownFiles(root: string): Promise<readonly string[]> {
+async function listMarkdownFiles(
+  root: string,
+  onDirectoryError?: (dir: string, error: unknown) => void,
+): Promise<readonly string[]> {
   const result: string[] = []
   async function walk(dir: string): Promise<void> {
     let entries: Dirent[]
     try {
       entries = await fs.readdir(dir, { withFileTypes: true })
-    } catch {
+    } catch (error) {
+      if (!isMissingPathError(error)) onDirectoryError?.(dir, error)
       return
     }
     for (const entry of entries) {
@@ -265,6 +292,30 @@ async function listMarkdownFiles(root: string): Promise<readonly string[]> {
   }
   await walk(root)
   return result
+}
+
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.length > 240 ? `${message.slice(0, 240)}...` : message
+}
+
+function errorSummary(error: unknown): string {
+  return errorMessage(error)
+    .replace(/\bauthorization(\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, "authorization$1[redacted]")
+    .replace(/\b(token|secret|api[-_]?key|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1$2[redacted]")
+    .replace(/'[^']*'/g, "'[path redacted]'")
+    .replace(/"[^"]*"/g, "\"[path redacted]\"")
+    .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
+    .replace(/\/[^\s'"`]+/g, "[path redacted]")
+}
+
+function errorCode(error: unknown): string | undefined {
+  const code = (error as { readonly code?: unknown } | null)?.code
+  return typeof code === "string" ? code : undefined
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return errorCode(error) === "ENOENT"
 }
 
 function descriptionFromMarkdown(content: string): string | undefined {

@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest"
 
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    warn: vi.fn(),
+  },
+}))
+
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import { taskSchedulerIpcModule } from "../ipc"
+
+vi.mock("../../../services/log-store", () => ({
+  createMainLogger: vi.fn(() => logStoreMock.logger),
+}))
 
 describe("taskSchedulerIpcModule", () => {
   it("routes task CRUD and run calls", async () => {
@@ -92,5 +102,37 @@ describe("taskSchedulerIpcModule", () => {
     expect(service.schedulerTaskUpdate).toHaveBeenCalledWith("task:1", { enabled: false })
     expect(service.runTaskNow).toHaveBeenCalledWith("task:1")
     expect(service.schedulerRunList).toHaveBeenCalledWith("task:1", { limit: undefined })
+  })
+
+  it("logs manual run failures with sanitized IPC context", async () => {
+    const service = {
+      runTaskNow: vi.fn(async () => {
+        throw new Error("failed with prompt text and token=sk-test")
+      }),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.task-scheduler") return service as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(taskSchedulerIpcModule, { moduleId: "task-scheduler", resolve })
+
+    await expect(harness.invoke("synapse:task-scheduler:tasks:run", {
+      taskId: "task:agent-1",
+    })).rejects.toThrow("failed with prompt text")
+
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+      "Task scheduler manual run IPC failed.",
+      expect.objectContaining({
+        boundary: "task-scheduler.ipc.run-task",
+        channel: "synapse:task-scheduler:tasks:run",
+        taskId: "task:agent-1",
+        durationMs: expect.any(Number),
+        errorName: "Error",
+        errorLength: "failed with prompt text and token=sk-test".length,
+      }),
+    )
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("prompt text")
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("sk-test")
   })
 })

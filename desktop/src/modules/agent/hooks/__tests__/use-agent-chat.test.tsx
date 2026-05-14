@@ -1,0 +1,346 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { useEffect } from "react"
+import type { ReactNode } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { act } from "react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import type { SynapseAgentSessionSummary } from "@/types/agent"
+import { useAgentChat } from "../use-agent-chat"
+import type { AgentProjectScope } from "../../project-resolution"
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const rendererLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
+}))
+
+const session: SynapseAgentSessionSummary = {
+  projectId: "project-1",
+  id: "conversation-1",
+  sessionKey: "local:renderer",
+  active: true,
+  historyCount: 0,
+  createdAt: "2026-05-13T00:00:00.000Z",
+  updatedAt: "2026-05-13T00:00:00.000Z",
+}
+
+const nextSession: SynapseAgentSessionSummary = {
+  projectId: "project-1",
+  id: "conversation-2",
+  sessionKey: "local:renderer",
+  active: false,
+  historyCount: 0,
+  createdAt: "2026-05-13T00:01:00.000Z",
+  updatedAt: "2026-05-13T00:01:00.000Z",
+}
+
+const projectScope: AgentProjectScope = {
+  projectIds: ["project-1"],
+  defaultProjectId: "project-1",
+}
+
+let roots: Root[] = []
+
+beforeEach(() => {
+  rendererLogger.debug.mockClear()
+  rendererLogger.error.mockClear()
+  rendererLogger.info.mockClear()
+  rendererLogger.warn.mockClear()
+  ;(window as unknown as { synapse?: unknown }).synapse = {
+    agent: {
+      getProviders: vi.fn(async () => ({ agentType: "claude-code", providers: [] })),
+      getTimeline: vi.fn(async () => ({
+        projectId: session.projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        entries: [],
+      })),
+      cancelTurn: vi.fn(async () => ({ status: "cancelled" })),
+      deleteSession: vi.fn(async () => ({ ok: true })),
+      forceKillTurn: vi.fn(async () => undefined),
+      listAllSessions: vi.fn(async () => [session]),
+      listCommands: vi.fn(async () => []),
+      listPendingPermissions: vi.fn(async () => []),
+      listSessions: vi.fn(async () => [session]),
+      onEvent: vi.fn(() => () => {}),
+      respondPermission: vi.fn(async () => undefined),
+      send: vi.fn(async () => {
+        throw new Error("enqueue failed with prompt=secret")
+      }),
+      status: vi.fn(async () => ({
+        projectId: session.projectId,
+        projectName: "Project One",
+        agentType: "claude-code",
+        liveSessions: 1,
+        busySessions: 0,
+        queuedTurns: 0,
+        pendingPermissions: 0,
+      })),
+      switchSession: vi.fn(async () => session),
+    },
+  }
+})
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  delete (window as unknown as { synapse?: unknown }).synapse
+})
+
+describe("useAgentChat", () => {
+  it("removes the optimistic local user message when send enqueue fails", async () => {
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    const sent = await act(async () =>
+      chat?.sendMessage("hello", {
+        projectId: session.projectId,
+        conversationId: session.id,
+        sessionKey: session.sessionKey,
+      }))
+
+    expect(sent).toBe(false)
+    expect(chat?.error).toBe("enqueue failed with prompt=secret")
+    expect(chat?.timeline).toEqual([])
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent send failed.", expect.objectContaining({
+      projectId: session.projectId,
+      conversationId: session.id,
+      sessionKey: session.sessionKey,
+      messageLength: "hello".length,
+      boundary: "renderer.agent.send",
+      errorName: "Error",
+      errorLength: "enqueue failed with prompt=secret".length,
+    }))
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt=secret")
+  })
+
+  it("logs archived session refresh failures without exposing the error message", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          listAllSessions: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listAllSessions.mockRejectedValue(new Error("archive secret failure"))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    expect(rendererLogger.warn).toHaveBeenCalledWith("Agent archived sessions refresh failed.", expect.objectContaining({
+      projectIds: ["project-1"],
+      errorName: "Error",
+      errorLength: "archive secret failure".length,
+    }))
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("archive secret failure")
+  })
+
+  it("logs delete fallback switch failures with session context", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+          switchSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listSessions.mockResolvedValue([session, nextSession])
+    bridge.switchSession.mockRejectedValue(new Error("switch internal detail"))
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.deleteSession(session)
+    })
+
+    expect(chat?.selectedConversationId).toBe(nextSession.id)
+    expect(bridge.getTimeline).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: nextSession.projectId,
+      sessionKey: nextSession.sessionKey,
+      conversationId: nextSession.id,
+    }))
+    expect(rendererLogger.warn).toHaveBeenCalledWith("Agent delete fallback switch failed.", expect.objectContaining({
+      projectId: nextSession.projectId,
+      conversationId: nextSession.id,
+      sessionKey: nextSession.sessionKey,
+      errorName: "Error",
+      errorLength: "switch internal detail".length,
+    }))
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("switch internal detail")
+  })
+
+  it("logs permission response failures with sanitized request context", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          listPendingPermissions: ReturnType<typeof vi.fn>
+          respondPermission: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listPendingPermissions.mockResolvedValue([{
+      requestId: "permission-1",
+      projectId: session.projectId,
+      sessionKey: session.sessionKey,
+      conversationId: session.id,
+      toolName: "Bash",
+      createdAt: "2026-05-13T00:02:00.000Z",
+    }])
+    bridge.respondPermission.mockRejectedValue("permission secret token=sk-test")
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.pendingPermissions.length === 1)
+
+    await act(async () => {
+      await chat?.respondPermission("permission-1", "allow")
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent permission response failed.", expect.objectContaining({
+      projectId: session.projectId,
+      requestId: "permission-1",
+      behavior: "allow",
+      boundary: "renderer.agent.permission-response",
+      errorName: "string",
+      errorLength: "permission secret token=sk-test".length,
+    }))
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("permission secret token")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
+  })
+
+  it("logs cancel and force-kill failures with sanitized conversation context", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          cancelTurn: ReturnType<typeof vi.fn>
+          forceKillTurn: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.cancelTurn.mockRejectedValue(new Error("cancel failed with prompt=secret"))
+    bridge.forceKillTurn.mockRejectedValue("force kill token=sk-test")
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.cancelTurn()
+      await chat?.forceKillTurn()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent cancel turn failed.", expect.objectContaining({
+      projectId: session.projectId,
+      conversationId: session.id,
+      boundary: "renderer.agent.cancel-turn",
+      errorName: "Error",
+      errorLength: "cancel failed with prompt=secret".length,
+    }))
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent force kill turn failed.", expect.objectContaining({
+      projectId: session.projectId,
+      conversationId: session.id,
+      boundary: "renderer.agent.force-kill-turn",
+      errorName: "string",
+      errorLength: "force kill token=sk-test".length,
+    }))
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt=secret")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
+  })
+})
+
+function HookProbe({ onChange }: { readonly onChange: (chat: ReturnType<typeof useAgentChat>) => void }): ReactNode {
+  const chat = useAgentChat(projectScope)
+  useEffect(() => {
+    onChange(chat)
+  }, [chat, onChange])
+  return null
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return
+    await act(async () => {
+      await Promise.resolve()
+    })
+  }
+  throw new Error("Timed out waiting for hook update")
+}

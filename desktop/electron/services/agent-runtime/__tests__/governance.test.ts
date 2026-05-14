@@ -46,6 +46,30 @@ describe("AgentGovernanceService", () => {
       { allowed: true },
     )
     expect(governance.evaluateMessage(message("second", { userId: "guest-1" }))).toEqual(
+      { allowed: true },
+    )
+    expect(governance.evaluateMessage(message("third", { userId: "guest-1" }))).toEqual(
+      expect.objectContaining({ allowed: false, code: "rate-limit" }),
+    )
+  })
+
+  it("does not consume rate limits for messages blocked by command policy", () => {
+    const governance = new AgentGovernanceService({
+      adminUserIds: ["admin-1"],
+      disabledCommands: ["status"],
+      rateLimit: { maxMessages: 1, windowMs: 60_000 },
+    })
+
+    expect(governance.evaluateMessage(message("/status", { userId: "user-1" }))).toEqual(
+      expect.objectContaining({ allowed: false, code: "disabled-command" }),
+    )
+    expect(governance.evaluateMessage(message("/shell pwd", { userId: "user-1" }))).toEqual(
+      expect.objectContaining({ allowed: false, code: "admin-required" }),
+    )
+    expect(governance.evaluateMessage(message("please continue", { userId: "user-1" }))).toEqual(
+      { allowed: true },
+    )
+    expect(governance.evaluateMessage(message("again", { userId: "user-1" }))).toEqual(
       expect.objectContaining({ allowed: false, code: "rate-limit" }),
     )
   })

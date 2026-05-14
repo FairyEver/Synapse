@@ -66,6 +66,8 @@ export class AgentSessionRepository {
         channelKey: message.channelKey ?? existing.channelKey,
         workspaceKey: message.workspaceKey ?? existing.workspaceKey,
         workspacePath: message.workspacePath ?? existing.workspacePath,
+        agentType: message.agentType ?? existing.agentType,
+        providerId: message.providerId ?? existing.providerId,
         userMeta: mergeUserMeta(existing.userMeta, message),
         updatedAt: this.isoNow(),
       }
@@ -83,6 +85,7 @@ export class AgentSessionRepository {
       workspaceKey: message.workspaceKey,
       workspacePath: message.workspacePath,
       resumePolicy: "resume",
+      agentType: message.agentType,
       providerId: message.providerId,
     })
   }

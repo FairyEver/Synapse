@@ -10,6 +10,7 @@ import type {
 import type { ProviderService } from "../../provider"
 import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
+import type { ConversationRouterDeps } from "../conversation-router"
 import { AgentGovernanceService } from "../governance"
 import { AgentSessionRepository, conversationId } from "../session-repository"
 import { SessionManager } from "../session-manager"
@@ -20,6 +21,12 @@ import type {
   AgentPermissionDecision,
   AgentRuntimeTurnResult,
 } from "../types"
+
+type RecordedAgentEvent = {
+  readonly type: string
+  readonly payload?: Record<string, unknown>
+  readonly scope?: { readonly sessionId?: string }
+}
 
 describe("ConversationRouter", () => {
   it("binds new conversations to the active provider and passes ProviderService env to the SDK session", async () => {
@@ -170,6 +177,33 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("uses string SDK assistant content when no content blocks were emitted", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "assistant",
+          content: "string assistant answer",
+          message: { role: "assistant" },
+          sdkSessionId: "sdk-1",
+        },
+        {
+          type: "result",
+          content: "",
+          done: true,
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(result.resultText).toBe("string assistant answer")
+    expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
+      expect.objectContaining({ content: "string assistant answer" }),
+    ])
+  })
+
   it("falls back to SDK result content when no assistant message was emitted", async () => {
     const { conversations, router } = createRouter({
       session: new ScriptedSession([
@@ -189,6 +223,64 @@ describe("ConversationRouter", () => {
     expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
       expect.objectContaining({ content: "fallback answer" }),
     ])
+  })
+
+  it("uses streamed SDK text as the turn result when the final result has no content", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        { type: "stream", text: "streamed ", deltaType: "text_delta", sdkSessionId: "sdk-1", event: {} },
+        { type: "stream", text: "answer", deltaType: "text_delta", sdkSessionId: "sdk-1", event: {} },
+        { type: "result", content: "", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(result.resultText).toBe("streamed answer")
+    expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
+      expect.objectContaining({ content: "streamed answer" }),
+    ])
+  })
+
+  it("returns streamed SDK text as side session partial text when the relay times out", async () => {
+    const session = new ControlledSession("sdk-1")
+    const { router } = createRouter({ session })
+
+    const pending = router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
+    await waitFor(() => session.sent.includes("relay"))
+    session.emitStreamText("partial")
+    const result = await pending
+
+    expect(result).toMatchObject({
+      timedOut: true,
+      partialText: "partial",
+      resultText: "partial",
+    })
+  })
+
+  it("emits background phase events with conversation scope", async () => {
+    const { eventBus, events } = createEventBusRecorder()
+    const { router } = createRouter({
+      eventBus,
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send({
+      ...baseMessage("hello"),
+      platform: "feishu",
+      sessionKey: "feishu:chat:user",
+    })
+    const phaseEvents = events.filter((event) => event.type === "phase.update")
+
+    expect(phaseEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        payload: expect.objectContaining({ conversationId: result.conversationId }),
+        scope: { sessionId: result.conversationId },
+      }),
+    ]))
   })
 
   it("closes the SDK session when a side session times out", async () => {
@@ -221,6 +313,33 @@ describe("ConversationRouter", () => {
     expect(second.sent).toEqual([])
   })
 
+  it("logs queued turn failures without raw SDK error text", async () => {
+    const warn = vi.fn()
+    const logger = {
+      warn,
+    } as unknown as NonNullable<ConversationRouterDeps["logger"]>
+    const { router } = createRouter({
+      logger,
+      session: new ThrowingSendSession("SDK failed for prompt sk-secret"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+
+    expect(result.error).toBe("SDK failed for prompt sk-secret")
+    expect(warn).toHaveBeenCalledWith(
+      "AgentRuntime queued turn failed.",
+      expect.objectContaining({
+        boundary: "agent-runtime.queued-turn",
+        projectId: "project-1",
+        sessionKey: "s1",
+        conversationId: conversationId("local", "s1", "active"),
+        errorName: "Error",
+        errorLength: "SDK failed for prompt sk-secret".length,
+      }),
+    )
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-secret")
+  })
+
   it("keeps persisted tool metadata and event payloads bounded and sanitized", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const raw = {
@@ -238,6 +357,16 @@ describe("ConversationRouter", () => {
           toolInputRaw: raw,
           sdkSessionId: "sdk-1",
         },
+        {
+          type: "sdkEvent",
+          sdkType: "future_message",
+          payload: {
+            authorization: "Bearer sk-auth",
+            headers: { cookie: "sid=secret-cookie" },
+            credential: "private-credential",
+          },
+          sdkSessionId: "sdk-1",
+        },
         { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
       ], "sdk-1"),
     })
@@ -250,7 +379,11 @@ describe("ConversationRouter", () => {
     expect(toolEntry?.metadata).toEqual(expect.not.objectContaining({
       toolInputRaw: expect.anything(),
     }))
-    expect(JSON.stringify(persisted[0]?.payload)).not.toContain("sk-secret")
+    const persistedPayload = JSON.stringify(persisted.map((entry) => entry.payload))
+    expect(persistedPayload).not.toContain("sk-secret")
+    expect(persistedPayload).not.toContain("Bearer sk-auth")
+    expect(persistedPayload).not.toContain("sid=secret-cookie")
+    expect(persistedPayload).not.toContain("private-credential")
     expect(JSON.stringify(persisted[0]?.payload).length).toBeLessThan(12_000)
   })
 })
@@ -265,6 +398,8 @@ function createRouter(input: {
   readonly message?: AgentLiveSession
   readonly governance?: AgentGovernanceService
   readonly commandRouter?: AgentCommandRouter
+  readonly eventBus?: ConversationRouterDeps["eventBus"]
+  readonly logger?: ConversationRouterDeps["logger"]
 } = {}) {
   const conversations = input.conversations ?? new MemoryNamespace<ConversationEntryV1>("conversations")
   const providerService = new FakeProviderService(input.activeProviderId ?? "anthropic", input.env ?? {})
@@ -308,6 +443,8 @@ function createRouter(input: {
       workDir: "/repo",
       governance: input.governance,
       agentEvents: input.agentEvents,
+      eventBus: input.eventBus,
+      logger: input.logger,
       now: fixedNow,
     },
     repository,
@@ -317,6 +454,26 @@ function createRouter(input: {
   })
 
   return { conversations, router, providerService, factoryCalls }
+}
+
+function createEventBusRecorder(): {
+  readonly eventBus: ConversationRouterDeps["eventBus"]
+  readonly events: RecordedAgentEvent[]
+} {
+  const events: RecordedAgentEvent[] = []
+  return {
+    events,
+    eventBus: {
+      projectId: "project-1",
+      emit(event) {
+        events.push(event as RecordedAgentEvent)
+      },
+      on() {
+        return () => {}
+      },
+      underlying: {} as NonNullable<ConversationRouterDeps["eventBus"]>["underlying"],
+    },
+  }
 }
 
 function conversation(patch: Partial<ConversationEntryV1> = {}): ConversationEntryV1 {
@@ -413,6 +570,32 @@ class ScriptedSession implements AgentLiveSession {
   }
 }
 
+class ThrowingSendSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+
+  constructor(private readonly message: string) {}
+
+  async send(): Promise<void> {
+    throw new Error(this.message)
+  }
+
+  async respondPermission(): Promise<void> {}
+
+  async nextEvent(): Promise<AgentEvent | null> {
+    return null
+  }
+
+  currentSessionId(): string | undefined {
+    return "throwing-sdk"
+  }
+
+  alive(): boolean {
+    return false
+  }
+
+  async close(): Promise<void> {}
+}
+
 class TimeoutSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
   closed = false
@@ -478,6 +661,10 @@ class ControlledSession implements AgentLiveSession {
 
   emitResult(content: string): void {
     this.push({ type: "result", content, done: true, sdkSessionId: this.sessionId })
+  }
+
+  emitStreamText(content: string): void {
+    this.push({ type: "stream", text: content, deltaType: "text_delta", sdkSessionId: this.sessionId, event: {} })
   }
 
   private push(event: AgentEvent): void {

@@ -23,6 +23,8 @@ describe("agent utils", () => {
   it("formats agent cli names for compact display", () => {
     expect(agentCliLabel("codex")).toBe("codex")
     expect(agentCliLabel("claude-code")).toBe("claudecode")
+    expect(agentCliLabel("claude-sdk")).toBe("claudecode")
+    expect(agentCliLabel("claude-agent-sdk")).toBe("claudecode")
     expect(agentCliLabel(undefined)).toBeUndefined()
   })
 

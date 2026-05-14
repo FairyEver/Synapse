@@ -166,7 +166,11 @@ function TaskFormDialog({
       updateField("cwd", selectedPath)
       setError(null)
     } catch (chooseError) {
-      logger.error("Failed to choose task working directory.", { error: chooseError })
+      logger.error("Failed to choose task working directory.", {
+        boundary: "task-scheduler.form.cwd-picker",
+        action: "chooseDirectory",
+        ...errorDiagnostic(chooseError),
+      })
       setError("打开目录选择器失败。")
     }
   }
@@ -532,6 +536,14 @@ function ToggleField({
       </div>
     </Field>
   )
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { TaskFormDialog }

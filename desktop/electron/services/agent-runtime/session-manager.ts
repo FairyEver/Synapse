@@ -59,6 +59,7 @@ export class SessionManager {
         env: input.env,
         mode: input.mode,
         abortSignal: input.abortSignal,
+        logger: deps.logger,
         now: deps.now,
       }))
   }
@@ -96,16 +97,31 @@ export class SessionManager {
     if (!providerId) {
       throw new Error("Provider is required")
     }
+    const modeOverride = input.message.modeOverride
+    const providerMatches = input.state.providerId === providerId
+    const modeMatches = input.state.modeOverride === modeOverride
     if (
       input.state.liveSession
       && input.state.liveSession.alive()
-      && input.state.providerId === providerId
+      && providerMatches
+      && modeMatches
     ) {
       return input.state.liveSession
     }
 
     if (input.state.liveSession) {
-      await input.state.liveSession.close()
+      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches)) {
+        this.deps.logger?.info("Recreating agent live session.", {
+          conversationId: input.conversation.id,
+          providerChanged: !providerMatches,
+          modeChanged: !modeMatches,
+          previousProviderId: input.state.providerId,
+          nextProviderId: providerId,
+          previousMode: input.state.modeOverride,
+          nextMode: modeOverride,
+        })
+      }
+      await this.closeLiveSession(input.state, input.conversation.id)
     }
 
     const cwd = input.message.workspacePath ?? this.deps.workDir
@@ -126,11 +142,12 @@ export class SessionManager {
       cwd,
       sdkSessionId,
       env,
-      mode: input.message.modeOverride,
+      mode: modeOverride,
       abortSignal: input.abortSignal,
     })
     input.state.liveSession = liveSession
     input.state.providerId = providerId
+    input.state.modeOverride = modeOverride
     return liveSession
   }
 
@@ -147,7 +164,7 @@ export class SessionManager {
     } catch (error) {
       this.deps.logger?.warn("Agent session interrupt failed.", {
         conversationId,
-        error: error instanceof Error ? error.message : String(error),
+        ...errorDiagnostic(error),
       })
       return false
     }
@@ -158,9 +175,30 @@ export class SessionManager {
     if (!state) return
     this.settlePending(state)
     if (!state.liveSession) return
-    await state.liveSession.close()
+    await this.closeLiveSession(state, conversationId)
+  }
+
+  private async closeLiveSession(
+    state: RuntimeSessionState,
+    conversationId: string,
+  ): Promise<void> {
+    const liveSession = state.liveSession
+    if (!liveSession) return
+    try {
+      await liveSession.close()
+    } catch (error) {
+      this.deps.logger?.warn("Agent live session close failed.", {
+        boundary: "agent-runtime.live-session.close",
+        conversationId,
+        providerId: state.providerId,
+        mode: state.modeOverride,
+        sdkSessionId: liveSession.currentSessionId(),
+        ...errorDiagnostic(error),
+      })
+    }
     state.liveSession = undefined
     state.providerId = undefined
+    state.modeOverride = undefined
   }
 
   async closeState(conversationId: string): Promise<void> {
@@ -237,5 +275,21 @@ function cancelledTurnResult(conversationId: string): AgentRuntimeTurnResult {
     events: [event],
     resultText: "",
     error: "cancelled",
+  }
+}
+
+function errorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? (error as { readonly code?: unknown }).code
+    : undefined
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+    ...(typeof code === "string" ? { errorCode: code } : {}),
   }
 }

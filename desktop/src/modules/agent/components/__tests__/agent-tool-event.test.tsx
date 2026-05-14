@@ -1,8 +1,22 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentToolEvent } from "../agent-tool-event"
+
+const rendererLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
+}))
 
 const profile: SynapseAgentDisplayProfile = {
   agentLabel: "Codex",
@@ -24,6 +38,26 @@ const profile: SynapseAgentDisplayProfile = {
     denied: "Denied",
   },
 }
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let roots: Root[] = []
+
+beforeEach(() => {
+  rendererLogger.info.mockClear()
+  rendererLogger.warn.mockClear()
+})
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  vi.restoreAllMocks()
+})
 
 describe("AgentToolEvent", () => {
   it("uses profile aliases and opens tools configured as expanded", () => {
@@ -84,6 +118,26 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("boom")
   })
 
+  it("treats failed status without success as a failed tool result", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-status-failed",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "command failed",
+        status: "failed",
+        exitCode: 1,
+      }}
+      profile={profile}
+    />)
+
+    expect(html).toContain("Failed")
+    expect(html).toContain("command failed")
+    expect(html).toContain("exit 1")
+    expect(html).not.toContain("Done")
+  })
+
   it("keeps exit code and copy action for expanded tool results", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
@@ -118,5 +172,54 @@ describe("AgentToolEvent", () => {
 
     expect(html).toContain("Pending")
     expect(html).toContain("rm file")
+  })
+
+  it("logs tool body copy failures without recording tool content", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn() },
+    })
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("clipboard denied for token=sk-secret"))
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={{
+          id: "tool-copy",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:00.000Z",
+          toolName: "Bash",
+          content: "token=sk-secret",
+          success: true,
+        }}
+        profile={profile}
+      />)
+    })
+
+    const copyButton = container.querySelectorAll("button")[1]
+    expect(copyButton).toBeTruthy()
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.warn).toHaveBeenCalledWith(
+      "Agent tool body copy failed.",
+      expect.objectContaining({
+        boundary: "renderer.agent.tool-copy",
+        itemId: "tool-copy",
+        kind: "toolResult",
+        toolName: "Bash",
+        bodyLength: "token=sk-secret".length,
+        errorName: "Error",
+        errorLength: "clipboard denied for token=sk-secret".length,
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=sk-secret")
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("clipboard denied")
   })
 })

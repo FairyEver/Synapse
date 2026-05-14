@@ -68,9 +68,9 @@ export class ReplyOutboxService {
       .then(() => this.deps.outbox.upsert(entry))
       .catch((error) => {
         this.deps.logger?.warn("Outbox persistence failed.", {
-          error: error instanceof Error ? error.message : String(error),
           projectId: input.target.projectId,
           sessionKey: input.target.sessionKey,
+          ...errorDiagnostic(error),
         })
       })
   }
@@ -139,13 +139,28 @@ function eventPayload(
   content: string | undefined,
   event: AgentEvent,
 ): OutboxPayloadV1 {
+  const metadata: Record<string, unknown> = {
+    eventType: event.type,
+  }
+  if (event.agentSessionId) metadata.agentSessionId = event.agentSessionId
+  if (event.threadId) metadata.threadId = event.threadId
+  if (event.conversationId) metadata.conversationId = event.conversationId
+  if (event.turnId) metadata.turnId = event.turnId
+  if (event.providerId) metadata.providerId = event.providerId
+  if (event.projectId) metadata.projectId = event.projectId
+  if (event.sdkSessionId) metadata.sdkSessionId = event.sdkSessionId
+
   return {
     kind,
     content,
-    metadata: {
-      eventType: event.type,
-      agentSessionId: event.agentSessionId,
-      threadId: event.threadId,
-    },
+    metadata,
+  }
+}
+
+function errorDiagnostic(error: unknown): Record<string, unknown> {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
   }
 }

@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
-import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
+import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import {
   AgentRuntimeService,
   AGENT_RUNTIME_SERVICE_ID,
@@ -336,6 +336,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     ...agentEventBaseSchema,
     type: z.literal("sessionInit"),
     tools: z.array(z.string()).optional(),
+    mcpServers: z.array(jsonRecordSchema).optional(),
     model: z.string().optional(),
   }),
   z.object({

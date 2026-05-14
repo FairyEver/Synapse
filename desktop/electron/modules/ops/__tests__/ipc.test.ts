@@ -2,7 +2,15 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { SynapseDiagnosticsReport } from "../../../../src/types/diagnostics"
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
+import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
+import { configStore } from "../../../services/config-store"
 import { opsIpcModule } from "../ipc"
+
+const logMocks = vi.hoisted(() => ({
+  mainLogger: {
+    warn: vi.fn(),
+  },
+}))
 
 vi.mock("electron", () => ({
   shell: {
@@ -27,6 +35,7 @@ vi.mock("../../../services/config-store", () => ({
 }))
 
 vi.mock("../../../services/log-store", () => ({
+  createMainLogger: () => logMocks.mainLogger,
   logStore: {
     getLogDirectory: () => "/logs",
   },
@@ -86,6 +95,104 @@ describe("opsIpcModule diagnostics", () => {
       receivedAt: expect.any(String),
     })
   })
+
+  it("opens repository-backed projects for compression state", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      activeRepoUuid: "repo-1",
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repo One",
+        localPath: "/repo-one",
+        contentDirs: {},
+      }],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const agent = {
+      getCompressionState: vi.fn(async () => ({ enabled: true })),
+    }
+    const projectContainers: Pick<ProjectContainerRegistry, "open"> = {
+      open: vi.fn(async () => ({
+        projectId: "repo-1",
+        get: <T,>() => agent as T,
+        inspect: () => [],
+        dispose: vi.fn(async () => undefined),
+      } satisfies ProjectContainer)),
+    }
+    const harness = createHarness({
+      collect: vi.fn(),
+      exportBundle: vi.fn(),
+    }, { projectContainers })
+
+    const result = await harness.invoke("synapse:ops:compress:get", {
+      projectId: "repo-1",
+    })
+
+    expect(projectContainers.open).toHaveBeenCalledWith("repo-1", {
+      name: "Repo One",
+      workspacePath: "/repo-one",
+    })
+    expect(agent.getCompressionState).toHaveBeenCalled()
+    expect(result).toEqual({ enabled: true })
+  })
+
+  it("logs compression state failures with project context and without error text", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      activeRepoUuid: "repo-1",
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repo One",
+        localPath: "/repo-one",
+        contentDirs: {},
+      }],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const agent = {
+      getCompressionState: vi.fn(async () => {
+        throw new Error("SDK failed for secret compression prompt")
+      }),
+    }
+    const projectContainers: Pick<ProjectContainerRegistry, "open"> = {
+      open: vi.fn(async () => ({
+        projectId: "repo-1",
+        get: <T,>() => agent as T,
+        inspect: () => [],
+        dispose: vi.fn(async () => undefined),
+      } satisfies ProjectContainer)),
+    }
+    const harness = createHarness({
+      collect: vi.fn(),
+      exportBundle: vi.fn(),
+    }, { projectContainers })
+
+    await expect(harness.invoke("synapse:ops:compress:get", {
+      projectId: "repo-1",
+    })).rejects.toThrow("SDK failed for secret compression prompt")
+
+    expect(logMocks.mainLogger.warn).toHaveBeenCalledWith(
+      "Ops Agent compression IPC failed.",
+      expect.objectContaining({
+        action: "get",
+        agentType: "claude-code",
+        boundary: "agent-runtime.compression",
+        errorLength: "SDK failed for secret compression prompt".length,
+        errorName: "Error",
+        projectId: "repo-1",
+      }),
+    )
+    expect(JSON.stringify(logMocks.mainLogger.warn.mock.calls)).not.toContain("secret compression prompt")
+  })
 })
 
 function createHarness(diagnostics: {
@@ -95,10 +202,13 @@ function createHarness(diagnostics: {
     filePath?: string
     fileCount?: number
   }>
-}) {
+}, services: {
+  readonly projectContainers?: Pick<ProjectContainerRegistry, "open">
+} = {}) {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
     if (serviceId === "core.diagnostics") return diagnostics as T
+    if (serviceId === "core.project-containers" && services.projectContainers) return services.projectContainers as T
     throw new Error(`Unknown service: ${serviceId}`)
   }
   harness.registry.register(opsIpcModule, { moduleId: "ops", resolve })

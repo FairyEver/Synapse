@@ -67,6 +67,24 @@ describe("ScheduledTaskRepository", () => {
       action: { type: " ", config: {} },
     })).rejects.toThrow(/action type/)
   })
+
+  it("validates interval updates before recomputing the next run time", async () => {
+    const repo = new ScheduledTaskRepository({
+      tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: () => "task:1",
+    })
+    const task = await repo.create({
+      name: "Agent digest",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 5 } },
+      action: { type: "builtin.agent", config: { prompt: "summarize" } },
+    })
+
+    await expect(repo.update(task.id, {
+      trigger: { type: "builtin.interval", config: { everyMinutes: 0 } },
+    })).rejects.toThrow(/everyMinutes/)
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

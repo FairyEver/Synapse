@@ -1,10 +1,22 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { TaskSchedulerModule } from "../index"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
-const useTaskSchedulerTasksMock = vi.hoisted(() => vi.fn())
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const mocks = vi.hoisted(() => ({
+  notify: vi.fn(),
+  runTask: vi.fn(),
+  requestWatchNextAgentSession: vi.fn(),
+  useTaskSchedulerTasks: vi.fn(),
+}))
 
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
@@ -24,9 +36,13 @@ vi.mock("@/app-shell/config", () => ({
 
 vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
-    notify: vi.fn(),
+    notify: mocks.notify,
     promise: async <T,>(operation: () => Promise<T>) => operation(),
   }),
+}))
+
+vi.mock("@/app-shell/navigation", () => ({
+  requestWatchNextAgentSession: mocks.requestWatchNextAgentSession,
 }))
 
 vi.mock("../hooks/use-task-scheduler", async () => {
@@ -36,7 +52,8 @@ vi.mock("../hooks/use-task-scheduler", async () => {
 
   return {
     ...actual,
-    useTaskSchedulerTasks: useTaskSchedulerTasksMock,
+    runTask: mocks.runTask,
+    useTaskSchedulerTasks: mocks.useTaskSchedulerTasks,
   }
 })
 
@@ -56,9 +73,22 @@ vi.mock("../components/task-import-dialog", () => ({
   TaskImportDialog: () => null,
 }))
 
+let roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  vi.clearAllMocks()
+})
+
 describe("TaskSchedulerModule", () => {
   it("renders empty state when there are no tasks", () => {
-    useTaskSchedulerTasksMock.mockReturnValue({
+    mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [],
       loading: false,
       error: null,
@@ -71,7 +101,7 @@ describe("TaskSchedulerModule", () => {
   })
 
   it("renders task names in cards", () => {
-    useTaskSchedulerTasksMock.mockReturnValue({
+    mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [createTask({ name: "Backup" })],
       loading: false,
       error: null,
@@ -84,7 +114,7 @@ describe("TaskSchedulerModule", () => {
   })
 
   it("renders trigger info for interval tasks", () => {
-    useTaskSchedulerTasksMock.mockReturnValue({
+    mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [createTask()],
       loading: false,
       error: null,
@@ -97,7 +127,7 @@ describe("TaskSchedulerModule", () => {
   })
 
   it("renders enabled task card status, next run, description, and primary run action", () => {
-    useTaskSchedulerTasksMock.mockReturnValue({
+    mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [
         createTask({
           name: "同步项目工作日志",
@@ -127,7 +157,7 @@ describe("TaskSchedulerModule", () => {
   })
 
   it("renders failed task card as retryable", () => {
-    useTaskSchedulerTasksMock.mockReturnValue({
+    mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [
         createTask({
           name: "仓库健康检查",
@@ -148,7 +178,7 @@ describe("TaskSchedulerModule", () => {
   })
 
   it("renders disabled task card with stopped schedule state", () => {
-    useTaskSchedulerTasksMock.mockReturnValue({
+    mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [
         createTask({
           name: "夜间归档",
@@ -168,7 +198,7 @@ describe("TaskSchedulerModule", () => {
   })
 
   it("renders secondary actions behind the task card more-actions trigger", () => {
-    useTaskSchedulerTasksMock.mockReturnValue({
+    mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [createTask({ name: "Backup" })],
       loading: false,
       error: null,
@@ -178,6 +208,144 @@ describe("TaskSchedulerModule", () => {
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
     expect(html).toContain("更多操作")
+  })
+
+  it("does not report success when a manual Agent task run fails", async () => {
+    mocks.runTask.mockRejectedValue(new Error("scheduler unavailable"))
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [
+        createTask({
+          action: {
+            type: "builtin.agent",
+            config: {
+              prompt: "run",
+              projectId: "project-1",
+            },
+          },
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    const runButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("运行"))
+    expect(runButton).toBeTruthy()
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mocks.runTask).toHaveBeenCalledWith("task-1")
+    expect(mocks.requestWatchNextAgentSession).not.toHaveBeenCalled()
+    expect(mocks.notify).toHaveBeenCalledWith({ message: "触发失败", tone: "destructive" })
+    expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
+  })
+
+  it.each([
+    ["missing", null],
+    ["skipped", { id: "run-1", status: "skipped" }],
+  ])(
+    "does not watch the next Agent session when a manual Agent task run is %s",
+    async (_label, runResult) => {
+      mocks.runTask.mockResolvedValue(runResult)
+      mocks.useTaskSchedulerTasks.mockReturnValue({
+        tasks: [
+          createTask({
+            action: {
+              type: "builtin.agent",
+              config: {
+                prompt: "run",
+                projectId: "project-1",
+              },
+            },
+          }),
+        ],
+        loading: false,
+        error: null,
+        refresh: vi.fn(),
+      })
+
+      const container = document.createElement("div")
+      document.body.appendChild(container)
+      const root = createRoot(container)
+      roots.push(root)
+
+      await act(async () => {
+        root.render(<TaskSchedulerModule />)
+      })
+
+      const runButton = Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("运行"))
+      expect(runButton).toBeTruthy()
+
+      await act(async () => {
+        runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(mocks.requestWatchNextAgentSession).not.toHaveBeenCalled()
+      expect(mocks.notify).toHaveBeenCalledWith({ message: "触发失败", tone: "destructive" })
+      expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
+    },
+  )
+
+  it("watches the next Agent session after a manual Agent task run is accepted", async () => {
+    mocks.runTask.mockResolvedValue({ id: "run-1", status: "running" })
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [
+        createTask({
+          action: {
+            type: "builtin.agent",
+            config: {
+              prompt: "run",
+              projectId: "project-1",
+            },
+          },
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    const runButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("运行"))
+    expect(runButton).toBeTruthy()
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+    expect(mocks.notify).toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
   })
 })
 

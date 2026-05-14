@@ -3,7 +3,6 @@ import {
   MoreHorizontal,
   Pencil,
   Play,
-  Square,
   Trash2,
 } from "lucide-react"
 
@@ -55,8 +54,7 @@ function getStatusBadge(task: ScheduledTask): {
   return { label: "已启用", variant: "secondary" }
 }
 
-function getPrimaryActionLabel(task: ScheduledTask, busy: boolean): string {
-  if (busy) return "停止"
+function getPrimaryActionLabel(task: ScheduledTask): string {
   if (task.lastStatus === "failed" || task.lastStatus === "timeout") return "重试"
   return "运行"
 }
@@ -72,7 +70,6 @@ function TaskCard({
   projects,
   busy,
   onRun,
-  onStop,
   onToggleEnabled,
   onEdit,
   onHistory,
@@ -80,7 +77,7 @@ function TaskCard({
 }: TaskCardProps) {
   const disabled = !task.enabled
   const badge = getStatusBadge(task)
-  const primaryLabel = getPrimaryActionLabel(task, busy)
+  const primaryLabel = getPrimaryActionLabel(task)
   const nextRun = disabled ? "停用中" : formatTaskDate(task.nextRunAt, "—")
   const lastRun = formatLastRun(task)
   const scope = formatTaskScope(task, projects)
@@ -94,6 +91,7 @@ function TaskCard({
         <Switch
           size="sm"
           checked={task.enabled}
+          disabled={busy}
           onCheckedChange={onToggleEnabled}
         />
       </div>
@@ -134,33 +132,22 @@ function TaskCard({
       <div className="mt-4 flex items-center justify-end gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
-            {busy ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onStop}
-              >
-                <Square className="size-3.5" />
-                {primaryLabel}
-              </Button>
-            ) : (
-              <Button
-                variant={task.lastStatus === "failed" || task.lastStatus === "timeout" ? "default" : "secondary"}
-                size="sm"
-                disabled={disabled}
-                onClick={onRun}
-              >
-                <Play className="size-3.5" />
-                {primaryLabel}
-              </Button>
-            )}
+            <Button
+              variant={task.lastStatus === "failed" || task.lastStatus === "timeout" ? "default" : "secondary"}
+              size="sm"
+              disabled={disabled || busy}
+              onClick={onRun}
+            >
+              <Play className="size-3.5" />
+              {primaryLabel}
+            </Button>
           </TooltipTrigger>
           <TooltipContent>{primaryLabel}</TooltipContent>
         </Tooltip>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm">
+            <Button variant="ghost" size="icon-sm" disabled={busy}>
               <MoreHorizontal className="size-3.5" />
               <span className="sr-only">更多操作</span>
             </Button>

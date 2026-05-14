@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react"
+import { useCallback } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
@@ -177,7 +177,12 @@ function useChatConnection(
       const currentProjectIds = new Set(projectIdsRef.current)
       const orphans = allSessions.filter((session) => !currentProjectIds.has(session.projectId))
       dispatch({ type: "SET_ARCHIVED_SESSIONS", archivedSessions: orphans })
-    } catch {
+    } catch (rawError) {
+      logger.warn("Agent archived sessions refresh failed.", {
+        projectIds: projectIdsRef.current,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
       dispatch({ type: "SET_ARCHIVED_SESSIONS", archivedSessions: [] })
     }
   }, [dispatch, projectIdsRef])
@@ -432,6 +437,8 @@ function useChatConnection(
     const conversationId = target?.conversationId ?? selected?.id
     const sessionKey = target?.sessionKey ?? selected?.sessionKey ?? selectedSessionKeyRef.current
     const now = new Date().toISOString()
+    const optimisticItem = localUserTimelineItem(trimmed, now, state.timeline.length)
+    let didAppendOptimisticItem = false
     if (isSelectedTimelineTarget(target ?? {
       projectId,
       sessionKey,
@@ -441,10 +448,8 @@ function useChatConnection(
       conversationId: selectedConversationIdRef.current,
       sessionKey: selectedSessionKeyRef.current,
     })) {
-      updateTimeline((current) => [
-        ...current,
-        localUserTimelineItem(trimmed, now, current.length),
-      ])
+      didAppendOptimisticItem = true
+      updateTimeline((current) => [...current, optimisticItem])
     }
     if (conversationId) {
       dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId })
@@ -466,8 +471,19 @@ function useChatConnection(
       // false between enqueue and actual turn completion.
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "发送失败"
-      logger.error("Agent send failed.", rawError)
+      logger.error("Agent send failed.", {
+        projectId,
+        conversationId,
+        sessionKey,
+        messageLength: trimmed.length,
+        boundary: "renderer.agent.send",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
       dispatch({ type: "SET_ERROR", error: message })
+      if (didAppendOptimisticItem) {
+        updateTimeline((current) => current.filter((item) => item.id !== optimisticItem.id))
+      }
       // Only remove on enqueue failure — the turn never started, so no phase
       // event will fire to clean it up.
       if (conversationId) {
@@ -476,7 +492,7 @@ function useChatConnection(
       return false
     }
     return true
-  }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, state.sessions, updateTimeline])
+  }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, state.sessions, state.timeline.length, updateTimeline])
 
   const deleteSession = useCallback(async (target: SynapseAgentSessionSummary) => {
     const requestId = selectRequestIdRef.current + 1
@@ -519,7 +535,15 @@ function useChatConnection(
               conversationId: session.id,
             })
             await refreshProjectMeta(session.projectId)
-          } catch {
+          } catch (rawError) {
+            logger.warn("Agent delete fallback switch failed.", {
+              projectId: next.projectId,
+              deletedConversationId: target.id,
+              conversationId: next.id,
+              sessionKey: next.sessionKey,
+              errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+              errorLength: errorMessage(rawError).length,
+            })
             setSelectedSession(next)
             await loadTimeline({
               projectId: next.projectId,
@@ -586,7 +610,14 @@ function useChatConnection(
       await refreshPendingPermissions()
     } catch (rawError) {
       const message = rawError instanceof Error ? rawError.message : "处理失败"
-      logger.error("Agent permission response failed.", rawError)
+      logger.error("Agent permission response failed.", {
+        projectId,
+        requestId,
+        behavior,
+        boundary: "renderer.agent.permission-response",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
       dispatch({ type: "SET_ERROR", error: message })
     }
   }, [dispatch, getDefaultProjectId, refreshPendingPermissions, state.pendingPermissions])
@@ -603,7 +634,13 @@ function useChatConnection(
         dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
       }
     } catch (rawError) {
-      logger.error("Agent cancel turn failed.", rawError)
+      logger.error("Agent cancel turn failed.", {
+        projectId,
+        conversationId,
+        boundary: "renderer.agent.cancel-turn",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
       dispatch({ type: "CANCEL_RESET" })
     }
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
@@ -617,7 +654,13 @@ function useChatConnection(
       await bridge.agent.forceKillTurn({ projectId, conversationId })
       dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
     } catch (rawError) {
-      logger.error("Agent force kill turn failed.", rawError)
+      logger.error("Agent force kill turn failed.", {
+        projectId,
+        conversationId,
+        boundary: "renderer.agent.force-kill-turn",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
     }
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
 
@@ -704,6 +747,11 @@ function sessionSnapshotForLog(
     historyCount: session.historyCount,
     updatedAt: session.updatedAt,
   }))
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return typeof error === "string" ? error : "Unknown error"
 }
 
 function formatSessionNameTime(date: Date): string {

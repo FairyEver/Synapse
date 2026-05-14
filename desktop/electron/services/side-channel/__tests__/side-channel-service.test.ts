@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   DataChangeEvent,
@@ -21,6 +21,7 @@ import {
   sanitizeAttachmentFileName,
   type ReplyTransportDispatcher,
 } from "../index"
+import type { StructuredLogger } from "../../../runtime/service-registry"
 
 describe("SideChannelService", () => {
   it("sends text to the remembered reply target through a generic dispatcher", async () => {
@@ -84,6 +85,261 @@ describe("SideChannelService", () => {
     await service.stop()
   })
 
+  it("records muted side-channel sends without dispatching externally", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const auditSink = new InMemoryAuditSink()
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      auditSink,
+      token: "tok",
+    })
+    const dispatcher = new FakeDispatcher()
+    service.registerDispatcher("bridge", dispatcher)
+    service.rememberReplyTarget({
+      ...bridgeTarget(),
+      replyCtx: { ...bridgeTarget().replyCtx, muted: true },
+    })
+
+    const result = await service.send({
+      project: "project-1",
+      sessionKey: "bridge:s1",
+      message: "generated file is ready",
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      outboxRecorded: true,
+    })
+    expect(dispatcher.sideChannelPayloads).toEqual([])
+    await expectEventually(async () => (await outbox.list()).length, 1)
+    expect(await outbox.list()).toEqual([
+      expect.objectContaining({
+        status: "sent",
+        destination: expect.objectContaining({
+          platform: "bridge",
+          connectorId: "bridge",
+          sessionKey: "bridge:s1",
+        }),
+        payload: expect.objectContaining({
+          kind: "text",
+          content: "generated file is ready",
+        }),
+      }),
+    ])
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "network.connect",
+        outcome: "allowed",
+        resource: "side-channel:/send",
+        metadata: expect.objectContaining({
+          projectId: "project-1",
+          sessionKey: "bridge:s1",
+          transportKind: "bridge",
+          connectorId: "bridge",
+          attachmentCount: 0,
+        }),
+      }),
+    ])
+  })
+
+  it("sanitizes failed side-channel send dispatch diagnostics", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const auditSink = new InMemoryAuditSink()
+    const warn = vi.fn()
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      auditSink,
+      logger: fakeLogger({ warn }),
+      token: "tok",
+    })
+    service.registerDispatcher("bridge", {
+      dispatchAgentEvent: async () => {},
+      dispatchSideChannelSend: async () => {
+        throw new Error("bridge failed with secret prompt text")
+      },
+    })
+    service.rememberReplyTarget(bridgeTarget())
+
+    await expect(service.send({
+      project: "project-1",
+      sessionKey: "bridge:s1",
+      message: "generated file is ready",
+    })).rejects.toThrow("dispatch failed")
+
+    const outboxEntries = await outbox.list()
+    expect(outboxEntries).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        lastError: "dispatch failed",
+      }),
+    ])
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          projectId: "project-1",
+          sessionKey: "bridge:s1",
+          transportKind: "bridge",
+          connectorId: "bridge",
+          attachmentCount: 0,
+          errorName: "Error",
+          errorLength: "bridge failed with secret prompt text".length,
+        }),
+      }),
+    ])
+    expect(warn).toHaveBeenCalledWith("Side-channel send dispatch failed.", expect.objectContaining({
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      transportKind: "bridge",
+      connectorId: "bridge",
+      attachmentCount: 0,
+      errorName: "Error",
+      errorLength: "bridge failed with secret prompt text".length,
+    }))
+    expect(JSON.stringify(outboxEntries)).not.toContain("secret prompt")
+    expect(JSON.stringify(auditSink.list())).not.toContain("secret prompt")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("secret prompt")
+  })
+
+  it("logs failed relay HTTP requests with source session context", async () => {
+    const warn = vi.fn()
+    const logger = fakeLogger({ warn })
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(new MemoryNamespace<OutboxEntryV1>("outbox")),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+      token: "tok",
+    })
+    await service.start()
+    const env = service.getAgentEnv("project-1", "bridge:s1")
+    service.rememberReplyTarget(bridgeTarget())
+    service.registerRelaySendHandler(async () => {
+      throw new Error("relay failed with secret prompt")
+    })
+
+    const response = await fetch(env?.SYNAPSE_RELAY_SEND_URL ?? "", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env?.SYNAPSE_SIDE_CHANNEL_TOKEN ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sourceProjectId: "project-1",
+        sourceSessionKey: "bridge:s1",
+        message: "secret prompt body",
+      }),
+    })
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: "internal_error",
+        message: "internal error",
+      },
+    })
+    expect(warn).toHaveBeenCalledWith("Side-channel HTTP request failed.", expect.objectContaining({
+      path: "/relay/send",
+      method: "POST",
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      messageLength: 18,
+      imageCount: 0,
+      fileCount: 0,
+      errorCode: "internal_error",
+      status: 500,
+      errorName: "Error",
+      errorLength: "relay failed with secret prompt".length,
+    }))
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("relay failed with secret prompt")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("secret prompt body")
+    await service.stop()
+  })
+
+  it("redacts failed Agent event dispatch diagnostics", async () => {
+    const warn = vi.fn()
+    const logger = fakeLogger({ warn })
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(new MemoryNamespace<OutboxEntryV1>("outbox")),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+      token: "tok",
+    })
+    service.registerDispatcher("bridge", {
+      dispatchAgentEvent: async () => {
+        throw new Error("dispatcher failed with secret prompt")
+      },
+      dispatchSideChannelSend: async () => {},
+    })
+
+    service.dispatchAgentEvent(bridgeTarget(), {
+      type: "error",
+      message: "agent result failed",
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sdkSessionId: "sdk-session-1",
+    })
+
+    await expectEventually(async () => warn.mock.calls.length, 1)
+    expect(warn).toHaveBeenCalledWith("Reply target dispatch failed.", expect.objectContaining({
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      transportKind: "bridge",
+      connectorId: "bridge",
+      eventType: "error",
+      conversationId: "conv-1",
+      sdkSessionId: "sdk-session-1",
+      errorName: "Error",
+      errorLength: "dispatcher failed with secret prompt".length,
+    }))
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("dispatcher failed with secret prompt")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("agent result failed")
+  })
+
+  it("logs missing Agent event dispatchers with target context", () => {
+    const warn = vi.fn()
+    const logger = fakeLogger({ warn })
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(new MemoryNamespace<OutboxEntryV1>("outbox")),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+      token: "tok",
+    })
+
+    service.dispatchAgentEvent(bridgeTarget(), {
+      type: "result",
+      content: "done",
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sdkSessionId: "sdk-session-1",
+    })
+
+    expect(warn).toHaveBeenCalledWith("Reply target dispatcher missing.", expect.objectContaining({
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      transportKind: "bridge",
+      connectorId: "bridge",
+      eventType: "result",
+      conversationId: "conv-1",
+      sdkSessionId: "sdk-session-1",
+    }))
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("done")
+  })
+
   it("rejects empty send, unknown project, missing session target, and unauthorized HTTP", async () => {
     const service = new SideChannelService({
       projectContainers: fakeProjectContainers(),
@@ -134,6 +390,16 @@ describe("side-channel attachment policy", () => {
         mimeType: "text/plain",
       }],
     })).rejects.toMatchObject({ code: "unsupported_image_mime" })
+  })
+
+  it("rejects malformed inline attachment base64", async () => {
+    await expect(prepareSideChannelAttachments({
+      files: [{
+        data: "%%%not-base64%%%",
+        fileName: "bad.txt",
+        mimeType: "text/plain",
+      }],
+    })).rejects.toMatchObject({ code: "invalid_attachment_data" })
   })
 
   it("rejects path escapes and symlinks", async () => {
@@ -218,6 +484,20 @@ function fakeDataRepository(outbox: DataNamespace<OutboxEntryV1>): DataRepositor
     importAll: async () => {},
     inspect: () => [],
   }
+}
+
+function fakeLogger(overrides: Partial<StructuredLogger> = {}): StructuredLogger {
+  const logger: StructuredLogger = {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(() => logger),
+    ...overrides,
+  }
+  return logger
 }
 
 async function expectEventually<T>(read: () => Promise<T>, expected: T): Promise<void> {

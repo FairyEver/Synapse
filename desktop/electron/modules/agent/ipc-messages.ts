@@ -6,6 +6,7 @@ import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
 import type { AgentEvent } from "../../services/agent-runtime"
 import type { EventBus } from "../../runtime/event-bus"
+import { createMainLogger } from "../../services/log-store"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
@@ -18,6 +19,7 @@ import {
 } from "./ipc-shared"
 
 const MAX_CLIENT_SKEW_MS = 60_000
+const logger = createMainLogger("agent.ipc")
 
 function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string): string {
   if (!clientIso) return recvIso
@@ -112,8 +114,16 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           conversationId: session?.id,
           entries: session ? historyEntries(session, request.limit) : [],
         }
-      } catch {
-        if (!request.conversationId) throw new Error("找不到当前项目。")
+      } catch (rawError) {
+        logger.warn("Agent timeline runtime lookup failed; trying repository fallback.", {
+          projectId: request.projectId,
+          sessionKey: request.sessionKey,
+          hasConversationId: Boolean(request.conversationId),
+          limit: request.limit,
+          boundary: "agent.timeline.runtime",
+          ...timelineLookupErrorMeta(rawError),
+        })
+        if (!request.conversationId) throw new Error("找不到当前项目。", { cause: rawError })
         const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
         const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
         const session = await conversations.get(request.conversationId)
@@ -312,4 +322,18 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       return agent.forceKillTurn(request.conversationId)
     },
   },
+}
+
+function timelineLookupErrorMeta(rawError: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  const code = (rawError as { readonly code?: unknown } | null)?.code
+  return {
+    errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+    errorLength: message.length,
+    errorCode: typeof code === "string" || typeof code === "number" ? String(code) : undefined,
+  }
 }

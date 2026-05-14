@@ -1,0 +1,98 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const electronMock = vi.hoisted(() => ({
+  shell: {
+    openPath: vi.fn(),
+  },
+}))
+
+vi.mock("electron", () => electronMock)
+
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
+import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
+import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
+import { configStore } from "../../../services/config-store"
+import { PROVIDER_SERVICE_ID } from "../../../services/provider"
+import { toolMethods } from "../ipc-tools"
+
+vi.mock("../../../services/config-store", () => ({
+  configStore: {
+    load: vi.fn(),
+  },
+}))
+
+describe("agent tool IPC methods", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [{
+        uuid: "project-1",
+        name: "Project One",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+  })
+
+  it("records a failed audit when opening an Agent reference rejects", async () => {
+    const auditSink = { record: vi.fn() }
+    electronMock.shell.openPath.mockRejectedValue(new Error("shell failed for /repo/src/app.ts"))
+
+    await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
+      projectId: "project-1",
+      reference: "src/app.ts:12",
+    })).rejects.toThrow("shell failed for /repo/src/app.ts")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "failed",
+      resource: "/repo/src/app.ts",
+      metadata: expect.objectContaining({
+        projectId: "project-1",
+        command: "open-reference",
+        line: 12,
+        errorName: "Error",
+        errorLength: "shell failed for /repo/src/app.ts".length,
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls[0]?.[0]?.metadata)).not.toContain("/repo/src/app.ts")
+  })
+})
+
+function createContext(options: {
+  readonly auditSink: AuditSink
+}) {
+  const permissionGuard: PermissionGuard = {
+    check: vi.fn(async () => ({ allowed: true })),
+  }
+  const container = {
+    get: vi.fn((serviceId: string) => {
+      if (serviceId === AGENT_RUNTIME_SERVICE_ID) return {}
+      if (serviceId === PROVIDER_SERVICE_ID) return {}
+      throw new Error(`Unknown service: ${serviceId}`)
+    }),
+  } as unknown as ProjectContainer
+  const containers: ProjectContainerRegistry = {
+    open: vi.fn(async () => container),
+    close: vi.fn(),
+    closeAll: vi.fn(),
+    listOpen: vi.fn(() => []),
+  }
+
+  return {
+    moduleId: "agent",
+    resolve: <T,>(serviceId: string): T => {
+      if (serviceId === "core.project-containers") return containers as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return options.auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    },
+  }
+}

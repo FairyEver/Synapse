@@ -13,9 +13,11 @@ import type { AutomationIngressService } from "../../services/automation-ingress
 import { configStore } from "../../services/config-store"
 import type { DiagnosticsService } from "../../services/diagnostics-service"
 import type { ExecutionIsolationService } from "../../services/execution-isolation"
-import { logStore } from "../../services/log-store"
+import { createMainLogger, logStore } from "../../services/log-store"
 import type { AgentRelayService } from "../../services/relay"
 import { collectOpsStatus } from "./status"
+
+const logger = createMainLogger("ops.ipc")
 
 const diagnosticsRequestSchema = z.object({
   projectId: z.string().optional(),
@@ -349,27 +351,35 @@ export const opsIpcModule: IpcModule = {
       channel: "synapse:ops:compress:get",
       request: projectRequestSchema,
       response: z.record(z.string(), z.unknown()),
-      handler: async (ctx, request: ProjectRequest) => {
+      handler: (ctx, request: ProjectRequest) => runCompressionIpc("get", request, async () => {
         const agent = await resolveProjectAgent(ctx.resolve, request.projectId)
         return agent.getCompressionState()
-      },
+      }),
     },
     compressUpdate: {
       kind: "invoke",
       channel: "synapse:ops:compress:update",
       request: compressUpdateSchema,
       response: z.record(z.string(), z.unknown()),
-      handler: async (ctx, request: CompressUpdateRequest) => {
+      handler: (ctx, request: CompressUpdateRequest) => runCompressionIpc("update", request, async () => {
         const agent = await resolveProjectAgent(ctx.resolve, request.projectId)
         return agent.updateCompressionState(request)
-      },
+      }),
     },
   },
   events: {},
 }
 
-async function projectById(projectId: string) {
+async function projectById(projectId: string): Promise<{ readonly id: string; readonly name: string; readonly path: string } | undefined> {
   const config = await configStore.load()
+  const repository = config.repositories.find((item) => item.uuid === projectId)
+  if (repository) {
+    return {
+      id: repository.uuid,
+      name: repository.name,
+      path: repository.localPath,
+    }
+  }
   return config.global.projects.find((item) => item.id === projectId)
 }
 
@@ -379,12 +389,57 @@ async function resolveProjectAgent(
 ): Promise<AgentRuntimeService> {
   const containers = resolve<ProjectContainerRegistry>("core.project-containers")
   const project = await projectById(projectId)
-  if (!project) throw new Error("Project was not found")
+  if (!project) {
+    logger.warn("Ops Agent project was not found.", { projectId })
+    throw new Error("Project was not found")
+  }
   const container = await containers.open(project.id, {
     name: project.name,
     workspacePath: project.path,
   })
   return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+}
+
+async function runCompressionIpc<T>(
+  action: "get" | "update",
+  request: { readonly projectId: string; readonly agentType?: string },
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    logger.warn("Ops Agent compression IPC failed.", {
+      action,
+      projectId: request.projectId,
+      agentType: request.agentType ?? "claude-code",
+      boundary: "agent-runtime.compression",
+      ...errorDiagnostic(error),
+    })
+    throw error
+  }
+}
+
+function errorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const code = errorCode(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: errorMessage(error).length,
+    ...(code ? { errorCode: code } : {}),
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined
+  const value = (error as { readonly code?: unknown }).code
+  return typeof value === "string" ? value : undefined
 }
 
 function optional<T>(

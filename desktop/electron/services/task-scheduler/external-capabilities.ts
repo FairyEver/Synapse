@@ -71,22 +71,23 @@ export async function dispatchSchedulerAction(
 
     case "scheduler.task.get": {
       const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: await service.schedulerTaskGet(taskId) }
+      const task = await service.schedulerTaskGet(taskId)
+      return { ok: true, data: task ? toPublicTaskSummary(task) : null }
     }
 
     case "scheduler.task.create": {
       const input = toCreateInput(parseCreateParams(params))
-      return { ok: true, data: await service.schedulerTaskCreate(input) }
+      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskCreate(input)) }
     }
 
     case "scheduler.task.enable": {
       const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: await service.schedulerTaskEnable(taskId) }
+      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskEnable(taskId)) }
     }
 
     case "scheduler.task.disable": {
       const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: await service.schedulerTaskDisable(taskId) }
+      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskDisable(taskId)) }
     }
 
     case "scheduler.run.list": {
@@ -115,7 +116,7 @@ export async function dispatchSchedulerAction(
 
     case "scheduler.task.update": {
       const input = parseUpdateParams(params)
-      return { ok: true, data: await service.schedulerTaskUpdate(input.taskId, toUpdatePatch(input)) }
+      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskUpdate(input.taskId, toUpdatePatch(input))) }
     }
 
     default:

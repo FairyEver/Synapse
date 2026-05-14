@@ -16,6 +16,7 @@ const PHASE_LABEL_IN_PROGRESS: Partial<Record<SynapseAgentPhaseValue, string>> =
   request_submitted: "已提交给模型",
   awaiting_first_token: "等待回复",
   streaming: "正在回复",
+  cancel_pending: "正在停止",
 }
 
 const PHASE_LABEL_DONE: Partial<Record<SynapseAgentPhaseValue, string>> = {
@@ -25,6 +26,9 @@ const PHASE_LABEL_DONE: Partial<Record<SynapseAgentPhaseValue, string>> = {
   request_submitted: "已提交",
   awaiting_first_token: "模型已回应",
   streaming: "回复完成",
+  completed: "已完成",
+  cancel_pending: "已停止",
+  cancelled: "已停止",
 }
 
 const PHASE_LABEL_FAILED: Partial<Record<SynapseAgentPhaseValue, string>> = {
@@ -34,6 +38,8 @@ const PHASE_LABEL_FAILED: Partial<Record<SynapseAgentPhaseValue, string>> = {
   request_submitted: "提交失败",
   awaiting_first_token: "等待超时",
   streaming: "回复中断",
+  cancel_pending: "已停止",
+  cancelled: "已停止",
   failed: "失败",
 }
 

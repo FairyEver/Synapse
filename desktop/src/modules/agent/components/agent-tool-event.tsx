@@ -1,6 +1,7 @@
 import { ChevronDown, Clipboard, Terminal } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { createRendererLogger } from "@/app-shell/logging"
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,6 +14,8 @@ import type {
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
+
+const logger = createRendererLogger("agent")
 
 type AgentToolEventItem =
   | SynapseAgentToolCallTimelineItem
@@ -29,13 +32,26 @@ function AgentToolEvent({
   const rule = profile.tools?.[item.toolName]
   const label = rule?.label ?? profile.aliases?.[item.toolName] ?? item.toolName
   const body = toolBody(item)
-  const failed = item.kind === "toolResult" && item.success === false
+  const failed = isFailedToolResult(item)
   const permission = item.kind === "permissionRequest"
   const defaultOpen = permission || failed || shouldDefaultOpen(
     body,
     rule?.defaultCollapsed ?? profile.toolDefaultCollapsed,
   )
   const status = item.kind === "toolCall" ? null : statusLabel(item, profile)
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(body).catch((error: unknown) => {
+      logger.warn("Agent tool body copy failed.", {
+        boundary: "renderer.agent.tool-copy",
+        itemId: item.id,
+        kind: item.kind,
+        toolName: item.toolName,
+        bodyLength: body.length,
+        ...errorLogMeta(error),
+      })
+    })
+  }
+
   return (
     <AgentAnnotation>
       <Collapsible defaultOpen={defaultOpen}>
@@ -74,7 +90,7 @@ function AgentToolEvent({
                   variant="ghost"
                   size="icon"
                   className="absolute right-1 top-1 size-6 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
-                  onClick={() => void navigator.clipboard.writeText(body)}
+                  onClick={handleCopy}
                 >
                   <Clipboard className="size-3.5" />
                 </Button>
@@ -102,8 +118,16 @@ function formatRawInput(value: Record<string, unknown> | undefined): string {
 function statusLabel(item: AgentToolEventItem, profile: SynapseAgentDisplayProfile): string {
   if (item.kind === "permissionRequest") return profile.statusLabels.pending
   if (item.kind === "toolCall") return profile.statusLabels.running
-  if (item.success === false) return profile.statusLabels.error
+  if (isFailedToolResult(item)) return profile.statusLabels.error
   return profile.statusLabels.success
+}
+
+function isFailedToolResult(item: AgentToolEventItem): boolean {
+  if (item.kind !== "toolResult") return false
+  if (item.success === false) return true
+  if (typeof item.exitCode === "number" && item.exitCode !== 0) return true
+  const status = item.status?.toLowerCase()
+  return status === "failed" || status === "error" || status === "denied"
 }
 
 function shouldDefaultOpen(body: string, mode: "expanded" | "collapsed" | "auto"): boolean {
@@ -115,6 +139,18 @@ function shouldDefaultOpen(body: string, mode: "expanded" | "collapsed" | "auto"
 function previewText(value: string, limit: number): string {
   if (value.length <= limit) return value
   return `${value.slice(0, limit).trimEnd()}\n...`
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+  }
 }
 
 export { AgentToolEvent }

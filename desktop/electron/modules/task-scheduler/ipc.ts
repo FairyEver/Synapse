@@ -3,7 +3,10 @@ import { readFile, writeFile } from "node:fs/promises"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
+import { createMainLogger } from "../../services/log-store"
 import type { TaskSchedulerService } from "../../services/task-scheduler"
+
+const logger = createMainLogger("task-scheduler.ipc")
 
 const taskScopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("global") }),
@@ -175,8 +178,21 @@ export const taskSchedulerIpcModule: IpcModule = {
       kind: "invoke",
       request: taskIdRequestSchema,
       response: runSchema.nullable(),
-      handler: async (ctx, request: TaskIdRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").runTaskNow(request.taskId),
+      handler: async (ctx, request: TaskIdRequest) => {
+        const startedAt = Date.now()
+        try {
+          return await ctx.resolve<TaskSchedulerService>("core.task-scheduler").runTaskNow(request.taskId)
+        } catch (rawError) {
+          logger.warn("Task scheduler manual run IPC failed.", {
+            boundary: "task-scheduler.ipc.run-task",
+            channel: "synapse:task-scheduler:tasks:run",
+            taskId: request.taskId,
+            durationMs: Date.now() - startedAt,
+            ...errorDiagnostic(rawError),
+          })
+          throw rawError
+        }
+      },
     },
     stopRun: {
       channel: "synapse:task-scheduler:runs:stop",
@@ -241,4 +257,15 @@ export const taskSchedulerIpcModule: IpcModule = {
     },
   },
   events: {},
+}
+
+function errorDiagnostic(rawError: unknown): Record<string, unknown> {
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  const errorLike = rawError as { readonly code?: unknown } | null
+  const code = typeof errorLike?.code === "string" ? errorLike.code : undefined
+  return {
+    errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+    errorLength: message.length,
+    ...(code ? { errorCode: code } : {}),
+  }
 }

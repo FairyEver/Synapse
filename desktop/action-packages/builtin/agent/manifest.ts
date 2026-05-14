@@ -25,7 +25,7 @@ export const agentActionManifest = {
       kind: "enum",
       required: true,
       description: "Agent type to use.",
-      choices: ["claude-code", "codex"],
+      choices: ["claude-code"],
       defaultValue: "claude-code",
     },
     {

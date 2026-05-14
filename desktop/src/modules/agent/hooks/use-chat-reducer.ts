@@ -86,7 +86,11 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_ARCHIVED_SESSIONS":
       return { ...state, archivedSessions: action.archivedSessions }
     case "SET_TIMELINE":
-      return { ...state, timeline: action.timeline, currentConversationModel: undefined }
+      return {
+        ...state,
+        timeline: action.timeline,
+        currentConversationModel: latestResultModel(action.timeline),
+      }
     case "UPDATE_TIMELINE":
       return { ...state, timeline: action.updater(state.timeline) }
     case "SET_PENDING_PERMISSIONS":
@@ -138,6 +142,16 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "RESET":
       return { ...initialChatState }
   }
+}
+
+function latestResultModel(timeline: readonly SynapseAgentTimelineItem[]): string | undefined {
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    const item = timeline[index]
+    if (item?.kind !== "result") continue
+    const model = item.metadata?.model
+    if (typeof model === "string" && model.length > 0) return model
+  }
+  return undefined
 }
 
 export { chatReducer, initialChatState }

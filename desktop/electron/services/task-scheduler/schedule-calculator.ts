@@ -31,7 +31,9 @@ export function resolveStartupSchedule(input: {
   if (!input.enabled) return { action: "none" }
   if (!input.nextRunAt) return { action: "schedule_next" }
   const nextRunAt = new Date(input.nextRunAt)
-  if (nextRunAt.getTime() > input.now.getTime()) return { action: "schedule_next" }
+  const nextRunAtTime = nextRunAt.getTime()
+  if (!Number.isFinite(nextRunAtTime)) return { action: "schedule_next" }
+  if (nextRunAtTime > input.now.getTime()) return { action: "schedule_next" }
   return input.missedRunPolicy === "run_once"
     ? { action: "run_missed_once" }
     : { action: "schedule_next" }

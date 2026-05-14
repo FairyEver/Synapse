@@ -5,6 +5,7 @@ import path from "node:path"
 
 import type { PublishedAgentCommand } from "./command-registry"
 import { normalizeCommandName } from "./command-registry"
+import type { StructuredLogger } from "../../runtime/logging"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 
 export interface AgentSkill {
@@ -16,7 +17,9 @@ export interface AgentSkill {
 }
 
 export interface SkillRegistryDeps {
+  readonly projectId?: string
   readonly workspacePath?: string
+  readonly logger?: Pick<StructuredLogger, "warn">
 }
 
 export class SkillRegistry {
@@ -27,10 +30,29 @@ export class SkillRegistry {
   }
 
   async list(): Promise<readonly AgentSkill[]> {
-    const files = await listSkillFiles(skillDirs(this.deps.workspacePath))
+    const files = await listSkillFiles(skillDirs(this.deps.workspacePath), (dir, error) => {
+      this.deps.logger?.warn("Agent skill directory skipped.", {
+        projectId: this.deps.projectId,
+        directoryName: path.basename(dir),
+        error: errorSummary(error),
+        errorCode: errorCode(error),
+      })
+    })
     const skills: AgentSkill[] = []
     for (const filePath of files) {
-      const content = await fs.readFile(filePath, "utf8")
+      let content: string
+      try {
+        content = await fs.readFile(filePath, "utf8")
+      } catch (error) {
+        this.deps.logger?.warn("Agent skill file skipped.", {
+          projectId: this.deps.projectId,
+          skillName: normalizeCommandName(path.basename(path.dirname(filePath))),
+          fileName: path.basename(filePath),
+          error: errorSummary(error),
+          errorCode: errorCode(error),
+        })
+        continue
+      }
       const parsed = parseSkillFile(content)
       const name = normalizeCommandName(path.basename(path.dirname(filePath)))
       if (!name || !parsed.prompt.trim()) continue
@@ -97,14 +119,18 @@ function skillDirs(workspacePath: string | undefined): readonly string[] {
   return roots
 }
 
-async function listSkillFiles(roots: readonly string[]): Promise<readonly string[]> {
+async function listSkillFiles(
+  roots: readonly string[],
+  onDirectoryError?: (dir: string, error: unknown) => void,
+): Promise<readonly string[]> {
   const result: string[] = []
   const visited = new Set<string>()
   async function walk(dir: string): Promise<void> {
     let realDir: string
     try {
       realDir = await fs.realpath(dir)
-    } catch {
+    } catch (error) {
+      if (!isMissingPathError(error)) onDirectoryError?.(dir, error)
       return
     }
     if (visited.has(realDir)) return
@@ -113,7 +139,8 @@ async function listSkillFiles(roots: readonly string[]): Promise<readonly string
     let entries: Dirent[]
     try {
       entries = await fs.readdir(realDir, { withFileTypes: true })
-    } catch {
+    } catch (error) {
+      if (!isMissingPathError(error)) onDirectoryError?.(realDir, error)
       return
     }
     for (const entry of entries) {
@@ -150,3 +177,26 @@ function firstBodyLine(content: string): string | undefined {
     .find(Boolean)
 }
 
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.length > 240 ? `${message.slice(0, 240)}...` : message
+}
+
+function errorSummary(error: unknown): string {
+  return errorMessage(error)
+    .replace(/\bauthorization(\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, "authorization$1[redacted]")
+    .replace(/\b(token|secret|api[-_]?key|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1$2[redacted]")
+    .replace(/'[^']*'/g, "'[path redacted]'")
+    .replace(/"[^"]*"/g, "\"[path redacted]\"")
+    .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
+    .replace(/\/[^\s'"`]+/g, "[path redacted]")
+}
+
+function errorCode(error: unknown): string | undefined {
+  const code = (error as { readonly code?: unknown } | null)?.code
+  return typeof code === "string" ? code : undefined
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return errorCode(error) === "ENOENT"
+}

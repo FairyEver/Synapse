@@ -58,7 +58,11 @@ function useAgentRuntimeStatus(projectId?: string) {
       })
       .catch((err) => {
         if (request.isActive()) {
-          logger.error("Failed to load agent runtime status.", err)
+          logger.error("Failed to load agent runtime status.", {
+            boundary: "settings.agent-runtime.status-refresh",
+            projectId,
+            ...errorDiagnostic(err),
+          })
           if (showLoading) {
             setStatus(null)
             setError("加载智能体运行时状态失败")
@@ -98,6 +102,18 @@ function useAgentRuntimeStatus(projectId?: string) {
   }, [refresh])
 
   return { status, loading, error, refresh }
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : ""
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { createLatestRequestGuard, useAgentRuntimeStatus }

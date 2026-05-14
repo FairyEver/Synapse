@@ -19,7 +19,7 @@ export const agentBaseDefinition = {
   ],
   commands: [
     { name: "model", description: "Switch model" },
-    { name: "mode", description: "Switch mode" },
+    { name: "mode", description: "List modes" },
     { name: "new", description: "Start a new session" },
     { name: "status", description: "Show agent status" },
     { name: "show", description: "Show a workspace reference" },

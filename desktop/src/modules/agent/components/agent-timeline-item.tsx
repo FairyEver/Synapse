@@ -63,7 +63,7 @@ function AgentTimelineItem({
       return (
         <Alert variant="destructive">
           <AlertCircle data-icon="inline-start" />
-          <AlertDescription>{item.message}</AlertDescription>
+          <AlertDescription className="whitespace-pre-wrap break-words">{item.message}</AlertDescription>
         </Alert>
       )
     case "result":

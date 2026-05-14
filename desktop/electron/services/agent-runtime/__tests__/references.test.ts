@@ -29,5 +29,24 @@ describe("agent local references", () => {
     await expect(renderReferenceView("file.ts:2", workspace, { context: 0 }))
       .resolves.toContain("   2 | two")
   })
-})
 
+  it("does not expose absolute workspace paths when a reference is missing", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-show-missing-"))
+
+    await expect(renderReferenceView("missing.ts", workspace))
+      .rejects.toThrow("Reference not found: missing.ts")
+    await expect(renderReferenceView("missing.ts", workspace))
+      .rejects.not.toThrow(workspace)
+  })
+
+  it("does not render workspace symlinks that resolve outside the workspace", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-ref-workspace-"))
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-ref-outside-"))
+    const outsideFile = path.join(outside, "secret.txt")
+    await fs.writeFile(outsideFile, "outside secret\n")
+    await fs.symlink(outsideFile, path.join(workspace, "linked-secret.txt"))
+
+    await expect(renderReferenceView("linked-secret.txt", workspace))
+      .resolves.toBe("Reference is outside the workspace or invalid.")
+  })
+})

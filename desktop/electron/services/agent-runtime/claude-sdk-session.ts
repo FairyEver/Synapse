@@ -7,6 +7,7 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 
+import type { StructuredLogger } from "../../runtime/service-registry"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import type {
   AgentEvent,
@@ -39,6 +40,7 @@ export interface ClaudeSDKSessionOptions {
   readonly maxTurns?: number
   readonly abortSignal?: AbortSignal
   readonly queryFactory?: QueryFactory
+  readonly logger?: Pick<StructuredLogger, "warn">
   readonly now?: () => Date
 }
 
@@ -62,6 +64,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly inputQueue = new AsyncQueue<SDKUserMessage>()
   private readonly eventQueue = new AsyncQueue<AgentEvent>()
   private readonly permissions = new Map<string, PendingPermission>()
+  private readonly logger: Pick<StructuredLogger, "warn"> | undefined
   private readonly query: QueryLike
   private readonly abortController: AbortController | undefined
   private readonly abortCleanup: (() => void) | undefined
@@ -76,6 +79,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.conversationId = options.conversationId
     this.providerId = options.providerId
     this.sdkSessionId = options.sdkSessionId
+    this.logger = options.logger
     this.now = options.now ?? (() => new Date())
     const forwardedAbort = createForwardedAbortController(options.abortSignal)
     this.abortController = forwardedAbort?.controller
@@ -143,7 +147,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.eventQueue.close()
     void Promise.resolve()
       .then(() => this.query.close())
-      .catch(() => undefined)
+      .catch((error) => {
+        this.logger?.warn("Claude SDK query close failed.", {
+          projectId: this.projectId,
+          conversationId: this.conversationId,
+          providerId: this.providerId,
+          sdkSessionId: this.sdkSessionId,
+          ...errorLogMeta(error),
+        })
+      })
   }
 
   private buildQueryOptions(options: ClaudeSDKSessionOptions): Record<string, unknown> {
@@ -163,7 +175,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (this.abortController) queryOptions.abortController = this.abortController
 
     const permissionMode = parsePermissionMode(options.mode)
-    if (permissionMode) queryOptions.permissionMode = permissionMode
+    if (permissionMode) {
+      queryOptions.permissionMode = permissionMode
+      if (permissionMode === "bypassPermissions") {
+        queryOptions.allowDangerouslySkipPermissions = true
+      }
+    }
 
     return queryOptions as Record<string, unknown>
   }
@@ -217,7 +234,17 @@ export class ClaudeSDKSession implements AgentLiveSession {
         }
       }
     } catch (error) {
-      if (!this.closed) this.eventQueue.push(this.errorEvent(error))
+      if (!this.closed) {
+        this.logger?.warn("Claude SDK query failed.", {
+          boundary: "claude-sdk-query",
+          projectId: this.projectId,
+          conversationId: this.conversationId,
+          providerId: this.providerId,
+          sdkSessionId: this.sdkSessionId,
+          ...errorLogMeta(error),
+        })
+        this.eventQueue.push(this.errorEvent(error))
+      }
     } finally {
       this.finished = true
       this.inputQueue.close()
@@ -230,7 +257,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private errorEvent(error: unknown): AgentEvent {
     return {
       type: "error",
-      message: errorMessage(error),
+      message: sanitizeDiagnosticText(errorMessage(error)),
       conversationId: this.conversationId,
       providerId: this.providerId,
       sdkSessionId: this.sdkSessionId,
@@ -276,6 +303,12 @@ const permissionModes = new Set<PermissionMode>([
   "dontAsk",
   "auto",
 ])
+const MAX_TOOL_INPUT_SUMMARY_LENGTH = 240
+const MAX_TOOL_INPUT_STRING_LENGTH = 120
+const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
+const REDACTED = "[redacted]"
+const PATH_REDACTED = "[path redacted]"
+const sensitiveToolInputKeyPattern = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
 
 function defaultQueryFactory(input: {
   prompt: AsyncIterable<SDKUserMessage>
@@ -361,10 +394,61 @@ function errorMessage(error: unknown): string {
   return typeof error === "string" ? error : "SDK query failed"
 }
 
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: errorMessage(error).length,
+  }
+}
+
+function sanitizeDiagnosticText(value: string): string {
+  const redacted = value
+    .replace(
+      /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;]+/gi,
+      (_match, key: string, separator: string, bearer: string | undefined) =>
+        `${key}${separator}${bearer ? `${bearer} ` : ""}${REDACTED}`,
+    )
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
+    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, PATH_REDACTED)
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, `$1${PATH_REDACTED}`)
+
+  return truncateText(redacted, MAX_DIAGNOSTIC_TEXT_LENGTH)
+}
+
 function summarizeToolInput(toolName: string, input: Record<string, unknown>): string | undefined {
-  if (toolName === "Bash" && typeof input.command === "string") return input.command
-  const summary = JSON.stringify(input)
-  return summary === "{}" ? undefined : summary
+  const summary = toolName === "Bash" && typeof input.command === "string"
+    ? redactSensitiveText(input.command)
+    : JSON.stringify(sanitizeToolInput(input))
+  if (summary === "{}") return undefined
+  return truncateText(summary, MAX_TOOL_INPUT_SUMMARY_LENGTH)
+}
+
+function sanitizeToolInput(value: unknown, key = ""): unknown {
+  if (sensitiveToolInputKeyPattern.test(key)) return REDACTED
+  if (typeof value === "string") return truncateText(value, MAX_TOOL_INPUT_STRING_LENGTH)
+  if (Array.isArray(value)) return value.map((item) => sanitizeToolInput(item))
+  if (!value || typeof value !== "object") return value
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(value)) {
+    sanitized[childKey] = sanitizeToolInput(childValue, childKey)
+  }
+  return sanitized
+}
+
+function redactSensitiveText(value: string): string {
+  return truncateText(
+    value.replace(
+      /\b(token|secret|password|authorization|cookie|credential|api[-_]?key)=\S+/gi,
+      "$1=[redacted]",
+    ),
+    MAX_TOOL_INPUT_SUMMARY_LENGTH,
+  )
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength)}...[truncated]`
 }
 
 class AsyncQueue<T> implements AsyncIterable<T> {

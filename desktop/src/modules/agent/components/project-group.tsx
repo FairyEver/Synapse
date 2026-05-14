@@ -84,15 +84,17 @@ function ProjectGroup({
             )}
             <span className="truncate">{project.name}</span>
           </CollapsibleTrigger>
-          <button
+          <Button
             type="button"
-            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+            variant="ghost"
+            size="icon-xs"
+            data-track="agent-project-new-session"
             title="新建会话"
             onClick={() => onCreateSession()}
           >
             <Plus className="size-3.5" />
             <span className="sr-only">新建会话</span>
-          </button>
+          </Button>
         </div>
         <CollapsibleContent>
           <div className="flex flex-col pl-3">

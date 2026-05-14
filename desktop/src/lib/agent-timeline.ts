@@ -1,5 +1,6 @@
 import type {
   SynapseAgentEvent,
+  SynapseAgentMessageTimelineItem,
   SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
 } from "../types/agent"
@@ -255,18 +256,18 @@ export function appendAgentTimelineEvent(
     return [...current, item]
   }
   if (event.type === "result" && last?.kind === "message" && last.role === "assistant") {
-    const metadata = resultMetadata(event)
-    return metadata ? [...current.slice(0, -1), { ...last, metadata, timestamp }] : [...current]
+    const next = mergeResultIntoAssistantMessage(last, event, timestamp)
+    return next === last ? [...current] : [...current.slice(0, -1), next]
   }
   if (event.type === "result") {
     const assistantIndex = latestAssistantMessageIndex(current)
     const assistant = assistantIndex === -1 ? undefined : current[assistantIndex]
     if (assistant?.kind === "message" && assistant.role === "assistant") {
-      const metadata = resultMetadata(event)
-      return metadata
+      const next = mergeResultIntoAssistantMessage(assistant, event, timestamp)
+      return next !== assistant
         ? [
             ...current.slice(0, assistantIndex),
-            { ...assistant, metadata, timestamp },
+            next,
             ...current.slice(assistantIndex + 1),
           ]
         : [...current]
@@ -294,6 +295,7 @@ function latestAssistantMessageIndex(items: readonly SynapseAgentTimelineItem[])
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
     if (item?.kind === "message" && item.role === "assistant") return index
+    if (item && isTimelineMergeBoundary(item)) return -1
     if (item?.kind === "message" && item.role === "user") return -1
   }
   return -1
@@ -303,6 +305,7 @@ function latestAssistantDraftIndex(items: readonly SynapseAgentTimelineItem[]): 
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
     if (item?.kind === "message" && item.role === "assistant" && isStreamedAssistantDraft(item)) return index
+    if (item && isTimelineMergeBoundary(item)) return -1
     if (item?.kind === "message" && item.role === "user") return -1
   }
   return -1
@@ -312,6 +315,7 @@ function latestThinkingDraftIndex(items: readonly SynapseAgentTimelineItem[]): n
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
     if (item?.kind === "thinking" && item.id.includes(":stream:")) return index
+    if (item && isTimelineMergeBoundary(item)) return -1
     if (item?.kind === "message" && item.role === "user") return -1
   }
   return -1
@@ -319,6 +323,14 @@ function latestThinkingDraftIndex(items: readonly SynapseAgentTimelineItem[]): n
 
 function isStreamedAssistantDraft(item: SynapseAgentTimelineItem): boolean {
   return item.kind === "message" && item.role === "assistant" && item.id.includes(":stream:")
+}
+
+function isTimelineMergeBoundary(item: SynapseAgentTimelineItem): boolean {
+  return item.kind === "toolCall"
+    || item.kind === "toolResult"
+    || item.kind === "permissionRequest"
+    || item.kind === "error"
+    || item.kind === "result"
 }
 
 export function localUserTimelineItem(
@@ -375,6 +387,17 @@ function resultMetadata(event: Extract<SynapseAgentEvent, { type: "result" }>): 
     costUsd: event.metadata?.costUsd ?? event.costUsd,
   }
   return Object.values(metadata).some((value) => value !== undefined) ? metadata : undefined
+}
+
+function mergeResultIntoAssistantMessage(
+  item: SynapseAgentMessageTimelineItem,
+  event: Extract<SynapseAgentEvent, { type: "result" }>,
+  timestamp: string,
+): SynapseAgentMessageTimelineItem {
+  const metadata = resultMetadata(event)
+  const content = event.content.trim().length > 0 ? event.content : item.content
+  if (!metadata && content === item.content) return item
+  return { ...item, content, metadata: metadata ?? item.metadata, timestamp }
 }
 
 function assistantText(event: Extract<SynapseAgentEvent, { type: "assistant" }>): string {

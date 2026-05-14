@@ -26,6 +26,7 @@ test('buildCodexArgs maps never approval to exec bypass flag', () => {
   assert.deepEqual(args, [
     'exec',
     '--cd', '/tmp/work',
+    '-c', 'mcp_servers={}',
     '--sandbox', 'danger-full-access',
     '--dangerously-bypass-approvals-and-sandbox',
     '--json',
@@ -40,6 +41,7 @@ test('buildCodexArgs includes model when configured', () => {
     sandbox: 'workspace-write',
     approvalPolicy: 'never',
     json: false,
+    disableMcp: false,
   }, '/tmp/work')
 
   assert.deepEqual(args, [
@@ -49,6 +51,25 @@ test('buildCodexArgs includes model when configured', () => {
     '--sandbox', 'workspace-write',
     '--dangerously-bypass-approvals-and-sandbox',
     '-',
+  ])
+})
+
+test('buildCodexArgs disables global MCP servers by default', () => {
+  const args = buildCodexArgs({
+    command: 'codex',
+    model: 'gpt-test',
+    sandbox: 'danger-full-access',
+    approvalPolicy: 'never',
+    json: true,
+    disableMcp: true,
+  }, '/tmp/work')
+
+  assert.deepEqual(args.slice(0, 9), [
+    'exec',
+    '--cd', '/tmp/work',
+    '--model', 'gpt-test',
+    '-c', 'mcp_servers={}',
+    '--sandbox', 'danger-full-access',
   ])
 })
 

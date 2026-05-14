@@ -1,10 +1,26 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { TaskFormDialog } from "../components/task-form-dialog"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
 const noop = vi.fn()
+
+const rendererLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
+}))
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -84,6 +100,26 @@ vi.mock("@/components/ui/toggle-group", () => ({
     </button>
   ),
 }))
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+let roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  vi.clearAllMocks()
+})
 
 describe("TaskFormDialog", () => {
   it("renders the four lightweight sections in create mode", () => {
@@ -284,6 +320,67 @@ describe("TaskFormDialog", () => {
     expect(html).toMatch(
       /<label[^>]*for="task-form-cwd"[^>]*>工作目录<\/label>[\s\S]*data-slot="input-group"[\s\S]*id="task-form-cwd"[\s\S]*>选择<\/button>/,
     )
+  })
+
+  it("logs directory picker failures without exposing the raw error message", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        repository: {
+          chooseDirectory: vi.fn().mockRejectedValue(
+            new Error("dialog failed for /Users/example/secret-agent-project"),
+          ),
+        },
+      },
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          state={{
+            mode: "edit",
+            task: createTask({
+              trigger: {
+                type: "builtin.interval",
+                config: { everyMinutes: 15, anchor: "created_at" },
+              },
+            }),
+          }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={async () => undefined}
+        />,
+      )
+    })
+
+    const chooseButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "选择")
+    expect(chooseButton).toBeTruthy()
+
+    await act(async () => {
+      chooseButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith(
+      "Failed to choose task working directory.",
+      expect.objectContaining({
+        boundary: "task-scheduler.form.cwd-picker",
+        action: "chooseDirectory",
+        errorName: "Error",
+        errorLength: "dialog failed for /Users/example/secret-agent-project".length,
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret-agent-project")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
   })
 
   it("renders cron as an input group with an inline editor action", () => {
