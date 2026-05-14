@@ -397,25 +397,25 @@ describe("ProviderPanel presets", () => {
     expect(document.body.textContent).toContain("第三方")
 
     await act(async () => {
-      clickByText(document.body, "国内官方")
+      buttonByText(document.body, "国内官方").click()
       await Promise.resolve()
     })
     expect(document.body.textContent).toContain("DeepSeek")
     expect(document.body.textContent).not.toContain("PackyCode")
 
     await act(async () => {
-      clickByText(document.body, "全部")
+      buttonByText(document.body, "全部").click()
       await Promise.resolve()
     })
     await act(async () => {
-      clickByText(document.body, "P")
+      buttonByText(document.body, "P").click()
       await Promise.resolve()
     })
     expect(document.body.textContent).toContain("PackyCode")
     expect(document.body.textContent).not.toContain("Claude Official")
 
     await act(async () => {
-      clickByText(document.body, "P")
+      buttonByText(document.body, "P").click()
       await Promise.resolve()
     })
     expect(document.body.textContent).toContain("Claude Official")

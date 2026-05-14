@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Plus } from "lucide-react"
+import { ChevronDownIcon, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
@@ -45,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { ProviderPresetPickerDialog, type ProviderPresetOption } from "./provider-preset-picker-dialog"
 import type {
   SynapseAgentProvider,
   SynapseAgentProviderApiKeyField,
@@ -447,12 +448,14 @@ function ProviderFormDialog({
 }) {
   const [selectedPresetValue, setSelectedPresetValue] = useState(CUSTOM_PROVIDER_PRESET_ID)
   const [pendingPresetSelection, setPendingPresetSelection] = useState<PendingPresetSelection | null>(null)
+  const [presetPickerOpen, setPresetPickerOpen] = useState(false)
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!open) {
       setSelectedPresetValue(CUSTOM_PROVIDER_PRESET_ID)
       setPendingPresetSelection(null)
+      setPresetPickerOpen(false)
       setTemplateValues({})
     }
   }, [open])
@@ -462,7 +465,7 @@ function ProviderFormDialog({
     [providers],
   )
 
-  const presetOptions = useMemo(
+  const presetOptions = useMemo<ProviderPresetOption[]>(
     () => presets.map((preset) => ({
       value: providerPresetSelectValue(preset),
       preset,
@@ -474,6 +477,8 @@ function ProviderFormDialog({
     if (selectedPresetValue === CUSTOM_PROVIDER_PRESET_ID) return null
     return presetOptions.find((option) => option.value === selectedPresetValue)?.preset ?? null
   }, [presetOptions, selectedPresetValue])
+
+  const selectedPresetLabel = selectedPreset?.name ?? "自定义"
 
   const setValue = <K extends keyof ProviderFormValues>(key: K, value: ProviderFormValues[K]) => {
     onValuesChange({ ...values, [key]: value })
@@ -526,25 +531,25 @@ function ProviderFormDialog({
               {mode === "create" ? (
                 <Field>
                   <FieldLabel>供应商预设</FieldLabel>
-                  <Select
-                    value={selectedPresetValue}
-                    onValueChange={handlePresetSelect}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between"
                     disabled={presetsLoading}
+                    onClick={() => setPresetPickerOpen(true)}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value={CUSTOM_PROVIDER_PRESET_ID}>自定义</SelectItem>
-                        {presetOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.preset.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                    <span className="truncate">{selectedPresetLabel}</span>
+                    <ChevronDownIcon className="text-muted-foreground" />
+                  </Button>
+                  <ProviderPresetPickerDialog
+                    open={presetPickerOpen}
+                    options={presetOptions}
+                    categories={PROVIDER_CATEGORIES}
+                    selectedValue={selectedPresetValue}
+                    customValue={CUSTOM_PROVIDER_PRESET_ID}
+                    onOpenChange={setPresetPickerOpen}
+                    onSelect={handlePresetSelect}
+                  />
                 </Field>
               ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
