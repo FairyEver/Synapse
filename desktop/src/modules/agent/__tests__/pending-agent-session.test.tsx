@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   timelineProps: null as {
     onOpenReference?: (reference: string) => void
   } | null,
+  bridgeAvailable: true,
   bridge: {
     agent: {
       getTimeline: vi.fn(),
@@ -38,7 +39,7 @@ vi.mock("@/app-shell/logging", () => ({
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
-  getSynapseBridge: () => mocks.bridge,
+  getSynapseBridge: () => mocks.bridgeAvailable ? mocks.bridge : undefined,
   requireSynapseBridge: () => mocks.bridge,
 }))
 
@@ -124,6 +125,7 @@ afterEach(() => {
   vi.clearAllMocks()
   mocks.chat = null
   mocks.timelineProps = null
+  mocks.bridgeAvailable = true
   mocks.useAgentChat.mockImplementation(() => mocks.chat)
 })
 
@@ -360,6 +362,44 @@ describe("AgentModule pending prompt sessions", () => {
       },
     )
     expect(JSON.stringify(mocks.rendererLogger.warn.mock.calls)).not.toContain("secret invalid reference detail")
+    expect(mocks.toast).toHaveBeenCalledWith("打开失败")
+  })
+
+  it("logs reference open failures when the bridge is unavailable", async () => {
+    mocks.bridgeAvailable = false
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      mocks.timelineProps?.onOpenReference?.("APP/PC")
+      await Promise.resolve()
+    })
+
+    expect(mocks.bridge.agent.openReference).not.toHaveBeenCalled()
+    expect(mocks.rendererLogger.warn).toHaveBeenCalledWith(
+      "Agent reference open failed.",
+      {
+        boundary: "renderer.agent.open-reference",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        referenceLength: 6,
+        errorName: "BridgeUnavailable",
+        errorLength: 0,
+      },
+    )
     expect(mocks.toast).toHaveBeenCalledWith("打开失败")
   })
 })

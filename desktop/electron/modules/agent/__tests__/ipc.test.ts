@@ -859,9 +859,13 @@ describe("agentIpcModule", () => {
       expect((submitted!.payload as { startedAt: string }).startedAt).not.toBe(stale)
     })
 
-    it("emits a failed phase when agent.send throws", async () => {
+    it("emits a sanitized failed phase and diagnostic when agent.send throws", async () => {
+      const rawError = Object.assign(
+        new Error("SDK failed for /Users/example/repo with token=sk-secret and prompt text"),
+        { code: "SDK_SEND_FAILED" },
+      )
       const send = vi.fn().mockImplementation(async () => {
-        throw new Error("nope")
+        throw rawError
       })
       const harness = createHarness({ agent: { send } })
 
@@ -869,14 +873,33 @@ describe("agentIpcModule", () => {
         harness.invoke("synapse:agent:send", {
           projectId: "project-1",
           content: "hi",
+          providerId: "anthropic",
         }),
-      ).rejects.toThrow("nope")
+      ).rejects.toThrow(rawError.message)
 
       const failed = harness.eventBusEmits.find(
         (e) => e.type === "phase.update" && (e.payload as { phase: string }).phase === "failed",
       )
       expect(failed).toBeDefined()
-      expect((failed!.payload as { errorMessage: string }).errorMessage).toBe("nope")
+      expect((failed!.payload as { errorMessage: string }).errorMessage).toBe("发送失败")
+      expect(JSON.stringify(failed!.payload)).not.toContain("/Users/example/repo")
+      expect(JSON.stringify(failed!.payload)).not.toContain("sk-secret")
+      expect(JSON.stringify(failed!.payload)).not.toContain("prompt text")
+      expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+        "Agent send IPC failed.",
+        expect.objectContaining({
+          projectId: "project-1",
+          sessionKey: "local:renderer",
+          providerId: "anthropic",
+          boundary: "agent.send.ipc",
+          errorName: "Error",
+          errorCode: "SDK_SEND_FAILED",
+          errorLength: rawError.message.length,
+        }),
+      )
+      expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("/Users/example/repo")
+      expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("sk-secret")
+      expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("prompt text")
     })
   })
 })

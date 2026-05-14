@@ -67,6 +67,14 @@ function isAcceptedManualRun(run: ScheduledTaskRun | null): run is AcceptedManua
   return run !== null && run.status !== "skipped"
 }
 
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
 function TaskSchedulerModule() {
   const { config } = useAppConfig()
   const platform = getRendererPlatform()
@@ -235,10 +243,12 @@ function TaskSchedulerModule() {
         cancelWatchNextAgentSession({ projectId: agentProjectId })
       }
       logger.error("Failed to run task.", {
-        error: err,
+        action: "runTask",
+        boundary: "renderer.task-scheduler.runTask",
         taskId: task.id,
         taskName: task.name,
         actionType: task.action.type,
+        ...errorLogMeta(err),
       })
       notify({ message: "触发失败", tone: "destructive" })
     }

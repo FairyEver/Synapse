@@ -2,6 +2,37 @@
 
 ---
 
+## [2026-05-14 11:35] 第 138 次迭代
+
+### Agent
+- agent-20260514113133-1d70
+
+### 发现的问题
+- Task Scheduler 表单保存失败时，用户点击保存 → `TaskFormDialog.handleSubmit` → `onCreate/onUpdate` 失败后，UI 会显示 raw backend error 且缺少表单提交边界日志，无法复盘是 create/update、哪个 task/actionType 失败。
+
+### 修复内容
+- [desktop/src/modules/task-scheduler/components/task-form-dialog.tsx:147] 保存失败时新增脱敏 renderer 日志，记录 `boundary/action/actionType/taskId/errorName/errorLength`。
+- [desktop/src/modules/task-scheduler/components/task-form-dialog.tsx:154] 保存失败 UI 改为固定 `保存任务失败。`，不展示 raw error 正文。
+- [desktop/src/modules/task-scheduler/__tests__/task-form-dialog.test.tsx:386] 新增回归测试，确认 token/path-shaped raw error 不进 UI 或 logger。
+
+### 日志补充
+- 新增 Task Scheduler 表单提交失败日志边界：`task-scheduler.form.submit`；字段包含 `action=create|update`、`actionType`、编辑时 `taskId`、`errorName`、`errorLength`，不记录 prompt/message/token/path/raw error。
+
+### 并行范围
+- claim / lock：`desktop/src/modules/task-scheduler/components/task-form-dialog.tsx`
+- claim / lock：`desktop/src/modules/task-scheduler/__tests__/task-form-dialog.test.tsx`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/task-scheduler/__tests__/task-form-dialog.test.tsx -t "logs submit failures"`：先红灯（保存失败没有日志），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/task-scheduler/__tests__/task-form-dialog.test.tsx`：通过，18 tests passed；测试输出包含既有 nested form React 警告。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/task-scheduler/components/task-form-dialog.tsx src/modules/task-scheduler/__tests__/task-form-dialog.test.tsx`：失败，既有 `task-form-dialog.tsx:372` `project` 未使用变量；本轮未修改该处。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Task Scheduler 保存任务失败现在不会向用户或日志暴露 raw backend error，并能按表单提交边界关联 task/actionType 与失败类型。
+
+---
+
 ## [2026-05-14 06:20] 第 133 次迭代
 
 ### Agent
@@ -8291,3 +8322,911 @@ Agent 项目组新建会话点击现在会进入统一 UI tracking，能和后�
 
 ### 本次进展
 Task Scheduler 导入弹窗现在会随当前导入文件重置选择索引，不再提交旧文件的无效任务索引。
+
+---
+
+## [2026-05-14 11:36] 第 138 次迭代
+
+### Agent
+- agent-20260514113225-98a0
+
+### 发现的问题
+- 无可安全实施的问题：全局 `auto/state/parallel/locks/claims.lock` 在本轮 claim 时存在且无 owner 元数据，mtime 为 2026-05-14 11:33:49 +0800，未达到 90 分钟过期条件，不能按协议追加 planned claim 或编辑业务文件。
+- 只读确认一个候选问题：后台 Agent 触发路径中，`platform !== local-renderer` 时 `ConversationRouter.processTurn` 先发 `phase.update received/in-progress`，但 SDK session 创建或 `liveSession.send()` 抛错会直接跳到 `processQueue` 的 queued-turn catch，只产生 queued-turn warning 和 error event，不会补发 `phase.update failed`，调度/后台侧可能停留在 in-progress。未取得 claim，未修复。
+
+### 修复内容
+- 无；未取得 planned claim 前没有修改 SDK/runtime/UI/调度业务代码或测试文件。
+
+### 日志补充
+- 无；未修改 SDK/对话/调度/消息事件代码。
+
+### 并行范围
+- 未 claim；只读查看 `desktop/electron/services/agent-runtime/conversation-router.ts` 与 `desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts`。
+- 个人 note：`auto/state/parallel/agent-notes/agent-20260514113225-98a0-iteration-138.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- 聚焦测试/目标 lint：未运行；未取得业务代码 claim，未修改可测目标文件。
+
+### 本次进展
+本轮因全局 claim 锁不可安全取得而退出，记录了一个后台 Agent phase failure 缺口候选供后续 worker claim 修复。
+
+---
+
+## [2026-05-14 11:38] 第 138 次迭代
+
+### Agent
+- agent-20260514113143-zpwh
+
+### 发现的问题
+- Side-channel send 在 reply target 存在但对应 transport dispatcher 未注册时误报成功：后台/SDK side-channel 发送 → `SideChannelService.send` → 缺 dispatcher 仍记录 sent/allowed 并返回 `ok: true`，导致消息丢失且复盘误判成功。
+
+### 修复内容
+- [desktop/electron/services/side-channel/side-channel-service.ts:235] 缺失 dispatcher 时抛出 `dispatch_unavailable`，进入现有 dispatch failure 分支。
+- [desktop/electron/services/side-channel/side-channel-service.ts:533] dispatch 失败诊断为 SideChannel/AttachmentPolicy 错误补充 `errorCode`，便于区分缺 dispatcher 等失败类型。
+- [desktop/electron/services/side-channel/__tests__/side-channel-service.test.ts:212] 增加缺 dispatcher 时失败 outbox/audit/log 的回归测试。
+
+### 日志补充
+- Side-channel send 派发失败日志现在能记录 `projectId`、`sessionKey`、`transportKind`、`connectorId`、`attachmentCount`、`errorName`、`errorLength`，并在缺 dispatcher 时补充 `errorCode=dispatch_unavailable`；不记录 message/prompt 正文。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/side-channel/side-channel-service.ts`
+- claim / lock：`desktop/electron/services/side-channel/__tests__/side-channel-service.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/side-channel/__tests__/side-channel-service.test.ts -t "fails side-channel sends when the reply target dispatcher is missing"`：先红灯（promise resolve `ok: true`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/side-channel/__tests__/side-channel-service.test.ts`：通过，12 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/side-channel/side-channel-service.ts electron/services/side-channel/__tests__/side-channel-service.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Side-channel 缺 dispatcher 不再吞掉消息并误报成功，失败可通过 session/transport/errorCode 复盘。
+
+---
+
+## [2026-05-14 11:37] 第 138 次迭代
+
+### Agent
+- agent-20260514113135-22f9
+
+### 发现的问题
+- SDK query 已结束后，`ClaudeSDKSession.send()` 仍会 resolve；触发路径为用户/调度发送消息 → ConversationRouter 调用 liveSession.send → SDK input queue 已关闭 → 消息可能被静默丢弃或只表现为空结果。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/claude-sdk-session.ts:99] finished 状态下拒绝 send，并记录 SDK send 边界日志。
+- [desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts:316] 增加回归测试覆盖 query finished 后 send 拒绝和日志上下文。
+
+### 日志补充
+- 新增 `Claude SDK send rejected after query finished.` warn，包含 `boundary=claude-sdk-send`、projectId、conversationId、providerId、sdkSessionId；不记录 prompt/message/content/token/secret/path。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/services/agent-runtime/claude-sdk-session.ts` :: `ClaudeSDKSession.send.rejectFinishedSession`
+- symbol claim / lock：`desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts` :: `ClaudeSDKSession.send.rejectFinishedSession`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts -t "rejects sends after the SDK query has finished"`：先红灯，修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts`：通过，22 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/claude-sdk-session.ts electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+SDK session 结束后再次发送消息不再静默成功，失败边界可通过 conversation/session/provider/sdkSessionId 复盘。
+
+---
+
+## [2026-05-14 11:39] 第 139 次迭代
+
+### Agent
+- agent-20260514113225-98a0
+
+### 发现的问题
+- 后台 Agent 触发路径中，`platform !== local-renderer` 时 `ConversationRouter.processTurn` 先发 `phase.update received/in-progress`，但 SDK session 创建或 `liveSession.send()` 抛错会绕过后续 phase 收口，最终只由 `processQueue` 记录 queued-turn warning 并发送 error event，后台/调度侧可能停留在 in-progress。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/conversation-router.ts:301] 将 SDK session 获取与 live turn 执行包进局部 try/catch。
+- [desktop/electron/services/agent-runtime/conversation-router.ts:326] 后台平台在 SDK setup/send throw 时先补发 `received/done` 与 `failed/failed`，再 rethrow 交给现有 queued-turn 失败日志和 error event。
+- [desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts:286] 增加后台 platform + SDK send throw 回归测试，断言 failed phase 发出且 phase error 不包含 raw SDK 错误文本。
+
+### 日志补充
+- 未新增 logger 行；复用既有 `AgentRuntime queued turn failed.` 脱敏日志。事件桥接补齐 `phase.update failed`，可用 `runId/projectId/sessionKey/conversationId/phase/status` 关联后台 Agent 触发和失败边界，且新增 phase 错误文案固定为 `Agent turn failed`，不写入 raw SDK 错误正文。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/agent-runtime/conversation-router.ts`
+- claim / lock：`desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts`
+- 个人 note：`auto/state/parallel/agent-notes/agent-20260514113225-98a0-iteration-139.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/conversation-router.test.ts -t "emits a failed background phase"`：先红灯，修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/conversation-router.test.ts`：通过，16 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/conversation-router.ts electron/services/agent-runtime/__tests__/conversation-router.test.ts`：失败；既有 `conversation-router.ts:532` `prefer-const`，本轮未改该无关逻辑。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+后台 Agent SDK setup/send 抛错后现在会发出 failed phase，避免后台/调度侧只看到 in-progress。
+
+---
+
+## [2026-05-14 11:40] 第 140 次迭代
+
+### Agent
+- agent-20260514113110-gt57
+
+### 发现的问题
+- Agent 权限时间线卡片在 summary 缺失时直接渲染 raw SDK 工具参数；触发路径为 Claude SDK 权限请求 → runtime permission event 携带 raw tool input → AgentPermissionCard raw fallback → UI 可能显示 secret-shaped 字段。
+
+### 修复内容
+- [desktop/src/modules/agent/components/agent-permission-card.tsx:78] raw fallback 改为先脱敏再 JSON 展示。
+- [desktop/src/modules/agent/components/agent-permission-card.tsx:82] 新增敏感 key 脱敏与长字符串截断。
+- [desktop/src/modules/agent/components/__tests__/agent-permission-card.test.tsx:64] 增加 raw fallback 不渲染敏感字段的回归测试。
+
+### 日志补充
+- 无新增日志；本轮修复 UI 展示层泄漏风险，不改变 SDK/对话事件日志结构。
+
+### 并行范围
+- claim / lock：desktop/src/modules/agent/components/agent-permission-card.tsx
+- claim / lock：desktop/src/modules/agent/components/__tests__/agent-permission-card.test.tsx
+- 曾取消：desktop/electron/services/agent-runtime/claude-sdk-session.ts 与测试，原因是其他 worker 已先取得符号级 claim。
+
+### 验证结果
+- pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-permission-card.test.tsx -t "redacts raw SDK tool input fallback"：先红灯，修复后通过。
+- pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-permission-card.test.tsx：通过，2 tests passed。
+- pnpm --filter @synapse/desktop exec eslint src/modules/agent/components/agent-permission-card.tsx src/modules/agent/components/__tests__/agent-permission-card.test.tsx：通过。
+- pnpm --filter @synapse/desktop run check:hard-constraints：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent 权限卡片缺少 summary 时仍可显示工具参数轮廓，但不会把 raw secret-shaped 参数直接渲染到 UI。
+
+---
+
+## [2026-05-14 11:47] 第 141 次迭代
+
+### Agent
+- agent-20260514114256-u23g
+
+### 发现的问题
+- SDK assistant `tool_use` 事件输入里的普通字符串字段（如 Bash `command`）只经过 key-based payload 清洗，`Authorization: Bearer ...` 这类 secret-shaped 文本会进入 Agent `toolUse` event、持久化历史和事件 payload。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/sdk-event-bridge.ts:167] `tool_use` 输入在生成 `toolUse` event 前统一走专用清洗。
+- [desktop/electron/services/agent-runtime/sdk-event-bridge.ts:208] 新增 tool input 字符串递归脱敏，保留普通字段并脱敏敏感 key 与 Bearer/token 等文本。
+- [desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts:216] 增加 SDK assistant tool_use 输入文本脱敏回归测试。
+
+### 日志补充
+- 未新增 logger 行；本轮在 SDK→Agent 事件桥接源头脱敏 `toolUse.toolInput` / `toolInputRaw`，避免后续事件日志、持久化历史和诊断 payload 携带原始 secret-shaped 命令文本。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/services/agent-runtime/sdk-event-bridge.ts` :: `sdkEventBridge.sanitizeToolInputText`
+- symbol claim / lock：`desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts` :: `sdkEventBridge.sanitizeToolInputText`
+- 个人 note：`auto/state/parallel/agent-notes/agent-20260514114256-u23g-iteration-141.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts -t "redacts sensitive text inside SDK assistant tool_use inputs"`：先红灯，修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`：通过，16 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/sdk-event-bridge.ts electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+SDK assistant tool_use 输入现在会在桥接成 Agent toolUse 事件前脱敏 secret-shaped 文本，后续日志和历史复盘不再携带原始 token。
+---
+
+## [2026-05-14 11:48] 第 141 次迭代
+
+### Agent
+- agent-1778730191-b5q7
+
+### 发现的问题
+- Automation webhook `replyMode=wait` prompt run 在 Agent/SDK 抛错时，`handleHttp` 的非 `WebhookError` catch 会把 raw 错误文本放进 HTTP 500 body；触发路径为 webhook prompt → `handleHttp` wait branch → `executePrompt` → `agent.send()` throw → response `internal_error` message。
+
+### 修复内容
+- [desktop/electron/services/automation-ingress/automation-ingress-service.ts:180] 非业务 `WebhookError` 的 HTTP 500 response 改为固定 `internal error`，避免返回 raw SDK/Agent 错误文本。
+- [desktop/electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts:190] 补充 wait-mode thrown Agent 错误 response body 断言，确认不会包含 raw prompt/error 文本。
+
+### 日志补充
+- 未新增 logger 行；保留既有 `Webhook run threw.` 结构化日志与 audit 诊断，可通过 `runId`、`projectId`、`sessionKey`、`boundary=agent-runtime`、`errorName`、`errorLength` 复盘，HTTP body 不再泄露 raw 错误。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/automation-ingress/automation-ingress-service.ts`
+- claim / lock：`desktop/electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts -t "logs thrown webhook prompt runs"`：先红灯（response message 为 raw `SDK failed for secret prompt text`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts`：通过，4 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/automation-ingress/automation-ingress-service.ts electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Webhook wait 模式下 Agent/SDK 内部抛错不再把 raw 错误返回给调用方，诊断关联仍保留在结构化日志和 audit 中。
+---
+
+## [2026-05-14 11:49] 第 141 次迭代
+
+### Agent
+- agent-20260514114308-uksw
+
+### 发现的问题
+- Claude SDK assistant `tool_use` 输入在事件桥接时会把 `file_path` 这类完整本地路径放进 `toolUse.toolInput` / `toolInputRaw`；触发路径为 SDK tool_use → sdk-event-bridge → Agent timeline / conversation history，用户查看工具调用或恢复会话时可能看到 raw path。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/sdk-event-bridge.ts:167] `toolUse` 事件改为基于 sanitized tool input 生成展示字符串与 raw 摘要。
+- [desktop/electron/services/agent-runtime/sdk-event-bridge.ts:280] SDK payload sanitization 增加 path-like key 脱敏，`file_path` / `workspacePath` / `cwd` 等值写成 `[path redacted]`。
+- [desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts:175] 回归测试覆盖 SDK tool_use 中完整路径与 authorization 值不会进入派生工具事件。
+
+### 日志补充
+- 未新增 logger 行；本轮补齐消息事件桥接脱敏。SDK tool_use 派生事件和 persisted event payload 现在可保留 `sdkSessionId`、toolName、参数轮廓，同时不携带 raw path / secret-shaped 值。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/services/agent-runtime/sdk-event-bridge.ts` :: `toolUseEventsFromBlocks.sanitizeToolInput`
+- symbol claim / lock：`desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts` :: `toolUseEventsFromBlocks.sanitizeToolInput`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts -t "bridges SDK assistant tool_use blocks"`：先红灯，修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`：通过，16 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/sdk-event-bridge.ts electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+SDK tool_use 事件进入 UI/历史前会脱敏路径类字段，避免工具调用展示和复盘记录携带完整本地路径。
+---
+
+## [2026-05-14 11:51] 第 141 次迭代
+
+### Agent
+- agent-1778730175-vewo
+
+### 发现的问题
+- Agent 工具事件 raw fallback 会直接渲染 `toolInputRaw`；触发路径为 SDK/tool 事件 -> Agent timeline item -> `AgentToolEvent.toolBody` -> `formatRawInput` -> UI pre block，可能在工具块里暴露 secret-shaped 字段或完整本地路径。
+
+### 修复内容
+- [desktop/src/modules/agent/components/agent-tool-event.tsx:114] raw input fallback 在 JSON 渲染前递归脱敏敏感字段，并把路径形字符串替换为 `[path redacted]`。
+- [desktop/src/modules/agent/components/__tests__/agent-tool-event.test.tsx:181] 增加工具 raw input fallback 脱敏回归测试。
+
+### 日志补充
+- 未新增日志；本轮修复的是 Agent UI 展示边界，避免 raw tool input 进入可见工具块。既有 copy failure 日志保持只记录 `bodyLength/errorName/errorLength`。
+
+### 并行范围
+- symbol claim / lock：`desktop/src/modules/agent/components/agent-tool-event.tsx` `AgentToolEvent.rawInputFallbackRedaction`
+- symbol claim / lock：`desktop/src/modules/agent/components/__tests__/agent-tool-event.test.tsx` `AgentToolEvent.rawInputFallbackRedaction`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-tool-event.test.tsx -t "redacts sensitive raw tool input fallback"`：先红灯，修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-tool-event.test.tsx`：通过，8 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/agent/components/agent-tool-event.tsx src/modules/agent/components/__tests__/agent-tool-event.test.tsx`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent 工具块在缺少安全 `toolInput`、只能回退 raw input 时，不再把敏感字段或完整路径直接展示给用户。
+
+---
+
+## [2026-05-14 11:52] 第 141 次迭代
+
+### Agent
+- agent-20260514114310-lwp9
+
+### 发现的问题
+- Agent timeline reference 点击在 renderer bridge 缺失时静默失败；触发路径为用户点击 reference → `AgentModule.openReference` → `getSynapseBridge()` 返回 undefined → 没有 IPC promise、没有 `.catch()`、没有 toast 或 renderer 日志。
+
+### 修复内容
+- [desktop/src/modules/agent/index.tsx:292] 在调用 `openReference` 前显式检查 bridge，缺失时记录结构化 warn 并提示 `打开失败`。
+- [desktop/src/modules/agent/__tests__/pending-agent-session.test.tsx:368] 新增 bridge 缺失回归测试，覆盖不调用 IPC、记录诊断、显示失败提示。
+
+### 日志补充
+- 新增 Agent reference 打开失败的 renderer 边界补齐：`boundary=renderer.agent.open-reference`，包含 `projectId`、`conversationId`、`sessionKey`、`referenceLength`、`errorName=BridgeUnavailable`、`errorLength=0`，不记录 reference 正文或消息内容。
+
+### 并行范围
+- claim / lock：`desktop/src/modules/agent/index.tsx`
+- claim / lock：`desktop/src/modules/agent/__tests__/pending-agent-session.test.tsx`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/__tests__/pending-agent-session.test.tsx -t "bridge is unavailable"`：先红灯（logger warn 0 次调用），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/__tests__/pending-agent-session.test.tsx`：通过，6 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/agent/index.tsx src/modules/agent/__tests__/pending-agent-session.test.tsx`：失败，既有 ESLint 配置缺少 `react-hooks/exhaustive-deps` 规则（`index.tsx:117`）；本轮未修改该处配置。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- `git diff --check -- desktop/src/modules/agent/index.tsx desktop/src/modules/agent/__tests__/pending-agent-session.test.tsx`：通过。
+
+### 本次进展
+Agent reference 打开在 preload/bridge 缺失时不再静默失败，用户能看到失败提示，日志能按会话和 reference 长度复盘。
+
+---
+
+## [2026-05-14 11:58] 第 142 次迭代
+
+### Agent
+- agent-20260514115622-bz2i
+
+### 发现的问题
+- Agent IPC send 失败 phase 会传播 raw SDK/Provider 错误正文；触发路径为用户发送 Agent 消息 → `synapse:agent:send` → `agent.send/sendToConversation` 抛错 → EventBus `phase.update failed` 携带 raw `Error.message`，renderer 时间线和诊断可能看到 path/token/prompt-shaped 失败文本。
+
+### 修复内容
+- [desktop/electron/modules/agent/ipc-messages.ts:266] 发送失败 catch 增加 `Agent send IPC failed.` 脱敏 warning，记录 `projectId/sessionKey/conversationId/providerId/boundary/errorName/errorLength/errorCode`。
+- [desktop/electron/modules/agent/ipc-messages.ts:286] failed phase 的 `errorMessage` 改为固定 `发送失败`，不再把 raw SDK 错误正文发给 renderer phase。
+- [desktop/electron/modules/agent/__tests__/ipc.test.ts:862] 增加回归测试，覆盖 failed phase 和日志都不包含完整路径、token 或 prompt 片段。
+
+### 日志补充
+- 新增 Agent IPC send 失败日志边界：`boundary=agent.send.ipc`；可关联 `projectId`、`sessionKey`、`conversationId`、`providerId` 和错误摘要，不记录 prompt/message/content/token/path/raw error。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/modules/agent/ipc-messages.ts` :: `agentIpc.send.failureErrorMessageSanitization`
+- symbol claim / lock：`desktop/electron/modules/agent/__tests__/ipc.test.ts` :: `agentIpc.send.failureErrorMessageSanitization`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/modules/agent/__tests__/ipc.test.ts -t "emits a sanitized failed phase"`：先红灯（failed phase 含 raw SDK 错误正文），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/modules/agent/__tests__/ipc.test.ts`：通过，19 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/modules/agent/ipc-messages.ts electron/modules/agent/__tests__/ipc.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent 对话发送失败进入 EventBus/时间线前会使用稳定失败文案，主进程日志保留可关联的脱敏 IPC 边界诊断。
+
+---
+
+## [2026-05-14 11:58] 第 142 次迭代
+
+### Agent
+- agent-20260514115507-noaj
+
+### 发现的问题
+- SDK/Agent runtime 失败 → main 发送 `phase.update.errorMessage` → renderer 写入 phase timeline → `AgentPhaseRow` 直接渲染错误正文；长 SDK/runtime 错误字符串没有断词约束，会撑宽 Agent 对话时间线。
+
+### 修复内容
+- [desktop/src/modules/agent/components/agent-phase-row.tsx:97] failed phase 错误正文增加 `whitespace-pre-wrap break-words`，保留换行并限制长无空格文本在当前行宽内换行。
+- [desktop/src/modules/agent/components/__tests__/agent-phase-row.test.tsx:66] 增加长 failed error 文本换行回归测试。
+
+### 日志补充
+- 无新增日志；本轮是对话 UI 展示瑕疵修复，未改变 SDK/消息事件日志语义。
+
+### 并行范围
+- claim / lock：`desktop/src/modules/agent/components/agent-phase-row.tsx`
+- claim / lock：`desktop/src/modules/agent/components/__tests__/agent-phase-row.test.tsx`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-phase-row.test.tsx -t "wraps long failed error text"`：先红灯（缺少 `whitespace-pre-wrap`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-phase-row.test.tsx`：通过，9 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/agent/components/agent-phase-row.tsx src/modules/agent/components/__tests__/agent-phase-row.test.tsx`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent failed phase 的长 SDK/runtime 错误不会再撑破对话时间线，用户仍能在当前消息宽度内查看失败状态。
+
+---
+
+## [2026-05-14 12:00] 第 142 次迭代
+
+### Agent
+- agent-20260514115457-ktaq
+
+### 发现的问题
+- Scheduled Agent 失败结果会把 SDK 原始错误正文返回给调度器；触发路径为定时/手动任务或 automation ingress → `AgentRuntimeService.sendScheduled` → scheduler 持久化 `result.error` → 运行历史 action result 渲染错误块，可能暴露 prompt-shaped SDK 错误内容。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/agent-runtime-service.ts:279] Scheduled Agent turn 返回 `result.error` 时，调度结果改为固定 `Agent run failed`，不再返回 raw SDK 错误正文。
+- [desktop/electron/services/agent-runtime/agent-runtime-service.ts:293] Scheduled Agent send 抛错时，调度结果同样使用固定失败文案，timeout 文案保持不变。
+- [desktop/electron/services/agent-runtime/agent-runtime-service.ts:833] `Scheduled agent send failed.` 日志继续记录原始错误长度，保留 `projectId/sessionKey/conversationId/agentType/mode/sessionPolicy/timeoutMs/durationMs/promptLength` 关联字段。
+- [desktop/electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts:430] 新增回归断言，确认 scheduled result 不包含 sensitive prompt 片段且日志仍保留 raw error length。
+
+### 日志补充
+- 未新增 logger 行；增强既有 `Scheduled agent send failed.` 诊断，确保 user-facing/scheduler result 脱敏后仍以原始错误长度关联 SDK 失败。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/services/agent-runtime/agent-runtime-service.ts` :: `AgentRuntimeService.sendScheduled.sanitizeResultError`
+- symbol claim / lock：`desktop/electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts` :: `AgentRuntimeService.sendScheduled.sanitizeResultError`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts -t "logs scheduled agent failures"`：先红灯（scheduled result 含 raw SDK 错误），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts`：失败，非本轮范围普通 `send` 测试期望 `resultText: "done"`，实际为 `"hello"`；本轮未修改该路径。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/agent-runtime-service.ts electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Scheduled Agent 失败进入调度运行结果前会使用稳定失败文案，日志仍能按会话、模式、任务触发上下文和原始错误长度复盘。
+---
+
+## [2026-05-14 12:01] 第 142 次迭代
+
+### Agent
+- agent-20260514115501-6s4q
+
+### 发现的问题
+- Agent 对话中执行 `/show` 时，reference/权限/文件读取异常会从 `AgentCommandRouter.handleShow` 原样返回到对话结果；触发路径为用户输入 `/show` → `showReference` 抛错 → command result error → Agent timeline，可能暴露本地路径或 secret-shaped 错误片段，且缺少可关联的命令边界日志。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/command-router.ts:373] `/show` 异常边界新增结构化 warn，记录 project/conversation/session/message/user/command/args/error 摘要。
+- [desktop/electron/services/agent-runtime/command-router.ts:386] 对话返回错误改走既有 `errorMessage(error)` 脱敏路径，不再返回 raw exception text。
+- [desktop/electron/services/agent-runtime/__tests__/command-router.test.ts:437] 增加 logger 缺失时仍脱敏 `/show` 错误结果的回归测试；同符号范围的并行测试覆盖日志字段脱敏。
+
+### 日志补充
+- 新增 `Agent command show reference failed.` 主进程 warn，包含 `projectId`、`conversationId`、`sessionKey`、`agentType`、`messageId`、`userId`、`command=/show`、`argsCount`、`errorName`、`errorCode`、脱敏 `error`；不记录 prompt/message content、raw path 或 token-like 值。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/services/agent-runtime/command-router.ts` :: `AgentCommandRouter.handleShow.sanitizeError`
+- symbol claim / lock：`desktop/electron/services/agent-runtime/__tests__/command-router.test.ts` :: `AgentCommandRouter.handleShow.sanitizeError`
+- 个人 note：`auto/state/parallel/agent-notes/agent-20260514115501-6s4q-iteration-142.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-router.test.ts -t "redacts raw /show command failure text"`：先红灯（返回 raw `/Users/... token=...`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-router.test.ts -t "logs /show failures"`：通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-router.test.ts`：通过，15 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/command-router.ts electron/services/agent-runtime/__tests__/command-router.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- `git diff --check -- desktop/electron/services/agent-runtime/command-router.ts desktop/electron/services/agent-runtime/__tests__/command-router.test.ts`：通过。
+
+### 本次进展
+Agent `/show` 命令失败现在有可关联的脱敏日志，对话里也只展示脱敏后的错误摘要。
+
+---
+
+## [2026-05-14 12:03] 第 142 次迭代
+
+### Agent
+- agent-20260514115444-6365
+
+### 发现的问题
+- Agent 对话里执行 `/show` 引用命令时，用户操作 → `AgentCommandRouter.handleShow` → `showReference` 失败后，raw Error message 会作为 command result 进入对话，且缺少可按 project/conversation/session 复盘的命令边界日志。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/command-router.ts:373] `/show` 失败时新增脱敏 `warn`，记录 `projectId/conversationId/sessionKey/agentType/messageId/userId/argsCount/errorName/errorCode/error`。
+- [desktop/electron/services/agent-runtime/command-router.ts:386] `/show` 失败结果改为 `errorMessage(error)`，不再返回 raw path/token/authorization 文本。
+- [desktop/electron/services/agent-runtime/__tests__/command-router.test.ts:233] 新增回归测试，覆盖 `/show` 失败日志关联字段与 raw error 脱敏。
+
+### 日志补充
+- 新增 Agent command `/show` 失败日志边界：`Agent command show reference failed.`；字段包含 project、conversation、session、agentType、messageId、userId、argsCount、errorName、errorCode 和脱敏错误摘要，不记录引用参数正文、prompt/message、token/secret 或完整路径。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/agent-runtime/command-router.ts`
+- claim / lock：`desktop/electron/services/agent-runtime/__tests__/command-router.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-router.test.ts -t "/show failures"`：先红灯（raw path/token 返回对话且无日志），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-router.test.ts`：通过，15 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/command-router.ts electron/services/agent-runtime/__tests__/command-router.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent `/show` 引用命令失败现在不会把 raw 错误正文写进对话，并能通过脱敏日志关联到具体 project/conversation/session 边界。
+
+---
+
+## [2026-05-14 12:09] 第 143 次迭代
+
+### Agent
+- agent-1778731516-tmva
+
+### 发现的问题
+- SDK `user/tool_result` 输出 → `sdk-event-bridge` → Agent `toolResult` event → renderer/outbox/history 的链路中，工具结果正文未走脱敏；正常 Read/Bash/HTTP 工具失败时可能把 path、Authorization、cookie 或 token-shaped 文本带入 Agent UI 和会话 history。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/sdk-event-bridge.ts:224] `toolResultContent` 对字符串和 text block 拼接结果复用既有 diagnostic redaction。
+- [desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts:296] 增加 SDK `tool_result` 敏感内容脱敏回归测试。
+
+### 日志补充
+- 无新增日志；本轮修复消息事件桥接层，防止敏感 SDK tool result 正文进入后续 UI/history/诊断载荷。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/services/agent-runtime/sdk-event-bridge.ts` :: `toolResultEventsFromBlocks.sanitizeToolResultContent`
+- symbol claim / lock：`desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts` :: `sdkEventBridge.toolResultContentRedaction`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts -t "redacts sensitive SDK user tool_result content"`：先红灯（toolResult.content 含 raw token/path），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`：通过，17 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/sdk-event-bridge.ts electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- `git diff --check -- desktop/electron/services/agent-runtime/sdk-event-bridge.ts desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts`：通过。
+
+### 本次进展
+SDK tool_result 内容进入 Agent 事件前会脱敏，后续 UI、outbox 和 history 不再接收明显的 token/path-shaped 原文。
+
+---
+
+## [2026-05-14 12:08] 第 143 次迭代
+
+### Agent
+- agent-20260514120527-3729
+
+### 发现的问题
+- Agent 对话复制 transcript 时，用户点击复制 → `AgentModule.handleCopyTranscript` → `formatAgentTranscript` → `formatEntryTime`，malformed SDK/timeline timestamp 会被写成 `Invalid Date`，导致复制出的失败会话记录状态错乱。
+
+### 修复内容
+- [desktop/src/modules/agent/utils.ts:26] `formatEntryTime` 增加 invalid timestamp guard，返回 `undefined` 而不是 `Invalid Date`。
+- [desktop/src/modules/agent/utils.ts:35] transcript label 只在时间合法时追加时间，坏时间仍保留角色和正文。
+- [desktop/src/modules/agent/__tests__/utils.test.ts:114] 增加 malformed timestamp transcript 回归测试。
+
+### 日志补充
+- 未新增 logger 行；本轮是复制 transcript 的 UI 文本稳定性修复，没有新的失败边界。既有复制失败日志 `renderer.agent.transcript-copy` 保持不记录 message content。
+
+### 并行范围
+- claim / lock：`desktop/src/modules/agent/utils.ts`
+- claim / lock：`desktop/src/modules/agent/__tests__/utils.test.ts`
+- 个人 note：`auto/state/parallel/agent-notes/agent-20260514120527-3729-iteration-143.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/__tests__/utils.test.ts -t "omits malformed timestamps"`：先红灯（输出 `Agent Invalid Date`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/__tests__/utils.test.ts`：通过，5 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/agent/utils.ts src/modules/agent/__tests__/utils.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent 对话复制文本现在会跳过坏时间戳，保留消息内容且不再出现 `Invalid Date`/`NaN`。
+---
+
+## [2026-05-14 12:08] 第 143 次迭代
+
+### Agent
+- agent-20260514120717-0g43
+
+### 发现的问题
+- Agent 对话 UI 发送消息入队失败时，用户发送消息 → `useChatConnection.sendMessage` → `window.synapse.agent.send` reject → `SET_ERROR` 使用 raw backend error，导致 prompt/token/path-shaped 错误正文可能显示给用户；日志路径已脱敏但 UI 状态仍泄漏。
+
+### 修复内容
+- [desktop/src/modules/agent/hooks/use-chat-connection.ts:484] 发送入队失败时用户可见错误固定为 `发送失败`，不再使用 raw backend error message。
+- [desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx:132] 更新回归测试，确认 `prompt=secret` 不进入 `chat.error`。
+
+### 日志补充
+- 未新增日志；复用既有 `Agent send failed.` 脱敏 renderer 日志，保留 `projectId`、`conversationId`、`sessionKey`、`messageLength`、`boundary=renderer.agent.send`、`errorName`、`errorLength`，不记录 prompt/message/raw error。
+
+### 并行范围
+- symbol claim / lock：`desktop/src/modules/agent/hooks/use-chat-connection.ts#useChatConnection.sendMessage.sanitizeUiError`
+- symbol claim / lock：`desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx#useAgentChat.sendMessage.sanitizeUiError`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx -t "removes the optimistic local user message"`：先红灯（UI error 仍为 `enqueue failed with prompt=secret`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx`：通过，6 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/agent/hooks/use-chat-connection.ts src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- `git diff --check -- desktop/src/modules/agent/hooks/use-chat-connection.ts desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx`：通过。
+
+### 本次进展
+Agent 发送入队失败现在不会把 raw SDK/IPC/backend 错误正文展示到对话 UI，复盘信息保留在脱敏日志中。
+---
+
+## [2026-05-14 12:10] 第 144 次迭代
+
+### Agent
+- agent-20260514121230-w3x5
+
+### 发现的问题
+- 手动触发 Agent 调度任务失败时，用户点击运行 → `TaskSchedulerModule.handleRunTask` → `runTask(task.id)` reject 后，renderer 调度边界把 raw thrown value 作为 `error` 字段写日志，可能暴露 prompt/token/path-shaped 错误内容，且缺少统一 `boundary/errorName/errorLength` 复盘字段。
+
+### 修复内容
+- [desktop/src/modules/task-scheduler/index.tsx:70] 新增 `errorLogMeta`，只记录错误类型与错误消息长度。
+- [desktop/src/modules/task-scheduler/index.tsx:245] 手动运行失败日志改为 `action/boundary/taskId/taskName/actionType/errorName/errorLength`，不再记录 raw error。
+- [desktop/src/modules/task-scheduler/__tests__/task-scheduler-module.test.tsx:238] 增加 Agent 手动任务失败日志脱敏回归测试。
+
+### 日志补充
+- 新增/修正 Task Scheduler 手动 Agent run 失败日志边界：`renderer.task-scheduler.runTask`；字段包含 `action=runTask`、`taskId`、`taskName`、`actionType`、`errorName`、`errorLength`，不记录 prompt/message/token/path/raw error。
+
+### 并行范围
+- claim / lock：`desktop/src/modules/task-scheduler/index.tsx`
+- claim / lock：`desktop/src/modules/task-scheduler/__tests__/task-scheduler-module.test.tsx`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/task-scheduler/__tests__/task-scheduler-module.test.tsx -t "logs sanitized diagnostics"`：先红灯（logger payload 含 raw `error` 且缺少 boundary 字段），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/task-scheduler/__tests__/task-scheduler-module.test.tsx`：通过，13 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/task-scheduler/index.tsx src/modules/task-scheduler/__tests__/task-scheduler-module.test.tsx`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Task Scheduler 手动触发 Agent 任务失败现在保留可关联的调度边界诊断，同时不把 raw backend error 写进 renderer 日志。
+
+---
+
+## [2026-05-14 12:11] 第 143 次迭代
+
+### Agent
+- agent-1778731520-yuz1
+
+### 发现的问题
+- 任务导出弹窗保留已不存在任务的选择状态：用户打开导出弹窗并选择任务 → 调度任务列表刷新/删除导致 `tasks` prop 变化 → `TaskExportDialog` 继续使用旧 `selected` → 导出按钮可能在当前可见列表没有选中任务时仍可点，父级导出按当前 `tasks` 过滤后会生成空/错乱导出。
+
+### 修复内容
+- [desktop/src/modules/task-scheduler/components/task-export-dialog.tsx:30] 根据当前 task id 集合收敛已选 id，移除 stale selection。
+- [desktop/src/modules/task-scheduler/components/__tests__/task-export-dialog.test.tsx:26] 新增回归测试，覆盖任务列表变化后旧选中项被清理且导出按钮禁用。
+
+### 日志补充
+- 无新增日志；本轮是 Task Scheduler 导出弹窗局部状态修复，不涉及 SDK/runtime/IPC 边界。修复后避免产生误导性的空导出操作。
+
+### 并行范围
+- claim / lock：`desktop/src/modules/task-scheduler/components/task-export-dialog.tsx`
+- claim / lock：`desktop/src/modules/task-scheduler/components/__tests__/task-export-dialog.test.tsx`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/task-scheduler/components/__tests__/task-export-dialog.test.tsx`：先红灯（列表变化后仍显示 `已选 1 项`），修复后通过，1 test passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/task-scheduler/components/task-export-dialog.tsx src/modules/task-scheduler/components/__tests__/task-export-dialog.test.tsx`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Task Scheduler 导出弹窗现在只保留当前任务列表中仍存在的选中项，避免导出空列表或显示错乱选择数。
+---
+
+## [2026-05-14 12:18] 第 145 次迭代
+
+### Agent
+- agent-1778732099-714e
+
+### 发现的问题
+- 定时/手动 Agent 任务触发 → TaskSchedulerExecutionService.runTask → action.execute 抛出 SDK/backend raw error 时，audit/logger 已脱敏记录 taskId/runId/actionType/triggeredBy/boundary，但 run.error/result.error 仍持久化 raw 错误，Task Runs 历史会展示敏感正文。
+
+### 修复内容
+- [desktop/electron/services/task-scheduler/execution-service.ts:154] action 执行中抛错时，持久化到 run/result 的用户可见错误改为通用失败/停止文案。
+- [desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts:109] 增加回归断言，确认 thrown action 的 run history 不包含 raw SDK 错误正文。
+
+### 日志补充
+- 未新增日志；复用既有 `Scheduled task action threw.` 脱敏日志与 failed audit，保留 taskId、runId、actionType、triggeredBy、boundary、errorName、errorLength，不记录 prompt/message/token/path/raw error。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/task-scheduler/execution-service.ts`
+- claim / lock：`desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/task-scheduler/__tests__/execution-service.test.ts -t "records action exceptions"`：先红灯（run.error 为 raw `sdk unavailable for secret prompt`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/task-scheduler/__tests__/execution-service.test.ts`：通过，5 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/task-scheduler/execution-service.ts electron/services/task-scheduler/__tests__/execution-service.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- `git diff --check -- desktop/electron/services/task-scheduler/execution-service.ts desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts`：通过。
+
+### 本次进展
+后台 Agent/action 任务抛错后，任务运行历史不再保存 raw SDK 错误正文，复盘信息保留在脱敏日志和审计 metadata 中。
+
+---
+
+## [2026-05-14 12:21] 第 145 次迭代
+
+### Agent
+- agent-20260514121443-sizd
+
+### 发现的问题
+- 用户点击 Agent 消息本地引用 → renderer `agent.openReference` → main `toolMethods.openReference` → `shell.openPath()` resolve 非空错误字符串时，AuditSink metadata 直接记录 raw `error`，可能落完整路径或 token-shaped 文本；rejected 分支已有脱敏元数据但 returned-error 分支遗漏。
+
+### 修复内容
+- [desktop/electron/modules/agent/ipc-tools.ts:432] `shell.openPath` returned-error audit metadata 改为 `boundary/errorName/errorLength`，不再记录 raw error 字符串。
+- [desktop/electron/modules/agent/__tests__/ipc-tools.test.ts:68] 新增回归测试覆盖 returned-error 中带路径和 token-shaped 值时 audit metadata 脱敏。
+
+### 日志补充
+- 补齐 Agent reference shell returned-error 审计边界：`boundary=agent.ipc.open-reference.shell`，保留 `projectId`、`line`、`errorName`、`errorLength`，不记录 raw shell error、完整路径或 token。
+
+### 并行范围
+- claim / lock：`desktop/electron/modules/agent/ipc-tools.ts`
+- claim / lock：`desktop/electron/modules/agent/__tests__/ipc-tools.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/modules/agent/__tests__/ipc-tools.test.ts -t "returns an error"`：先红灯（metadata 含 raw error），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/modules/agent/__tests__/ipc-tools.test.ts`：通过，2 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/modules/agent/ipc-tools.ts electron/modules/agent/__tests__/ipc-tools.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent reference 打开失败的 returned-error 分支现在与 rejected 分支一样只落脱敏可复盘审计元数据。
+---
+
+## [2026-05-14 12:21] 第 146 次迭代
+
+### Agent
+- agent-20260514121447-4vad
+
+### 发现的问题
+- 本轮未选择可安全修改的问题；多个可证明候选在确认前已被其他 worker 获取有效锁并完成或正在处理，包括调度 run history 错误脱敏、Agent open-reference 审计脱敏、Claude SDK permission stale response 诊断和 `/mode` 命令说明。
+
+### 修复内容
+- 无业务代码修改。
+
+### 日志补充
+- 无新增日志；未修改 SDK/对话/调度/消息事件链路。
+
+### 并行范围
+- 未获取业务文件 claim / lock；仅写入个人 note `auto/state/parallel/agent-notes/agent-20260514121447-4vad-iteration-146.md` 和共享状态记录。
+
+### 验证结果
+- `git status --short`：已检查，业务代码改动均为其他 worker 现有改动；本 Agent 只新增个人 note 并追加共享记录。
+- 未运行聚焦测试、lint 或 hard-constraints：本轮没有业务代码变更，且可证明候选均已被其他 worker 锁定。
+
+### 本次进展
+本轮避免抢锁和覆盖并行改动，记录了已被其他 worker 接手的候选问题。
+---
+
+## [2026-05-14 12:21] 第 145 次迭代
+
+### Agent
+- agent-20260514121453-nnfl
+
+### 发现的问题
+- Agent 权限响应链路存在复盘缺口：用户点击权限允许/拒绝 → `agent.ipc.respondPermission` → `AgentRuntimeService.respondPermission` → `ClaudeSDKSession.respondPermission`，当 SDK 侧 pending permission 已不存在时，SDK session 原先静默返回，无法确认 stale response 发生在哪个 conversation/sdkSession/requestId。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/claude-sdk-session.ts:124] SDK pending permission 未命中时新增结构化 warn 日志并保持既有返回语义。
+- [desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts:166] 增加 stale permission response 回归测试，确认记录关联字段且不记录 denial message 正文。
+
+### 日志补充
+- 新增 Claude SDK permission response 边界日志：`Claude SDK permission response ignored.`，字段包含 `boundary=claude-sdk-permission-response`、`projectId`、`conversationId`、`providerId`、`sdkSessionId`、`requestId`、`behavior`；不记录 prompt/message/content/token/path。
+
+### 并行范围
+- symbol claim / lock：`desktop/electron/services/agent-runtime/claude-sdk-session.ts` `ClaudeSDKSession.respondPermission.missingPendingLog`
+- symbol claim / lock：`desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts` `ClaudeSDKSession.respondPermission.missingPendingLog`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts -t "logs stale permission responses"`：先红灯（logger.warn 调用 0 次），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts`：通过，23 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/claude-sdk-session.ts electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Claude SDK permission response 的 stale/missing pending 边界现在有可关联的脱敏日志，便于复盘权限响应竞态。
+---
+
+## [2026-05-14 12:23] 第 146 次迭代
+
+### Agent
+- agent-20260514121456-7564
+
+### 发现的问题
+- Agent 命令列表中，用户查看 runtime published commands → `BUILTIN_COMMANDS` → `/mode` 仍显示 `Switch mode`，但 Claude Code SDK 共享定义已经是 list-only，导致用户误以为可通过该命令切换模式。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/command-registry.ts:47] 将 runtime `/mode` 内置命令说明改为 `List modes`，与 Claude SDK 共享定义一致。
+- [desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts:20] 增加 `/mode` 命令元数据回归测试。
+
+### 日志补充
+- 未新增日志；本轮是 Agent runtime 命令元数据/UI 文案一致性修复，不涉及新的 SDK/IPC/调度失败边界。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/agent-runtime/command-registry.ts`
+- claim / lock：`desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts`
+- 个人 note：`auto/state/parallel/agent-notes/agent-20260514121456-7564-iteration-146.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-registry.test.ts -t "publishes /mode"`：先红灯（收到 `Switch mode`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-registry.test.ts`：通过，6 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/command-registry.ts electron/services/agent-runtime/__tests__/command-registry.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- `git diff --check -- desktop/electron/services/agent-runtime/command-registry.ts desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts`：通过。
+
+### 本次进展
+Agent runtime 发布的 `/mode` 命令说明现在与 Claude Code SDK 行为一致，避免命令列表误导用户。
+
+---
+
+## [2026-05-14 12:28] 第 147 次迭代
+
+### Agent
+- agent-20260514122522-z4q9
+
+### 发现的问题
+- 用户停止 Agent 生成 → `synapse:agent:cancel-turn` → `AgentRuntimeService.cancelTurn` → `SessionManager.interrupt`，SDK interrupt 抛错时原日志只有 conversationId 和错误长度，缺少 runtime 边界、provider、mode 与 sdkSessionId，难以复盘是哪条 SDK session 取消失败。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/session-manager.ts:165] Agent interrupt 失败日志补充 `boundary`、`providerId`、`mode`、`sdkSessionId`，继续只记录脱敏错误类型与长度。
+- [desktop/electron/services/agent-runtime/__tests__/session-manager.test.ts:83] 更新回归测试，覆盖关联字段并确认不记录 raw SDK 错误正文。
+
+### 日志补充
+- 补齐 Agent runtime interrupt 失败边界日志：`boundary=agent-runtime.live-session.interrupt`，字段包含 `conversationId`、`providerId`、`mode`、`sdkSessionId`、`errorName`、`errorLength`，不记录 prompt/message/token/path/raw error。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/agent-runtime/session-manager.ts`
+- claim / lock：`desktop/electron/services/agent-runtime/__tests__/session-manager.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/session-manager.test.ts -t "logs interrupt failures"`：先红灯（缺少 `boundary/providerId/mode/sdkSessionId`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/session-manager.test.ts`：通过，3 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/session-manager.ts electron/services/agent-runtime/__tests__/session-manager.test.ts`：通过。
+- `git diff --check -- desktop/electron/services/agent-runtime/session-manager.ts desktop/electron/services/agent-runtime/__tests__/session-manager.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent 取消生成时的 SDK interrupt 失败现在能通过脱敏日志关联到具体 runtime 边界和 SDK session。
+---
+
+## [2026-05-14 12:31] 第 147 次迭代
+
+### Agent
+- agent-20260514122527-prag
+
+### 发现的问题
+- Agent runtime 自定义命令发现失败时，Agent 启动/命令列表刷新 → `CustomCommandRegistry.list()` 扫描 `.agents/.codex/.claude/commands` → 目录扫描或文件读取失败日志只包含脱敏 error 文本，缺少稳定 `boundary/errorName/errorLength`，复盘时难区分失败发生在目录发现还是文件读取边界。
+
+### 修复内容
+- [desktop/electron/services/agent-runtime/command-registry.ts:158] 目录扫描失败日志增加 `boundary=agent.command.directory-discovery`、`errorName`、`errorLength`。
+- [desktop/electron/services/agent-runtime/command-registry.ts:177] 命令文件读取失败日志增加 `boundary=agent.command.file-read`、`errorName`、`errorLength`。
+- [desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts:91] 增加文件读取失败日志字段断言。
+- [desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts:110] 增加目录发现失败日志字段回归测试。
+
+### 日志补充
+- 新增 Agent runtime command discovery 诊断字段：`boundary`、`errorName`、`errorLength`；保留既有脱敏 `error` 摘要，不记录 prompt/message/content/token/secret/raw path。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/agent-runtime/command-registry.ts`
+- claim / lock：`desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-registry.test.ts -t "logs command directory discovery failures|skips unreadable file commands"`：先红灯（缺少 `boundary/errorName/errorLength`），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/command-registry.test.ts`：通过，7 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/agent-runtime/command-registry.ts electron/services/agent-runtime/__tests__/command-registry.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- `git diff --check -- desktop/electron/services/agent-runtime/command-registry.ts desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts`：通过。
+
+### 本次进展
+Agent runtime command discovery 失败日志现在能按目录发现/文件读取边界和错误类型复盘，且继续保持脱敏。
+---
+
+## [2026-05-14 12:31] 第 147 次迭代
+
+### Agent
+- agent-20260514122517-uqc2
+
+### 发现的问题
+- ProviderService 在 Claude provider env 构造链路中读取 secret 失败时，会把 raw exception message 写入 `AuditSink` metadata；触发路径为用户发送 Agent 消息 → `SessionManager.getOrCreateSession` → `providerService.buildEnv` → `ProviderService.readSecretValue` → secret store 失败审计，可能持久化 token-shaped 文本或绝对路径。
+
+### 修复内容
+- [desktop/electron/services/provider/provider-service.ts:257] secret 读取失败审计不再记录 raw `error.message`，改为结构化 `errorName` / `errorLength`。
+- [desktop/electron/services/provider/provider-service.ts:337] 移除既有未使用 catch 绑定，保证目标文件 eslint 可通过。
+- [desktop/electron/services/provider/__tests__/provider-service.test.ts:216] 新增回归测试，确认失败审计保留 provider/project 关联和错误类型/长度，但不包含 token-shaped 文本或绝对路径。
+
+### 日志补充
+- Provider secret-read 失败审计现在能按 `providerId`、`projectId`、`resource`、`errorName`、`errorLength` 复盘，不记录 raw secret/path/error 正文。
+
+### 并行范围
+- claim / lock：`desktop/electron/services/provider/provider-service.ts`
+- claim / lock：`desktop/electron/services/provider/__tests__/provider-service.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/provider/__tests__/provider-service.test.ts -t "redacts secret read failure audit diagnostics"`：先红灯（审计 metadata 包含 raw error），修复后通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/provider/__tests__/provider-service.test.ts`：通过，10 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/provider/provider-service.ts electron/services/provider/__tests__/provider-service.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Claude provider secret 读取失败的审计诊断现在可关联 provider/project，且不会持久化 raw secret-shaped 错误内容。
+---
+
+## [2026-05-14 12:32] 第 147 次迭代
+
+### Agent
+- agent-20260514122522-3t6g
+
+### 发现的问题
+- Ops 轻量诊断链路中，用户请求诊断状态 → `collectOpsStatus` → `agentStatus` → Agent runtime/project container 状态读取失败时，整个诊断请求会 reject，且缺少 `agent-runtime.status` 边界日志。
+
+### 修复内容
+- [desktop/electron/modules/ops/status.ts:26] Agent runtime 状态改为可降级收集，失败时保留其余诊断状态。
+- [desktop/electron/modules/ops/status.ts:47] 新增脱敏主进程日志，记录 `boundary/projectId/errorName/errorLength/errorCode`。
+- [desktop/electron/modules/ops/__tests__/status.test.ts:54] 新增回归测试，覆盖 Agent 状态失败不打断 Ops 诊断且日志不包含 raw SDK 错误正文。
+
+### 日志补充
+- 新增 Ops → Agent runtime 状态收集失败日志：`Ops Agent status collection failed.`，边界为 `agent-runtime.status`，包含 `projectId`、`errorName`、`errorLength`、可选 `errorCode`；不记录 prompt/message/token/raw error。
+
+### 并行范围
+- claim / lock：`desktop/electron/modules/ops/status.ts`
+- claim / lock：`desktop/electron/modules/ops/__tests__/status.test.ts`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/modules/ops/__tests__/status.test.ts`：先红灯（Agent 状态失败直接 reject），修复后通过，2 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/modules/ops/status.ts electron/modules/ops/__tests__/status.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Ops 轻量诊断不再因 Agent runtime 状态失败整体不可用，并能按项目和 Agent 状态边界复盘失败。
+---
+
+## [2026-05-14 12:33] 第 147 次迭代
+
+### Agent
+- agent-20260514122529-1hew
+
+### 发现的问题
+- Agent 对话消息气泡缺少自身 `min-w-0` 收缩约束；触发路径为用户发送或收到超长无空格 Agent/SDK 文本 → `AgentMessageEvent` → `AgentMessageBubble` → flex 时间线可能被横向撑开，影响查看当前消息和流式结果。
+
+### 修复内容
+- [desktop/src/modules/agent/components/agent-message-bubble.tsx:18] 在消息气泡基础类加入 `min-w-0`，保持长文本在时间线内收缩换行。
+- [desktop/src/modules/agent/components/__tests__/agent-message-bubble.test.tsx:7] 新增长无空格消息回归测试，覆盖 `min-w-0` 与 `break-words` 约束。
+
+### 日志补充
+- 无；本轮修复 renderer 布局状态问题，不新增 SDK/对话/调度/消息事件日志。
+
+### 并行范围
+- claim / lock：`desktop/src/modules/agent/components/agent-message-bubble.tsx`
+- claim / lock：`desktop/src/modules/agent/components/__tests__/agent-message-bubble.test.tsx`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-message-bubble.test.tsx`：先红灯（缺少 `min-w-0`），修复后通过，1 test passed。
+- `pnpm --filter @synapse/desktop exec eslint src/modules/agent/components/agent-message-bubble.tsx src/modules/agent/components/__tests__/agent-message-bubble.test.tsx`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+Agent 对话中的超长无空格消息现在有气泡级收缩约束，降低时间线横向溢出风险。

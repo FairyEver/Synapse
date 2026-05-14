@@ -174,6 +174,36 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("rm file")
   })
 
+  it("redacts sensitive raw tool input fallback before rendering", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-raw",
+        kind: "toolCall",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        toolInputRaw: {
+          apiKey: "sk-secret",
+          file_path: "/Users/liyang/private/project/file.ts",
+          nested: {
+            authorization: "Bearer sk-auth",
+          },
+        },
+      }}
+      profile={{
+        ...profile,
+        tools: {},
+        toolDefaultCollapsed: "expanded",
+        toolPreviewChars: 400,
+      }}
+    />)
+
+    expect(html).toContain("[redacted]")
+    expect(html).toContain("[path redacted]")
+    expect(html).not.toContain("sk-secret")
+    expect(html).not.toContain("sk-auth")
+    expect(html).not.toContain("/Users/liyang/private")
+  })
+
   it("logs tool body copy failures without recording tool content", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,

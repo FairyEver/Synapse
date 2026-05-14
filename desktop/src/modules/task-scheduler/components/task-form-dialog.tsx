@@ -144,7 +144,14 @@ function TaskFormDialog({
       }
       onOpenChange(false)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "保存失败")
+      logger.error("Failed to save scheduled task.", {
+        boundary: "task-scheduler.form.submit",
+        action: state.mode === "edit" ? "update" : "create",
+        actionType: form.actionType,
+        ...(state.mode === "edit" ? { taskId: state.task.id } : {}),
+        ...errorDiagnostic(submitError),
+      })
+      setError("保存任务失败。")
     }
   }
 

@@ -163,7 +163,11 @@ export class SessionManager {
       return await liveSession.cancelCurrentTurn()
     } catch (error) {
       this.deps.logger?.warn("Agent session interrupt failed.", {
+        boundary: "agent-runtime.live-session.interrupt",
         conversationId,
+        providerId: state?.providerId,
+        mode: state?.modeOverride,
+        sdkSessionId: liveSession.currentSessionId(),
         ...errorDiagnostic(error),
       })
       return false

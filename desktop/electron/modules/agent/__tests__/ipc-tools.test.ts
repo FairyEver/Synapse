@@ -64,6 +64,33 @@ describe("agent tool IPC methods", () => {
     }))
     expect(JSON.stringify(auditSink.record.mock.calls[0]?.[0]?.metadata)).not.toContain("/repo/src/app.ts")
   })
+
+  it("records sanitized audit metadata when opening an Agent reference returns an error", async () => {
+    const auditSink = { record: vi.fn() }
+    const rawError = "shell failed for /repo/src/app.ts token=sk-secret"
+    electronMock.shell.openPath.mockResolvedValue(rawError)
+
+    await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
+      projectId: "project-1",
+      reference: "src/app.ts:12",
+    })).rejects.toThrow(rawError)
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "failed",
+      resource: "/repo/src/app.ts",
+      metadata: expect.objectContaining({
+        projectId: "project-1",
+        command: "open-reference",
+        line: 12,
+        boundary: "agent.ipc.open-reference.shell",
+        errorName: "string",
+        errorLength: rawError.length,
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls[0]?.[0]?.metadata)).not.toContain("/repo/src/app.ts")
+    expect(JSON.stringify(auditSink.record.mock.calls[0]?.[0]?.metadata)).not.toContain("sk-secret")
+  })
 })
 
 function createContext(options: {

@@ -107,6 +107,12 @@ describe("TaskSchedulerExecutionService", () => {
     const run = await harness.service.runTask(harness.task, "schedule")
 
     expect(run.status).toBe("failed")
+    expect(run.error).toBe("执行失败")
+    expect(run.result).toEqual({
+      status: "failed",
+      error: "执行失败",
+      summary: "执行失败",
+    })
     expect(harness.auditEvents).toEqual([
       expect.objectContaining({
         action: "shell.exec",
@@ -144,6 +150,7 @@ describe("TaskSchedulerExecutionService", () => {
     )
     expect(JSON.stringify(harness.auditEvents)).not.toContain("secret prompt")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(run)).not.toContain("secret prompt")
   })
 
   it("records returned action failures without leaking raw error text", async () => {

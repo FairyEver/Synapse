@@ -472,7 +472,6 @@ function useChatConnection(
       // so we must NOT remove here — doing so causes `sending` to briefly flash
       // false between enqueue and actual turn completion.
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "发送失败"
       logger.error("Agent send failed.", {
         projectId,
         conversationId,
@@ -482,7 +481,7 @@ function useChatConnection(
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
-      dispatch({ type: "SET_ERROR", error: message })
+      dispatch({ type: "SET_ERROR", error: "发送失败" })
       if (didAppendOptimisticItem) {
         updateTimeline((current) => current.filter((item) => item.id !== optimisticItem.id))
       }

@@ -184,7 +184,10 @@ describe("SDK event bridge", () => {
             type: "tool_use",
             id: "toolu-1",
             name: "Read",
-            input: { file_path: "/Users/liyang/project/README.md" },
+            input: {
+              file_path: "/Users/liyang/project/README.md",
+              authorization: "Bearer sk-tool",
+            },
           },
         ],
       },
@@ -206,11 +209,59 @@ describe("SDK event bridge", () => {
         type: "toolUse",
         sdkSessionId: "sdk-tools",
         toolName: "Read",
-        toolInput: "{\"file_path\":\"/Users/liyang/project/README.md\"}",
-        toolInputRaw: { file_path: "/Users/liyang/project/README.md" },
+        toolInput: "{\"file_path\":\"[path redacted]\",\"authorization\":\"[redacted]\"}",
+        toolInputRaw: {
+          file_path: "[path redacted]",
+          authorization: "[redacted]",
+        },
         ...baseEnvelope,
       }),
     ])
+    expect(JSON.stringify(events)).not.toContain("/Users/liyang/project")
+    expect(JSON.stringify(events)).not.toContain("sk-tool")
+  })
+
+  it("redacts sensitive text inside SDK assistant tool_use inputs", () => {
+    const events = bridgeSdkMessage({
+      type: "assistant",
+      session_id: "sdk-tools",
+      uuid: "uuid-tool-secret",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu-secret",
+            name: "Bash",
+            input: {
+              command: "curl -H 'Authorization: Bearer sk-tool-secret' https://api.example.test",
+              env: {
+                normal: "kept",
+                token: "env-token-secret",
+              },
+            },
+          },
+        ],
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    const toolEvent = Array.isArray(events) ? events[1] : events
+    expect(toolEvent).toMatchObject({
+      type: "toolUse",
+      sdkSessionId: "sdk-tools",
+      toolName: "Bash",
+      toolInput: expect.stringContaining("Bearer [redacted]"),
+      toolInputRaw: {
+        command: expect.stringContaining("Bearer [redacted]"),
+        env: {
+          normal: "kept",
+          token: "[redacted]",
+        },
+      },
+      ...baseEnvelope,
+    })
+    expect(JSON.stringify(toolEvent)).not.toContain("sk-tool-secret")
+    expect(JSON.stringify(toolEvent)).not.toContain("env-token-secret")
   })
 
   it("bridges SDK user tool_result blocks to Agent tool result events", () => {
@@ -240,6 +291,49 @@ describe("SDK event bridge", () => {
         ...baseEnvelope,
       }),
     ])
+  })
+
+  it("redacts sensitive SDK user tool_result content before emitting Agent events", () => {
+    const events = bridgeSdkMessage({
+      type: "user",
+      session_id: "sdk-tools",
+      uuid: "uuid-tool-result-secret",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu-secret",
+            content: [
+              {
+                type: "text",
+                text: "Authorization: Bearer sk-tool-result failed at /Users/liyang/private/file.ts",
+              },
+              {
+                type: "text",
+                text: "\ncookie=sid-secret",
+              },
+            ],
+            is_error: true,
+          },
+        ],
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "toolResult",
+        sdkSessionId: "sdk-tools",
+        toolName: "toolu-secret",
+        content: expect.stringContaining("[redacted]"),
+        status: "error",
+        success: false,
+        ...baseEnvelope,
+      }),
+    ])
+    expect(JSON.stringify(events)).not.toContain("sk-tool-result")
+    expect(JSON.stringify(events)).not.toContain("sid-secret")
+    expect(JSON.stringify(events)).not.toContain("/Users/liyang/private")
   })
 
   it("bridges SDK result error messages to error events", () => {

@@ -60,6 +60,39 @@ describe("AgentPermissionCard", () => {
     expect(buttonByText(container, "拒绝")).toBeTruthy()
     expect(container.textContent).not.toContain("已允许")
   })
+
+  it("redacts raw SDK tool input fallback before rendering", () => {
+    const onRespond = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    act(() => {
+      root.render(
+        <AgentPermissionCard
+          item={{
+            ...permissionItem,
+            toolInput: undefined,
+            toolInputRaw: {
+              authorization: "Bearer sk-secret",
+              headers: { cookie: "sid=secret-cookie" },
+              nested: { password: "pass-1", value: "safe" },
+            },
+          }}
+          pending
+          isLatestPending
+          onRespond={onRespond}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("[redacted]")
+    expect(container.textContent).toContain('"value": "safe"')
+    expect(container.textContent).not.toContain("sk-secret")
+    expect(container.textContent).not.toContain("secret-cookie")
+    expect(container.textContent).not.toContain("pass-1")
+  })
 })
 
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {

@@ -9,12 +9,14 @@ import {
 import type { AutomationIngressService } from "../../services/automation-ingress"
 import { configStore } from "../../services/config-store"
 import type { FeishuConnectorService } from "../../services/connectors"
-import { logStore } from "../../services/log-store"
+import { createMainLogger, logStore } from "../../services/log-store"
 import type { AgentRelayService } from "../../services/relay"
 import type { SideChannelService } from "../../services/side-channel"
 import { createWindowsCompatibilitySnapshot } from "../../services/windows-compatibility"
 
 type ServiceResolver = <T>(serviceId: string) => T
+
+const logger = createMainLogger("ops.status")
 
 async function collectOpsStatus(
   resolve: ServiceResolver,
@@ -29,8 +31,24 @@ async function collectOpsStatus(
     sideChannel: optional<SideChannelService>(resolve, "core.side-channel")?.getStatus(),
     webhook: await optional<AutomationIngressService>(resolve, "core.automation-ingress")?.getStatus(),
     relay: await relayStatus(optional<AgentRelayService>(resolve, "core.relay")),
-    agent: projectId ? await agentStatus(resolve, projectId) : undefined,
+    agent: projectId ? await safeAgentStatus(resolve, projectId) : undefined,
     feishu: projectId ? await feishuStatus(resolve, projectId) : undefined,
+  }
+}
+
+async function safeAgentStatus(
+  resolve: ServiceResolver,
+  projectId: string,
+) {
+  try {
+    return await agentStatus(resolve, projectId)
+  } catch (error) {
+    logger.warn("Ops Agent status collection failed.", {
+      boundary: "agent-runtime.status",
+      projectId,
+      ...errorDiagnostic(error),
+    })
+    return undefined
   }
 }
 
@@ -132,6 +150,22 @@ function optional<T>(
     return resolve<T>(serviceId)
   } catch {
     return undefined
+  }
+}
+
+function errorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? (error as { readonly code?: unknown }).code
+    : undefined
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+    ...(typeof code === "string" || typeof code === "number" ? { errorCode: String(code) } : {}),
   }
 }
 

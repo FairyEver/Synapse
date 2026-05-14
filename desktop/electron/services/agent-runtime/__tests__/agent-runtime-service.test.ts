@@ -429,8 +429,9 @@ describe("AgentRuntimeService", () => {
 
     expect(result).toEqual(expect.objectContaining({
       status: "error",
-      error: "sdk failed with sensitive prompt content",
+      error: "Agent run failed",
     }))
+    expect(JSON.stringify(result)).not.toContain("sensitive prompt")
     expect(logger.warn).toHaveBeenCalledWith(
       "Scheduled agent send failed.",
       expect.objectContaining({

@@ -63,6 +63,24 @@ describe("AgentPhaseRow", () => {
     expect(html).toContain("CLI exited 1")
   })
 
+  it("wraps long failed error text inside the phase row", () => {
+    const html = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({
+          phase: "failed",
+          status: "failed",
+          errorMessage: "sdk_error_" + "x".repeat(160),
+          completedAt: "2026-05-10T00:00:01.000Z",
+        })}
+        now={Date.parse("2026-05-10T00:00:02.000Z")}
+      />,
+    )
+
+    expect(html).toContain("whitespace-pre-wrap")
+    expect(html).toContain("break-words")
+    expect(html).toContain("sdk_error_")
+  })
+
   it("renders cancellation labels instead of internal phase names", () => {
     const stopping = renderToStaticMarkup(
       <AgentPhaseRow

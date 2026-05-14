@@ -23,8 +23,10 @@ function defaultSessionId(sessions: readonly SynapseAgentSessionSummary[]): stri
     ?? sessions[0]?.id
 }
 
-function formatEntryTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString([], {
+function formatEntryTime(timestamp: string): string | undefined {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   })
@@ -32,9 +34,16 @@ function formatEntryTime(timestamp: string): string {
 
 function formatAgentTranscript(entries: readonly SynapseAgentTimelineItem[]): string {
   return entries.map((entry) => [
-    `${labelForTimelineItem(entry)} ${formatEntryTime(entry.timestamp)}`,
+    transcriptLabel(entry),
     timelineItemText(entry).trimEnd(),
   ].join("\n")).join("\n\n")
+}
+
+function transcriptLabel(entry: SynapseAgentTimelineItem): string {
+  const formattedTime = formatEntryTime(entry.timestamp)
+  return formattedTime
+    ? `${labelForTimelineItem(entry)} ${formattedTime}`
+    : labelForTimelineItem(entry)
 }
 
 function labelForRole(role: SynapseAgentMessageTimelineItem["role"]): string {

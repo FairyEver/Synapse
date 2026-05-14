@@ -429,7 +429,12 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
           projectId: request.projectId,
           command: "open-reference",
           line: reference.line,
-          error: error || undefined,
+          ...(error
+            ? {
+                boundary: "agent.ipc.open-reference.shell",
+                ...shellOpenErrorMetadata(error),
+              }
+            : {}),
         },
       })
       if (error) throw new Error(error)

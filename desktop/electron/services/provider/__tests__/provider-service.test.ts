@@ -213,6 +213,44 @@ describe("ProviderService", () => {
     ])
   })
 
+  it("redacts secret read failure audit diagnostics", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const { service, secrets } = makeProviderService({ auditSink })
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-test",
+      env: {},
+    })
+    const rawError = "secret store failed with token=sk-raw and /Users/test/.claude/settings.json"
+    secrets.get = async () => {
+      throw new Error(rawError)
+    }
+
+    await expect(service.buildEnv("anthropic", {
+      actor: { kind: "agent", id: "agent-1" },
+      projectId: "project-1",
+    })).rejects.toThrow(rawError)
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.read",
+        outcome: "failed",
+        resource: "provider:anthropic:api-key",
+        metadata: expect.objectContaining({
+          providerId: "anthropic",
+          projectId: "project-1",
+          errorName: "Error",
+          errorLength: rawError.length,
+        }),
+      }),
+    ])
+    expect(JSON.stringify(auditSink.list())).not.toContain("sk-raw")
+    expect(JSON.stringify(auditSink.list())).not.toContain("/Users/test")
+  })
+
   it("rejects activating an archived provider", async () => {
     const { service } = makeProviderService()
 

@@ -370,9 +370,22 @@ export class AgentCommandRouter {
       const content = await this.deps.showReference(message, args)
       return commandResult(conversation.id, content)
     } catch (error) {
+      this.deps.logger?.warn("Agent command show reference failed.", {
+        projectId: this.deps.projectId,
+        conversationId: conversation.id,
+        sessionKey: conversation.sessionKey,
+        agentType: conversation.agentType ?? this.deps.agentType,
+        messageId: message.messageId,
+        userId: message.userId,
+        command: "/show",
+        argsCount: args.length,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorCode: errorCode(error),
+        error: errorMessage(error),
+      })
       return commandResult(
         conversation.id,
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
         true,
       )
     }

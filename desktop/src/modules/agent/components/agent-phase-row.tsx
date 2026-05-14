@@ -94,7 +94,7 @@ function AgentPhaseRow({
         <span className="tabular-nums">{formatElapsed(elapsed)}</span>
       </div>
       {failed && item.errorMessage ? (
-        <div className="pl-5 text-destructive">{item.errorMessage}</div>
+        <div className="whitespace-pre-wrap break-words pl-5 text-destructive">{item.errorMessage}</div>
       ) : null}
     </div>
   )

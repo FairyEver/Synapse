@@ -96,6 +96,16 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   async send(message: AgentMessage): Promise<void> {
     if (this.closed) return
+    if (this.finished) {
+      this.logger?.warn("Claude SDK send rejected after query finished.", {
+        boundary: "claude-sdk-send",
+        projectId: this.projectId,
+        conversationId: this.conversationId,
+        providerId: this.providerId,
+        sdkSessionId: this.sdkSessionId,
+      })
+      throw new Error("Claude SDK session is not accepting messages")
+    }
     this.inputQueue.push({
       type: "user",
       message: {
@@ -111,7 +121,18 @@ export class ClaudeSDKSession implements AgentLiveSession {
     decision: AgentPermissionDecision,
   ): Promise<void> {
     const pending = this.permissions.get(requestId)
-    if (!pending) return
+    if (!pending) {
+      this.logger?.warn("Claude SDK permission response ignored.", {
+        boundary: "claude-sdk-permission-response",
+        projectId: this.projectId,
+        conversationId: this.conversationId,
+        providerId: this.providerId,
+        sdkSessionId: this.sdkSessionId,
+        requestId,
+        behavior: decision.behavior,
+      })
+      return
+    }
 
     this.permissions.delete(requestId)
     pending.cleanup()

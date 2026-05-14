@@ -276,28 +276,30 @@ export class AgentRuntimeService {
         return scheduledResult
       }
 
+      const errorLength = result.error?.length
       const scheduledResult: ScheduledAgentSendResult = {
         conversationId: result.conversationId,
         status: result.error ? "error" : "success",
         summary: result.resultText || undefined,
-        error: result.error,
+        error: result.error ? SCHEDULED_AGENT_ERROR_MESSAGE : undefined,
         durationMs: Date.now() - startMs,
       }
       if (scheduledResult.status !== "success") {
-        this.logScheduledAgentFailure(input, message, scheduledResult)
+        this.logScheduledAgentFailure(input, message, scheduledResult, errorLength)
       }
       return scheduledResult
     } catch (error) {
       const isTimeout = ac.signal.aborted && !externalSignal?.aborted
+      const errorLength = isTimeout ? undefined : errorMessage(error).length
       const scheduledResult: ScheduledAgentSendResult = {
         conversationId: "",
         status: isTimeout ? "timeout" : "error",
         error: isTimeout
           ? `Execution exceeded ${input.timeoutMs}ms timeout`
-          : error instanceof Error ? error.message : String(error),
+          : SCHEDULED_AGENT_ERROR_MESSAGE,
         durationMs: Date.now() - startMs,
       }
-      this.logScheduledAgentFailure(input, message, scheduledResult)
+      this.logScheduledAgentFailure(input, message, scheduledResult, errorLength)
       return scheduledResult
     } finally {
       clearTimeout(timeout)
@@ -832,6 +834,7 @@ export class AgentRuntimeService {
     input: ScheduledAgentSendInput,
     message: AgentMessage,
     result: ScheduledAgentSendResult,
+    errorLength?: number,
   ): void {
     this.deps.logger?.warn("Scheduled agent send failed.", {
       boundary: "agent-runtime.scheduled-send",
@@ -844,7 +847,7 @@ export class AgentRuntimeService {
       sessionPolicy: input.sessionPolicy,
       resumeConversationId: input.lastConversationId,
       status: result.status,
-      errorLength: result.error?.length,
+      errorLength: errorLength ?? result.error?.length,
       timeoutMs: input.timeoutMs,
       durationMs: result.durationMs,
       promptLength: input.prompt.length,
@@ -938,6 +941,12 @@ function summarizeScheduledResumeError(error: unknown): { errorName: string; err
     errorName: typeof error,
     errorLength: message.length,
   }
+}
+
+const SCHEDULED_AGENT_ERROR_MESSAGE = "Agent run failed"
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function truncateRunes(value: string, maxRunes: number): string {

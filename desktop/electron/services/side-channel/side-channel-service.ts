@@ -232,9 +232,10 @@ export class SideChannelService implements ReplyTargetRuntime {
     }
 
     try {
-      if (dispatcher) {
-        await dispatcher.dispatchSideChannelSend(target, { message, attachments })
+      if (!dispatcher) {
+        throw new SideChannelError("dispatch_unavailable", "dispatcher is unavailable", 502)
       }
+      await dispatcher.dispatchSideChannelSend(target, { message, attachments })
       outbox.record({ target, payload, status: "sent" })
       this.recordSendAudit("allowed", target, attachments.length)
       return {
@@ -529,11 +530,19 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  return {
+function errorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const diagnostic = {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: errorMessage(error).length,
   }
+  if (error instanceof AttachmentPolicyError || error instanceof SideChannelError) {
+    return { ...diagnostic, errorCode: error.code }
+  }
+  return diagnostic
 }
 
 function stringValue(value: unknown): string | undefined {

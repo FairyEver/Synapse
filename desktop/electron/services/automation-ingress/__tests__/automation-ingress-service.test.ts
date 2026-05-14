@@ -187,6 +187,15 @@ describe("AutomationIngressService", () => {
     })
 
     expect(response.status).toBe(500)
+    const responseBody = await response.json()
+    expect(responseBody).toEqual({
+      ok: false,
+      error: {
+        code: "internal_error",
+        message: "internal error",
+      },
+    })
+    expect(JSON.stringify(responseBody)).not.toContain("secret prompt text")
     const [run] = await runs.list()
     expect(run).toEqual(expect.objectContaining({
       kind: "prompt",

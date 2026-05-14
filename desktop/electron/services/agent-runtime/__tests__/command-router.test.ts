@@ -230,6 +230,52 @@ describe("AgentCommandRouter", () => {
     expect(JSON.stringify(records)).not.toContain("session-id")
   })
 
+  it("logs /show failures without exposing raw reference errors to the conversation", async () => {
+    const { providerService } = makeProviderService()
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+      showReference: async () => {
+        throw Object.assign(
+          new Error("open /Users/liyang/secret/token.txt token=sk-secret authorization=BearerSecret"),
+          { code: "EACCES" },
+        )
+      },
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/show token.txt"), baseConversation()),
+    )
+
+    expect(result.error).toBe("open [path redacted] token=[redacted] authorization=[redacted]")
+    expect(result.error).not.toContain("/Users/liyang")
+    expect(result.error).not.toContain("sk-secret")
+    expect(result.error).not.toContain("BearerSecret")
+    expect(records).toEqual([{
+      message: "Agent command show reference failed.",
+      meta: expect.objectContaining({
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "s1",
+        agentType: "claude-code",
+        command: "/show",
+        argsCount: 1,
+        errorName: "Error",
+        errorCode: "EACCES",
+        error: "open [path redacted] token=[redacted] authorization=[redacted]",
+      }),
+    }])
+    expect(JSON.stringify(records)).not.toContain("/Users/liyang")
+    expect(JSON.stringify(records)).not.toContain("sk-secret")
+    expect(JSON.stringify(records)).not.toContain("BearerSecret")
+  })
+
   it("lists modes, switches safe modes, handles /new and /status, and routes dangerous modes to the selector", async () => {
     const { providerService } = makeProviderService()
     await providerService.createProvider({
@@ -386,6 +432,25 @@ describe("AgentCommandRouter", () => {
     const result = expectRuntimeResult(await router.handle(baseMessage("/compress"), baseConversation()))
 
     expect(result.resultText).toBe("Context compressed.")
+  })
+
+  it("redacts raw /show command failure text before returning it", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => baseConversation(),
+      showReference: async () => {
+        throw new Error("read failed /Users/liyang/secret/repo token=sk-secret")
+      },
+    })
+
+    const result = expectRuntimeResult(await router.handle(baseMessage("/show secret.ts"), baseConversation()))
+
+    expect(result.error).toBe("read failed [path redacted] token=[redacted]")
+    expect(result.error).not.toContain("/Users/liyang/secret")
+    expect(result.error).not.toContain("sk-secret")
   })
 })
 

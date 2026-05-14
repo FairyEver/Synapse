@@ -12,11 +12,20 @@ import { createRecordingLogger } from "../../../runtime/lib/test-helpers"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  BUILTIN_COMMANDS,
   CustomCommandRegistry,
   expandCustomCommandPrompt,
 } from "../command-registry"
 
 describe("CustomCommandRegistry", () => {
+  it("publishes /mode as a list-only command", () => {
+    expect(BUILTIN_COMMANDS.find((command) => command.name === "mode")).toEqual(
+      expect.objectContaining({
+        description: "List modes",
+      }),
+    )
+  })
+
   it("stores prompt and exec commands", async () => {
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
     const registry = new CustomCommandRegistry({
@@ -83,14 +92,61 @@ describe("CustomCommandRegistry", () => {
         level: "warn",
         message: "Agent command file skipped.",
         meta: expect.objectContaining({
+          boundary: "agent.command.file-read",
           projectId: "project-1",
           commandName: "bad",
           fileName: "bad.md",
           error: "EACCES: permission denied, open '[path redacted]'",
+          errorName: "Error",
+          errorLength: "EACCES: permission denied, open '/secret/bad.md'".length,
         }),
       }))
     } finally {
       readFileSpy.mockRestore()
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it("logs command directory discovery failures with a runtime boundary", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-command-"))
+    const commandDir = path.join(workspace, ".agents", "commands")
+    await fs.mkdir(commandDir, { recursive: true })
+
+    const logger = createRecordingLogger()
+    const originalReadDir = fs.readdir.bind(fs)
+    const readDirSpy = vi.spyOn(fs, "readdir").mockImplementation(async (dir, options) => {
+      if (dir.toString() === commandDir) {
+        throw new Error("EACCES: permission denied, scandir '/secret/commands'")
+      }
+      return originalReadDir(dir, options)
+    })
+
+    try {
+      const registry = new CustomCommandRegistry({
+        projectId: "project-1",
+        commands: new MemoryNamespace<AgentCommandEntryV1>("agent.commands"),
+        workspacePath: workspace,
+        now: fixedNow,
+        logger,
+      })
+
+      await registry.list()
+
+      expect(logger.records).toContainEqual(expect.objectContaining({
+        level: "warn",
+        message: "Agent command directory skipped.",
+        meta: expect.objectContaining({
+          boundary: "agent.command.directory-discovery",
+          projectId: "project-1",
+          directoryName: "commands",
+          rootName: "commands",
+          error: "EACCES: permission denied, scandir '[path redacted]'",
+          errorName: "Error",
+          errorLength: "EACCES: permission denied, scandir '/secret/commands'".length,
+        }),
+      }))
+    } finally {
+      readDirSpy.mockRestore()
       await fs.rm(workspace, { recursive: true, force: true })
     }
   })

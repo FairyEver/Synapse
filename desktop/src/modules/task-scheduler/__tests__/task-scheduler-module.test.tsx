@@ -16,7 +16,17 @@ const mocks = vi.hoisted(() => ({
   runTask: vi.fn(),
   cancelWatchNextAgentSession: vi.fn(),
   requestWatchNextAgentSession: vi.fn(),
+  rendererLogger: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
   useTaskSchedulerTasks: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => mocks.rendererLogger,
 }))
 
 vi.mock("@/app-shell/config", () => ({
@@ -225,8 +235,8 @@ describe("TaskSchedulerModule", () => {
     expect(html).toContain("更多操作")
   })
 
-  it("does not report success when a manual Agent task run fails", async () => {
-    mocks.runTask.mockRejectedValue(new Error("scheduler unavailable"))
+  it("logs sanitized diagnostics when a manual Agent task run fails", async () => {
+    mocks.runTask.mockRejectedValue(new Error("scheduler unavailable token=sk-secret /Users/example/repo prompt text"))
     mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [
         createTask({
@@ -269,6 +279,20 @@ describe("TaskSchedulerModule", () => {
     expect(mocks.cancelWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
     expect(mocks.notify).toHaveBeenCalledWith({ message: "触发失败", tone: "destructive" })
     expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
+    expect(mocks.rendererLogger.error).toHaveBeenCalledWith("Failed to run task.", {
+      action: "runTask",
+      boundary: "renderer.task-scheduler.runTask",
+      taskId: "task-1",
+      taskName: "Backup",
+      actionType: "builtin.agent",
+      errorName: "Error",
+      errorLength: "scheduler unavailable token=sk-secret /Users/example/repo prompt text".length,
+    })
+    const details = mocks.rendererLogger.error.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(details).not.toHaveProperty("error")
+    expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("/Users/example")
+    expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("prompt text")
   })
 
   it.each([

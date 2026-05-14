@@ -262,7 +262,7 @@ export class ProviderService {
         outcome: "failed",
         metadata: {
           ...metadata,
-          error: error instanceof Error ? error.message : String(error),
+          ...errorAuditMetadata(error),
         },
       })
       throw error
@@ -334,7 +334,7 @@ export class ProviderService {
         env,
         model: stringValue(parsed.model),
       }
-    } catch (_error) {
+    } catch {
       return { env: {} }
     }
   }
@@ -448,6 +448,18 @@ function providerCategory(value: unknown): ProviderCategory {
 
 function apiKeyField(value: unknown): ProviderApiKeyField {
   return value === "ANTHROPIC_API_KEY" ? "ANTHROPIC_API_KEY" : "ANTHROPIC_AUTH_TOKEN"
+}
+
+function errorAuditMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+  }
 }
 
 function stringValue(value: unknown): string | undefined {

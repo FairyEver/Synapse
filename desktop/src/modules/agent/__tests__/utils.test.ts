@@ -110,4 +110,25 @@ describe("agent utils", () => {
       "read_file",
     ].join("\n"))
   })
+
+  it("omits malformed timestamps from copied transcripts", () => {
+    const entries = [
+      {
+        id: "bad-time",
+        kind: "message",
+        role: "assistant",
+        content: "SDK result still readable",
+        timestamp: "not-a-date",
+      },
+    ] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toBe([
+      "Agent",
+      "SDK result still readable",
+    ].join("\n"))
+    expect(transcript).not.toContain("Invalid Date")
+    expect(transcript).not.toContain("NaN")
+  })
 })

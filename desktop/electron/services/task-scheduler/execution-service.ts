@@ -151,12 +151,13 @@ export class TaskSchedulerExecutionService {
           ...diagnostic,
         })
       }
+      const visibleError = actionExecutePending && permissionAllowed ? visibleFailureMessage(status) : message
       const finished = await this.deps.runs.finish(run.id, {
         status,
-        error: message,
+        error: visibleError,
         result: {
           status,
-          error: message,
+          error: visibleError,
           summary: status === "cancelled" ? "已停止" : "执行失败",
         },
       })
@@ -203,4 +204,8 @@ function resultErrorDiagnostic(error: string | undefined): { readonly errorName?
     errorName: "string",
     errorLength: error.length,
   }
+}
+
+function visibleFailureMessage(status: "failed" | "cancelled"): string {
+  return status === "cancelled" ? "已停止" : "执行失败"
 }

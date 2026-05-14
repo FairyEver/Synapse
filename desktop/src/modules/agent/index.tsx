@@ -289,7 +289,21 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const openReference = (reference: string) => {
     const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId) return
-    void getSynapseBridge()?.agent.openReference({ projectId, reference }).catch((rawError: unknown) => {
+    const bridge = getSynapseBridge()
+    if (!bridge?.agent.openReference) {
+      logger.warn("Agent reference open failed.", {
+        boundary: "renderer.agent.open-reference",
+        projectId,
+        conversationId: chat.selectedConversationId,
+        sessionKey: chat.selectedSessionKey,
+        referenceLength: reference.length,
+        errorName: "BridgeUnavailable",
+        errorLength: 0,
+      })
+      toast("打开失败")
+      return
+    }
+    void bridge.agent.openReference({ projectId, reference }).catch((rawError: unknown) => {
       logger.warn("Agent reference open failed.", {
         boundary: "renderer.agent.open-reference",
         projectId,

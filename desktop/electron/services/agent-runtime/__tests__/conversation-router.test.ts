@@ -283,6 +283,43 @@ describe("ConversationRouter", () => {
     ]))
   })
 
+  it("emits a failed background phase when the SDK turn throws", async () => {
+    const { eventBus, events } = createEventBusRecorder()
+    const { router } = createRouter({
+      eventBus,
+      session: new ThrowingSendSession("SDK send failed"),
+    })
+
+    const result = await router.send({
+      ...baseMessage("hello"),
+      platform: "feishu",
+      sessionKey: "feishu:chat:user",
+    })
+    const phaseEvents = events.filter((event) => event.type === "phase.update")
+
+    expect(result.error).toBe("SDK send failed")
+    expect(phaseEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          conversationId: result.conversationId,
+          phase: "received",
+          status: "done",
+        }),
+        scope: { sessionId: result.conversationId },
+      }),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          conversationId: result.conversationId,
+          phase: "failed",
+          status: "failed",
+          errorMessage: "Agent turn failed",
+        }),
+        scope: { sessionId: result.conversationId },
+      }),
+    ]))
+    expect(JSON.stringify(phaseEvents)).not.toContain("SDK send failed")
+  })
+
   it("closes the SDK session when a side session times out", async () => {
     const session = new TimeoutSession()
     const { router } = createRouter({ session })

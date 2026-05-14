@@ -72,6 +72,8 @@ describe("SessionManager", () => {
       logger,
     })
     const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    state.providerId = "anthropic"
+    state.modeOverride = "default"
     state.liveSession = new FakeLiveSession({
       cancelError: new Error("SDK interrupt failed for secret prompt text"),
     })
@@ -79,7 +81,11 @@ describe("SessionManager", () => {
     await expect(manager.interrupt("conversation-1")).resolves.toBe(false)
 
     expect(logger.warn).toHaveBeenCalledWith("Agent session interrupt failed.", {
+      boundary: "agent-runtime.live-session.interrupt",
       conversationId: "conversation-1",
+      providerId: "anthropic",
+      mode: "default",
+      sdkSessionId: "sdk-1",
       errorName: "Error",
       errorLength: "SDK interrupt failed for secret prompt text".length,
     })

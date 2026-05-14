@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -26,6 +26,14 @@ function TaskExportDialog({
   onExport: (selectedIds: string[]) => void
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const taskIds = new Set(tasks.map((task) => task.id))
+    setSelected((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => taskIds.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [tasks])
 
   const allSelected = selected.size === tasks.length && tasks.length > 0
   const someSelected = selected.size > 0 && selected.size < tasks.length

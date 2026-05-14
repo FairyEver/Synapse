@@ -163,6 +163,28 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("logs stale permission responses when the SDK pending request is missing", async () => {
+    const { factory } = createQueryFactory()
+    const logger = { warn: vi.fn() }
+    const session = createSession(factory, { logger, sdkSessionId: "sdk-1" })
+
+    await session.respondPermission("conversation-1-permission-stale", {
+      behavior: "deny",
+      message: "denied because prompt contained secret",
+    })
+
+    expect(logger.warn).toHaveBeenCalledWith("Claude SDK permission response ignored.", {
+      boundary: "claude-sdk-permission-response",
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      providerId: "claude-sdk",
+      sdkSessionId: "sdk-1",
+      requestId: "conversation-1-permission-stale",
+      behavior: "deny",
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("prompt contained secret")
+  })
+
   it("redacts and bounds permission request tool input summaries", async () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory)
@@ -311,6 +333,28 @@ describe("ClaudeSDKSession", () => {
       message: "sdk exploded",
     })
     expect(session.alive()).toBe(false)
+  })
+
+  it("rejects sends after the SDK query has finished", async () => {
+    const { factory, query } = createQueryFactory()
+    const logger = { warn: vi.fn() }
+    const session = createSession(factory, { logger, sdkSessionId: "sdk-1" })
+
+    const event = session.nextEvent()
+    query.rejectNext(new Error("sdk exploded"))
+    await expect(event).resolves.toMatchObject({ type: "error" })
+    expect(session.alive()).toBe(false)
+
+    await expect(session.send(message("late message"))).rejects.toThrow(
+      "Claude SDK session is not accepting messages",
+    )
+    expect(logger.warn).toHaveBeenCalledWith("Claude SDK send rejected after query finished.", {
+      boundary: "claude-sdk-send",
+      conversationId: "conversation-1",
+      projectId: "project-1",
+      providerId: "claude-sdk",
+      sdkSessionId: "sdk-1",
+    })
   })
 
   it("releases event waiters when SDK close throws", async () => {

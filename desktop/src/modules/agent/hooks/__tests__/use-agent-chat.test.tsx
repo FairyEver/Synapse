@@ -129,7 +129,7 @@ describe("useAgentChat", () => {
       }))
 
     expect(sent).toBe(false)
-    expect(chat?.error).toBe("enqueue failed with prompt=secret")
+    expect(chat?.error).toBe("发送失败")
     expect(chat?.timeline).toEqual([])
     expect(rendererLogger.error).toHaveBeenCalledWith("Agent send failed.", expect.objectContaining({
       projectId: session.projectId,

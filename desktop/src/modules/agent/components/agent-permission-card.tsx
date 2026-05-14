@@ -76,7 +76,29 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {
-  return value ? JSON.stringify(value, null, 2) : ""
+  return value ? JSON.stringify(sanitizeRawInput(value), null, 2) : ""
+}
+
+const REDACTED = "[redacted]"
+const MAX_RAW_INPUT_STRING_LENGTH = 160
+const sensitiveRawInputKeyPattern = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
+
+function sanitizeRawInput(value: unknown, key = ""): unknown {
+  if (sensitiveRawInputKeyPattern.test(key)) return REDACTED
+  if (typeof value === "string") return truncateRawInputString(value)
+  if (Array.isArray(value)) return value.map((item) => sanitizeRawInput(item))
+  if (!value || typeof value !== "object") return value
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(value)) {
+    sanitized[childKey] = sanitizeRawInput(childValue, childKey)
+  }
+  return sanitized
+}
+
+function truncateRawInputString(value: string): string {
+  if (value.length <= MAX_RAW_INPUT_STRING_LENGTH) return value
+  return `${value.slice(0, MAX_RAW_INPUT_STRING_LENGTH)}...[truncated]`
 }
 
 export { AgentPermissionCard }

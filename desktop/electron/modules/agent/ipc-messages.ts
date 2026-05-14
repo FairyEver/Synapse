@@ -263,7 +263,14 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         }
       } catch (rawError) {
         const t_fail = new Date().toISOString()
-        const message = rawError instanceof Error ? rawError.message : "发送失败"
+        logger.warn("Agent send IPC failed.", {
+          projectId: request.projectId,
+          sessionKey,
+          conversationId: request.conversationId,
+          providerId: request.providerId,
+          boundary: "agent.send.ipc",
+          ...sendFailureDiagnostic(rawError),
+        })
         eventBus.emit({
           domain: "agent",
           type: "phase.update",
@@ -276,7 +283,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             status: "failed",
             startedAt: t_recv,
             completedAt: t_fail,
-            errorMessage: message,
+            errorMessage: "发送失败",
           },
           scope: { projectId: request.projectId },
           timestamp: t_fail,
@@ -349,6 +356,20 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
 }
 
 function timelineLookupErrorMeta(rawError: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  const code = (rawError as { readonly code?: unknown } | null)?.code
+  return {
+    errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+    errorLength: message.length,
+    errorCode: typeof code === "string" || typeof code === "number" ? String(code) : undefined,
+  }
+}
+
+function sendFailureDiagnostic(rawError: unknown): {
   readonly errorName: string
   readonly errorLength: number
   readonly errorCode?: string

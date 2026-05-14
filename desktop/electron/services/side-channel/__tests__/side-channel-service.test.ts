@@ -209,6 +209,63 @@ describe("SideChannelService", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("secret prompt")
   })
 
+  it("fails side-channel sends when the reply target dispatcher is missing", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const auditSink = new InMemoryAuditSink()
+    const warn = vi.fn()
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      auditSink,
+      logger: fakeLogger({ warn }),
+      token: "tok",
+    })
+    service.rememberReplyTarget(bridgeTarget())
+
+    await expect(service.send({
+      project: "project-1",
+      sessionKey: "bridge:s1",
+      message: "generated file is ready",
+    })).rejects.toThrow("dispatch failed")
+
+    const outboxEntries = await outbox.list()
+    expect(outboxEntries).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        lastError: "dispatch failed",
+      }),
+    ])
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          projectId: "project-1",
+          sessionKey: "bridge:s1",
+          transportKind: "bridge",
+          connectorId: "bridge",
+          attachmentCount: 0,
+          errorName: "Error",
+          errorCode: "dispatch_unavailable",
+          errorLength: "dispatcher is unavailable".length,
+        }),
+      }),
+    ])
+    expect(warn).toHaveBeenCalledWith("Side-channel send dispatch failed.", expect.objectContaining({
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      transportKind: "bridge",
+      connectorId: "bridge",
+      attachmentCount: 0,
+      errorName: "Error",
+      errorCode: "dispatch_unavailable",
+      errorLength: "dispatcher is unavailable".length,
+    }))
+    expect(JSON.stringify(auditSink.list())).not.toContain("generated file is ready")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("generated file is ready")
+  })
+
   it("logs failed relay HTTP requests with source session context", async () => {
     const warn = vi.fn()
     const logger = fakeLogger({ warn })

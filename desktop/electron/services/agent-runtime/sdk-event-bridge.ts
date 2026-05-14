@@ -164,12 +164,13 @@ function toolUseEventsFromBlocks(
     if (record?.type !== "tool_use") return []
     const toolName = stringValue(record.name)
     if (!toolName) return []
-    const toolInputRaw = recordValue(record.input)
+    const sanitizedToolInput = sanitizeToolInputValue(record.input)
+    const toolInputRaw = isRecord(sanitizedToolInput) ? sanitizedToolInput : undefined
     return [{
       type: "toolUse",
       sdkSessionId,
       toolName,
-      toolInput: stringifyToolInput(toolInputRaw ?? record.input),
+      toolInput: stringifyToolInput(sanitizedToolInput),
       toolInputRaw,
       ...envelope,
     }]
@@ -204,15 +205,31 @@ function stringifyToolInput(value: unknown): string | undefined {
   return JSON.stringify(value)
 }
 
+function sanitizeToolInputValue(value: unknown): unknown {
+  const sanitized = sanitizeJsonValue(value, new WeakSet<object>())
+  return redactToolInputStrings(sanitized)
+}
+
+function redactToolInputStrings(value: unknown): unknown {
+  if (typeof value === "string") return redactSensitiveText(value)
+  if (Array.isArray(value)) return value.map(redactToolInputStrings)
+  if (!isRecord(value)) return value
+  const output: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    output[key] = isSensitivePayloadKey(key) ? REDACTED : redactToolInputStrings(item)
+  }
+  return output
+}
+
 function toolResultContent(value: unknown): string | undefined {
-  if (typeof value === "string") return value
+  if (typeof value === "string") return redactDiagnosticText(value)
   if (!Array.isArray(value)) return undefined
   const text = value.map((item) => {
     if (typeof item === "string") return item
     const record = recordValue(item)
     return stringValue(record?.text) ?? ""
   }).join("")
-  return text.length > 0 ? text : undefined
+  return text.length > 0 ? redactDiagnosticText(text) : undefined
 }
 
 function streamDeltaFields(event: Record<string, unknown>): {
@@ -261,6 +278,7 @@ function sanitizeJsonValue(value: unknown, seen: WeakSet<object>, parentKey?: st
   if (typeof value === "function" || typeof value === "symbol") return undefined
   if (typeof value === "bigint") return value.toString()
   if (typeof value === "string") {
+    if (parentKey && isPathPayloadKey(parentKey)) return PATH_REDACTED
     return parentKey && isDiagnosticPayloadKey(parentKey) ? sanitizeDiagnosticText(value) : value
   }
   if (typeof value !== "object") return value
@@ -280,6 +298,10 @@ function sanitizeJsonValue(value: unknown, seen: WeakSet<object>, parentKey?: st
   for (const [key, item] of Object.entries(value)) {
     if (isSensitivePayloadKey(key)) {
       record[key] = REDACTED
+      continue
+    }
+    if (isPathPayloadKey(key) && typeof item === "string") {
+      record[key] = PATH_REDACTED
       continue
     }
     if (key === "partial_json" && typeof item === "string") {
@@ -312,6 +334,15 @@ function isSensitivePayloadKey(key: string): boolean {
   return normalized.includes("token") && !normalized.endsWith("tokens")
 }
 
+function isPathPayloadKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[-_]/g, "")
+  return normalized === "path"
+    || normalized === "filepath"
+    || normalized === "workdir"
+    || normalized === "cwd"
+    || normalized.endsWith("path")
+}
+
 function isDiagnosticPayloadKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, "")
   return normalized === "message"
@@ -327,17 +358,37 @@ function isDiagnosticPayloadKey(key: string): boolean {
 }
 
 function sanitizeDiagnosticText(value: string): string {
-  const redacted = value
-    .replace(
-      /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;]+/gi,
-      (_match, key: string, separator: string, bearer: string | undefined) =>
-        `${key}${separator}${bearer ? `${bearer} ` : ""}${REDACTED}`,
-    )
+  return truncateDiagnosticText(redactDiagnosticText(value))
+}
+
+function redactDiagnosticText(value: string): string {
+  return value
+    .replace(secretLikeTextPattern(), secretLikeTextReplacement)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
     .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, PATH_REDACTED)
     .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, `$1${PATH_REDACTED}`)
+}
 
-  return truncateDiagnosticText(redacted)
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(
+      secretLikeTextPattern(),
+      secretLikeTextReplacement,
+    )
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
+}
+
+function secretLikeTextPattern(): RegExp {
+  return /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;]+/gi
+}
+
+function secretLikeTextReplacement(
+  _match: string,
+  key: string,
+  separator: string,
+  bearer: string | undefined,
+): string {
+  return `${key}${separator}${bearer ? `${bearer} ` : ""}${REDACTED}`
 }
 
 function truncateDiagnosticText(value: string): string {

@@ -383,6 +383,55 @@ describe("TaskFormDialog", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
   })
 
+  it("logs submit failures without exposing the raw error message", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const onUpdate = vi.fn().mockRejectedValue(
+      new Error("save failed for token=secret-agent-token in /Users/example/agent-task"),
+    )
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          state={{ mode: "edit", task: createTask() }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={onUpdate}
+        />,
+      )
+    })
+
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith(
+      "Failed to save scheduled task.",
+      expect.objectContaining({
+        boundary: "task-scheduler.form.submit",
+        action: "update",
+        taskId: "task-1",
+        actionType: "builtin.command",
+        errorName: "Error",
+        errorLength: "save failed for token=secret-agent-token in /Users/example/agent-task".length,
+      }),
+    )
+    expect(container.textContent).toContain("保存任务失败。")
+    expect(container.textContent).not.toContain("secret-agent-token")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret-agent-token")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
+  })
+
   it("renders cron as an input group with an inline editor action", () => {
     const html = renderDialog()
 

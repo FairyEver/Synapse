@@ -177,7 +177,7 @@ export class AutomationIngressService {
       if (error instanceof WebhookError) {
         return jsonResponse(error.status, false, undefined, error.code, error.message)
       }
-      return jsonResponse(500, false, undefined, "internal_error", errorMessage(error))
+      return jsonResponse(500, false, undefined, "internal_error", "internal error")
     }
   }
 

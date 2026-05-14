@@ -44,7 +44,7 @@ export interface AddCustomCommandInput {
 
 export const BUILTIN_COMMANDS: readonly PublishedAgentCommand[] = [
   { name: "model", description: "Switch model", source: "builtin", kind: "builtin", adminOnly: false },
-  { name: "mode", description: "Switch mode", source: "builtin", kind: "builtin", adminOnly: false },
+  { name: "mode", description: "List modes", source: "builtin", kind: "builtin", adminOnly: false },
   { name: "new", description: "Start a new session", source: "builtin", kind: "builtin", adminOnly: false },
   { name: "status", description: "Show agent status", source: "builtin", kind: "builtin", adminOnly: false },
   { name: "show", description: "Show a workspace reference", source: "builtin", kind: "builtin", adminOnly: false },
@@ -156,11 +156,14 @@ export class CustomCommandRegistry {
     for (const root of roots) {
       const files = await listMarkdownFiles(root, (dir, error) => {
         this.deps.logger?.warn("Agent command directory skipped.", {
+          boundary: "agent.command.directory-discovery",
           projectId: this.deps.projectId,
           directoryName: path.basename(dir),
           rootName: path.basename(root),
           error: errorSummary(error),
           errorCode: errorCode(error),
+          errorName: errorName(error),
+          errorLength: rawErrorMessage(error).length,
         })
       })
       for (const filePath of files) {
@@ -172,11 +175,14 @@ export class CustomCommandRegistry {
           content = await fs.readFile(filePath, "utf8")
         } catch (error) {
           this.deps.logger?.warn("Agent command file skipped.", {
+            boundary: "agent.command.file-read",
             projectId: this.deps.projectId,
             commandName: name,
             fileName: path.basename(filePath),
             error: errorSummary(error),
             errorCode: errorCode(error),
+            errorName: errorName(error),
+            errorLength: rawErrorMessage(error).length,
           })
           continue
         }
@@ -295,8 +301,16 @@ async function listMarkdownFiles(
 }
 
 function errorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = rawErrorMessage(error)
   return message.length > 240 ? `${message.slice(0, 240)}...` : message
+}
+
+function rawErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error
 }
 
 function errorSummary(error: unknown): string {

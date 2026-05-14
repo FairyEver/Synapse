@@ -298,30 +298,48 @@ export class ConversationRouter {
         this.emitPhase(message, conversation.id, phaseRunId, "received", "in-progress", tRecv)
       }
 
-      const liveSession = await this.sessionManager.getOrCreateSession({
-        state,
-        conversation,
-        message,
-        abortSignal,
-      })
-      const result = await this.processLiveTurn(state, message, conversation, liveSession, turnId, abortSignal)
-
-      if (isBackgroundPlatform) {
-        const tDone = this.isoNow()
-        this.emitPhase(message, conversation.id, phaseRunId, "received", "done", tRecv, tDone)
-        this.emitPhase(
+      try {
+        const liveSession = await this.sessionManager.getOrCreateSession({
+          state,
+          conversation,
           message,
-          conversation.id,
-          phaseRunId,
-          result.error ? "failed" : "completed",
-          result.error ? "failed" : "done",
-          tRecv,
-          tDone,
-          result.error,
-        )
-      }
+          abortSignal,
+        })
+        const result = await this.processLiveTurn(state, message, conversation, liveSession, turnId, abortSignal)
 
-      return result
+        if (isBackgroundPlatform) {
+          const tDone = this.isoNow()
+          this.emitPhase(message, conversation.id, phaseRunId, "received", "done", tRecv, tDone)
+          this.emitPhase(
+            message,
+            conversation.id,
+            phaseRunId,
+            result.error ? "failed" : "completed",
+            result.error ? "failed" : "done",
+            tRecv,
+            tDone,
+            result.error,
+          )
+        }
+
+        return result
+      } catch (error) {
+        if (isBackgroundPlatform) {
+          const tDone = this.isoNow()
+          this.emitPhase(message, conversation.id, phaseRunId, "received", "done", tRecv, tDone)
+          this.emitPhase(
+            message,
+            conversation.id,
+            phaseRunId,
+            "failed",
+            "failed",
+            tRecv,
+            tDone,
+            "Agent turn failed",
+          )
+        }
+        throw error
+      }
     } finally {
       state.activeTurns = Math.max(0, state.activeTurns - 1)
       state.lastActivity = Date.now()
