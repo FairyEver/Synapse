@@ -26,11 +26,15 @@ pnpm once
 
 ## 页面配置
 
-Prompt 会保存到：
+提示词库会保存到：
 
 ```text
-prompt.md
+prompts/
+  default.md
+  <提示词名称>.md
 ```
+
+第一次启动时，如果 `prompts/` 为空且旧的 `prompt.md` 有内容，会迁移为 `prompts/default.md`。迁移后运行以提示词库中的当前选中项为准。
 
 运行参数会保存到：
 
@@ -49,7 +53,7 @@ state/ui-config.json
 
 ## 并行行为
 
-每一批会同时启动多个 `codex exec` 进程。所有 worker 使用同一个工作目录和同一个 Prompt。
+每一批会同时启动多个 `codex exec` 进程。所有 worker 使用同一个工作目录和当前选中的 Prompt。
 
 每个 worker 的 Prompt 前会追加运行约束：
 
