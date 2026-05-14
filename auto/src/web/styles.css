@@ -214,6 +214,21 @@ h2 {
   line-height: 18px;
 }
 
+.prompt-tools {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: end;
+  margin-bottom: var(--space-md);
+}
+
+.prompt-actions,
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
 input,
 select,
 textarea {
@@ -412,6 +427,21 @@ dd {
   color: var(--error);
 }
 
+.dialog {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--ink);
+  padding: 0;
+}
+
+.dialog-body {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 360px;
+  padding: var(--space-lg);
+}
+
 @media (max-width: 900px) {
   .app-shell {
     padding: var(--space-md);
@@ -424,6 +454,10 @@ dd {
   .config-layout,
   .run-layout,
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-tools {
     grid-template-columns: 1fr;
   }
 }

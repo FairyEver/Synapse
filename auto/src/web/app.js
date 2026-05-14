@@ -1,5 +1,6 @@
 const fields = {
   prompt: document.querySelector('#prompt'),
+  activePromptName: document.querySelector('#activePromptName'),
   workingDirectory: document.querySelector('#workingDirectory'),
   concurrency: document.querySelector('#concurrency'),
   intervalMinutes: document.querySelector('#intervalMinutes'),
@@ -15,6 +16,10 @@ const elements = {
   save: document.querySelector('#save'),
   start: document.querySelector('#start'),
   stopAfterCurrent: document.querySelector('#stop-after-current'),
+  newPrompt: document.querySelector('#new-prompt'),
+  renamePrompt: document.querySelector('#rename-prompt'),
+  deletePrompt: document.querySelector('#delete-prompt'),
+  unsavedDialog: document.querySelector('#unsaved-dialog'),
   configTab: document.querySelector('#config-tab'),
   runTab: document.querySelector('#run-tab'),
   configView: document.querySelector('#config-view'),
@@ -26,6 +31,12 @@ const elements = {
   summaryPath: document.querySelector('#summary-path'),
   workers: document.querySelector('#workers'),
   error: document.querySelector('#error'),
+}
+
+const state = {
+  activePromptName: '',
+  savedPrompt: '',
+  pendingPromptName: '',
 }
 
 function setActiveView(view) {
@@ -43,6 +54,7 @@ function numberValue(input) {
 function readForm() {
   return {
     prompt: fields.prompt.value,
+    activePromptName: fields.activePromptName.value,
     workingDirectory: fields.workingDirectory.value,
     concurrency: numberValue(fields.concurrency),
     intervalMinutes: numberValue(fields.intervalMinutes),
@@ -58,7 +70,20 @@ function readForm() {
   }
 }
 
+function renderPromptOptions(prompts, activePromptName) {
+  fields.activePromptName.replaceChildren(...(prompts || []).map(name => {
+    const option = document.createElement('option')
+    option.value = name
+    option.textContent = name
+    option.selected = name === activePromptName
+    return option
+  }))
+}
+
 function writeForm(config) {
+  state.activePromptName = config.activePromptName || 'default'
+  state.savedPrompt = config.prompt || ''
+  renderPromptOptions(config.prompts || [state.activePromptName], state.activePromptName)
   fields.prompt.value = config.prompt || ''
   fields.workingDirectory.value = config.workingDirectory || ''
   fields.concurrency.value = config.concurrency || 1
@@ -87,11 +112,77 @@ function setMessage(message, isError = false) {
 }
 
 async function saveConfig() {
-  await requestJson('/api/config', {
+  const config = await requestJson('/api/config', {
     method: 'PUT',
     body: JSON.stringify(readForm()),
   })
+  writeForm(config)
   setMessage('已保存')
+}
+
+function hasPromptChanges() {
+  return fields.prompt.value !== state.savedPrompt
+}
+
+function promptUrl(name) {
+  return `/api/prompts/${encodeURIComponent(name)}`
+}
+
+async function loadPrompt(name) {
+  const body = await requestJson(promptUrl(name))
+  fields.prompt.value = body.prompt || ''
+  state.savedPrompt = fields.prompt.value
+  state.activePromptName = name
+  fields.activePromptName.value = name
+}
+
+async function switchPrompt(name) {
+  if (!name || name === state.activePromptName) {
+    fields.activePromptName.value = state.activePromptName
+    return
+  }
+  if (!hasPromptChanges()) {
+    await loadPrompt(name)
+    return
+  }
+  state.pendingPromptName = name
+  elements.unsavedDialog.showModal()
+}
+
+async function createPrompt() {
+  const name = window.prompt('提示词名称')
+  if (!name) return
+  const config = await requestJson('/api/prompts', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+  writeForm({ ...config, activePromptName: name, prompt: '' })
+  await loadPrompt(name)
+  setMessage('已新建')
+}
+
+async function renameActivePrompt() {
+  const name = window.prompt('提示词名称', state.activePromptName)
+  if (!name || name === state.activePromptName) return
+  const currentPrompt = fields.prompt.value
+  const renamed = await requestJson(`${promptUrl(state.activePromptName)}/rename`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  })
+  writeForm({ ...renamed, activePromptName: name, prompt: currentPrompt })
+  const saved = await requestJson('/api/config', {
+    method: 'PUT',
+    body: JSON.stringify(readForm()),
+  })
+  writeForm(saved)
+  setMessage('已重命名')
+}
+
+async function deleteActivePrompt() {
+  if (!window.confirm(`删除提示词「${state.activePromptName}」？`)) return
+  const config = await requestJson(promptUrl(state.activePromptName), { method: 'DELETE' })
+  writeForm(config)
+  setMessage('已删除')
 }
 
 async function startRun() {
@@ -194,6 +285,44 @@ async function init() {
     setMessage(err instanceof Error ? err.message : String(err), true)
   }
 }
+
+elements.unsavedDialog.addEventListener('close', () => {
+  const action = elements.unsavedDialog.returnValue
+  const nextName = state.pendingPromptName
+  state.pendingPromptName = ''
+  if (!nextName || action === 'cancel') {
+    fields.activePromptName.value = state.activePromptName
+    return
+  }
+  const run = async () => {
+    if (action === 'save') await saveConfig()
+    await loadPrompt(nextName)
+  }
+  void run().catch(err => {
+    fields.activePromptName.value = state.activePromptName
+    setMessage(err instanceof Error ? err.message : String(err), true)
+  })
+})
+
+fields.prompt.addEventListener('input', () => {
+  setMessage(hasPromptChanges() ? '未保存' : '')
+})
+
+fields.activePromptName.addEventListener('change', () => {
+  void switchPrompt(fields.activePromptName.value).catch(err => setMessage(err instanceof Error ? err.message : String(err), true))
+})
+
+elements.newPrompt.addEventListener('click', () => {
+  void createPrompt().catch(err => setMessage(err instanceof Error ? err.message : String(err), true))
+})
+
+elements.renamePrompt.addEventListener('click', () => {
+  void renameActivePrompt().catch(err => setMessage(err instanceof Error ? err.message : String(err), true))
+})
+
+elements.deletePrompt.addEventListener('click', () => {
+  void deleteActivePrompt().catch(err => setMessage(err instanceof Error ? err.message : String(err), true))
+})
 
 elements.save.addEventListener('click', () => {
   void saveConfig().catch(err => setMessage(err instanceof Error ? err.message : String(err), true))

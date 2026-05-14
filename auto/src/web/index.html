@@ -22,10 +22,33 @@
               <p id="save-state" class="state-text"></p>
             </div>
 
+            <div class="prompt-tools">
+              <label class="field prompt-select-field">
+                <span>提示词</span>
+                <select id="activePromptName"></select>
+              </label>
+              <div class="prompt-actions" aria-label="提示词操作">
+                <button id="new-prompt" class="button secondary" type="button">新建</button>
+                <button id="rename-prompt" class="button secondary" type="button">重命名</button>
+                <button id="delete-prompt" class="button secondary" type="button">删除</button>
+              </div>
+            </div>
+
             <label class="field span-all">
-              <span>提示词</span>
+              <span>内容</span>
               <textarea id="prompt" rows="9" spellcheck="false"></textarea>
             </label>
+
+            <dialog id="unsaved-dialog" class="dialog">
+              <form method="dialog" class="dialog-body">
+                <h2>未保存</h2>
+                <div class="dialog-actions">
+                  <button id="switch-save" class="button primary" value="save" type="submit">保存并切换</button>
+                  <button id="switch-discard" class="button secondary" value="discard" type="submit">放弃修改</button>
+                  <button class="button secondary" value="cancel" type="submit">取消</button>
+                </div>
+              </form>
+            </dialog>
 
             <div class="grid">
               <label class="field span-all">
