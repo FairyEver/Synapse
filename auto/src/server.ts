@@ -4,6 +4,7 @@ import { readFile } from 'fs/promises'
 import { extname, join, normalize, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { loadUiConfig, saveUiConfig, type UiConfig } from './config.js'
+import { createPrompt, deletePrompt, readPrompt, renamePrompt, type PromptLibraryPaths } from './prompt-library.js'
 import { AutoScheduler } from './scheduler.js'
 import { c } from './ui.js'
 
@@ -46,6 +47,19 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   return raw ? JSON.parse(raw) : {}
 }
 
+function promptNameFromPath(pathname: string, prefix: string): string {
+  return decodeURIComponent(pathname.slice(prefix.length))
+}
+
+function bodyName(body: unknown, field: string): string {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new Error(`${field} is required`)
+  }
+  const value = (body as Record<string, unknown>)[field]
+  if (typeof value !== 'string') throw new Error(`${field} is required`)
+  return value
+}
+
 async function serveFile(res: ServerResponse, path: string): Promise<void> {
   const body = await readFile(path)
   res.writeHead(200, {
@@ -77,7 +91,12 @@ function openBrowser(url: string): void {
   child.unref()
 }
 
-function createHandler(scheduler: AutoScheduler) {
+interface HandlerPaths extends PromptLibraryPaths {
+  configPath?: string
+  promptPath?: string
+}
+
+export function createHandler(scheduler: AutoScheduler, paths: HandlerPaths = {}) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
@@ -93,17 +112,55 @@ function createHandler(scheduler: AutoScheduler) {
       }
 
       if (req.method === 'GET' && url.pathname === '/api/config') {
-        sendJson(res, 200, await loadUiConfig())
+        sendJson(res, 200, await loadUiConfig(paths.configPath, paths.promptPath, paths.promptsDir))
         return
       }
 
       if (req.method === 'PUT' && url.pathname === '/api/config') {
-        sendJson(res, 200, await saveUiConfig(await readJson(req)))
+        sendJson(res, 200, await saveUiConfig(await readJson(req), paths.configPath, paths.promptPath, paths.promptsDir))
+        return
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/prompts') {
+        const body = await readJson(req)
+        const name = bodyName(body, 'name')
+        await createPrompt(name, paths)
+        sendJson(res, 200, await loadUiConfig(paths.configPath, paths.promptPath, paths.promptsDir))
+        return
+      }
+
+      if (req.method === 'GET' && url.pathname.startsWith('/api/prompts/')) {
+        const name = promptNameFromPath(url.pathname, '/api/prompts/')
+        sendJson(res, 200, { name, prompt: await readPrompt(name, paths) })
+        return
+      }
+
+      if (req.method === 'PUT' && url.pathname.startsWith('/api/prompts/') && url.pathname.endsWith('/rename')) {
+        const prefix = '/api/prompts/'
+        const name = decodeURIComponent(url.pathname.slice(prefix.length, -'/rename'.length))
+        const body = await readJson(req)
+        const nextName = bodyName(body, 'name')
+        const current = await loadUiConfig(paths.configPath, paths.promptPath, paths.promptsDir)
+        await renamePrompt(name, nextName, paths)
+        const activePromptName = current.activePromptName === name ? nextName : current.activePromptName
+        const config = await saveUiConfig({
+          ...current,
+          activePromptName,
+          prompt: await readPrompt(activePromptName, paths),
+        }, paths.configPath, paths.promptPath, paths.promptsDir)
+        sendJson(res, 200, config)
+        return
+      }
+
+      if (req.method === 'DELETE' && url.pathname.startsWith('/api/prompts/')) {
+        const name = promptNameFromPath(url.pathname, '/api/prompts/')
+        await deletePrompt(name, paths)
+        sendJson(res, 200, await loadUiConfig(paths.configPath, paths.promptPath, paths.promptsDir))
         return
       }
 
       if (req.method === 'POST' && url.pathname === '/api/start') {
-        const config = await saveUiConfig(await readJson(req))
+        const config = await saveUiConfig(await readJson(req), paths.configPath, paths.promptPath, paths.promptsDir)
         void scheduler.start(config)
         sendJson(res, 200, scheduler.getSnapshot())
         return
