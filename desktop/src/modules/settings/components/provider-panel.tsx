@@ -444,6 +444,11 @@ function ProviderPresetDialog({
   const [apiKey, setApiKey] = useState("")
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
 
+  const selectPreset = useCallback((preset: SynapseAgentProviderPreset) => {
+    setSelected(preset)
+    setTemplateValues(templateDefaultsFromPreset(preset))
+  }, [])
+
   useEffect(() => {
     if (!open) return
     setLoading(true)
@@ -470,6 +475,11 @@ function ProviderPresetDialog({
       setQuery("")
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open || selected || presets.length === 0) return
+    selectPreset(presets[0])
+  }, [open, presets, selectPreset, selected])
 
   const visiblePresets = useMemo(() => {
     const keyword = query.trim().toLowerCase()
@@ -513,43 +523,30 @@ function ProviderPresetDialog({
               </div>
             </Field>
             <div className="max-h-80 overflow-auto">
-              <Table>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell className="text-muted-foreground">正在加载</TableCell>
-                    </TableRow>
-                  ) : visiblePresets.length === 0 ? (
-                    <TableRow>
-                      <TableCell className="text-muted-foreground">暂无预设</TableCell>
-                    </TableRow>
-                  ) : visiblePresets.map((preset) => (
-                    <TableRow key={preset.name}>
-                      <TableCell>
-                        <div className="flex min-w-0 flex-col gap-1">
-                          <span className="truncate font-medium">{preset.name}</span>
-                          <span className="truncate text-xs text-muted-foreground">{preset.baseUrl ?? preset.model ?? "-"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          variant={selected?.name === preset.name ? "secondary" : "outline"}
-                          size="sm"
-                          onClick={() => {
-                            setSelected(preset)
-                            setTemplateValues(Object.fromEntries(
-                              preset.templateValues.map((item) => [item.key, item.defaultValue ?? ""]),
-                            ))
-                          }}
-                        >
-                          {selected?.name === preset.name ? "已选择" : `选择 ${preset.name}`}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+              {loading ? (
+                <div className="py-3 text-sm text-muted-foreground">正在加载</div>
+              ) : visiblePresets.length === 0 ? (
+                <div className="py-3 text-sm text-muted-foreground">暂无预设</div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {visiblePresets.map((preset) => (
+                    <Button
+                      key={preset.name}
+                      type="button"
+                      variant={selected?.name === preset.name ? "secondary" : "ghost"}
+                      className="h-auto justify-start px-3 py-2"
+                      onClick={() => selectPreset(preset)}
+                    >
+                      <span className="flex min-w-0 flex-col items-start gap-1 text-left">
+                        <span className="max-w-full truncate font-medium">{preset.name}</span>
+                        <span className="max-w-full truncate text-xs text-muted-foreground">
+                          {preset.baseUrl ?? preset.model ?? "-"}
+                        </span>
+                      </span>
+                    </Button>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex flex-col gap-4">
@@ -831,6 +828,12 @@ function buildUpdateInput(values: ProviderFormValues): SynapseUpdateAgentProvide
     sortIndex: optionalNumber(values.sortIndex),
     ...(apiKey ? { apiKey } : {}),
   }
+}
+
+function templateDefaultsFromPreset(preset: SynapseAgentProviderPreset): Record<string, string> {
+  return Object.fromEntries(
+    preset.templateValues.map((item) => [item.key, item.defaultValue ?? ""]),
+  )
 }
 
 function optionalTrimmed(value: string): string | undefined {

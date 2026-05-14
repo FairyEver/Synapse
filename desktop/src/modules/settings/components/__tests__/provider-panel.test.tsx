@@ -167,13 +167,9 @@ describe("ProviderPanel presets", () => {
     expect(listProviderPresets).toHaveBeenCalled()
     expect(document.body.textContent).toContain("PackyCode")
 
-    await act(async () => {
-      buttonByText(document.body, "选择 PackyCode").click()
-      await Promise.resolve()
-    })
-
     const apiKeyInput = document.body.querySelector<HTMLInputElement>("#provider-preset-api-key")
     if (!apiKeyInput) throw new Error("API key input not found")
+    expect(apiKeyInput.disabled).toBe(false)
     await act(async () => {
       setInputValue(apiKeyInput, "sk-packy")
       apiKeyInput.dispatchEvent(new Event("input", { bubbles: true }))
