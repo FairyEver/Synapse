@@ -130,6 +130,8 @@ test('runWorker returns stderr as lastMessage when command fails', async () => {
 
     const config: UiConfig = {
       prompt: 'hello',
+      activePromptName: 'default',
+      prompts: ['default'],
       workingDirectory: dir,
       concurrency: 1,
       intervalMinutes: 1,
@@ -163,6 +165,8 @@ test('runWorker reports stdout progress while command is running', async () => {
 
     const config: UiConfig = {
       prompt: 'hello',
+      activePromptName: 'default',
+      prompts: ['default'],
       workingDirectory: dir,
       concurrency: 1,
       intervalMinutes: 1,

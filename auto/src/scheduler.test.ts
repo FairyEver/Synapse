@@ -6,6 +6,8 @@ import { AutoScheduler, type BatchRunner } from './scheduler.js'
 function config(): UiConfig {
   return {
     prompt: 'hello',
+    activePromptName: 'default',
+    prompts: ['default'],
     workingDirectory: '/tmp/work',
     concurrency: 2,
     intervalMinutes: 1,

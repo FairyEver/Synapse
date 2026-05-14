@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { DEFAULT_UI_CONFIG, loadUiConfig, saveUiConfig, validateUiConfig } from './config.js'
@@ -18,13 +18,18 @@ test('validateUiConfig fills blank model with GPT-5.5', () => {
   assert.equal(config.codex.model, 'gpt-5.5')
 })
 
-test('saveUiConfig persists prompt and runtime settings in separate files', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'auto-config-'))
+test('saveUiConfig persists active prompt content and runtime settings separately', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-config-save-library-'))
   try {
     const file = join(dir, 'ui-config.json')
     const promptFile = join(dir, 'prompt.md')
+    const promptsDir = join(dir, 'prompts')
+    await mkdir(promptsDir, { recursive: true })
+    await writeFile(join(promptsDir, 'work.md'), 'old', 'utf-8')
+
     await saveUiConfig({
       prompt: 'hello',
+      activePromptName: 'work',
       workingDirectory: dir,
       concurrency: 2,
       intervalMinutes: 3,
@@ -37,13 +42,14 @@ test('saveUiConfig persists prompt and runtime settings in separate files', asyn
         approvalPolicy: 'never',
         json: true,
       },
-    }, file, promptFile)
+    }, file, promptFile, promptsDir)
 
-    const loaded = await loadUiConfig(file, promptFile)
+    const loaded = await loadUiConfig(file, promptFile, promptsDir)
     const savedConfig = JSON.parse(await readFile(file, 'utf-8'))
     assert.equal(loaded.prompt, 'hello')
-    assert.equal(await readFile(promptFile, 'utf-8'), 'hello')
+    assert.equal(await readFile(join(promptsDir, 'work.md'), 'utf-8'), 'hello')
     assert.equal('prompt' in savedConfig, false)
+    assert.equal(savedConfig.activePromptName, 'work')
     assert.equal(loaded.workingDirectory, dir)
     assert.equal(loaded.concurrency, 2)
     assert.equal(loaded.codex.model, 'gpt-test')
@@ -52,20 +58,68 @@ test('saveUiConfig persists prompt and runtime settings in separate files', asyn
   }
 })
 
-test('loadUiConfig reads prompt from prompt file instead of ui config', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'auto-config-prompt-'))
+test('loadUiConfig migrates legacy prompt into prompt library', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-config-library-'))
   try {
     const file = join(dir, 'ui-config.json')
     const promptFile = join(dir, 'prompt.md')
+    const promptsDir = join(dir, 'prompts')
+    await writeFile(promptFile, 'legacy prompt', 'utf-8')
+
+    const loaded = await loadUiConfig(file, promptFile, promptsDir)
+
+    assert.equal(loaded.activePromptName, 'default')
+    assert.deepEqual(loaded.prompts, ['default'])
+    assert.equal(loaded.prompt, 'legacy prompt')
+    assert.equal(await readFile(join(promptsDir, 'default.md'), 'utf-8'), 'legacy prompt')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('loadUiConfig uses saved active prompt name when it exists', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-config-active-'))
+  try {
+    const file = join(dir, 'ui-config.json')
+    const promptFile = join(dir, 'prompt.md')
+    const promptsDir = join(dir, 'prompts')
+    await mkdir(promptsDir, { recursive: true })
+    await writeFile(join(promptsDir, 'a.md'), 'prompt a', 'utf-8')
+    await writeFile(join(promptsDir, 'b.md'), 'prompt b', 'utf-8')
     await writeFile(file, `${JSON.stringify({
       ...DEFAULT_UI_CONFIG,
-      prompt: 'legacy prompt',
+      activePromptName: 'b',
       workingDirectory: dir,
     }, null, 2)}\n`, 'utf-8')
-    await writeFile(promptFile, 'from prompt file', 'utf-8')
 
-    const loaded = await loadUiConfig(file, promptFile)
-    assert.equal(loaded.prompt, 'from prompt file')
+    const loaded = await loadUiConfig(file, promptFile, promptsDir)
+
+    assert.equal(loaded.activePromptName, 'b')
+    assert.deepEqual(loaded.prompts, ['a', 'b'])
+    assert.equal(loaded.prompt, 'prompt b')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('loadUiConfig falls back when saved active prompt is missing', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-config-missing-active-'))
+  try {
+    const file = join(dir, 'ui-config.json')
+    const promptFile = join(dir, 'prompt.md')
+    const promptsDir = join(dir, 'prompts')
+    await mkdir(promptsDir, { recursive: true })
+    await writeFile(join(promptsDir, 'a.md'), 'prompt a', 'utf-8')
+    await writeFile(file, `${JSON.stringify({
+      ...DEFAULT_UI_CONFIG,
+      activePromptName: 'missing',
+      workingDirectory: dir,
+    }, null, 2)}\n`, 'utf-8')
+
+    const loaded = await loadUiConfig(file, promptFile, promptsDir)
+
+    assert.equal(loaded.activePromptName, 'a')
+    assert.equal(loaded.prompt, 'prompt a')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
