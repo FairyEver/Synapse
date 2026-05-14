@@ -11,7 +11,9 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
+import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
+import { getPermissionModeCapability } from "../permission-mode-capability"
 import {
   permissionModeDescriptions,
   permissionModeLabels,
@@ -35,7 +37,7 @@ function AgentPermissionModeMenu({
   onSelect,
 }: AgentPermissionModeMenuProps) {
   return (
-    <DropdownMenu>
+    <DropdownMenu data-track="agent-permission-mode-menu">
       <DropdownMenuTrigger asChild>
         {trigger}
       </DropdownMenuTrigger>
@@ -46,6 +48,21 @@ function AgentPermissionModeMenu({
               <DropdownMenuItem
                 data-mode={mode}
                 onSelect={() => {
+                  track({
+                    component: "agent",
+                    name: "agent-permission-mode-select",
+                    action: "select",
+                    metadata: {
+                      boundary: "renderer.agent.permission-mode-select",
+                      currentMode: selectedMode,
+                      targetMode: mode,
+                      capability: getPermissionModeCapability({
+                        currentMode: selectedMode,
+                        targetMode: mode,
+                      }),
+                      changed: mode !== selectedMode,
+                    },
+                  })
                   onSelect(mode)
                 }}
               >

@@ -44,6 +44,10 @@ export interface ConversationRouterDeps {
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
+const SENSITIVE_ERROR_ASSIGNMENT_PATTERN = /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
+const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g
+const POSIX_PATH_PATTERN = /(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g
 
 export class ConversationRouter {
   private readonly deps: ConversationRouterDeps
@@ -124,6 +128,7 @@ export class ConversationRouter {
       channelKey: message.channelKey,
       workspaceKey: message.workspaceKey,
       workspacePath: message.workspacePath,
+      agentType: "claude-sdk",
       providerId,
       name,
       userMeta: userMetaFromMessage(message),
@@ -261,7 +266,9 @@ export class ConversationRouter {
               conversationId: turn.conversationId,
               ...queuedTurnFailureMetadata(error),
             })
-            turn.resolve(this.finishWithError(turn.message, turn.conversationId, messageText))
+            const result = this.finishWithError(turn.message, turn.conversationId, messageText)
+            await this.persistFailureEvent(turn.conversationId, result.events[0])
+            turn.resolve(result)
           }
         } finally {
           externalSignal?.removeEventListener("abort", abort)
@@ -397,6 +404,22 @@ export class ConversationRouter {
       }
     }
 
+    if (error && events[events.length - 1]?.type !== "error") {
+      const errorEvent: AgentEvent = {
+        type: "error",
+        message: sanitizeErrorText(error),
+        conversationId: conversation.id,
+        providerId: message.providerId ?? conversation.providerId,
+        sdkSessionId: liveSession.currentSessionId(),
+        timestamp: this.isoNow(),
+      }
+      events.push(errorEvent)
+      this.emitEvent(message, conversation.id, errorEvent)
+      await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+      await this.saveEventHistory(conversation.id, errorEvent)
+      error = errorEvent.message
+    }
+
     const sdkSessionId = liveSession.currentSessionId()
     const saved = await this.saveExecutionResult(conversation, resultText, sdkSessionId)
 
@@ -438,6 +461,19 @@ export class ConversationRouter {
       while (liveSession.alive()) {
         const event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
         if (!event) {
+          const errorEvent: AgentEvent = {
+            type: "error",
+            message: "Agent relay timed out.",
+            conversationId: conversation.id,
+            providerId: message.providerId ?? conversation.providerId,
+            sdkSessionId: liveSession.currentSessionId(),
+            timestamp: this.isoNow(),
+          }
+          events.push(errorEvent)
+          this.emitEvent(message, conversation.id, errorEvent)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+          await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
+          await this.saveEventHistory(conversation.id, errorEvent)
           await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
             conversationId: conversation.id,
@@ -446,6 +482,7 @@ export class ConversationRouter {
             partialText,
             agentSessionId: liveSession.currentSessionId(),
             threadId: liveSession.currentSessionId(),
+            error: errorEvent.message,
             timedOut: true,
           }
         }
@@ -475,6 +512,16 @@ export class ConversationRouter {
           break
         }
       }
+      if (error && events[events.length - 1]?.type !== "error") {
+        const errorResult = this.finishWithError(message, conversation.id, error)
+        const errorEvent = errorResult.events[0]
+        if (errorEvent) {
+          events.push(errorEvent)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+          await this.saveEventHistory(conversation.id, errorEvent)
+        }
+        error = errorResult.error
+      }
       const saved = await this.saveExecutionResult(conversation, resultText, liveSession.currentSessionId())
       return {
         conversationId: saved.id,
@@ -488,8 +535,20 @@ export class ConversationRouter {
       }
     } catch (rawError) {
       const messageText = rawError instanceof Error ? rawError.message : String(rawError)
+      this.deps.logger?.warn("AgentRuntime side session failed.", {
+        boundary: "agent-runtime.side-session",
+        projectId: this.deps.projectId,
+        sessionKey: message.sessionKey,
+        platform: message.platform,
+        conversationId: conversation.id,
+        providerId: message.providerId ?? conversation.providerId,
+        timeoutMs,
+        ...queuedTurnFailureMetadata(rawError),
+      })
+      const result = this.finishWithError(message, conversation.id, messageText)
+      await this.persistFailureEvent(conversation.id, result.events[0])
       return {
-        ...this.finishWithError(message, conversation.id, messageText),
+        ...result,
         timedOut: false,
       }
     } finally {
@@ -620,18 +679,38 @@ export class ConversationRouter {
     })
   }
 
+  private async persistFailureEvent(
+    conversationId: string,
+    event: AgentEvent | undefined,
+  ): Promise<void> {
+    if (!event) return
+    try {
+      await this.persistAgentEvent(conversationId, randomUUID(), 1, event)
+      await this.saveEventHistory(conversationId, event)
+    } catch (error) {
+      this.deps.logger?.warn("AgentRuntime failure event persistence failed.", {
+        boundary: "agent-runtime.failure-event-persistence",
+        projectId: this.deps.projectId,
+        conversationId,
+        eventType: event.type,
+        ...queuedTurnFailureMetadata(error),
+      })
+    }
+  }
+
   private finishWithError(
     message: AgentMessage,
     conversationId: string,
     error: string,
   ): AgentRuntimeTurnResult {
-    const event: AgentEvent = { type: "error", message: error }
+    const safeError = sanitizeErrorText(error)
+    const event: AgentEvent = { type: "error", message: safeError }
     this.emitEvent(message, conversationId, event)
     return {
       conversationId,
       events: [event],
       resultText: "",
-      error,
+      error: safeError,
     }
   }
 
@@ -878,7 +957,7 @@ function sanitizeEventPayload(event: AgentEvent): Record<string, unknown> {
 }
 
 function sanitizeValue(value: unknown): unknown {
-  if (typeof value === "string") return truncateString(value, MAX_SUMMARY_LENGTH)
+  if (typeof value === "string") return sanitizeErrorText(value)
   if (Array.isArray(value)) return value.slice(0, 20).map(sanitizeValue)
   if (!isRecord(value)) return value
   const output: Record<string, unknown> = {}
@@ -911,6 +990,17 @@ function queuedTurnFailureMetadata(error: unknown): {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function sanitizeErrorText(value: string): string {
+  return truncateString(
+    value
+      .replace(SENSITIVE_ERROR_ASSIGNMENT_PATTERN, (_match, key: string) => `${key}=[redacted]`)
+      .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]")
+      .replace(WINDOWS_PATH_PATTERN, "[path redacted]")
+      .replace(POSIX_PATH_PATTERN, "$1[path redacted]"),
+    MAX_SUMMARY_LENGTH,
+  ) ?? ""
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

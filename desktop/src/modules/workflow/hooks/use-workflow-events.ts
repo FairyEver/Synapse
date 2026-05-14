@@ -54,13 +54,24 @@ export function useWorkflowEvents(
         logger.info("hydration applying workflow:completed", { runId, nodeCount: Object.keys(status.nodeResults).length })
         cbRef.current.onCompleted?.(status.nodeResults)
       } else if (status.status === "failed") {
-        logger.info("hydration applying workflow:failed with authoritative nodeResults", { runId, error: status.error, nodeCount: Object.keys(status.nodeResults).length })
+        logger.info("hydration applying workflow:failed with authoritative nodeResults", {
+          runId,
+          ...workflowErrorLogMeta(status.error),
+          nodeCount: Object.keys(status.nodeResults).length,
+        })
         cbRef.current.onFailed?.(status.error ?? "Unknown error", status.nodeResults)
       } else if (status.status === "cancelled") {
         logger.info("hydration applying workflow:cancelled with authoritative nodeResults", { runId, nodeCount: Object.keys(status.nodeResults).length })
         cbRef.current.onCancelled?.(status.nodeResults)
       }
-    })()
+    })().catch((error: unknown) => {
+      if (cancelled) return
+      logger.warn("workflow hydration status query failed", {
+        runId,
+        boundary: "renderer.workflow.hydration-status",
+        ...errorLogMeta(error),
+      })
+    })
 
     const unsub = window.synapse?.workflow.onEvent((event: WorkflowEvent) => {
       if (event.runId !== runId) return
@@ -84,7 +95,12 @@ export function useWorkflowEvents(
       } else if (event.type === "workflow:failed") {
         workflowTerminal = true
         const hasResults = !!event.result?.nodeResults
-        logger.info("workflow:failed — applying terminal state", { runId, error: event.error, hasAuthoritativeResults: hasResults, nodeCount: hasResults ? Object.keys(event.result!.nodeResults).length : 0 })
+        logger.info("workflow:failed — applying terminal state", {
+          runId,
+          ...workflowErrorLogMeta(event.error),
+          hasAuthoritativeResults: hasResults,
+          nodeCount: hasResults ? Object.keys(event.result!.nodeResults).length : 0,
+        })
         cbRef.current.onFailed?.(event.error, event.result?.nodeResults)
       } else if (event.type === "workflow:cancelled") {
         workflowTerminal = true
@@ -96,4 +112,19 @@ export function useWorkflowEvents(
 
     return () => { cancelled = true; unsub?.() }
   }, [runId])
+}
+
+function workflowErrorLogMeta(error: string | undefined): { readonly errorName: string; readonly errorLength: number } {
+  return {
+    errorName: "workflow",
+    errorLength: error?.length ?? 0,
+  }
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }

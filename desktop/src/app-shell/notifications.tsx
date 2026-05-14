@@ -133,7 +133,7 @@ function showToast(
 ): AppNotificationId {
   const toastOptions = buildToastOptions(tone, options)
   const logLevel = tone === "destructive" ? "error" : tone === "warning" ? "warn" : "info"
-  notificationLogger[logLevel](`[${tone}] ${typeof message === "string" ? message : "(rich content)"}`)
+  notificationLogger[logLevel]("notification.shown", notificationLogMetadata(message, tone))
 
   switch (tone) {
     case "success":
@@ -148,6 +148,23 @@ function showToast(
       return toast.loading(message, toastOptions)
     default:
       return toast(message, toastOptions)
+  }
+}
+
+function notificationLogMetadata(
+  message: ReactNode,
+  tone: AppNotificationTone,
+): { readonly tone: AppNotificationTone; readonly messageLength?: number; readonly richContent?: boolean } {
+  if (typeof message === "string") {
+    return {
+      tone,
+      messageLength: message.length,
+    }
+  }
+
+  return {
+    tone,
+    richContent: true,
   }
 }
 
@@ -194,15 +211,11 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         const elapsedMs = Math.round(performance.now() - startedAt)
         notificationLogger.error(`[async:fail] ${loadingLabel} (${elapsedMs}ms)`, error)
-        const fallbackMessage =
-          error instanceof Error && error.message.trim()
-            ? error.message
-            : "操作失败。"
         const result = resolveNotificationResult(
           errorResolver,
           error,
           "destructive",
-          fallbackMessage,
+          "操作失败。",
         )
 
         if (result.message === null) {

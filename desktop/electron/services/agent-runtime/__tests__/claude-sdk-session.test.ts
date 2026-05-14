@@ -86,6 +86,59 @@ describe("ClaudeSDKSession", () => {
     expect(session.currentSessionId()).toBe("sdk-1")
   })
 
+  it("maps SDK tool result ids back to the tool name for timeline display", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    const assistantEvent = session.nextEvent()
+    query.push({
+      type: "assistant",
+      session_id: "sdk-tools",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu-read-1",
+            name: "Read",
+            input: {
+              file_path: "/tmp/project/README.md",
+            },
+          },
+        ],
+      },
+    } as unknown as SDKMessage)
+
+    await expect(assistantEvent).resolves.toMatchObject({ type: "assistant" })
+    await expect(session.nextEvent()).resolves.toMatchObject({
+      type: "toolUse",
+      toolName: "Read",
+    })
+
+    const resultEvent = session.nextEvent()
+    query.push({
+      type: "user",
+      session_id: "sdk-tools",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu-read-1",
+            content: "file contents",
+            is_error: false,
+          },
+        ],
+      },
+    } as unknown as SDKMessage)
+
+    await expect(resultEvent).resolves.toMatchObject({
+      type: "toolResult",
+      toolName: "Read",
+      content: "file contents",
+    })
+  })
+
   it("cancelCurrentTurn interrupts an alive query", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)
@@ -185,7 +238,7 @@ describe("ClaudeSDKSession", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("prompt contained secret")
   })
 
-  it("redacts and bounds permission request tool input summaries", async () => {
+  it("redacts and bounds permission request tool input summaries and raw event input", async () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory)
 
@@ -211,9 +264,71 @@ describe("ClaudeSDKSession", () => {
     expect(event.toolInput).not.toContain("pass-1")
     expect(event.toolInput).not.toContain("x".repeat(200))
     expect(event.toolInputRaw).toMatchObject({
-      authorization: "Bearer sk-live",
-      headers: { cookie: "sid=secret" },
+      authorization: "[redacted]",
+      headers: { cookie: "[redacted]" },
+      nested: { password: "[redacted]", value: "safe" },
     })
+    expect(JSON.stringify(event)).not.toContain("Bearer sk-live")
+    expect(JSON.stringify(event)).not.toContain("sid=secret")
+    expect(JSON.stringify(event)).not.toContain("pass-1")
+  })
+
+  it("redacts Bash permission request header and cookie secrets", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+
+    void canUseTool(getOptions())("Bash", {
+      command: "curl -H 'Authorization: Bearer sk-command' --cookie sid=command https://example.test",
+    }, {
+      signal: new AbortController().signal,
+    })
+
+    const event = await session.nextEvent()
+
+    expect(event?.type).toBe("permissionRequest")
+    if (event?.type !== "permissionRequest") {
+      throw new Error("expected permission request")
+    }
+    expect(event.toolInput).toContain("[redacted]")
+    expect(event.toolInput).not.toContain("sk-command")
+    expect(event.toolInput).not.toContain("sid=command")
+    expect(event.toolInputRaw).toMatchObject({
+      command: expect.stringContaining("[redacted]"),
+    })
+    expect(JSON.stringify(event)).not.toContain("sk-command")
+    expect(JSON.stringify(event)).not.toContain("sid=command")
+  })
+
+  it("redacts local paths from permission request summaries and raw event input", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+
+    void canUseTool(getOptions())("Read", {
+      file_path: "/Users/liyang/private/project/secret.ts",
+      windowsPath: "C:\\Users\\liyang\\private\\secret.txt",
+      nested: {
+        cwd: "/Users/liyang/private/project",
+      },
+    }, {
+      signal: new AbortController().signal,
+    })
+
+    const event = await session.nextEvent()
+
+    expect(event?.type).toBe("permissionRequest")
+    if (event?.type !== "permissionRequest") {
+      throw new Error("expected permission request")
+    }
+    expect(event.toolInput).toContain("[path redacted]")
+    expect(event.toolInputRaw).toMatchObject({
+      file_path: "[path redacted]",
+      windowsPath: "[path redacted]",
+      nested: {
+        cwd: "[path redacted]",
+      },
+    })
+    expect(JSON.stringify(event)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(event)).not.toContain("C:\\Users\\liyang")
   })
 
   it("generates permission request ids that are unique across conversations", async () => {
@@ -387,6 +502,7 @@ describe("ClaudeSDKSession", () => {
     await waitFor(() => logger.warn.mock.calls.length > 0)
 
     expect(logger.warn).toHaveBeenCalledWith("Claude SDK query close failed.", {
+      boundary: "claude-sdk-query.close",
       conversationId: "conversation-1",
       errorLength: 12,
       errorName: "Error",

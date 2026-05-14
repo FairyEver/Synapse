@@ -63,4 +63,21 @@ describe("agent bridge preview progress", () => {
     expect(rendered).toContain("authorization=[redacted]")
     expect(`${rendered}\n${payloadJson}`).not.toContain("sk-equals")
   })
+
+  it("redacts local absolute paths from progress previews", () => {
+    const entry = progressEntryFromEvent({
+      type: "toolResult",
+      toolName: "Read",
+      content: "opened /Users/example/project/src/secret.ts and C:\\Users\\example\\project\\token.txt",
+    })
+
+    if (!entry) throw new Error("Expected progress entry")
+
+    const rendered = renderCompactProgress([entry])
+    const payloadJson = JSON.stringify(compactProgressPayload([entry]))
+
+    expect(rendered).toContain("[path redacted]")
+    expect(`${rendered}\n${payloadJson}`).not.toContain("/Users/example/project/src/secret.ts")
+    expect(`${rendered}\n${payloadJson}`).not.toContain("C:\\Users\\example\\project\\token.txt")
+  })
 })

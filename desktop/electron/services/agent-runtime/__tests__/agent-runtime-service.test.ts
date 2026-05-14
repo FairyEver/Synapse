@@ -183,13 +183,14 @@ describe("AgentRuntimeService", () => {
   it("redacts permission response failure audit metadata", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const auditSink = { record: vi.fn() }
-    const rawError = "backend leaked token sk-secret and sensitive prompt content"
+    const rawError = "backend failed without sensitive content"
+    const rawToolInput = "curl -H 'Authorization: Bearer sk-tool' /Users/liyang/private/file.ts"
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
       providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
-      createSession: () => new PermissionFailureSession("conversation-a-permission-1", rawError),
+      createSession: () => new PermissionFailureSession("conversation-a-permission-1", rawError, rawToolInput),
       auditSink: auditSink as never,
       now: fixedNow,
     })
@@ -217,7 +218,35 @@ describe("AgentRuntimeService", () => {
       }),
     }))
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain(rawError)
-    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-tool")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/liyang/private")
+
+    await service.forceKillTurn(conversationId("local", "s1", "active"))
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
+
+  it("redacts pending permission raw tool input before listing it", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const rawToolInput = "curl -H 'Authorization: Bearer sk-tool' /Users/liyang/private/file.ts"
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new PermissionFailureSession("conversation-a-permission-1", "unused", rawToolInput),
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    const pending = service.listPendingPermissions()[0]
+
+    expect(pending?.toolInputRaw).toEqual({
+      command: "curl -H 'Authorization: Bearer [redacted]' [path redacted]",
+    })
+    expect(JSON.stringify(pending)).not.toContain("sk-tool")
+    expect(JSON.stringify(pending)).not.toContain("/Users/liyang/private")
 
     await service.forceKillTurn(conversationId("local", "s1", "active"))
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
@@ -440,6 +469,7 @@ describe("AgentRuntimeService", () => {
         projectId: "project-1",
         sessionKey: expect.stringMatching(/^scheduled:project-1:/),
         conversationId: result.conversationId,
+        sdkSessionId: "sdk-1",
         agentType: "claude-code",
         mode: "plan",
         sessionPolicy: "fresh",
@@ -452,6 +482,94 @@ describe("AgentRuntimeService", () => {
     )
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sensitive prompt")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sensitive prompt content")
+  })
+
+  it("logs scheduled agent completions with SDK session correlation context", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done from sensitive prompt", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      logger: logger as never,
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "sensitive scheduled prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+    })
+
+    expect(result.status).toBe("success")
+    expect(logger.info).toHaveBeenCalledWith(
+      "Scheduled agent send completed.",
+      expect.objectContaining({
+        boundary: "agent-runtime.scheduled-send",
+        source: "scheduled",
+        projectId: "project-1",
+        sessionKey: expect.stringMatching(/^scheduled:project-1:/),
+        conversationId: result.conversationId,
+        sdkSessionId: "sdk-1",
+        agentType: "claude-code",
+        mode: "plan",
+        sessionPolicy: "fresh",
+        status: "success",
+        promptLength: "sensitive scheduled prompt".length,
+        summaryLength: "done from sensitive prompt".length,
+        timeoutMs: 120_000,
+        durationMs: expect.any(Number),
+      }),
+    )
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("sensitive scheduled prompt")
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("done from sensitive prompt")
+  })
+
+  it("does not create a scheduled timeout when timeoutMs is non-positive", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      logger: logger as never,
+      now: fixedNow,
+    })
+
+    try {
+      const result = await service.sendScheduled({
+        projectId: "project-1",
+        agentType: "claude-code",
+        mode: "plan",
+        prompt: "sensitive scheduled prompt",
+        sessionPolicy: "fresh",
+        timeoutMs: 0,
+      })
+
+      expect(result.status).toBe("success")
+      expect(timeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 0)
+      expect(logger.info).toHaveBeenCalledWith(
+        "Scheduled agent send completed.",
+        expect.objectContaining({
+          timeoutMs: 0,
+          status: "success",
+        }),
+      )
+    } finally {
+      timeoutSpy.mockRestore()
+    }
   })
 
   it("logs scheduled resume fallback without prompt content", async () => {
@@ -712,6 +830,7 @@ class PermissionFailureSession implements AgentLiveSession {
   constructor(
     private readonly requestId: string,
     private readonly failureMessage: string,
+    private readonly toolInput = "pwd",
   ) {}
 
   async send(): Promise<void> {
@@ -730,8 +849,8 @@ class PermissionFailureSession implements AgentLiveSession {
         type: "permissionRequest",
         requestId: this.requestId,
         toolName: "Bash",
-        toolInput: "pwd",
-        toolInputRaw: { command: "pwd" },
+        toolInput: this.toolInput,
+        toolInputRaw: { command: this.toolInput },
       })
     }
     return new Promise((resolve) => {

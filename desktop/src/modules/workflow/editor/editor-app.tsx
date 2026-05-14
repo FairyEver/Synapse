@@ -63,9 +63,12 @@ export function WorkflowEditorApp() {
         }
       } catch (err) {
         if (cancelled) return
-        const msg = err instanceof Error ? err.message : String(err)
-        setLoadError(`加载失败：${msg}`)
-        logger.error("editor definition load threw", { workflowId, error: msg })
+        setLoadError("无法加载工作流，请重试")
+        logger.error("editor definition load threw", {
+          workflowId,
+          boundary: "renderer.workflow.editor.load",
+          ...errorDiagnostic(err),
+        })
       }
     })()
     return () => { cancelled = true }
@@ -190,7 +193,11 @@ export function WorkflowEditorApp() {
       try {
         result = await window.synapse?.workflow.save(def)
       } catch (err) {
-        logger.error("save IPC call threw", { workflowId: def.id, error: err instanceof Error ? err.message : String(err) })
+        logger.error("save IPC call threw", {
+          workflowId: def.id,
+          boundary: "renderer.workflow.editor.save",
+          ...errorDiagnostic(err),
+        })
         setRunErrors([{ type: "invalid_config", message: "保存失败：无法连接到主进程" }])
         return { errors: [{ type: "invalid_config" as const, message: "保存失败：无法连接到主进程" }] }
       }
@@ -247,8 +254,12 @@ export function WorkflowEditorApp() {
       void window.synapse?.workflow.openRunner(saved.id, result.runId)
       return result.runId
     } catch (err) {
-      logger.error("handleRun failed", { error: err instanceof Error ? err.message : String(err) })
-      setRunErrors([{ type: "invalid_config", message: `运行失败：${err instanceof Error ? err.message : String(err)}` }])
+      logger.error("handleRun failed", {
+        workflowId: def.id,
+        boundary: "renderer.workflow.editor.run",
+        ...errorDiagnostic(err),
+      })
+      setRunErrors([{ type: "invalid_config", message: "运行失败：无法连接到主进程" }])
       return null
     } finally {
       setRunning(false)
@@ -276,6 +287,13 @@ export function WorkflowEditorApp() {
         return
       }
       void window.synapse?.workflow.openRunner(saved.id, forceResult.runId)
+    } catch (err) {
+      logger.error("force run failed", {
+        workflowId: saved.id,
+        boundary: "renderer.workflow.editor.force-run",
+        ...errorDiagnostic(err),
+      })
+      toast.error("运行失败：无法连接到主进程")
     } finally {
       setRunning(false)
     }
@@ -382,4 +400,12 @@ export function WorkflowEditorApp() {
     </AlertDialog>
     </>
   )
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }

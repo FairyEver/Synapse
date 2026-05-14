@@ -70,6 +70,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly abortController: AbortController | undefined
   private readonly abortCleanup: (() => void) | undefined
   private readonly pumpPromise: Promise<void>
+  private readonly toolNamesByUseId = new Map<string, string>()
   private closed = false
   private finished = false
   private sdkSessionId: string | undefined
@@ -182,6 +183,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       .then(() => this.query.close())
       .catch((error) => {
         this.logger?.warn("Claude SDK query close failed.", {
+          boundary: "claude-sdk-query.close",
           projectId: this.projectId,
           conversationId: this.conversationId,
           providerId: this.providerId,
@@ -233,7 +235,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       requestId,
       toolName,
       toolInput: summarizeToolInput(toolName, input),
-      toolInputRaw: input,
+      toolInputRaw: sanitizeToolInputRecord(input),
       conversationId: this.conversationId,
       providerId: this.providerId,
       projectId: this.projectId,
@@ -309,8 +311,29 @@ export class ClaudeSDKSession implements AgentLiveSession {
       sdkSessionId: this.sdkSessionId,
       timestamp: this.now().toISOString(),
     }
+    this.rememberToolUseNames(raw)
     const bridged = bridgeSdkMessage(message, envelope)
-    return Array.isArray(bridged) ? bridged : [bridged as AgentEvent]
+    const events = Array.isArray(bridged) ? bridged : [bridged as AgentEvent]
+    return events.map((event) => this.resolveToolResultName(event))
+  }
+
+  private rememberToolUseNames(raw: Record<string, unknown>): void {
+    const message = asRecord(raw.message)
+    const content = Array.isArray(message?.content) ? message.content : []
+    for (const block of content) {
+      const record = asRecord(block)
+      const id = typeof record?.id === "string" ? record.id : undefined
+      const name = typeof record?.name === "string" ? record.name : undefined
+      if (record?.type === "tool_use" && id && name) {
+        this.toolNamesByUseId.set(id, name)
+      }
+    }
+  }
+
+  private resolveToolResultName(event: AgentEvent): AgentEvent {
+    if (event.type !== "toolResult") return event
+    const toolName = this.toolNamesByUseId.get(event.toolName)
+    return toolName ? { ...event, toolName } : event
   }
 
   private nextPermissionRequestId(): string {
@@ -438,6 +461,12 @@ function errorLogMeta(error: unknown): Record<string, unknown> {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
 function sanitizeDiagnosticText(value: string): string {
   const redacted = value
     .replace(
@@ -462,7 +491,9 @@ function summarizeToolInput(toolName: string, input: Record<string, unknown>): s
 
 function sanitizeToolInput(value: unknown, key = ""): unknown {
   if (sensitiveToolInputKeyPattern.test(key)) return REDACTED
-  if (typeof value === "string") return truncateText(value, MAX_TOOL_INPUT_STRING_LENGTH)
+  if (typeof value === "string") {
+    return truncateText(redactSensitiveText(value), MAX_TOOL_INPUT_STRING_LENGTH)
+  }
   if (Array.isArray(value)) return value.map((item) => sanitizeToolInput(item))
   if (!value || typeof value !== "object") return value
 
@@ -473,12 +504,28 @@ function sanitizeToolInput(value: unknown, key = ""): unknown {
   return sanitized
 }
 
+function sanitizeToolInputRecord(input: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = sanitizeToolInput(input)
+  return asRecord(sanitized) ?? {}
+}
+
 function redactSensitiveText(value: string): string {
   return truncateText(
-    value.replace(
-      /\b(token|secret|password|authorization|cookie|credential|api[-_]?key)=\S+/gi,
-      "$1=[redacted]",
-    ),
+    value
+      .replace(
+        /\b(authorization)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s'"]+(?:\s+[^\s'"]+)?)/gi,
+        `$1$2${REDACTED}`,
+      )
+      .replace(
+        /\b(cookie|set-cookie|token|secret|password|credential|api[-_]?key)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;'"`]+)/gi,
+        `$1$2${REDACTED}`,
+      )
+      .replace(
+        /(--cookie(?:-jar)?\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/gi,
+        `$1${REDACTED}`,
+      )
+      .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, PATH_REDACTED)
+      .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, `$1${PATH_REDACTED}`),
     MAX_TOOL_INPUT_SUMMARY_LENGTH,
   )
 }

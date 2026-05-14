@@ -1,6 +1,7 @@
 import { ChevronDown, Clipboard, Sparkles } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { track } from "@/lib/ui-tracking"
 import {
   Collapsible,
   CollapsibleContent,
@@ -22,6 +23,16 @@ function AgentThinkingEvent({
   readonly profile: SynapseAgentDisplayProfile
 }) {
   const handleCopy = () => {
+    track({
+      component: "agent",
+      name: "agent-thinking-copy",
+      action: "click",
+      metadata: {
+        boundary: "renderer.agent.thinking-copy",
+        itemId: item.id,
+        contentLength: item.content.length,
+      },
+    })
     void navigator.clipboard.writeText(item.content).catch((error: unknown) => {
       logger.warn("Agent thinking copy failed.", {
         boundary: "renderer.agent.thinking-copy",

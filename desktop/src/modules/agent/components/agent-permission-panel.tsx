@@ -5,6 +5,7 @@ import {
   AlertTitle,
 } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPendingPermission } from "@/types/agent"
 
 type AgentPermissionPanelProps = {
@@ -34,14 +35,16 @@ function AgentPermissionPanel({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onRespond(permission.requestId, "deny")}
+              data-track="agent-permission-deny"
+              onClick={() => handlePermissionResponse(permission, "deny", onRespond)}
             >
               <ShieldX data-icon="inline-start" />
               拒绝
             </Button>
             <Button
               size="sm"
-              onClick={() => onRespond(permission.requestId, "allow")}
+              data-track="agent-permission-allow"
+              onClick={() => handlePermissionResponse(permission, "allow", onRespond)}
             >
               <ShieldCheck data-icon="inline-start" />
               允许
@@ -51,6 +54,30 @@ function AgentPermissionPanel({
       ))}
     </div>
   )
+}
+
+function handlePermissionResponse(
+  permission: SynapseAgentPendingPermission,
+  behavior: "allow" | "deny",
+  onRespond: (requestId: string, behavior: "allow" | "deny") => void,
+): void {
+  track({
+    component: "agent",
+    name: "agent-permission-response",
+    action: "submit",
+    value: behavior,
+    metadata: {
+      boundary: "renderer.agent.permission-response",
+      requestId: permission.requestId,
+      projectId: permission.projectId,
+      sessionKey: permission.sessionKey,
+      conversationId: permission.conversationId,
+      toolName: permission.toolName,
+      behavior,
+      inputLength: permission.toolInput?.length ?? 0,
+    },
+  })
+  onRespond(permission.requestId, behavior)
 }
 
 export { AgentPermissionPanel }

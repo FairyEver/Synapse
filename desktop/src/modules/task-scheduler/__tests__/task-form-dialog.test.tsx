@@ -17,10 +17,19 @@ const rendererLogger = vi.hoisted(() => ({
   info: vi.fn(),
   warn: vi.fn(),
 }))
+const track = vi.hoisted(() => vi.fn())
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
 }))
+
+vi.mock("@/lib/ui-tracking", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ui-tracking")>()
+  return {
+    ...actual,
+    track,
+  }
+})
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -497,6 +506,80 @@ describe("TaskFormDialog", () => {
     expect(container.textContent).not.toContain("secret-agent-token")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret-agent-token")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
+  })
+
+  it("tracks successful Agent task submits without recording prompt or paths", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/Users/example/secret-project" }]}
+          state={{
+            mode: "edit",
+            task: createTask({
+              scope: { type: "project", projectId: "project-1" },
+              trigger: {
+                type: "builtin.interval",
+                config: { everyMinutes: 15, anchor: "last_completed_at" },
+              },
+              action: {
+                type: "builtin.agent",
+                config: {
+                  projectId: "project-1",
+                  agentType: "claude-code",
+                  mode: "plan",
+                  prompt: "secret scheduled prompt",
+                  sessionPolicy: "fresh",
+                  timeoutMins: 30,
+                },
+              },
+            }),
+          }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={onUpdate}
+        />,
+      )
+    })
+
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "task-scheduler",
+      name: "task-form-submit",
+      action: "submit",
+      metadata: expect.objectContaining({
+        boundary: "renderer.task-scheduler.form-submit",
+        mode: "edit",
+        taskId: "task-1",
+        actionType: "builtin.agent",
+        triggerType: "interval",
+        enabled: true,
+        missedRunPolicy: "skip",
+        hasCwd: false,
+        hasAgentProject: true,
+        agentType: "claude-code",
+        agentMode: "plan",
+        sessionPolicy: "fresh",
+      }),
+    })
+    expect(JSON.stringify(track.mock.calls)).not.toContain("secret scheduled prompt")
+    expect(JSON.stringify(track.mock.calls)).not.toContain("/Users/example")
   })
 
   it("renders cron as an input group with an inline editor action", () => {

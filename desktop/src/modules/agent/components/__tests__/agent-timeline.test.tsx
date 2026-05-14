@@ -1,5 +1,9 @@
+/**
+ * @vitest-environment jsdom
+ */
 import type { ComponentProps } from "react"
-import { createRef } from "react"
+import { act, createRef } from "react"
+import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
@@ -9,6 +13,16 @@ import {
 } from "@/lib/agent-timeline"
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
+
+const track = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/ui-tracking", () => ({
+  debounce: <Args extends unknown[]>(fn: (...args: Args) => void) => fn,
+  extractLabel: () => "button",
+  track,
+}))
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const profile: SynapseAgentDisplayProfile = {
   agentLabel: "Codex",
@@ -64,6 +78,46 @@ describe("AgentTimeline", () => {
     const html = renderTimeline({ showJumpToBottom: true })
     expect(html).toContain("↓ 新消息")
     expect(html).toContain('aria-label="跳到最新消息"')
+  })
+
+  it("tracks the jump-to-bottom action with a stable Agent timeline name", async () => {
+    const onJumpToBottom = vi.fn()
+    const container = document.createElement("div")
+    const root = createRoot(container)
+    track.mockClear()
+
+    await act(async () => {
+      root.render(
+        <AgentTimeline
+          items={[]}
+          profile={profile}
+          sending={false}
+          pendingPermissions={[]}
+          onOpenReference={vi.fn()}
+          onRespondPermission={vi.fn()}
+          viewportRef={createRef<HTMLDivElement>()}
+          showJumpToBottom
+          onJumpToBottom={onJumpToBottom}
+        />,
+      )
+    })
+
+    const button = container.querySelector('button[aria-label="跳到最新消息"]')
+    expect(button).toBeTruthy()
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onJumpToBottom).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "button",
+      name: "agent-timeline-jump-to-bottom",
+      action: "click",
+    })
+
+    await act(async () => {
+      root.unmount()
+    })
   })
 
   it("renders an AgentPhaseRow for phase items", () => {

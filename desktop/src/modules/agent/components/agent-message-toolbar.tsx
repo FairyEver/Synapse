@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Check, Clipboard } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
+import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 
 const logger = createRendererLogger("agent")
@@ -8,21 +9,35 @@ const logger = createRendererLogger("agent")
 interface AgentMessageToolbarProps {
   readonly timestamp?: string
   readonly content: string
+  readonly messageId?: string
+  readonly role?: "assistant" | "user"
   readonly className?: string
 }
 
-function AgentMessageToolbar({ timestamp, content, className }: AgentMessageToolbarProps) {
+function AgentMessageToolbar({ timestamp, content, messageId, role, className }: AgentMessageToolbarProps) {
   const [copied, setCopied] = useState(false)
   const formattedTimestamp = timestamp ? formatTime(timestamp) : undefined
 
   const handleCopy = () => {
+    const metadata = {
+      boundary: "renderer.agent.message-toolbar",
+      ...(messageId ? { messageId } : {}),
+      ...(role ? { role } : {}),
+      contentLength: content.length,
+      hasTimestamp: Boolean(formattedTimestamp),
+    }
+    track({
+      component: "agent",
+      name: "agent-message-copy",
+      action: "click",
+      metadata,
+    })
     void navigator.clipboard.writeText(content).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }).catch((rawError: unknown) => {
       logger.error("Agent message copy failed.", {
-        boundary: "renderer.agent.message-toolbar",
-        contentLength: content.length,
+        ...metadata,
         ...errorLogMeta(rawError),
       })
     })

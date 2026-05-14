@@ -20,6 +20,7 @@ export interface TaskSchedulerExecutionServiceDeps {
 }
 
 export interface TaskSchedulerExecutionLogger {
+  info?(message: string, metadata: Record<string, unknown>): void
   warn(message: string, metadata: Record<string, unknown>): void
 }
 
@@ -40,6 +41,7 @@ export class TaskSchedulerExecutionService {
     this.activeRuns.set(run.id, controller)
     let permissionRequest: PermissionRequest | undefined
     let permissionAllowed = false
+    let permissionDenied = false
     let actionExecutePending = false
     try {
       const action = this.deps.actions.get(task.action.type)
@@ -69,6 +71,7 @@ export class TaskSchedulerExecutionService {
             reason: permission.reason,
           },
         })
+        permissionDenied = true
         throw new Error(permission.reason)
       }
       this.deps.auditSink.record({
@@ -88,6 +91,9 @@ export class TaskSchedulerExecutionService {
       const previousOutputs = await this.getLastSuccessOutputs(task.id)
       actionExecutePending = true
       const result = await action.execute({ config, context, previousOutputs })
+      if (controller.signal.aborted) {
+        throw new TaskRunCancelledError()
+      }
       actionExecutePending = false
       if (result.status !== "success") {
         const metadata = {
@@ -109,12 +115,28 @@ export class TaskSchedulerExecutionService {
         })
         this.logger.warn("Scheduled task action failed.", metadata)
       }
+      const persistableResult = result.error
+        ? { ...result, error: persistableActionError(result.error) }
+        : result
       const finished = await this.deps.runs.finish(run.id, {
         status: result.status,
-        result,
-        error: result.error,
+        result: persistableResult,
+        error: persistableResult.error,
       })
       await this.deps.tasks.markRunResult(task.id, { status: result.status })
+      if (result.status === "success") {
+        this.logger.info?.("Scheduled task action completed.", {
+          source: "task-scheduler",
+          taskId: task.id,
+          runId: run.id,
+          actionType: task.action.type,
+          triggeredBy,
+          boundary: "task-scheduler-action",
+          status: result.status,
+          hasOutputs: Boolean(result.outputs),
+          summaryLength: result.summary?.length ?? 0,
+        })
+      }
       return finished
     } catch (error) {
       const message = errorMessage(error)
@@ -151,7 +173,9 @@ export class TaskSchedulerExecutionService {
           ...diagnostic,
         })
       }
-      const visibleError = actionExecutePending && permissionAllowed ? visibleFailureMessage(status) : message
+      const visibleError = permissionDenied
+        ? message
+        : visibleFailureMessage(status)
       const finished = await this.deps.runs.finish(run.id, {
         status,
         error: visibleError,
@@ -203,6 +227,18 @@ function resultErrorDiagnostic(error: string | undefined): { readonly errorName?
   return {
     errorName: "string",
     errorLength: error.length,
+  }
+}
+
+function persistableActionError(error: string | undefined): string | undefined {
+  if (!error) return undefined
+  return `执行失败（错误 ${error.length} 字）`
+}
+
+class TaskRunCancelledError extends Error {
+  constructor() {
+    super("Scheduled task run was stopped")
+    this.name = "TaskRunCancelledError"
   }
 }
 

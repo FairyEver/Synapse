@@ -5,8 +5,16 @@ const electronMock = vi.hoisted(() => ({
     openPath: vi.fn(),
   },
 }))
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    warn: vi.fn(),
+  },
+}))
 
 vi.mock("electron", () => electronMock)
+vi.mock("../../../services/log-store", () => ({
+  createMainLogger: vi.fn(() => logStoreMock.logger),
+}))
 
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
@@ -90,6 +98,29 @@ describe("agent tool IPC methods", () => {
     }))
     expect(JSON.stringify(auditSink.record.mock.calls[0]?.[0]?.metadata)).not.toContain("/repo/src/app.ts")
     expect(JSON.stringify(auditSink.record.mock.calls[0]?.[0]?.metadata)).not.toContain("sk-secret")
+  })
+
+  it("logs invalid Agent reference opens without recording the raw reference", async () => {
+    const auditSink = { record: vi.fn() }
+    const rawReference = "https://example.com/private?token=sk-secret"
+
+    await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
+      projectId: "project-1",
+      reference: rawReference,
+    })).rejects.toThrow("Reference is outside the workspace or invalid.")
+
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+      "Agent open reference IPC failed.",
+      expect.objectContaining({
+        projectId: "project-1",
+        boundary: "agent.open-reference.ipc",
+        referenceLength: rawReference.length,
+        errorName: "Error",
+        errorLength: "Reference is outside the workspace or invalid.".length,
+      }),
+    )
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain(rawReference)
+    expect(auditSink.record).not.toHaveBeenCalled()
   })
 })
 

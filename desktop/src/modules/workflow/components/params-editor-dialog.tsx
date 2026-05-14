@@ -152,7 +152,9 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
   }
 
   const handleSave = () => {
-    onChange(draft.filter((p) => p.name.trim() !== ""))
+    onChange(draft
+      .map((p) => ({ ...p, name: p.name.trim() }))
+      .filter((p) => p.name !== ""))
     onClose()
   }
 

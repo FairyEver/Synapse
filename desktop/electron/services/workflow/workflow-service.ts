@@ -27,9 +27,19 @@ export class WorkflowService {
 
   async list(): Promise<WorkflowMeta[]> {
     const resolvedPath = this.repoPath
-    logger.info("workflow list: resolving from repo", { repoPath: resolvedPath })
+    const repoPathMeta = summarizeRepoPath(resolvedPath)
+    logger.info("workflow list: resolving from repo", repoPathMeta)
     let ids: string[]
-    try { ids = await readdir(path.join(resolvedPath, "workflows")) } catch { return [] }
+    try {
+      ids = await readdir(path.join(resolvedPath, "workflows"))
+    } catch (err) {
+      logger.warn("workflow list failed", {
+        boundary: "workflow-service.list",
+        ...repoPathMeta,
+        ...errorLogMeta(err),
+      })
+      return []
+    }
     const metas: WorkflowMeta[] = []
     for (const id of ids) {
       const def = await this.get(id)
@@ -41,8 +51,13 @@ export class WorkflowService {
 
   async get(id: string): Promise<WorkflowDefinition | null> {
     let files: string[]
-    try { files = await readdir(this.dir(id)) } catch {
-      logger.info("workflow get: not found", { id })
+    try { files = await readdir(this.dir(id)) } catch (err) {
+      logger.info("workflow get: not found", {
+        boundary: "workflow-service.get.not-found",
+        id,
+        ...summarizeRepoPath(this.repoPath),
+        ...errorLogMeta(err),
+      })
       return null
     }
     const versions = files.filter((f) => f.startsWith("v_") && f.endsWith(".json")).sort()
@@ -52,7 +67,17 @@ export class WorkflowService {
     }
     const versionFile = versions[versions.length - 1]
     logger.info("workflow get: loaded", { id, versionFile })
-    return JSON.parse(await readFile(path.join(this.dir(id), versionFile), "utf-8")) as WorkflowDefinition
+    try {
+      return JSON.parse(await readFile(path.join(this.dir(id), versionFile), "utf-8")) as WorkflowDefinition
+    } catch (err) {
+      logger.warn("workflow get failed", {
+        boundary: "workflow-service.get",
+        id,
+        versionFile,
+        ...errorLogMeta(err),
+      })
+      return null
+    }
   }
 
   async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {
@@ -67,8 +92,13 @@ export class WorkflowService {
       await mkdir(this.dir(def.id), { recursive: true })
       await writeFile(path.join(this.dir(def.id), `${versionHash}.json`), JSON.stringify(versioned, null, 2), "utf-8")
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      logger.error("workflow save failed — disk write error", { id: def.id, name: def.name, error: msg, stack: err instanceof Error ? err.stack : undefined })
+      logger.error("workflow save failed — disk write error", {
+        boundary: "workflow-service.save",
+        id: def.id,
+        name: def.name,
+        ...summarizeRepoPath(this.repoPath),
+        ...errorLogMeta(err),
+      })
       return { errors: [{ type: "invalid_config", message: "保存失败：磁盘空间不足或权限不足，请检查后重试" }] }
     }
     logger.info("workflow saved", { id: def.id, name: def.name, nodeCount: def.nodes.length, versionHash })
@@ -99,7 +129,34 @@ export class WorkflowService {
       await rm(this.dir(id), { recursive: true, force: true })
       logger.info("workflow deleted", { id })
     } catch (err) {
-      logger.warn("workflow delete error", { id, error: err instanceof Error ? err.message : String(err) })
+      logger.warn("workflow delete error", {
+        boundary: "workflow-service.delete",
+        id,
+        ...summarizeRepoPath(this.repoPath),
+        ...errorLogMeta(err),
+      })
     }
   }
+}
+
+function summarizeRepoPath(repoPath: string): { repoBasename: string; repoPathLength: number } {
+  return {
+    repoBasename: path.basename(repoPath) || "[path redacted]",
+    repoPathLength: repoPath.length,
+  }
+}
+
+function errorLogMeta(error: unknown): { errorName: string; errorCode?: string; errorLength: number } {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorCode: errorCode(error),
+    errorLength: message.length,
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined
+  const code = (error as { readonly code?: unknown }).code
+  return typeof code === "string" ? code : undefined
 }

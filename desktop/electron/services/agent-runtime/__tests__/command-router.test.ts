@@ -324,10 +324,14 @@ describe("AgentCommandRouter", () => {
     const next = expectRuntimeResult(await router.handle(baseMessage("/new"), baseConversation()))
     expect(next.resultText).toBe("New session will start on the next message.")
 
-    const status = expectRuntimeResult(await router.handle(baseMessage("/status"), baseConversation()))
+    const status = expectRuntimeResult(await router.handle(baseMessage("/status"), {
+      ...baseConversation(),
+      agentConfig: { mode: "acceptEdits" },
+    }))
     expect(status.resultText).toContain("Agent: claude-code")
     expect(status.resultText).toContain("Provider: anthropic")
     expect(status.resultText).toContain("Model: claude-sonnet-4.5")
+    expect(status.resultText).toContain("Mode: acceptEdits")
     expect(status.resultText).toContain("Agent session: thread-1")
 
     const unknown = expectRuntimeResult(await router.handle(baseMessage("/unknown"), baseConversation()))

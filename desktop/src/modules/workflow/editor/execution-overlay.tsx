@@ -3,6 +3,7 @@ import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import type { RunState } from "../hooks/use-workflow-run"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { track } from "@/lib/ui-tracking"
 
 const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过", pending: "等待" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -38,12 +39,34 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
   if (runState === "idle" && results.length === 0) return null
 
   const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
+  const typeOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.type ?? "unknown"
 
   const externalResult = viewingNodeId ? (nodeResults[viewingNodeId] ?? null) : null
   const dialogTarget = selected ?? externalResult
   const handleDialogClose = () => {
     if (selected) setSelected(null)
     else onViewClose?.()
+  }
+  const handleResultOpen = (result: NodeRunResult) => {
+    if (result.status !== "success" && result.status !== "failed" && result.status !== "skipped") return
+    track({
+      component: "workflow.editor",
+      name: "workflow-editor-execution-node-detail-open",
+      action: "select",
+      value: result.nodeId,
+      metadata: {
+        boundary: "renderer.workflow.editor.execution-overlay",
+        workflowId: definition.id,
+        nodeId: result.nodeId,
+        nodeType: typeOf(result.nodeId),
+        status: result.status,
+        hasError: Boolean(result.error),
+        hasOutput: (result.output != null && result.output !== "")
+          || (result.outputs != null && Object.keys(result.outputs).length > 0),
+        hasPrompt: Boolean(result.input.prompt),
+      },
+    })
+    setSelected(result)
   }
 
   return (
@@ -62,7 +85,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
           <div
             key={r.nodeId}
             className={`flex items-center gap-2 ${r.status === "success" || r.status === "failed" || r.status === "skipped" ? "cursor-pointer hover:opacity-75" : ""}`}
-            onClick={() => { if (r.status === "success" || r.status === "failed" || r.status === "skipped") setSelected(r) }}
+            onClick={() => handleResultOpen(r)}
           >
             <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">{STATUS_LABEL[r.status] ?? r.status}</Badge>
             <span className="text-xs text-muted-foreground truncate max-w-32">{nameOf(r.nodeId)}</span>

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { WorkflowList } from "./components/workflow-list"
 import { Loader2, Plus } from "lucide-react"
@@ -7,6 +8,8 @@ import { Loader2, Plus } from "lucide-react"
 // files that import main-process modules (electron, node:fs, ...) and must not
 // be pulled into the Vite renderer bundle.
 import "../../../workflow-nodes/register.renderer"
+
+const logger = createRendererLogger("workflow")
 
 export function WorkflowModule() {
   const [listKey, setListKey] = useState(0)
@@ -28,7 +31,11 @@ export function WorkflowModule() {
       await window.synapse?.workflow.openEditor(result.id)
       setListKey((k) => k + 1)
     } catch (err) {
-      toast.error(`创建工作流失败：${err instanceof Error ? err.message : String(err)}`)
+      logger.warn("Workflow create failed.", {
+        boundary: "renderer.workflow.create",
+        ...errorLogMeta(err),
+      })
+      toast.error("创建工作流失败，请重试")
     } finally {
       setCreating(false)
     }
@@ -44,4 +51,16 @@ export function WorkflowModule() {
       <div className="flex-1 overflow-auto"><WorkflowList key={listKey} /></div>
     </div>
   )
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+  }
 }

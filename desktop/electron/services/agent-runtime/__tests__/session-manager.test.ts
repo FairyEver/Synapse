@@ -92,6 +92,55 @@ describe("SessionManager", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
   })
 
+  it("logs live session creation with SDK resume correlation", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const logger = structuredLogger()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      logger,
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    const message = {
+      ...baseMessage("default"),
+      workspaceKey: "repo-1",
+      workspacePath: "/Users/liyang/private/project",
+    }
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message,
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      sdkSessionId: "sdk-1",
+    }))
+    expect(logger.info).toHaveBeenCalledWith("Created agent live session.", {
+      boundary: "agent-runtime.live-session.create",
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      providerId: "anthropic",
+      mode: "default",
+      sessionKey: "session-1",
+      platform: "scheduled",
+      workspaceKey: "repo-1",
+      hasWorkspacePath: true,
+      resumePolicy: "resume",
+      sdkSessionId: "sdk-1",
+    })
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("/Users/liyang")
+  })
+
   it("recreates the SDK session when closing the previous session fails", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const logger = structuredLogger()
@@ -142,6 +191,38 @@ describe("SessionManager", () => {
       errorLength: "close failed for secret prompt text".length,
     })
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
+  })
+
+  it("logs idle session reclaim with SDK session correlation", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const logger = structuredLogger()
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      logger,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    state.providerId = "anthropic"
+    state.modeOverride = "default"
+    state.liveSession = new FakeLiveSession()
+    state.lastActivity = Date.now() - 11 * 60 * 1000
+
+    await manager.closeIdleSessions()
+
+    expect(logger.info).toHaveBeenCalledWith("Reclaimed idle agent session.", {
+      boundary: "agent-runtime.live-session.idle-reclaim",
+      conversationId: "conversation-1",
+      providerId: "anthropic",
+      mode: "default",
+      sdkSessionId: "sdk-1",
+    })
   })
 })
 
@@ -214,7 +295,10 @@ class FakeLiveSession implements AgentLiveSession {
   }
 }
 
-function structuredLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn> } {
+function structuredLogger(): StructuredLogger & {
+  info: ReturnType<typeof vi.fn>
+  warn: ReturnType<typeof vi.fn>
+} {
   const logger = {
     trace: vi.fn(),
     debug: vi.fn(),

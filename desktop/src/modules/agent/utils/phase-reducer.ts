@@ -79,6 +79,23 @@ export function reducePhaseEvent(
       if (item.status !== "in-progress") return item
       return closeItem(item, "failed", event.completedAt ?? event.eventTimestamp, event.errorMessage)
     })
+    const existingFailedIndex = closed.findIndex(
+      (item) =>
+        isPhaseItem(item)
+        && item.runId === event.runId
+        && item.phase === "failed",
+    )
+    if (existingFailedIndex >= 0) {
+      const target = closed[existingFailedIndex] as SynapseAgentPhaseTimelineItem
+      closed[existingFailedIndex] = {
+        ...target,
+        timestamp: event.eventTimestamp,
+        status: "failed",
+        completedAt: event.completedAt ?? event.eventTimestamp,
+        errorMessage: event.errorMessage ?? target.errorMessage,
+      }
+      return closed
+    }
     closed.push({
       id: newPhaseId(event.runId, "failed"),
       kind: "phase",

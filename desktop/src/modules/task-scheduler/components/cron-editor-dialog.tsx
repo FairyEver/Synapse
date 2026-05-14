@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatDateTime } from "@/lib/date-time"
+import { track } from "@/lib/ui-tracking"
 import {
   buildCronExpression,
   createDefaultCronTemplateDraft,
@@ -108,6 +109,17 @@ function CronEditorDialog({
     event.preventDefault()
     const currentValidation = validateCronExpression(draft)
     if (!currentValidation.ok) return
+    track({
+      component: "task-scheduler",
+      name: "task-scheduler-cron-apply",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.task-scheduler.cron-editor",
+        activeTab,
+        expressionLength: draft.length,
+        previewCount: previewRuns.length,
+      },
+    })
     onApply(draft)
     onOpenChange(false)
   }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "totalIterations": 147,
+  "totalIterations": 191,
   "files": {
     "desktop/src/modules/agent/components/archived-group.tsx": {
       "lastReviewedIteration": 135,
@@ -17,11 +17,25 @@
       "lastUpdated": "2026-05-14T06:32:00+08:00"
     },
     "desktop/src/modules/agent/index.tsx": {
-      "lastReviewedIteration": 141,
-      "issuesFound": 3,
-      "issuesFixed": 3,
+      "lastReviewedIteration": 161,
+      "issuesFound": 4,
+      "issuesFixed": 4,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:52:59+08:00"
+      "lastUpdated": "2026-05-15T01:59:00+08:00"
+    },
+    "desktop/src/modules/agent/hooks/use-stick-to-bottom.ts": {
+      "lastReviewedIteration": 161,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:59:00+08:00"
+    },
+    "desktop/src/modules/agent/hooks/__tests__/use-stick-to-bottom.test.ts": {
+      "lastReviewedIteration": 161,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:59:00+08:00"
     },
     "desktop/src/modules/agent/__tests__/pending-agent-session.test.tsx": {
       "lastReviewedIteration": 141,
@@ -45,18 +59,18 @@
       "lastUpdated": "2026-05-14T11:58:00+08:00"
     },
     "desktop/electron/modules/workflow/ipc.ts": {
-      "lastReviewedIteration": 30,
-      "issuesFound": 5,
-      "issuesFixed": 5,
+      "lastReviewedIteration": 191,
+      "issuesFound": 6,
+      "issuesFixed": 6,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T18:20:00+08:00"
+      "lastUpdated": "2026-05-15T06:43:00+08:00"
     },
     "desktop/electron/services/workflow/run-snapshot-service.ts": {
-      "lastReviewedIteration": 28,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 148,
+      "issuesFound": 3,
+      "issuesFixed": 3,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:45:00+08:00"
+      "lastUpdated": "2026-05-14T23:08:19+08:00"
     },
     "desktop/electron/services/workflow/variable-resolver.ts": {
       "lastReviewedIteration": 3,
@@ -72,18 +86,18 @@
       "lastUpdated": "2026-05-13T19:00:00+08:00"
     },
     "desktop/electron/services/workflow/workflow-engine.ts": {
-      "lastReviewedIteration": 24,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 172,
+      "issuesFound": 4,
+      "issuesFixed": 4,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T15:00:00+08:00"
+      "lastUpdated": "2026-05-15T03:37:00+08:00"
     },
     "desktop/electron/services/workflow/workflow-service.ts": {
-      "lastReviewedIteration": 25,
-      "issuesFound": 1,
-      "issuesFixed": 1,
+      "lastReviewedIteration": 187,
+      "issuesFound": 4,
+      "issuesFixed": 4,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T16:00:00+08:00"
+      "lastUpdated": "2026-05-15T05:58:00+08:00"
     },
     "desktop/electron/services/workflow/workflow-validator.ts": {
       "lastReviewedIteration": 37,
@@ -100,17 +114,32 @@
       "lastUpdated": "2026-05-14T00:15:00+08:00"
     },
     "desktop/src/modules/workflow/components/run-history-dialog.tsx": {
-      "lastReviewedIteration": 38,
+      "lastReviewedIteration": 172,
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:40:00+08:00"
+    },
+    "desktop/src/modules/workflow/components/__tests__/run-history-dialog.test.tsx": {
+      "lastReviewedIteration": 172,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:40:00+08:00"
+    },
+    "desktop/src/modules/workflow/components/run-params-dialog.tsx": {
+      "lastReviewedIteration": 160,
       "issuesFound": 3,
       "issuesFixed": 3,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T01:00:00+08:00"
+      "lastUpdated": "2026-05-15T01:44:00+08:00"
     },
-    "desktop/src/modules/workflow/components/run-params-dialog.tsx": {
-      "lastReviewedIteration": 18,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active"
+    "desktop/src/modules/workflow/components/__tests__/run-params-dialog.test.tsx": {
+      "lastReviewedIteration": 160,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:44:00+08:00"
     },
     "desktop/src/modules/workflow/components/workflow-card.tsx": {
       "lastReviewedIteration": 16,
@@ -119,11 +148,18 @@
       "healthScore": "active"
     },
     "desktop/src/modules/workflow/components/workflow-list.tsx": {
-      "lastReviewedIteration": 36,
-      "issuesFound": 8,
-      "issuesFixed": 8,
+      "lastReviewedIteration": 160,
+      "issuesFound": 9,
+      "issuesFixed": 9,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T23:00:00+08:00"
+      "lastUpdated": "2026-05-15T01:45:00+08:00"
+    },
+    "desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx": {
+      "lastReviewedIteration": 160,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:45:00+08:00"
     },
     "desktop/electron/bootstrap/descriptors.ts": {
       "lastReviewedIteration": 24,
@@ -154,11 +190,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/editor-app.tsx": {
-      "lastReviewedIteration": 38,
-      "issuesFound": 12,
-      "issuesFixed": 12,
+      "lastReviewedIteration": 170,
+      "issuesFound": 14,
+      "issuesFixed": 14,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T01:00:00+08:00"
+      "lastUpdated": "2026-05-15T03:30:00+08:00"
     },
     "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
       "lastReviewedIteration": 33,
@@ -196,11 +232,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/editor/toolbar.tsx": {
-      "lastReviewedIteration": 35,
-      "issuesFound": 3,
-      "issuesFixed": 3,
+      "lastReviewedIteration": 157,
+      "issuesFound": 4,
+      "issuesFixed": 4,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:10:00+08:00"
+      "lastUpdated": "2026-05-15T01:12:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-upstream-nodes.ts": {
       "lastReviewedIteration": 20,
@@ -210,10 +246,18 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-events.ts": {
-      "lastReviewedIteration": 14,
+      "lastReviewedIteration": 153,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:21:00+08:00"
+    },
+    "desktop/src/modules/workflow/hooks/__tests__/use-workflow-events.test.tsx": {
+      "lastReviewedIteration": 153,
       "issuesFound": 1,
       "issuesFixed": 1,
-      "healthScore": "stable"
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:21:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-list.ts": {
       "lastReviewedIteration": 21,
@@ -223,11 +267,18 @@
       "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/src/modules/workflow/hooks/use-workflow-run.ts": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastReviewedIteration": 173,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:49:00+08:00"
+    },
+    "desktop/src/modules/workflow/hooks/__tests__/use-workflow-run.test.tsx": {
+      "lastReviewedIteration": 173,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:49:00+08:00"
     },
     "desktop/src/modules/workflow/index.tsx": {
       "lastReviewedIteration": 29,
@@ -264,11 +315,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/src/modules/workflow/runner/runner-toolbar.tsx": {
-      "lastReviewedIteration": 26,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 155,
+      "issuesFound": 1,
+      "issuesFixed": 1,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T16:30:00+08:00"
+      "lastUpdated": "2026-05-15T00:50:00+08:00"
     },
     "desktop/src/modules/workflow/runner/runner-edge.tsx": {
       "lastReviewedIteration": 37,
@@ -345,11 +396,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/prompt/executor.main.ts": {
-      "lastReviewedIteration": 28,
+      "lastReviewedIteration": 187,
       "issuesFound": 2,
       "issuesFixed": 2,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:45:00+08:00"
+      "lastUpdated": "2026-05-15T06:00:00+08:00"
     },
     "desktop/workflow-nodes/prompt/index.ts": {
       "lastReviewedIteration": 20,
@@ -421,11 +472,11 @@
       "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/workflow-nodes/switch/executor.main.ts": {
-      "lastReviewedIteration": 28,
-      "issuesFound": 4,
-      "issuesFixed": 4,
+      "lastReviewedIteration": 188,
+      "issuesFound": 6,
+      "issuesFixed": 6,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:45:00+08:00"
+      "lastUpdated": "2026-05-15T06:08:00+08:00"
     },
     "desktop/workflow-nodes/switch/index.ts": {
       "lastReviewedIteration": 20,
@@ -469,130 +520,130 @@
       "lastUpdated": "2026-05-13T21:40:00+08:00"
     },
     "desktop/electron/services/agent-runtime/sdk-event-bridge.ts": {
-      "lastReviewedIteration": 143,
-      "issuesFound": 10,
-      "issuesFixed": 9,
+      "lastReviewedIteration": 190,
+      "issuesFound": 14,
+      "issuesFixed": 13,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:09:00+08:00"
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
     },
     "desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts": {
-      "lastReviewedIteration": 143,
-      "issuesFound": 10,
-      "issuesFixed": 9,
+      "lastReviewedIteration": 190,
+      "issuesFound": 14,
+      "issuesFixed": 13,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:09:00+08:00"
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
     },
     "desktop/electron/services/agent-runtime/conversation-router.ts": {
-      "issuesFound": 6,
-      "issuesFixed": 6,
-      "lastReviewedIteration": 139,
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 190,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T03:40:22.010Z"
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
     },
     "desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts": {
-      "issuesFound": 6,
-      "issuesFixed": 6,
-      "lastReviewedIteration": 139,
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 190,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T03:40:22.010Z"
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
     },
     "desktop/electron/services/agent-runtime/agent-runtime-service.ts": {
-      "lastReviewedIteration": 142,
-      "issuesFound": 7,
-      "issuesFixed": 7,
+      "lastReviewedIteration": 189,
+      "issuesFound": 11,
+      "issuesFixed": 11,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:00:00+08:00"
+      "lastUpdated": "2026-05-15T06:22:00+08:00"
     },
     "desktop/electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts": {
-      "lastReviewedIteration": 142,
-      "issuesFound": 5,
-      "issuesFixed": 5,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:00:00+08:00"
-    },
-    "desktop/action-packages/builtin/agent/executor.main.ts": {
-      "lastReviewedIteration": 132,
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:13:01+08:00"
-    },
-    "desktop/action-packages/builtin/agent/__tests__/executor.main.test.ts": {
-      "lastReviewedIteration": 132,
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:13:01+08:00"
-    },
-    "desktop/electron/services/side-channel/side-channel-service.ts": {
-      "lastReviewedIteration": 138,
-      "issuesFound": 7,
-      "issuesFixed": 7,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:38:00+08:00"
-    },
-    "desktop/electron/services/side-channel/__tests__/side-channel-service.test.ts": {
-      "lastReviewedIteration": 138,
+      "lastReviewedIteration": 189,
       "issuesFound": 8,
       "issuesFixed": 8,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:38:00+08:00"
+      "lastUpdated": "2026-05-15T06:22:00+08:00"
+    },
+    "desktop/action-packages/builtin/agent/executor.main.ts": {
+      "lastReviewedIteration": 189,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:22:00+08:00"
+    },
+    "desktop/action-packages/builtin/agent/__tests__/executor.main.test.ts": {
+      "lastReviewedIteration": 189,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:22:00+08:00"
+    },
+    "desktop/electron/services/side-channel/side-channel-service.ts": {
+      "lastReviewedIteration": 186,
+      "issuesFound": 9,
+      "issuesFixed": 9,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:48:00+08:00"
+    },
+    "desktop/electron/services/side-channel/__tests__/side-channel-service.test.ts": {
+      "lastReviewedIteration": 186,
+      "issuesFound": 10,
+      "issuesFixed": 10,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:48:00+08:00"
     },
     "desktop/electron/services/automation-ingress/automation-ingress-service.ts": {
-      "issuesFound": 7,
-      "issuesFixed": 7,
-      "lastReviewedIteration": 141,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 189,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:48:00+08:00"
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
     },
     "desktop/electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts": {
-      "issuesFound": 7,
-      "issuesFixed": 7,
-      "lastReviewedIteration": 141,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 189,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:48:00+08:00"
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
     },
     "desktop/electron/services/agent-runtime/session-manager.ts": {
-      "issuesFound": 4,
-      "issuesFixed": 4,
-      "lastReviewedIteration": 147,
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "lastReviewedIteration": 187,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T04:28:10Z"
+      "lastUpdated": "2026-05-15T05:59:00+08:00"
     },
     "desktop/electron/services/agent-runtime/session-lifecycle.ts": {
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "lastReviewedIteration": 62,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 158,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T16:37:20.903Z"
+      "lastUpdated": "2026-05-15T01:21:00+08:00"
     },
     "desktop/electron/services/agent-runtime/__tests__/session-manager.test.ts": {
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "lastReviewedIteration": 147,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T04:28:10Z"
-    },
-    "desktop/src/lib/agent-timeline.ts": {
       "issuesFound": 4,
       "issuesFixed": 4,
-      "lastReviewedIteration": 129,
+      "lastReviewedIteration": 187,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T05:41:00+08:00"
+      "lastUpdated": "2026-05-15T05:59:00+08:00"
+    },
+    "desktop/src/lib/agent-timeline.ts": {
+      "issuesFound": 6,
+      "issuesFixed": 6,
+      "lastReviewedIteration": 159,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:34:00+08:00"
     },
     "desktop/src/lib/__tests__/agent-timeline.test.ts": {
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "lastReviewedIteration": 129,
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "lastReviewedIteration": 159,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T05:41:00+08:00"
+      "lastUpdated": "2026-05-15T01:34:00+08:00"
     },
     "desktop/src/modules/agent/components/__tests__/agent-timeline.test.tsx": {
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "lastReviewedIteration": 130,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 153,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T21:54:18.909Z"
+      "lastUpdated": "2026-05-15T00:22:00+08:00"
     },
     "desktop/electron/modules/agent/ipc-shared.ts": {
       "issuesFound": 1,
@@ -616,18 +667,18 @@
       "lastUpdated": "2026-05-14T01:51:34+08:00"
     },
     "desktop/electron/services/agent-runtime/claude-sdk-session.ts": {
-      "issuesFound": 7,
-      "issuesFixed": 7,
-      "lastReviewedIteration": 145,
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 185,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:21:00+08:00"
+      "lastUpdated": "2026-05-15T05:37:00+08:00"
     },
     "desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts": {
-      "issuesFound": 7,
-      "issuesFixed": 7,
-      "lastReviewedIteration": 145,
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 185,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:21:00+08:00"
+      "lastUpdated": "2026-05-15T05:37:00+08:00"
     },
     "desktop/electron/modules/ops/ipc.ts": {
       "issuesFound": 2,
@@ -644,18 +695,18 @@
       "lastUpdated": "2026-05-14T00:48:38+08:00"
     },
     "desktop/electron/services/task-scheduler/execution-service.ts": {
-      "issuesFound": 6,
-      "issuesFixed": 6,
-      "lastReviewedIteration": 145,
+      "issuesFound": 8,
+      "issuesFixed": 8,
+      "lastReviewedIteration": 191,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:19:38+08:00"
+      "lastUpdated": "2026-05-15T06:42:00+08:00"
     },
     "desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts": {
-      "issuesFound": 6,
-      "issuesFixed": 6,
-      "lastReviewedIteration": 145,
+      "issuesFound": 8,
+      "issuesFixed": 8,
+      "lastReviewedIteration": 191,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:19:38+08:00"
+      "lastUpdated": "2026-05-15T06:42:00+08:00"
     },
     "desktop/electron/services/task-scheduler/external-capabilities.ts": {
       "issuesFound": 2,
@@ -672,18 +723,18 @@
       "lastUpdated": "2026-05-14T03:42:00+08:00"
     },
     "desktop/src/modules/task-scheduler/index.tsx": {
-      "issuesFound": 5,
-      "issuesFixed": 4,
-      "lastReviewedIteration": 144,
+      "issuesFound": 8,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 186,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:10:00+08:00"
+      "lastUpdated": "2026-05-15T05:50:00+08:00"
     },
     "desktop/src/modules/task-scheduler/__tests__/task-scheduler-module.test.tsx": {
-      "issuesFound": 4,
-      "issuesFixed": 4,
-      "lastReviewedIteration": 144,
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 186,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:10:00+08:00"
+      "lastUpdated": "2026-05-15T05:50:00+08:00"
     },
     "desktop/src/modules/task-scheduler/hooks/use-task-scheduler.ts": {
       "issuesFound": 2,
@@ -735,32 +786,32 @@
       "lastUpdated": "2026-05-13T23:53:00+08:00"
     },
     "desktop/electron/services/task-scheduler/task-scheduler-service.ts": {
-      "lastReviewedIteration": 65,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 186,
+      "issuesFound": 4,
+      "issuesFixed": 4,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T00:51:00+08:00"
+      "lastUpdated": "2026-05-15T05:47:00+08:00"
     },
     "desktop/electron/services/task-scheduler/__tests__/task-scheduler-service.test.ts": {
-      "lastReviewedIteration": 65,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 186,
+      "issuesFound": 4,
+      "issuesFixed": 4,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T00:51:00+08:00"
+      "lastUpdated": "2026-05-15T05:47:00+08:00"
     },
     "desktop/src/modules/agent/hooks/use-chat-connection.ts": {
-      "issuesFound": 7,
-      "issuesFixed": 7,
-      "lastReviewedIteration": 143,
+      "issuesFound": 13,
+      "issuesFixed": 12,
+      "lastReviewedIteration": 190,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:08:00+08:00"
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
     },
     "desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx": {
-      "issuesFound": 7,
-      "issuesFixed": 7,
-      "lastReviewedIteration": 143,
+      "issuesFound": 12,
+      "issuesFixed": 12,
+      "lastReviewedIteration": 190,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:08:00+08:00"
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
     },
     "desktop/electron/modules/agent/ipc-sessions.ts": {
       "issuesFound": 2,
@@ -777,11 +828,11 @@
       "lastUpdated": "2026-05-13T19:23:05.810Z"
     },
     "desktop/src/modules/agent/hooks/use-chat-events.ts": {
-      "issuesFound": 4,
+      "issuesFound": 5,
       "issuesFixed": 4,
-      "lastReviewedIteration": 133,
+      "lastReviewedIteration": 159,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:24:30.000Z"
+      "lastUpdated": "2026-05-15T01:31:57+08:00"
     },
     "desktop/src/modules/agent/live-sync.ts": {
       "issuesFound": 1,
@@ -854,18 +905,18 @@
       "lastUpdated": "2026-05-13T23:58:25+08:00"
     },
     "desktop/electron/services/agent-runtime/references.ts": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 133,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 189,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:21:20.155Z"
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
     },
     "desktop/electron/services/agent-runtime/__tests__/references.test.ts": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 133,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 189,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:21:20.155Z"
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
     },
     "desktop/electron/services/agent-runtime/command-router.ts": {
       "lastReviewedIteration": 142,
@@ -882,32 +933,32 @@
       "lastUpdated": "2026-05-14T12:03:04+08:00"
     },
     "desktop/electron/services/agent-runtime/preview-progress.ts": {
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "lastReviewedIteration": 131,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "lastReviewedIteration": 188,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:00:58+08:00"
+      "lastUpdated": "2026-05-15T06:08:00+08:00"
     },
     "desktop/electron/services/agent-runtime/__tests__/preview-progress.test.ts": {
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "lastReviewedIteration": 131,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "lastReviewedIteration": 188,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:00:58+08:00"
+      "lastUpdated": "2026-05-15T06:08:00+08:00"
     },
     "desktop/src/modules/task-scheduler/components/task-runs-dialog.tsx": {
-      "lastReviewedIteration": 132,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 161,
+      "issuesFound": 3,
+      "issuesFixed": 3,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:13:00+08:00"
+      "lastUpdated": "2026-05-15T01:56:00+08:00"
     },
     "desktop/src/modules/task-scheduler/components/__tests__/task-runs-dialog.test.tsx": {
-      "lastReviewedIteration": 132,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 161,
+      "issuesFound": 3,
+      "issuesFixed": 3,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:13:00+08:00"
+      "lastUpdated": "2026-05-15T01:56:00+08:00"
     },
     "desktop/src/modules/agent/components/provider-select-dialog.tsx": {
       "lastReviewedIteration": 130,
@@ -938,11 +989,11 @@
       "lastUpdated": "2026-05-14T03:31:44+0800"
     },
     "desktop/electron/services/agent-runtime/__tests__/session-lifecycle.test.ts": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 62,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 158,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T16:37:20.903Z"
+      "lastUpdated": "2026-05-15T01:21:00+08:00"
     },
     "desktop/electron/services/side-channel/attachment-policy.ts": {
       "issuesFound": 2,
@@ -952,18 +1003,18 @@
       "lastUpdated": "2026-05-13T19:18:20Z"
     },
     "desktop/electron/modules/agent/ipc-tools.ts": {
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "lastReviewedIteration": 145,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 191,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:21:08+08:00"
+      "lastUpdated": "2026-05-15T06:45:00+08:00"
     },
     "desktop/electron/modules/agent/__tests__/ipc-tools.test.ts": {
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "lastReviewedIteration": 145,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 191,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:21:08+08:00"
+      "lastUpdated": "2026-05-15T06:45:00+08:00"
     },
     "desktop/action-packages/builtin/agent/manifest.ts": {
       "lastReviewedIteration": 63,
@@ -1059,16 +1110,16 @@
     "desktop/src/modules/agent/components/agent-phase-row.tsx": {
       "issuesFound": 2,
       "issuesFixed": 2,
-      "lastReviewedIteration": 142,
+      "lastReviewedIteration": 148,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:58:55+08:00"
+      "lastUpdated": "2026-05-14T23:08:00+08:00"
     },
     "desktop/src/modules/agent/components/__tests__/agent-phase-row.test.tsx": {
       "issuesFound": 2,
       "issuesFixed": 2,
-      "lastReviewedIteration": 142,
+      "lastReviewedIteration": 148,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:58:55+08:00"
+      "lastUpdated": "2026-05-14T23:08:00+08:00"
     },
     "desktop/electron/services/task-scheduler/schedule-calculator.ts": {
       "lastReviewedIteration": 73,
@@ -1099,18 +1150,18 @@
       "lastUpdated": "2026-05-13T17:40:49.643+08:00"
     },
     "desktop/src/modules/agent/components/agent-message-toolbar.tsx": {
-      "lastReviewedIteration": 133,
-      "issuesFound": 4,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 149,
+      "issuesFound": 5,
+      "issuesFixed": 3,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:21:20.155Z"
+      "lastUpdated": "2026-05-14T23:22:00+08:00"
     },
     "desktop/src/modules/agent/components/agent-tool-event.tsx": {
-      "lastReviewedIteration": 141,
-      "issuesFound": 3,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 190,
+      "issuesFound": 8,
+      "issuesFixed": 7,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:51:34+08:00"
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
     },
     "desktop/src/modules/agent/components/agent-composer.tsx": {
       "lastReviewedIteration": 102,
@@ -1134,11 +1185,11 @@
       "lastUpdated": "2026-05-13T19:18:20Z"
     },
     "desktop/src/modules/agent/components/__tests__/agent-message-toolbar.test.tsx": {
-      "lastReviewedIteration": 133,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 149,
+      "issuesFound": 3,
+      "issuesFixed": 3,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:21:20.155Z"
+      "lastUpdated": "2026-05-14T23:22:00+08:00"
     },
     "desktop/electron/runtime/ipc/electron-adapter.ts": {
       "issuesFound": 2,
@@ -1155,18 +1206,18 @@
       "lastUpdated": "2026-05-14T05:28:01+08:00"
     },
     "desktop/src/modules/agent/components/agent-message-event.tsx": {
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "lastReviewedIteration": 135,
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 188,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:33:45+0800"
+      "lastUpdated": "2026-05-15T06:10:00+0800"
     },
     "desktop/src/modules/agent/components/__tests__/agent-message-event.test.tsx": {
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "lastReviewedIteration": 135,
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 188,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:33:45+0800"
+      "lastUpdated": "2026-05-15T06:10:00+0800"
     },
     "desktop/action-packages/builtin/agent/schema.ts": {
       "issuesFound": 1,
@@ -1302,11 +1353,11 @@
       "lastUpdated": "2026-05-13T19:58:29.504Z"
     },
     "desktop/src/modules/agent/components/agent-timeline.tsx": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 130,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 153,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T21:54:18.909Z"
+      "lastUpdated": "2026-05-15T00:22:00+08:00"
     },
     "desktop/electron/services/diagnostics-service.ts": {
       "issuesFound": 1,
@@ -1386,11 +1437,11 @@
       "lastUpdated": "2026-05-14T05:50:31+08:00"
     },
     "desktop/src/modules/agent/components/__tests__/agent-tool-event.test.tsx": {
-      "lastReviewedIteration": 141,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+      "lastReviewedIteration": 190,
+      "issuesFound": 7,
+      "issuesFixed": 7,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:51:34+08:00"
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
     },
     "desktop/src/modules/settings/components/provider-panel.tsx": {
       "issuesFound": 1,
@@ -1407,18 +1458,18 @@
       "lastUpdated": "2026-05-14T06:01:50+08:00"
     },
     "desktop/src/app-shell/logging.ts": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 132,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 160,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:11:42+08:00"
+      "lastUpdated": "2026-05-15T01:43:00+08:00"
     },
     "desktop/src/app-shell/__tests__/logging.test.ts": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 132,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 160,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:11:42+08:00"
+      "lastUpdated": "2026-05-15T01:43:00+08:00"
     },
     "desktop/src/modules/task-scheduler/components/task-form-dialog.tsx": {
       "issuesFound": 1,
@@ -1435,18 +1486,18 @@
       "lastUpdated": "2026-05-14T11:35:10+08:00"
     },
     "desktop/src/modules/agent/components/agent-thinking-event.tsx": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 133,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 156,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:26:20.469Z"
+      "lastUpdated": "2026-05-15T01:01:00+08:00"
     },
     "desktop/src/modules/agent/components/__tests__/agent-thinking-event.test.tsx": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 133,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 156,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:26:20.469Z"
+      "lastUpdated": "2026-05-15T01:01:00+08:00"
     },
     "desktop/src/modules/agent/components/project-group.tsx": {
       "lastReviewedIteration": 136,
@@ -1477,60 +1528,74 @@
       "lastUpdated": "2026-05-14T06:35:04+08:00"
     },
     "desktop/src/modules/agent/hooks/use-chat-reducer.ts": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 135,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 152,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:35:27+08:00"
+      "lastUpdated": "2026-05-15T00:04:55+08:00"
     },
     "desktop/src/modules/agent/hooks/__tests__/use-chat-reducer.test.tsx": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 135,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 152,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T06:35:27+08:00"
+      "lastUpdated": "2026-05-15T00:04:55+08:00"
     },
     "desktop/src/modules/task-scheduler/components/task-import-dialog.tsx": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 137,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 158,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:37:24.456Z"
+      "lastUpdated": "2026-05-15T01:19:00+08:00"
     },
     "desktop/src/modules/task-scheduler/components/__tests__/task-import-dialog.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:19:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/cron-editor-dialog.tsx": {
       "issuesFound": 1,
       "issuesFixed": 1,
-      "lastReviewedIteration": 137,
+      "lastReviewedIteration": 158,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:37:24.456Z"
+      "lastUpdated": "2026-05-15T01:24:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/__tests__/cron-input.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:24:00+08:00"
     },
     "desktop/src/modules/agent/components/agent-permission-card.tsx": {
-      "lastReviewedIteration": 140,
-      "issuesFound": 1,
-      "issuesFixed": 1,
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:40:50+08:00"
+      "lastUpdated": "2026-05-15T00:03:20+08:00"
     },
     "desktop/src/modules/agent/components/__tests__/agent-permission-card.test.tsx": {
-      "lastReviewedIteration": 140,
-      "issuesFound": 1,
-      "issuesFixed": 1,
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T11:40:50+08:00"
+      "lastUpdated": "2026-05-15T00:03:20+08:00"
     },
     "desktop/src/modules/task-scheduler/components/task-export-dialog.tsx": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 143,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 151,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:11:00+08:00"
+      "lastUpdated": "2026-05-14T23:53:00+08:00"
     },
     "desktop/src/modules/task-scheduler/components/__tests__/task-export-dialog.test.tsx": {
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "lastReviewedIteration": 143,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 151,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T12:11:00+08:00"
+      "lastUpdated": "2026-05-14T23:53:00+08:00"
     },
     "desktop/electron/services/provider/provider-service.ts": {
       "lastReviewedIteration": 147,
@@ -1573,6 +1638,132 @@
       "lastReviewedIteration": 147,
       "healthScore": "active",
       "lastUpdated": "2026-05-14T12:33:12+08:00"
+    },
+    "desktop/electron/services/__tests__/run-snapshot-service.test.ts": {
+      "lastReviewedIteration": 148,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T23:08:19+08:00"
+    },
+    "desktop/workflow-nodes/prompt/__tests__/executor.test.ts": {
+      "lastReviewedIteration": 187,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:00:00+08:00"
+    },
+    "desktop/electron/services/__tests__/workflow-service.test.ts": {
+      "lastReviewedIteration": 187,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:58:00+08:00"
+    },
+    "desktop/electron/services/__tests__/workflow-engine.test.ts": {
+      "lastReviewedIteration": 172,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:37:00+08:00"
+    },
+    "desktop/src/modules/workflow/editor/__tests__/editor-app.test.tsx": {
+      "lastReviewedIteration": 170,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:30:00+08:00"
+    },
+    "desktop/workflow-nodes/switch/__tests__/executor.test.ts": {
+      "lastReviewedIteration": 188,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:08:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-permission-panel.tsx": {
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:03:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-permission-panel.test.tsx": {
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:03:00+08:00"
+    },
+    "desktop/src/app-shell/notifications.tsx": {
+      "lastReviewedIteration": 159,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:34:00+08:00"
+    },
+    "desktop/src/app-shell/__tests__/notifications.test.tsx": {
+      "lastReviewedIteration": 159,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:34:00+08:00"
+    },
+    "desktop/src/modules/workflow/runner/__tests__/runner-toolbar.test.tsx": {
+      "lastReviewedIteration": 155,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:50:00+08:00"
+    },
+    "desktop/src/app-shell/diagnostics/global-error-listener.ts": {
+      "lastReviewedIteration": 156,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:00:00+08:00"
+    },
+    "desktop/src/app-shell/diagnostics/__tests__/global-error-listener.test.ts": {
+      "lastReviewedIteration": 156,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:00:00+08:00"
+    },
+    "desktop/electron/runtime/observability/diagnostics.ts": {
+      "lastReviewedIteration": 157,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:10:00+08:00"
+    },
+    "desktop/electron/runtime/observability/__tests__/observability.test.ts": {
+      "lastReviewedIteration": 157,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:10:00+08:00"
+    },
+    "desktop/src/modules/workflow/editor/__tests__/toolbar.test.tsx": {
+      "lastReviewedIteration": 157,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:12:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/__tests__/agent-runtime-cancel.test.ts": {
+      "lastReviewedIteration": 172,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:40:15+08:00"
+    },
+    "desktop/electron/modules/workflow/__tests__/ipc.test.ts": {
+      "lastReviewedIteration": 191,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:43:00+08:00"
     }
   },
   "areas": {
@@ -1598,8 +1789,8 @@
     },
     "logging-coverage": {
       "status": "active",
-      "lastIteration": 142,
-      "issuesCount": 13
+      "lastIteration": 188,
+      "issuesCount": 20
     },
     "memory-management": {
       "status": "stable",
@@ -1613,8 +1804,8 @@
     },
     "run-params": {
       "status": "active",
-      "lastIteration": 19,
-      "issuesCount": 5
+      "lastIteration": 160,
+      "issuesCount": 6
     },
     "runner-hydration": {
       "status": "stable",
@@ -1647,5 +1838,5 @@
       "issuesCount": 3
     }
   },
-  "lastUpdated": "2026-05-14T04:28:10Z"
+  "lastUpdated": "2026-05-15T06:42:00+08:00"
 }

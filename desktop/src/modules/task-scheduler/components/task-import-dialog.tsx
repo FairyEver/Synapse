@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { track } from "@/lib/ui-tracking"
 import type { TaskExportEntry } from "../types"
 import { formatTaskTrigger } from "../utils"
 
@@ -54,6 +55,24 @@ function TaskImportDialog({
       }
       return next
     })
+  }
+
+  function handleImport() {
+    const selectedEntries = entries.filter((_, index) => selected.has(index))
+    track({
+      component: "task-scheduler",
+      name: "task-import-submit",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.task-scheduler.import.dialog",
+        entryCount: entries.length,
+        selectedCount: selectedEntries.length,
+        agentTaskCount: selectedEntries.filter((entry) => entry.action.type === "builtin.agent").length,
+        actionTypes: Array.from(new Set(selectedEntries.map((entry) => entry.action.type))).sort(),
+        triggerTypes: Array.from(new Set(selectedEntries.map((entry) => entry.trigger.type))).sort(),
+      },
+    })
+    onImport(Array.from(selected))
   }
 
   return (
@@ -100,7 +119,7 @@ function TaskImportDialog({
           </Button>
           <Button
             disabled={selected.size === 0}
-            onClick={() => onImport(Array.from(selected))}
+            onClick={handleImport}
           >
             导入
           </Button>

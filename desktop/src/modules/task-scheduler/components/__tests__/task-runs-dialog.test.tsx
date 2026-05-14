@@ -12,6 +12,7 @@ import { TaskRunsDialog } from "../task-runs-dialog"
 
 const mocks = vi.hoisted(() => ({
   listRuns: vi.fn(),
+  track: vi.fn(),
   warn: vi.fn(),
 }))
 
@@ -23,6 +24,15 @@ vi.mock("@/app-shell/logging", () => ({
     error: vi.fn(),
   }),
 }))
+
+vi.mock("@/lib/ui-tracking", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ui-tracking")>("@/lib/ui-tracking")
+
+  return {
+    ...actual,
+    track: mocks.track,
+  }
+})
 
 vi.mock("@/action-runtime/builtin-actions", () => ({
   rendererActionRegistry: {
@@ -126,11 +136,122 @@ describe("TaskRunsDialog", () => {
         runId: "run-1",
         actionType: "builtin.agent",
         runStatus: "success",
+        boundary: "renderer.task-scheduler.runs.result-fallback",
         errorName: "Error",
         errorLength: "agent result view unavailable with secret prompt".length,
       }),
     )
     expect(JSON.stringify(mocks.warn.mock.calls)).not.toContain("secret prompt")
+  })
+
+  it("logs stop failures with task and run context", async () => {
+    mocks.listRuns.mockResolvedValue([{
+      ...createRun(),
+      status: "running",
+      finishedAt: undefined,
+      result: undefined,
+    }])
+    const onStopRun = vi.fn().mockRejectedValue(new Error("stop failed with secret prompt"))
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskRunsDialog
+          open
+          busy={false}
+          task={createTask()}
+          onOpenChange={vi.fn()}
+          onStopRun={onStopRun}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const stopButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("停止"))
+    expect(stopButton).toBeTruthy()
+
+    await act(async () => {
+      stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(onStopRun).toHaveBeenCalledWith("run-1")
+    expect(mocks.warn).toHaveBeenCalledWith(
+      "Task run stop failed.",
+      expect.objectContaining({
+        taskId: "task-1",
+        runId: "run-1",
+        actionType: "builtin.agent",
+        boundary: "renderer.task-scheduler.runs.stop",
+        errorName: "Error",
+        errorLength: "stop failed with secret prompt".length,
+      }),
+    )
+    expect(document.body.textContent).toContain("停止失败")
+    expect(JSON.stringify(mocks.warn.mock.calls)).not.toContain("secret prompt")
+  })
+
+  it("tracks stop submissions with task and run context", async () => {
+    mocks.listRuns.mockResolvedValue([{
+      ...createRun(),
+      status: "running",
+      finishedAt: undefined,
+      result: undefined,
+      triggeredBy: "manual",
+    }])
+    const onStopRun = vi.fn().mockResolvedValue(undefined)
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskRunsDialog
+          open
+          busy={false}
+          task={createTask()}
+          onOpenChange={vi.fn()}
+          onStopRun={onStopRun}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const stopButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("停止"))
+    expect(stopButton).toBeTruthy()
+
+    await act(async () => {
+      stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(onStopRun).toHaveBeenCalledWith("run-1")
+    expect(mocks.track).toHaveBeenCalledWith({
+      component: "task-scheduler",
+      name: "task-run-stop-submit",
+      action: "submit",
+      value: "run-1",
+      metadata: {
+        boundary: "renderer.task-scheduler.runs.stop.submit",
+        taskId: "task-1",
+        runId: "run-1",
+        actionType: "builtin.agent",
+        triggeredBy: "manual",
+      },
+    })
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("prompt")
   })
 })
 

@@ -188,4 +188,42 @@ describe("DiagnosticsCollector (T6.5)", () => {
     // Default redact replaces values for keys matching /key|token|secret|password/.
     expect(artifact.recentLogs[0]?.context?.token).toBe("[REDACTED]")
   })
+
+  it("redacts recent log error messages and stacks in diagnostics artifacts", async () => {
+    const reg = createMetricsRegistry()
+    const agg = createHealthCheckAggregator()
+    const collector = createDiagnosticsCollector({
+      recentLogs: () => [
+        {
+          timestamp: "2026-04-25T00:00:00Z",
+          level: "error",
+          module: "agent-runtime",
+          message: "sdk failed",
+          context: { conversationId: "conv-1" },
+          error: {
+            name: "Error",
+            message: "token=sk-secret failed in /Users/liyang/private/repo",
+            stack: "Error: token=sk-secret\n    at /Users/liyang/private/repo/index.ts:1:1",
+          },
+        },
+      ],
+      inspectServices: () => [],
+      inspectDataRepo: () => [],
+      metricsSnapshot: () => reg.snapshot(),
+      checkHealth: () => agg.checkAll(),
+      listProjectContainers: () => [],
+    })
+
+    const artifact = await collector.collect()
+    const error = artifact.recentLogs[0]?.error
+    const serialized = JSON.stringify(artifact.recentLogs)
+
+    expect(error).toEqual({
+      name: "Error",
+      message: "[REDACTED 52 chars]",
+      stack: "[REDACTED 69 chars]",
+    })
+    expect(serialized).not.toContain("sk-secret")
+    expect(serialized).not.toContain("/Users/liyang/private")
+  })
 })

@@ -41,6 +41,28 @@ function pruneTerminalStatuses(runStatuses: Map<string, WorkflowRunStatus>, work
   logger.info("pruned stale run statuses", { workflowId, removed: toRemove.length, remaining: terminalEntries.length - toRemove.length })
 }
 
+function engineRejectionDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly stackLength?: number
+} {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorLength: error.message.length,
+      stackLength: error.stack?.length,
+    }
+  }
+  return {
+    errorName: typeof error,
+    errorLength: String(error).length,
+  }
+}
+
+function visibleEngineRejectionError(diagnostic: { readonly errorLength: number }): string {
+  return `引擎异常（错误 ${diagnostic.errorLength} 字）`
+}
+
 const workflowDefinitionSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
@@ -232,8 +254,8 @@ export const workflowIpcModule: IpcModule = {
           // a terminal event, the run would be stuck at "running" forever. Catch the
           // rejection, update status to "failed", and emit workflow:failed so the
           // renderer can recover.
-          const errorMsg = err instanceof Error ? err.message : String(err)
-          logger.error("workflow engine rejected unexpectedly", { workflowId: id, runId, error: errorMsg, stack: err instanceof Error ? err.stack : undefined })
+          const diagnostic = engineRejectionDiagnostic(err)
+          logger.error("workflow engine rejected unexpectedly", { workflowId: id, runId, ...diagnostic })
           abortMap.delete(runId)
           const current = runStatuses.get(runId)
           // Only recover if the run hasn't already reached a terminal state
@@ -249,7 +271,7 @@ export const workflowIpcModule: IpcModule = {
               startedAt,
               endedAt,
               durationMs,
-              error: `引擎异常：${errorMsg}`,
+              error: visibleEngineRejectionError(diagnostic),
             }
             runStatuses.set(runId, failedStatus)
             eventBus.emit(
@@ -338,16 +360,17 @@ export const workflowIpcModule: IpcModule = {
             pruneTerminalStatuses(runStatuses, def.id)
           }
         }, ac.signal, projectId).catch((err) => {
-          const errorMsg = err instanceof Error ? err.message : String(err)
-          logger.error("workflow engine rejected (runDefinition)", { workflowId: def.id, runId, error: errorMsg })
+          const diagnostic = engineRejectionDiagnostic(err)
+          const visibleError = visibleEngineRejectionError(diagnostic)
+          logger.error("workflow engine rejected (runDefinition)", { workflowId: def.id, runId, ...diagnostic })
           abortMap.delete(runId)
           const current = runStatuses.get(runId)
           if (current && current.status === "running") {
             const endedAt = Date.now()
             const durationMs = endedAt - startedAt
-            runStatuses.set(runId, { runId, workflowId: def.id, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs, error: `引擎异常：${errorMsg}`, definition: def })
+            runStatuses.set(runId, { runId, workflowId: def.id, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs, error: visibleError, definition: def })
             eventBus.emit(
-              { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: `引擎异常：${errorMsg}`, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
+              { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
               { backpressure: "block" },
             )
             void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def })
@@ -449,14 +472,15 @@ export const workflowIpcModule: IpcModule = {
             pruneTerminalStatuses(runStatuses, workflowId!)
           }
         }, ac.signal, projectId).catch((err) => {
-          const errorMsg = err instanceof Error ? err.message : String(err)
-          logger.error("workflow engine rejected (rerun)", { workflowId, runId, error: errorMsg })
+          const diagnostic = engineRejectionDiagnostic(err)
+          const visibleError = visibleEngineRejectionError(diagnostic)
+          logger.error("workflow engine rejected (rerun)", { workflowId, runId, ...diagnostic })
           abortMap.delete(runId)
           const current = runStatuses.get(runId)
           if (current && current.status === "running") {
             const endedAt = Date.now()
-            runStatuses.set(runId, { runId, workflowId: workflowId!, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs: endedAt - startedAt, error: `引擎异常：${errorMsg}`, definition: def })
-            eventBus.emit({ domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: `引擎异常：${errorMsg}`, result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt } }, timestamp: new Date().toISOString() }, { backpressure: "block" })
+            runStatuses.set(runId, { runId, workflowId: workflowId!, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs: endedAt - startedAt, error: visibleError, definition: def })
+            eventBus.emit({ domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt } }, timestamp: new Date().toISOString() }, { backpressure: "block" })
             void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def })
           }
         })

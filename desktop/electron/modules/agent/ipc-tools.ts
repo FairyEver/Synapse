@@ -21,7 +21,10 @@ import type {
   UpdateProviderInput,
 } from "../../services/provider"
 import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "../../services/provider"
+import { createMainLogger } from "../../services/log-store"
 import { resolveProjectAgent } from "./ipc-shared"
+
+const logger = createMainLogger("agent.ipc")
 
 type CreateProviderIpcInput = CreateProviderInput
 type UpdateProviderIpcInput = UpdateProviderInput
@@ -557,73 +560,83 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: openReferenceRequestSchema,
     response: openReferenceResultSchema,
     handler: async (ctx, request: OpenReferenceRequest) => {
-      const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      const reference = resolveLocalReference(request.reference, project.localPath)
-      if (!reference) throw new Error("Reference is outside the workspace or invalid.")
-      const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
-      const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
-      const actor = { kind: "user" as const, id: "renderer" }
-      const permission = await permissionGuard.check({
-        action: "fs.read.outside-userdata",
-        actor,
-        resource: reference.path,
-        context: {
-          projectId: request.projectId,
-          command: "open-reference",
-        },
-      })
-      if (!permission.allowed) {
-        auditSink.record({
+      try {
+        const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const reference = resolveLocalReference(request.reference, project.localPath)
+        if (!reference) throw new Error("Reference is outside the workspace or invalid.")
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const actor = { kind: "user" as const, id: "renderer" }
+        const permission = await permissionGuard.check({
           action: "fs.read.outside-userdata",
           actor,
           resource: reference.path,
-          outcome: "denied",
-          metadata: {
+          context: {
             projectId: request.projectId,
-            reason: permission.reason,
-            policyId: permission.policyId,
+            command: "open-reference",
           },
         })
-        throw new Error(permission.reason)
-      }
-      let error: string
-      try {
-        error = await shell.openPath(reference.path)
-      } catch (openError) {
+        if (!permission.allowed) {
+          auditSink.record({
+            action: "fs.read.outside-userdata",
+            actor,
+            resource: reference.path,
+            outcome: "denied",
+            metadata: {
+              projectId: request.projectId,
+              reason: permission.reason,
+              policyId: permission.policyId,
+            },
+          })
+          throw new Error(permission.reason)
+        }
+        let error: string
+        try {
+          error = await shell.openPath(reference.path)
+        } catch (openError) {
+          auditSink.record({
+            action: "fs.read.outside-userdata",
+            actor,
+            resource: reference.path,
+            outcome: "failed",
+            metadata: {
+              projectId: request.projectId,
+              command: "open-reference",
+              line: reference.line,
+              boundary: "agent.ipc.open-reference.shell",
+              ...shellOpenErrorMetadata(openError),
+            },
+          })
+          throw openError
+        }
         auditSink.record({
           action: "fs.read.outside-userdata",
           actor,
           resource: reference.path,
-          outcome: "failed",
+          outcome: error ? "failed" : "allowed",
           metadata: {
             projectId: request.projectId,
             command: "open-reference",
             line: reference.line,
-            boundary: "agent.ipc.open-reference.shell",
-            ...shellOpenErrorMetadata(openError),
+            ...(error
+              ? {
+                  boundary: "agent.ipc.open-reference.shell",
+                  ...shellOpenErrorMetadata(error),
+                }
+              : {}),
           },
         })
-        throw openError
-      }
-      auditSink.record({
-        action: "fs.read.outside-userdata",
-        actor,
-        resource: reference.path,
-        outcome: error ? "failed" : "allowed",
-        metadata: {
+        if (error) throw new Error(error)
+        return { ok: true, path: reference.path }
+      } catch (error) {
+        logger.warn("Agent open reference IPC failed.", {
           projectId: request.projectId,
-          command: "open-reference",
-          line: reference.line,
-          ...(error
-            ? {
-                boundary: "agent.ipc.open-reference.shell",
-                ...shellOpenErrorMetadata(error),
-              }
-            : {}),
-        },
-      })
-      if (error) throw new Error(error)
-      return { ok: true, path: reference.path }
+          boundary: "agent.open-reference.ipc",
+          referenceLength: request.reference.length,
+          ...shellOpenErrorMetadata(error),
+        })
+        throw error
+      }
     },
   },
 }

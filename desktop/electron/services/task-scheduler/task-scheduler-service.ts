@@ -98,8 +98,17 @@ export class TaskSchedulerService {
     return this.runNow(id)
   }
 
-  stopRun(runId: string): { readonly stopped: boolean } {
-    return { stopped: this.deps.execution.stopRun(runId) }
+  async stopRun(runId: string): Promise<{ readonly stopped: boolean }> {
+    const run = await this.deps.runs.get(runId)
+    const stopped = this.deps.execution.stopRun(runId)
+    this.deps.logger?.info("Scheduled task stop requested.", {
+      ...(run ? { taskId: run.taskId } : {}),
+      runId,
+      stopped,
+      runFound: Boolean(run),
+      boundary: "task-scheduler-stop-run",
+    })
+    return { stopped }
   }
 
   schedulerRunList(
@@ -217,6 +226,14 @@ export class TaskSchedulerService {
       error,
     })
     await this.deps.tasks.markRunResult(taskId, { status: "skipped" })
+    this.deps.logger?.info("Scheduled task run skipped.", {
+      taskId,
+      runId: run.id,
+      triggeredBy,
+      status: "skipped",
+      boundary: "task-scheduler-skip-run",
+      reason: error,
+    })
     return finished
   }
 

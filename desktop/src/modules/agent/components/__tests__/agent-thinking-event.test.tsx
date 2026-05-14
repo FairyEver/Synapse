@@ -9,15 +9,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentThinkingEvent } from "../agent-thinking-event"
 
-const { rendererLogger } = vi.hoisted(() => ({
+const { rendererLogger, track } = vi.hoisted(() => ({
   rendererLogger: {
     info: vi.fn(),
     warn: vi.fn(),
   },
+  track: vi.fn(),
 }))
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
+}))
+
+vi.mock("@/lib/ui-tracking", () => ({
+  extractLabel: () => "复制思考过程",
+  track,
 }))
 
 const profile: SynapseAgentDisplayProfile = {
@@ -134,5 +140,45 @@ describe("AgentThinkingEvent", () => {
     })
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("private chain of thought")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("Permission denied for secret thinking")
+  })
+
+  it("tracks thinking copy clicks without recording thinking content", async () => {
+    vi.mocked(window.navigator.clipboard.writeText).mockResolvedValue(undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentThinkingEvent
+        item={{
+          id: "thinking-copy",
+          kind: "thinking",
+          timestamp: "2026-05-13T00:00:00.000Z",
+          content: "sensitive thinking text",
+        }}
+        profile={{ ...profile, thinkingDefaultCollapsed: false }}
+      />)
+    })
+
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="复制思考过程"]')
+    expect(button).not.toBeNull()
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(track).toHaveBeenCalledWith({
+      component: "agent",
+      name: "agent-thinking-copy",
+      action: "click",
+      metadata: {
+        boundary: "renderer.agent.thinking-copy",
+        itemId: "thinking-copy",
+        contentLength: 23,
+      },
+    })
+    expect(JSON.stringify(track.mock.calls)).not.toContain("sensitive thinking text")
   })
 })

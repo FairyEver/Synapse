@@ -148,6 +148,19 @@ export class SessionManager {
     input.state.liveSession = liveSession
     input.state.providerId = providerId
     input.state.modeOverride = modeOverride
+    this.deps.logger?.info("Created agent live session.", {
+      boundary: "agent-runtime.live-session.create",
+      projectId: this.deps.projectId,
+      conversationId: input.conversation.id,
+      providerId,
+      mode: modeOverride,
+      sessionKey: input.message.sessionKey,
+      platform: input.message.platform,
+      workspaceKey: input.message.workspaceKey,
+      hasWorkspacePath: Boolean(input.message.workspacePath),
+      resumePolicy: input.conversation.resumePolicy,
+      sdkSessionId,
+    })
     return liveSession
   }
 
@@ -244,8 +257,17 @@ export class SessionManager {
       if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
       if (!state.liveSession) continue
       if (now - state.lastActivity < IDLE_TIMEOUT_MS) continue
+      const providerId = state.providerId
+      const mode = state.modeOverride
+      const sdkSessionId = state.liveSession.currentSessionId()
       await this.closeCurrentTurn(conversationId)
-      this.deps.logger?.info("Reclaimed idle agent session.", { conversationId })
+      this.deps.logger?.info("Reclaimed idle agent session.", {
+        boundary: "agent-runtime.live-session.idle-reclaim",
+        conversationId,
+        providerId,
+        mode,
+        sdkSessionId,
+      })
     }
   }
 

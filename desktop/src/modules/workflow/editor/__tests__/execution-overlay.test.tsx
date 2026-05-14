@@ -1,0 +1,121 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import type { WorkflowDefinition } from "@/types/workflow"
+import { ExecutionOverlay } from "../execution-overlay"
+
+const track = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/ui-tracking", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ui-tracking")>("@/lib/ui-tracking")
+  return {
+    ...actual,
+    track,
+  }
+})
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  track.mockClear()
+})
+
+describe("ExecutionOverlay", () => {
+  it("tracks node detail opens without logging prompt, output, or error text", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const rawPrompt = "prompt with token=sk-secret"
+    const rawOutput = "output from /Users/example/project/file.txt"
+    const rawError = "authorization failed Bearer abc123"
+
+    await act(async () => {
+      root.render(
+        <ExecutionOverlay
+          definition={definition()}
+          runState="failed"
+          nodeResults={{
+            "node-1": {
+              nodeId: "node-1",
+              status: "failed",
+              input: {
+                variables: {},
+                prompt: rawPrompt,
+              },
+              output: rawOutput,
+              error: rawError,
+            },
+          }}
+        />,
+      )
+    })
+
+    await act(async () => {
+      textElement(container, "Transform").click()
+    })
+
+    expect(track).toHaveBeenCalledWith({
+      component: "workflow.editor",
+      name: "workflow-editor-execution-node-detail-open",
+      action: "select",
+      value: "node-1",
+      metadata: {
+        boundary: "renderer.workflow.editor.execution-overlay",
+        workflowId: "workflow-1",
+        nodeId: "node-1",
+        nodeType: "prompt",
+        status: "failed",
+        hasError: true,
+        hasOutput: true,
+        hasPrompt: true,
+      },
+    })
+    expect(JSON.stringify(track.mock.calls)).not.toContain(rawPrompt)
+    expect(JSON.stringify(track.mock.calls)).not.toContain(rawOutput)
+    expect(JSON.stringify(track.mock.calls)).not.toContain(rawError)
+  })
+})
+
+function definition(): WorkflowDefinition {
+  return {
+    id: "workflow-1",
+    name: "Workflow",
+    version: "1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      {
+        id: "node-1",
+        name: "Transform",
+        type: "prompt",
+        position: { x: 0, y: 0 },
+        config: {},
+      },
+    ],
+    edges: [],
+  }
+}
+
+function textElement(container: HTMLElement, text: string): HTMLElement {
+  const element = Array.from(container.querySelectorAll("*"))
+    .find((candidate): candidate is HTMLElement =>
+      candidate instanceof HTMLElement && candidate.textContent === text
+    )
+  if (!element) throw new Error(`Element not found: ${text}`)
+  return element
+}

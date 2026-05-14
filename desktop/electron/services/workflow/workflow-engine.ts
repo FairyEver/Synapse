@@ -6,9 +6,31 @@ import { createMainLogger } from "../log-store"
 
 const logger = createMainLogger("service.workflow.engine")
 
-function truncate(text: string | undefined, maxLen: number): string | undefined {
-  if (!text) return text
-  return text.length <= maxLen ? text : `${text.slice(0, maxLen)}...(truncated)`
+function summarizeRecord(record: Record<string, unknown>): { readonly keys: string[]; readonly count: number } {
+  const keys = Object.keys(record)
+  return { keys, count: keys.length }
+}
+
+function stringDiagnostic(text: string | undefined, errorName: string): { readonly errorName: string; readonly errorLength: number } {
+  return {
+    errorName,
+    errorLength: text?.length ?? 0,
+  }
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly stackLength?: number } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorLength: error.message.length,
+      stackLength: error.stack?.length,
+    }
+  }
+
+  return {
+    errorName: "Error",
+    errorLength: String(error).length,
+  }
 }
 
 type EventCallback = (event: WorkflowEvent) => void
@@ -47,7 +69,16 @@ export class WorkflowEngine {
     emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
     const order = topoOrder(def)
-    logger.info("workflow run started", { runId, workflowId: def.id, projectId: projectId ?? "(fallback to def.id)", nodeCount: def.nodes.length, executionOrder: order.length, params: paramValues })
+    const paramSummary = summarizeRecord(paramValues)
+    logger.info("workflow run started", {
+      runId,
+      workflowId: def.id,
+      projectId: projectId ?? "(fallback to def.id)",
+      nodeCount: def.nodes.length,
+      executionOrder: order.length,
+      paramKeys: paramSummary.keys,
+      paramCount: paramSummary.count,
+    })
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
     let overallFailed = false
@@ -125,10 +156,12 @@ export class WorkflowEngine {
           ...(interpolatable !== undefined ? { prompt: interpolatePrompt(interpolatable, resolved) } : {}),
         }
 
+        const inputVariableSummary = summarizeRecord(resolved)
         logger.info("node started", {
           runId, nodeId, nodeType: node.type, nodeName: node.name,
-          inputVariables: resolved,
-          ...(nr.input.prompt !== undefined ? { prompt: truncate(nr.input.prompt, 200) } : {}),
+          inputVariableKeys: inputVariableSummary.keys,
+          inputVariableCount: inputVariableSummary.count,
+          ...(nr.input.prompt !== undefined ? { promptLength: nr.input.prompt.length } : {}),
         })
 
         const execResult = await executor.execute({
@@ -161,7 +194,7 @@ export class WorkflowEngine {
         if (execResult.status === "success") {
           logger.info("node succeeded", {
             runId, nodeId, nodeName: node.name, durationMs: nr.durationMs,
-            ...(nr.output !== undefined ? { outputPreview: truncate(nr.output, 500) } : {}),
+            ...(nr.output !== undefined ? { outputLength: nr.output.length } : {}),
             ...(nr.activeBranch !== undefined ? { activeBranch: nr.activeBranch } : {}),
           })
           nodeOutputs[nodeId] = execResult.output
@@ -175,9 +208,12 @@ export class WorkflowEngine {
           }
         } else {
           logger.warn("node failed", {
-            runId, nodeId, nodeName: node.name, nodeType: node.type, error: execResult.error, durationMs: nr.durationMs,
-            inputVariables: nr.input.variables,
-            ...(nr.input.prompt !== undefined ? { prompt: truncate(nr.input.prompt, 200) } : {}),
+            runId, nodeId, nodeName: node.name, nodeType: node.type,
+            ...stringDiagnostic(execResult.error, "agent"),
+            durationMs: nr.durationMs,
+            inputVariableKeys: inputVariableSummary.keys,
+            inputVariableCount: inputVariableSummary.count,
+            ...(nr.input.prompt !== undefined ? { promptLength: nr.input.prompt.length } : {}),
           })
           overallFailed = true
           emit({ type: "node:failed", runId, nodeId, error: execResult.error ?? "Unknown error", result: { ...nr } })
@@ -199,14 +235,15 @@ export class WorkflowEngine {
           return result
         }
         const msg = err instanceof Error ? err.message : String(err)
+        const visibleError = `节点执行异常（错误 ${msg.length} 字）`
         logger.warn("node threw exception", {
-          runId, nodeId, nodeName: node.name, nodeType: node.type, error: msg,
-          ...(err instanceof Error && err.stack ? { stack: err.stack } : {}),
+          runId, nodeId, nodeName: node.name, nodeType: node.type,
+          ...errorDiagnostic(err),
         })
-        nr.status = "failed"; nr.error = msg; nr.endedAt = Date.now()
+        nr.status = "failed"; nr.error = visibleError; nr.endedAt = Date.now()
         nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
         overallFailed = true
-        emit({ type: "node:failed", runId, nodeId, error: msg, result: { ...nr } })
+        emit({ type: "node:failed", runId, nodeId, error: visibleError, result: { ...nr } })
       }
     }
 
@@ -244,12 +281,18 @@ export class WorkflowEngine {
       const detailedError = failedNode?.error
         ? (failedNodeName ? `节点「${failedNodeName}」失败：${failedNode.error}` : failedNode.error)
         : "One or more nodes failed"
-      logger.error("workflow run failed", { runId, workflowId: def.id, durationMs, firstFailedNode: failedNode?.nodeId, error: detailedError })
+      logger.error("workflow run failed", {
+        runId,
+        workflowId: def.id,
+        durationMs,
+        firstFailedNode: failedNode?.nodeId,
+        ...stringDiagnostic(detailedError, "workflow"),
+      })
       emit({ type: "workflow:failed", runId, error: detailedError, result })
     } else {
       logger.info("workflow run completed", {
         runId, workflowId: def.id, durationMs,
-        ...(result.output !== undefined ? { outputPreview: truncate(result.output, 500) } : {}),
+        ...(result.output !== undefined ? { outputLength: result.output.length } : {}),
       })
       emit({ type: "workflow:completed", runId, result })
     }

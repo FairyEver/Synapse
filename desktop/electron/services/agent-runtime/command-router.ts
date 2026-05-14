@@ -257,7 +257,7 @@ export class AgentCommandRouter {
       `Agent: ${agentType}`,
       `Provider: ${provider?.id ?? conversation.providerId ?? "default"}`,
       `Model: ${provider?.model ?? "default"}`,
-      "Mode: default",
+      `Mode: ${conversation.agentConfig?.mode ?? "default"}`,
       `Conversation: ${conversation.id}`,
       `Agent session: ${conversation.agentSessionId ?? "none"}`,
     ]

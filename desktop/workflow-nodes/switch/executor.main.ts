@@ -69,8 +69,10 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("switch node executing", {
-      runId: context.runId, agent: config.agent,
-      branchIds: ids, branchLabels: config.branches.map((b) => b.label),
+      projectId: context.projectId, runId: context.runId, agent: config.agent,
+      branchIds: ids,
+      branchCount: config.branches.length,
+      branchLabelLengths: config.branches.map((b) => b.label.length),
       defaultBranch: config.defaultBranch ?? null,
     })
 
@@ -79,40 +81,49 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     const durationMs = Date.now() - start
 
     if (agentResult.status === "failed") {
+      const diagnostic = agentErrorDiagnostic(agentResult.error)
       logger.warn("switch node agent call failed", {
-        runId: context.runId, error: agentResult.error, durationMs,
+        projectId: context.projectId, runId: context.runId, ...diagnostic, durationMs,
       })
-      return { status: "failed", output: "", error: agentResult.error, durationMs }
+      return { status: "failed", output: "", error: agentFailureMessage(agentResult.error), durationMs }
     }
 
     const rawResponse = agentResult.response.trim()
+    const normalizedResponse = normalizeResponse(rawResponse)
     input.onProgress?.("matching_branch", "匹配分支…")
     const matched = matchBranch(rawResponse, ids)
 
     if (matched) {
       logger.info("switch node branch matched", {
-        runId: context.runId, activeBranch: matched,
-        rawResponse: rawResponse.slice(0, 200), durationMs,
-        normalizedResponse: normalizeResponse(rawResponse).slice(0, 100),
+        projectId: context.projectId, runId: context.runId, activeBranch: matched,
+        responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
       return { status: "success", output: matched, activeBranch: matched, durationMs }
     }
 
     if (config.defaultBranch) {
       logger.info("switch node using default branch (no match)", {
-        runId: context.runId, activeBranch: config.defaultBranch,
-        rawResponse: rawResponse.slice(0, 200), durationMs,
+        projectId: context.projectId, runId: context.runId, activeBranch: config.defaultBranch,
+        responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
       return { status: "success", output: config.defaultBranch, activeBranch: config.defaultBranch, durationMs }
     }
 
     logger.warn("switch node branch match failed — no match and no default", {
-      runId: context.runId, rawResponse: rawResponse.slice(0, 500),
+      projectId: context.projectId, runId: context.runId, responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length,
       branchIds: ids, durationMs,
     })
     return {
       status: "failed", output: "", durationMs,
-      error: `Agent 响应 "${rawResponse.slice(0, 100)}" 不匹配任何分支 [${ids.join(", ")}]`,
+      error: `Agent 响应不匹配任何分支 [${ids.join(", ")}]`,
     }
   },
+}
+
+function agentErrorDiagnostic(error: string | undefined): { readonly errorName: string; readonly errorLength: number } {
+  return { errorName: "agent", errorLength: error?.length ?? 0 }
+}
+
+function agentFailureMessage(error: string | undefined): string {
+  return `Agent 调用失败（错误 ${error?.length ?? 0} 字）`
 }

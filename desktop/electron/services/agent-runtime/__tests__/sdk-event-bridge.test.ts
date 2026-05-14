@@ -30,6 +30,32 @@ describe("SDK event bridge", () => {
     })
   })
 
+  it("keeps success result text out of SDK payload diagnostics", () => {
+    const rawResult =
+      "Final answer with Authorization: Bearer sk-answer and /Users/liyang/private/source.ts"
+    const event = bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-result-payload",
+      result: rawResult,
+      total_cost_usd: 0.02,
+      usage: { input_tokens: 4, output_tokens: 8 },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(event).toMatchObject({
+      type: "result",
+      content: rawResult,
+      payload: expect.objectContaining({
+        type: "result",
+        subtype: "success",
+        session_id: "sdk-result-payload",
+      }),
+    })
+    expect((event as { payload?: Record<string, unknown> }).payload).not.toHaveProperty("result")
+    expect(JSON.stringify((event as { payload?: Record<string, unknown> }).payload)).not.toContain("sk-answer")
+    expect(JSON.stringify((event as { payload?: Record<string, unknown> }).payload)).not.toContain("/Users/liyang")
+  })
+
   it("bridges SDK init messages to session init events", () => {
     expect(bridgeSdkMessage({
       type: "system",
@@ -149,6 +175,68 @@ describe("SDK event bridge", () => {
     expect(JSON.stringify(event)).not.toContain("sk-live")
   })
 
+  it("redacts local paths from SDK tool input JSON deltas", () => {
+    const event = bridgeSdkMessage({
+      type: "stream_event",
+      session_id: "sdk-path",
+      uuid: "uuid-path",
+      parent_tool_use_id: null,
+      event: {
+        type: "content_block_delta",
+        index: 2,
+        delta: {
+          type: "input_json_delta",
+          partial_json:
+            "{\"file_path\":\"/Users/liyang/private/project/file.ts\",\"command\":\"type C:\\\\Users\\\\liyang\\\\secret\\\\file.ts",
+        },
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(event).toMatchObject({
+      type: "stream",
+      sdkSessionId: "sdk-path",
+      partialJson: expect.stringContaining("[path redacted]"),
+      payload: {
+        event: {
+          delta: {
+            partial_json: expect.stringContaining("[path redacted]"),
+          },
+        },
+      },
+      ...baseEnvelope,
+    })
+    expect(JSON.stringify(event)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(event)).not.toContain("C:\\Users\\liyang")
+  })
+
+  it("truncates sanitized SDK tool input JSON deltas", () => {
+    const event = bridgeSdkMessage({
+      type: "stream_event",
+      session_id: "sdk-long-partial",
+      uuid: "uuid-long-partial",
+      parent_tool_use_id: null,
+      event: {
+        type: "content_block_delta",
+        index: 2,
+        delta: {
+          type: "input_json_delta",
+          partial_json: `{"authorization":"Bearer sk-long-partial","command":"${"x".repeat(360)}`,
+        },
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    const partialJson = (event as { partialJson?: string }).partialJson
+    const payloadPartialJson = (event as {
+      payload?: { event?: { delta?: { partial_json?: string } } }
+    }).payload?.event?.delta?.partial_json
+
+    expect(partialJson).toBe(payloadPartialJson)
+    expect(partialJson).toContain("\"authorization\":\"[redacted]\"")
+    expect(partialJson).toHaveLength(243)
+    expect(partialJson?.endsWith("...")).toBe(true)
+    expect(JSON.stringify(event)).not.toContain("sk-long-partial")
+  })
+
   it("exposes assistant content blocks for final reconciliation", () => {
     expect(bridgeSdkMessage({
       type: "assistant",
@@ -170,6 +258,41 @@ describe("SDK event bridge", () => {
       ],
       ...baseEnvelope,
     })
+  })
+
+  it("keeps long assistant text available for final reconciliation without expanding diagnostics", () => {
+    const longAnswer = `Final answer: ${"x".repeat(360)}`
+    const event = bridgeSdkMessage({
+      type: "assistant",
+      session_id: "sdk-long-answer",
+      uuid: "uuid-long-answer",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "text", text: longAnswer },
+        ],
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(event).toMatchObject({
+      type: "assistant",
+      contentBlocks: [
+        { type: "text", text: longAnswer },
+      ],
+      message: {
+        content: [
+          { type: "text", text: longAnswer },
+        ],
+      },
+      ...baseEnvelope,
+    })
+    const payload = (event as { payload?: Record<string, unknown> }).payload
+    expect(payload?.message).toEqual({
+      role: "assistant",
+      contentCount: 1,
+      contentTypes: ["text"],
+    })
+    expect(JSON.stringify(payload)).not.toContain(longAnswer)
   })
 
   it("bridges SDK assistant tool_use blocks to Agent tool events", () => {
@@ -234,7 +357,8 @@ describe("SDK event bridge", () => {
             id: "toolu-secret",
             name: "Bash",
             input: {
-              command: "curl -H 'Authorization: Bearer sk-tool-secret' https://api.example.test",
+              command:
+                "cat /Users/liyang/private/project/file.ts && type C:\\Users\\liyang\\private\\secret.txt && curl -H 'Authorization: Bearer sk-tool-secret' https://api.example.test",
               env: {
                 normal: "kept",
                 token: "env-token-secret",
@@ -245,6 +369,7 @@ describe("SDK event bridge", () => {
       },
     } as unknown as SDKMessage, baseEnvelope)
 
+    const assistantEvent = Array.isArray(events) ? events[0] : events
     const toolEvent = Array.isArray(events) ? events[1] : events
     expect(toolEvent).toMatchObject({
       type: "toolUse",
@@ -262,6 +387,26 @@ describe("SDK event bridge", () => {
     })
     expect(JSON.stringify(toolEvent)).not.toContain("sk-tool-secret")
     expect(JSON.stringify(toolEvent)).not.toContain("env-token-secret")
+    expect(JSON.stringify(toolEvent)).not.toContain("/Users/liyang")
+    expect(JSON.stringify(toolEvent)).not.toContain("C:\\Users\\liyang")
+    expect(assistantEvent).toMatchObject({
+      type: "assistant",
+      contentBlocks: [
+        expect.objectContaining({
+          input: {
+            command: expect.stringContaining("Bearer [redacted]"),
+            env: {
+              normal: "kept",
+              token: "[redacted]",
+            },
+          },
+        }),
+      ],
+    })
+    expect(JSON.stringify(events)).not.toContain("sk-tool-secret")
+    expect(JSON.stringify(events)).not.toContain("env-token-secret")
+    expect(JSON.stringify(events)).not.toContain("/Users/liyang")
+    expect(JSON.stringify(events)).not.toContain("C:\\Users\\liyang")
   })
 
   it("bridges SDK user tool_result blocks to Agent tool result events", () => {
@@ -450,6 +595,30 @@ describe("SDK event bridge", () => {
     expect(JSON.stringify(payload)).not.toContain("sk-auth")
     expect(JSON.stringify(payload)).not.toContain("secret-cookie")
     expect(JSON.stringify(payload)).not.toContain("private-credential")
+  })
+
+  it("drops query and fragment from SDK bridge payload URLs", () => {
+    const event = bridgeSdkMessage({
+      type: "future_message",
+      subtype: "future_subtype",
+      session_id: "sdk-url",
+      url: "https://api.example.test/v1/messages?token=sk-url#secret-fragment",
+      nested: {
+        request_url: "http://localhost:8787/callback?code=secret-code&state=secret-state",
+        note: "https://example.test/docs?keep=query",
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    const payload = (event as { payload: Record<string, unknown> }).payload
+    expect(payload.url).toBe("https://api.example.test/v1/messages")
+    expect(payload.nested).toMatchObject({
+      request_url: "http://localhost:8787/callback",
+      note: "https://example.test/docs?keep=query",
+    })
+    expect(JSON.stringify(payload)).not.toContain("sk-url")
+    expect(JSON.stringify(payload)).not.toContain("secret-fragment")
+    expect(JSON.stringify(payload)).not.toContain("secret-code")
+    expect(JSON.stringify(payload)).not.toContain("secret-state")
   })
 
   it("sanitizes diagnostic strings in unknown SDK event payloads", () => {

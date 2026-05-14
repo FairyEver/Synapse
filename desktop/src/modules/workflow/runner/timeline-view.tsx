@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
+import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 
 const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过", pending: "等待" }
@@ -16,6 +17,7 @@ interface TimelineViewProps {
 
 export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSelect }: TimelineViewProps) {
   const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
+  const typeOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.type ?? "unknown"
 
   // Combine active results (sorted by startedAt) with pending nodes (not yet in nodeResults)
   const activeResults = Object.values(nodeResults)
@@ -25,6 +27,26 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
     .filter((n) => !activeNodeIds.has(n.id))
     .map((n) => ({ nodeId: n.id, status: "pending" as const, input: { variables: {} } }))
   const results = [...activeResults, ...pendingNodes]
+
+  function handleNodeSelect(result: NodeRunResult) {
+    track({
+      component: "workflow.runner",
+      name: "workflow-runner-timeline-node-select",
+      action: "select",
+      value: result.nodeId,
+      metadata: {
+        boundary: "renderer.workflow.runner.timeline",
+        workflowId: definition.id,
+        nodeId: result.nodeId,
+        nodeType: typeOf(result.nodeId),
+        status: result.status,
+        hasError: Boolean(result.error),
+        hasOutput: (result.output != null && result.output !== "")
+          || (result.outputs != null && Object.keys(result.outputs).length > 0),
+      },
+    })
+    onNodeSelect(result.nodeId)
+  }
 
   // Tick every second while any node is still running so the elapsed-time
   // display stays up to date. Stops automatically once all nodes are terminal.
@@ -47,7 +69,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
           <div
             key={r.nodeId}
             className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
-            onClick={() => onNodeSelect(r.nodeId)}
+            onClick={() => handleNodeSelect(r)}
           >
             <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">
               {STATUS_LABEL[r.status] ?? r.status}

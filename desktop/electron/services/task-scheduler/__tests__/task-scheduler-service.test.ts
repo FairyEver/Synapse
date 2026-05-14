@@ -33,16 +33,26 @@ describe("TaskSchedulerService", () => {
   })
 
   it("skips overlapping scheduled runs", async () => {
-    const harness = createHarness({ action: longRunningAction() })
+    const logger = structuredLogger()
+    const harness = createHarness({ action: longRunningAction(), logger })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))
 
     const runPromise = harness.service.runNow("task:1")
     await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
-    await harness.service.triggerForTest("task:1", "schedule")
+    const skipped = await harness.service.triggerForTest("task:1", "schedule")
 
     expect(await harness.runs.listByTask("task:1")).toEqual(expect.arrayContaining([
       expect.objectContaining({ status: "skipped", error: "task is already running" }),
     ]))
+    expect(skipped?.status).toBe("skipped")
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task run skipped.", {
+      taskId: "task:1",
+      runId: skipped?.id,
+      triggeredBy: "schedule",
+      status: "skipped",
+      boundary: "task-scheduler-skip-run",
+      reason: "task is already running",
+    })
     const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
     expect(running).toBeDefined()
     await harness.service.stopRun(running!.id)
@@ -82,6 +92,28 @@ describe("TaskSchedulerService", () => {
     await runPromise
 
     expect(await harness.runs.get(running!.id)).toEqual(expect.objectContaining({ status: "cancelled" }))
+  })
+
+  it("logs stopRun requests with the run id and result", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ action: longRunningAction(), logger })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+
+    const runPromise = harness.service.runNow("task:1")
+    await waitFor(async () => (await harness.runs.listByTask("task:1")).some((run) => run.status === "running"))
+    const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+
+    await expect(harness.service.stopRun(running!.id)).resolves.toEqual({ stopped: true })
+    await runPromise
+
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task stop requested.", {
+      taskId: "task:1",
+      runId: running!.id,
+      stopped: true,
+      runFound: true,
+      boundary: "task-scheduler-stop-run",
+    })
   })
 
   it("logs missed-run background failures with sanitized task context", async () => {

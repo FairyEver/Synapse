@@ -339,6 +339,7 @@ class DiagnosticsService {
       })
       return { success: true, filePath: outputPath, fileCount: included.length }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       this.deps.auditSink.record({
         action: "fs.write",
         actor: { kind: "user" },
@@ -346,7 +347,8 @@ class DiagnosticsService {
         outcome: "failed",
         metadata: {
           source: "ops.exportDiagnosticsBundle",
-          error: error instanceof Error ? error.message : String(error),
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorLength: message.length,
         },
       })
       throw error

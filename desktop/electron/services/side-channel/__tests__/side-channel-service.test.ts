@@ -209,6 +209,53 @@ describe("SideChannelService", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("secret prompt")
   })
 
+  it("sanitizes network listen failure audit metadata", async () => {
+    const rawError = "listen failed token=sk-secret /Users/example/repo"
+    const auditSink = new InMemoryAuditSink()
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: {
+        register: async (descriptor: Parameters<ReturnType<typeof createNetworkServiceRegistry>["register"]>[0]) => {
+          await descriptor.audit?.({
+            action: "failed",
+            serviceId: "side-channel.send",
+            role: "http",
+            binding: { id: "side-channel.send", port: 49999, bindAddress: "127.0.0.1" },
+            timestamp: "2026-05-15T00:00:00.000Z",
+            error: rawError,
+          })
+          throw new Error(rawError)
+        },
+        unregister: async () => {},
+        list: () => [],
+        conflictPolicy: "next-available",
+      },
+      dataRepository: fakeDataRepository(new MemoryNamespace<OutboxEntryV1>("outbox")),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      auditSink,
+      token: "tok",
+    })
+
+    await expect(service.start()).rejects.toThrow(rawError)
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "network.listen",
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          action: "failed",
+          role: "http",
+          bindAddress: "127.0.0.1",
+          port: 49999,
+          errorName: "Error",
+          errorLength: rawError.length,
+        }),
+      }),
+    ])
+    expect(JSON.stringify(auditSink.list())).not.toContain("sk-secret")
+    expect(JSON.stringify(auditSink.list())).not.toContain("/Users/example/repo")
+  })
+
   it("fails side-channel sends when the reply target dispatcher is missing", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const auditSink = new InMemoryAuditSink()
@@ -315,6 +362,7 @@ describe("SideChannelService", () => {
       fileCount: 0,
       errorCode: "internal_error",
       status: 500,
+      boundary: "side-channel-http",
       errorName: "Error",
       errorLength: "relay failed with secret prompt".length,
     }))
@@ -323,7 +371,7 @@ describe("SideChannelService", () => {
     await service.stop()
   })
 
-  it("redacts failed Agent event dispatch diagnostics", async () => {
+  it("redacts failed Agent event dispatch diagnostics and falls back to target conversation", async () => {
     const warn = vi.fn()
     const logger = fakeLogger({ warn })
     const service = new SideChannelService({
@@ -345,7 +393,6 @@ describe("SideChannelService", () => {
       type: "error",
       message: "agent result failed",
       projectId: "project-1",
-      conversationId: "conv-1",
       sdkSessionId: "sdk-session-1",
     })
 
@@ -365,7 +412,7 @@ describe("SideChannelService", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("agent result failed")
   })
 
-  it("logs missing Agent event dispatchers with target context", () => {
+  it("logs missing Agent event dispatchers with target conversation context", () => {
     const warn = vi.fn()
     const logger = fakeLogger({ warn })
     const service = new SideChannelService({
@@ -381,7 +428,6 @@ describe("SideChannelService", () => {
       type: "result",
       content: "done",
       projectId: "project-1",
-      conversationId: "conv-1",
       sdkSessionId: "sdk-session-1",
     })
 

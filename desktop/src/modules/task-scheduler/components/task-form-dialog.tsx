@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTaskCreateInput, ScheduledTaskUpdateInput } from "@/types/task-scheduler"
@@ -142,6 +143,12 @@ function TaskFormDialog({
       } else {
         await onCreate(buildTaskCreateInput(form))
       }
+      track({
+        component: "task-scheduler",
+        name: "task-form-submit",
+        action: "submit",
+        metadata: taskFormSubmitMetadata(state, form),
+      })
       onOpenChange(false)
     } catch (submitError) {
       logger.error("Failed to save scheduled task.", {
@@ -551,6 +558,38 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function taskFormSubmitMetadata(
+  state: TaskFormDialogState,
+  form: TaskFormState,
+): Record<string, unknown> {
+  const actionConfig = form.actionConfig as Record<string, unknown>
+  const isAgentAction = form.actionType === "builtin.agent"
+  return compactMetadata({
+    boundary: "renderer.task-scheduler.form-submit",
+    mode: state.mode,
+    taskId: state.mode === "edit" ? state.task.id : undefined,
+    actionType: form.actionType,
+    triggerType: form.triggerType,
+    enabled: form.enabled,
+    missedRunPolicy: form.missedRunPolicy,
+    hasCwd: form.cwd.trim().length > 0,
+    hasAgentProject: isAgentAction && stringValue(actionConfig.projectId) !== undefined,
+    agentType: isAgentAction ? stringValue(actionConfig.agentType) : undefined,
+    agentMode: isAgentAction ? stringValue(actionConfig.mode) : undefined,
+    sessionPolicy: isAgentAction ? stringValue(actionConfig.sessionPolicy) : undefined,
+  })
+}
+
+function compactMetadata(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  )
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined
 }
 
 export { TaskFormDialog }

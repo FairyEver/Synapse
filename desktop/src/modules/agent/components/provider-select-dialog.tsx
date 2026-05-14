@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentProvider } from "@/types/bridge"
 
 const logger = createRendererLogger("agent")
@@ -102,6 +103,7 @@ function ProviderSelectDialog({
     const autoCreateKey = `${projectId}:${providerId}:${requestIdRef.current}`
     if (autoCreateKeyRef.current === autoCreateKey) return
     autoCreateKeyRef.current = autoCreateKey
+    trackProviderCreate(projectId, providerId, visibleProviders.length, "auto")
     onCreate(projectId, providerId)
     onOpenChange(false)
   }, [error, loaded, loading, onCreate, onOpenChange, open, projectId, visibleProviders])
@@ -112,9 +114,10 @@ function ProviderSelectDialog({
 
   const handleCreate = useCallback(() => {
     if (!projectId || !selectedProviderId || !selectedProviderAvailable || error || loading) return
+    trackProviderCreate(projectId, selectedProviderId, visibleProviders.length, "manual")
     onCreate(projectId, selectedProviderId)
     onOpenChange(false)
-  }, [error, loading, onCreate, onOpenChange, projectId, selectedProviderAvailable, selectedProviderId])
+  }, [error, loading, onCreate, onOpenChange, projectId, selectedProviderAvailable, selectedProviderId, visibleProviders.length])
 
   const shouldAutoCreate = Boolean(
     open && loaded && !loading && !error && projectId && visibleProviders.length === 1,
@@ -207,6 +210,26 @@ function ProviderSelectDialog({
 function errorMessageLength(error: unknown): number {
   if (error instanceof Error) return error.message.length
   return String(error).length
+}
+
+function trackProviderCreate(
+  projectId: string,
+  providerId: string,
+  providerCount: number,
+  source: "auto" | "manual",
+): void {
+  track({
+    component: "agent",
+    name: "agent-provider-create",
+    action: "submit",
+    metadata: {
+      boundary: "renderer.agent.provider-select",
+      projectId,
+      providerId,
+      providerCount,
+      source,
+    },
+  })
 }
 
 export { ProviderSelectDialog }

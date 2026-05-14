@@ -44,17 +44,28 @@ export function WorkflowRunnerApp() {
     let cancelled = false
     setLoadError(null)
     void (async () => {
-      const status = await window.synapse?.workflow.runStatus(runId)
-      if (cancelled) return
-      if (!status) {
-        logger.warn("runner hydration failed: runStatus returned null, triggering fallback", { runId, workflowId })
+      try {
+        const status = await window.synapse?.workflow.runStatus(runId)
+        if (cancelled) return
+        if (!status) {
+          logger.warn("runner hydration failed: runStatus returned null, triggering fallback", { runId, workflowId })
+          setLoadError("无法加载运行记录（可能已被淘汰），显示最新工作流结构")
+          return
+        }
+        setLoadError(null)
+        logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
+        if (status.definition) setDefinition(status.definition)
+        if (status.params) setRunParams(status.params)
+      } catch (err) {
+        if (cancelled) return
+        logger.warn("runner hydration failed: runStatus rejected, triggering fallback", {
+          workflowId,
+          runId,
+          boundary: "renderer.workflow.runner.hydration",
+          ...errorDiagnostic(err),
+        })
         setLoadError("无法加载运行记录（可能已被淘汰），显示最新工作流结构")
-        return
       }
-      setLoadError(null)
-      logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
-      if (status.definition) setDefinition(status.definition)
-      if (status.params) setRunParams(status.params)
     })()
     return () => { cancelled = true }
   }, [runId, retrySignal])
@@ -73,13 +84,24 @@ export function WorkflowRunnerApp() {
     if (runId && !loadError) return
     let cancelled = false
     void (async () => {
-      const def = await window.synapse?.workflow.get(workflowId)
-      if (cancelled) return
-      if (def) {
-        setDefinition(def)
-        // Fallback succeeded: clear the loadError so the warning banner
-        // doesn't persist when the DAG is now correctly rendered.
-        setLoadError(null)
+      try {
+        const def = await window.synapse?.workflow.get(workflowId)
+        if (cancelled) return
+        if (def) {
+          setDefinition(def)
+          // Fallback succeeded: clear the loadError so the warning banner
+          // doesn't persist when the DAG is now correctly rendered.
+          setLoadError(null)
+        }
+      } catch (err) {
+        if (cancelled) return
+        logger.warn("runner fallback definition failed", {
+          workflowId,
+          runId,
+          boundary: "renderer.workflow.runner.fallback-definition",
+          ...errorDiagnostic(err),
+        })
+        setLoadError("无法加载工作流结构，请重试")
       }
     })()
     return () => { cancelled = true }
@@ -162,7 +184,7 @@ export function WorkflowRunnerApp() {
     } catch (err) {
       logger.warn("cancel IPC call failed", {
         runId,
-        error: err instanceof Error ? err.message : String(err),
+        ...errorDiagnostic(err),
       })
       setRunError("取消失败：无法连接到主进程，请重试")
     } finally {
@@ -182,10 +204,12 @@ export function WorkflowRunnerApp() {
         return
       }
       if ("errors" in result) {
-        const errors = result.errors as Array<{ message?: string }>
-        const msg = errors[0]?.message ?? "重新运行失败：校验未通过"
-        logger.warn("rerun failed", { errors: result.errors })
-        setRunError(msg)
+        const errors = Array.isArray(result.errors) ? result.errors : []
+        logger.warn("rerun failed", {
+          runId,
+          ...validationErrorsDiagnostic(errors),
+        })
+        setRunError("重新运行失败：校验未通过")
         return
       }
       // Clear definition and params so the runner shows loading state until
@@ -201,7 +225,7 @@ export function WorkflowRunnerApp() {
     } catch (err) {
       logger.warn("rerun IPC call failed", {
         runId,
-        error: err instanceof Error ? err.message : String(err),
+        ...errorDiagnostic(err),
       })
       setRunError("重新运行失败：无法连接到主进程，请重试")
     } finally {
@@ -302,4 +326,36 @@ export function WorkflowRunnerApp() {
       </ResizablePanelGroup>
     </div>
   )
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
+function validationErrorsDiagnostic(errors: readonly unknown[]): {
+  readonly errorCount: number
+  readonly firstErrorType?: string
+  readonly firstErrorLength?: number
+} {
+  const first = validationErrorRecord(errors[0])
+  const firstErrorType = typeof first?.type === "string" ? first.type : undefined
+  const firstErrorMessage = typeof first?.message === "string" ? first.message : undefined
+  return {
+    errorCount: errors.length,
+    firstErrorType,
+    firstErrorLength: firstErrorMessage?.length,
+  }
+}
+
+function validationErrorRecord(value: unknown): {
+  readonly type?: unknown
+  readonly message?: unknown
+} | undefined {
+  return typeof value === "object" && value !== null
+    ? value as { readonly type?: unknown; readonly message?: unknown }
+    : undefined
 }

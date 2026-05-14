@@ -71,6 +71,7 @@ function AgentTimeline({
           size="sm"
           onClick={onJumpToBottom}
           aria-label="跳到最新消息"
+          data-track="agent-timeline-jump-to-bottom"
           className="absolute bottom-4 right-4 rounded-full shadow-md"
         >
           ↓ 新消息

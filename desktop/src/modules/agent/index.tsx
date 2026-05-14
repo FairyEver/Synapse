@@ -28,7 +28,7 @@ import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
 import { useAgentChat } from "./hooks/use-agent-chat"
-import { useStickToBottom } from "./hooks/use-stick-to-bottom"
+import { latestTimelineContentSignal, useStickToBottom } from "./hooks/use-stick-to-bottom"
 import {
   enqueuePendingMessage,
   firstQueuedMessageForIdleTarget,
@@ -87,6 +87,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       chat.timeline.length,
       latestEntry?.id,
       latestEntry?.timestamp,
+      latestTimelineContentSignal(latestEntry),
       chat.sending,
     ],
     latestEntryId: latestEntry?.id,

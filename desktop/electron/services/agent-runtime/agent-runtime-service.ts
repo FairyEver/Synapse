@@ -241,7 +241,9 @@ export class AgentRuntimeService {
     const onExternalAbort = () => ac.abort()
     externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
 
-    const timeout = setTimeout(() => ac.abort(), input.timeoutMs)
+    const timeout = input.timeoutMs > 0
+      ? setTimeout(() => ac.abort(), input.timeoutMs)
+      : undefined
 
     try {
       let result: AgentRuntimeTurnResult
@@ -272,7 +274,7 @@ export class AgentRuntimeService {
           error: `Execution exceeded ${input.timeoutMs}ms timeout`,
           durationMs: Date.now() - startMs,
         }
-        this.logScheduledAgentFailure(input, message, scheduledResult)
+        this.logScheduledAgentFailure(input, message, scheduledResult, undefined, result.agentSessionId)
         return scheduledResult
       }
 
@@ -285,7 +287,9 @@ export class AgentRuntimeService {
         durationMs: Date.now() - startMs,
       }
       if (scheduledResult.status !== "success") {
-        this.logScheduledAgentFailure(input, message, scheduledResult, errorLength)
+        this.logScheduledAgentFailure(input, message, scheduledResult, errorLength, result.agentSessionId)
+      } else {
+        this.logScheduledAgentCompletion(input, message, scheduledResult, result.agentSessionId)
       }
       return scheduledResult
     } catch (error) {
@@ -302,7 +306,7 @@ export class AgentRuntimeService {
       this.logScheduledAgentFailure(input, message, scheduledResult, errorLength)
       return scheduledResult
     } finally {
-      clearTimeout(timeout)
+      if (timeout) clearTimeout(timeout)
       externalSignal?.removeEventListener("abort", onExternalAbort)
     }
   }
@@ -310,10 +314,16 @@ export class AgentRuntimeService {
   async cancelTurn(conversationId: string): Promise<CancelTurnResult> {
     const state = this.states.get(conversationId)
     if (!state || !state.busy) {
-      return { status: "no-active-turn" }
+      const result: CancelTurnResult = { status: "no-active-turn" }
+      this.logTurnCancellation("cancel", conversationId, state, result)
+      return result
     }
     if (state.cancelState) {
-      return { status: state.cancelState.escalationTimer ? "graceful-pending" : "hard-killed" }
+      const result: CancelTurnResult = {
+        status: state.cancelState.escalationTimer ? "graceful-pending" : "hard-killed",
+      }
+      this.logTurnCancellation("cancel", conversationId, state, result, { alreadyRequested: true })
+      return result
     }
 
     state.cancelState = { requestedAt: Date.now() }
@@ -324,34 +334,74 @@ export class AgentRuntimeService {
       const gracefulSent = await this.sessionManager.interrupt(conversationId)
       if (!gracefulSent) {
         state.turnAbortController?.abort("user-cancel")
+        const result: CancelTurnResult = { status: "hard-killed" }
+        this.logTurnCancellation("cancel", conversationId, state, result, { gracefulSent: false })
         await this.sessionManager.closeCurrentTurn(conversationId)
-        return { status: "hard-killed" }
+        return result
       }
       const conversation = await this.repository.get(conversationId)
       const sessionKey = conversation?.sessionKey ?? ""
       state.cancelState.escalationTimer = setTimeout(() => {
         this.emitCancelEscalation(conversationId, sessionKey)
       }, 5000)
-      return { status: "graceful-pending" }
+      const result: CancelTurnResult = { status: "graceful-pending" }
+      this.logTurnCancellation("cancel", conversationId, state, result, { gracefulSent: true })
+      return result
     }
 
     if (state.turnAbortController) {
       state.turnAbortController.abort("user-cancel")
-      return { status: "hard-killed" }
+      const result: CancelTurnResult = { status: "hard-killed" }
+      this.logTurnCancellation("cancel", conversationId, state, result)
+      return result
     }
 
-    return { status: "no-active-turn" }
+    const result: CancelTurnResult = { status: "no-active-turn" }
+    this.logTurnCancellation("cancel", conversationId, state, result)
+    return result
   }
 
   async forceKillTurn(conversationId: string): Promise<CancelTurnResult> {
     const state = this.states.get(conversationId)
     if (!state || !state.busy) {
-      return { status: "no-active-turn" }
+      const result: CancelTurnResult = { status: "no-active-turn" }
+      this.logTurnCancellation("force-kill", conversationId, state, result)
+      return result
     }
     this.conversationRouter.clearCancelState(state)
     state.turnAbortController?.abort("force-kill")
+    const result: CancelTurnResult = { status: "hard-killed" }
+    this.logTurnCancellation("force-kill", conversationId, state, result)
     await this.sessionManager.closeCurrentTurn(conversationId)
-    return { status: "hard-killed" }
+    return result
+  }
+
+  private logTurnCancellation(
+    action: "cancel" | "force-kill",
+    conversationId: string,
+    state: RuntimeSessionState | undefined,
+    result: CancelTurnResult,
+    metadata: Record<string, unknown> = {},
+  ): void {
+    const liveSession = state?.liveSession
+    this.deps.logger?.info("Agent turn cancellation updated.", {
+      boundary: action === "cancel"
+        ? "agent-runtime.turn.cancel"
+        : "agent-runtime.turn.force-kill",
+      projectId: this.deps.projectId,
+      conversationId,
+      providerId: state?.providerId,
+      mode: state?.modeOverride,
+      sdkSessionId: liveSession?.currentSessionId(),
+      status: result.status,
+      busy: state?.busy ?? false,
+      activeTurns: state?.activeTurns ?? 0,
+      queuedTurns: state?.queue.length ?? 0,
+      hadLiveSession: Boolean(liveSession),
+      hadTurnAbortController: Boolean(state?.turnAbortController),
+      hadCancelState: Boolean(state?.cancelState),
+      ...metadata,
+    })
   }
 
   private emitCancelEscalation(conversationId: string, sessionKey: string): void {
@@ -382,8 +432,8 @@ export class AgentRuntimeService {
       workspacePath: pending.workspacePath,
       conversationId: pending.conversationId,
       toolName: pending.toolName,
-      toolInput: pending.toolInput,
-      toolInputRaw: pending.toolInputRaw,
+      toolInput: sanitizePendingPermissionText(pending.toolInput),
+      toolInputRaw: sanitizePendingPermissionRawInput(pending.toolInputRaw),
       createdAt: pending.createdAt,
     }))
   }
@@ -622,7 +672,7 @@ export class AgentRuntimeService {
     this.deps.auditSink?.record({
       action,
       actor,
-      resource,
+      resource: permissionAuditResource(resource, pending.toolName),
       outcome,
       metadata: {
         ...metadata,
@@ -836,6 +886,7 @@ export class AgentRuntimeService {
     message: AgentMessage,
     result: ScheduledAgentSendResult,
     errorLength?: number,
+    sdkSessionId?: string,
   ): void {
     this.deps.logger?.warn("Scheduled agent send failed.", {
       boundary: "agent-runtime.scheduled-send",
@@ -843,6 +894,7 @@ export class AgentRuntimeService {
       projectId: input.projectId,
       sessionKey: message.sessionKey,
       conversationId: result.conversationId || undefined,
+      sdkSessionId,
       agentType: input.agentType,
       mode: input.mode,
       sessionPolicy: input.sessionPolicy,
@@ -852,6 +904,31 @@ export class AgentRuntimeService {
       timeoutMs: input.timeoutMs,
       durationMs: result.durationMs,
       promptLength: input.prompt.length,
+    })
+  }
+
+  private logScheduledAgentCompletion(
+    input: ScheduledAgentSendInput,
+    message: AgentMessage,
+    result: ScheduledAgentSendResult,
+    sdkSessionId: string | undefined,
+  ): void {
+    this.deps.logger?.info("Scheduled agent send completed.", {
+      boundary: "agent-runtime.scheduled-send",
+      source: "scheduled",
+      projectId: input.projectId,
+      sessionKey: message.sessionKey,
+      conversationId: result.conversationId || undefined,
+      sdkSessionId,
+      agentType: input.agentType,
+      mode: input.mode,
+      sessionPolicy: input.sessionPolicy,
+      resumeConversationId: input.lastConversationId,
+      status: result.status,
+      timeoutMs: input.timeoutMs,
+      durationMs: result.durationMs,
+      promptLength: input.prompt.length,
+      summaryLength: result.summary?.length,
     })
   }
 
@@ -897,6 +974,57 @@ function permissionActionForTool(toolName: string): PermissionAction {
     default:
       return "agent.spawn"
   }
+}
+
+function permissionAuditResource(resource: string, toolName: string): string {
+  return resource === toolName ? toolName : `${toolName} input (${resource.length} chars)`
+}
+
+function sanitizePendingPermissionRawInput(
+  value: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!value) return undefined
+  return sanitizePendingPermissionValue(value) as Record<string, unknown>
+}
+
+function sanitizePendingPermissionValue(value: unknown, key = ""): unknown {
+  if (isSensitivePendingPermissionKey(key)) return "[redacted]"
+  if (typeof value === "string") return sanitizePendingPermissionText(value)
+  if (Array.isArray(value)) return value.map((item) => sanitizePendingPermissionValue(item, key))
+  if (!value || typeof value !== "object") return value
+
+  const output: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(value)) {
+    output[childKey] = sanitizePendingPermissionValue(childValue, childKey)
+  }
+  return output
+}
+
+function sanitizePendingPermissionText(value: string | undefined): string | undefined {
+  if (!value) return value
+  return truncateRunes(
+    value
+      .replace(
+        /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;'"`]+/gi,
+        (_match, key: string, separator: string, bearer: string | undefined) =>
+          `${key}${separator}${bearer ? `${bearer} ` : ""}[redacted]`,
+      )
+      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+      .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
+      .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]"),
+    240,
+  )
+}
+
+function isSensitivePendingPermissionKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[-_]/g, "")
+  return normalized.includes("secret")
+    || normalized.includes("apikey")
+    || normalized.includes("authorization")
+    || normalized.includes("cookie")
+    || normalized.includes("password")
+    || normalized.includes("credential")
+    || (normalized.includes("token") && !normalized.endsWith("tokens"))
 }
 
 function compressionStateId(projectId: string, agentType: string): string {

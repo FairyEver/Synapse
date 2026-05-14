@@ -72,10 +72,13 @@ describe("SkillRegistry", () => {
     expect(skills.map((skill) => skill.name)).toContain("reviewer")
     expect(skills.map((skill) => skill.name)).not.toContain("broken")
     expect(logger.warn).toHaveBeenCalledWith("Agent skill file skipped.", expect.objectContaining({
+      boundary: "agent.skill.file-read",
       fileName: "SKILL.md",
       projectId: "project-1",
       skillName: "broken",
       errorCode: "EACCES",
+      errorName: "Error",
+      errorLength: `EACCES: permission denied, open '${brokenSkillPath}'`.length,
       error: expect.stringContaining("[path redacted]"),
     }))
   })

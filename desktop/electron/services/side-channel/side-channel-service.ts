@@ -100,7 +100,7 @@ export class SideChannelService implements ReplyTargetRuntime {
             role: event.role,
             bindAddress: event.binding?.bindAddress,
             port: event.binding?.port,
-            error: event.error,
+            ...networkAuditErrorDiagnostic(event.error),
           },
         })
       },
@@ -170,6 +170,7 @@ export class SideChannelService implements ReplyTargetRuntime {
 
   dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void {
     const dispatcher = this.dispatchers.get(target.transport.kind)
+    const conversationId = event.conversationId ?? target.conversationId
     if (!dispatcher) {
       this.deps.logger?.warn("Reply target dispatcher missing.", {
         projectId: target.projectId,
@@ -177,7 +178,7 @@ export class SideChannelService implements ReplyTargetRuntime {
         transportKind: target.transport.kind,
         connectorId: target.transport.connectorId,
         eventType: event.type,
-        conversationId: event.conversationId,
+        conversationId,
         sdkSessionId: event.sdkSessionId,
       })
       return
@@ -189,7 +190,7 @@ export class SideChannelService implements ReplyTargetRuntime {
         transportKind: target.transport.kind,
         connectorId: target.transport.connectorId,
         eventType: event.type,
-        conversationId: event.conversationId,
+        conversationId,
         sdkSessionId: event.sdkSessionId,
         errorName: error instanceof Error ? error.name : typeof error,
         errorLength: errorMessage(error).length,
@@ -444,6 +445,7 @@ export class SideChannelService implements ReplyTargetRuntime {
       fileCount: arrayLength(request?.files),
       errorCode: errorCode(error),
       status,
+      boundary: "side-channel-http",
       errorName: error instanceof Error ? error.name : typeof error,
       errorLength: errorMessage(error).length,
     })
@@ -543,6 +545,14 @@ function errorDiagnostic(error: unknown): {
     return { ...diagnostic, errorCode: error.code }
   }
   return diagnostic
+}
+
+function networkAuditErrorDiagnostic(error: string | undefined): {
+  readonly errorName?: string
+  readonly errorLength?: number
+} {
+  if (!error) return {}
+  return { errorName: "Error", errorLength: error.length }
 }
 
 function stringValue(value: unknown): string | undefined {

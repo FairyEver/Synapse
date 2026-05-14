@@ -125,6 +125,63 @@ describe("agent timeline conversion", () => {
     expect(afterTool[2]).toEqual(expect.objectContaining({ content: "Summarize result." }))
   })
 
+  it("ignores empty stream deltas", () => {
+    const afterEmptyText = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "",
+    }, "2026-05-14T00:00:03.000Z", "claude")
+    const afterEmptyThinking = appendAgentTimelineEvent(afterEmptyText, {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "",
+    }, "2026-05-14T00:00:04.000Z", "claude")
+
+    expect(afterEmptyThinking).toEqual([])
+  })
+
+  it("keeps interleaved text and thinking stream blocks in event order", () => {
+    const textThenThinking = appendAgentTimelineEvent(appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "Visible first.",
+    }, "2026-05-14T00:00:05.000Z", "claude"), {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Reason second.",
+    }, "2026-05-14T00:00:06.000Z", "claude")
+    const textAfterThinking = appendAgentTimelineEvent(textThenThinking, {
+      type: "stream",
+      deltaType: "text_delta",
+      text: " Visible third.",
+    }, "2026-05-14T00:00:07.000Z", "claude")
+
+    expect(textAfterThinking.map((item) => item.kind)).toEqual(["message", "thinking", "message"])
+    expect(textAfterThinking[0]).toEqual(expect.objectContaining({ content: "Visible first." }))
+    expect(textAfterThinking[1]).toEqual(expect.objectContaining({ content: "Reason second." }))
+    expect(textAfterThinking[2]).toEqual(expect.objectContaining({ content: " Visible third." }))
+
+    const thinkingThenText = appendAgentTimelineEvent(appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Reason first.",
+    }, "2026-05-14T00:00:08.000Z", "claude"), {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "Visible second.",
+    }, "2026-05-14T00:00:09.000Z", "claude")
+    const thinkingAfterText = appendAgentTimelineEvent(thinkingThenText, {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: " Reason third.",
+    }, "2026-05-14T00:00:10.000Z", "claude")
+
+    expect(thinkingAfterText.map((item) => item.kind)).toEqual(["thinking", "message", "thinking"])
+    expect(thinkingAfterText[0]).toEqual(expect.objectContaining({ content: "Reason first." }))
+    expect(thinkingAfterText[1]).toEqual(expect.objectContaining({ content: "Visible second." }))
+    expect(thinkingAfterText[2]).toEqual(expect.objectContaining({ content: " Reason third." }))
+  })
+
   it("promotes a standalone result event to a visible message item", () => {
     const userMessage = [{
       id: "user:1",

@@ -248,9 +248,15 @@ function useChatConnection(
         sessions: sessionSnapshotForLog(normalizedSessions),
       })
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "刷新会话失败"
-      logger.error("Agent conversation refresh failed.", rawError)
-      dispatch({ type: "SET_ERROR", error: message })
+      logger.error("Agent conversation refresh failed.", {
+        projectId: target.projectId,
+        targetConversationId: target.conversationId,
+        targetSessionKey: target.sessionKey,
+        boundary: "renderer.agent.conversation-refresh",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: "刷新会话失败" })
     }
   }, [dispatch])
 
@@ -303,9 +309,15 @@ function useChatConnection(
         clearTimeline()
       }
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "加载失败"
-      logger.error("Agent refresh failed.", rawError)
-      dispatch({ type: "SET_ERROR", error: message })
+      logger.error("Agent refresh failed.", {
+        projectIds: projectIdsRef.current,
+        selectedProjectId: selectedProjectIdRef.current,
+        selectedConversationId: selectedConversationIdRef.current,
+        boundary: "renderer.agent.refresh",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: "加载失败" })
     } finally {
       dispatch({ type: "SET_LOADING", loading: false })
     }
@@ -366,9 +378,15 @@ function useChatConnection(
       if (requestId !== selectRequestIdRef.current) {
         return
       }
-      const message = rawError instanceof Error ? rawError.message : "创建失败"
-      logger.error("Agent session create failed.", rawError)
-      dispatch({ type: "SET_ERROR", error: message })
+      logger.error("Agent session create failed.", {
+        projectId,
+        providerId,
+        mode,
+        boundary: "renderer.agent.session-create",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: "创建失败" })
     }
   }, [clearTimeline, dispatch, refresh, selectRequestIdRef, setSelectedSession])
 
@@ -410,7 +428,14 @@ function useChatConnection(
       if (requestId !== selectRequestIdRef.current) {
         return
       }
-      logger.error("Agent session switch failed.", rawError)
+      logger.error("Agent session switch failed.", {
+        projectId: target.projectId,
+        conversationId: target.id,
+        sessionKey: target.sessionKey,
+        boundary: "renderer.agent.session-switch",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
       const isNotFound = rawError instanceof Error && rawError.message.includes("不存在")
       if (isNotFound) {
         const remaining = state.sessions.filter((item) => !isSameSession(item, target))
@@ -429,7 +454,7 @@ function useChatConnection(
         }
         return
       }
-      dispatch({ type: "SET_ERROR", error: rawError instanceof Error ? rawError.message : "切换失败" })
+      dispatch({ type: "SET_ERROR", error: "切换失败" })
     }
   }, [clearTimeline, dispatch, loadTimeline, refreshProjectMeta, selectRequestIdRef, setSelectedSession, state.sessions])
 
@@ -567,9 +592,15 @@ function useChatConnection(
       if (requestId !== selectRequestIdRef.current) {
         return
       }
-      const message = rawError instanceof Error ? rawError.message : "删除失败"
-      logger.error("Agent session delete failed.", rawError)
-      dispatch({ type: "SET_ERROR", error: message })
+      logger.error("Agent session delete failed.", {
+        projectId: target.projectId,
+        conversationId: target.id,
+        sessionKey: target.sessionKey,
+        boundary: "renderer.agent.session-delete",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: "删除失败" })
     }
   }, [
     clearTimeline,
@@ -597,9 +628,15 @@ function useChatConnection(
         isSameSession(session, target) ? { ...session, name } : session) })
       toast("已重命名")
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "重命名失败"
-      logger.error("Agent session rename failed.", rawError)
-      dispatch({ type: "SET_ERROR", error: message })
+      logger.error("Agent session rename failed.", {
+        projectId: target.projectId,
+        conversationId: target.id,
+        sessionKey: target.sessionKey,
+        boundary: "renderer.agent.session-rename",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: "重命名失败" })
     }
   }, [dispatch])
 
@@ -641,7 +678,6 @@ function useChatConnection(
       await bridge.agent.respondPermission({ projectId, requestId, behavior })
       await refreshPendingPermissions()
     } catch (rawError) {
-      const message = rawError instanceof Error ? rawError.message : "处理失败"
       logger.error("Agent permission response failed.", {
         projectId,
         requestId,
@@ -650,7 +686,7 @@ function useChatConnection(
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
-      dispatch({ type: "SET_ERROR", error: message })
+      dispatch({ type: "SET_ERROR", error: "处理失败" })
     }
   }, [dispatch, getDefaultProjectId, refreshPendingPermissions, state.pendingPermissions])
 
@@ -664,6 +700,8 @@ function useChatConnection(
       const result = await bridge.agent.cancelTurn({ projectId, conversationId })
       if (result.status === "hard-killed") {
         dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
+      } else if (result.status === "no-active-turn") {
+        dispatch({ type: "CANCEL_RESET" })
       }
     } catch (rawError) {
       logger.error("Agent cancel turn failed.", {

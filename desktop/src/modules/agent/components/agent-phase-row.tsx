@@ -50,14 +50,19 @@ function pickLabel(item: SynapseAgentPhaseTimelineItem): string {
 }
 
 function elapsedSeconds(item: SynapseAgentPhaseTimelineItem, now: number): number {
-  const start = Date.parse(item.startedAt)
-  const end = item.completedAt ? Date.parse(item.completedAt) : now
+  const start = parseTimestamp(item.startedAt) ?? now
+  const end = item.completedAt ? parseTimestamp(item.completedAt) ?? start : now
   const ms = Math.max(0, end - start)
   return ms / 1000
 }
 
 function formatElapsed(seconds: number): string {
   return `${seconds.toFixed(1)}s`
+}
+
+function parseTimestamp(value: string): number | undefined {
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : undefined
 }
 
 function AgentPhaseRow({

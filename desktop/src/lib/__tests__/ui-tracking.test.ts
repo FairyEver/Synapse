@@ -25,6 +25,13 @@ describe("ui tracking value sanitizers", () => {
     )
   })
 
+  it("redacts generic tracked values that look sensitive or path-like", () => {
+    expect(sanitizeTrackValue("value", "token=sk-secret")).toBe("[redacted]")
+    expect(sanitizeTrackValue("value", "/Users/liyang/Documents/orders.csv")).toBe(
+      "[path redacted]/orders.csv",
+    )
+  })
+
   it("sanitizes record fields recursively", () => {
     expect(sanitizeTrackRecord({
       title: "客户订单",

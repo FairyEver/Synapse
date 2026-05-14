@@ -58,15 +58,67 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("uses webhook run id as AgentMessage messageId when no messageId is provided", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const send = vi.fn(async () => ({ resultText: "ok" }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: {
+        run: async () => {
+          throw new Error("not used")
+        },
+      },
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        project: "project-1",
+        sessionKey: "local:automation",
+        prompt: "run",
+        replyMode: "wait",
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const responseBody = await response.json()
+    const runId = responseBody.data.runId
+    expect(runId).toMatch(/^webhook-run:/)
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      messageId: runId,
+      projectId: "project-1",
+      sessionKey: "local:automation",
+    }))
+
+    await service.stop()
+  })
+
   it("records webhook prompt agent errors as failed runs with redacted diagnostics", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
     const auditEvents: Parameters<AuditSink["record"]>[0][] = []
     const logger = structuredLogger()
     const errorText = "SDK failed for secret prompt text"
+    const safeErrorText = `执行失败（错误 ${errorText.length} 字）`
     const service = new AutomationIngressService({
       projectContainers: fakeProjectContainers({
-        send: async () => ({ error: errorText }),
+        send: async () => ({
+          conversationId: "conversation-webhook-1",
+          agentSessionId: "sdk-webhook-1",
+          error: errorText,
+        }),
       }),
       networkRegistry: createNetworkServiceRegistry(),
       configs,
@@ -99,24 +151,33 @@ describe("AutomationIngressService", () => {
       body: JSON.stringify({
         project: "project-1",
         sessionKey: "local:automation",
+        messageId: "message-webhook-1",
         prompt: "run",
         replyMode: "wait",
       }),
     })
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual(expect.objectContaining({
+    const responseBody = await response.json()
+    expect(responseBody).toEqual(expect.objectContaining({
       ok: true,
       data: expect.objectContaining({
         status: "failed",
-        error: errorText,
+        error: safeErrorText,
+        conversationId: "conversation-webhook-1",
+        sdkSessionId: "sdk-webhook-1",
       }),
     }))
     expect(await runs.list()).toEqual([
       expect.objectContaining({
         kind: "prompt",
         status: "failed",
-        lastError: errorText,
+        lastError: safeErrorText,
+        metadata: expect.objectContaining({
+          messageId: "message-webhook-1",
+          conversationId: "conversation-webhook-1",
+          sdkSessionId: "sdk-webhook-1",
+        }),
       }),
     ])
     expect(logger.warn).toHaveBeenCalledWith(
@@ -125,6 +186,9 @@ describe("AutomationIngressService", () => {
         projectId: "project-1",
         kind: "prompt",
         sessionKey: "local:automation",
+        messageId: "message-webhook-1",
+        conversationId: "conversation-webhook-1",
+        sdkSessionId: "sdk-webhook-1",
         status: "failed",
         boundary: "agent-runtime",
         errorName: "string",
@@ -136,13 +200,76 @@ describe("AutomationIngressService", () => {
         outcome: "failed",
         metadata: expect.objectContaining({
           boundary: "agent-runtime",
+          messageId: "message-webhook-1",
+          conversationId: "conversation-webhook-1",
+          sdkSessionId: "sdk-webhook-1",
           errorName: "string",
           errorLength: errorText.length,
         }),
       }),
     ]))
+    expect(JSON.stringify(responseBody)).not.toContain("secret prompt text")
+    expect(JSON.stringify(await runs.list())).not.toContain("secret prompt text")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
     expect(JSON.stringify(auditEvents)).not.toContain("secret prompt text")
+
+    await service.stop()
+  })
+
+  it("summarizes webhook prompt agent errors before sending automation replies", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const errorText = "SDK failed for secret prompt text"
+    const safeErrorText = `执行失败（错误 ${errorText.length} 字）`
+    const sendAutomationMessage = vi.fn(async () => {})
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({
+        send: async () => ({ error: errorText }),
+      }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: {
+        run: async () => {
+          throw new Error("not used")
+        },
+      },
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      feishuConnector: { sendAutomationMessage },
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        project: "project-1",
+        sessionKey: "local:automation",
+        prompt: "run",
+        replyMode: "wait",
+        replyCtx: {
+          kind: "feishu",
+          projectId: "project-1",
+          sessionKey: "local:automation",
+          connectorId: "feishu-main",
+        },
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(sendAutomationMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        sessionKey: "local:automation",
+      }),
+      safeErrorText,
+    )
+    expect(JSON.stringify(sendAutomationMessage.mock.calls)).not.toContain("secret prompt text")
 
     await service.stop()
   })
@@ -151,10 +278,12 @@ describe("AutomationIngressService", () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
     const logger = structuredLogger()
+    const errorText = "SDK failed for secret prompt text"
+    const safeErrorText = `执行失败（错误 ${errorText.length} 字）`
     const service = new AutomationIngressService({
       projectContainers: fakeProjectContainers({
         send: async () => {
-          throw new Error("SDK failed for secret prompt text")
+          throw new Error(errorText)
         },
       }),
       networkRegistry: createNetworkServiceRegistry(),
@@ -202,6 +331,7 @@ describe("AutomationIngressService", () => {
       projectId: "project-1",
       sessionKey: "local:automation",
       status: "failed",
+      lastError: safeErrorText,
     }))
     expect(logger.warn).toHaveBeenCalledWith(
       "Webhook run threw.",
@@ -212,9 +342,10 @@ describe("AutomationIngressService", () => {
         sessionKey: "local:automation",
         boundary: "agent-runtime",
         errorName: "Error",
-        errorLength: "SDK failed for secret prompt text".length,
+        errorLength: errorText.length,
       }),
     )
+    expect(JSON.stringify(await runs.list())).not.toContain("secret prompt text")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
 
     await service.stop()
@@ -271,6 +402,58 @@ describe("AutomationIngressService", () => {
       }),
     )
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret async prompt text")
+
+    await service.stop()
+  })
+
+  it("logs webhook validation failures before a run is created", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({
+        send: async () => ({ resultText: "not used" }),
+      }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: {
+        run: async () => {
+          throw new Error("not used")
+        },
+      },
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: '{"prompt":"secret prompt text",',
+    })
+
+    expect(response.status).toBe(400)
+    expect(await runs.list()).toEqual([])
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Webhook request validation failed.",
+      expect.objectContaining({
+        boundary: "webhook.validation",
+        path: "/hook",
+        method: "POST",
+        status: 400,
+        errorCode: "invalid_json",
+        bodyLength: '{"prompt":"secret prompt text",'.length,
+        source: "local",
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(config.token ?? "")
 
     await service.stop()
   })

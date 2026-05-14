@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { track } from "@/lib/ui-tracking"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import { formatTaskTrigger } from "../utils"
 
@@ -58,6 +59,24 @@ function TaskExportDialog({
     })
   }
 
+  function handleExport() {
+    const selectedTasks = tasks.filter((task) => selected.has(task.id))
+    track({
+      component: "task-scheduler",
+      name: "task-export-submit",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.task-scheduler.export.dialog",
+        taskCount: tasks.length,
+        selectedCount: selectedTasks.length,
+        agentTaskCount: selectedTasks.filter((task) => task.action.type === "builtin.agent").length,
+        actionTypes: Array.from(new Set(selectedTasks.map((task) => task.action.type))).sort(),
+        triggerTypes: Array.from(new Set(selectedTasks.map((task) => task.trigger.type))).sort(),
+      },
+    })
+    onExport(selectedTasks.map((task) => task.id))
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -99,7 +118,7 @@ function TaskExportDialog({
           </Button>
           <Button
             disabled={selected.size === 0}
-            onClick={() => onExport(Array.from(selected))}
+            onClick={handleExport}
           >
             导出
           </Button>

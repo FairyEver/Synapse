@@ -91,6 +91,8 @@ function redactSensitiveContent(value: string): string {
     .replace(/\b(authorization)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s'"]+(?:\s+[^\s'"]+)?)/gi, `$1$2${REDACTED}`)
     .replace(/\b(cookie|set-cookie|token|api[_-]?key|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;'"`]+)/gi, `$1$2${REDACTED}`)
     .replace(/(--cookie(?:-jar)?\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/gi, `$1${REDACTED}`)
+    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
 }
 
 function truncateOneLine(value: string, maxRunes: number): string {

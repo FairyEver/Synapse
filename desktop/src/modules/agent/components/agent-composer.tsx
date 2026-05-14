@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText } from "../permission-mode-options"
@@ -90,12 +91,29 @@ function AgentComposer({
     setMultiline(scrollHeight > SINGLE_LINE_HEIGHT)
   }, [draft])
 
+  const handleSubmit = (event: FormEvent) => {
+    track({
+      component: "agent",
+      name: "agent-message-submit",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.agent.composer-submit",
+        draftLength: draft.trim().length,
+        canSend,
+        sending,
+        pendingCount: pendingMessages.length,
+        permissionMode,
+      },
+    })
+    onSubmit(event)
+  }
+
   return (
     <>
       <form
         className="agent-composer absolute inset-x-4 bottom-5 z-10 mx-auto max-w-2xl md:inset-x-20"
         data-track="agent-composer"
-        onSubmit={onSubmit}
+        onSubmit={handleSubmit}
       >
         <div
           className="agent-composer__container rounded-lg border border-border bg-background p-2"

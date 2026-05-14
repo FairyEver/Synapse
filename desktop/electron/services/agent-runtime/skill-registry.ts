@@ -32,10 +32,13 @@ export class SkillRegistry {
   async list(): Promise<readonly AgentSkill[]> {
     const files = await listSkillFiles(skillDirs(this.deps.workspacePath), (dir, error) => {
       this.deps.logger?.warn("Agent skill directory skipped.", {
+        boundary: "agent.skill.directory-discovery",
         projectId: this.deps.projectId,
         directoryName: path.basename(dir),
         error: errorSummary(error),
         errorCode: errorCode(error),
+        errorName: errorName(error),
+        errorLength: rawErrorMessage(error).length,
       })
     })
     const skills: AgentSkill[] = []
@@ -45,11 +48,14 @@ export class SkillRegistry {
         content = await fs.readFile(filePath, "utf8")
       } catch (error) {
         this.deps.logger?.warn("Agent skill file skipped.", {
+          boundary: "agent.skill.file-read",
           projectId: this.deps.projectId,
           skillName: normalizeCommandName(path.basename(path.dirname(filePath))),
           fileName: path.basename(filePath),
           error: errorSummary(error),
           errorCode: errorCode(error),
+          errorName: errorName(error),
+          errorLength: rawErrorMessage(error).length,
         })
         continue
       }
@@ -178,8 +184,16 @@ function firstBodyLine(content: string): string | undefined {
 }
 
 function errorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = rawErrorMessage(error)
   return message.length > 240 ? `${message.slice(0, 240)}...` : message
+}
+
+function rawErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error
 }
 
 function errorSummary(error: unknown): string {

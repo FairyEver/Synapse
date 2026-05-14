@@ -15,16 +15,27 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
     if (!initialRunId) return
     let cancelled = false
     void (async () => {
-      const status = await window.synapse?.workflow.runStatus(initialRunId)
-      if (cancelled) return
-      if (!status) {
-        logger.info("initial run status not found, resetting to idle", { workflowId, initialRunId })
+      try {
+        const status = await window.synapse?.workflow.runStatus(initialRunId)
+        if (cancelled) return
+        if (!status) {
+          logger.info("initial run status not found, resetting to idle", { workflowId, initialRunId })
+          setRunState("idle")
+          return
+        }
+        logger.info("hydrated initial run status", { workflowId, initialRunId, status: status.status })
+        setNodeResults(status.nodeResults)
+        setRunState(status.status)
+      } catch (err) {
+        if (cancelled) return
+        logger.error("initial run status IPC call failed, resetting to idle", {
+          workflowId,
+          initialRunId,
+          boundary: "renderer.workflow.run.initial-status",
+          ...errorLogMeta(err),
+        })
         setRunState("idle")
-        return
       }
-      logger.info("hydrated initial run status", { workflowId, initialRunId, status: status.status })
-      setNodeResults(status.nodeResults)
-      setRunState(status.status)
     })()
     return () => { cancelled = true }
   }, [initialRunId])
@@ -46,13 +57,42 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
       logger.info("run started successfully", { workflowId, runId: result.runId })
       setRunId(result.runId); return result
     } catch (err) {
-      logger.error("run IPC call failed, resetting to idle", { workflowId, error: err instanceof Error ? err.message : String(err) })
+      logger.error("run IPC call failed, resetting to idle", {
+        workflowId,
+        boundary: "renderer.workflow.run.start",
+        ...errorLogMeta(err),
+      })
       setRunState("idle")
       return null
     }
   }, [workflowId])
 
-  const cancel = useCallback(async () => { if (runId) { logger.info("cancelling run", { workflowId, runId }); await window.synapse?.workflow.cancel(runId) } }, [workflowId, runId])
+  const cancel = useCallback(async () => {
+    if (!runId) return
+    logger.info("cancelling run", { workflowId, runId })
+    try {
+      await window.synapse?.workflow.cancel(runId)
+    } catch (err) {
+      logger.error("cancel IPC call failed", {
+        workflowId,
+        runId,
+        boundary: "renderer.workflow.run.cancel",
+        ...errorLogMeta(err),
+      })
+    }
+  }, [workflowId, runId])
 
   return { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel, attachRun }
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+  }
 }

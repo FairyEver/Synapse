@@ -13,8 +13,8 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("prompt node executing", {
-      runId: input.context.runId, agent: input.config.agent,
-      promptPreview: prompt.slice(0, 200),
+      projectId: input.context.projectId, runId: input.context.runId, agent: input.config.agent,
+      promptLength: prompt.length,
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
@@ -23,17 +23,29 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
 
     if (result.status === "failed") {
       logger.warn("prompt node agent call failed", {
-        runId: input.context.runId, agent: input.config.agent,
-        error: result.error, durationMs,
+        projectId: input.context.projectId, runId: input.context.runId, agent: input.config.agent,
+        ...agentErrorDiagnostic(result.error),
+        durationMs,
       })
-      return { status: "failed", output: "", error: result.error, durationMs }
+      return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs }
     }
 
     input.onProgress?.("processing_output", "处理输出…")
     logger.info("prompt node succeeded", {
-      runId: input.context.runId, agent: input.config.agent,
-      outputPreview: result.response.slice(0, 200), durationMs,
+      projectId: input.context.projectId, runId: input.context.runId, agent: input.config.agent,
+      outputLength: result.response.length, durationMs,
     })
     return { status: "success", output: result.response, durationMs }
   },
+}
+
+function agentErrorDiagnostic(error: string | undefined): { readonly errorName: string; readonly errorLength: number } {
+  return {
+    errorName: "agent",
+    errorLength: error?.length ?? 0,
+  }
+}
+
+function agentFailureMessage(error: string | undefined): string {
+  return `Agent 调用失败（错误 ${error?.length ?? 0} 字）`
 }

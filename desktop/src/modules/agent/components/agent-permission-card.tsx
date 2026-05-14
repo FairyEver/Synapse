@@ -2,6 +2,7 @@ import { useState } from "react"
 import { ShieldAlert, ShieldCheck, ShieldX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseAgentPermissionRequestTimelineItem } from "@/types/agent"
 
@@ -18,6 +19,24 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
   const showActions = pending
 
   function handleRespond(behavior: "allow" | "deny") {
+    track({
+      component: "agent",
+      name: "agent-permission-card-response",
+      action: "submit",
+      value: behavior,
+      metadata: {
+        boundary: "renderer.agent.permission-card-response",
+        itemId: item.id,
+        requestId: item.requestId,
+        toolName: item.toolName,
+        behavior,
+        inputLength: body.length,
+        hasRawInput: Boolean(item.toolInputRaw),
+        ...(item.sdkSessionId ? { sdkSessionId: item.sdkSessionId } : {}),
+        ...(item.agentSessionId ? { agentSessionId: item.agentSessionId } : {}),
+        ...(item.threadId ? { threadId: item.threadId } : {}),
+      },
+    })
     onRespond(item.requestId, behavior)
   }
 
@@ -85,7 +104,7 @@ const sensitiveRawInputKeyPattern = /token|secret|api[-_]?key|authorization|cook
 
 function sanitizeRawInput(value: unknown, key = ""): unknown {
   if (sensitiveRawInputKeyPattern.test(key)) return REDACTED
-  if (typeof value === "string") return truncateRawInputString(value)
+  if (typeof value === "string") return truncateRawInputString(redactPathLikeValue(value))
   if (Array.isArray(value)) return value.map((item) => sanitizeRawInput(item))
   if (!value || typeof value !== "object") return value
 
@@ -99,6 +118,12 @@ function sanitizeRawInput(value: unknown, key = ""): unknown {
 function truncateRawInputString(value: string): string {
   if (value.length <= MAX_RAW_INPUT_STRING_LENGTH) return value
   return `${value.slice(0, MAX_RAW_INPUT_STRING_LENGTH)}...[truncated]`
+}
+
+function redactPathLikeValue(value: string): string {
+  return value
+    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
 }
 
 export { AgentPermissionCard }

@@ -136,4 +136,21 @@ describe("AgentPhaseRow", () => {
     )
     expect(html).toContain("0.0s")
   })
+
+  it("does not render NaNs when phase timestamps are malformed", () => {
+    const html = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({
+          phase: "streaming",
+          status: "done",
+          startedAt: "not-a-date",
+          completedAt: "also-not-a-date",
+        })}
+        now={Date.parse("2026-05-10T00:00:00.500Z")}
+      />,
+    )
+
+    expect(html).toContain("0.0s")
+    expect(html).not.toContain("NaNs")
+  })
 })

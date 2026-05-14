@@ -37,15 +37,15 @@ export function WorkflowToolbar({ definition, saving, running, dirty, onSave, on
         placeholder="描述（可选）"
       />
       <div className="ml-auto flex items-center gap-1.5">
-        <Button size="sm" variant="ghost" onClick={() => setParamsOpen(true)} disabled={busy}>
+        <Button size="sm" variant="ghost" data-track="workflow-editor-params" onClick={() => setParamsOpen(true)} disabled={busy}>
           <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />参数
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => void onSave(definition)} disabled={busy} className="relative">
+        <Button size="sm" variant="ghost" data-track="workflow-editor-save" onClick={() => void onSave(definition)} disabled={busy} className="relative">
           {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
           保存
           {dirty && !saving && <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />}
         </Button>
-        <Button size="sm" onClick={() => definition.params.length === 0 ? void onRun({}) : setRunParamsOpen(true)} disabled={busy}>
+        <Button size="sm" data-track="workflow-editor-run" onClick={() => definition.params.length === 0 ? void onRun({}) : setRunParamsOpen(true)} disabled={busy}>
           {running ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />}
           运行
         </Button>

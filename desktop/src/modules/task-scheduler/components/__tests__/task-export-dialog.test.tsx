@@ -8,6 +8,18 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import { TaskExportDialog } from "../task-export-dialog"
 
+const { track } = vi.hoisted(() => ({
+  track: vi.fn(),
+}))
+
+vi.mock("@/lib/ui-tracking", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ui-tracking")>("@/lib/ui-tracking")
+  return {
+    ...actual,
+    track,
+  }
+})
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let roots: Root[] = []
@@ -60,16 +72,60 @@ describe("TaskExportDialog", () => {
     expect(document.body.textContent).toContain("已选 0 项")
     expect(buttonByText("导出").disabled).toBe(true)
   })
+
+  it("tracks export submits with a sanitized selected task summary", async () => {
+    const onExport = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskExportDialog
+          open
+          tasks={[task("task-a"), task("task-b", "builtin.command")]}
+          onExport={onExport}
+          onOpenChange={vi.fn()}
+        />,
+      )
+    })
+
+    await act(async () => {
+      checkboxAt(1).dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain("已选 1 项")
+
+    await act(async () => {
+      buttonByText("导出").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onExport).toHaveBeenCalledWith(["task-a"])
+    expect(track).toHaveBeenCalledWith({
+      component: "task-scheduler",
+      name: "task-export-submit",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.task-scheduler.export.dialog",
+        taskCount: 2,
+        selectedCount: 1,
+        agentTaskCount: 1,
+        actionTypes: ["builtin.agent"],
+        triggerTypes: ["builtin.interval"],
+      },
+    })
+    expect(JSON.stringify(track.mock.calls)).not.toContain("hello")
+  })
 })
 
-function task(id: string): ScheduledTask {
+function task(id: string, actionType = "builtin.agent"): ScheduledTask {
   return {
     id,
     schemaVersion: 2,
     name: id,
     scope: { type: "global" },
     trigger: { type: "builtin.interval", config: { everyMinutes: 5 } },
-    action: { type: "builtin.agent", config: { prompt: "hello" } },
+    action: { type: actionType, config: { prompt: "hello" } },
     enabled: true,
     missedRunPolicy: "skip",
     overlapPolicy: "skip",

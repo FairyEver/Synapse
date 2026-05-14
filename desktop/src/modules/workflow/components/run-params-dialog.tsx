@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { track } from "@/lib/ui-tracking"
 import type { WorkflowParam } from "@/types/workflow"
 
 interface RunParamsDialogProps {
@@ -30,6 +31,18 @@ export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel 
     e?.preventDefault()
     const parsed: Record<string, unknown> = {}
     for (const p of params) parsed[p.name] = p.type === "number" ? Number(values[p.name]) : values[p.name]
+    track({
+      component: "workflow",
+      name: "workflow-run-params-submit",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.workflow.run-params.submit",
+        paramCount: params.length,
+        numberParamCount: params.filter((param) => param.type === "number").length,
+        textParamCount: params.filter((param) => param.type === "text").length,
+        hasLastValues: Boolean(lastValues),
+      },
+    })
     onConfirm(parsed, values)
   }
   return (

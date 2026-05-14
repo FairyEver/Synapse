@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type Ref } from "react"
+import { act, type FormEvent, type Ref } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -408,6 +408,65 @@ describe("AgentComposer", () => {
     expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-pending-message-remove", action: "click" })
     expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-turn-stop", action: "click" })
     expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-turn-force-stop", action: "click" })
+  })
+
+  it("tracks composer submits without recording message content", async () => {
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="secret prompt text"
+          disabled={false}
+          canSend={true}
+          sending={true}
+          cancelPhase="idle"
+          pendingMessages={[{
+            id: "pending-1",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "queued message",
+            createdAt: "2026-05-13T10:00:02.000Z",
+            status: "queued",
+          }]}
+          permissionMode="auto"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "agent",
+      name: "agent-message-submit",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.agent.composer-submit",
+        draftLength: 18,
+        canSend: true,
+        sending: true,
+        pendingCount: 1,
+        permissionMode: "auto",
+      },
+    })
+    expect(JSON.stringify(track.mock.calls)).not.toContain("secret prompt text")
   })
 })
 

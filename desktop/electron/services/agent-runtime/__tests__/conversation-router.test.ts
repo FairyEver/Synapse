@@ -146,6 +146,57 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("persists a terminal error when the SDK session ends without result or error", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentEvents,
+      eventBus,
+      session: new EndedWithoutTerminalSession("sdk-ended"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
+
+    expect(result).toMatchObject({
+      error: "Agent session ended",
+      events: [expect.objectContaining({ type: "error", message: "Agent session ended" })],
+    })
+    expect(events.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          event: expect.objectContaining({
+            type: "error",
+            message: "Agent session ended",
+          }),
+        }),
+      }),
+    ])
+    expect(persisted).toEqual([
+      expect.objectContaining({
+        conversationId: result.conversationId,
+        eventType: "error",
+        payload: expect.objectContaining({
+          type: "error",
+          message: "Agent session ended",
+          sdkSessionId: "sdk-ended",
+        }),
+      }),
+    ])
+    expect(saved?.history).toEqual([
+      expect.objectContaining({ role: "user", content: "hello" }),
+      expect.objectContaining({
+        role: "system",
+        content: "Agent session ended",
+        metadata: expect.objectContaining({
+          agentEventType: "error",
+          sdkSessionId: "sdk-ended",
+        }),
+      }),
+    ])
+  })
+
   it("uses SDK assistant text as the canonical turn result over result content", async () => {
     const { conversations, router } = createRouter({
       session: new ScriptedSession([
@@ -259,6 +310,73 @@ describe("ConversationRouter", () => {
     })
   })
 
+  it("persists a terminal error when a side session relay times out", async () => {
+    const session = new ControlledSession("sdk-timeout")
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentEvents,
+      eventBus,
+      session,
+    })
+
+    const pending = router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
+    await waitFor(() => session.sent.includes("relay"))
+    session.emitStreamText("partial")
+    const result = await pending
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
+
+    expect(result).toMatchObject({
+      timedOut: true,
+      error: "Agent relay timed out.",
+      partialText: "partial",
+      resultText: "partial",
+    })
+    expect(events.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          event: expect.objectContaining({
+            type: "error",
+            message: "Agent relay timed out.",
+            sdkSessionId: "sdk-timeout",
+          }),
+        }),
+      }),
+    ])
+    expect(persisted.map((entry) => entry.eventType)).toEqual(["stream", "error"])
+    expect(saved?.history).toEqual([
+      expect.objectContaining({ role: "user", content: "relay" }),
+      expect.objectContaining({
+        role: "system",
+        content: "Agent relay timed out.",
+        metadata: expect.objectContaining({
+          agentEventType: "error",
+          sdkSessionId: "sdk-timeout",
+        }),
+      }),
+    ])
+  })
+
+  it("persists the Claude SDK agent type for timeout side sessions", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+    const conversation = await conversations.get(result.conversationId)
+
+    expect(conversation).toMatchObject({
+      agentType: "claude-sdk",
+      providerId: "anthropic",
+      sdkSessionId: "sdk-1",
+      resumePolicy: "fresh",
+      active: false,
+    })
+  })
+
   it("emits background phase events with conversation scope", async () => {
     const { eventBus, events } = createEventBusRecorder()
     const { router } = createRouter({
@@ -350,19 +468,56 @@ describe("ConversationRouter", () => {
     expect(second.sent).toEqual([])
   })
 
-  it("logs queued turn failures without raw SDK error text", async () => {
+  it("returns queued turn failures without raw SDK error text", async () => {
     const warn = vi.fn()
     const logger = {
       warn,
     } as unknown as NonNullable<ConversationRouterDeps["logger"]>
-    const { router } = createRouter({
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentEvents,
+      eventBus,
       logger,
-      session: new ThrowingSendSession("SDK failed for prompt sk-secret"),
+      session: new ThrowingSendSession("SDK failed token=sk-secret at /Users/liyang/private/repo"),
     })
 
     const result = await router.send(baseMessage("hello"))
+    const errorEvents = events.filter((event) => event.type === "error")
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
 
-    expect(result.error).toBe("SDK failed for prompt sk-secret")
+    expect(result.error).toContain("token=[redacted]")
+    expect(result.error).toContain("[path redacted]")
+    expect(result.error).not.toContain("sk-secret")
+    expect(result.error).not.toContain("/Users/liyang/private/repo")
+    expect(errorEvents).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          event: expect.objectContaining({
+            message: result.error,
+          }),
+        }),
+      }),
+    ])
+    expect(persisted).toEqual([
+      expect.objectContaining({
+        conversationId: result.conversationId,
+        eventType: "error",
+        payload: expect.objectContaining({
+          type: "error",
+          message: result.error,
+        }),
+      }),
+    ])
+    expect(saved?.history).toEqual([
+      expect.objectContaining({ role: "user", content: "hello" }),
+      expect.objectContaining({
+        role: "system",
+        content: result.error,
+        metadata: expect.objectContaining({ agentEventType: "error" }),
+      }),
+    ])
     expect(warn).toHaveBeenCalledWith(
       "AgentRuntime queued turn failed.",
       expect.objectContaining({
@@ -371,10 +526,135 @@ describe("ConversationRouter", () => {
         sessionKey: "s1",
         conversationId: conversationId("local", "s1", "active"),
         errorName: "Error",
-        errorLength: "SDK failed for prompt sk-secret".length,
+        errorLength: "SDK failed token=sk-secret at /Users/liyang/private/repo".length,
       }),
     )
     expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(persisted)).not.toContain("sk-secret")
+    expect(JSON.stringify(saved?.history)).not.toContain("/Users/liyang/private/repo")
+  })
+
+  it("persists side session failures without raw SDK error text", async () => {
+    const warn = vi.fn()
+    const logger = {
+      warn,
+    } as unknown as NonNullable<ConversationRouterDeps["logger"]>
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentEvents,
+      eventBus,
+      logger,
+      session: new ThrowingSendSession("Side session failed token=sk-secret at /Users/liyang/private/repo"),
+    })
+
+    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+    const errorEvents = events.filter((event) => event.type === "error")
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
+
+    expect(result.error).toContain("token=[redacted]")
+    expect(result.error).toContain("[path redacted]")
+    expect(result.error).not.toContain("sk-secret")
+    expect(result.error).not.toContain("/Users/liyang/private/repo")
+    expect(errorEvents).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          event: expect.objectContaining({
+            message: result.error,
+          }),
+        }),
+      }),
+    ])
+    expect(persisted).toEqual([
+      expect.objectContaining({
+        conversationId: result.conversationId,
+        eventType: "error",
+        payload: expect.objectContaining({
+          type: "error",
+          message: result.error,
+        }),
+      }),
+    ])
+    expect(saved?.history).toEqual([
+      expect.objectContaining({ role: "user", content: "relay" }),
+      expect.objectContaining({
+        role: "system",
+        content: result.error,
+        metadata: expect.objectContaining({ agentEventType: "error" }),
+      }),
+    ])
+    expect(warn).toHaveBeenCalledWith(
+      "AgentRuntime side session failed.",
+      expect.objectContaining({
+        boundary: "agent-runtime.side-session",
+        projectId: "project-1",
+        sessionKey: "s1",
+        platform: "local",
+        conversationId: result.conversationId,
+        providerId: "anthropic",
+        timeoutMs: 100,
+        errorName: "Error",
+        errorLength: "Side session failed token=sk-secret at /Users/liyang/private/repo".length,
+      }),
+    )
+    expect(JSON.stringify(persisted)).not.toContain("sk-secret")
+    expect(JSON.stringify(saved?.history)).not.toContain("/Users/liyang/private/repo")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("/Users/liyang/private/repo")
+  })
+
+  it("persists a terminal error when a side session cannot approve SDK permissions", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentEvents,
+      eventBus,
+      session: new ScriptedSession([
+        {
+          type: "permissionRequest",
+          requestId: "permission-1",
+          toolName: "Bash",
+          toolInput: "pwd",
+          toolInputRaw: { command: "pwd" },
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
+
+    expect(result).toMatchObject({
+      timedOut: false,
+      error: "Relay requested permission.",
+    })
+    expect(result.events.map((event) => event.type)).toEqual(["permissionRequest", "error"])
+    expect(events.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          event: expect.objectContaining({
+            type: "error",
+            message: "Relay requested permission.",
+          }),
+        }),
+      }),
+    ])
+    expect(persisted.map((entry) => entry.eventType)).toEqual(["permissionRequest", "error"])
+    expect(saved?.history).toEqual([
+      expect.objectContaining({ role: "user", content: "relay" }),
+      expect.objectContaining({
+        role: "system",
+        content: "Bash\npwd",
+        metadata: expect.objectContaining({ agentEventType: "permissionRequest" }),
+      }),
+      expect.objectContaining({
+        role: "system",
+        content: "Relay requested permission.",
+        metadata: expect.objectContaining({ agentEventType: "error" }),
+      }),
+    ])
   })
 
   it("keeps persisted tool metadata and event payloads bounded and sanitized", async () => {
@@ -401,6 +681,8 @@ describe("ConversationRouter", () => {
             authorization: "Bearer sk-auth",
             headers: { cookie: "sid=secret-cookie" },
             credential: "private-credential",
+            workspacePath: "/Users/liyang/private/repo",
+            artifact: "C:\\Users\\liyang\\secret\\out.txt",
           },
           sdkSessionId: "sdk-1",
         },
@@ -421,6 +703,9 @@ describe("ConversationRouter", () => {
     expect(persistedPayload).not.toContain("Bearer sk-auth")
     expect(persistedPayload).not.toContain("sid=secret-cookie")
     expect(persistedPayload).not.toContain("private-credential")
+    expect(persistedPayload).toContain("[path redacted]")
+    expect(persistedPayload).not.toContain("/Users/liyang/private/repo")
+    expect(persistedPayload).not.toContain("C:\\Users\\liyang\\secret\\out.txt")
     expect(JSON.stringify(persisted[0]?.payload).length).toBeLessThan(12_000)
   })
 })
@@ -605,6 +890,32 @@ class ScriptedSession implements AgentLiveSession {
   async close(): Promise<void> {
     this.closed = true
   }
+}
+
+class EndedWithoutTerminalSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  private read = false
+
+  constructor(private readonly sessionId: string) {}
+
+  async send(): Promise<void> {}
+
+  async respondPermission(): Promise<void> {}
+
+  async nextEvent(): Promise<AgentEvent | null> {
+    this.read = true
+    return null
+  }
+
+  currentSessionId(): string | undefined {
+    return this.sessionId
+  }
+
+  alive(): boolean {
+    return !this.read
+  }
+
+  async close(): Promise<void> {}
 }
 
 class ThrowingSendSession implements AgentLiveSession {

@@ -4,8 +4,11 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { createRendererLogger } from "@/app-shell/logging"
+import { track } from "@/lib/ui-tracking"
 import type { WorkflowRunSnapshot } from "@/types/workflow"
 
+const logger = createRendererLogger("workflow.run-history")
 const STATUS_LABEL: Record<string, string> = { completed: "已完成", failed: "失败", cancelled: "已取消" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   completed: "secondary", failed: "destructive", cancelled: "outline",
@@ -47,7 +50,12 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         setSnapshots(data)
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : "加载失败，请重试")
+        logger.warn("Workflow run history load failed.", {
+          boundary: "renderer.workflow.run-history.load",
+          workflowId,
+          ...errorDiagnostic(err),
+        })
+        setError("加载失败，请重试")
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -73,6 +81,16 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
   }
 
   const handleOpenRunner = (runId: string) => {
+    track({
+      component: "workflow",
+      name: "workflow-run-history-open-runner",
+      action: "click",
+      metadata: {
+        boundary: "renderer.workflow.run-history.open-runner",
+        workflowId,
+        runId,
+      },
+    })
     void window.synapse?.workflow.openRunner(workflowId, runId)
     onClose()
   }
@@ -130,4 +148,12 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
       </DialogContent>
     </Dialog>
   )
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }

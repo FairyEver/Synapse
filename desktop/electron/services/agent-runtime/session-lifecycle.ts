@@ -129,10 +129,24 @@ export class SessionLifecycleManager {
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
     const conversation = await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
+    const agentType = conversation ? await this.deps.getActiveAgentType() : undefined
     if (conversation) {
       await this.deps.sessionManager.closeState(conversation.id)
     }
-    return this.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
+    const reset = conversation
+      ? await this.deps.repository.clearCurrentAgentSessionId(conversation.id, agentType)
+      : null
+    this.deps.logger?.info("Agent session reset.", {
+      projectId: this.deps.projectId,
+      boundary: "agent-runtime.session.reset",
+      sessionKey,
+      platform,
+      workspaceKey,
+      conversationId: conversation?.id,
+      agentType,
+      hadConversation: Boolean(conversation),
+    })
+    return reset
   }
 
   async reclaimIdleSessions(): Promise<void> {
@@ -140,6 +154,7 @@ export class SessionLifecycleManager {
   }
 
   startIdleReclaim(): void {
+    if (this.reclaimInterval) return
     this.reclaimInterval = setInterval(() => {
       void this.reclaimIdleSessions().catch((error) => {
         this.deps.logger?.warn("Agent idle reclaim failed.", {

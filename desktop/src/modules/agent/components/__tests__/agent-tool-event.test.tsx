@@ -73,11 +73,12 @@ describe("AgentToolEvent", () => {
     />)
 
     expect(html).toContain("Bash")
-    expect(html).not.toContain("Running")
+    expect(html).toContain("Running")
     expect(html).toContain("pnpm test")
     expect(html).toContain("w-full")
     expect(html).not.toContain("border-y border-border")
-    expect(html.indexOf("Bash")).toBeLessThan(html.indexOf("lucide-chevron-down"))
+    expect(html.indexOf("Bash")).toBeLessThan(html.indexOf("Running"))
+    expect(html.indexOf("Running")).toBeLessThan(html.indexOf("lucide-chevron-down"))
     expect(html).toContain("group-data-[state=closed]/agent-event-trigger:-rotate-90")
   })
 
@@ -138,6 +139,24 @@ describe("AgentToolEvent", () => {
     expect(html).not.toContain("Done")
   })
 
+  it("shows denied tool results with the profile denied label", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-status-denied",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "permission denied",
+        status: "denied",
+      }}
+      profile={profile}
+    />)
+
+    expect(html).toContain("Denied")
+    expect(html).toContain("permission denied")
+    expect(html).not.toContain("Failed")
+  })
+
   it("keeps exit code and copy action for expanded tool results", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
@@ -155,6 +174,29 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("command output")
     expect(html).toContain("exit 2")
     expect(html).toContain("lucide-clipboard")
+  })
+
+  it("makes the copy action visible when hovering tool output", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-hover-copy",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "command output",
+        success: true,
+      }}
+      profile={profile}
+    />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const body = container.querySelector("pre")
+    const copyButton = body?.parentElement?.querySelector("button")
+
+    expect(body?.parentElement?.className.split(" ")).toContain("group")
+    expect(copyButton?.className).toContain("group-hover:opacity-100")
+    expect(copyButton?.getAttribute("aria-label")).toBe("复制工具输出")
   })
 
   it("opens permission requests by default", () => {
@@ -204,6 +246,27 @@ describe("AgentToolEvent", () => {
     expect(html).not.toContain("/Users/liyang/private")
   })
 
+  it("redacts path-like tool input strings before rendering", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-string",
+        kind: "toolCall",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        toolInput: "cat /Users/liyang/private/project/file.ts && type C:\\Users\\liyang\\secret\\file.ts",
+      }}
+      profile={{
+        ...profile,
+        toolDefaultCollapsed: "expanded",
+        toolPreviewChars: 400,
+      }}
+    />)
+
+    expect(html).toContain("[path redacted]")
+    expect(html).not.toContain("/Users/liyang/private")
+    expect(html).not.toContain("C:\\Users\\liyang")
+  })
+
   it("logs tool body copy failures without recording tool content", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -251,5 +314,56 @@ describe("AgentToolEvent", () => {
     )
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=sk-secret")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("clipboard denied")
+  })
+
+  it("tracks tool body copy clicks without recording tool content", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn() },
+    })
+    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={{
+          id: "tool-copy-track",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:00.000Z",
+          toolName: "Bash",
+          content: "token=sk-secret",
+          success: true,
+        }}
+        profile={profile}
+      />)
+    })
+
+    const copyButton = container.querySelectorAll("button")[1]
+    expect(copyButton).toBeTruthy()
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.info).toHaveBeenCalledWith(
+      "agent-tool-copy:click",
+      expect.objectContaining({
+        component: "agent",
+        name: "agent-tool-copy",
+        action: "click",
+        metadata: expect.objectContaining({
+          boundary: "renderer.agent.tool-copy",
+          itemId: "tool-copy-track",
+          kind: "toolResult",
+          toolName: "Bash",
+          bodyLength: "token=sk-secret".length,
+        }),
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("token=sk-secret")
   })
 })

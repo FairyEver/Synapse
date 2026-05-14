@@ -5,10 +5,14 @@ import { WorkflowCard } from "./workflow-card"
 import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
 import { useWorkflowList } from "../hooks/use-workflow-list"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition } from "@/types/workflow"
+
+const logger = createRendererLogger("workflow.list")
 
 export function WorkflowList() {
   const { items, loading, error, refresh } = useWorkflowList()
@@ -30,6 +34,7 @@ export function WorkflowList() {
         return
       }
       if (def.params.length === 0) {
+        trackWorkflowRunSubmit(def, {}, false)
         const result = await window.synapse?.workflow.runDefinition(def, {})
         if (!result) {
           toast.error("运行失败：无法连接到主进程")
@@ -49,7 +54,7 @@ export function WorkflowList() {
         setRunTarget(def)
       }
     } catch (err) {
-      toast.error(`运行失败：${err instanceof Error ? err.message : String(err)}`)
+      showRunFailure({ id }, {}, false, err)
     } finally {
       setRunningId(null)
     }
@@ -72,6 +77,7 @@ export function WorkflowList() {
     setRunTarget(null)
     setRunningId(def.id)
     try {
+      trackWorkflowRunSubmit(def, params, false)
       const result = await window.synapse?.workflow.runDefinition(def, params)
       if (!result) {
         toast.error("运行失败：无法连接到主进程")
@@ -89,7 +95,7 @@ export function WorkflowList() {
       void window.synapse?.workflow.openRunner(def.id, result.runId)
       void refresh()
     } catch (err) {
-      toast.error(`运行失败：${err instanceof Error ? err.message : String(err)}`)
+      showRunFailure(def, params, false, err)
     } finally {
       setRunningId(null)
     }
@@ -100,6 +106,7 @@ export function WorkflowList() {
     const { def, params } = conflictState
     setConflictState(null)
     try {
+      trackWorkflowRunSubmit(def, params, true)
       const forceResult = await window.synapse?.workflow.runDefinition(def, params, true)
       if (!forceResult) {
         toast.error("运行失败：无法连接到主进程")
@@ -116,8 +123,8 @@ export function WorkflowList() {
       }
       void window.synapse?.workflow.openRunner(def.id, forceResult.runId)
       void refresh()
-    } catch {
-      toast.error("运行失败：操作异常")
+    } catch (err) {
+      showRunFailure(def, params, true, err)
     }
   }
 
@@ -163,4 +170,53 @@ export function WorkflowList() {
       </AlertDialog>
     </>
   )
+}
+
+function trackWorkflowRunSubmit(
+  def: WorkflowDefinition,
+  params: Record<string, unknown>,
+  force: boolean,
+): void {
+  const paramCount = Object.keys(params).length
+  track({
+    component: "workflow",
+    name: "workflow-list-run-submit",
+    action: "submit",
+    metadata: {
+      boundary: "renderer.workflow.list.run-submit",
+      workflowId: def.id,
+      source: "workflow-list",
+      force,
+      paramCount,
+      hasParams: paramCount > 0,
+    },
+  })
+}
+
+function showRunFailure(
+  def: Pick<WorkflowDefinition, "id">,
+  params: Record<string, unknown>,
+  force: boolean,
+  error: unknown,
+): void {
+  logger.warn("Workflow list run failed.", {
+    boundary: "renderer.workflow.list.run",
+    workflowId: def.id,
+    force,
+    paramCount: Object.keys(params).length,
+    ...errorLogMeta(error),
+  })
+  toast.error("运行失败，请重试")
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+  }
 }

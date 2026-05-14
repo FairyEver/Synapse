@@ -219,8 +219,17 @@ function errorCode(error: unknown): string | undefined {
 
 function normalizeReferenceInput(input: string): string {
   const trimmed = input.trim().replace(/^["'`]+|["'`]+$/g, "")
-  const markdown = /^\[[^\]]+\]\(([^)]+)\)$/.exec(trimmed)
-  return (markdown?.[1] ?? trimmed).trim()
+  const reference = trimTrailingReferencePunctuation(trimmed)
+  const markdown = /^\[[^\]]+\]\(([^)]+)\)$/.exec(reference)
+  return (markdown?.[1] ?? reference).trim()
+}
+
+function trimTrailingReferencePunctuation(input: string): string {
+  let value = input.trim()
+  while (/[)\d][.,;]$/.test(value)) {
+    value = value.slice(0, -1).trimEnd()
+  }
+  return value
 }
 
 function splitLocationSuffix(input: string): {

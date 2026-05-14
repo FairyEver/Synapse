@@ -359,6 +359,36 @@ describe("DiagnosticsService.exportBundle", () => {
 
     await expect(service.exportBundle({ report })).resolves.toEqual({ success: false })
   })
+
+  it("records failed exports without raw error text in audit metadata", async () => {
+    const rawError = "zip failed token=sk-secret at /Users/example/private/report.zip"
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const service = createService({
+      auditSink,
+      createZipArchive: vi.fn(async () => {
+        throw new Error(rawError)
+      }),
+    })
+    const report = await service.collect()
+
+    await expect(service.exportBundle({ report })).rejects.toThrow(rawError)
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "ops.exportDiagnosticsBundle",
+        errorName: "Error",
+        errorLength: rawError.length,
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/example/private")
+  })
 })
 
 function createService(

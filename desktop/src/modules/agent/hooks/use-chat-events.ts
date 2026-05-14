@@ -189,6 +189,7 @@ function useChatEvents(
         logger.debug("Agent stream event ignored for inactive conversation.", {
           projectId: domainEvent.payload.projectId,
           eventType: domainEvent.type,
+          ...streamEventLogMeta(domainEvent),
           sessionKey: domainEvent.payload.sessionKey,
           platform: domainEvent.payload.platform,
           selectedProjectId: selectedProjectIdRef.current,
@@ -200,6 +201,7 @@ function useChatEvents(
       logger.debug("Agent stream event applied.", {
         projectId: domainEvent.payload.projectId,
         eventType: domainEvent.type,
+        ...streamEventLogMeta(domainEvent),
         sessionKey: domainEvent.payload.sessionKey,
         platform: domainEvent.payload.platform,
         selectedProjectId: selectedProjectIdRef.current,
@@ -220,7 +222,7 @@ function useChatEvents(
       void refreshPendingPermissions().catch((rawError: unknown) => {
         logger.error("Agent pending permissions refresh failed.", {
           projectId: domainEvent.payload.projectId,
-          conversationId: domainEvent.scope?.sessionId,
+          conversationId: streamEventConversationId(domainEvent),
           sessionKey: domainEvent.payload.sessionKey,
           platform: domainEvent.payload.platform,
           eventType: domainEvent.type,
@@ -277,7 +279,32 @@ function matchesSelectedEvent(
 ): boolean {
   return isSelectedConversation({
     projectId: domainEvent.payload.projectId,
-    conversationId: domainEvent.scope?.sessionId,
+    conversationId: streamEventConversationId(domainEvent),
     sessionKey: domainEvent.payload.sessionKey,
   }, selected)
+}
+
+function streamEventConversationId(domainEvent: SynapseAgentDomainEvent): string | undefined {
+  if (domainEvent.scope?.sessionId) return domainEvent.scope.sessionId
+  if (!("event" in domainEvent.payload)) return undefined
+
+  const conversationId = domainEvent.payload.event.conversationId
+  return typeof conversationId === "string" && conversationId.length > 0
+    ? conversationId
+    : undefined
+}
+
+function streamEventLogMeta(domainEvent: SynapseAgentDomainEvent): {
+  readonly conversationId?: string
+  readonly agentEventType?: string
+  readonly sdkSessionId?: string
+} {
+  if (!("event" in domainEvent.payload)) {
+    return { conversationId: streamEventConversationId(domainEvent) }
+  }
+  return {
+    conversationId: streamEventConversationId(domainEvent),
+    agentEventType: domainEvent.payload.event.type,
+    sdkSessionId: domainEvent.payload.event.sdkSessionId,
+  }
 }

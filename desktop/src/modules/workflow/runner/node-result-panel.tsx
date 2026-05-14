@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
+import { track } from "@/lib/ui-tracking"
 
 const STATUS_LABEL: Record<string, string> = { pending: "等待", running: "执行中", success: "完成", failed: "失败", skipped: "跳过" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -24,6 +25,28 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
     const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
     return branches?.find((b) => b.id === result.activeBranch)?.label ?? result.activeBranch
   })()
+  const handleClose = () => {
+    track({
+      component: "workflow.runner",
+      name: "workflow-runner-node-result-close",
+      action: "close",
+      value: result.nodeId,
+      metadata: {
+        boundary: "renderer.workflow.runner.node-result",
+        nodeId: result.nodeId,
+        status: result.status,
+        hasOutput: Boolean(result.output),
+        hasError: Boolean(result.error),
+        hasPrompt: Boolean(result.input.prompt),
+        variableCount: Object.keys(result.input.variables).length,
+        outputLength: result.output?.length ?? 0,
+        errorLength: result.error?.length ?? 0,
+        promptLength: result.input.prompt?.length ?? 0,
+      },
+    })
+    onClose()
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2 px-3 py-2 border-b">
@@ -34,7 +57,14 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         {result.status === "running" && result.progressLabel && (
           <span className="text-xs text-muted-foreground animate-pulse">{result.progressLabel}</span>
         )}
-        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onClose}>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6"
+          aria-label="关闭节点详情"
+          data-track="workflow-runner-node-result-close-button"
+          onClick={handleClose}
+        >
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>

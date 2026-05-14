@@ -193,6 +193,7 @@ export function appendAgentTimelineEvent(
   if (event.type === "stream") {
     const kind = streamKind(event)
     if (kind === "text" && item.kind === "message") {
+      if (item.content.length === 0) return [...current]
       const assistantIndex = latestAssistantDraftIndex(current)
       if (assistantIndex !== -1) {
         const assistant = current[assistantIndex]
@@ -208,6 +209,7 @@ export function appendAgentTimelineEvent(
     }
 
     if (kind === "thinking" && item.kind === "thinking") {
+      if (item.content.length === 0) return [...current]
       const thinkingIndex = latestThinkingDraftIndex(current)
       if (thinkingIndex !== -1) {
         const thinking = current[thinkingIndex]
@@ -239,7 +241,7 @@ export function appendAgentTimelineEvent(
     return [...current, item]
   }
   if (event.type === "assistant" && item.kind === "message") {
-    const assistantIndex = latestAssistantDraftIndex(current)
+    const assistantIndex = latestAssistantDraftForFinalIndex(current)
     const assistant = assistantIndex === -1 ? undefined : current[assistantIndex]
     if (assistant?.kind === "message" && assistant.role === "assistant") {
       return [
@@ -305,6 +307,17 @@ function latestAssistantDraftIndex(items: readonly SynapseAgentTimelineItem[]): 
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
     if (item?.kind === "message" && item.role === "assistant" && isStreamedAssistantDraft(item)) return index
+    if (item?.kind === "thinking") return -1
+    if (item && isTimelineMergeBoundary(item)) return -1
+    if (item?.kind === "message" && item.role === "user") return -1
+  }
+  return -1
+}
+
+function latestAssistantDraftForFinalIndex(items: readonly SynapseAgentTimelineItem[]): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind === "message" && item.role === "assistant" && isStreamedAssistantDraft(item)) return index
     if (item && isTimelineMergeBoundary(item)) return -1
     if (item?.kind === "message" && item.role === "user") return -1
   }
@@ -315,6 +328,7 @@ function latestThinkingDraftIndex(items: readonly SynapseAgentTimelineItem[]): n
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
     if (item?.kind === "thinking" && item.id.includes(":stream:")) return index
+    if (item?.kind === "message" && item.role === "assistant") return -1
     if (item && isTimelineMergeBoundary(item)) return -1
     if (item?.kind === "message" && item.role === "user") return -1
   }

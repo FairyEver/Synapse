@@ -44,6 +44,7 @@ export function RunnerToolbar({ definition, runState, runError, viewMode, rerunn
             size="sm"
             variant={viewMode === "dag" ? "secondary" : "ghost"}
             className="rounded-r-none h-7"
+            data-track="workflow-runner-view-dag"
             onClick={() => onViewModeChange("dag")}
           >
             <LayoutDashboard className="h-3.5 w-3.5 mr-1" />DAG
@@ -52,22 +53,23 @@ export function RunnerToolbar({ definition, runState, runError, viewMode, rerunn
             size="sm"
             variant={viewMode === "timeline" ? "secondary" : "ghost"}
             className="rounded-l-none h-7"
+            data-track="workflow-runner-view-timeline"
             onClick={() => onViewModeChange("timeline")}
           >
             <List className="h-3.5 w-3.5 mr-1" />时间线
           </Button>
         </div>
         {isRunning && (
-          <Button size="sm" variant="destructive" disabled={cancelling} onClick={() => void onCancel()}>
+          <Button size="sm" variant="destructive" disabled={cancelling} data-track="workflow-runner-stop" onClick={() => void onCancel()}>
             {cancelling ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Square className="h-3.5 w-3.5 mr-1" />}停止
           </Button>
         )}
         {isTerminal && (
-          <Button size="sm" variant="outline" disabled={rerunning} onClick={() => void onRerun()}>
+          <Button size="sm" variant="outline" disabled={rerunning} data-track="workflow-runner-rerun" onClick={() => void onRerun()}>
             {rerunning ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}重新运行
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={onOpenEditor}>
+        <Button size="sm" variant="ghost" data-track="workflow-runner-open-editor" onClick={onOpenEditor}>
           <PenLine className="h-3.5 w-3.5 mr-1" />编辑
         </Button>
       </div>

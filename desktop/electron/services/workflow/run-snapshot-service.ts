@@ -20,8 +20,7 @@ export class RunSnapshotService {
     } catch (err) {
       logger.warn("run snapshot readdir failed", {
         workflowId,
-        error: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
+        ...snapshotErrorMetadata(err),
       })
       return []
     }
@@ -32,7 +31,7 @@ export class RunSnapshotService {
       } catch (err) {
         logger.warn("run snapshot file corrupted or unreadable, skipping", {
           workflowId, file,
-          error: err instanceof Error ? err.message : String(err),
+          ...snapshotErrorMetadata(err),
         })
         return null
       }
@@ -54,8 +53,7 @@ export class RunSnapshotService {
       logger.error("run snapshot save failed", {
         runId: s.runId,
         workflowId: s.workflowId,
-        error: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
+        ...snapshotErrorMetadata(err),
       })
     }
   }
@@ -68,8 +66,7 @@ export class RunSnapshotService {
     } catch (err) {
       logger.warn("run snapshot list failed", {
         workflowId,
-        error: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
+        ...snapshotErrorMetadata(err),
       })
       return []
     }
@@ -84,11 +81,30 @@ export class RunSnapshotService {
       if (code !== "ENOENT") {
         logger.warn("run snapshot get failed", {
           runId, workflowId,
-          error: err instanceof Error ? err.message : String(err),
-          code,
+          ...snapshotErrorMetadata(err),
         })
       }
       return null
     }
   }
+}
+
+function snapshotErrorMetadata(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly code?: string
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  const code = errorCode(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+    ...(code ? { code } : {}),
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined
+  const code = (error as NodeJS.ErrnoException).code
+  return typeof code === "string" ? code : undefined
 }

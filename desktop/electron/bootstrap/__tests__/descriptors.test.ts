@@ -129,6 +129,78 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreActionRuntimeDescriptor.create).toBeTypeOf("function")
   })
 
+  it("coreWorkflowEngineDescriptor redacts infrastructure errors from Agent dependency logs and result", async () => {
+    const logger = {
+      error: vi.fn(),
+    }
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{
+            uuid: "repo-1",
+            name: "Repo",
+            localPath: "/repo",
+          }],
+        })),
+      },
+    }))
+    vi.doMock("../../services/log-store", () => ({
+      logStore: {},
+      createMainLogger: () => logger,
+    }))
+    const rawError = new Error("container failed token=sk-test at /Users/liyang/private prompt")
+    rawError.stack = "stack with token=sk-test at /Users/liyang/private prompt"
+    const containers = {
+      open: vi.fn(async () => {
+        throw rawError
+      }),
+    }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn(() => containers),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      agentDeps: {
+        sendToAgent(input: { agent: string; prompt: string; abortSignal: AbortSignal }): Promise<{
+          status: "success" | "failed"
+          response: string
+          error?: string
+          durationMs: number
+        }>
+      }
+    }
+
+    const result = await engine.agentDeps.sendToAgent({
+      agent: "claude-code",
+      prompt: "secret prompt",
+      abortSignal: new AbortController().signal,
+    })
+
+    expect(result).toEqual({
+      status: "failed",
+      response: "",
+      error: `Agent call failed (${rawError.message.length} chars)`,
+      durationMs: 0,
+    })
+    expect(logger.error).toHaveBeenCalledWith(
+      "engine agent call failed (infrastructure)",
+      expect.objectContaining({
+        agent: "claude-code",
+        errorName: "Error",
+        errorLength: rawError.message.length,
+        stackLength: rawError.stack.length,
+      }),
+    )
+    const serialized = JSON.stringify([result, logger.error.mock.calls])
+    expect(serialized).not.toContain("sk-test")
+    expect(serialized).not.toContain("/Users/liyang/private")
+    expect(serialized).not.toContain("secret prompt")
+  })
+
   it("coreTaskSchedulerDescriptor depends on action runtime", async () => {
     const { coreTaskSchedulerDescriptor } = await importBootstrap()
     expect(coreTaskSchedulerDescriptor.dependsOn).toEqual([

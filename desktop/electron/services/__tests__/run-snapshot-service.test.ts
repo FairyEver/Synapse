@@ -2,9 +2,18 @@ import { randomUUID } from "node:crypto"
 import { mkdir, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { RunSnapshotService } from "../workflow/run-snapshot-service"
+
+const logger = vi.hoisted(() => ({
+  error: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => logger,
+}))
 
 const roots: string[] = []
 
@@ -14,6 +23,11 @@ async function tmpDir() {
   roots.push(d)
   return d
 }
+
+beforeEach(() => {
+  logger.error.mockClear()
+  logger.warn.mockClear()
+})
 
 afterEach(() => Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true }))))
 
@@ -47,5 +61,23 @@ describe("RunSnapshotService", () => {
     expect(runs).toHaveLength(20)
     expect(runs[0]?.runId).toBe("run-20")
     expect(runs.some((run) => run.runId === "run-0")).toBe(false)
+  })
+
+  it("logs snapshot filesystem failures with sanitized diagnostics", async () => {
+    const root = await tmpDir()
+    const svc = new RunSnapshotService(root)
+
+    await expect(svc.list("wf-missing")).resolves.toEqual([])
+
+    expect(logger.warn).toHaveBeenCalledWith("run snapshot readdir failed", expect.objectContaining({
+      workflowId: "wf-missing",
+      errorName: expect.any(String),
+      errorLength: expect.any(Number),
+      code: "ENOENT",
+    }))
+    const metadata = logger.warn.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(metadata).not.toHaveProperty("error")
+    expect(metadata).not.toHaveProperty("stack")
+    expect(JSON.stringify(metadata)).not.toContain(root)
   })
 })

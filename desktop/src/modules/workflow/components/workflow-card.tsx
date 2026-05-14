@@ -33,15 +33,37 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
           {badge ? <Badge variant={badge.variant} className="text-xs">{badge.label}</Badge> : null}
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" disabled={running} onClick={(e) => { e.stopPropagation(); onRun() }}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={running}
+            aria-label="运行工作流"
+            data-track="workflow-card-run"
+            onClick={(e) => { e.stopPropagation(); onRun() }}
+          >
             {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
           </Button>
-          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onHistory() }}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-label="查看运行历史"
+            data-track="workflow-card-history"
+            onClick={(e) => { e.stopPropagation(); onHistory() }}
+          >
             <History className="h-3.5 w-3.5" />
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button size="sm" variant="ghost" onClick={(e) => e.stopPropagation()}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                aria-label="删除工作流"
+                data-track="workflow-card-delete-open"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
               </Button>
             </AlertDialogTrigger>

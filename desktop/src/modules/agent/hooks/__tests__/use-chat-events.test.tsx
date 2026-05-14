@@ -177,6 +177,57 @@ describe("useChatEvents", () => {
     )
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret permission refresh detail")
   })
+
+  it("applies stream events matched by SDK envelope conversation id", async () => {
+    const refreshPendingPermissions = vi.fn(async () => {})
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          dispatch={dispatch}
+          refreshPendingPermissions={refreshPendingPermissions}
+        />,
+      )
+    })
+
+    const event = {
+      domain: "agent",
+      type: "text",
+      timestamp: "2026-05-14T00:00:00.000Z",
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        event: {
+          type: "text",
+          content: "partial",
+          conversationId: "conversation-1",
+          sdkSessionId: "sdk-session-1",
+        },
+      },
+    } as unknown as SynapseAgentDomainEvent
+
+    await act(async () => {
+      bridgeState.listener?.(event)
+      await Promise.resolve()
+    })
+
+    expect(refreshPendingPermissions).toHaveBeenCalled()
+    expect(rendererLogger.debug).toHaveBeenCalledWith(
+      "Agent stream event applied.",
+      expect.objectContaining({
+        projectId: "project-1",
+        eventType: "text",
+        conversationId: "conversation-1",
+        agentEventType: "text",
+        sdkSessionId: "sdk-session-1",
+        selectedConversationId: "conversation-1",
+      }),
+    )
+  })
 })
 
 function HookProbe({

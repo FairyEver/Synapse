@@ -175,6 +175,15 @@ export class AutomationIngressService {
       return jsonResponse(202, true, { status: "queued" })
     } catch (error) {
       if (error instanceof WebhookError) {
+        this.deps.logger?.warn("Webhook request validation failed.", {
+          boundary: "webhook.validation",
+          path: url.pathname,
+          method: request.method,
+          status: error.status,
+          source: remoteSource(request),
+          bodyLength: request.body.length,
+          ...errorDiagnostic(error),
+        })
         return jsonResponse(error.status, false, undefined, error.code, error.message)
       }
       return jsonResponse(500, false, undefined, "internal_error", "internal error")
@@ -211,10 +220,17 @@ export class AutomationIngressService {
         : "success"
       const resultBoundary = run.kind === "prompt" ? "agent-runtime" : "process-runner"
       const resultError = stringValue(result.error)
+      const safeResultError = resultBoundary === "agent-runtime" && resultError
+        ? summarizeReturnedAgentError(resultError)
+        : resultError
       const resultDiagnostic = errorDiagnostic(resultError ?? resultStatus ?? finalStatus)
+      const resultCorrelation = run.kind === "prompt"
+        ? { messageId: webhookAgentMessageId(body, run.id), ...agentResultCorrelation(result) }
+        : agentResultCorrelation(result)
       await this.finishRun(run, finalStatus, {
         resultText: stringValue(result.resultText),
-        lastError: finalStatus === "success" ? undefined : resultError ?? resultStatus,
+        lastError: finalStatus === "success" ? undefined : safeResultError ?? resultStatus,
+        metadata: resultCorrelation,
       })
       if (finalStatus !== "success") {
         this.deps.logger?.warn("Webhook prompt run completed with agent error.", {
@@ -222,6 +238,7 @@ export class AutomationIngressService {
           projectId: project.projectId,
           kind: run.kind,
           sessionKey: run.sessionKey,
+          ...resultCorrelation,
           status: finalStatus,
           boundary: resultBoundary,
           ...resultDiagnostic,
@@ -231,20 +248,29 @@ export class AutomationIngressService {
         runId: run.id,
         projectId: project.projectId,
         kind: run.kind,
+        ...resultCorrelation,
       }
       this.recordAudit(finalStatus === "success" ? "allowed" : "failed", `webhook:${path}`, finalStatus === "success"
         ? auditMetadata
         : { ...auditMetadata, status: finalStatus, boundary: resultBoundary, ...resultDiagnostic })
-      return { runId: run.id, ...result }
+      return {
+        runId: run.id,
+        ...result,
+        ...(safeResultError ? { error: safeResultError } : {}),
+      }
     } catch (error) {
       const message = errorMessage(error)
       const diagnostic = errorDiagnostic(error)
-      await this.finishRun(run, "failed", { lastError: message })
+      const persistedLastError = run.kind === "prompt" && !(error instanceof WebhookError)
+        ? summarizeReturnedAgentError(message)
+        : message
+      await this.finishRun(run, "failed", { lastError: persistedLastError })
       this.deps.logger?.warn("Webhook run threw.", {
         runId: run.id,
         projectId: project.projectId,
         kind: run.kind,
         sessionKey: run.sessionKey,
+        ...(run.kind === "prompt" ? { messageId: webhookAgentMessageId(body, run.id) } : {}),
         boundary: run.kind === "prompt" ? "agent-runtime" : "process-runner",
         ...diagnostic,
       })
@@ -252,6 +278,7 @@ export class AutomationIngressService {
         runId: run.id,
         projectId: project.projectId,
         kind: run.kind,
+        ...(run.kind === "prompt" ? { messageId: webhookAgentMessageId(body, run.id) } : {}),
         ...diagnostic,
       })
       throw error
@@ -276,7 +303,7 @@ export class AutomationIngressService {
       projectId: project.projectId,
       sessionKey,
       platform: "webhook",
-      messageId: stringValue(body.messageId),
+      messageId: webhookAgentMessageId(body, run.id),
       userId: "webhook",
       userName: "webhook",
       content,
@@ -286,11 +313,15 @@ export class AutomationIngressService {
       createdAt: this.isoNow(),
     }
     const result = await agent.send(message)
-    await this.maybeReply(body, message.replyCtx, result.resultText || result.error)
+    const replyText = result.resultText
+      || (result.error ? summarizeReturnedAgentError(result.error) : undefined)
+    await this.maybeReply(body, message.replyCtx, replyText)
     return {
       status: result.error ? "failed" : "success",
       resultText: result.resultText,
       error: result.error,
+      conversationId: result.conversationId,
+      sdkSessionId: result.agentSessionId,
     }
   }
 
@@ -468,6 +499,7 @@ export class AutomationIngressService {
     patch: {
       readonly resultText?: string
       readonly lastError?: string
+      readonly metadata?: Record<string, unknown>
     },
   ): Promise<void> {
     await this.deps.runs.upsert({
@@ -475,6 +507,7 @@ export class AutomationIngressService {
       status,
       resultText: patch.resultText ? truncate(patch.resultText) : undefined,
       lastError: patch.lastError,
+      metadata: patch.metadata ? { ...run.metadata, ...patch.metadata } : run.metadata,
       finishedAt: this.isoNow(),
       updatedAt: this.isoNow(),
     })
@@ -668,6 +701,24 @@ function timingSafeEqualText(a: string, b: string): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function summarizeReturnedAgentError(error: string): string {
+  return `执行失败（错误 ${error.length} 字）`
+}
+
+function webhookAgentMessageId(body: Record<string, unknown>, runId: string): string {
+  return stringValue(body.messageId) ?? runId
+}
+
+function agentResultCorrelation(result: Record<string, unknown>): Record<string, string> | undefined {
+  const conversationId = stringValue(result.conversationId)
+  const sdkSessionId = stringValue(result.sdkSessionId) ?? stringValue(result.agentSessionId)
+  if (!conversationId && !sdkSessionId) return undefined
+  return {
+    ...(conversationId ? { conversationId } : {}),
+    ...(sdkSessionId ? { sdkSessionId } : {}),
+  }
 }
 
 function errorDiagnostic(error: unknown): {

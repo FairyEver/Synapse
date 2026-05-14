@@ -180,6 +180,88 @@ describe("useAgentChat", () => {
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("archive secret failure")
   })
 
+  it("logs Agent refresh failures with sanitized target context", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          listSessions: ReturnType<typeof vi.fn>
+          onEvent: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let emitAgentEvent: ((event: {
+      readonly type: "conversationUpdated"
+      readonly timestamp: string
+      readonly payload: {
+        readonly projectId: string
+        readonly sessionKey: string
+        readonly conversationId: string
+      }
+    }) => void) | undefined
+    bridge.onEvent.mockImplementation((callback) => {
+      emitAgentEvent = callback
+      return () => {}
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    bridge.listSessions.mockRejectedValue(new Error("refresh failed token=sk-refresh /Users/liyang/project"))
+
+    await act(async () => {
+      emitAgentEvent?.({
+        type: "conversationUpdated",
+        timestamp: "2026-05-13T00:02:00.000Z",
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+        },
+      })
+    })
+    await waitFor(() => rendererLogger.error.mock.calls.some((call) => call[0] === "Agent conversation refresh failed."))
+
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent conversation refresh failed.", {
+      projectId: session.projectId,
+      targetConversationId: session.id,
+      targetSessionKey: session.sessionKey,
+      boundary: "renderer.agent.conversation-refresh",
+      errorName: "Error",
+      errorLength: "refresh failed token=sk-refresh /Users/liyang/project".length,
+    })
+    expect(chat?.error).toBe("刷新会话失败")
+
+    rendererLogger.error.mockClear()
+
+    await act(async () => {
+      await chat?.refresh()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent refresh failed.", {
+      projectIds: ["project-1"],
+      selectedProjectId: session.projectId,
+      selectedConversationId: session.id,
+      boundary: "renderer.agent.refresh",
+      errorName: "Error",
+      errorLength: "refresh failed token=sk-refresh /Users/liyang/project".length,
+    })
+    expect(chat?.error).toBe("加载失败")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-refresh")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/liyang")
+  })
+
   it("clears the selected timeline when refresh finds no remaining sessions", async () => {
     const bridge = (window as unknown as {
       synapse: {
@@ -362,7 +444,7 @@ describe("useAgentChat", () => {
       toolName: "Bash",
       createdAt: "2026-05-13T00:02:00.000Z",
     }])
-    bridge.respondPermission.mockRejectedValue("permission secret token=sk-test")
+    bridge.respondPermission.mockRejectedValue(new Error("permission secret token=sk-test"))
 
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")
@@ -389,9 +471,10 @@ describe("useAgentChat", () => {
       requestId: "permission-1",
       behavior: "allow",
       boundary: "renderer.agent.permission-response",
-      errorName: "string",
+      errorName: "Error",
       errorLength: "permission secret token=sk-test".length,
     }))
+    expect(chat?.error).toBe("处理失败")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("permission secret token")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
   })
@@ -465,6 +548,123 @@ describe("useAgentChat", () => {
     }))
   })
 
+  it("logs session create failures without exposing backend error text", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          createSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.createSession.mockRejectedValue(new Error("create failed token=sk-secret /Users/liyang/project"))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.createSession("project-1", "provider-1", "bypassPermissions")
+    })
+
+    expect(chat?.error).toBe("创建失败")
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent session create failed.", {
+      projectId: "project-1",
+      providerId: "provider-1",
+      mode: "bypassPermissions",
+      boundary: "renderer.agent.session-create",
+      errorName: "Error",
+      errorLength: "create failed token=sk-secret /Users/liyang/project".length,
+    })
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/liyang")
+  })
+
+  it("logs session mutation failures with sanitized target context", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          deleteSession: ReturnType<typeof vi.fn>
+          renameSession: ReturnType<typeof vi.fn>
+          switchSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.renameSession = vi.fn(async () => undefined)
+    bridge.switchSession.mockRejectedValue(new Error("switch failed token=sk-switch"))
+    bridge.deleteSession.mockRejectedValue(new Error("delete failed token=sk-delete"))
+    bridge.renameSession.mockRejectedValue(new Error("rename failed token=sk-rename"))
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.selectSession(nextSession)
+    })
+    expect(chat?.error).toBe("切换失败")
+
+    await act(async () => {
+      await chat?.deleteSession(session)
+    })
+    expect(chat?.error).toBe("删除失败")
+
+    await act(async () => {
+      await chat?.renameSession(session, "Renamed")
+    })
+    expect(chat?.error).toBe("重命名失败")
+
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent session switch failed.", {
+      projectId: nextSession.projectId,
+      conversationId: nextSession.id,
+      sessionKey: nextSession.sessionKey,
+      boundary: "renderer.agent.session-switch",
+      errorName: "Error",
+      errorLength: "switch failed token=sk-switch".length,
+    })
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent session delete failed.", {
+      projectId: session.projectId,
+      conversationId: session.id,
+      sessionKey: session.sessionKey,
+      boundary: "renderer.agent.session-delete",
+      errorName: "Error",
+      errorLength: "delete failed token=sk-delete".length,
+    })
+    expect(rendererLogger.error).toHaveBeenCalledWith("Agent session rename failed.", {
+      projectId: session.projectId,
+      conversationId: session.id,
+      sessionKey: session.sessionKey,
+      boundary: "renderer.agent.session-rename",
+      errorName: "Error",
+      errorLength: "rename failed token=sk-rename".length,
+    })
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-switch")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-delete")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-rename")
+  })
+
   it("logs cancel and force-kill failures with sanitized conversation context", async () => {
     const bridge = (window as unknown as {
       synapse: {
@@ -514,6 +714,43 @@ describe("useAgentChat", () => {
     }))
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt=secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
+  })
+
+  it("resets cancel state when no active turn is found", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          cancelTurn: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.cancelTurn.mockResolvedValue({ status: "no-active-turn" })
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.cancelTurn()
+    })
+
+    expect(bridge.cancelTurn).toHaveBeenCalledWith({
+      projectId: session.projectId,
+      conversationId: session.id,
+    })
+    expect(chat?.cancelPhase).toBe("idle")
   })
 })
 

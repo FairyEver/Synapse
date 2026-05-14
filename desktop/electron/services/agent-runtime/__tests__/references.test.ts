@@ -22,6 +22,21 @@ describe("agent local references", () => {
     expect(resolveLocalReference("../outside.ts", workspace)).toBeNull()
   })
 
+  it("resolves sentence-punctuated local references from agent messages", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-ref-punctuated-"))
+    await fs.mkdir(path.join(workspace, "src"))
+    await fs.writeFile(path.join(workspace, "src", "app.ts"), "one\ntwo\nthree\n")
+
+    expect(resolveLocalReference("src/app.ts:2.", workspace)).toEqual(expect.objectContaining({
+      relativePath: "src/app.ts",
+      line: 2,
+    }))
+    expect(resolveLocalReference("[app](src/app.ts:3),", workspace)).toEqual(expect.objectContaining({
+      relativePath: "src/app.ts",
+      line: 3,
+    }))
+  })
+
   it("renders a bounded file view", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-show-"))
     await fs.writeFile(path.join(workspace, "file.ts"), "one\ntwo\nthree\n")

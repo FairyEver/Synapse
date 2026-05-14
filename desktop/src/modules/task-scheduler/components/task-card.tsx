@@ -56,6 +56,7 @@ function getStatusBadge(task: ScheduledTask): {
 }
 
 function getPrimaryActionLabel(task: ScheduledTask): string {
+  if (task.activeRun?.status === "running") return "运行中"
   if (task.lastStatus === "failed" || task.lastStatus === "timeout") return "重试"
   return "运行"
 }
@@ -77,6 +78,7 @@ function TaskCard({
   onDelete,
 }: TaskCardProps) {
   const disabled = !task.enabled
+  const activeRunning = task.activeRun?.status === "running"
   const badge = getStatusBadge(task)
   const primaryLabel = getPrimaryActionLabel(task)
   const nextRun = formatTaskNextRun(task)
@@ -134,9 +136,9 @@ function TaskCard({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={task.lastStatus === "failed" || task.lastStatus === "timeout" ? "default" : "secondary"}
+              variant={!activeRunning && (task.lastStatus === "failed" || task.lastStatus === "timeout") ? "default" : "secondary"}
               size="sm"
-              disabled={disabled || busy}
+              disabled={disabled || busy || activeRunning}
               onClick={onRun}
             >
               <Play className="size-3.5" />

@@ -95,4 +95,101 @@ describe("renderer logging", () => {
     expect(JSON.stringify(logWrite.mock.calls)).not.toContain("Bearer raw-token")
     expect(JSON.stringify(logWrite.mock.calls)).not.toContain("prompt text")
   })
+
+  it("summarizes string error fields before writing renderer logs", () => {
+    const logger = createRendererLogger("workflow.run")
+
+    logger.error("Workflow run failed.", {
+      boundary: "renderer.workflow.run.start",
+      workflowId: "workflow-1",
+      error: "SDK failed with token=sk-secret and prompt text",
+    })
+
+    expect(logWrite).toHaveBeenCalledWith({
+      level: "error",
+      category: "workflow.run",
+      message: "Workflow run failed.",
+      details: expect.objectContaining({
+        boundary: "renderer.workflow.run.start",
+        workflowId: "workflow-1",
+        errorLength: 47,
+      }),
+    })
+    expect(JSON.stringify(logWrite.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logWrite.mock.calls)).not.toContain("prompt text")
+  })
+
+  it("summarizes string errors arrays before writing renderer logs", () => {
+    const logger = createRendererLogger("workflow.runner")
+
+    logger.warn("rerun failed", {
+      runId: "run-1",
+      errors: [
+        "SDK failed with token=sk-secret and prompt text",
+        "failed at /Users/liyang/private/repo/workflow.json",
+      ],
+    })
+
+    expect(logWrite).toHaveBeenCalledWith({
+      level: "warn",
+      category: "workflow.runner",
+      message: "rerun failed",
+      details: expect.objectContaining({
+        runId: "run-1",
+        errors: [
+          { errorsLength: 47 },
+          { errorsLength: 50 },
+        ],
+      }),
+    })
+    expect(JSON.stringify(logWrite.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logWrite.mock.calls)).not.toContain("prompt text")
+    expect(JSON.stringify(logWrite.mock.calls)).not.toContain("/Users/liyang/private")
+  })
+
+  it("redacts path-like fields before writing renderer logs", () => {
+    const logger = createRendererLogger("renderer.runtime")
+
+    logger.error("Renderer error event.", {
+      filename: "/Users/liyang/private/repo/dist/renderer.js",
+      workspacePath: "/Users/liyang/private/repo",
+      profile: "default",
+      boundary: "renderer.runtime.error",
+    })
+
+    expect(logWrite).toHaveBeenCalledWith({
+      level: "error",
+      category: "renderer.runtime",
+      message: "Renderer error event.",
+      details: expect.objectContaining({
+        filename: "[path redacted]/renderer.js",
+        workspacePath: "[path redacted]/repo",
+        profile: "default",
+        boundary: "renderer.runtime.error",
+      }),
+    })
+    expect(JSON.stringify(logWrite.mock.calls)).not.toContain("/Users/liyang/private")
+  })
+
+  it("does not write raw bridge failures to console when renderer log forwarding fails", async () => {
+    const rawError = "log bridge failed with token=sk-secret and prompt text"
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    logWrite.mockImplementationOnce(() => {
+      throw new Error(rawError)
+    })
+    const logger = createRendererLogger("agent")
+
+    try {
+      logger.error("Agent send failed.", {
+        boundary: "renderer.agent.send",
+        prompt: "secret prompt body",
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(consoleError).not.toHaveBeenCalled()
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
 })

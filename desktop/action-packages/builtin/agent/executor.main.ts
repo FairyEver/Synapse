@@ -44,7 +44,7 @@ export function createAgentAction(deps: {
         mode: input.config.mode,
         prompt: input.config.prompt,
         sessionPolicy: input.config.sessionPolicy,
-        timeoutMs: (input.config.timeoutMins ?? 30) * 60_000,
+        timeoutMs: scheduledTimeoutMs(input.config.timeoutMins),
         lastConversationId,
         abortSignal: input.context.abortSignal,
       })
@@ -70,4 +70,9 @@ function persistableAgentError(
   if (!error) return undefined
   if (status !== "failed") return error
   return `Agent runtime error (${error.length} chars)`
+}
+
+function scheduledTimeoutMs(timeoutMins: number | null | undefined): number {
+  if (timeoutMins === null) return 0
+  return (timeoutMins ?? 30) * 60_000
 }

@@ -16,6 +16,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { createRendererLogger } from "@/app-shell/logging"
+import { track } from "@/lib/ui-tracking"
 import type { ScheduledTask, ScheduledTaskRun } from "@/types/task-scheduler"
 import { formatRunStatus, formatTaskDate } from "../utils"
 import { listRuns } from "../hooks/use-task-scheduler"
@@ -77,10 +78,34 @@ function TaskRunsDialog({
     }
   }, [open, task])
 
-  async function handleStop(runId: string) {
-    await onStopRun(runId)
-    if (task) {
+  async function handleStop(run: ScheduledTaskRun) {
+    if (!task) return
+    track({
+      component: "task-scheduler",
+      name: "task-run-stop-submit",
+      action: "submit",
+      value: run.id,
+      metadata: {
+        boundary: "renderer.task-scheduler.runs.stop.submit",
+        taskId: task.id,
+        runId: run.id,
+        actionType: task.action.type,
+        triggeredBy: run.triggeredBy,
+      },
+    })
+    try {
+      await onStopRun(run.id)
       setRuns(await listRuns(task.id))
+      setError(null)
+    } catch (stopError) {
+      logger.warn("Task run stop failed.", {
+        taskId: task.id,
+        runId: run.id,
+        actionType: task.action.type,
+        boundary: "renderer.task-scheduler.runs.stop",
+        ...errorDiagnostic(stopError),
+      })
+      setError("停止失败")
     }
   }
 
@@ -121,7 +146,7 @@ function RunItem({
   readonly run: ScheduledTaskRun
   readonly task: ScheduledTask | null
   readonly busy: boolean
-  readonly onStop: (runId: string) => void
+  readonly onStop: (run: ScheduledTaskRun) => void
 }) {
   const hasOutput = run.result || run.error
   const statusVariant = run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"
@@ -150,10 +175,11 @@ function RunItem({
           ) : null}
           {run.status === "running" ? (
             <Button
+              data-track="task-run-stop"
               disabled={busy}
               size="icon-sm"
               variant="outline"
-              onClick={() => { onStop(run.id) }}
+              onClick={() => { onStop(run) }}
             >
               <Square />
               <span className="sr-only">停止</span>
@@ -204,6 +230,7 @@ function RunResult({
         runId,
         actionType: task.action.type,
         runStatus,
+        boundary: "renderer.task-scheduler.runs.result-fallback",
         ...errorDiagnostic(renderError),
       })
       return <ActionResultView result={result} />

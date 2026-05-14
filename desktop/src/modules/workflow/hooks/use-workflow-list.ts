@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import type { WorkflowMeta } from "@/types/workflow"
+import { createRendererLogger } from "@/app-shell/logging"
+
+const logger = createRendererLogger("workflow.list")
 
 export function useWorkflowList() {
   const [items, setItems] = useState<WorkflowMeta[]>([])
@@ -17,11 +20,27 @@ export function useWorkflowList() {
       }
       setItems(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败，请重试")
+      logger.warn("Workflow list refresh failed.", {
+        boundary: "renderer.workflow.list",
+        ...errorLogMeta(err),
+      })
+      setError("加载失败，请重试")
     } finally {
       setLoading(false)
     }
   }, [])
   useEffect(() => { void refresh() }, [refresh])
   return { items, loading, error, refresh }
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+  }
 }

@@ -3,12 +3,19 @@
  */
 import { createRoot, type Root } from "react-dom/client"
 import { act } from "react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseAgentPermissionRequestTimelineItem } from "@/types/agent"
 import { AgentPermissionCard } from "../agent-permission-card"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const trackMock = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/ui-tracking", () => ({
+  extractLabel: vi.fn(() => "button"),
+  track: trackMock,
+}))
 
 const permissionItem: SynapseAgentPermissionRequestTimelineItem = {
   id: "permission-1",
@@ -17,9 +24,16 @@ const permissionItem: SynapseAgentPermissionRequestTimelineItem = {
   requestId: "request-1",
   toolName: "Bash",
   toolInput: "pnpm test",
+  sdkSessionId: "sdk-session-1",
+  agentSessionId: "agent-session-1",
+  threadId: "thread-1",
 }
 
 let roots: Root[] = []
+
+beforeEach(() => {
+  trackMock.mockClear()
+})
 
 afterEach(() => {
   for (const root of roots) {
@@ -61,6 +75,50 @@ describe("AgentPermissionCard", () => {
     expect(container.textContent).not.toContain("已允许")
   })
 
+  it("tracks permission responses without recording tool input", () => {
+    const onRespond = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    act(() => {
+      root.render(
+        <AgentPermissionCard
+          item={permissionItem}
+          pending
+          isLatestPending
+          onRespond={onRespond}
+        />,
+      )
+    })
+
+    const denyButton = buttonByText(container, "拒绝")
+    act(() => {
+      denyButton.click()
+    })
+
+    expect(trackMock).toHaveBeenCalledWith({
+      component: "agent",
+      name: "agent-permission-card-response",
+      action: "submit",
+      value: "deny",
+      metadata: {
+        boundary: "renderer.agent.permission-card-response",
+        itemId: "permission-1",
+        requestId: "request-1",
+        toolName: "Bash",
+        behavior: "deny",
+        inputLength: "pnpm test".length,
+        hasRawInput: false,
+        sdkSessionId: "sdk-session-1",
+        agentSessionId: "agent-session-1",
+        threadId: "thread-1",
+      },
+    })
+    expect(JSON.stringify(trackMock.mock.calls)).not.toContain("pnpm test")
+  })
+
   it("redacts raw SDK tool input fallback before rendering", () => {
     const onRespond = vi.fn()
     const container = document.createElement("div")
@@ -92,6 +150,37 @@ describe("AgentPermissionCard", () => {
     expect(container.textContent).not.toContain("sk-secret")
     expect(container.textContent).not.toContain("secret-cookie")
     expect(container.textContent).not.toContain("pass-1")
+  })
+
+  it("redacts path-like raw SDK tool input fallback before rendering", () => {
+    const onRespond = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    act(() => {
+      root.render(
+        <AgentPermissionCard
+          item={{
+            ...permissionItem,
+            toolInput: undefined,
+            toolInputRaw: {
+              cwd: "/Users/liyang/Documents/code/github/Synapse",
+              command: "cat /Users/liyang/Documents/code/github/Synapse/secret.txt",
+              windowsPath: "C:\\Users\\liyang\\Synapse\\secret.txt",
+            },
+          }}
+          pending
+          isLatestPending
+          onRespond={onRespond}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("[path redacted]")
+    expect(container.textContent).not.toContain("/Users/liyang")
+    expect(container.textContent).not.toContain("C:\\Users\\liyang")
   })
 })
 

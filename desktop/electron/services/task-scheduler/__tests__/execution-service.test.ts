@@ -43,6 +43,35 @@ describe("TaskSchedulerExecutionService", () => {
     ])
   })
 
+  it("logs successful action completion without recording raw result content", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn() }
+    const harness = await createExecutionHarness({
+      action: sensitiveSuccessAction,
+      logger,
+    })
+
+    const run = await harness.service.runTask(harness.task, "schedule")
+
+    expect(run.status).toBe("success")
+    expect(logger.info).toHaveBeenCalledWith(
+      "Scheduled task action completed.",
+      expect.objectContaining({
+        source: "task-scheduler",
+        taskId: "task:1",
+        runId: "run:1",
+        actionType: "builtin.test",
+        triggeredBy: "schedule",
+        boundary: "task-scheduler-action",
+        status: "success",
+        hasOutputs: true,
+        summaryLength: "completed secret prompt token=sk-secret".length,
+      }),
+    )
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("/Users/example")
+  })
+
   it("records failed run when action permission is denied", async () => {
     const harness = await createExecutionHarness({
       permissionGuard: permissionGuard({ allowed: false, reason: "denied by test" }),
@@ -80,6 +109,8 @@ describe("TaskSchedulerExecutionService", () => {
     const run = await harness.service.runTask(harness.task, "schedule")
 
     expect(run.status).toBe("failed")
+    expect(run.error).toBe("执行失败")
+    expect(run.result?.error).toBe("执行失败")
     expect(logger.warn).toHaveBeenCalledWith(
       "Scheduled task preparation failed.",
       expect.objectContaining({
@@ -95,6 +126,7 @@ describe("TaskSchedulerExecutionService", () => {
       }),
     )
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(run)).not.toContain("secret prompt")
   })
 
   it("records action exceptions with audit and log context", async () => {
@@ -163,7 +195,8 @@ describe("TaskSchedulerExecutionService", () => {
     const run = await harness.service.runTask(harness.task, "schedule")
 
     expect(run.status).toBe("failed")
-    expect(run.error).toBe("sdk failed for secret prompt")
+    expect(run.error).toBe("执行失败（错误 60 字）")
+    expect(run.result?.error).toBe("执行失败（错误 60 字）")
     expect(harness.auditEvents).toEqual([
       expect.objectContaining({
         action: "shell.exec",
@@ -181,7 +214,7 @@ describe("TaskSchedulerExecutionService", () => {
           boundary: "task-scheduler-action",
           status: "failed",
           errorName: "string",
-          errorLength: "sdk failed for secret prompt".length,
+          errorLength: "sdk failed for token=sk-secret at /Users/example/repo prompt".length,
         }),
       }),
     ])
@@ -196,17 +229,86 @@ describe("TaskSchedulerExecutionService", () => {
         boundary: "task-scheduler-action",
         status: "failed",
         errorName: "string",
-        errorLength: "sdk failed for secret prompt".length,
+        errorLength: "sdk failed for token=sk-secret at /Users/example/repo prompt".length,
       }),
     )
     expect(JSON.stringify(harness.auditEvents)).not.toContain("secret prompt")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(run)).not.toContain("sk-secret")
+    expect(JSON.stringify(run)).not.toContain("/Users/example")
+    expect(JSON.stringify(run)).not.toContain("prompt")
+  })
+
+  it("keeps stopped runs cancelled when an action resolves successfully after abort", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn() }
+    let releaseAction: (() => void) | undefined
+    let markStarted: (() => void) | undefined
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    const mayFinish = new Promise<void>((resolve) => {
+      releaseAction = resolve
+    })
+    let observedSignal: AbortSignal | undefined
+    const lateSuccessAction: MainActionDefinition<TestActionConfig> = {
+      ...testAction,
+      execute: async ({ context }) => {
+        observedSignal = context.abortSignal
+        markStarted?.()
+        await mayFinish
+        return {
+          status: "success",
+          summary: "late ok",
+          outputs: { stdout: "late ok" },
+        }
+      },
+    }
+    const harness = await createExecutionHarness({
+      action: lateSuccessAction,
+      logger,
+    })
+
+    const running = harness.service.runTask(harness.task, "manual")
+    await started
+    expect(observedSignal?.aborted).toBe(false)
+
+    expect(harness.service.stopRun("run:1")).toBe(true)
+    expect(observedSignal?.aborted).toBe(true)
+    releaseAction?.()
+    const run = await running
+
+    expect(run.status).toBe("cancelled")
+    expect(run.error).toBe("已停止")
+    expect(run.result).toEqual({
+      status: "cancelled",
+      error: "已停止",
+      summary: "已停止",
+    })
+    expect(await harness.tasks.get("task:1")).toEqual(expect.objectContaining({
+      lastStatus: "cancelled",
+    }))
+    expect(logger.info).not.toHaveBeenCalledWith("Scheduled task action completed.", expect.anything())
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Scheduled task action threw.",
+      expect.objectContaining({
+        source: "task-scheduler",
+        taskId: "task:1",
+        runId: "run:1",
+        actionType: "builtin.test",
+        triggeredBy: "manual",
+        boundary: "task-scheduler-action",
+        status: "cancelled",
+      }),
+    )
   })
 })
 
 async function createExecutionHarness(options: {
   readonly action?: MainActionDefinition<TestActionConfig>
-  readonly logger?: { warn: (message: string, metadata: Record<string, unknown>) => void }
+  readonly logger?: {
+    info?: (message: string, metadata: Record<string, unknown>) => void
+    warn: (message: string, metadata: Record<string, unknown>) => void
+  }
   readonly permissionGuard?: PermissionGuard
 } = {}) {
   const tasks = new ScheduledTaskRepository({
@@ -278,11 +380,20 @@ const throwingAction: MainActionDefinition<TestActionConfig> = {
   },
 }
 
+const sensitiveSuccessAction: MainActionDefinition<TestActionConfig> = {
+  ...testAction,
+  execute: async () => ({
+    status: "success",
+    summary: "completed secret prompt token=sk-secret",
+    outputs: { stdout: "/Users/example/repo" },
+  }),
+}
+
 const failedResultAction: MainActionDefinition<TestActionConfig> = {
   ...testAction,
   execute: async () => ({
     status: "failed",
-    error: "sdk failed for secret prompt",
+    error: "sdk failed for token=sk-secret at /Users/example/repo prompt",
     summary: "failed",
   }),
 }

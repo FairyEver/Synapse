@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   ConversationEntryV1,
@@ -95,6 +95,54 @@ describe("AgentRuntimeService cancelTurn", () => {
     await sendPromise
   })
 
+  it("logs cancel and force-kill outcomes with SDK session correlation", async () => {
+    const session = new CancellableLiveSession({ graceful: true })
+    const factory = new CancellableSessionFactory(session)
+    const logger = { info: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    const service = createService(factory, logger)
+
+    const sendPromise = service.send(baseMessage("hello token=sk-test"))
+    await waitForBusy(service, "hello")
+
+    const convId = conversationId("local", "s1", "active")
+    await service.cancelTurn(convId)
+    await service.forceKillTurn(convId)
+    await sendPromise
+
+    expect(logger.info).toHaveBeenCalledWith("Agent turn cancellation updated.", {
+      boundary: "agent-runtime.turn.cancel",
+      projectId: "project-1",
+      conversationId: convId,
+      providerId: "anthropic",
+      mode: undefined,
+      sdkSessionId: "test-session-1",
+      status: "graceful-pending",
+      busy: true,
+      activeTurns: 1,
+      queuedTurns: 0,
+      hadLiveSession: true,
+      hadTurnAbortController: true,
+      hadCancelState: true,
+      gracefulSent: true,
+    })
+    expect(logger.info).toHaveBeenCalledWith("Agent turn cancellation updated.", {
+      boundary: "agent-runtime.turn.force-kill",
+      projectId: "project-1",
+      conversationId: convId,
+      providerId: "anthropic",
+      mode: undefined,
+      sdkSessionId: "test-session-1",
+      status: "hard-killed",
+      busy: true,
+      activeTurns: 1,
+      queuedTurns: 0,
+      hadLiveSession: true,
+      hadTurnAbortController: true,
+      hadCancelState: false,
+    })
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("token=sk-test")
+  })
+
   it("forceKillTurn preserves queued turns after closing the active session", async () => {
     const session = new CancellableLiveSession({ graceful: true })
     const factory = new CancellableSessionFactory(session)
@@ -162,7 +210,10 @@ function baseMessage(content: string): AgentMessage {
   }
 }
 
-function createService(factory: CancellableSessionFactory | AgentLiveSession): AgentRuntimeService {
+function createService(
+  factory: CancellableSessionFactory | AgentLiveSession,
+  logger?: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; debug: ReturnType<typeof vi.fn> },
+): AgentRuntimeService {
   const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
   return new AgentRuntimeService({
     projectId: "project-1",
@@ -171,6 +222,7 @@ function createService(factory: CancellableSessionFactory | AgentLiveSession): A
     providerService: new FakeProviderService() as unknown as ProviderService,
     createSession: () => factory instanceof CancellableSessionFactory ? factory.create() : factory,
     now: fixedNow,
+    logger: logger as never,
   })
 }
 

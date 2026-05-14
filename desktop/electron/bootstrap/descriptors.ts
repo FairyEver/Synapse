@@ -898,16 +898,40 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         })
         return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
       } catch (err) {
+        const diagnostic = workflowAgentErrorDiagnostic(err)
         engineLogger.error("engine agent call failed (infrastructure)", {
+          boundary: "workflow-engine.agent-deps",
           agent,
-          error: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
+          ...diagnostic,
         })
-        return { status: "failed", response: "", error: String(err), durationMs: 0 }
+        return { status: "failed", response: "", error: workflowAgentFailureMessage(diagnostic), durationMs: 0 }
       }
     }
     return new WorkflowEngine({ sendToAgent })
   },
+}
+
+function workflowAgentErrorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly stackLength?: number
+} {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorLength: error.message.length,
+      stackLength: error.stack?.length,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+  }
+}
+
+function workflowAgentFailureMessage(diagnostic: { readonly errorLength: number }): string {
+  return `Agent call failed (${diagnostic.errorLength} chars)`
 }
 
 export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {
