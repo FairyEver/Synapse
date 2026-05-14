@@ -51,7 +51,6 @@ describe("ToolsPanel", () => {
         loading={false}
         error={null}
         onAdd={vi.fn()}
-        onAddPreset={vi.fn()}
         onEdit={vi.fn()}
         onArchive={vi.fn()}
         onSetActive={vi.fn()}

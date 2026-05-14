@@ -1,7 +1,17 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Plus, Search } from "lucide-react"
+import { Plus } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -61,6 +71,8 @@ const API_KEY_FIELDS: SynapseAgentProviderApiKeyField[] = [
   "ANTHROPIC_AUTH_TOKEN",
 ]
 
+const CUSTOM_PROVIDER_PRESET_ID = "custom"
+
 type ProviderFormValues = {
   id: string
   name: string
@@ -81,11 +93,15 @@ type ProviderPanelViewProps = {
   readonly loading: boolean
   readonly error: string | null
   readonly onAdd: () => void
-  readonly onAddPreset: () => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onSetActive: (provider: SynapseAgentProvider) => void
   readonly onRetry: () => void
+}
+
+type PendingPresetSelection = {
+  readonly value: string
+  readonly preset: SynapseAgentProviderPreset | null
 }
 
 type ProviderRefreshOptions = {
@@ -102,12 +118,14 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [error, setError] = useState<string | null>(null)
   const [editingProvider, setEditingProvider] = useState<SynapseAgentProvider | null>(null)
   const [formOpen, setFormOpen] = useState(false)
-  const [presetDialogOpen, setPresetDialogOpen] = useState(false)
+  const [providerPresets, setProviderPresets] = useState<SynapseAgentProviderPreset[]>([])
+  const [providerPresetsLoading, setProviderPresetsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formValues, setFormValues] = useState<ProviderFormValues>(() => emptyProviderForm())
   const requestIdRef = useRef(0)
   const loadingRequestIdRef = useRef(0)
   const loadingRefreshPendingRef = useRef(false)
+  const providerPresetsLoadedRef = useRef(false)
 
   const refresh = useCallback(async (options: ProviderRefreshOptions = {}) => {
     requestIdRef.current += 1
@@ -168,15 +186,31 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     }
   }, [refresh])
 
+  const loadProviderPresets = useCallback(async () => {
+    if (providerPresetsLoadedRef.current || providerPresetsLoading) return
+    setProviderPresetsLoading(true)
+    try {
+      const nextPresets = await requireSynapseBridge().agent.listProviderPresets()
+      setProviderPresets(nextPresets)
+      providerPresetsLoadedRef.current = true
+    } catch (rawError) {
+      logger.error("Provider presets list failed.", {
+        boundary: "settings.providers.preset.list",
+        action: "listProviderPresets",
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast("读取预设失败")
+    } finally {
+      setProviderPresetsLoading(false)
+    }
+  }, [providerPresetsLoading])
+
   const openAddDialog = useCallback(() => {
     setEditingProvider(null)
     setFormValues(emptyProviderForm())
     setFormOpen(true)
-  }, [])
-
-  const openPresetDialog = useCallback(() => {
-    setPresetDialogOpen(true)
-  }, [])
+    void loadProviderPresets()
+  }, [loadProviderPresets])
 
   const openEditDialog = useCallback((provider: SynapseAgentProvider) => {
     setEditingProvider(provider)
@@ -214,30 +248,6 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       setSaving(false)
     }
   }, [editingProvider, formValues, refresh])
-
-  const handleCreateFromPreset = useCallback(async (input: {
-    readonly presetName: string
-    readonly apiKey?: string
-    readonly templateValues: Record<string, string>
-  }) => {
-    setSaving(true)
-    try {
-      await requireSynapseBridge().agent.createProviderFromPreset(input)
-      setPresetDialogOpen(false)
-      await refresh()
-      toast("Provider 已保存")
-    } catch (rawError) {
-      logger.error("Provider preset save failed.", {
-        boundary: "settings.providers.preset.save",
-        action: "createProviderFromPreset",
-        providerId: input.presetName,
-        ...providerErrorDiagnostic(rawError),
-      })
-      toast("保存 Provider 失败")
-    } finally {
-      setSaving(false)
-    }
-  }, [refresh])
 
   const handleArchive = useCallback(async (provider: SynapseAgentProvider) => {
     try {
@@ -282,7 +292,6 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         loading={loading}
         error={error}
         onAdd={openAddDialog}
-        onAddPreset={openPresetDialog}
         onEdit={openEditDialog}
         onArchive={handleArchive}
         onSetActive={handleSetActive}
@@ -291,17 +300,14 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       <ProviderFormDialog
         open={formOpen}
         mode={editingProvider ? "edit" : "create"}
+        providers={providers}
+        presets={providerPresets}
+        presetsLoading={providerPresetsLoading}
         values={formValues}
         saving={saving}
         onValuesChange={setFormValues}
         onOpenChange={setFormOpen}
         onSubmit={handleSubmit}
-      />
-      <ProviderPresetDialog
-        open={presetDialogOpen}
-        saving={saving}
-        onOpenChange={setPresetDialogOpen}
-        onSubmit={handleCreateFromPreset}
       />
     </>
   )
@@ -312,7 +318,6 @@ function ProviderPanelView({
   loading,
   error,
   onAdd,
-  onAddPreset,
   onEdit,
   onArchive,
   onSetActive,
@@ -329,15 +334,10 @@ function ProviderPanelView({
         <div className="flex min-w-0 items-center gap-2">
           <CardTitle className="text-base">Provider</CardTitle>
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onAddPreset}>
-            从预设添加
-          </Button>
-          <Button type="button" size="sm" onClick={onAdd}>
-            <Plus data-icon="inline-start" />
-            添加
-          </Button>
-        </div>
+        <Button type="button" size="sm" onClick={onAdd}>
+          <Plus data-icon="inline-start" />
+          添加
+        </Button>
       </CardHeader>
       <CardContent>
         {error ? (
@@ -422,178 +422,12 @@ function ProviderPanelView({
   )
 }
 
-function ProviderPresetDialog({
-  open,
-  saving,
-  onOpenChange,
-  onSubmit,
-}: {
-  readonly open: boolean
-  readonly saving: boolean
-  readonly onOpenChange: (open: boolean) => void
-  readonly onSubmit: (input: {
-    readonly presetName: string
-    readonly apiKey?: string
-    readonly templateValues: Record<string, string>
-  }) => Promise<void>
-}) {
-  const [presets, setPresets] = useState<SynapseAgentProviderPreset[]>([])
-  const [loading, setLoading] = useState(false)
-  const [query, setQuery] = useState("")
-  const [selected, setSelected] = useState<SynapseAgentProviderPreset | null>(null)
-  const [apiKey, setApiKey] = useState("")
-  const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
-
-  const selectPreset = useCallback((preset: SynapseAgentProviderPreset) => {
-    setSelected(preset)
-    setTemplateValues(templateDefaultsFromPreset(preset))
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    setLoading(true)
-    requireSynapseBridge().agent.listProviderPresets()
-      .then((nextPresets) => {
-        setPresets(nextPresets)
-      })
-      .catch((rawError) => {
-        logger.error("Provider presets list failed.", {
-          boundary: "settings.providers.preset.list",
-          action: "listProviderPresets",
-          ...providerErrorDiagnostic(rawError),
-        })
-        toast("读取预设失败")
-      })
-      .finally(() => setLoading(false))
-  }, [open])
-
-  useEffect(() => {
-    if (!open) {
-      setSelected(null)
-      setApiKey("")
-      setTemplateValues({})
-      setQuery("")
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open || selected || presets.length === 0) return
-    selectPreset(presets[0])
-  }, [open, presets, selectPreset, selected])
-
-  const visiblePresets = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    if (!keyword) return presets
-    return presets.filter((preset) => preset.name.toLowerCase().includes(keyword))
-  }, [presets, query])
-
-  const templateComplete = selected
-    ? selected.templateValues.every((item) => {
-      const value = templateValues[item.key] ?? item.defaultValue ?? ""
-      return value.trim().length > 0
-    })
-    : false
-
-  const handleSubmit = () => {
-    if (!selected || !templateComplete || saving) return
-    void onSubmit({
-      presetName: selected.name,
-      apiKey: optionalTrimmed(apiKey),
-      templateValues,
-    })
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl" aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle>从预设添加</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="flex flex-col gap-3">
-            <Field>
-              <FieldLabel htmlFor="provider-preset-search">搜索</FieldLabel>
-              <div className="flex items-center gap-2">
-                <Search data-icon="inline-start" />
-                <Input
-                  id="provider-preset-search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-            </Field>
-            <div className="max-h-80 overflow-auto">
-              {loading ? (
-                <div className="py-3 text-sm text-muted-foreground">正在加载</div>
-              ) : visiblePresets.length === 0 ? (
-                <div className="py-3 text-sm text-muted-foreground">暂无预设</div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {visiblePresets.map((preset) => (
-                    <Button
-                      key={preset.name}
-                      type="button"
-                      variant={selected?.name === preset.name ? "secondary" : "ghost"}
-                      className="h-auto justify-start px-3 py-2"
-                      onClick={() => selectPreset(preset)}
-                    >
-                      <span className="flex min-w-0 flex-col items-start gap-1 text-left">
-                        <span className="max-w-full truncate font-medium">{preset.name}</span>
-                        <span className="max-w-full truncate text-xs text-muted-foreground">
-                          {preset.baseUrl ?? preset.model ?? "-"}
-                        </span>
-                      </span>
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col gap-4">
-            <Field>
-              <FieldLabel htmlFor="provider-preset-api-key">API Key</FieldLabel>
-              <Input
-                id="provider-preset-api-key"
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                disabled={!selected}
-              />
-            </Field>
-            {selected?.templateValues.map((item) => (
-              <Field key={item.key}>
-                <FieldLabel htmlFor={`provider-preset-template-${item.key}`}>{item.label}</FieldLabel>
-                <Input
-                  id={`provider-preset-template-${item.key}`}
-                  type={item.sensitive ? "password" : "text"}
-                  value={templateValues[item.key] ?? item.defaultValue ?? ""}
-                  placeholder={item.placeholder}
-                  onChange={(event) => setTemplateValues({
-                    ...templateValues,
-                    [item.key]: event.target.value,
-                  })}
-                />
-              </Field>
-            ))}
-          </div>
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button type="button" disabled={!selected || !templateComplete || saving} onClick={handleSubmit}>
-            添加
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 function ProviderFormDialog({
   open,
   mode,
+  providers,
+  presets,
+  presetsLoading,
   values,
   saving,
   onValuesChange,
@@ -602,45 +436,138 @@ function ProviderFormDialog({
 }: {
   readonly open: boolean
   readonly mode: "create" | "edit"
+  readonly providers: SynapseAgentProvider[]
+  readonly presets: SynapseAgentProviderPreset[]
+  readonly presetsLoading: boolean
   readonly values: ProviderFormValues
   readonly saving: boolean
   readonly onValuesChange: (values: ProviderFormValues) => void
   readonly onOpenChange: (open: boolean) => void
   readonly onSubmit: (event: FormEvent) => void
 }) {
+  const [selectedPresetValue, setSelectedPresetValue] = useState(CUSTOM_PROVIDER_PRESET_ID)
+  const [pendingPresetSelection, setPendingPresetSelection] = useState<PendingPresetSelection | null>(null)
+  const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedPresetValue(CUSTOM_PROVIDER_PRESET_ID)
+      setPendingPresetSelection(null)
+      setTemplateValues({})
+    }
+  }, [open])
+
+  const existingProviderIds = useMemo(
+    () => new Set(providers.map((provider) => provider.id)),
+    [providers],
+  )
+
+  const presetOptions = useMemo(
+    () => presets.map((preset) => ({
+      value: providerPresetSelectValue(preset),
+      preset,
+    })),
+    [presets],
+  )
+
+  const selectedPreset = useMemo(() => {
+    if (selectedPresetValue === CUSTOM_PROVIDER_PRESET_ID) return null
+    return presetOptions.find((option) => option.value === selectedPresetValue)?.preset ?? null
+  }, [presetOptions, selectedPresetValue])
+
   const setValue = <K extends keyof ProviderFormValues>(key: K, value: ProviderFormValues[K]) => {
     onValuesChange({ ...values, [key]: value })
   }
 
+  const handlePresetSelect = (value: string) => {
+    if (value === selectedPresetValue) return
+    const preset = presetOptions.find((option) => option.value === value)?.preset ?? null
+    setPendingPresetSelection({ value, preset })
+  }
+
+  const applyPresetSelection = () => {
+    if (!pendingPresetSelection) return
+    setSelectedPresetValue(pendingPresetSelection.value)
+    if (!pendingPresetSelection.preset) {
+      setTemplateValues({})
+      onValuesChange(emptyProviderForm())
+      setPendingPresetSelection(null)
+      return
+    }
+    const defaults = templateDefaultsFromPreset(pendingPresetSelection.preset)
+    setTemplateValues(defaults)
+    onValuesChange(formFromPreset(pendingPresetSelection.preset, existingProviderIds, defaults))
+    setPendingPresetSelection(null)
+  }
+
+  const cancelPresetSelection = () => {
+    setPendingPresetSelection(null)
+  }
+
+  const updateTemplateValue = (key: string, value: string) => {
+    if (!selectedPreset) return
+    const nextValues = {
+      ...templateValues,
+      [key]: value,
+    }
+    setTemplateValues(nextValues)
+    onValuesChange(formFromPreset(selectedPreset, existingProviderIds, nextValues, values))
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
-        <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-          <DialogHeader>
-            <DialogTitle>{mode === "create" ? "添加 Provider" : "编辑 Provider"}</DialogTitle>
-          </DialogHeader>
-          <FieldGroup>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="provider-id">ID</FieldLabel>
-                <Input
-                  id="provider-id"
-                  value={values.id}
-                  disabled={mode === "edit"}
-                  required
-                  onChange={(event) => setValue("id", event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="provider-name">名称</FieldLabel>
-                <Input
-                  id="provider-name"
-                  value={values.name}
-                  required
-                  onChange={(event) => setValue("name", event.target.value)}
-                />
-              </Field>
-            </div>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+          <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+            <DialogHeader>
+              <DialogTitle>{mode === "create" ? "添加 Provider" : "编辑 Provider"}</DialogTitle>
+            </DialogHeader>
+            <FieldGroup>
+              {mode === "create" ? (
+                <Field>
+                  <FieldLabel>供应商预设</FieldLabel>
+                  <Select
+                    value={selectedPresetValue}
+                    onValueChange={handlePresetSelect}
+                    disabled={presetsLoading}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={CUSTOM_PROVIDER_PRESET_ID}>自定义</SelectItem>
+                        {presetOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.preset.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="provider-id">ID</FieldLabel>
+                  <Input
+                    id="provider-id"
+                    value={values.id}
+                    disabled={mode === "edit"}
+                    required
+                    onChange={(event) => setValue("id", event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="provider-name">名称</FieldLabel>
+                  <Input
+                    id="provider-name"
+                    value={values.name}
+                    required
+                    onChange={(event) => setValue("name", event.target.value)}
+                  />
+                </Field>
+              </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel>类型</FieldLabel>
@@ -702,6 +629,22 @@ function ProviderFormDialog({
                 onChange={(event) => setValue("apiKey", event.target.value)}
               />
             </Field>
+            {mode === "create" && selectedPreset && selectedPreset.templateValues.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {selectedPreset.templateValues.map((item) => (
+                  <Field key={item.key}>
+                    <FieldLabel htmlFor={`provider-template-${item.key}`}>{item.label}</FieldLabel>
+                    <Input
+                      id={`provider-template-${item.key}`}
+                      type={item.sensitive ? "password" : "text"}
+                      value={templateValues[item.key] ?? item.defaultValue ?? ""}
+                      placeholder={item.placeholder}
+                      onChange={(event) => updateTemplateValue(item.key, event.target.value)}
+                    />
+                  </Field>
+                ))}
+              </div>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="provider-model">默认模型</FieldLabel>
@@ -756,9 +699,26 @@ function ProviderFormDialog({
               保存
             </Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={Boolean(pendingPresetSelection)} onOpenChange={(nextOpen) => {
+        if (!nextOpen) cancelPresetSelection()
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>重置表单</AlertDialogTitle>
+            <AlertDialogDescription>
+              当前表单将被重置，并填入供应商默认值。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelPresetSelection}>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={applyPresetSelection}>确认</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -793,6 +753,29 @@ function formFromProvider(provider: SynapseAgentProvider): ProviderFormValues {
     sonnetModel: provider.sonnetModel ?? "",
     opusModel: provider.opusModel ?? "",
     sortIndex: provider.sortIndex === undefined ? "" : String(provider.sortIndex),
+  }
+}
+
+function formFromPreset(
+  preset: SynapseAgentProviderPreset,
+  existingIds: ReadonlySet<string>,
+  templateValues: Record<string, string>,
+  previousValues: ProviderFormValues = emptyProviderForm(),
+): ProviderFormValues {
+  return {
+    ...emptyProviderForm(),
+    apiKey: previousValues.apiKey,
+    active: previousValues.active,
+    sortIndex: previousValues.sortIndex,
+    id: providerIdFromPresetName(preset.name, existingIds),
+    name: preset.name,
+    category: preset.category,
+    baseUrl: applyTemplateValues(preset.baseUrl, templateValues) ?? "",
+    apiKeyField: preset.apiKeyField,
+    model: applyTemplateValues(preset.model, templateValues) ?? "",
+    haikuModel: applyTemplateValues(preset.haikuModel, templateValues) ?? "",
+    sonnetModel: applyTemplateValues(preset.sonnetModel, templateValues) ?? "",
+    opusModel: applyTemplateValues(preset.opusModel, templateValues) ?? "",
   }
 }
 
@@ -834,6 +817,26 @@ function templateDefaultsFromPreset(preset: SynapseAgentProviderPreset): Record<
   return Object.fromEntries(
     preset.templateValues.map((item) => [item.key, item.defaultValue ?? ""]),
   )
+}
+
+function providerPresetSelectValue(preset: SynapseAgentProviderPreset): string {
+  return `preset:${preset.name}`
+}
+
+function providerIdFromPresetName(name: string, existingIds: ReadonlySet<string>): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "provider"
+  if (!existingIds.has(base)) return base
+  let suffix = 2
+  while (existingIds.has(`${base}-${suffix}`)) suffix += 1
+  return `${base}-${suffix}`
+}
+
+function applyTemplateValues(value: string | undefined, values: Record<string, string>): string | undefined {
+  if (!value) return value
+  return value.replace(/\$\{([A-Z0-9_]+)\}/g, (_match, key: string) => values[key] ?? "")
 }
 
 function optionalTrimmed(value: string): string | undefined {

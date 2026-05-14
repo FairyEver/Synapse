@@ -31,6 +31,9 @@ beforeEach(() => {
   rendererLogger.error.mockClear()
   rendererLogger.info.mockClear()
   toast.mockClear()
+  if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = vi.fn()
+  }
 })
 
 afterEach(() => {
@@ -124,24 +127,18 @@ describe("ProviderPanel diagnostics", () => {
 })
 
 describe("ProviderPanel presets", () => {
-  it("opens provider presets and creates from a selected preset", async () => {
+  it("applies a selected preset to the create form and saves through createProvider", async () => {
     const listProviders = vi.fn().mockResolvedValue([])
-    const listProviderPresets = vi.fn().mockResolvedValue([{
-      name: "PackyCode",
-      category: "third_party",
-      websiteUrl: "https://www.packyapi.com",
-      apiKeyUrl: "https://www.packyapi.com/register?aff=cc-switch",
-      baseUrl: "https://www.packyapi.com",
-      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
-      templateValues: [],
-    }])
-    const createProviderFromPreset = vi.fn().mockResolvedValue(customProvider())
+    const listProviderPresets = vi.fn().mockResolvedValue([packyPreset()])
+    const createProvider = vi.fn().mockResolvedValue(customProvider())
+    const createProviderFromPreset = vi.fn()
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
         agent: {
           listProviders,
           listProviderPresets,
+          createProvider,
           createProviderFromPreset,
         },
       },
@@ -159,36 +156,235 @@ describe("ProviderPanel presets", () => {
     })
 
     await act(async () => {
-      buttonByText(container, "从预设添加").click()
+      buttonByText(container, "添加").click()
       await Promise.resolve()
       await Promise.resolve()
     })
 
     expect(listProviderPresets).toHaveBeenCalled()
-    expect(document.body.textContent).toContain("PackyCode")
+    expect(document.body.textContent).toContain("供应商预设")
+    expect(document.body.textContent).not.toContain("从预设添加")
 
-    const apiKeyInput = document.body.querySelector<HTMLInputElement>("#provider-preset-api-key")
-    if (!apiKeyInput) throw new Error("API key input not found")
-    expect(apiKeyInput.disabled).toBe(false)
     await act(async () => {
-      setInputValue(apiKeyInput, "sk-packy")
-      apiKeyInput.dispatchEvent(new Event("input", { bubbles: true }))
+      clickByText(document.body, "自定义")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickByText(document.body, "PackyCode")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("重置表单")
+
+    await act(async () => {
+      buttonByText(document.body, "确认").click()
+      await Promise.resolve()
+    })
+
+    expect(inputById("provider-id").value).toBe("packycode")
+    expect(inputById("provider-name").value).toBe("PackyCode")
+    expect(inputById("provider-base-url").value).toBe("https://www.packyapi.com")
+    expect(inputById("provider-model").value).toBe("claude-sonnet-4-5")
+
+    await act(async () => {
+      setInputValue(inputById("provider-api-key"), "sk-packy")
+      inputById("provider-api-key").dispatchEvent(new Event("input", { bubbles: true }))
     })
 
     await act(async () => {
-      buttonByText(document.body, "添加").click()
+      buttonByText(document.body, "保存").click()
       await Promise.resolve()
       await Promise.resolve()
     })
 
-    expect(createProviderFromPreset).toHaveBeenCalledWith({
-      presetName: "PackyCode",
-      apiKey: "sk-packy",
-      templateValues: {},
+    expect(createProvider).toHaveBeenCalledWith({
+      provider: expect.objectContaining({
+        id: "packycode",
+        name: "PackyCode",
+        category: "third_party",
+        baseUrl: "https://www.packyapi.com",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        apiKey: "sk-packy",
+        model: "claude-sonnet-4-5",
+        haikuModel: "claude-haiku-4-5",
+        sonnetModel: "claude-sonnet-4-5",
+        opusModel: "claude-opus-4-5",
+      }),
     })
+    expect(createProviderFromPreset).not.toHaveBeenCalled()
     expect(toast).toHaveBeenCalledWith("Provider 已保存")
   })
+
+  it("updates preset-derived fields when template parameters change", async () => {
+    const listProviders = vi.fn().mockResolvedValue([])
+    const listProviderPresets = vi.fn().mockResolvedValue([templatedPreset()])
+    const createProvider = vi.fn().mockResolvedValue(customProvider())
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+          listProviderPresets,
+          createProvider,
+          createProviderFromPreset: vi.fn(),
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ProviderPanel />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText(container, "添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickByText(document.body, "自定义")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickByText(document.body, "KAT-Coder")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText(document.body, "确认").click()
+      await Promise.resolve()
+    })
+
+    expect(inputById("provider-base-url").value).toBe("https://api.example.com/default-endpoint")
+
+    await act(async () => {
+      setInputValue(inputById("provider-template-ENDPOINT_ID"), "custom-endpoint")
+      inputById("provider-template-ENDPOINT_ID").dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    expect(inputById("provider-base-url").value).toBe("https://api.example.com/custom-endpoint")
+  })
+
+  it("does not show provider preset selection while editing", async () => {
+    const listProviders = vi.fn().mockResolvedValue([customProvider()])
+    const listProviderPresets = vi.fn().mockResolvedValue([packyPreset()])
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+          listProviderPresets,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ProviderPanel />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText(container, "编辑").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("编辑 Provider")
+    expect(document.body.textContent).not.toContain("供应商预设")
+  })
+
+  it("leaves create form unchanged when preset reset confirmation is canceled", async () => {
+    const listProviders = vi.fn().mockResolvedValue([])
+    const listProviderPresets = vi.fn().mockResolvedValue([packyPreset()])
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+          listProviderPresets,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ProviderPanel />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText(container, "添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      setInputValue(inputById("provider-id"), "manual-provider")
+      inputById("provider-id").dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => {
+      clickByText(document.body, "自定义")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickByText(document.body, "PackyCode")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText(document.body, "取消").click()
+      await Promise.resolve()
+    })
+
+    expect(inputById("provider-id").value).toBe("manual-provider")
+    expect(inputById("provider-name").value).toBe("")
+  })
 })
+
+function packyPreset() {
+  return {
+    name: "PackyCode",
+    category: "third_party",
+    websiteUrl: "https://www.packyapi.com",
+    apiKeyUrl: "https://www.packyapi.com/register?aff=cc-switch",
+    baseUrl: "https://www.packyapi.com",
+    apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+    model: "claude-sonnet-4-5",
+    haikuModel: "claude-haiku-4-5",
+    sonnetModel: "claude-sonnet-4-5",
+    opusModel: "claude-opus-4-5",
+    templateValues: [],
+  } as const
+}
+
+function templatedPreset() {
+  return {
+    name: "KAT-Coder",
+    category: "third_party",
+    baseUrl: "https://api.example.com/${ENDPOINT_ID}",
+    apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+    model: "claude-sonnet-4-5",
+    templateValues: [{
+      key: "ENDPOINT_ID",
+      label: "Endpoint ID",
+      placeholder: "endpoint-id",
+      defaultValue: "default-endpoint",
+      sensitive: false,
+    }],
+  } as const
+}
 
 function customProvider(): SynapseAgentProvider {
   return {
@@ -215,6 +411,22 @@ function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
     throw new Error(`Button not found: ${text}`)
   }
   return button
+}
+
+function clickByText(container: HTMLElement, text: string): void {
+  const element = Array.from(container.querySelectorAll<HTMLElement>("button,[role='option']"))
+    .reverse()
+    .find((candidate) => candidate.textContent === text)
+  if (!element) {
+    throw new Error(`Clickable text not found: ${text}`)
+  }
+  element.click()
+}
+
+function inputById(id: string): HTMLInputElement {
+  const input = document.body.querySelector<HTMLInputElement>(`#${id}`)
+  if (!input) throw new Error(`Input not found: ${id}`)
+  return input
 }
 
 function setInputValue(input: HTMLInputElement, value: string): void {
