@@ -166,9 +166,12 @@ describe("ProviderPanel presets", () => {
     expect(document.body.textContent).not.toContain("从预设添加")
 
     await act(async () => {
-      clickByText(document.body, "自定义")
+      buttonContainingText(document.body, "自定义").click()
       await Promise.resolve()
     })
+    expect(document.body.textContent).toContain("选择供应商预设")
+    expect(document.body.textContent).toContain("PackyCode")
+
     await act(async () => {
       clickByText(document.body, "PackyCode")
       await Promise.resolve()
@@ -248,7 +251,7 @@ describe("ProviderPanel presets", () => {
       await Promise.resolve()
     })
     await act(async () => {
-      clickByText(document.body, "自定义")
+      buttonContainingText(document.body, "自定义").click()
       await Promise.resolve()
     })
     await act(async () => {
@@ -336,7 +339,7 @@ describe("ProviderPanel presets", () => {
       inputById("provider-id").dispatchEvent(new Event("input", { bubbles: true }))
     })
     await act(async () => {
-      clickByText(document.body, "自定义")
+      buttonContainingText(document.body, "自定义").click()
       await Promise.resolve()
     })
     await act(async () => {
@@ -350,6 +353,127 @@ describe("ProviderPanel presets", () => {
 
     expect(inputById("provider-id").value).toBe("manual-provider")
     expect(inputById("provider-name").value).toBe("")
+  })
+
+  it("filters preset picker results by search, category, and initial", async () => {
+    const listProviders = vi.fn().mockResolvedValue([])
+    const listProviderPresets = vi.fn().mockResolvedValue([
+      packyPreset(),
+      claudePreset(),
+      deepSeekPreset(),
+    ])
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+          listProviderPresets,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ProviderPanel />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText(container, "添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonContainingText(document.body, "自定义").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("官方")
+    expect(document.body.textContent).toContain("国内官方")
+    expect(document.body.textContent).toContain("第三方")
+
+    await act(async () => {
+      clickByText(document.body, "国内官方")
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("DeepSeek")
+    expect(document.body.textContent).not.toContain("PackyCode")
+
+    await act(async () => {
+      clickByText(document.body, "全部")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickByText(document.body, "P")
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("PackyCode")
+    expect(document.body.textContent).not.toContain("Claude Official")
+
+    await act(async () => {
+      clickByText(document.body, "P")
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("Claude Official")
+
+    await act(async () => {
+      setInputValue(inputByPlaceholder("搜索名称、模型或地址"), "deepseek.com")
+      inputByPlaceholder("搜索名称、模型或地址").dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain("DeepSeek")
+    expect(document.body.textContent).not.toContain("PackyCode")
+  })
+
+  it("does not select a preset when opening its external link", async () => {
+    const open = vi.fn()
+    vi.spyOn(window, "open").mockImplementation(open)
+    const listProviders = vi.fn().mockResolvedValue([])
+    const listProviderPresets = vi.fn().mockResolvedValue([packyPreset()])
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+          listProviderPresets,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ProviderPanel />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText(container, "添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonContainingText(document.body, "自定义").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      linkButtonByLabel("打开 PackyCode 链接").click()
+      await Promise.resolve()
+    })
+
+    expect(open).toHaveBeenCalledWith(
+      "https://www.packyapi.com/register?aff=cc-switch",
+      "_blank",
+      "noopener,noreferrer",
+    )
+    expect(document.body.textContent).toContain("选择供应商预设")
+    expect(document.body.textContent).not.toContain("重置表单")
   })
 })
 
@@ -386,6 +510,30 @@ function templatedPreset() {
   } as const
 }
 
+function claudePreset() {
+  return {
+    name: "Claude Official",
+    category: "official",
+    websiteUrl: "https://www.anthropic.com/claude-code",
+    baseUrl: "",
+    apiKeyField: "ANTHROPIC_API_KEY",
+    model: "claude-sonnet-4-5",
+    templateValues: [],
+  } as const
+}
+
+function deepSeekPreset() {
+  return {
+    name: "DeepSeek",
+    category: "cn_official",
+    websiteUrl: "https://platform.deepseek.com",
+    baseUrl: "https://api.deepseek.com/anthropic",
+    apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+    model: "DeepSeek-V3.2",
+    templateValues: [],
+  } as const
+}
+
 function customProvider(): SynapseAgentProvider {
   return {
     id: "custom-provider",
@@ -413,20 +561,42 @@ function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   return button
 }
 
+function buttonContainingText(container: HTMLElement, text: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll("button"))
+    .find((candidate) => candidate.textContent?.includes(text))
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Button containing text not found: ${text}`)
+  }
+  return button
+}
+
 function clickByText(container: HTMLElement, text: string): void {
   const element = Array.from(container.querySelectorAll<HTMLElement>("button,[role='option']"))
     .reverse()
-    .find((candidate) => candidate.textContent === text)
+    .find((candidate) => candidate.textContent?.includes(text))
   if (!element) {
     throw new Error(`Clickable text not found: ${text}`)
   }
   element.click()
 }
 
+function inputByPlaceholder(placeholder: string): HTMLInputElement {
+  const input = Array.from(document.body.querySelectorAll<HTMLInputElement>("input"))
+    .find((candidate) => candidate.placeholder === placeholder)
+  if (!input) throw new Error(`Input not found for placeholder: ${placeholder}`)
+  return input
+}
+
 function inputById(id: string): HTMLInputElement {
   const input = document.body.querySelector<HTMLInputElement>(`#${id}`)
   if (!input) throw new Error(`Input not found: ${id}`)
   return input
+}
+
+function linkButtonByLabel(label: string): HTMLButtonElement {
+  const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found for aria-label: ${label}`)
+  return button
 }
 
 function setInputValue(input: HTMLInputElement, value: string): void {
