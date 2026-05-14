@@ -152,6 +152,12 @@ export class AgentRuntimeService {
       skills: deps.skills,
       logger: deps.logger,
       resetSession: (message) => this.resetMessageSession(message),
+      setPermissionMode: (_message, conversation, mode) =>
+        this.setPermissionMode({
+          conversationId: conversation.id,
+          mode,
+          actor: { kind: "user" },
+        }),
       showReference: (message, args) => this.showReferenceForMessage(message, args),
       listCommands: (message) => this.listPublishedCommands(message.platform),
       runCustomCommand: (command, args, message) =>
@@ -517,6 +523,37 @@ export class AgentRuntimeService {
     this.sessionManager.settlePendingPermission(pending)
   }
 
+  async setPermissionMode(input: {
+    readonly conversationId: string
+    readonly mode: string
+    readonly actor: ActorIdentity
+  }): Promise<ConversationEntryV1> {
+    const conversation = await this.repository.get(input.conversationId)
+    if (!conversation) {
+      throw new Error(`Conversation "${input.conversationId}" was not found`)
+    }
+
+    const liveSession = this.states.get(input.conversationId)?.liveSession
+    if (liveSession?.alive()) {
+      if (!liveSession.setPermissionMode) {
+        throw new Error("当前会话不支持切换权限模式")
+      }
+      await liveSession.setPermissionMode(input.mode)
+    }
+
+    const updated = await this.repository.savePermissionMode(input.conversationId, input.mode)
+    this.emitConversationUpdated(updated)
+    this.deps.logger?.info("Agent permission mode changed.", {
+      boundary: "agent-runtime.permission-mode",
+      projectId: this.deps.projectId,
+      conversationId: input.conversationId,
+      actorKind: input.actor.kind,
+      actorId: input.actor.id,
+      mode: input.mode,
+    })
+    return updated
+  }
+
   async clearCurrentAgentSessionId(
     sessionKey: string,
     platform = "local",
@@ -770,6 +807,21 @@ export class AgentRuntimeService {
 
   private agentType(): string {
     return "claude-code"
+  }
+
+  private emitConversationUpdated(conversation: ConversationEntryV1): void {
+    this.deps.eventBus?.emit({
+      domain: "agent",
+      type: "conversationUpdated",
+      payload: {
+        projectId: this.deps.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: conversation.platform ?? "local",
+        conversationId: conversation.id,
+      },
+      scope: { sessionId: conversation.id },
+      timestamp: this.isoNow(),
+    })
   }
 
   private isoNow(): string {

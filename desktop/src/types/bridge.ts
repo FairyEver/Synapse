@@ -27,6 +27,7 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentStatus,
   SynapseAgentTimelineResult,
+  SynapseAgentPermissionMode,
 } from "./agent"
 import type {
   SynapseConfigBackupExportResult,
@@ -508,6 +509,13 @@ export type SynapseBridge = {
     respondPermission: (
       args: { projectId: string; requestId: string; behavior: "allow" | "deny"; message?: string },
     ) => Promise<{ ok: true }>
+    setPermissionMode: (
+      args: {
+        projectId: string
+        conversationId: string
+        mode: SynapseAgentPermissionMode
+      },
+    ) => Promise<SynapseAgentSessionSummary>
     cancelTurn: (
       args: { projectId: string; conversationId: string },
     ) => Promise<SynapseAgentCancelTurnResult>

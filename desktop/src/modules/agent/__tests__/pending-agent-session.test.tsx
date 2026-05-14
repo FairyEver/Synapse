@@ -15,9 +15,13 @@ const mocks = vi.hoisted(() => ({
   chat: null as unknown,
   useAgentChat: vi.fn(),
   forcePin: vi.fn(),
+  timelineProps: null as {
+    onOpenReference?: (reference: string) => void
+  } | null,
   bridge: {
     agent: {
       getTimeline: vi.fn(),
+      openReference: vi.fn(),
     },
   },
   toast: vi.fn(),
@@ -83,7 +87,10 @@ vi.mock("../components/agent-session-sidebar", () => ({
 }))
 
 vi.mock("../components/agent-timeline", () => ({
-  AgentTimeline: () => <section />,
+  AgentTimeline: (props: { onOpenReference?: (reference: string) => void }) => {
+    mocks.timelineProps = props
+    return <section />
+  },
 }))
 
 vi.mock("../components/agent-composer", () => ({
@@ -116,6 +123,7 @@ afterEach(() => {
   document.body.innerHTML = ""
   vi.clearAllMocks()
   mocks.chat = null
+  mocks.timelineProps = null
   mocks.useAgentChat.mockImplementation(() => mocks.chat)
 })
 
@@ -310,6 +318,49 @@ describe("AgentModule pending prompt sessions", () => {
     )
     expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("secret transcript IPC detail")
     expect(mocks.toast).toHaveBeenCalledWith("复制失败")
+  })
+
+  it("logs reference open failures without an unhandled rejection", async () => {
+    const openError = new Error("secret invalid reference detail")
+    mocks.bridge.agent.openReference.mockRejectedValue(openError)
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      mocks.timelineProps?.onOpenReference?.("APP/PC")
+      await Promise.resolve()
+    })
+
+    expect(mocks.bridge.agent.openReference).toHaveBeenCalledWith({
+      projectId: "project-1",
+      reference: "APP/PC",
+    })
+    expect(mocks.rendererLogger.warn).toHaveBeenCalledWith(
+      "Agent reference open failed.",
+      {
+        boundary: "renderer.agent.open-reference",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        referenceLength: 6,
+        errorName: "Error",
+        errorLength: openError.message.length,
+      },
+    )
+    expect(JSON.stringify(mocks.rendererLogger.warn.mock.calls)).not.toContain("secret invalid reference detail")
+    expect(mocks.toast).toHaveBeenCalledWith("打开失败")
   })
 })
 

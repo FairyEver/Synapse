@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type Ref } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -9,11 +9,22 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AgentComposer } from "../components/agent-composer"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 const track = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/ui-tracking", () => ({
   extractLabel: () => "button",
+  mergeRefs: (...refs: Array<Ref<HTMLElement> | undefined>) => (node: HTMLElement | null) => {
+    for (const ref of refs) {
+      if (typeof ref === "function") ref(node)
+      else if (ref) ref.current = node
+    }
+  },
   track,
 }))
 
@@ -138,6 +149,157 @@ describe("AgentComposer", () => {
     expect(html).toContain('aria-label="重试发送"')
   })
 
+  it("renders all permission modes in the selector", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          permissionMode="default"
+          onPermissionModeChange={vi.fn()}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openPermissionMenu(container)
+
+    expect(container.innerHTML).toContain("权限模式")
+    expect(document.body.textContent).toContain("默认")
+    expect(document.body.textContent).toContain("接受编辑")
+    expect(document.body.textContent).toContain("计划")
+    expect(document.body.textContent).toContain("自动")
+    expect(document.body.textContent).toContain("不再询问")
+    expect(document.body.textContent).toContain("跳过权限")
+  })
+
+  it("shows the original SDK mode name and description in a left-side hover card", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          permissionMode="default"
+          onPermissionModeChange={vi.fn()}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openPermissionMenu(container)
+    const item = getPermissionModeItem("bypassPermissions")
+    expect(item.textContent).toContain("跳过权限")
+
+    await hoverElement(item)
+
+    expect(document.body.textContent).toContain("bypassPermissions")
+    expect(document.body.textContent).toContain("跳过所有权限确认")
+  })
+
+  it("shows provider availability only for modes with provider limitations", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          permissionMode="default"
+          onPermissionModeChange={vi.fn()}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openPermissionMenu(container)
+    await hoverPermissionMode("auto")
+
+    expect(document.body.textContent).toContain("仅 Anthropic API")
+    expect(document.body.textContent).toContain("Bedrock、Vertex、Foundry 不支持")
+
+    await hoverPermissionMode("default")
+
+    expect(document.body.textContent).not.toContain("仅 Anthropic API")
+  })
+
+  it("requires confirmation before changing to bypassPermissions", async () => {
+    const onPermissionModeChange = vi.fn(async () => {})
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          permissionMode="default"
+          onPermissionModeChange={onPermissionModeChange}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openPermissionMenu(container)
+    const dangerousItem = getPermissionModeItem("bypassPermissions")
+    await act(async () => {
+      dangerousItem.click()
+    })
+
+    expect(onPermissionModeChange).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("将跳过工具权限确认。")
+
+    const confirm = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.textContent === "继续切换") as HTMLButtonElement
+    await act(async () => {
+      confirm.click()
+    })
+
+    expect(onPermissionModeChange).toHaveBeenCalledWith("bypassPermissions")
+  })
+
   it("marks primary Agent composer actions for renderer action diagnostics", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -228,5 +390,38 @@ function clickButton(container: HTMLElement, label: string) {
   expect(button).toBeTruthy()
   act(() => {
     button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function openPermissionMenu(container: HTMLElement) {
+  const trigger = container.querySelector('button[aria-label="权限模式"]')
+  expect(trigger).toBeTruthy()
+  act(() => {
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
+function getPermissionModeItem(mode: string) {
+  const item = document.querySelector(`[data-mode="${mode}"]`)
+  expect(item).toBeTruthy()
+  return item as HTMLElement
+}
+
+async function hoverPermissionMode(mode: string) {
+  await hoverElement(getPermissionModeItem(mode))
+}
+
+async function hoverElement(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }))
+    element.dispatchEvent(new MouseEvent("pointerenter", { bubbles: false }))
+    element.dispatchEvent(new MouseEvent("pointermove", { bubbles: true }))
+    element.focus()
+    await wait(120)
   })
 }

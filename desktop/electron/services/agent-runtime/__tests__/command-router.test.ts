@@ -230,7 +230,7 @@ describe("AgentCommandRouter", () => {
     expect(JSON.stringify(records)).not.toContain("session-id")
   })
 
-  it("lists modes, handles /new and /status, and rejects mode switches and unknown commands", async () => {
+  it("lists modes, switches safe modes, handles /new and /status, and routes dangerous modes to the selector", async () => {
     const { providerService } = makeProviderService()
     await providerService.createProvider({
       id: "anthropic",
@@ -242,6 +242,7 @@ describe("AgentCommandRouter", () => {
       env: {},
     })
     const resets: string[] = []
+    const modeSwitches: string[] = []
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
@@ -250,15 +251,29 @@ describe("AgentCommandRouter", () => {
         resets.push(message.sessionKey)
         return { ...baseConversation(), agentSessionId: undefined }
       },
+      setPermissionMode: async (_message, _conversation, mode) => {
+        modeSwitches.push(mode)
+        return { ...baseConversation(), agentConfig: { mode } }
+      },
     })
 
-    const list = expectRuntimeResult(await router.handle(baseMessage("/mode"), baseConversation()))
+    const list = expectRuntimeResult(await router.handle(baseMessage("/mode"), {
+      ...baseConversation(),
+      agentConfig: { mode: "plan" },
+    }))
+    expect(list.resultText).toContain("Current mode: plan")
     expect(list.resultText).toContain("acceptEdits")
 
-    const rejected = expectRuntimeResult(
+    const switched = expectRuntimeResult(
       await router.handle(baseMessage("/mode acceptEdits"), baseConversation()),
     )
-    expect(rejected.error).toBe("Mode switching is unavailable in SDK sessions.")
+    expect(switched.resultText).toBe("Mode changed: acceptEdits")
+    expect(modeSwitches).toEqual(["acceptEdits"])
+
+    const dangerous = expectRuntimeResult(
+      await router.handle(baseMessage("/mode bypassPermissions"), baseConversation()),
+    )
+    expect(dangerous.error).toBe("请使用权限模式选择器确认切换。")
 
     const next = expectRuntimeResult(await router.handle(baseMessage("/new"), baseConversation()))
     expect(next.resultText).toBe("New session will start on the next message.")

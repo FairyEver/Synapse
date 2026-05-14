@@ -285,10 +285,21 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
     ?? DEFAULT_AGENT_DISPLAY_PROFILE
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
+  const selectedPermissionMode = selectedSession?.mode ?? "default"
   const openReference = (reference: string) => {
     const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId) return
-    void getSynapseBridge()?.agent.openReference({ projectId, reference })
+    void getSynapseBridge()?.agent.openReference({ projectId, reference }).catch((rawError: unknown) => {
+      logger.warn("Agent reference open failed.", {
+        boundary: "renderer.agent.open-reference",
+        projectId,
+        conversationId: chat.selectedConversationId,
+        sessionKey: chat.selectedSessionKey,
+        referenceLength: reference.length,
+        ...errorDiagnostic(rawError),
+      })
+      toast("打开失败")
+    })
   }
 
   const sidebar = (
@@ -435,6 +446,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               canSend={Boolean(draft.trim() && chat.activeProjectId)}
               sending={chat.sending}
               cancelPhase={chat.cancelPhase}
+              permissionMode={selectedPermissionMode}
+              onPermissionModeChange={(mode) => chat.setPermissionMode(mode)}
               onDraftChange={setDraft}
               onInputKeyDown={handleInputKeyDown}
               onSubmit={handleSubmit}

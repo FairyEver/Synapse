@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import type {
   SynapseAgentPendingPermission,
+  SynapseAgentPermissionMode,
   SynapseAgentPublishedCommand,
   SynapseAgentProviderState,
   SynapseAgentSessionSummary,
@@ -45,6 +46,7 @@ type UseAgentChatState = {
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
   sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
+  setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
   respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
   cancelTurn: () => Promise<void>
   forceKillTurn: () => Promise<void>
@@ -171,6 +173,7 @@ function useAgentChat(
     renameSession: connection.renameSession,
     refresh: connection.refresh,
     sendMessage: connection.sendMessage,
+    setPermissionMode: connection.setPermissionMode,
     respondPermission: connection.respondPermission,
     cancelTurn: connection.cancelTurn,
     forceKillTurn: connection.forceKillTurn,

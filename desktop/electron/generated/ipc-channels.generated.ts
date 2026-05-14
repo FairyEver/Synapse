@@ -109,6 +109,7 @@ export const IPC_CHANNELS = {
     "send": "synapse:agent:send",
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",
+    "setPermissionMode": "synapse:agent:set-permission-mode",
     "cancelTurn": "synapse:agent:cancel-turn",
     "forceKillTurn": "synapse:agent:force-kill-turn",
     "getProviders": "synapse:agent:get-providers",

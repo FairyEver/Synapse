@@ -6,6 +6,17 @@ export interface SynapseAgentEventBase {
   readonly payload?: Record<string, unknown>
 }
 
+export const SYNAPSE_AGENT_PERMISSION_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+] as const
+
+export type SynapseAgentPermissionMode = typeof SYNAPSE_AGENT_PERMISSION_MODES[number]
+
 export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
       type: "text"
@@ -252,6 +263,7 @@ export interface SynapseAgentSessionSummary {
   readonly projectId: string
   readonly id: string
   readonly sessionKey: string
+  readonly mode?: SynapseAgentPermissionMode
   readonly name?: string
   readonly platform?: string
   readonly sourceLabel?: string

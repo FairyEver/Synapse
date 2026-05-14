@@ -40,6 +40,11 @@ export interface AgentCommandRouterDeps {
   ): Promise<string>
   compressSession?(message: AgentMessage, conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult>
   resetSession(message: AgentMessage): Promise<ConversationEntryV1 | null>
+  setPermissionMode?(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    mode: string,
+  ): Promise<ConversationEntryV1>
   showReference?(message: AgentMessage, args: readonly string[]): Promise<string>
 }
 
@@ -209,7 +214,7 @@ export class AgentCommandRouter {
     const agentType = await this.resolveAgentType()
     const modes = modesForAgent(agentType)
     if (args.length === 0) {
-      return commandResult(conversation.id, formatModeList(undefined, modes))
+      return commandResult(conversation.id, formatModeList(conversation.agentConfig?.mode, modes))
     }
 
     const target = resolveModeTarget(args[0] ?? "", modes)
@@ -217,7 +222,19 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, modeUsage(modes), true)
     }
 
-    return commandResult(conversation.id, "Mode switching is unavailable in SDK sessions.", true)
+    if (requiresModeConfirmation(target)) {
+      return commandResult(conversation.id, "请使用权限模式选择器确认切换。", true)
+    }
+    if (!this.deps.setPermissionMode) {
+      return commandResult(conversation.id, "当前会话不支持切换权限模式", true)
+    }
+    const updated = await this.deps.setPermissionMode(message, conversation, target)
+    return commandResult(
+      updated.id,
+      `Mode changed: ${target}`,
+      false,
+      updated.agentSessionId,
+    )
   }
 
   private async handleNew(
@@ -556,6 +573,10 @@ function resolveModeTarget(input: string, modes: readonly ModeOption[]): string 
   }
   const exact = modes.find((mode) => mode.key.toLowerCase() === trimmed.toLowerCase())
   return exact?.key ?? null
+}
+
+function requiresModeConfirmation(mode: string): boolean {
+  return mode === "auto" || mode === "bypassPermissions"
 }
 
 function formatModelList(

@@ -29,6 +29,15 @@ export const timelineRequestSchema = projectRequestSchema.extend({
   limit: z.number().int().positive().max(200).optional(),
 })
 
+export const permissionModeSchema = z.enum([
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+])
+
 // ─── Shared response schemas ──────────────────────────────────────────────────
 
 const timelineBaseSchema = {
@@ -136,6 +145,7 @@ export const sessionSummarySchema = z.object({
   projectId: z.string(),
   id: z.string(),
   sessionKey: z.string(),
+  mode: permissionModeSchema.optional(),
   name: z.string().optional(),
   platform: z.string().optional(),
   sourceLabel: z.string().optional(),
@@ -202,6 +212,7 @@ export function sessionSummary(session: ConversationEntryV1) {
     projectId: session.projectId,
     id: session.id,
     sessionKey: session.sessionKey,
+    mode: permissionModeFromConversation(session),
     name: session.name,
     platform: session.platform,
     sourceLabel: sessionSourceLabel(session),
@@ -214,6 +225,15 @@ export function sessionSummary(session: ConversationEntryV1) {
     updatedAt: session.updatedAt,
     lastMessage: last ? historyEntry(session.id, last, session.history.length - 1, session.agentType) : undefined,
   }
+}
+
+function permissionModeFromConversation(
+  session: ConversationEntryV1,
+): z.infer<typeof permissionModeSchema> | undefined {
+  const mode = session.agentConfig?.mode
+  return permissionModeSchema.safeParse(mode).success
+    ? mode as z.infer<typeof permissionModeSchema>
+    : undefined
 }
 
 function sessionSourceLabel(session: ConversationEntryV1): string | undefined {

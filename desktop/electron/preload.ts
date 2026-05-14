@@ -123,6 +123,7 @@ const IPC_CHANNELS = {
     "send": "synapse:agent:send",
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",
+    "setPermissionMode": "synapse:agent:set-permission-mode",
     "cancelTurn": "synapse:agent:cancel-turn",
     "forceKillTurn": "synapse:agent:force-kill-turn",
     "getProviders": "synapse:agent:get-providers",
@@ -640,6 +641,7 @@ const synapseBridge: SynapseBridge = {
     listPendingPermissions: (projectId) =>
       invoke(IPC_CHANNELS.agent.listPendingPermissions)({ projectId }),
     respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),
+    setPermissionMode: (args) => invoke(IPC_CHANNELS.agent.setPermissionMode)(args),
     cancelTurn: (args) => invoke(IPC_CHANNELS.agent.cancelTurn)(args),
     forceKillTurn: (args) => invoke(IPC_CHANNELS.agent.forceKillTurn)(args),
     getProviders: () => invoke(IPC_CHANNELS.agent.getProviders)({}),

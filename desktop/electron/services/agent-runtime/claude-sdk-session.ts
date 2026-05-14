@@ -21,6 +21,7 @@ export interface QueryLike {
   interrupt(): Promise<void>
   close(): void | Promise<void>
   streamInput?(stream: AsyncIterable<SDKUserMessage>): Promise<void>
+  setPermissionMode?(mode: PermissionMode): Promise<void>
 }
 
 export type QueryFactory = (input: {
@@ -134,6 +135,17 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.denyPendingPermissions("Current turn was cancelled before permission was resolved.")
     await this.query.interrupt()
     return true
+  }
+
+  async setPermissionMode(mode: string): Promise<void> {
+    const permissionMode = parsePermissionMode(mode)
+    if (!permissionMode) {
+      throw new Error(`Unsupported permission mode: ${mode}`)
+    }
+    if (!this.query.setPermissionMode) {
+      throw new Error("当前会话不支持切换权限模式")
+    }
+    await this.query.setPermissionMode(permissionMode)
   }
 
   async close(): Promise<void> {
@@ -345,6 +357,10 @@ class LazyQuery implements QueryLike {
 
   async streamInput(stream: AsyncIterable<SDKUserMessage>): Promise<void> {
     await (await this.query).streamInput(stream)
+  }
+
+  async setPermissionMode(mode: PermissionMode): Promise<void> {
+    await (await this.query).setPermissionMode(mode)
   }
 }
 

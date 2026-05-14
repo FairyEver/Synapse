@@ -313,6 +313,96 @@ describe("AgentRuntimeService", () => {
     await expect(resolveSoon(firstTurn)).resolves.not.toBe("timeout")
   })
 
+  it("persists permission mode when no live session exists", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      now: fixedNow,
+    })
+    const created = await service.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "Local",
+    })
+
+    const updated = await service.setPermissionMode({
+      conversationId: created.id,
+      mode: "plan",
+      actor: { kind: "user", id: "user-1" },
+    })
+
+    expect(updated.agentConfig?.mode).toBe("plan")
+    await expect(conversations.get(created.id)).resolves.toMatchObject({
+      agentConfig: { mode: "plan" },
+    })
+  })
+
+  it("switches a live session before persisting permission mode", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new ModeSwitchSession()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("wait"))
+    await waitFor(() => session.sent.length === 1)
+    const id = conversationId("local", "s1", "active")
+
+    await expect(service.setPermissionMode({
+      conversationId: id,
+      mode: "acceptEdits",
+      actor: { kind: "user", id: "user-1" },
+    })).resolves.toMatchObject({
+      agentConfig: { mode: "acceptEdits" },
+    })
+
+    expect(session.modeCalls).toEqual(["acceptEdits"])
+    await expect(conversations.get(id)).resolves.toMatchObject({
+      agentConfig: { mode: "acceptEdits" },
+    })
+
+    await service.forceKillTurn(id)
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
+
+  it("does not persist permission mode when the live SDK switch fails", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new ModeSwitchSession(new Error("sdk denied mode"))
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("wait"))
+    await waitFor(() => session.sent.length === 1)
+    const id = conversationId("local", "s1", "active")
+
+    await expect(service.setPermissionMode({
+      conversationId: id,
+      mode: "acceptEdits",
+      actor: { kind: "user", id: "user-1" },
+    })).rejects.toThrow("sdk denied mode")
+
+    await expect(conversations.get(id)).resolves.not.toMatchObject({
+      agentConfig: { mode: "acceptEdits" },
+    })
+
+    await service.forceKillTurn(id)
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
+
   it("logs scheduled agent failures with correlation context", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
@@ -522,6 +612,19 @@ class HangingSession implements AgentLiveSession {
     this.calls.push("close")
     this.closed = true
     this.waiter?.(null)
+  }
+}
+
+class ModeSwitchSession extends HangingSession {
+  readonly modeCalls: string[] = []
+
+  constructor(private readonly failure?: Error) {
+    super()
+  }
+
+  async setPermissionMode(mode: string): Promise<void> {
+    this.modeCalls.push(mode)
+    if (this.failure) throw this.failure
   }
 }
 

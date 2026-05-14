@@ -74,6 +74,7 @@ beforeEach(() => {
       listSessions: vi.fn(async () => [session]),
       onEvent: vi.fn(() => () => {}),
       respondPermission: vi.fn(async () => undefined),
+      setPermissionMode: vi.fn(async () => ({ ...session, mode: "plan" })),
       send: vi.fn(async () => {
         throw new Error("enqueue failed with prompt=secret")
       }),
@@ -273,6 +274,41 @@ describe("useAgentChat", () => {
     }))
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("permission secret token")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
+  })
+
+  it("updates selected session mode after a permission mode switch", async () => {
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.setPermissionMode("plan")
+    })
+
+    expect(chat?.sessions.find((item) => item.id === session.id)?.mode).toBe("plan")
+    expect((window as unknown as {
+      synapse: {
+        agent: {
+          setPermissionMode: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent.setPermissionMode).toHaveBeenCalledWith({
+      projectId: session.projectId,
+      conversationId: session.id,
+      mode: "plan",
+    })
   })
 
   it("logs cancel and force-kill failures with sanitized conversation context", async () => {

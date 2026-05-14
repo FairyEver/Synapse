@@ -146,6 +146,24 @@ describe("AgentMessageEvent", () => {
     expect(html).toContain("/Users/liyang/project/file.ts:12")
   })
 
+  it("does not link slash-separated app labels in assistant messages", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={{
+          ...baseEntry,
+          role: "assistant",
+          content: "余额退款申请单(蛋鸡APP/PC)；养殖户模板(PC/APP)",
+        }}
+        profile={mockProfile}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).not.toContain("<a href")
+    expect(html).toContain("蛋鸡APP/PC")
+    expect(html).toContain("PC/APP")
+  })
+
   it("opens wrapped relative file references through the reference bridge", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

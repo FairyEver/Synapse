@@ -97,7 +97,7 @@ export class SessionManager {
     if (!providerId) {
       throw new Error("Provider is required")
     }
-    const modeOverride = input.message.modeOverride
+    const modeOverride = input.message.modeOverride ?? input.conversation.agentConfig?.mode
     const providerMatches = input.state.providerId === providerId
     const modeMatches = input.state.modeOverride === modeOverride
     if (

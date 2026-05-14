@@ -226,6 +226,7 @@ export interface AgentLiveSession {
   alive(): boolean
   close(): Promise<void>
   cancelCurrentTurn?(): Promise<boolean>
+  setPermissionMode?(mode: string): Promise<void>
 }
 
 export interface AgentRuntimeTurnResult {

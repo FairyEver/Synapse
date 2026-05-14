@@ -13,6 +13,9 @@ import {
   timelineRequestSchema,
   timelineItemSchema,
   agentEventSchema,
+  permissionModeSchema,
+  sessionSummary,
+  sessionSummarySchema,
   resolveProjectAgent,
   resolveTimelineSession,
   historyEntries,
@@ -45,6 +48,11 @@ const respondPermissionRequestSchema = projectRequestSchema.extend({
   requestId: z.string().min(1),
   behavior: z.enum(["allow", "deny"]),
   message: z.string().optional(),
+})
+
+const setPermissionModeRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  mode: permissionModeSchema,
 })
 
 const cancelTurnRequestSchema = projectRequestSchema.extend({
@@ -95,6 +103,7 @@ const respondPermissionResultSchema = z.object({
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SendRequest = z.infer<typeof sendRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
+type SetPermissionModeRequest = z.infer<typeof setPermissionModeRequestSchema>
 
 // ─── Message method descriptors ───────────────────────────────────────────────
 
@@ -300,6 +309,21 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         actor: { kind: "user" },
       })
       return { ok: true }
+    },
+  },
+  setPermissionMode: {
+    kind: "invoke",
+    channel: "synapse:agent:set-permission-mode",
+    request: setPermissionModeRequestSchema,
+    response: sessionSummarySchema,
+    handler: async (ctx, request: SetPermissionModeRequest) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const updated = await agent.setPermissionMode({
+        conversationId: request.conversationId,
+        mode: request.mode,
+        actor: { kind: "user" },
+      })
+      return sessionSummary(updated)
     },
   },
   cancelTurn: {

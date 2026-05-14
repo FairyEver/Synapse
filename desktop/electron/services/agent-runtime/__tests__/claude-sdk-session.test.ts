@@ -94,6 +94,25 @@ describe("ClaudeSDKSession", () => {
     expect(query.interrupt).toHaveBeenCalledOnce()
   })
 
+  it("forwards permission mode switches to the SDK query", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    await session.setPermissionMode("acceptEdits")
+
+    expect(query.setPermissionMode).toHaveBeenCalledWith("acceptEdits")
+  })
+
+  it("rejects invalid runtime permission modes", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    await expect(session.setPermissionMode("free-for-all")).rejects.toThrow(
+      "Unsupported permission mode: free-for-all",
+    )
+    expect(query.setPermissionMode).not.toHaveBeenCalled()
+  })
+
   it("close closes the SDK query", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)
@@ -467,6 +486,7 @@ function createQueryFactory(): {
 class FakeQuery implements QueryLike {
   readonly interrupt = vi.fn(async () => {})
   readonly close = vi.fn()
+  readonly setPermissionMode = vi.fn(async (_mode: string) => {})
 
   private readonly messages: SDKMessage[] = []
   private readonly waiters: Array<(value: IteratorResult<SDKMessage, void>) => void> = []

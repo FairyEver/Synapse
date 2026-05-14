@@ -725,6 +725,41 @@ describe("agentIpcModule", () => {
     expect(deleteSession).toHaveBeenCalledWith("conv-1")
   })
 
+  it("sets conversation permission mode through IPC", async () => {
+    const setPermissionMode = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      id: "conversation-1",
+      sessionKey: "local:renderer",
+      agentConfig: { mode: "plan" },
+      active: true,
+      history: [],
+      schemaVersion: 1,
+      createdAt: "2026-05-14T00:00:00.000Z",
+      updatedAt: "2026-05-14T00:00:00.000Z",
+    })
+    const harness = createHarness({
+      agent: {
+        setPermissionMode,
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:set-permission-mode", {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      mode: "plan",
+    })
+
+    expect(setPermissionMode).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+      mode: "plan",
+      actor: { kind: "user" },
+    })
+    expect(result).toMatchObject({
+      id: "conversation-1",
+      mode: "plan",
+    })
+  })
+
   describe("phase emit (Plan A)", () => {
     it("emits submitted (done) + received (in-progress) + received (done) + completed (done) on success", async () => {
       const send = vi.fn().mockResolvedValue({

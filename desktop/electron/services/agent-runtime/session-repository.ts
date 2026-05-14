@@ -262,6 +262,23 @@ export class AgentSessionRepository {
     return updated
   }
 
+  async savePermissionMode(
+    conversationIdValue: string,
+    mode: string,
+  ): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      agentConfig: {
+        ...(conversation.agentConfig ?? {}),
+        mode,
+      },
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
   async clearCurrentAgentSessionId(
     conversationIdValue: string,
     agentType?: string,

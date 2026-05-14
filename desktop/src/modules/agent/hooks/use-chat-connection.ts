@@ -4,6 +4,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { localUserTimelineItem } from "@/lib/agent-timeline"
 import type {
+  SynapseAgentPermissionMode,
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
@@ -52,6 +53,7 @@ type ChatConnectionResult = {
   readonly sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
+  readonly setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
   readonly respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
   readonly cancelTurn: () => Promise<void>
   readonly forceKillTurn: () => Promise<void>
@@ -596,6 +598,31 @@ function useChatConnection(
     }
   }, [dispatch])
 
+  const setPermissionMode = useCallback(async (mode: SynapseAgentPermissionMode) => {
+    const projectId = selectedProjectIdRef.current ?? getDefaultProjectId()
+    const conversationId = selectedConversationIdRef.current
+    if (!projectId || !conversationId) return
+    const bridge = requireSynapseBridge()
+    dispatch({ type: "SET_ERROR", error: null })
+    try {
+      const updated = await bridge.agent.setPermissionMode({ projectId, conversationId, mode })
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) =>
+        current.map((session) => session.id === updated.id ? updated : session) })
+    } catch (rawError) {
+      const message = rawError instanceof Error ? rawError.message : "切换失败"
+      logger.error("Agent permission mode switch failed.", {
+        projectId,
+        conversationId,
+        mode,
+        boundary: "renderer.agent.permission-mode",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: message })
+      throw rawError
+    }
+  }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
+
   const respondPermission = useCallback(async (
     requestId: string,
     behavior: "allow" | "deny",
@@ -681,6 +708,7 @@ function useChatConnection(
     sendMessage,
     deleteSession,
     renameSession,
+    setPermissionMode,
     respondPermission,
     cancelTurn,
     forceKillTurn,
