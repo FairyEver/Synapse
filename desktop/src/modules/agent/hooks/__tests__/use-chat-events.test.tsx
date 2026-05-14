@@ -185,7 +185,7 @@ function HookProbe({
   refreshPendingPermissions,
 }: {
   readonly dispatch: React.Dispatch<ChatAction>
-  readonly loadTimeline: (target: {
+  readonly loadTimeline?: (target: {
     readonly projectId: string
     readonly sessionKey: string
     readonly conversationId?: string
@@ -209,7 +209,7 @@ function HookProbe({
     selectedSessionKey: "local:renderer",
   }), [])
   const connection = useMemo(() => ({
-    loadTimeline,
+    loadTimeline: loadTimeline ?? vi.fn(async () => {}),
     refreshConversationSnapshot: vi.fn(async () => {}),
     refreshPendingPermissions: refreshPendingPermissions ?? vi.fn(async () => {}),
     updateTimeline: vi.fn(),

@@ -581,6 +581,7 @@ export class AgentRuntimeService {
       readonly workspaceKey?: string
       readonly workspacePath?: string
       readonly providerId?: string
+      readonly mode?: string
     },
   ): Promise<ConversationEntryV1> {
     return this.sessionLifecycle.createSession(input)

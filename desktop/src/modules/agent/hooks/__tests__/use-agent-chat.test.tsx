@@ -66,6 +66,10 @@ beforeEach(() => {
         entries: [],
       })),
       cancelTurn: vi.fn(async () => ({ status: "cancelled" })),
+      createSession: vi.fn(async () => ({
+        ...nextSession,
+        active: true,
+      })),
       deleteSession: vi.fn(async () => ({ ok: true })),
       forceKillTurn: vi.fn(async () => undefined),
       listAllSessions: vi.fn(async () => [session]),
@@ -176,7 +180,125 @@ describe("useAgentChat", () => {
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("archive secret failure")
   })
 
-  it("logs delete fallback switch failures with session context", async () => {
+  it("clears the selected timeline when refresh finds no remaining sessions", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.getTimeline.mockImplementation(async (request: { conversationId?: string }) => ({
+      projectId: session.projectId,
+      sessionKey: session.sessionKey,
+      conversationId: request.conversationId,
+      entries: request.conversationId ? [] : [{
+        id: "stale-message",
+        kind: "message",
+        role: "assistant",
+        content: "stale content",
+        timestamp: "2026-05-13T00:03:00.000Z",
+      }],
+    }))
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    bridge.listSessions.mockResolvedValue([])
+
+    await act(async () => {
+      await chat?.refresh()
+    })
+
+    expect(chat?.sessions).toEqual([])
+    expect(chat?.selectedConversationId).toBeUndefined()
+    expect(chat?.timeline).toEqual([])
+    expect(bridge.getTimeline).not.toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: undefined,
+    }))
+  })
+
+  it("clears the selected timeline after concurrent deletes remove every session", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          deleteSession: ReturnType<typeof vi.fn>
+          getTimeline: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    const deletes = new Map<string, () => void>()
+    bridge.listSessions.mockResolvedValue([session, nextSession])
+    bridge.getTimeline.mockResolvedValue({
+      projectId: session.projectId,
+      sessionKey: session.sessionKey,
+      conversationId: session.id,
+      entries: [{
+        id: "existing-message",
+        kind: "message",
+        role: "assistant",
+        content: "existing content",
+        timestamp: "2026-05-13T00:03:00.000Z",
+      }],
+    })
+    bridge.deleteSession.mockImplementation(({ conversationId }: { conversationId: string }) =>
+      new Promise<{ ok: true }>((resolve) => {
+        deletes.set(conversationId, () => resolve({ ok: true }))
+      }))
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    let deleteSelected: Promise<void> | undefined
+    let deleteNext: Promise<void> | undefined
+    await act(async () => {
+      deleteSelected = chat?.deleteSession(session)
+      deleteNext = chat?.deleteSession(nextSession)
+      await Promise.resolve()
+    })
+
+    bridge.listSessions.mockResolvedValue([])
+
+    await act(async () => {
+      deletes.get(nextSession.id)?.()
+      deletes.get(session.id)?.()
+      await Promise.all([deleteSelected, deleteNext])
+    })
+    await waitFor(() => chat?.sessions.length === 0)
+
+    expect(chat?.selectedConversationId).toBeUndefined()
+    expect(chat?.timeline).toEqual([])
+  })
+
+  it("refreshes selection when delete fallback switch fails", async () => {
     const bridge = (window as unknown as {
       synapse: {
         agent: {
@@ -186,7 +308,9 @@ describe("useAgentChat", () => {
         }
       }
     }).synapse.agent
-    bridge.listSessions.mockResolvedValue([session, nextSession])
+    bridge.listSessions
+      .mockResolvedValueOnce([session, nextSession])
+      .mockResolvedValue([])
     bridge.switchSession.mockRejectedValue(new Error("switch internal detail"))
 
     let chat: ReturnType<typeof useAgentChat> | undefined
@@ -209,12 +333,8 @@ describe("useAgentChat", () => {
       await chat?.deleteSession(session)
     })
 
-    expect(chat?.selectedConversationId).toBe(nextSession.id)
-    expect(bridge.getTimeline).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: nextSession.projectId,
-      sessionKey: nextSession.sessionKey,
-      conversationId: nextSession.id,
-    }))
+    expect(chat?.selectedConversationId).toBeUndefined()
+    expect(chat?.timeline).toEqual([])
     expect(rendererLogger.warn).toHaveBeenCalledWith("Agent delete fallback switch failed.", expect.objectContaining({
       projectId: nextSession.projectId,
       conversationId: nextSession.id,
@@ -309,6 +429,40 @@ describe("useAgentChat", () => {
       conversationId: session.id,
       mode: "plan",
     })
+  })
+
+  it("creates an Agent session with an explicit permission mode", async () => {
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.createSession("project-1", "provider-1", "bypassPermissions")
+    })
+
+    expect((window as unknown as {
+      synapse: {
+        agent: {
+          createSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      providerId: "provider-1",
+      mode: "bypassPermissions",
+    }))
   })
 
   it("logs cancel and force-kill failures with sanitized conversation context", async () => {

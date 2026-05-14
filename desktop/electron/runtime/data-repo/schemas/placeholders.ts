@@ -89,6 +89,8 @@ export interface ProviderEntryV1 extends Record<string, unknown> {
   kind: string
   projectId?: string
   display?: string
+  note?: string
+  websiteUrl?: string
   baseUrl?: string
   secretRef?: string
   models?: ProviderModelEntryV1[]
@@ -99,6 +101,7 @@ export interface ProviderEntryV1 extends Record<string, unknown> {
   agentType?: string
   agentTypes?: string[]
   env?: Record<string, string>
+  settingsConfig?: Record<string, unknown>
   secretEnvRefs?: Record<string, string>
   thinking?: string
   options?: ProviderOptionsV1
@@ -118,6 +121,8 @@ export const providersSchema: NamespaceSchema<ProviderEntryV1> = {
     && ((v as ProviderEntryV1).scope === "global" || (v as ProviderEntryV1).scope === "project")
     && typeof (v as ProviderEntryV1).kind === "string"
     && isOptionalString((v as ProviderEntryV1).projectId)
+    && isOptionalString((v as ProviderEntryV1).note)
+    && isOptionalString((v as ProviderEntryV1).websiteUrl)
     && isOptionalString((v as ProviderEntryV1).baseUrl)
     && isOptionalString((v as ProviderEntryV1).secretRef)
     && isOptionalString((v as ProviderEntryV1).activeMode)
@@ -125,6 +130,7 @@ export const providersSchema: NamespaceSchema<ProviderEntryV1> = {
     && ((v as ProviderEntryV1).providerRefs === undefined || isStringArray((v as ProviderEntryV1).providerRefs))
     && ((v as ProviderEntryV1).agentTypes === undefined || isStringArray((v as ProviderEntryV1).agentTypes))
     && ((v as ProviderEntryV1).env === undefined || isStringRecord((v as ProviderEntryV1).env))
+    && ((v as ProviderEntryV1).settingsConfig === undefined || isAnyRecord((v as ProviderEntryV1).settingsConfig))
     && ((v as ProviderEntryV1).secretEnvRefs === undefined || isStringRecord((v as ProviderEntryV1).secretEnvRefs))
     && isOptionalString((v as ProviderEntryV1).thinking)
     && ((v as ProviderEntryV1).options === undefined || isProviderOptions((v as ProviderEntryV1).options)),

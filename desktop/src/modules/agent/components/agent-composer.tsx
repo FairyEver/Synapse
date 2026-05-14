@@ -22,46 +22,17 @@ import {
 } from "@/components/ui/hover-card"
 import { Textarea } from "@/components/ui/textarea"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
+import { getPermissionModeCapability } from "../permission-mode-capability"
+import {
+  permissionModeConfirmationText,
+  permissionModeDescriptions,
+  permissionModeLabels,
+  permissionModes,
+  providerAvailabilityNotes,
+} from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
 
 const SINGLE_LINE_HEIGHT = 28
-const permissionModes: readonly SynapseAgentPermissionMode[] = [
-  "default",
-  "acceptEdits",
-  "plan",
-  "auto",
-  "dontAsk",
-  "bypassPermissions",
-]
-const permissionModeLabels: Record<SynapseAgentPermissionMode, string> = {
-  default: "默认",
-  acceptEdits: "接受编辑",
-  plan: "计划",
-  auto: "自动",
-  dontAsk: "不再询问",
-  bypassPermissions: "跳过权限",
-}
-const permissionModeDescriptions: Record<SynapseAgentPermissionMode, string> = {
-  default: "使用 Claude Code 默认权限策略。",
-  acceptEdits: "自动接受文件编辑，其他工具仍按权限策略处理。",
-  plan: "先制定计划，避免直接执行会修改环境的操作。",
-  auto: "由 Claude Code 根据上下文自动判断工具权限。",
-  dontAsk: "不再弹出权限询问，按当前会话策略继续执行。",
-  bypassPermissions: "跳过所有权限确认。",
-}
-const providerAvailabilityNotes: Partial<Record<SynapseAgentPermissionMode, string>> = {
-  auto: "部分服务不可用，切换失败时请换其他模式。",
-}
-
-function requiresModeConfirmation(mode: SynapseAgentPermissionMode): boolean {
-  return mode === "auto" || mode === "bypassPermissions"
-}
-
-function confirmationText(mode: SynapseAgentPermissionMode | null): string {
-  if (mode === "auto") return "将由模型自动判断工具权限。"
-  if (mode === "bypassPermissions") return "将跳过工具权限确认。"
-  return ""
-}
 
 function AgentComposer({
   draft,
@@ -76,6 +47,7 @@ function AgentComposer({
   onCancelTurn,
   onForceKillTurn,
   onPermissionModeChange = () => undefined,
+  onCreatePermissionModeSession,
   pendingMessages = [],
   onRemovePendingMessage,
   onRetryPendingMessage,
@@ -93,13 +65,16 @@ function AgentComposer({
   readonly onCancelTurn: () => void
   readonly onForceKillTurn: () => void
   readonly onPermissionModeChange?: (mode: SynapseAgentPermissionMode) => Promise<void> | void
+  readonly onCreatePermissionModeSession?: (mode: SynapseAgentPermissionMode) => void
   readonly onRemovePendingMessage?: (id: string) => void
   readonly onRetryPendingMessage?: (id: string) => void
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [multiline, setMultiline] = useState(false)
   const [pendingMode, setPendingMode] = useState<SynapseAgentPermissionMode | null>(null)
+  const [pendingModeAction, setPendingModeAction] = useState<"switch" | "new-session">("switch")
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
+  const isNewSessionMode = pendingModeAction === "new-session"
 
   useEffect(() => {
     const el = textareaRef.current
@@ -191,10 +166,22 @@ function AgentComposer({
                     <HoverCardTrigger asChild>
                       <DropdownMenuItem
                         data-mode={mode}
-                        onSelect={(event) => {
-                          event.preventDefault()
-                          if (requiresModeConfirmation(mode)) {
+                        onSelect={() => {
+                          const capability = getPermissionModeCapability({
+                            currentMode: permissionMode,
+                            targetMode: mode,
+                          })
+                          if (capability === "current") {
+                            return
+                          }
+                          if (capability === "requiresNewSession") {
                             setPendingMode(mode)
+                            setPendingModeAction("new-session")
+                            return
+                          }
+                          if (capability === "confirmable") {
+                            setPendingMode(mode)
+                            setPendingModeAction("switch")
                             return
                           }
                           void onPermissionModeChange(mode)
@@ -244,19 +231,27 @@ function AgentComposer({
         </div>
       </form>
       <Dialog open={pendingMode !== null} onOpenChange={(open) => {
-        if (!open) setPendingMode(null)
+        if (!open) {
+          setPendingMode(null)
+          setPendingModeAction("switch")
+        }
       }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>切换权限模式</DialogTitle>
-            <DialogDescription>{confirmationText(pendingMode)}</DialogDescription>
+            <DialogTitle>{isNewSessionMode ? "需要新会话" : "切换权限模式"}</DialogTitle>
+            <DialogDescription>
+              {isNewSessionMode ? "跳过权限只能在会话启动时启用。" : permissionModeConfirmationText(pendingMode)}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setPendingMode(null)}
+              onClick={() => {
+                setPendingMode(null)
+                setPendingModeAction("switch")
+              }}
             >
               取消
             </Button>
@@ -267,10 +262,15 @@ function AgentComposer({
                 const mode = pendingMode
                 if (!mode) return
                 setPendingMode(null)
+                setPendingModeAction("switch")
+                if (isNewSessionMode) {
+                  onCreatePermissionModeSession?.(mode)
+                  return
+                }
                 void onPermissionModeChange(mode)
               }}
             >
-              继续切换
+              {isNewSessionMode ? "新建会话" : "继续切换"}
             </Button>
           </DialogFooter>
         </DialogContent>

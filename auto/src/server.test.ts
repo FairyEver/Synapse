@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer, type Server } from 'http'
-import { mkdir, mkdtemp, rm } from 'fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { AutoScheduler } from './scheduler.js'
@@ -79,6 +79,28 @@ test('prompt API creates, reads, renames, and deletes prompts', async () => {
 
     const afterDelete = record(await requestJson(baseUrl, '/api/prompts/renamed', { method: 'DELETE' }))
     assert.deepEqual(afterDelete.prompts, ['default'])
+  } finally {
+    server.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('guide API returns the prompt writing guide', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
+  const guidePath = join(dir, 'GUIDE.md')
+  const server = createServer(createHandler(new AutoScheduler(), {
+    configPath: join(dir, 'ui-config.json'),
+    promptPath: join(dir, 'prompt.md'),
+    promptsDir: join(dir, 'prompts'),
+    guidePath,
+  }))
+  try {
+    await writeFile(guidePath, '# Guide\n\nCopy this into an AI chat.', 'utf-8')
+    const baseUrl = await listen(server)
+
+    const guide = record(await requestJson(baseUrl, '/api/guide'))
+
+    assert.equal(guide.content, '# Guide\n\nCopy this into an AI chat.')
   } finally {
     server.close()
     await rm(dir, { recursive: true, force: true })

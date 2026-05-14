@@ -18,8 +18,8 @@ The product needs to distinguish two decisions:
 - Prevent raw SDK errors when users choose `bypassPermissions` from an active
   non-bypass conversation.
 - Give users a clear path to start a new conversation with `bypassPermissions`.
-- Add a global setting that makes new Agent conversations start in
-  `bypassPermissions`.
+- Add a global default permission-mode setting for newly created Agent
+  conversations, including `bypassPermissions` as one selectable value.
 - Keep existing conversations stable. Do not mutate or restart them because a
   global default changed.
 
@@ -87,18 +87,28 @@ with mode `bypassPermissions`. The old conversation remains unchanged.
 
 Add one global setting under Settings -> Agent:
 
-- Label: `默认跳过权限`
-- Description: `新建 Agent 对话时使用跳过权限模式。`
-- Control: shadcn `Switch`
+- Label: `默认权限`
+- Description: `新建 Agent 对话使用此权限模式。`
+- Control: the same permission-mode dropdown option set used by the Agent
+  conversation composer.
 
-Turning the switch on opens a confirmation dialog:
+The setting stores one permission-mode value:
+
+- `default`
+- `acceptEdits`
+- `plan`
+- `auto`
+- `dontAsk`
+- `bypassPermissions`
+
+Selecting `bypassPermissions` opens a confirmation dialog:
 
 - Title: `启用默认跳过权限`
 - Description: `新建 Agent 对话将跳过工具权限确认。`
 - Secondary action: `取消`
 - Primary action: `启用`
 
-Turning it off does not need confirmation.
+Selecting other values does not need confirmation.
 
 The setting is global. It is not scoped by project, repository, provider, or
 conversation.
@@ -108,9 +118,8 @@ conversation.
 When Synapse creates a new Agent conversation:
 
 1. If the caller explicitly supplies a permission mode, use it.
-2. Otherwise, if the global `defaultBypassPermissions` setting is enabled, use
-   `bypassPermissions`.
-3. Otherwise, use the existing default mode.
+2. Otherwise, use the global `defaultPermissionMode` value.
+3. If the value is missing or invalid, normalize it to `default`.
 
 Existing conversations keep their stored conversation-level mode. A later
 global setting change does not rewrite them.
@@ -128,17 +137,18 @@ Suggested config shape:
 
 ```ts
 agent?: {
-  defaultBypassPermissions?: boolean
+  defaultPermissionMode?: SynapseAgentPermissionMode
 }
 ```
 
-Use normalization so missing config values behave as `false`.
+Use normalization so missing config values behave as `default`. Legacy
+`defaultBypassPermissions: true` values migrate to `bypassPermissions`.
 
 ## UI Constraints
 
 Use existing shadcn primitives and current Synapse settings patterns:
 
-- `Switch` for the global boolean.
+- `DropdownMenu` for the global permission-mode value.
 - `AlertDialog` or existing dialog primitives for confirmations.
 - Existing `Card`, `Button`, and settings row components where they already fit.
 
@@ -152,7 +162,7 @@ visual treatment. Use concise product copy only.
 - Backend failures while creating the new bypass conversation should flow
   through the existing Agent error handling path.
 - Settings save failures should show the existing settings error/toast pattern
-  and leave the switch in the last confirmed persisted state.
+  and leave the dropdown in the last confirmed persisted state.
 
 ## Testing
 

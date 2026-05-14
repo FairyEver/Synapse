@@ -76,6 +76,7 @@ export const IPC_CHANNELS = {
     "createDirectory": "synapse:editor:create-directory",
   },
   "shell": {
+    "openExternal": "synapse:shell:open-external",
     "showItemInFolder": "synapse:shell:show-item-in-folder",
   },
   "repository": {
@@ -117,6 +118,9 @@ export const IPC_CHANNELS = {
     "listProviderPresets": "synapse:agent:list-provider-presets",
     "createProvider": "synapse:agent:create-provider",
     "createProviderFromPreset": "synapse:agent:create-provider-from-preset",
+    "previewCcSwitchClaudeProviders": "synapse:agent:preview-cc-switch-claude-providers",
+    "importCcSwitchClaudeProviders": "synapse:agent:import-cc-switch-claude-providers",
+    "chooseCcSwitchClaudeImportSource": "synapse:agent:choose-cc-switch-claude-import-source",
     "updateProvider": "synapse:agent:update-provider",
     "archiveProvider": "synapse:agent:archive-provider",
     "setActiveProvider": "synapse:agent:set-active-provider",
@@ -208,12 +212,6 @@ export const IPC_CHANNELS = {
     "getAgentReport": "synapse:token-usage:agent-report",
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",
-    "cursorAddAccount": "synapse:token-usage:cursor:add-account",
-    "cursorRemoveAccount": "synapse:token-usage:cursor:remove-account",
-    "cursorListAccounts": "synapse:token-usage:cursor:list-accounts",
-    "cursorSetActive": "synapse:token-usage:cursor:set-active",
-    "cursorSync": "synapse:token-usage:cursor:sync",
-    "cursorValidate": "synapse:token-usage:cursor:validate",
   },
 } as const
 

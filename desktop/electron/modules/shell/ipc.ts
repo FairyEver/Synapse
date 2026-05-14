@@ -12,6 +12,19 @@ import type { IpcModule } from "../../runtime/ipc/types"
 export const shellIpcModule: IpcModule = {
   id: "shell",
   methods: {
+    openExternal: {
+      kind: "invoke",
+      channel: "synapse:shell:open-external",
+      request: z.object({ url: z.string().url() }),
+      response: z.void(),
+      handler: async (_ctx, request: { url: string }) => {
+        const url = new URL(request.url)
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          throw new Error("Only http and https links can be opened.")
+        }
+        await shell.openExternal(url.toString())
+      },
+    },
     showItemInFolder: {
       kind: "invoke",
       channel: "synapse:shell:show-item-in-folder",

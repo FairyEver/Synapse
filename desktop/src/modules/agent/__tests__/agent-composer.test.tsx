@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AgentComposer } from "../components/agent-composer"
+import { getPermissionModeCapability } from "../permission-mode-capability"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
@@ -42,6 +43,27 @@ afterEach(() => {
 })
 
 describe("AgentComposer", () => {
+  it("requires a new session when switching a non-bypass conversation to bypassPermissions", () => {
+    expect(getPermissionModeCapability({
+      currentMode: "default",
+      targetMode: "bypassPermissions",
+    })).toBe("requiresNewSession")
+  })
+
+  it("treats selecting the current bypassPermissions mode as current", () => {
+    expect(getPermissionModeCapability({
+      currentMode: "bypassPermissions",
+      targetMode: "bypassPermissions",
+    })).toBe("current")
+  })
+
+  it("keeps auto as confirmable", () => {
+    expect(getPermissionModeCapability({
+      currentMode: "default",
+      targetMode: "auto",
+    })).toBe("confirmable")
+  })
+
   it("renders a ChatGPT-style input with an icon-only send button", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
@@ -256,8 +278,9 @@ describe("AgentComposer", () => {
     expect(document.body.textContent).not.toContain("部分服务不可用")
   })
 
-  it("requires confirmation before changing to bypassPermissions", async () => {
+  it("opens a new-session dialog for bypassPermissions instead of switching live mode", async () => {
     const onPermissionModeChange = vi.fn(async () => {})
+    const onCreatePermissionModeSession = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -273,6 +296,7 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           permissionMode="default"
           onPermissionModeChange={onPermissionModeChange}
+          onCreatePermissionModeSession={onCreatePermissionModeSession}
           onDraftChange={vi.fn()}
           onInputKeyDown={vi.fn()}
           onSubmit={vi.fn()}
@@ -289,15 +313,17 @@ describe("AgentComposer", () => {
     })
 
     expect(onPermissionModeChange).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("将跳过工具权限确认。")
+    expect(document.body.textContent).toContain("需要新会话")
+    expect(document.body.textContent).toContain("跳过权限只能在会话启动时启用。")
 
     const confirm = Array.from(document.querySelectorAll("button"))
-      .find((button) => button.textContent === "继续切换") as HTMLButtonElement
+      .find((button) => button.textContent === "新建会话") as HTMLButtonElement
     await act(async () => {
       confirm.click()
     })
 
-    expect(onPermissionModeChange).toHaveBeenCalledWith("bypassPermissions")
+    expect(onPermissionModeChange).not.toHaveBeenCalled()
+    expect(onCreatePermissionModeSession).toHaveBeenCalledWith("bypassPermissions")
   })
 
   it("marks primary Agent composer actions for renderer action diagnostics", async () => {

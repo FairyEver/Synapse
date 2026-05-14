@@ -19,7 +19,6 @@ import { hermesParser } from "./parsers/hermes"
 import { gooseParser } from "./parsers/goose"
 import { opencodeParser, kiloDbParser } from "./parsers/opencode"
 import { crushParser } from "./parsers/crush"
-import { cursorParser } from "./parsers/cursor"
 import { syntheticParser } from "./parsers/synthetic"
 import { antigravityParser } from "./parsers/antigravity"
 import type { AgentParser, ScanProgress } from "./parsers/types"
@@ -48,7 +47,6 @@ const PARSERS: Record<string, AgentParser> = {
   opencode: opencodeParser,
   kilo: kiloDbParser,
   crush: crushParser,
-  cursor: cursorParser,
   synthetic: syntheticParser,
 }
 
@@ -70,29 +68,9 @@ export async function scanTokenUsage(): Promise<ScanProgress> {
   }
 }
 
-async function syncCursorAndGetFiles(): Promise<string[]> {
-  try {
-    const { cursorSyncService } = await import("./cursor-sync/index.js")
-    const files = cursorSyncService.getCsvFiles()
-    if (cursorSyncService.hasAccounts()) {
-      await cursorSyncService.syncAll()
-      return cursorSyncService.getCsvFiles()
-    }
-    return files
-  } catch (error) {
-    logger.warn("Cursor sync skipped", { error: String(error) })
-    return []
-  }
-}
-
 async function doScan(): Promise<ScanProgress> {
   const start = Date.now()
   const scanResults = scanAllClients()
-
-  const cursorFiles = await syncCursorAndGetFiles()
-  if (cursorFiles.length > 0) {
-    scanResults.push({ clientId: "cursor", files: cursorFiles })
-  }
 
   const progress: ScanProgress = {
     totalClients: scanResults.length,

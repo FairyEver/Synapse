@@ -48,7 +48,11 @@ type ChatConnectionResult = {
   readonly refreshProjectMeta: (projectId: string | undefined) => Promise<void>
   readonly refreshConversationSnapshot: (target: TimelineTarget) => Promise<void>
   readonly refresh: () => Promise<void>
-  readonly createSession: (projectId: string, providerId?: string) => Promise<void>
+  readonly createSession: (
+    projectId: string,
+    providerId?: string,
+    mode?: SynapseAgentPermissionMode,
+  ) => Promise<void>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
@@ -289,11 +293,11 @@ function useChatConnection(
         return
       }
       setSelectedSession(nextSession)
-      if (nextProjectId) {
+      if (nextSession && nextProjectId) {
         await loadTimeline({
           projectId: nextProjectId,
           sessionKey: nextSessionKey,
-          conversationId: nextSession?.id,
+          conversationId: nextSession.id,
         })
       } else {
         clearTimeline()
@@ -321,7 +325,11 @@ function useChatConnection(
     setSelectedSession,
   ])
 
-  const createSession = useCallback(async (projectId: string, providerId?: string) => {
+  const createSession = useCallback(async (
+    projectId: string,
+    providerId?: string,
+    mode?: SynapseAgentPermissionMode,
+  ) => {
     if (!projectId) return
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
@@ -334,6 +342,7 @@ function useChatConnection(
         name: `新会话 ${formatSessionNameTime(new Date())}`,
         agentType: "claude-code",
         providerId,
+        mode,
       })
       const session = normalizeSessionProject(created, projectId)
       if (requestId !== selectRequestIdRef.current) {
@@ -509,6 +518,7 @@ function useChatConnection(
         if (result.ok) {
           dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
           dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
+          await refresh()
           toast("会话已删除")
         }
         return
@@ -545,12 +555,7 @@ function useChatConnection(
               errorName: rawError instanceof Error ? rawError.name : typeof rawError,
               errorLength: errorMessage(rawError).length,
             })
-            setSelectedSession(next)
-            await loadTimeline({
-              projectId: next.projectId,
-              sessionKey: next.sessionKey,
-              conversationId: next.id,
-            })
+            await refresh()
           }
         } else {
           setSelectedSession(undefined)
@@ -570,6 +575,7 @@ function useChatConnection(
     clearTimeline,
     dispatch,
     loadTimeline,
+    refresh,
     refreshProjectMeta,
     selectRequestIdRef,
     selectedConversationIdRef,

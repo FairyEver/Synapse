@@ -19,6 +19,8 @@ export interface CCProvider {
   readonly?: boolean
   configured?: boolean
   configPath?: string
+  note?: string
+  websiteUrl?: string
   baseUrl?: string
   apiKeyField: ProviderApiKeyField
   active?: boolean
@@ -27,6 +29,7 @@ export interface CCProvider {
   sonnetModel?: string
   opusModel?: string
   env: Record<string, string>
+  settingsConfig?: Record<string, unknown>
   secretRef?: string
   secretEnvRefs?: Record<string, string>
   archived?: boolean
@@ -38,6 +41,8 @@ export interface CCProvider {
 export interface CreateProviderInput {
   readonly id: string
   readonly name: string
+  readonly note?: string
+  readonly websiteUrl?: string
   readonly category: ProviderCategory
   readonly baseUrl?: string
   readonly apiKeyField: ProviderApiKeyField
@@ -48,12 +53,15 @@ export interface CreateProviderInput {
   readonly sonnetModel?: string
   readonly opusModel?: string
   readonly env: Record<string, string>
+  readonly settingsConfig?: Record<string, unknown>
   readonly secretEnv?: Record<string, string>
   readonly sortIndex?: number
 }
 
 export interface UpdateProviderInput {
   readonly name?: string
+  readonly note?: string
+  readonly websiteUrl?: string
   readonly category?: ProviderCategory
   readonly baseUrl?: string
   readonly apiKeyField?: ProviderApiKeyField
@@ -64,6 +72,7 @@ export interface UpdateProviderInput {
   readonly sonnetModel?: string
   readonly opusModel?: string
   readonly env?: Record<string, string>
+  readonly settingsConfig?: Record<string, unknown>
   readonly secretEnv?: Record<string, string>
   readonly clearSecretEnv?: readonly string[]
   readonly archived?: boolean
@@ -100,4 +109,58 @@ export interface CreateProviderFromPresetInput {
   readonly templateValues?: Record<string, string>
   readonly active?: boolean
   readonly sortIndex?: number
+}
+
+export type CcSwitchImportSourceKind = "sqlite" | "json"
+
+export interface CcSwitchImportSource {
+  readonly kind: CcSwitchImportSourceKind
+  readonly path: string
+}
+
+export type CcSwitchImportPreviewStatus = "ready" | "duplicate" | "missing_api_key"
+
+export interface CcSwitchClaudeProviderImportCandidate {
+  readonly id: string
+  readonly name: string
+  readonly category: ProviderCategory
+  readonly websiteUrl?: string
+  readonly note?: string
+  readonly settingsConfig: Record<string, unknown>
+  readonly sortIndex?: number
+}
+
+export interface CcSwitchClaudeProviderPreviewItem {
+  readonly id: string
+  readonly name: string
+  readonly category: ProviderCategory
+  readonly websiteUrl?: string
+  readonly note?: string
+  readonly baseUrl?: string
+  readonly apiKeyField: ProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly status: CcSwitchImportPreviewStatus
+  readonly selectedByDefault: boolean
+}
+
+export interface CcSwitchClaudeImportPreview {
+  readonly items: readonly CcSwitchClaudeProviderPreviewItem[]
+}
+
+export interface CcSwitchClaudeImportPreviewResult extends CcSwitchClaudeImportPreview {
+  readonly source?: CcSwitchImportSource
+  readonly error?: string
+}
+
+export interface ImportCcSwitchClaudeProvidersInput {
+  readonly source: CcSwitchImportSource
+  readonly providerIds: readonly string[]
+}
+
+export interface ImportCcSwitchClaudeProvidersResult {
+  readonly imported: readonly CCProvider[]
+  readonly skipped: readonly CcSwitchClaudeProviderPreviewItem[]
 }

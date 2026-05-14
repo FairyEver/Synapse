@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => ({
   timelineProps: null as {
     onOpenReference?: (reference: string) => void
   } | null,
+  sidebarProps: null as {
+    projects?: Array<{ id: string; name: string; path: string }>
+  } | null,
+  configProjects: [{ id: "project-1", name: "Project One", path: "/repo" }],
+  activeRepository: { uuid: "project-1", name: "Project One", localPath: "/repo" },
   bridgeAvailable: true,
   bridge: {
     agent: {
@@ -51,14 +56,14 @@ vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
     config: {
       global: {
-        projects: [{ id: "project-1", name: "Project One", path: "/repo" }],
+        projects: mocks.configProjects,
       },
     },
   }),
 }))
 
 vi.mock("@/app-shell/use-repository-manager", () => ({
-  useActiveRepository: () => ({ uuid: "project-1", name: "Project One", localPath: "/repo" }),
+  useActiveRepository: () => mocks.activeRepository,
 }))
 
 vi.mock("@/lib/runtime-platform", () => ({
@@ -80,11 +85,19 @@ vi.mock("../hooks/use-stick-to-bottom", () => ({
 }))
 
 vi.mock("@/components/sidebar-content-layout", () => ({
-  SidebarContentLayout: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+  SidebarContentLayout: ({ children, sidebar }: { children: ReactNode; sidebar?: ReactNode }) => (
+    <main>
+      {sidebar}
+      {children}
+    </main>
+  ),
 }))
 
 vi.mock("../components/agent-session-sidebar", () => ({
-  AgentSessionSidebar: () => <aside />,
+  AgentSessionSidebar: (props: { projects?: Array<{ id: string; name: string; path: string }> }) => {
+    mocks.sidebarProps = props
+    return <aside />
+  },
 }))
 
 vi.mock("../components/agent-timeline", () => ({
@@ -125,11 +138,37 @@ afterEach(() => {
   vi.clearAllMocks()
   mocks.chat = null
   mocks.timelineProps = null
+  mocks.sidebarProps = null
+  mocks.configProjects = [{ id: "project-1", name: "Project One", path: "/repo" }]
+  mocks.activeRepository = { uuid: "project-1", name: "Project One", localPath: "/repo" }
   mocks.bridgeAvailable = true
   mocks.useAgentChat.mockImplementation(() => mocks.chat)
 })
 
 describe("AgentModule pending prompt sessions", () => {
+  it("does not include the active repository in the session sidebar when it is not a project", async () => {
+    mocks.configProjects = [{ id: "project-1", name: "Project One", path: "/repo" }]
+    mocks.activeRepository = {
+      uuid: "repo-1",
+      name: "Repository One",
+      localPath: "/content-repo",
+    }
+    mocks.chat = createChatState()
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.sidebarProps?.projects).toEqual([
+      { id: "project-1", name: "Project One", path: "/repo" },
+    ])
+  })
+
   it("refreshes missing pending sessions before selecting and sending the prompt", async () => {
     const refresh = vi.fn().mockResolvedValue(undefined)
     const selectSession = vi.fn().mockResolvedValue(undefined)
@@ -223,6 +262,32 @@ describe("AgentModule pending prompt sessions", () => {
       },
     )
     expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("secret pending prompt text")
+  })
+
+  it("does not render an active session when no conversation is selected", async () => {
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      timeline: [{
+        id: "stale-message",
+        kind: "message",
+        role: "assistant",
+        content: "stale content",
+        timestamp: "2026-05-14T00:00:00.000Z",
+      }],
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.timelineProps).toBeNull()
+    expect(container.textContent).toContain("请创建新的会话")
+    expect(container.textContent).not.toContain("claudecode")
   })
 
   it("logs pending session handoff failures without consuming the prompt", async () => {

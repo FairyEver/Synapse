@@ -54,6 +54,9 @@ describe("agentIpcModule", () => {
         recentlyViewed: { rule: [], skill: [], prompt: [] },
         contentSortOrder: "modified-desc",
       },
+      agent: {
+        defaultPermissionMode: "default",
+      },
     } as never)
   })
 
@@ -420,6 +423,65 @@ describe("agentIpcModule", () => {
     expect(JSON.stringify(result)).not.toContain("sk-packy")
   })
 
+  it("previews and imports CC Switch Claude providers through IPC without secrets", async () => {
+    const source = { kind: "sqlite" as const, path: "/Users/test/.cc-switch/cc-switch.db" }
+    const previewCcSwitchClaudeProviders = vi.fn().mockResolvedValue({
+      source,
+      items: [{
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+        status: "ready",
+        selectedByDefault: true,
+      }],
+    })
+    const importCcSwitchClaudeProviders = vi.fn().mockResolvedValue({
+      imported: [{
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+        env: {},
+        createdAt: "2026-05-14T00:00:00.000Z",
+        updatedAt: "2026-05-14T00:00:00.000Z",
+      }],
+      skipped: [],
+    })
+    const harness = createHarness({
+      providerService: {
+        previewCcSwitchClaudeProviders,
+        importCcSwitchClaudeProviders,
+      },
+    })
+
+    const preview = await harness.invoke("synapse:agent:preview-cc-switch-claude-providers", {})
+    const result = await harness.invoke("synapse:agent:import-cc-switch-claude-providers", {
+      source,
+      providerIds: ["deepseek"],
+    })
+
+    expect(previewCcSwitchClaudeProviders).toHaveBeenCalledWith(undefined, {
+      actor: { kind: "user", id: "renderer" },
+    })
+    expect(importCcSwitchClaudeProviders).toHaveBeenCalledWith({
+      source,
+      providerIds: ["deepseek"],
+    }, {
+      actor: { kind: "user", id: "renderer" },
+    })
+    expect(result).toEqual({
+      imported: [expect.objectContaining({ id: "deepseek" })],
+      skipped: [],
+    })
+    expect(JSON.stringify(preview)).not.toContain("sk-")
+    expect(JSON.stringify(result)).not.toContain("sk-")
+  })
+
   it("returns Agent runtime readiness without exposing secrets", async () => {
     const harness = createHarness({
       providerService: {
@@ -759,6 +821,30 @@ describe("agentIpcModule", () => {
       name: "新会话",
       agentType: "claude-code",
       providerId: "deepseek",
+      mode: "default",
+    })
+
+    const bypassSession = {
+      ...created,
+      id: "conv-bypass",
+      agentConfig: { mode: "bypassPermissions" },
+    }
+    createSession.mockResolvedValueOnce(bypassSession)
+
+    expect(await harness.invoke("synapse:agent:create-session", {
+      projectId: "project-1",
+      mode: "bypassPermissions",
+    })).toEqual(expect.objectContaining({
+      id: "conv-bypass",
+      mode: "bypassPermissions",
+    }))
+    expect(createSession).toHaveBeenLastCalledWith({
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      name: undefined,
+      agentType: "claude-code",
+      providerId: undefined,
+      mode: "bypassPermissions",
     })
 
     expect(await harness.invoke("synapse:agent:switch-session", {
@@ -784,6 +870,89 @@ describe("agentIpcModule", () => {
       conversationId: "conv-1",
     })).toEqual({ ok: true })
     expect(deleteSession).toHaveBeenCalledWith("conv-1")
+  })
+
+  it("uses global default permission mode when create-session mode is omitted", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [{
+        uuid: "project-1",
+        name: "Project One",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+      agent: {
+        defaultPermissionMode: "plan",
+      },
+    } as never)
+    const createSession = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      id: "conv-default-bypass",
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      active: true,
+      history: [],
+      agentConfig: { mode: "plan" },
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    })
+    const harness = createHarness({ agent: { createSession } })
+
+    await harness.invoke("synapse:agent:create-session", {
+      projectId: "project-1",
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "plan",
+    }))
+  })
+
+  it("lets explicit create-session mode override the global default permission mode", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [{
+        uuid: "project-1",
+        name: "Project One",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+      agent: {
+        defaultPermissionMode: "bypassPermissions",
+      },
+    } as never)
+    const createSession = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      id: "conv-plan",
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      active: true,
+      history: [],
+      agentConfig: { mode: "plan" },
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    })
+    const harness = createHarness({ agent: { createSession } })
+
+    await harness.invoke("synapse:agent:create-session", {
+      projectId: "project-1",
+      mode: "plan",
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "plan",
+    }))
   })
 
   it("sets conversation permission mode through IPC", async () => {

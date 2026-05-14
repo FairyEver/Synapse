@@ -1,7 +1,6 @@
 import { ExternalLinkIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,6 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   SynapseAgentProviderCategory,
   SynapseAgentProviderPreset,
@@ -93,7 +94,7 @@ function ProviderPresetPickerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>选择供应商预设</DialogTitle>
+          <DialogTitle>选择提供商预设</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
@@ -104,52 +105,50 @@ function ProviderPresetPickerDialog({
             onChange={(event) => setQuery(event.target.value)}
           />
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={category === ALL_CATEGORIES ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setCategory(ALL_CATEGORIES)}
-            >
-              全部
-            </Button>
-            {categories.map((item) => (
-              <Button
-                key={item.value}
-                type="button"
-                variant={category === item.value ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setCategory(item.value)}
-              >
-                {item.label}
-              </Button>
-            ))}
-          </div>
+          <Tabs
+            value={category}
+            onValueChange={(value) => setCategory(value as CategoryFilter)}
+          >
+            <TabsList variant="line" className="flex h-auto flex-wrap justify-start">
+              <TabsTrigger value={ALL_CATEGORIES}>全部</TabsTrigger>
+              {categories.map((item) => (
+                <TabsTrigger key={item.value} value={item.value}>
+                  {item.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
           {initials.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
+            <ToggleGroup
+              type="single"
+              value={initial ?? ""}
+              variant="default"
+              size="sm"
+              spacing={1}
+              className="flex flex-wrap justify-start"
+              onValueChange={(value) => setInitial(value || null)}
+            >
               {initials.map((letter) => (
-                <Button
+                <ToggleGroupItem
                   key={letter}
-                  type="button"
-                  variant={initial === letter ? "secondary" : "ghost"}
-                  size="xs"
-                  onClick={() => setInitial((current) => current === letter ? null : letter)}
+                  value={letter}
+                  aria-label={`筛选 ${letter}`}
                 >
                   {letter}
-                </Button>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           ) : null}
 
-          <Button
+          <button
             type="button"
-            variant={selectedValue === customValue ? "secondary" : "outline"}
-            className="justify-start"
+            data-selected={selectedValue === customValue}
+            className="flex h-10 w-full items-center rounded-lg bg-muted/40 px-3 text-left text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 data-[selected=true]:bg-muted"
             onClick={() => handleSelect(customValue)}
           >
             自定义
-          </Button>
+          </button>
 
           <ScrollArea className="h-80">
             <div className="flex flex-col gap-4 pr-3">
@@ -163,7 +162,6 @@ function ProviderPresetPickerDialog({
                       <ProviderPresetRow
                         key={option.value}
                         option={option}
-                        categoryLabel={group.label}
                         selected={option.value === selectedValue}
                         onSelect={handleSelect}
                       />
@@ -181,12 +179,10 @@ function ProviderPresetPickerDialog({
 
 function ProviderPresetRow({
   option,
-  categoryLabel,
   selected,
   onSelect,
 }: {
   readonly option: ProviderPresetOption
-  readonly categoryLabel: string
   readonly selected: boolean
   readonly onSelect: (value: string) => void
 }) {
@@ -194,7 +190,10 @@ function ProviderPresetRow({
   const link = option.preset.apiKeyUrl ?? option.preset.websiteUrl
 
   return (
-    <div className="flex w-full items-center gap-2 rounded-lg border border-border px-2 py-1.5 hover:bg-muted">
+    <div
+      data-selected={selected}
+      className="flex w-full items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 transition-colors hover:bg-muted data-[selected=true]:bg-muted"
+    >
       <button
         type="button"
         className="min-w-0 flex-1 text-left"
@@ -203,7 +202,6 @@ function ProviderPresetRow({
         <span className="block truncate text-sm font-medium">{option.preset.name}</span>
         {detail ? <span className="block truncate text-xs text-muted-foreground">{detail}</span> : null}
       </button>
-      <Badge variant={selected ? "secondary" : "outline"}>{categoryLabel}</Badge>
       {link ? (
         <Button
           type="button"
@@ -212,10 +210,10 @@ function ProviderPresetRow({
           aria-label={`打开 ${option.preset.name} 链接`}
           onClick={(event) => {
             event.stopPropagation()
-            window.open(link, "_blank", "noopener,noreferrer")
+            window.synapse?.shell.openExternal(link)
           }}
         >
-          <ExternalLinkIcon />
+          <ExternalLinkIcon data-icon="inline-start" />
         </Button>
       ) : null}
     </div>
@@ -287,7 +285,7 @@ function domainFromUrl(url: string | undefined): string | null {
   if (!url) return null
   try {
     return new URL(url).hostname
-  } catch (_error) {
+  } catch {
     return null
   }
 }

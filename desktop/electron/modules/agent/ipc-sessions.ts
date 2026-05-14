@@ -4,9 +4,11 @@ import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
 import { createMainLogger } from "../../services/log-store"
+import { configStore } from "../../services/config-store"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
+  permissionModeSchema,
   sessionSummary,
   sessionSummarySchema,
   resolveProjectAgent,
@@ -25,6 +27,7 @@ const createSessionRequestSchema = projectRequestSchema.extend({
   name: z.string().optional(),
   agentType: z.string().default("claude-code"),
   providerId: z.string().min(1).optional(),
+  mode: permissionModeSchema.optional(),
 })
 
 const switchSessionRequestSchema = projectRequestSchema.extend({
@@ -69,6 +72,13 @@ type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
 type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
 type DeleteSessionRequest = z.infer<typeof deleteSessionRequestSchema>
 type RenameSessionRequest = z.infer<typeof renameSessionRequestSchema>
+
+function resolveCreateSessionMode(
+  requestedMode: CreateSessionRequest["mode"],
+  defaultPermissionMode: CreateSessionRequest["mode"],
+): CreateSessionRequest["mode"] {
+  return requestedMode ?? defaultPermissionMode
+}
 
 // ─── Session method descriptors ───────────────────────────────────────────────
 
@@ -119,12 +129,15 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: CreateSessionRequest) => {
       const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
       const agentType = request.agentType?.trim() || undefined
+      const config = await configStore.load()
+      const mode = resolveCreateSessionMode(request.mode, config.agent.defaultPermissionMode)
       const input = {
         sessionKey,
         platform: LOCAL_RENDERER_PLATFORM,
         name: request.name?.trim() || undefined,
         agentType,
         providerId: request.providerId,
+        ...(mode ? { mode } : undefined),
       }
       try {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)

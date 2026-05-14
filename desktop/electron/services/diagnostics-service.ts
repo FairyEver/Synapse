@@ -1054,6 +1054,9 @@ function createEmptyConfig(): SynapseConfig {
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",
     },
+    agent: {
+      defaultPermissionMode: "default",
+    },
   }
 }
 

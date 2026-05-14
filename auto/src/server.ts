@@ -10,6 +10,7 @@ import { c } from './ui.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const WEB_DIR = resolve(__dirname, 'web')
+const GUIDE_PATH = resolve(__dirname, '../GUIDE.md')
 const DEFAULT_PORT = 47831
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -93,6 +94,7 @@ function openBrowser(url: string): void {
 
 interface HandlerPaths extends PromptLibraryPaths {
   configPath?: string
+  guidePath?: string
   promptPath?: string
 }
 
@@ -113,6 +115,11 @@ export function createHandler(scheduler: AutoScheduler, paths: HandlerPaths = {}
 
       if (req.method === 'GET' && url.pathname === '/api/config') {
         sendJson(res, 200, await loadUiConfig(paths.configPath, paths.promptPath, paths.promptsDir))
+        return
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/guide') {
+        sendJson(res, 200, { content: await readFile(paths.guidePath ?? GUIDE_PATH, 'utf-8') })
         return
       }
 

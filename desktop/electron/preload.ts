@@ -90,6 +90,7 @@ const IPC_CHANNELS = {
     "createDirectory": "synapse:editor:create-directory",
   },
   "shell": {
+    "openExternal": "synapse:shell:open-external",
     "showItemInFolder": "synapse:shell:show-item-in-folder",
   },
   "repository": {
@@ -131,6 +132,9 @@ const IPC_CHANNELS = {
     "listProviderPresets": "synapse:agent:list-provider-presets",
     "createProvider": "synapse:agent:create-provider",
     "createProviderFromPreset": "synapse:agent:create-provider-from-preset",
+    "previewCcSwitchClaudeProviders": "synapse:agent:preview-cc-switch-claude-providers",
+    "importCcSwitchClaudeProviders": "synapse:agent:import-cc-switch-claude-providers",
+    "chooseCcSwitchClaudeImportSource": "synapse:agent:choose-cc-switch-claude-import-source",
     "updateProvider": "synapse:agent:update-provider",
     "archiveProvider": "synapse:agent:archive-provider",
     "setActiveProvider": "synapse:agent:set-active-provider",
@@ -222,12 +226,6 @@ const IPC_CHANNELS = {
     "getAgentReport": "synapse:token-usage:agent-report",
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",
-    "cursorAddAccount": "synapse:token-usage:cursor:add-account",
-    "cursorRemoveAccount": "synapse:token-usage:cursor:remove-account",
-    "cursorListAccounts": "synapse:token-usage:cursor:list-accounts",
-    "cursorSetActive": "synapse:token-usage:cursor:set-active",
-    "cursorSync": "synapse:token-usage:cursor:sync",
-    "cursorValidate": "synapse:token-usage:cursor:validate",
   },
 } as const satisfies IpcChannelMap
 
@@ -500,6 +498,9 @@ const synapseBridge: SynapseBridge = {
     ),
   },
   shell: {
+    openExternal: (url: string) => {
+      void invoke(IPC_CHANNELS.shell.openExternal)({ url })
+    },
     showItemInFolder: (filePath: string) => {
       void invoke(IPC_CHANNELS.shell.showItemInFolder)({ fullPath: filePath })
     },
@@ -651,6 +652,12 @@ const synapseBridge: SynapseBridge = {
     listProviderPresets: () => invoke(IPC_CHANNELS.agent.listProviderPresets)({}),
     createProvider: (args) => invoke(IPC_CHANNELS.agent.createProvider)(args),
     createProviderFromPreset: (args) => invoke(IPC_CHANNELS.agent.createProviderFromPreset)(args),
+    previewCcSwitchClaudeProviders: (args) =>
+      invoke(IPC_CHANNELS.agent.previewCcSwitchClaudeProviders)(args ?? {}),
+    importCcSwitchClaudeProviders: (args) =>
+      invoke(IPC_CHANNELS.agent.importCcSwitchClaudeProviders)(args),
+    chooseCcSwitchClaudeImportSource: () =>
+      invoke(IPC_CHANNELS.agent.chooseCcSwitchClaudeImportSource)({}),
     updateProvider: (args) => invoke(IPC_CHANNELS.agent.updateProvider)(args),
     archiveProvider: (args) => invoke(IPC_CHANNELS.agent.archiveProvider)(args),
     setActiveProvider: (args) => invoke(IPC_CHANNELS.agent.setActiveProvider)(args),
@@ -758,16 +765,6 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["token-usage"].getAgentReport)(options),
     getDetectedAgents: invoke(IPC_CHANNELS["token-usage"].getDetectedAgents),
     clearData: invoke(IPC_CHANNELS["token-usage"].clearData),
-    cursorAddAccount: (params: { sessionToken: string; label?: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorAddAccount)(params),
-    cursorRemoveAccount: (params: { accountId: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorRemoveAccount)(params),
-    cursorListAccounts: invoke(IPC_CHANNELS["token-usage"].cursorListAccounts),
-    cursorSetActive: (params: { accountId: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorSetActive)(params),
-    cursorSync: invoke(IPC_CHANNELS["token-usage"].cursorSync),
-    cursorValidate: (params: { sessionToken: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorValidate)(params),
   },
   diagnostics: {
     onPing: (listener: () => void) => {

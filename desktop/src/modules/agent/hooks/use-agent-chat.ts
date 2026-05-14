@@ -40,7 +40,11 @@ type UseAgentChatState = {
   cancelPhase: ChatState["cancelPhase"]
   error: string | null
   currentConversationModel: string | undefined
-  createSession: (projectId: string, providerId?: string) => Promise<void>
+  createSession: (
+    projectId: string,
+    providerId?: string,
+    mode?: SynapseAgentPermissionMode,
+  ) => Promise<void>
   selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>

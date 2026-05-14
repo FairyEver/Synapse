@@ -1,4 +1,7 @@
-import { shell } from "electron"
+import path from "node:path"
+
+import { BrowserWindow, dialog, shell } from "electron"
+import type { OpenDialogOptions } from "electron"
 import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
@@ -8,8 +11,10 @@ import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
 import type {
   CCProvider,
+  CcSwitchImportSource,
   CreateProviderFromPresetInput,
   CreateProviderInput,
+  ImportCcSwitchClaudeProvidersInput,
   ProviderApiKeyField,
   ProviderCategory,
   ProviderService,
@@ -18,8 +23,8 @@ import type {
 import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "../../services/provider"
 import { resolveProjectAgent } from "./ipc-shared"
 
-type CreateProviderIpcInput = Omit<CreateProviderInput, "env">
-type UpdateProviderIpcInput = Omit<UpdateProviderInput, "env">
+type CreateProviderIpcInput = CreateProviderInput
+type UpdateProviderIpcInput = UpdateProviderInput
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
@@ -45,9 +50,19 @@ const providerApiKeyFieldSchema = z.enum([
   "ANTHROPIC_API_KEY",
 ]) satisfies z.ZodType<ProviderApiKeyField>
 
+const providerEnvSchema = z.record(z.string(), z.string())
+const providerSettingsConfigSchema = z.record(z.string(), z.unknown())
+
+const ccSwitchImportSourceSchema = z.object({
+  kind: z.enum(["sqlite", "json"]),
+  path: z.string().min(1),
+}) satisfies z.ZodType<CcSwitchImportSource>
+
 const createProviderInputSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  note: z.string().optional(),
+  websiteUrl: z.string().optional(),
   category: providerCategorySchema,
   baseUrl: z.string().optional(),
   apiKeyField: providerApiKeyFieldSchema,
@@ -57,11 +72,16 @@ const createProviderInputSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
+  env: providerEnvSchema.default({}),
+  settingsConfig: providerSettingsConfigSchema.optional(),
+  secretEnv: providerEnvSchema.optional(),
   sortIndex: z.number().optional(),
 }) satisfies z.ZodType<CreateProviderIpcInput>
 
 const updateProviderInputSchema = z.object({
   name: z.string().min(1).optional(),
+  note: z.string().optional(),
+  websiteUrl: z.string().optional(),
   category: providerCategorySchema.optional(),
   baseUrl: z.string().optional(),
   apiKeyField: providerApiKeyFieldSchema.optional(),
@@ -71,6 +91,10 @@ const updateProviderInputSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
+  env: providerEnvSchema.optional(),
+  settingsConfig: providerSettingsConfigSchema.optional(),
+  secretEnv: providerEnvSchema.optional(),
+  clearSecretEnv: z.array(z.string()).optional(),
   archived: z.boolean().optional(),
   sortIndex: z.number().optional(),
 }) satisfies z.ZodType<UpdateProviderIpcInput>
@@ -99,6 +123,15 @@ const createProviderFromPresetRequestSchema = z.object({
   active: z.boolean().optional(),
   sortIndex: z.number().optional(),
 })
+
+const previewCcSwitchClaudeProvidersRequestSchema = z.object({
+  source: ccSwitchImportSourceSchema.optional(),
+})
+
+const importCcSwitchClaudeProvidersRequestSchema = z.object({
+  source: ccSwitchImportSourceSchema,
+  providerIds: z.array(z.string().min(1)),
+}) satisfies z.ZodType<ImportCcSwitchClaudeProvidersInput>
 
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
@@ -143,6 +176,8 @@ const publicProviderSchema = z.object({
   readonly: z.boolean().optional(),
   configured: z.boolean().optional(),
   configPath: z.string().optional(),
+  note: z.string().optional(),
+  websiteUrl: z.string().optional(),
   baseUrl: z.string().optional(),
   apiKeyField: providerApiKeyFieldSchema,
   active: z.boolean().optional(),
@@ -150,6 +185,8 @@ const publicProviderSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
+  env: providerEnvSchema.optional(),
+  settingsConfig: providerSettingsConfigSchema.optional(),
   archived: z.boolean().optional(),
   sortIndex: z.number().optional(),
   createdAt: z.string(),
@@ -176,6 +213,37 @@ const publicProviderPresetSchema = z.object({
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
   templateValues: z.array(providerPresetTemplateValueSchema),
+})
+
+const ccSwitchImportPreviewItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: providerCategorySchema,
+  websiteUrl: z.string().optional(),
+  note: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  status: z.enum(["ready", "duplicate", "missing_api_key"]),
+  selectedByDefault: z.boolean(),
+})
+
+const ccSwitchImportPreviewResultSchema = z.object({
+  source: ccSwitchImportSourceSchema.optional(),
+  items: z.array(ccSwitchImportPreviewItemSchema),
+  error: z.string().optional(),
+})
+
+const ccSwitchImportResultSchema = z.object({
+  imported: z.array(publicProviderSchema),
+  skipped: z.array(ccSwitchImportPreviewItemSchema),
+})
+
+const chooseCcSwitchImportSourceResultSchema = z.object({
+  source: ccSwitchImportSourceSchema.optional(),
 })
 
 const okResultSchema = z.object({
@@ -213,6 +281,8 @@ type CreateProviderRequest = z.infer<typeof createProviderRequestSchema>
 type UpdateProviderRequest = z.infer<typeof updateProviderRequestSchema>
 type ProviderIdRequest = z.infer<typeof providerIdRequestSchema>
 type CreateProviderFromPresetRequest = z.infer<typeof createProviderFromPresetRequestSchema>
+type PreviewCcSwitchClaudeProvidersRequest = z.infer<typeof previewCcSwitchClaudeProvidersRequestSchema>
+type ImportCcSwitchClaudeProvidersRequest = z.infer<typeof importCcSwitchClaudeProvidersRequestSchema>
 
 function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSchema> {
   return {
@@ -223,6 +293,8 @@ function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSche
     readonly: provider.readonly,
     configured: provider.configured,
     configPath: provider.configPath,
+    note: provider.note,
+    websiteUrl: provider.websiteUrl,
     baseUrl: provider.baseUrl,
     apiKeyField: provider.apiKeyField,
     active: provider.active,
@@ -230,6 +302,7 @@ function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSche
     haikuModel: provider.haikuModel,
     sonnetModel: provider.sonnetModel,
     opusModel: provider.opusModel,
+    env: provider.env,
     archived: provider.archived,
     sortIndex: provider.sortIndex,
     createdAt: provider.createdAt,
@@ -246,6 +319,13 @@ function providerSummary(provider: CCProvider, activeProviderId?: string): z.inf
     model: provider.model,
     baseUrl: provider.baseUrl,
     scope: "global",
+  }
+}
+
+function ccSwitchSourceFromPath(filePath: string): CcSwitchImportSource {
+  return {
+    kind: path.extname(filePath).toLowerCase() === ".json" ? "json" : "sqlite",
+    path: filePath,
   }
 }
 
@@ -323,6 +403,56 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: CreateProviderFromPresetRequest) => {
       const providerService = resolveGlobalProviderService(ctx.resolve)
       return publicProvider(await providerService.createProviderFromPreset(request as CreateProviderFromPresetInput))
+    },
+  },
+  previewCcSwitchClaudeProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:preview-cc-switch-claude-providers",
+    request: previewCcSwitchClaudeProvidersRequestSchema,
+    response: ccSwitchImportPreviewResultSchema,
+    handler: async (ctx, request: PreviewCcSwitchClaudeProvidersRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return providerService.previewCcSwitchClaudeProviders(request.source, {
+        actor: { kind: "user", id: "renderer" },
+      })
+    },
+  },
+  importCcSwitchClaudeProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:import-cc-switch-claude-providers",
+    request: importCcSwitchClaudeProvidersRequestSchema,
+    response: ccSwitchImportResultSchema,
+    handler: async (ctx, request: ImportCcSwitchClaudeProvidersRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      const result = await providerService.importCcSwitchClaudeProviders(request, {
+        actor: { kind: "user", id: "renderer" },
+      })
+      return {
+        imported: result.imported.map(publicProvider),
+        skipped: result.skipped,
+      }
+    },
+  },
+  chooseCcSwitchClaudeImportSource: {
+    kind: "invoke",
+    channel: "synapse:agent:choose-cc-switch-claude-import-source",
+    request: z.object({}),
+    response: chooseCcSwitchImportSourceResultSchema,
+    handler: async () => {
+      const options: OpenDialogOptions = {
+        title: "选择 CC Switch 配置",
+        properties: ["openFile"],
+        filters: [
+          { name: "CC Switch", extensions: ["db", "json"] },
+        ],
+      }
+      const focusedWindow = BrowserWindow.getFocusedWindow()
+      const result = focusedWindow
+        ? await dialog.showOpenDialog(focusedWindow, options)
+        : await dialog.showOpenDialog(options)
+      const filePath = result.filePaths[0]
+      if (result.canceled || !filePath) return {}
+      return { source: ccSwitchSourceFromPath(filePath) }
     },
   },
   updateProvider: {

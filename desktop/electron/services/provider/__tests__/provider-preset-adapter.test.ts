@@ -28,6 +28,65 @@ describe("provider preset adapter", () => {
     }))
   })
 
+  it("maps DeepSeek using cc-switch model defaults", () => {
+    const preset = getClaudeProviderPreset("DeepSeek")
+    if (!preset) throw new Error("DeepSeek preset missing")
+
+    const input = buildProviderInputFromClaudePreset({
+      preset,
+      apiKey: "sk-deepseek",
+      existingIds: new Set(),
+    })
+
+    expect(input.baseUrl).toBe("https://api.deepseek.com/anthropic")
+    expect(input.model).toBe("deepseek-v4-pro")
+    expect(input.haikuModel).toBe("deepseek-v4-flash")
+    expect(input.sonnetModel).toBe("deepseek-v4-pro")
+    expect(input.opusModel).toBe("deepseek-v4-pro")
+  })
+
+  it("maps Baidu Qianfan Coding Plan from cc-switch presets", () => {
+    const preset = getClaudeProviderPreset("Baidu Qianfan Coding Plan")
+    if (!preset) throw new Error("Baidu Qianfan Coding Plan preset missing")
+
+    const input = buildProviderInputFromClaudePreset({
+      preset,
+      apiKey: "sk-qianfan",
+      existingIds: new Set(),
+    })
+
+    expect(input).toEqual(expect.objectContaining({
+      id: "baidu-qianfan-coding-plan",
+      name: "Baidu Qianfan Coding Plan",
+      category: "cn_official",
+      baseUrl: "https://qianfan.baidubce.com/anthropic/coding",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      model: "qianfan-code-latest",
+      haikuModel: "qianfan-code-latest",
+      sonnetModel: "qianfan-code-latest",
+      opusModel: "qianfan-code-latest",
+    }))
+  })
+
+  it("maps Compshare Coding Plan from cc-switch presets", () => {
+    const preset = getClaudeProviderPreset("Compshare Coding Plan")
+    if (!preset) throw new Error("Compshare Coding Plan preset missing")
+
+    const input = buildProviderInputFromClaudePreset({
+      preset,
+      apiKey: "sk-compshare-coding",
+      existingIds: new Set(),
+    })
+
+    expect(input).toEqual(expect.objectContaining({
+      id: "compshare-coding-plan",
+      name: "Compshare Coding Plan",
+      category: "aggregator",
+      baseUrl: "https://cp.compshare.cn",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+    }))
+  })
+
   it("applies template values before mapping", () => {
     const preset = getClaudeProviderPreset("KAT-Coder")
     if (!preset) throw new Error("KAT-Coder preset missing")

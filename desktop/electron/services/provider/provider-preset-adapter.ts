@@ -48,6 +48,7 @@ export function buildProviderInputFromClaudePreset(
   return {
     id: options.providerId?.trim() || providerIdFromPresetName(options.preset.name, options.existingIds),
     name: options.name?.trim() || options.preset.name,
+    websiteUrl: options.preset.websiteUrl,
     category: options.preset.category ?? "custom",
     baseUrl: stringValue(env.ANTHROPIC_BASE_URL),
     apiKeyField,

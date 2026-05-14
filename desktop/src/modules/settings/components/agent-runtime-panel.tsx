@@ -1,4 +1,4 @@
-import { Fragment } from "react"
+import { Fragment, type ReactNode } from "react"
 import { RefreshCw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtim
 import type { SynapseAgentRuntimeStatusItem } from "@/types/agent"
 
 type AgentRuntimePanelProps = {
+  readonly children?: ReactNode
   readonly projectId?: string
   readonly onRefresh?: () => void
 }
@@ -69,7 +70,7 @@ function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
   )
 }
 
-function AgentRuntimePanel({ projectId, onRefresh }: AgentRuntimePanelProps) {
+function AgentRuntimePanel({ children, projectId, onRefresh }: AgentRuntimePanelProps) {
   const { status, loading, error, refresh } = useAgentRuntimeStatus(projectId)
   const agents = status?.agents ?? []
 
@@ -109,6 +110,14 @@ function AgentRuntimePanel({ projectId, onRefresh }: AgentRuntimePanelProps) {
             </Fragment>
           ))
         )}
+        {children ? (
+          <>
+            {agents.length > 0 ? <Separator /> : null}
+            <div className="px-4 py-3">
+              {children}
+            </div>
+          </>
+        ) : null}
       </CardContent>
     </Card>
   )

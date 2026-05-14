@@ -5,7 +5,6 @@ export const PROVIDER_COLORS: Record<string, string> = {
   deepseek: "#06B6D4",
   xai: "#EAB308",
   meta: "#6366F1",
-  cursor: "#8B5CF6",
   unknown: "#888888",
 }
 

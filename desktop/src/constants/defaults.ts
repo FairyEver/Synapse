@@ -1,4 +1,5 @@
 import type {
+  SynapseAgentGlobalConfig,
   SynapseConfig,
   SynapseContentSortOrder,
   SynapseFavorites,
@@ -48,8 +49,13 @@ export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   contentSortOrder: DEFAULT_CONTENT_SORT_ORDER,
 }
 
+export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {
+  defaultPermissionMode: "default",
+}
+
 export const DEFAULT_CONFIG: SynapseConfig = {
   activeRepoUuid: null,
   repositories: [],
   global: DEFAULT_GLOBAL_CONFIG,
+  agent: DEFAULT_AGENT_GLOBAL_CONFIG,
 }

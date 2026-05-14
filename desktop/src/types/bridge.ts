@@ -235,6 +235,8 @@ export type SynapseAgentProvider = {
   readonly readonly?: boolean
   readonly configured?: boolean
   readonly configPath?: string
+  readonly note?: string
+  readonly websiteUrl?: string
   readonly baseUrl?: string
   readonly apiKeyField: SynapseAgentProviderApiKeyField
   readonly active?: boolean
@@ -242,6 +244,8 @@ export type SynapseAgentProvider = {
   readonly haikuModel?: string
   readonly sonnetModel?: string
   readonly opusModel?: string
+  readonly env?: Record<string, string>
+  readonly settingsConfig?: Record<string, unknown>
   readonly archived?: boolean
   readonly sortIndex?: number
   readonly createdAt: string
@@ -251,6 +255,8 @@ export type SynapseAgentProvider = {
 export type SynapseCreateAgentProviderInput = {
   readonly id: string
   readonly name: string
+  readonly note?: string
+  readonly websiteUrl?: string
   readonly category: SynapseAgentProviderCategory
   readonly baseUrl?: string
   readonly apiKeyField: SynapseAgentProviderApiKeyField
@@ -260,11 +266,15 @@ export type SynapseCreateAgentProviderInput = {
   readonly haikuModel?: string
   readonly sonnetModel?: string
   readonly opusModel?: string
+  readonly env?: Record<string, string>
+  readonly settingsConfig?: Record<string, unknown>
+  readonly secretEnv?: Record<string, string>
   readonly sortIndex?: number
 }
 
 export type SynapseUpdateAgentProviderInput = Partial<Omit<SynapseCreateAgentProviderInput, "id">> & {
   readonly archived?: boolean
+  readonly clearSecretEnv?: readonly string[]
 }
 
 export type SynapseAgentProviderPresetTemplateValue = {
@@ -297,6 +307,40 @@ export type SynapseCreateProviderFromPresetInput = {
   readonly templateValues?: Record<string, string>
   readonly active?: boolean
   readonly sortIndex?: number
+}
+
+export type SynapseCcSwitchImportSource = {
+  readonly kind: "sqlite" | "json"
+  readonly path: string
+}
+
+export type SynapseCcSwitchImportPreviewStatus = "ready" | "duplicate" | "missing_api_key"
+
+export type SynapseCcSwitchClaudeProviderPreviewItem = {
+  readonly id: string
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly websiteUrl?: string
+  readonly note?: string
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly status: SynapseCcSwitchImportPreviewStatus
+  readonly selectedByDefault: boolean
+}
+
+export type SynapseCcSwitchClaudeImportPreviewResult = {
+  readonly source?: SynapseCcSwitchImportSource
+  readonly items: readonly SynapseCcSwitchClaudeProviderPreviewItem[]
+  readonly error?: string
+}
+
+export type SynapseImportCcSwitchClaudeProvidersResult = {
+  readonly imported: readonly SynapseAgentProvider[]
+  readonly skipped: readonly SynapseCcSwitchClaudeProviderPreviewItem[]
 }
 
 export type SynapseBridge = {
@@ -412,6 +456,7 @@ export type SynapseBridge = {
     onChanged: (listener: (payload: InstallStatusChangedEvent) => void) => () => void
   }
   shell: {
+    openExternal: (url: string) => void
     showItemInFolder: (filePath: string) => void
   }
   repository: {
@@ -516,7 +561,14 @@ export type SynapseBridge = {
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
     createSession: (
-      args: { projectId: string; sessionKey?: string; name?: string; agentType?: string; providerId?: string },
+      args: {
+        projectId: string
+        sessionKey?: string
+        name?: string
+        agentType?: string
+        providerId?: string
+        mode?: SynapseAgentPermissionMode
+      },
     ) => Promise<SynapseAgentSessionSummary>
     switchSession: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
@@ -563,6 +615,13 @@ export type SynapseBridge = {
     createProviderFromPreset: (
       args: SynapseCreateProviderFromPresetInput,
     ) => Promise<SynapseAgentProvider>
+    previewCcSwitchClaudeProviders: (
+      args?: { source?: SynapseCcSwitchImportSource },
+    ) => Promise<SynapseCcSwitchClaudeImportPreviewResult>
+    importCcSwitchClaudeProviders: (
+      args: { source: SynapseCcSwitchImportSource; providerIds: readonly string[] },
+    ) => Promise<SynapseImportCcSwitchClaudeProvidersResult>
+    chooseCcSwitchClaudeImportSource: () => Promise<{ source?: SynapseCcSwitchImportSource }>
     updateProvider: (
       args: { providerId: string; patch: SynapseUpdateAgentProviderInput },
     ) => Promise<SynapseAgentProvider>
@@ -729,12 +788,6 @@ export type SynapseBridge = {
     }[]>
     getDetectedAgents: () => Promise<{ id: string; name: string; fileCount: number }[]>
     clearData: () => Promise<void>
-    cursorAddAccount: (params: { sessionToken: string; label?: string }) => Promise<{ accountId: string; error?: string }>
-    cursorRemoveAccount: (params: { accountId: string }) => Promise<void>
-    cursorListAccounts: () => Promise<{ id: string; label?: string; userId?: string; active: boolean; createdAt: string; lastSyncAt?: string }[]>
-    cursorSetActive: (params: { accountId: string }) => Promise<void>
-    cursorSync: () => Promise<{ synced: boolean; rows: number; error?: string }>
-    cursorValidate: (params: { sessionToken: string }) => Promise<{ valid: boolean; membershipType?: string; error?: string }>
   }
   diagnostics?: {
     onPing: (listener: () => void) => () => void

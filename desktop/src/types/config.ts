@@ -1,4 +1,5 @@
 import type { SynapseContentType } from "./content"
+import type { SynapseAgentPermissionMode } from "./agent"
 
 export const SYNAPSE_CONTENT_SORT_OPTIONS = [
   "modified-desc",
@@ -55,10 +56,15 @@ export type SynapseGlobalConfig = {
   contentSortOrder: SynapseContentSortOrder
 }
 
+export type SynapseAgentGlobalConfig = {
+  defaultPermissionMode: SynapseAgentPermissionMode
+}
+
 export type SynapseConfig = {
   activeRepoUuid: string | null
   repositories: SynapseRepositoryConfig[]
   global: SynapseGlobalConfig
+  agent: SynapseAgentGlobalConfig
 }
 
 export type SynapseConfigPatch = {
@@ -67,4 +73,5 @@ export type SynapseConfigPatch = {
   global?: Partial<SynapseGlobalConfig> & {
     projects?: SynapseProjectConfig[]
   }
+  agent?: Partial<SynapseAgentGlobalConfig>
 }

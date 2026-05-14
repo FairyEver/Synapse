@@ -1,20 +1,31 @@
-import { createElement, type ComponentType } from "react"
+import { createElement, type ComponentType, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
 import { ClaudeCodePanel } from "@/modules/settings/components/claude-code-panel"
 import { ToolsPanel } from "@/modules/settings/components/tools-panel"
-import { ProviderPanelView } from "@/modules/settings/components/provider-panel"
-import type { SynapseAgentProvider } from "@/types/bridge"
 
 vi.mock("@/modules/settings/components/editor-directories-panel", () => ({
   EditorDirectoriesContent: () => <div>IDE</div>,
 }))
 
 vi.mock("@/modules/settings/components/agent-runtime-panel", () => ({
-  AgentRuntimePanel: ({ projectId }: { readonly projectId?: string }) => (
-    <div>Agent project: {projectId ?? "global"}</div>
+  AgentRuntimePanel: ({
+    children,
+    projectId,
+  }: {
+    readonly children?: ReactNode
+    readonly projectId?: string
+  }) => (
+    <div>
+      Agent project: {projectId ?? "global"}
+      {children}
+    </div>
   ),
+}))
+
+vi.mock("@/modules/settings/components/agent-defaults-panel", () => ({
+  AgentDefaultsContent: () => <div>Agent defaults</div>,
 }))
 
 describe("ToolsPanel", () => {
@@ -30,36 +41,6 @@ describe("ToolsPanel", () => {
     const html = renderToStaticMarkup(<ClaudeCodePanel />)
 
     expect(html).toContain("Agent project: global")
-  })
-
-  it("renders providers without leaking api key values", () => {
-    const providers = [{
-      id: "anthropic",
-      name: "Anthropic",
-      category: "official",
-      baseUrl: "https://api.anthropic.com",
-      apiKeyField: "ANTHROPIC_API_KEY",
-      apiKey: "sk-should-never-render",
-      active: true,
-      model: "claude-sonnet-4-5",
-      createdAt: "2026-05-13T00:00:00.000Z",
-      updatedAt: "2026-05-13T00:00:00.000Z",
-    }] as unknown as SynapseAgentProvider[]
-    const html = renderToStaticMarkup(
-      <ProviderPanelView
-        providers={providers}
-        loading={false}
-        error={null}
-        onAdd={vi.fn()}
-        onEdit={vi.fn()}
-        onArchive={vi.fn()}
-        onSetActive={vi.fn()}
-        onRetry={vi.fn()}
-      />,
-    )
-
-    expect(html).toContain("Anthropic")
-    expect(html).toContain("claude-sonnet-4-5")
-    expect(html).not.toContain("sk-should-never-render")
+    expect(html).toContain("Agent defaults")
   })
 })

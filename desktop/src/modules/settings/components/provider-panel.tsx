@@ -1,5 +1,5 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDownIcon, Plus } from "lucide-react"
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ChevronDownIcon, DownloadIcon, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
@@ -17,16 +17,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog"
 import {
   Field,
+  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
+import { FormDialog } from "@/components/form-dialog"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -44,7 +42,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { CcSwitchImportDialog } from "./cc-switch-import-dialog"
 import { ProviderPresetPickerDialog, type ProviderPresetOption } from "./provider-preset-picker-dialog"
 import type {
   SynapseAgentProvider,
@@ -68,15 +68,26 @@ const PROVIDER_CATEGORIES: Array<{ value: SynapseAgentProviderCategory; label: s
 ]
 
 const API_KEY_FIELDS: SynapseAgentProviderApiKeyField[] = [
-  "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
 ]
 
 const CUSTOM_PROVIDER_PRESET_ID = "custom"
+const FORM_ENV_KEYS = new Set([
+  "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_MODEL",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL",
+])
 
 type ProviderFormValues = {
   id: string
   name: string
+  note: string
+  websiteUrl: string
   category: SynapseAgentProviderCategory
   baseUrl: string
   apiKeyField: SynapseAgentProviderApiKeyField
@@ -87,6 +98,19 @@ type ProviderFormValues = {
   sonnetModel: string
   opusModel: string
   sortIndex: string
+  configJson: string
+}
+
+type ProviderConfigParseResult = {
+  readonly env: Record<string, string>
+  readonly settingsConfig: Record<string, unknown>
+}
+
+type ProviderConfigJson = {
+  readonly [key: string]: unknown
+  readonly env?: Record<string, unknown>
+  readonly hooks?: Record<string, unknown>
+  readonly permissions?: Record<string, unknown>
 }
 
 type ProviderPanelViewProps = {
@@ -94,6 +118,7 @@ type ProviderPanelViewProps = {
   readonly loading: boolean
   readonly error: string | null
   readonly onAdd: () => void
+  readonly onImport: () => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onSetActive: (provider: SynapseAgentProvider) => void
@@ -119,6 +144,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [error, setError] = useState<string | null>(null)
   const [editingProvider, setEditingProvider] = useState<SynapseAgentProvider | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [ccSwitchImportOpen, setCcSwitchImportOpen] = useState(false)
   const [providerPresets, setProviderPresets] = useState<SynapseAgentProviderPreset[]>([])
   const [providerPresetsLoading, setProviderPresetsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -161,6 +187,25 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     }
   }, [])
 
+  const loadProviderPresets = useCallback(async () => {
+    if (providerPresetsLoadedRef.current || providerPresetsLoading) return
+    setProviderPresetsLoading(true)
+    try {
+      const nextPresets = await requireSynapseBridge().agent.listProviderPresets()
+      setProviderPresets(nextPresets)
+      providerPresetsLoadedRef.current = true
+    } catch (rawError) {
+      logger.error("Provider presets list failed.", {
+        boundary: "settings.providers.preset.list",
+        action: "listProviderPresets",
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast("读取预设失败")
+    } finally {
+      setProviderPresetsLoading(false)
+    }
+  }, [providerPresetsLoading])
+
   useEffect(() => {
     void refresh()
   }, [refresh])
@@ -187,31 +232,16 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     }
   }, [refresh])
 
-  const loadProviderPresets = useCallback(async () => {
-    if (providerPresetsLoadedRef.current || providerPresetsLoading) return
-    setProviderPresetsLoading(true)
-    try {
-      const nextPresets = await requireSynapseBridge().agent.listProviderPresets()
-      setProviderPresets(nextPresets)
-      providerPresetsLoadedRef.current = true
-    } catch (rawError) {
-      logger.error("Provider presets list failed.", {
-        boundary: "settings.providers.preset.list",
-        action: "listProviderPresets",
-        ...providerErrorDiagnostic(rawError),
-      })
-      toast("读取预设失败")
-    } finally {
-      setProviderPresetsLoading(false)
-    }
-  }, [providerPresetsLoading])
-
   const openAddDialog = useCallback(() => {
     setEditingProvider(null)
     setFormValues(emptyProviderForm())
     setFormOpen(true)
     void loadProviderPresets()
   }, [loadProviderPresets])
+
+  const openCcSwitchImportDialog = useCallback(() => {
+    setCcSwitchImportOpen(true)
+  }, [])
 
   const openEditDialog = useCallback((provider: SynapseAgentProvider) => {
     setEditingProvider(provider)
@@ -221,16 +251,21 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
 
   const handleSubmit = useCallback(async (event: FormEvent) => {
     event.preventDefault()
+    const config = providerConfigJsonFromValues(formValues)
+    if (!config) {
+      toast("配置 JSON 格式错误")
+      return
+    }
     setSaving(true)
     try {
       if (editingProvider) {
         await requireSynapseBridge().agent.updateProvider({
           providerId: editingProvider.id,
-          patch: buildUpdateInput(formValues),
+          patch: buildUpdateInput(formValues, config),
         })
       } else {
         await requireSynapseBridge().agent.createProvider({
-          provider: buildCreateInput(formValues),
+          provider: buildCreateInput(formValues, config, new Set(providers.map((item) => item.id))),
         })
       }
       setFormOpen(false)
@@ -248,7 +283,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     } finally {
       setSaving(false)
     }
-  }, [editingProvider, formValues, refresh])
+  }, [editingProvider, formValues, providers, refresh])
 
   const handleArchive = useCallback(async (provider: SynapseAgentProvider) => {
     try {
@@ -293,6 +328,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         loading={loading}
         error={error}
         onAdd={openAddDialog}
+        onImport={openCcSwitchImportDialog}
         onEdit={openEditDialog}
         onArchive={handleArchive}
         onSetActive={handleSetActive}
@@ -301,6 +337,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       <ProviderFormDialog
         open={formOpen}
         mode={editingProvider ? "edit" : "create"}
+        provider={editingProvider}
         providers={providers}
         presets={providerPresets}
         presetsLoading={providerPresetsLoading}
@@ -309,6 +346,11 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         onValuesChange={setFormValues}
         onOpenChange={setFormOpen}
         onSubmit={handleSubmit}
+      />
+      <CcSwitchImportDialog
+        open={ccSwitchImportOpen}
+        onOpenChange={setCcSwitchImportOpen}
+        onImported={() => void refresh()}
       />
     </>
   )
@@ -319,6 +361,7 @@ function ProviderPanelView({
   loading,
   error,
   onAdd,
+  onImport,
   onEdit,
   onArchive,
   onSetActive,
@@ -333,12 +376,18 @@ function ProviderPanelView({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <CardTitle className="text-base">Provider</CardTitle>
+          <CardTitle className="text-base">Claude 供应商</CardTitle>
         </div>
-        <Button type="button" size="sm" onClick={onAdd}>
-          <Plus data-icon="inline-start" />
-          添加
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onImport}>
+            <DownloadIcon data-icon="inline-start" />
+            从 CCS 导入
+          </Button>
+          <Button type="button" size="sm" onClick={onAdd}>
+            <Plus data-icon="inline-start" />
+            新建
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {error ? (
@@ -426,6 +475,7 @@ function ProviderPanelView({
 function ProviderFormDialog({
   open,
   mode,
+  provider,
   providers,
   presets,
   presetsLoading,
@@ -437,6 +487,7 @@ function ProviderFormDialog({
 }: {
   readonly open: boolean
   readonly mode: "create" | "edit"
+  readonly provider: SynapseAgentProvider | null
   readonly providers: SynapseAgentProvider[]
   readonly presets: SynapseAgentProviderPreset[]
   readonly presetsLoading: boolean
@@ -461,7 +512,7 @@ function ProviderFormDialog({
   }, [open])
 
   const existingProviderIds = useMemo(
-    () => new Set(providers.map((provider) => provider.id)),
+    () => new Set(providers.map((item) => item.id)),
     [providers],
   )
 
@@ -480,10 +531,6 @@ function ProviderFormDialog({
 
   const selectedPresetLabel = selectedPreset?.name ?? "自定义"
 
-  const setValue = <K extends keyof ProviderFormValues>(key: K, value: ProviderFormValues[K]) => {
-    onValuesChange({ ...values, [key]: value })
-  }
-
   const handlePresetSelect = (value: string) => {
     if (value === selectedPresetValue) return
     const preset = presetOptions.find((option) => option.value === value)?.preset ?? null
@@ -501,7 +548,7 @@ function ProviderFormDialog({
     }
     const defaults = templateDefaultsFromPreset(pendingPresetSelection.preset)
     setTemplateValues(defaults)
-    onValuesChange(formFromPreset(pendingPresetSelection.preset, existingProviderIds, defaults))
+    onValuesChange(formFromPreset(pendingPresetSelection.preset, existingProviderIds, defaults, values))
     setPendingPresetSelection(null)
   }
 
@@ -522,190 +569,57 @@ function ProviderFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
-          <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-            <DialogHeader>
-              <DialogTitle>{mode === "create" ? "添加 Provider" : "编辑 Provider"}</DialogTitle>
-            </DialogHeader>
-            <FieldGroup>
-              {mode === "create" ? (
-                <Field>
-                  <FieldLabel>供应商预设</FieldLabel>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between"
-                    disabled={presetsLoading}
-                    onClick={() => setPresetPickerOpen(true)}
-                  >
-                    <span className="truncate">{selectedPresetLabel}</span>
-                    <ChevronDownIcon className="text-muted-foreground" />
-                  </Button>
-                  <ProviderPresetPickerDialog
-                    open={presetPickerOpen}
-                    options={presetOptions}
-                    categories={PROVIDER_CATEGORIES}
-                    selectedValue={selectedPresetValue}
-                    customValue={CUSTOM_PROVIDER_PRESET_ID}
-                    onOpenChange={setPresetPickerOpen}
-                    onSelect={handlePresetSelect}
-                  />
-                </Field>
-              ) : null}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="provider-id">ID</FieldLabel>
-                  <Input
-                    id="provider-id"
-                    value={values.id}
-                    disabled={mode === "edit"}
-                    required
-                    onChange={(event) => setValue("id", event.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="provider-name">名称</FieldLabel>
-                  <Input
-                    id="provider-name"
-                    value={values.name}
-                    required
-                    onChange={(event) => setValue("name", event.target.value)}
-                  />
-                </Field>
-              </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+        <FormDialog
+          title={mode === "create" ? "新建 Claude 供应商" : "编辑 Claude 供应商"}
+          contentClassName="sm:max-w-4xl"
+          bodyClassName="flex flex-col gap-4"
+          onSubmit={onSubmit}
+          footer={(
+            <>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={saving || !values.name.trim()}>
+                保存
+              </Button>
+            </>
+          )}
+        >
+          <ProviderInlineEditor
+            mode={mode}
+            provider={provider}
+            selectedPreset={selectedPreset}
+            templateValues={templateValues}
+            values={values}
+            saving={saving}
+            presetField={mode === "create" ? (
               <Field>
-                <FieldLabel>类型</FieldLabel>
-                <Select
-                  value={values.category}
-                  onValueChange={(value) => setValue("category", value as SynapseAgentProviderCategory)}
+                <FieldLabel>供应商预设</FieldLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                  disabled={presetsLoading}
+                  onClick={() => setPresetPickerOpen(true)}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {PROVIDER_CATEGORIES.map((category) => (
-                        <SelectItem key={category.value} value={category.value}>
-                          {category.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                  <span className="truncate">{selectedPresetLabel}</span>
+                  <ChevronDownIcon className="text-muted-foreground" />
+                </Button>
+                <ProviderPresetPickerDialog
+                  open={presetPickerOpen}
+                  options={presetOptions}
+                  categories={PROVIDER_CATEGORIES}
+                  selectedValue={selectedPresetValue}
+                  customValue={CUSTOM_PROVIDER_PRESET_ID}
+                  onOpenChange={setPresetPickerOpen}
+                  onSelect={handlePresetSelect}
+                />
               </Field>
-              <Field>
-                <FieldLabel>Key 字段</FieldLabel>
-                <Select
-                  value={values.apiKeyField}
-                  onValueChange={(value) => setValue("apiKeyField", value as SynapseAgentProviderApiKeyField)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {API_KEY_FIELDS.map((field) => (
-                        <SelectItem key={field} value={field}>
-                          {field}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <Field>
-              <FieldLabel htmlFor="provider-base-url">Base URL</FieldLabel>
-              <Input
-                id="provider-base-url"
-                value={values.baseUrl}
-                onChange={(event) => setValue("baseUrl", event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="provider-api-key">API Key</FieldLabel>
-              <Input
-                id="provider-api-key"
-                type="password"
-                autoComplete="off"
-                value={values.apiKey}
-                placeholder={mode === "edit" ? "保持不变" : undefined}
-                onChange={(event) => setValue("apiKey", event.target.value)}
-              />
-            </Field>
-            {mode === "create" && selectedPreset && selectedPreset.templateValues.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {selectedPreset.templateValues.map((item) => (
-                  <Field key={item.key}>
-                    <FieldLabel htmlFor={`provider-template-${item.key}`}>{item.label}</FieldLabel>
-                    <Input
-                      id={`provider-template-${item.key}`}
-                      type={item.sensitive ? "password" : "text"}
-                      value={templateValues[item.key] ?? item.defaultValue ?? ""}
-                      placeholder={item.placeholder}
-                      onChange={(event) => updateTemplateValue(item.key, event.target.value)}
-                    />
-                  </Field>
-                ))}
-              </div>
             ) : null}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="provider-model">默认模型</FieldLabel>
-                <Input
-                  id="provider-model"
-                  value={values.model}
-                  onChange={(event) => setValue("model", event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="provider-sort-index">排序</FieldLabel>
-                <Input
-                  id="provider-sort-index"
-                  type="number"
-                  value={values.sortIndex}
-                  onChange={(event) => setValue("sortIndex", event.target.value)}
-                />
-              </Field>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field>
-                <FieldLabel htmlFor="provider-haiku-model">Haiku</FieldLabel>
-                <Input
-                  id="provider-haiku-model"
-                  value={values.haikuModel}
-                  onChange={(event) => setValue("haikuModel", event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="provider-sonnet-model">Sonnet</FieldLabel>
-                <Input
-                  id="provider-sonnet-model"
-                  value={values.sonnetModel}
-                  onChange={(event) => setValue("sonnetModel", event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="provider-opus-model">Opus</FieldLabel>
-                <Input
-                  id="provider-opus-model"
-                  value={values.opusModel}
-                  onChange={(event) => setValue("opusModel", event.target.value)}
-                />
-              </Field>
-            </div>
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              取消
-            </Button>
-            <Button type="submit" disabled={saving || !values.id.trim() || !values.name.trim()}>
-              保存
-            </Button>
-          </DialogFooter>
-          </form>
-        </DialogContent>
+            onValuesChange={onValuesChange}
+            onTemplateValueChange={updateTemplateValue}
+          />
+        </FormDialog>
       </Dialog>
       <AlertDialog open={Boolean(pendingPresetSelection)} onOpenChange={(nextOpen) => {
         if (!nextOpen) cancelPresetSelection()
@@ -727,13 +641,255 @@ function ProviderFormDialog({
   )
 }
 
+function ProviderInlineEditor({
+  mode,
+  provider,
+  selectedPreset,
+  templateValues,
+  values,
+  saving,
+  presetField,
+  onValuesChange,
+  onTemplateValueChange,
+}: {
+  readonly mode: "create" | "edit"
+  readonly provider: SynapseAgentProvider | null
+  readonly selectedPreset: SynapseAgentProviderPreset | null
+  readonly templateValues: Record<string, string>
+  readonly values: ProviderFormValues
+  readonly saving: boolean
+  readonly presetField?: ReactNode
+  readonly onValuesChange: (values: ProviderFormValues) => void
+  readonly onTemplateValueChange: (key: string, value: string) => void
+}) {
+  const disabled = Boolean(provider?.readonly || saving)
+  const setValue = <K extends keyof ProviderFormValues>(key: K, value: ProviderFormValues[K]) => {
+    if (key === "configJson") {
+      onValuesChange(formFromConfigJson(values, String(value)))
+      return
+    }
+    const nextValues = { ...values, [key]: value }
+    onValuesChange(syncConfigJsonFromForm(nextValues, values.configJson, key))
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <FieldGroup>
+        {mode === "create" && selectedPreset && selectedPreset.templateValues.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {selectedPreset.templateValues.map((item) => (
+              <Field key={item.key}>
+                <FieldLabel htmlFor={`provider-template-${item.key}`}>{item.label}</FieldLabel>
+                <Input
+                  id={`provider-template-${item.key}`}
+                  type={item.sensitive ? "password" : "text"}
+                  value={templateValues[item.key] ?? item.defaultValue ?? ""}
+                  placeholder={item.placeholder}
+                  onChange={(event) => onTemplateValueChange(item.key, event.target.value)}
+                />
+              </Field>
+            ))}
+          </div>
+        ) : null}
+
+        <div className={`grid gap-4 ${presetField ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+          {presetField}
+          <Field>
+            <FieldLabel htmlFor="provider-name">供应商名称</FieldLabel>
+            <Input
+              id="provider-name"
+              value={values.name}
+              placeholder="例如：Claude 官方"
+              disabled={disabled}
+              required
+              onChange={(event) => setValue("name", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="provider-note">备注</FieldLabel>
+            <Input
+              id="provider-note"
+              value={values.note}
+              placeholder="例如：公司专用账号"
+              disabled={disabled}
+              onChange={(event) => setValue("note", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="provider-website-url">官网链接</FieldLabel>
+            <Input
+              id="provider-website-url"
+              value={values.websiteUrl}
+              placeholder="https://example.com"
+              disabled={disabled}
+              onChange={(event) => setValue("websiteUrl", event.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="provider-base-url">请求地址</FieldLabel>
+            <Input
+              id="provider-base-url"
+              value={values.baseUrl}
+              placeholder="https://your-api-endpoint.com"
+              disabled={disabled}
+              onChange={(event) => setValue("baseUrl", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="provider-api-key">API Key</FieldLabel>
+            <Input
+              id="provider-api-key"
+              type="password"
+              autoComplete="off"
+              value={values.apiKey}
+              placeholder={mode === "edit" ? "保持不变" : "只需要填这里，下方配置会自动填充"}
+              disabled={disabled}
+              onChange={(event) => setValue("apiKey", event.target.value)}
+            />
+          </Field>
+        </div>
+
+        <ProviderApiAndModelFields
+          disabled={disabled}
+          values={values}
+          onValueChange={setValue}
+        />
+
+        <Field>
+          <FieldLabel htmlFor="provider-config-json">配置 JSON</FieldLabel>
+          <Textarea
+            id="provider-config-json"
+            aria-label="配置 JSON"
+            value={values.configJson}
+            rows={14}
+            spellCheck={false}
+            disabled={disabled}
+            onChange={(event) => setValue("configJson", event.target.value)}
+          />
+        </Field>
+      </FieldGroup>
+    </div>
+  )
+}
+
+function ProviderApiAndModelFields({
+  disabled,
+  values,
+  onValueChange,
+}: {
+  readonly disabled: boolean
+  readonly values: ProviderFormValues
+  readonly onValueChange: <K extends keyof ProviderFormValues>(key: K, value: ProviderFormValues[K]) => void
+}) {
+  return (
+    <>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field>
+          <FieldLabel>API 格式</FieldLabel>
+          <Select value="anthropic" disabled>
+            <SelectTrigger id="provider-api-format" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="anthropic">
+                  Anthropic Messages (原生)
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel>认证字段</FieldLabel>
+          <Select
+            value={values.apiKeyField}
+            disabled={disabled}
+            onValueChange={(value) => onValueChange("apiKeyField", value as SynapseAgentProviderApiKeyField)}
+          >
+            <SelectTrigger id="provider-api-key-field" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {API_KEY_FIELDS.map((field) => (
+                  <SelectItem key={field} value={field}>
+                    {apiKeyFieldLabel(field)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">模型映射</p>
+          <FieldDescription>
+            如果供应商原生提供 Claude 系列模型，通常无需配置。仅在需要将请求映射到不同模型名称时填写。
+          </FieldDescription>
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          <Field>
+            <FieldLabel htmlFor="provider-model">主模型</FieldLabel>
+            <Input
+              id="provider-model"
+              value={values.model}
+              disabled={disabled}
+              onChange={(event) => onValueChange("model", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="provider-haiku-model">Haiku 默认模型</FieldLabel>
+            <Input
+              id="provider-haiku-model"
+              value={values.haikuModel}
+              disabled={disabled}
+              onChange={(event) => onValueChange("haikuModel", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="provider-sonnet-model">Sonnet 默认模型</FieldLabel>
+            <Input
+              id="provider-sonnet-model"
+              value={values.sonnetModel}
+              disabled={disabled}
+              onChange={(event) => onValueChange("sonnetModel", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="provider-opus-model">Opus 默认模型</FieldLabel>
+            <Input
+              id="provider-opus-model"
+              value={values.opusModel}
+              disabled={disabled}
+              onChange={(event) => onValueChange("opusModel", event.target.value)}
+            />
+          </Field>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function apiKeyFieldLabel(field: SynapseAgentProviderApiKeyField): string {
+  if (field === "ANTHROPIC_AUTH_TOKEN") {
+    return "ANTHROPIC_AUTH_TOKEN（默认）"
+  }
+  return field
+}
+
 function emptyProviderForm(): ProviderFormValues {
   return {
     id: "",
     name: "",
-    category: "official",
+    note: "",
+    websiteUrl: "",
+    category: "custom",
     baseUrl: "",
-    apiKeyField: "ANTHROPIC_API_KEY",
+    apiKeyField: "ANTHROPIC_AUTH_TOKEN",
     apiKey: "",
     active: false,
     model: "",
@@ -741,13 +897,16 @@ function emptyProviderForm(): ProviderFormValues {
     sonnetModel: "",
     opusModel: "",
     sortIndex: "",
+    configJson: providerConfigJson({}),
   }
 }
 
 function formFromProvider(provider: SynapseAgentProvider): ProviderFormValues {
-  return {
+  const values = {
     id: provider.id,
     name: provider.name,
+    note: provider.note ?? "",
+    websiteUrl: provider.websiteUrl ?? "",
     category: provider.category,
     baseUrl: provider.baseUrl ?? "",
     apiKeyField: provider.apiKeyField,
@@ -758,7 +917,9 @@ function formFromProvider(provider: SynapseAgentProvider): ProviderFormValues {
     sonnetModel: provider.sonnetModel ?? "",
     opusModel: provider.opusModel ?? "",
     sortIndex: provider.sortIndex === undefined ? "" : String(provider.sortIndex),
+    configJson: providerConfigJson(provider.env ?? {}, provider.settingsConfig),
   }
+  return syncConfigJsonFromForm(values, values.configJson)
 }
 
 function formFromPreset(
@@ -767,13 +928,14 @@ function formFromPreset(
   templateValues: Record<string, string>,
   previousValues: ProviderFormValues = emptyProviderForm(),
 ): ProviderFormValues {
-  return {
+  const values = {
     ...emptyProviderForm(),
     apiKey: previousValues.apiKey,
     active: previousValues.active,
     sortIndex: previousValues.sortIndex,
     id: providerIdFromPresetName(preset.name, existingIds),
     name: preset.name,
+    websiteUrl: preset.websiteUrl ?? "",
     category: preset.category,
     baseUrl: applyTemplateValues(preset.baseUrl, templateValues) ?? "",
     apiKeyField: preset.apiKeyField,
@@ -782,12 +944,20 @@ function formFromPreset(
     sonnetModel: applyTemplateValues(preset.sonnetModel, templateValues) ?? "",
     opusModel: applyTemplateValues(preset.opusModel, templateValues) ?? "",
   }
+  return syncConfigJsonFromForm(values, previousValues.configJson)
 }
 
-function buildCreateInput(values: ProviderFormValues): SynapseCreateAgentProviderInput {
+function buildCreateInput(
+  values: ProviderFormValues,
+  config: ProviderConfigParseResult,
+  existingIds: ReadonlySet<string>,
+): SynapseCreateAgentProviderInput {
+  const trimmedId = values.id.trim()
   return {
-    id: values.id.trim(),
+    id: trimmedId || providerIdFromPresetName(values.name.trim(), existingIds),
     name: values.name.trim(),
+    note: optionalTrimmed(values.note),
+    websiteUrl: optionalTrimmed(values.websiteUrl),
     category: values.category,
     baseUrl: optionalTrimmed(values.baseUrl),
     apiKeyField: values.apiKeyField,
@@ -797,14 +967,21 @@ function buildCreateInput(values: ProviderFormValues): SynapseCreateAgentProvide
     haikuModel: optionalTrimmed(values.haikuModel),
     sonnetModel: optionalTrimmed(values.sonnetModel),
     opusModel: optionalTrimmed(values.opusModel),
+    env: config.env,
+    settingsConfig: config.settingsConfig,
     sortIndex: optionalNumber(values.sortIndex),
   }
 }
 
-function buildUpdateInput(values: ProviderFormValues): SynapseUpdateAgentProviderInput {
+function buildUpdateInput(
+  values: ProviderFormValues,
+  config: ProviderConfigParseResult,
+): SynapseUpdateAgentProviderInput {
   const apiKey = optionalTrimmed(values.apiKey)
   return {
     name: values.name.trim(),
+    note: optionalTrimmed(values.note),
+    websiteUrl: optionalTrimmed(values.websiteUrl),
     category: values.category,
     baseUrl: optionalTrimmed(values.baseUrl),
     apiKeyField: values.apiKeyField,
@@ -813,9 +990,169 @@ function buildUpdateInput(values: ProviderFormValues): SynapseUpdateAgentProvide
     haikuModel: optionalTrimmed(values.haikuModel),
     sonnetModel: optionalTrimmed(values.sonnetModel),
     opusModel: optionalTrimmed(values.opusModel),
+    env: config.env,
+    settingsConfig: config.settingsConfig,
     sortIndex: optionalNumber(values.sortIndex),
     ...(apiKey ? { apiKey } : {}),
   }
+}
+
+function providerConfigJson(
+  env: Record<string, string>,
+  settingsConfig: Record<string, unknown> = {},
+): string {
+  const baseConfig = normalizedProviderConfig(settingsConfig)
+  const baseEnv = isRecord(baseConfig.env) ? stringifyEnvRecord(baseConfig.env) : {}
+  return JSON.stringify({
+    ...baseConfig,
+    env: {
+      ...baseEnv,
+      ...env,
+    },
+  }, null, 2)
+}
+
+function syncConfigJsonFromForm(
+  values: ProviderFormValues,
+  previousConfigJson: string,
+  changedKey?: keyof ProviderFormValues,
+): ProviderFormValues {
+  if (changedKey && !isConfigBackedField(changedKey)) return values
+  const parsed = parseProviderConfigObject(previousConfigJson)
+  if (!parsed) return values
+  const env = isRecord(parsed.env) ? { ...parsed.env } : {}
+  syncEnvString(env, "ANTHROPIC_BASE_URL", values.baseUrl)
+  syncEnvString(env, "ANTHROPIC_MODEL", values.model)
+  syncEnvString(env, "ANTHROPIC_DEFAULT_HAIKU_MODEL", values.haikuModel)
+  syncEnvString(env, "ANTHROPIC_DEFAULT_SONNET_MODEL", values.sonnetModel)
+  syncEnvString(env, "ANTHROPIC_DEFAULT_OPUS_MODEL", values.opusModel)
+
+  const otherApiKeyField = values.apiKeyField === "ANTHROPIC_AUTH_TOKEN"
+    ? "ANTHROPIC_API_KEY"
+    : "ANTHROPIC_AUTH_TOKEN"
+  delete env[otherApiKeyField]
+  const shouldKeepApiKeyField = Boolean(values.apiKey.trim())
+    || Object.prototype.hasOwnProperty.call(env, values.apiKeyField)
+    || Boolean(values.baseUrl.trim())
+  if (shouldKeepApiKeyField) {
+    env[values.apiKeyField] = values.apiKey
+  }
+
+  return {
+    ...values,
+    configJson: JSON.stringify({
+      ...parsed,
+      env,
+    }, null, 2),
+  }
+}
+
+function formFromConfigJson(values: ProviderFormValues, configJson: string): ProviderFormValues {
+  const parsed = parseProviderConfigObject(configJson)
+  if (!parsed) return { ...values, configJson }
+  const env = isRecord(parsed.env) ? parsed.env : {}
+  const apiKeyField = Object.prototype.hasOwnProperty.call(env, "ANTHROPIC_API_KEY")
+    && !Object.prototype.hasOwnProperty.call(env, "ANTHROPIC_AUTH_TOKEN")
+    ? "ANTHROPIC_API_KEY"
+    : "ANTHROPIC_AUTH_TOKEN"
+  return {
+    ...values,
+    configJson,
+    baseUrl: envString(env.ANTHROPIC_BASE_URL),
+    apiKeyField,
+    apiKey: envString(env[apiKeyField]),
+    model: envString(env.ANTHROPIC_MODEL),
+    haikuModel: envString(env.ANTHROPIC_DEFAULT_HAIKU_MODEL),
+    sonnetModel: envString(env.ANTHROPIC_DEFAULT_SONNET_MODEL),
+    opusModel: envString(env.ANTHROPIC_DEFAULT_OPUS_MODEL),
+  }
+}
+
+function providerConfigJsonFromValues(values: ProviderFormValues): ProviderConfigParseResult | null {
+  let parsed: ProviderConfigJson
+  try {
+    parsed = JSON.parse(values.configJson || "{}") as ProviderConfigJson
+  } catch {
+    return null
+  }
+  return {
+    env: stripFormEnvKeys(stringifyEnvRecord(parsed.env)),
+    settingsConfig: settingsConfigFromParsed(parsed),
+  }
+}
+
+function normalizedProviderConfig(settingsConfig: Record<string, unknown>): ProviderConfigJson {
+  return {
+    env: {},
+    hooks: {},
+    permissions: {
+      allow: [],
+      deny: [],
+    },
+    ...settingsConfig,
+  }
+}
+
+function settingsConfigFromParsed(parsed: ProviderConfigJson): Record<string, unknown> {
+  const settingsConfig: Record<string, unknown> = { ...parsed }
+  const env = stripFormEnvKeys(stringifyEnvRecord(parsed.env))
+  if (Object.keys(env).length > 0) {
+    settingsConfig.env = env
+  } else {
+    delete settingsConfig.env
+  }
+  return settingsConfig
+}
+
+function parseProviderConfigObject(configJson: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(configJson || "{}") as unknown
+    return isRecord(parsed) ? { ...parsed } : {}
+  } catch {
+    return null
+  }
+}
+
+function isConfigBackedField(key: keyof ProviderFormValues): boolean {
+  return key === "baseUrl"
+    || key === "apiKeyField"
+    || key === "apiKey"
+    || key === "model"
+    || key === "haikuModel"
+    || key === "sonnetModel"
+    || key === "opusModel"
+}
+
+function syncEnvString(env: Record<string, unknown>, key: string, value: string): void {
+  const trimmed = value.trim()
+  if (trimmed) {
+    env[key] = trimmed
+  } else {
+    delete env[key]
+  }
+}
+
+function envString(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : ""
+}
+
+function stripFormEnvKeys(env: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !FORM_ENV_KEYS.has(key)))
+}
+
+function stringifyEnvRecord(value: Record<string, unknown> | undefined): Record<string, string> {
+  if (!value) return {}
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => typeof item === "string" || typeof item === "number" || typeof item === "boolean")
+      .map(([key, item]) => [key, String(item)]),
+  )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function templateDefaultsFromPreset(preset: SynapseAgentProviderPreset): Record<string, string> {

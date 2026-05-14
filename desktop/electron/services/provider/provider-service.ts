@@ -16,8 +16,12 @@ import { ProviderSecretStore, providerApiKeySecretId } from "./provider-secret-s
 import type {
   CCProvider,
   CCProviderPreset,
+  CcSwitchClaudeImportPreviewResult,
+  CcSwitchImportSource,
   CreateProviderFromPresetInput,
   CreateProviderInput,
+  ImportCcSwitchClaudeProvidersInput,
+  ImportCcSwitchClaudeProvidersResult,
   ProviderApiKeyField,
   ProviderCategory,
   UpdateProviderInput,
@@ -30,6 +34,13 @@ import {
 } from "./claude-provider-presets"
 import { buildProviderInputFromClaudePreset } from "./provider-preset-adapter"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID as LOCAL_PROVIDER_ID } from "./types"
+import {
+  buildCcSwitchClaudeImportPreview,
+  buildProviderInputFromCcSwitchCandidate,
+  readCcSwitchClaudeProvidersFromSourceAsync,
+  resolveCcSwitchCandidateSources,
+  type ReadCcSwitchSourceResult,
+} from "./cc-switch-importer"
 
 export interface ProviderServiceDeps {
   readonly providers: DataNamespace<ProviderEntryV1>
@@ -39,6 +50,8 @@ export interface ProviderServiceDeps {
   readonly now?: () => Date
   readonly localClaudeSettingsPath?: string
   readonly readTextFile?: (filePath: string) => Promise<string>
+  readonly ccSwitchImportSources?: () => readonly CcSwitchImportSource[]
+  readonly readCcSwitchClaudeProviders?: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
 }
 
 export interface BuildProviderEnvContext {
@@ -56,6 +69,8 @@ export class ProviderService {
   private readonly now?: () => Date
   private readonly localClaudeSettingsPath: string
   private readonly readTextFile: (filePath: string) => Promise<string>
+  private readonly ccSwitchImportSources: () => readonly CcSwitchImportSource[]
+  private readonly readCcSwitchClaudeProviders: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
 
   constructor(deps: ProviderServiceDeps) {
     this.providers = deps.providers
@@ -65,6 +80,8 @@ export class ProviderService {
     this.now = deps.now
     this.localClaudeSettingsPath = deps.localClaudeSettingsPath ?? path.join(os.homedir(), ".claude", "settings.json")
     this.readTextFile = deps.readTextFile ?? ((filePath) => fs.readFile(filePath, "utf8"))
+    this.ccSwitchImportSources = deps.ccSwitchImportSources ?? resolveCcSwitchCandidateSources
+    this.readCcSwitchClaudeProviders = deps.readCcSwitchClaudeProviders ?? readCcSwitchClaudeProvidersFromSourceAsync
   }
 
   async listProviders(): Promise<readonly CCProvider[]> {
@@ -104,6 +121,61 @@ export class ProviderService {
     }))
   }
 
+  async previewCcSwitchClaudeProviders(
+    source?: CcSwitchImportSource,
+    context: BuildProviderEnvContext = {},
+  ): Promise<CcSwitchClaudeImportPreviewResult> {
+    const existingIds = new Set((await this.listProviders()).map((provider) => provider.id))
+    const sources = source ? [source] : this.ccSwitchImportSources()
+    let lastError: unknown
+
+    for (const candidateSource of sources) {
+      try {
+        await this.assertCanReadCcSwitchSource(candidateSource, context)
+        const result = await this.readCcSwitchClaudeProviders(candidateSource)
+        if (!source && result.providers.length === 0) continue
+        return {
+          source: candidateSource,
+          ...buildCcSwitchClaudeImportPreview(result.providers, existingIds),
+        }
+      } catch (error) {
+        lastError = error
+        if (source) throw error
+      }
+    }
+
+    return {
+      items: [],
+      error: lastError instanceof Error ? lastError.message : undefined,
+    }
+  }
+
+  async importCcSwitchClaudeProviders(
+    input: ImportCcSwitchClaudeProvidersInput,
+    context: BuildProviderEnvContext = {},
+  ): Promise<ImportCcSwitchClaudeProvidersResult> {
+    const selectedIds = new Set(input.providerIds)
+    if (selectedIds.size === 0) return { imported: [], skipped: [] }
+
+    await this.assertCanReadCcSwitchSource(input.source, context)
+    const result = await this.readCcSwitchClaudeProviders(input.source)
+    const existingIds = new Set((await this.listProviders()).map((provider) => provider.id))
+    const preview = buildCcSwitchClaudeImportPreview(result.providers, existingIds)
+    const previewById = new Map(preview.items.map((item) => [item.id, item]))
+    const imported: CCProvider[] = []
+    const skipped = [...preview.items].filter((item) => selectedIds.has(item.id) && item.status !== "ready")
+    let sortIndex = this.nextUserProviderSortIndex(await this.listProviders())
+
+    for (const provider of result.providers) {
+      const previewItem = previewById.get(provider.id)
+      if (!selectedIds.has(provider.id) || previewItem?.status !== "ready") continue
+      imported.push(await this.createProvider(buildProviderInputFromCcSwitchCandidate(provider, sortIndex)))
+      sortIndex += 1
+    }
+
+    return { imported, skipped }
+  }
+
   async createProvider(input: CreateProviderInput): Promise<CCProvider> {
     if (input.id === LOCAL_PROVIDER_ID) {
       throw new Error("The local Claude Code provider is built in and cannot be created.")
@@ -121,6 +193,8 @@ export class ProviderService {
     const provider = toProviderEntry({
       id: input.id,
       name: input.name,
+      note: input.note,
+      websiteUrl: input.websiteUrl,
       category: input.category,
       baseUrl: input.baseUrl,
       apiKeyField: input.apiKeyField,
@@ -130,6 +204,7 @@ export class ProviderService {
       sonnetModel: input.sonnetModel,
       opusModel: input.opusModel,
       env: input.env,
+      settingsConfig: input.settingsConfig,
       secretRef,
       secretEnvRefs,
       sortIndex: input.sortIndex,
@@ -348,6 +423,55 @@ export class ProviderService {
     return (this.now?.() ?? new Date()).toISOString()
   }
 
+  private async assertCanReadCcSwitchSource(
+    source: CcSwitchImportSource,
+    context: BuildProviderEnvContext,
+  ): Promise<void> {
+    const actor = context.actor ?? { kind: "user" }
+    const metadata = removeUndefined({
+      projectId: context.projectId,
+      sourceKind: source.kind,
+    })
+
+    if (this.permissionGuard) {
+      const permission = await this.permissionGuard.check({
+        action: "fs.read.outside-userdata",
+        actor,
+        resource: source.path,
+        context: metadata,
+      })
+      if (!permission.allowed) {
+        this.auditSink?.record({
+          action: "fs.read.outside-userdata",
+          actor,
+          resource: source.path,
+          outcome: "denied",
+          metadata: {
+            ...metadata,
+            reason: permission.reason,
+            policyId: permission.policyId,
+          },
+        })
+        throw new Error(permission.reason)
+      }
+    }
+
+    this.auditSink?.record({
+      action: "fs.read.outside-userdata",
+      actor,
+      resource: source.path,
+      outcome: "allowed",
+      metadata,
+    })
+  }
+
+  private nextUserProviderSortIndex(providers: readonly CCProvider[]): number {
+    const sortIndexes = providers
+      .filter((provider) => provider.id !== LOCAL_PROVIDER_ID)
+      .map((provider) => provider.sortIndex ?? 0)
+    return sortIndexes.length === 0 ? 0 : Math.max(...sortIndexes) + 1
+  }
+
   private async clearActiveUserProvider(): Promise<void> {
     const now = this.isoNow()
     const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)
@@ -373,6 +497,7 @@ export class ProviderService {
       readonly: true,
       configured: true,
       configPath: this.localClaudeSettingsPath,
+      websiteUrl: "https://www.anthropic.com/claude-code",
       baseUrl: env.ANTHROPIC_BASE_URL,
       apiKeyField: env.ANTHROPIC_API_KEY ? "ANTHROPIC_API_KEY" : "ANTHROPIC_AUTH_TOKEN",
       active,
@@ -381,6 +506,7 @@ export class ProviderService {
       sonnetModel: env.ANTHROPIC_DEFAULT_SONNET_MODEL,
       opusModel: env.ANTHROPIC_DEFAULT_OPUS_MODEL,
       env: {},
+      settingsConfig: {},
       sortIndex: -10000,
       createdAt: "",
       updatedAt: "",
@@ -440,11 +566,14 @@ function toProviderEntry(provider: CCProvider): ProviderEntryV1 {
     scope: "global",
     kind: PROVIDER_KIND,
     display: provider.name,
+    note: provider.note,
+    websiteUrl: provider.websiteUrl,
     baseUrl: provider.baseUrl,
     secretRef: provider.secretRef ?? providerApiKeySecretId(provider.id),
     secretEnvRefs: provider.secretEnvRefs,
     activeModel: provider.model,
     env: provider.env,
+    settingsConfig: provider.settingsConfig,
     category: provider.category,
     apiKeyField: provider.apiKeyField,
     active: provider.active,
@@ -462,6 +591,8 @@ function toProvider(entry: ProviderEntryV1): CCProvider {
   return {
     id: entry.id,
     name: typeof entry.display === "string" ? entry.display : entry.id,
+    note: stringValue(entry.note),
+    websiteUrl: stringValue(entry.websiteUrl),
     category: providerCategory(entry.category),
     baseUrl: entry.baseUrl,
     apiKeyField: apiKeyField(entry.apiKeyField),
@@ -471,6 +602,7 @@ function toProvider(entry: ProviderEntryV1): CCProvider {
     sonnetModel: stringValue(entry.sonnetModel),
     opusModel: stringValue(entry.opusModel),
     env: entry.env ?? {},
+    settingsConfig: isRecord(entry.settingsConfig) ? entry.settingsConfig : undefined,
     secretRef: entry.secretRef,
     secretEnvRefs: entry.secretEnvRefs,
     archived: booleanValue(entry.archived),
@@ -537,6 +669,8 @@ async function storeSecretEnv(
 function providerPatch(input: UpdateProviderInput): Partial<CCProvider> {
   return removeUndefined({
     name: input.name,
+    note: input.note,
+    websiteUrl: input.websiteUrl,
     category: input.category,
     baseUrl: input.baseUrl,
     apiKeyField: input.apiKeyField,
@@ -546,6 +680,7 @@ function providerPatch(input: UpdateProviderInput): Partial<CCProvider> {
     sonnetModel: input.sonnetModel,
     opusModel: input.opusModel,
     env: input.env,
+    settingsConfig: input.settingsConfig,
     archived: input.archived,
     sortIndex: input.sortIndex,
   })

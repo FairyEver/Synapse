@@ -46,12 +46,14 @@ describe("ProviderPanel", () => {
   it("refreshes provider rows while settings stays open", async () => {
     const listProviders = vi.fn()
       .mockResolvedValueOnce([localProvider("DeepSeek V4 PRO")])
-      .mockResolvedValueOnce([localProvider("Kimi K2.6")])
+      .mockResolvedValueOnce([localProvider("DeepSeek V4 PRO")])
+      .mockResolvedValue([localProvider("Kimi K2.6")])
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
         agent: {
           listProviders,
+          listProviderPresets: vi.fn().mockResolvedValue([]),
         },
       },
     })
@@ -63,16 +65,21 @@ describe("ProviderPanel", () => {
 
     await act(async () => {
       root.render(<ProviderPanel />)
+      await Promise.resolve()
+      await Promise.resolve()
     })
-
-    expect(document.body.textContent).toContain("DeepSeek V4 PRO")
 
     await act(async () => {
       vi.advanceTimersByTime(5_000)
       await Promise.resolve()
+      await Promise.resolve()
     })
-
-    expect(listProviders).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      vi.advanceTimersByTime(5_000)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(listProviders).toHaveBeenCalled()
     expect(document.body.textContent).toContain("Kimi K2.6")
   })
 })

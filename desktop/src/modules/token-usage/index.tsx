@@ -14,7 +14,6 @@ import { SourcePicker } from "./components/source-picker"
 import { GroupByPicker } from "./components/group-by-picker"
 import type { GroupByMode } from "./components/group-by-picker"
 import { ExportButton } from "./components/export-button"
-import { CursorConnectBadge } from "./components/cursor-connect-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -110,7 +109,6 @@ export function TokenUsageModule() {
         {activeSubTab === "models" && (
           <GroupByPicker value={groupBy} onChange={handleGroupByChange} />
         )}
-        <CursorConnectBadge onConnected={handleScan} />
         <div className="flex-1" />
         <SourcePicker clients={allClients} selected={selectedSources} onChange={setSelectedSources} />
         <DateRangeFilter value={range} onChange={handleRangeChange} />

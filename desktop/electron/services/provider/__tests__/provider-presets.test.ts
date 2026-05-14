@@ -12,6 +12,9 @@ describe("Claude provider presets", () => {
     const names = presets.map((preset) => preset.name)
 
     expect(names).toContain("Claude Official")
+    expect(names).toContain("Baidu Qianfan Coding Plan")
+    expect(names).toContain("Compshare Coding Plan")
+    expect(names).toContain("DeepSeek")
     expect(names).toContain("PackyCode")
     expect(names).toContain("AWS Bedrock (AKSK)")
     expect(names).not.toContain("GitHub Copilot")

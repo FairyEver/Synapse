@@ -323,7 +323,6 @@ export const CLIENT_DEFS: ClientDef[] = [
   { id: "opencode", name: "OpenCode", root: "xdgData", relativePath: "opencode/storage/message", filePattern: "*.json", parseLocal: true },
   { id: "claude", name: "Claude Code", root: "home", relativePath: ".claude/projects", filePattern: "*.jsonl", parseLocal: true },
   { id: "codex", name: "Codex", root: "envVar", envVar: "CODEX_HOME", fallbackRelative: ".codex", relativePath: "sessions", filePattern: "*.jsonl", parseLocal: true },
-  { id: "cursor", name: "Cursor", root: "home", relativePath: ".config/tokscale/cursor-cache", filePattern: "usage*.csv", parseLocal: false },
   { id: "gemini", name: "Gemini", root: "home", relativePath: ".gemini/tmp", filePattern: "*.json|*.jsonl", parseLocal: true },
   { id: "amp", name: "Amp", root: "xdgData", relativePath: "amp/threads", filePattern: "T-*.json", parseLocal: true },
   { id: "droid", name: "Droid", root: "home", relativePath: ".factory/sessions", filePattern: "*.settings.json", parseLocal: true },
@@ -1629,7 +1628,6 @@ export const PROVIDER_COLORS: Record<string, string> = {
   deepseek: "#06B6D4",
   xai: "#EAB308",
   meta: "#6366F1",
-  cursor: "#8B5CF6",
   unknown: "#888888",
 }
 
@@ -2508,7 +2506,7 @@ Phase 2 tasks are outlined here for reference. Each will be a separate implement
 
 ### Task 20: Remaining Agent Parsers
 
-Add parsers for the remaining 19 agents. Priority order:
+Add parsers for the remaining agents. Priority order:
 1. Gemini (3 format variants, promptTokenCount cache subtraction)
 2. Amp (JSON with thread structure)
 3. RooCode/KiloCode (JSON array, filter `say: "api_req_started"`)
@@ -2516,7 +2514,6 @@ Add parsers for the remaining 19 agents. Priority order:
 5. Copilot (OpenTelemetry JSONL, traceId:spanId dedup)
 6. OpenCode/Kilo/Hermes/Goose/Crush (SQLite readers)
 7. Codebuff (chat-messages.json)
-8. Cursor (CSV, parse_local=false — skip or implement remote sync)
 
 ### Task 21: Hourly + Agents Views
 

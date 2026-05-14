@@ -101,7 +101,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   [config.global.projects])
   const selectedSession = chat.sessions.find((session) =>
     session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
-    ?? chat.sessions.find((session) => session.active)
   const selectedTarget: PendingMessageTarget | undefined = selectedSession
     ? {
         projectId: selectedSession.projectId,
@@ -177,7 +176,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     chat.sendMessage,
     onPendingAgentSessionConsumed,
   ])
-
   useEffect(() => {
     const next = firstQueuedMessageForIdleTarget(pendingMessages, chat.sendingConversationIds)
     if (!next) return
@@ -429,7 +427,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
           </div>
         </TooltipProvider>
 
-        {!selectedSession && chat.sessions.length === 0 && !chat.loading ? (
+        {!selectedSession && !chat.loading ? (
           <div className="flex flex-1 items-center justify-center">
             <p className="text-sm text-muted-foreground">请创建新的会话</p>
           </div>
@@ -462,6 +460,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               cancelPhase={chat.cancelPhase}
               permissionMode={selectedPermissionMode}
               onPermissionModeChange={(mode) => chat.setPermissionMode(mode)}
+              onCreatePermissionModeSession={(mode) => {
+                const projectId = chat.selectedProjectId ?? chat.activeProjectId
+                if (!projectId) return
+                void chat.createSession(projectId, selectedSession?.providerId, mode)
+              }}
               onDraftChange={setDraft}
               onInputKeyDown={handleInputKeyDown}
               onSubmit={handleSubmit}

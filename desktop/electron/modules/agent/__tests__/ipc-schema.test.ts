@@ -5,6 +5,7 @@ import {
   sessionSummarySchema,
 } from "../ipc-shared"
 import { messageMethods } from "../ipc-messages"
+import { sessionMethods } from "../ipc-sessions"
 
 describe("agent IPC schemas", () => {
   it("preserves SDK init MCP server summaries", () => {
@@ -74,6 +75,20 @@ describe("agent IPC schemas", () => {
     expect(() => messageMethods.setPermissionMode.request.parse({
       projectId: "project-1",
       conversationId: "conversation-1",
+      mode: "free-for-all",
+    })).toThrow()
+  })
+
+  it("accepts a create session permission mode", () => {
+    expect(sessionMethods.createSession.request.parse({
+      projectId: "project-1",
+      mode: "bypassPermissions",
+    }).mode).toBe("bypassPermissions")
+  })
+
+  it("rejects an invalid create session permission mode", () => {
+    expect(() => sessionMethods.createSession.request.parse({
+      projectId: "project-1",
       mode: "free-for-all",
     })).toThrow()
   })

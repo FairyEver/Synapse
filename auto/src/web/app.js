@@ -16,6 +16,7 @@ const elements = {
   save: document.querySelector('#save'),
   start: document.querySelector('#start'),
   stopAfterCurrent: document.querySelector('#stop-after-current'),
+  copyGuide: document.querySelector('#copy-guide'),
   newPrompt: document.querySelector('#new-prompt'),
   renamePrompt: document.querySelector('#rename-prompt'),
   deletePrompt: document.querySelector('#delete-prompt'),
@@ -37,6 +38,7 @@ const state = {
   activePromptName: '',
   savedPrompt: '',
   pendingPromptName: '',
+  copyGuideResetTimer: 0,
 }
 
 function setActiveView(view) {
@@ -111,6 +113,14 @@ function setMessage(message, isError = false) {
   elements.error.textContent = isError ? message : ''
 }
 
+function markGuideCopied() {
+  window.clearTimeout(state.copyGuideResetTimer)
+  elements.copyGuide.textContent = '已复制'
+  state.copyGuideResetTimer = window.setTimeout(() => {
+    elements.copyGuide.textContent = '复制指南'
+  }, 1800)
+}
+
 async function saveConfig() {
   const config = await requestJson('/api/config', {
     method: 'PUT',
@@ -118,6 +128,13 @@ async function saveConfig() {
   })
   writeForm(config)
   setMessage('已保存')
+}
+
+async function copyGuide() {
+  const body = await requestJson('/api/guide')
+  await navigator.clipboard.writeText(body.content || '')
+  markGuideCopied()
+  setMessage('已复制指南')
 }
 
 function hasPromptChanges() {
@@ -314,6 +331,10 @@ fields.activePromptName.addEventListener('change', () => {
 
 elements.newPrompt.addEventListener('click', () => {
   void createPrompt().catch(err => setMessage(err instanceof Error ? err.message : String(err), true))
+})
+
+elements.copyGuide.addEventListener('click', () => {
+  void copyGuide().catch(err => setMessage(err instanceof Error ? err.message : String(err), true))
 })
 
 elements.renamePrompt.addEventListener('click', () => {

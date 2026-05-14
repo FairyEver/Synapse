@@ -24,6 +24,7 @@ export interface CreateAgentSessionInput {
   readonly resumePolicy?: ConversationResumePolicyV1
   readonly agentType?: string
   readonly providerId?: string
+  readonly mode?: string
   readonly sdkSessionId?: string
   readonly usage?: ConversationEntryV1["usage"]
   readonly costUsd?: number
@@ -128,6 +129,7 @@ export class AgentSessionRepository {
       workspacePath: input.workspacePath,
       agentType: input.agentType,
       providerId: input.providerId,
+      agentConfig: input.mode ? { mode: input.mode } : undefined,
       sdkSessionId: input.sdkSessionId,
       usage: input.usage,
       costUsd: input.costUsd,
@@ -157,6 +159,7 @@ export class AgentSessionRepository {
       workspacePath: input.workspacePath,
       agentType: input.agentType,
       providerId: input.providerId,
+      agentConfig: input.mode ? { mode: input.mode } : undefined,
       sdkSessionId: input.sdkSessionId,
       usage: input.usage,
       costUsd: input.costUsd,

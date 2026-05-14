@@ -16,7 +16,11 @@ import type {
   PermissionGuard,
 } from "../../../runtime/security"
 import { ProviderService } from "../provider-service"
-import { LOCAL_CLAUDE_CODE_PROVIDER_ID } from "../types"
+import {
+  LOCAL_CLAUDE_CODE_PROVIDER_ID,
+  type CcSwitchClaudeProviderImportCandidate,
+  type CcSwitchImportSource,
+} from "../types"
 
 describe("ProviderService", () => {
   it("exposes local Claude Code as the default read-only provider", async () => {
@@ -262,6 +266,50 @@ describe("ProviderService", () => {
     })
   })
 
+  it("round-trips provider metadata and extra env through create and update", async () => {
+    const { service } = makeProviderService()
+
+    await service.createProvider({
+      id: "extra-env-provider",
+      name: "Extra Env Provider",
+      note: "Company account",
+      websiteUrl: "https://example.com",
+      category: "custom",
+      baseUrl: "https://api.example.com",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      apiKey: "sk-extra",
+      env: {
+        ENABLE_TOOL_SEARCH: "true",
+      },
+    })
+
+    await expect(service.getProvider("extra-env-provider")).resolves.toMatchObject({
+      note: "Company account",
+      websiteUrl: "https://example.com",
+      env: {
+        ENABLE_TOOL_SEARCH: "true",
+      },
+    })
+
+    await service.updateProvider("extra-env-provider", {
+      note: "Team account",
+      websiteUrl: "https://docs.example.com",
+      env: {
+        ENABLE_TOOL_SEARCH: "false",
+        CLAUDE_CODE_EFFORT_LEVEL: "max",
+      },
+    })
+
+    await expect(service.getProvider("extra-env-provider")).resolves.toMatchObject({
+      note: "Team account",
+      websiteUrl: "https://docs.example.com",
+    })
+    await expect(service.buildEnv("extra-env-provider")).resolves.toMatchObject({
+      ENABLE_TOOL_SEARCH: "false",
+      CLAUDE_CODE_EFFORT_LEVEL: "max",
+    })
+  })
+
   it("denies secret env reads through PermissionGuard and records audit", async () => {
     const permissionGuard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()
@@ -381,6 +429,116 @@ describe("ProviderService", () => {
       archived: true,
     })
   })
+
+  it("previews CC Switch Claude providers from the first readable source", async () => {
+    const source = ccSwitchSource("/Users/test/.cc-switch/cc-switch.db")
+    const { service } = makeProviderService({
+      ccSwitchImportSources: () => [source],
+      readCcSwitchClaudeProviders: async () => ({
+        kind: "sqlite",
+        providers: [ccSwitchCandidate("deepseek")],
+      }),
+    })
+    await service.createProvider({
+      id: "deepseek",
+      name: "DeepSeek Existing",
+      category: "cn_official",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      env: {},
+    })
+
+    await expect(service.previewCcSwitchClaudeProviders()).resolves.toEqual({
+      source,
+      items: [
+        expect.objectContaining({
+          id: "deepseek",
+          status: "duplicate",
+          selectedByDefault: false,
+          apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        }),
+      ],
+    })
+  })
+
+  it("imports selected ready CC Switch Claude providers through the normal provider path", async () => {
+    const source = ccSwitchSource("/Users/test/.cc-switch/cc-switch.db")
+    const { service, secrets } = makeProviderService({
+      ccSwitchImportSources: () => [source],
+      readCcSwitchClaudeProviders: async () => ({
+        kind: "sqlite",
+        providers: [
+          ccSwitchCandidate("deepseek"),
+          ccSwitchCandidate("missing-key", { env: { ANTHROPIC_BASE_URL: "https://example.com" } }),
+        ],
+      }),
+    })
+
+    const result = await service.importCcSwitchClaudeProviders({
+      source,
+      providerIds: ["deepseek", "missing-key"],
+    })
+
+    expect(result.imported).toEqual([
+      expect.objectContaining({
+        id: "deepseek",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        model: "deepseek-chat",
+        env: {},
+        settingsConfig: expect.objectContaining({
+          env: expect.not.objectContaining({
+            ANTHROPIC_AUTH_TOKEN: "sk-deepseek",
+          }),
+        }),
+      }),
+    ])
+    expect(result.skipped).toEqual([
+      expect.objectContaining({
+        id: "missing-key",
+        status: "missing_api_key",
+      }),
+    ])
+    await expect(secrets.get("provider:deepseek:api-key")).resolves.toMatchObject({
+      value: "sk-deepseek",
+    })
+    expect(JSON.stringify(result.imported)).not.toContain("sk-deepseek")
+  })
+
+  it("denies CC Switch import source reads through PermissionGuard and records audit", async () => {
+    const source = ccSwitchSource("/Users/test/.cc-switch/cc-switch.db")
+    const permissionGuard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const { service } = makeProviderService({
+      permissionGuard,
+      auditSink,
+      ccSwitchImportSources: () => [source],
+      readCcSwitchClaudeProviders: async () => ({
+        kind: "sqlite",
+        providers: [ccSwitchCandidate("deepseek")],
+      }),
+    })
+
+    permissionGuard.registerPolicy({
+      id: "deny-cc-switch",
+      decide: (request) => request.action === "fs.read.outside-userdata" ? "deny" : "defer-to-next",
+    })
+
+    await expect(service.previewCcSwitchClaudeProviders(source, {
+      actor: { kind: "agent", id: "agent-1" },
+      projectId: "project-1",
+    })).rejects.toThrow("denied by deny-cc-switch")
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "denied",
+        resource: source.path,
+        metadata: expect.objectContaining({
+          projectId: "project-1",
+          sourceKind: "sqlite",
+          policyId: "deny-cc-switch",
+        }),
+      }),
+    ])
+  })
 })
 
 function makeProviderService(deps: {
@@ -388,6 +546,11 @@ function makeProviderService(deps: {
   readonly auditSink?: AuditSink
   readonly localClaudeSettingsPath?: string
   readonly readTextFile?: (filePath: string) => Promise<string>
+  readonly ccSwitchImportSources?: () => readonly CcSwitchImportSource[]
+  readonly readCcSwitchClaudeProviders?: (source: CcSwitchImportSource) => Promise<{
+    readonly kind: CcSwitchImportSource["kind"]
+    readonly providers: readonly CcSwitchClaudeProviderImportCandidate[]
+  }>
 } = {}) {
   const providers = new MemoryNamespace<ProviderEntryV1>("providers")
   const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
@@ -398,6 +561,8 @@ function makeProviderService(deps: {
     auditSink: deps.auditSink,
     localClaudeSettingsPath: deps.localClaudeSettingsPath,
     readTextFile: deps.readTextFile,
+    ccSwitchImportSources: deps.ccSwitchImportSources,
+    readCcSwitchClaudeProviders: deps.readCcSwitchClaudeProviders,
     now: fixedNow,
   })
 
@@ -475,4 +640,27 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
 function fixedNow(): Date {
   return new Date("2026-05-13T00:00:00.000Z")
+}
+
+function ccSwitchSource(filePath: string): CcSwitchImportSource {
+  return { kind: "sqlite", path: filePath }
+}
+
+function ccSwitchCandidate(
+  id: string,
+  settingsConfig: Record<string, unknown> = {
+    env: {
+      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "sk-deepseek",
+      ANTHROPIC_MODEL: "deepseek-chat",
+    },
+  },
+): CcSwitchClaudeProviderImportCandidate {
+  return {
+    id,
+    name: id === "deepseek" ? "DeepSeek" : "Missing Key",
+    category: id === "deepseek" ? "cn_official" : "custom",
+    websiteUrl: id === "deepseek" ? "https://platform.deepseek.com" : undefined,
+    settingsConfig,
+  }
 }
