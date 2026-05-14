@@ -45,7 +45,7 @@
 - Create: `desktop/electron/services/provider/claude-provider-presets.ts`
 - Test: `desktop/electron/services/provider/__tests__/provider-presets.test.ts`
 
-- [ ] **Step 1: Write the failing preset filter test**
+- [x] **Step 1: Write the failing preset filter test**
 
 Create `desktop/electron/services/provider/__tests__/provider-presets.test.ts`:
 
@@ -112,7 +112,7 @@ describe("Claude provider presets", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -122,7 +122,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: FAIL because `claude-provider-presets.ts` does not exist.
 
-- [ ] **Step 3: Create the copied preset source module**
+- [x] **Step 3: Create the copied preset source module**
 
 Create `desktop/electron/services/provider/claude-provider-presets.ts`.
 
@@ -162,7 +162,7 @@ export function getClaudeProviderPreset(name: string): ProviderPreset | undefine
 
 If TypeScript reports semicolon/style differences from the copied source, remove semicolons in the added Synapse code only. Do not rewrite the copied preset values.
 
-- [ ] **Step 4: Run the preset test**
+- [x] **Step 4: Run the preset test**
 
 Run:
 
@@ -172,7 +172,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
