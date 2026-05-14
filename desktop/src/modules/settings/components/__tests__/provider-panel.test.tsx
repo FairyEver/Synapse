@@ -123,6 +123,77 @@ describe("ProviderPanel diagnostics", () => {
   })
 })
 
+describe("ProviderPanel presets", () => {
+  it("opens provider presets and creates from a selected preset", async () => {
+    const listProviders = vi.fn().mockResolvedValue([])
+    const listProviderPresets = vi.fn().mockResolvedValue([{
+      name: "PackyCode",
+      category: "third_party",
+      websiteUrl: "https://www.packyapi.com",
+      apiKeyUrl: "https://www.packyapi.com/register?aff=cc-switch",
+      baseUrl: "https://www.packyapi.com",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      templateValues: [],
+    }])
+    const createProviderFromPreset = vi.fn().mockResolvedValue(customProvider())
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+          listProviderPresets,
+          createProviderFromPreset,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ProviderPanel />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText(container, "从预设添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(listProviderPresets).toHaveBeenCalled()
+    expect(document.body.textContent).toContain("PackyCode")
+
+    await act(async () => {
+      buttonByText(document.body, "选择 PackyCode").click()
+      await Promise.resolve()
+    })
+
+    const apiKeyInput = document.body.querySelector<HTMLInputElement>("#provider-preset-api-key")
+    if (!apiKeyInput) throw new Error("API key input not found")
+    await act(async () => {
+      setInputValue(apiKeyInput, "sk-packy")
+      apiKeyInput.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    await act(async () => {
+      buttonByText(document.body, "添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(createProviderFromPreset).toHaveBeenCalledWith({
+      presetName: "PackyCode",
+      apiKey: "sk-packy",
+      templateValues: {},
+    })
+    expect(toast).toHaveBeenCalledWith("Provider 已保存")
+  })
+})
+
 function customProvider(): SynapseAgentProvider {
   return {
     id: "custom-provider",
@@ -142,9 +213,16 @@ function customProvider(): SynapseAgentProvider {
 
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll("button"))
+    .reverse()
     .find((candidate) => candidate.textContent === text)
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`Button not found: ${text}`)
   }
   return button
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  if (!setter) throw new Error("Input value setter not found")
+  setter.call(input, value)
 }

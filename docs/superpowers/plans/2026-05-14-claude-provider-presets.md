@@ -1083,7 +1083,7 @@ git commit -m "feat: expose claude provider presets"
 - Modify: `desktop/src/modules/settings/components/provider-panel.tsx`
 - Test: `desktop/src/modules/settings/components/__tests__/provider-panel.test.tsx`
 
-- [ ] **Step 1: Add failing renderer tests**
+- [x] **Step 1: Add failing renderer tests**
 
 Append to `desktop/src/modules/settings/components/__tests__/provider-panel.test.tsx`:
 
@@ -1160,7 +1160,7 @@ describe("ProviderPanel presets", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing renderer test**
+- [x] **Step 2: Run the failing renderer test**
 
 Run:
 
@@ -1170,7 +1170,7 @@ pnpm --filter @synapse/desktop test -- desktop/src/modules/settings/components/_
 
 Expected: FAIL because the preset button/dialog does not exist.
 
-- [ ] **Step 3: Add preset state and handlers**
+- [x] **Step 3: Add preset state and handlers**
 
 In `desktop/src/modules/settings/components/provider-panel.tsx`, import:
 
@@ -1235,7 +1235,7 @@ Render the preset dialog next to `ProviderFormDialog`:
 
 Pass `onAddPreset={openPresetDialog}` into `ProviderPanelView`.
 
-- [ ] **Step 4: Add the preset button**
+- [x] **Step 4: Add the preset button**
 
 Update `ProviderPanelViewProps`:
 
@@ -1257,7 +1257,7 @@ In `ProviderPanelView`, change the header actions to:
         </div>
 ```
 
-- [ ] **Step 5: Add ProviderPresetDialog**
+- [x] **Step 5: Add ProviderPresetDialog**
 
 Add this component before `ProviderFormDialog`:
 
@@ -1437,7 +1437,7 @@ function ProviderPresetDialog({
 
 If the icon inside the search field violates local shadcn input composition, remove the icon and keep the `Input`; do not add custom input styling.
 
-- [ ] **Step 6: Run renderer test**
+- [x] **Step 6: Run renderer test**
 
 Run:
 
@@ -1447,7 +1447,7 @@ pnpm --filter @synapse/desktop test -- desktop/src/modules/settings/components/_
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Run:
 
