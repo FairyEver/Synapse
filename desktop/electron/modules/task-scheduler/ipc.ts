@@ -38,6 +38,9 @@ const taskActionSchema = z.object({
 const taskStatusSchema = z.enum(["success", "failed", "timeout", "cancelled", "skipped"])
 const runStatusSchema = z.enum(["running", "success", "failed", "timeout", "cancelled", "skipped"])
 const runTriggerSchema = z.enum(["schedule", "manual", "missed_run"])
+const activeRunSchema = z.object({
+  status: z.literal("running"),
+})
 const actionRunResultSchema = z.object({
   status: z.enum(["success", "failed", "timeout", "cancelled"]),
   summary: z.string().optional(),
@@ -68,6 +71,7 @@ const taskSchema = z.object({
   nextRunAt: z.string().optional(),
   lastRunAt: z.string().optional(),
   lastStatus: taskStatusSchema.optional(),
+  activeRun: activeRunSchema.optional(),
   runCount: z.number(),
 })
 

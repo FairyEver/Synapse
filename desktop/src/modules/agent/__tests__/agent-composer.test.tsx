@@ -248,12 +248,12 @@ describe("AgentComposer", () => {
     openPermissionMenu(container)
     await hoverPermissionMode("auto")
 
-    expect(document.body.textContent).toContain("仅 Anthropic API")
-    expect(document.body.textContent).toContain("Bedrock、Vertex、Foundry 不支持")
+    expect(document.body.textContent).toContain("部分服务不可用")
+    expect(document.body.textContent).toContain("切换失败时请换其他模式")
 
     await hoverPermissionMode("default")
 
-    expect(document.body.textContent).not.toContain("仅 Anthropic API")
+    expect(document.body.textContent).not.toContain("部分服务不可用")
   })
 
   it("requires confirmation before changing to bypassPermissions", async () => {

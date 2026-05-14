@@ -5,6 +5,7 @@ import {
   createTaskFormState,
   DEFAULT_TASK_FORM_STATE,
   formatTaskAction,
+  formatTaskNextRun,
 } from "../utils"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
@@ -184,4 +185,57 @@ describe("task scheduler utils", () => {
     )
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret-value")
   })
+
+  it("shows unknown while a completion-anchored interval task is running", () => {
+    expect(formatTaskNextRun(createTask({
+      activeRun: { status: "running" },
+      nextRunAt: "2026-04-29T10:00:00.000Z",
+      trigger: {
+        type: "builtin.interval",
+        config: { everyMinutes: 60, anchor: "last_completed_at" },
+      },
+    }), new Date("2026-04-29T10:30:00.000Z"))).toBe("未知")
+  })
+
+  it("shows unknown when next run time cannot be trusted", () => {
+    expect(formatTaskNextRun(createTask({ nextRunAt: undefined }))).toBe("未知")
+    expect(formatTaskNextRun(createTask({ nextRunAt: "not-a-date" }))).toBe("未知")
+    expect(formatTaskNextRun(
+      createTask({ nextRunAt: "2026-04-29T09:59:00.000Z" }),
+      new Date("2026-04-29T10:00:00.000Z"),
+    )).toBe("未知")
+  })
+
+  it("shows disabled tasks as stopped instead of unknown", () => {
+    expect(formatTaskNextRun(createTask({
+      enabled: false,
+      nextRunAt: undefined,
+    }))).toBe("停用中")
+  })
 })
+
+function createTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
+  return {
+    id: "task-agent-1",
+    schemaVersion: 2,
+    name: "Agent Task",
+    scope: { type: "project", projectId: "project-1" },
+    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+    action: {
+      type: "builtin.agent",
+      config: {
+        projectId: "project-1",
+        agentType: "claude-code",
+        prompt: "run",
+        sessionPolicy: "fresh",
+      },
+    },
+    enabled: true,
+    missedRunPolicy: "skip",
+    overlapPolicy: "skip",
+    createdAt: "2026-04-29T00:00:00.000Z",
+    updatedAt: "2026-04-29T00:00:00.000Z",
+    runCount: 0,
+    ...overrides,
+  }
+}

@@ -14,6 +14,7 @@ import type { ScheduledTask } from "@/types/task-scheduler"
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   runTask: vi.fn(),
+  cancelWatchNextAgentSession: vi.fn(),
   requestWatchNextAgentSession: vi.fn(),
   useTaskSchedulerTasks: vi.fn(),
 }))
@@ -42,6 +43,7 @@ vi.mock("@/app-shell/notifications", () => ({
 }))
 
 vi.mock("@/app-shell/navigation", () => ({
+  cancelWatchNextAgentSession: mocks.cancelWatchNextAgentSession,
   requestWatchNextAgentSession: mocks.requestWatchNextAgentSession,
 }))
 
@@ -111,6 +113,19 @@ describe("TaskSchedulerModule", () => {
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
     expect(html).toContain("Backup")
+  })
+
+  it("contains scroll chaining inside the task list", () => {
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({ name: "Backup" })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<TaskSchedulerModule />)
+
+    expect(html).toContain("overflow-y-auto overscroll-contain")
   })
 
   it("renders trigger info for interval tasks", () => {
@@ -250,7 +265,8 @@ describe("TaskSchedulerModule", () => {
     })
 
     expect(mocks.runTask).toHaveBeenCalledWith("task-1")
-    expect(mocks.requestWatchNextAgentSession).not.toHaveBeenCalled()
+    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+    expect(mocks.cancelWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
     expect(mocks.notify).toHaveBeenCalledWith({ message: "触发失败", tone: "destructive" })
     expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
   })
@@ -259,7 +275,7 @@ describe("TaskSchedulerModule", () => {
     ["missing", null],
     ["skipped", { id: "run-1", status: "skipped" }],
   ])(
-    "does not watch the next Agent session when a manual Agent task run is %s",
+    "cancels the next Agent session watch when a manual Agent task run is %s",
     async (_label, runResult) => {
       mocks.runTask.mockResolvedValue(runResult)
       mocks.useTaskSchedulerTasks.mockReturnValue({
@@ -299,7 +315,8 @@ describe("TaskSchedulerModule", () => {
         await Promise.resolve()
       })
 
-      expect(mocks.requestWatchNextAgentSession).not.toHaveBeenCalled()
+      expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+      expect(mocks.cancelWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
       expect(mocks.notify).toHaveBeenCalledWith({ message: "触发失败", tone: "destructive" })
       expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
     },
@@ -345,6 +362,57 @@ describe("TaskSchedulerModule", () => {
     })
 
     expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+    expect(mocks.notify).toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
+  })
+
+  it("starts watching the next Agent session before the manual Agent run finishes", async () => {
+    let resolveRun: (value: { id: string; status: "running" }) => void = () => {}
+    mocks.runTask.mockReturnValue(new Promise((resolve) => {
+      resolveRun = resolve
+    }))
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [
+        createTask({
+          action: {
+            type: "builtin.agent",
+            config: {
+              prompt: "run",
+              projectId: "project-1",
+            },
+          },
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    const runButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("运行"))
+    expect(runButton).toBeTruthy()
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+    expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
+
+    await act(async () => {
+      resolveRun({ id: "run-1", status: "running" })
+      await Promise.resolve()
+    })
+
     expect(mocks.notify).toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
   })
 })

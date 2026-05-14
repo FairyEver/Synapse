@@ -9,7 +9,7 @@ import {
 
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { requestWatchNextAgentSession } from "@/app-shell/navigation"
+import { cancelWatchNextAgentSession, requestWatchNextAgentSession } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { Button } from "@/components/ui/button"
@@ -59,7 +59,11 @@ import {
 
 const logger = createRendererLogger("task-scheduler")
 
-function isAcceptedManualRun(run: ScheduledTaskRun | null): run is ScheduledTaskRun {
+type AcceptedManualRun = ScheduledTaskRun & {
+  status: Exclude<ScheduledTaskRun["status"], "skipped">
+}
+
+function isAcceptedManualRun(run: ScheduledTaskRun | null): run is AcceptedManualRun {
   return run !== null && run.status !== "skipped"
 }
 
@@ -193,9 +197,19 @@ function TaskSchedulerModule() {
   }
 
   async function handleRunTask(task: ScheduledTask) {
+    const agentProjectId = task.action.type === "builtin.agent"
+      ? task.action.config["projectId"]
+      : undefined
+    const shouldWatchAgentSession = typeof agentProjectId === "string" && agentProjectId.length > 0
     try {
+      if (shouldWatchAgentSession) {
+        requestWatchNextAgentSession({ projectId: agentProjectId })
+      }
       const run = await runTask(task.id)
       if (!isAcceptedManualRun(run)) {
+        if (shouldWatchAgentSession) {
+          cancelWatchNextAgentSession({ projectId: agentProjectId })
+        }
         logger.warn("Task run was not accepted.", {
           action: "runTask",
           boundary: "renderer.task-scheduler.runTask",
@@ -208,12 +222,6 @@ function TaskSchedulerModule() {
         notify({ message: "触发失败", tone: "destructive" })
         return
       }
-      if (task.action.type === "builtin.agent") {
-        const projectId = task.action.config["projectId"]
-        if (typeof projectId === "string" && projectId) {
-          requestWatchNextAgentSession({ projectId })
-        }
-      }
       logger.info("Task run triggered.", {
         taskId: task.id,
         taskName: task.name,
@@ -223,6 +231,9 @@ function TaskSchedulerModule() {
       })
       notify({ message: "任务已触发", tone: "success" })
     } catch (err) {
+      if (shouldWatchAgentSession) {
+        cancelWatchNextAgentSession({ projectId: agentProjectId })
+      }
       logger.error("Failed to run task.", {
         error: err,
         taskId: task.id,
@@ -271,7 +282,7 @@ function TaskSchedulerModule() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-0.5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5">
           {error ? (
             <div className="flex items-center gap-3 p-4">
               <p className="text-sm text-destructive">{error}</p>

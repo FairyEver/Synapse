@@ -24,6 +24,7 @@ import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import {
   formatTaskDate,
+  formatTaskNextRun,
   formatTaskScope,
   formatTaskStatus,
   formatTaskTrigger,
@@ -78,7 +79,7 @@ function TaskCard({
   const disabled = !task.enabled
   const badge = getStatusBadge(task)
   const primaryLabel = getPrimaryActionLabel(task)
-  const nextRun = disabled ? "停用中" : formatTaskDate(task.nextRunAt, "—")
+  const nextRun = formatTaskNextRun(task)
   const lastRun = formatLastRun(task)
   const scope = formatTaskScope(task, projects)
 

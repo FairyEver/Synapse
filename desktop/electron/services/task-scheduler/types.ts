@@ -30,6 +30,7 @@ export type TaskActionRef = {
 export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
+export type ScheduledTaskActiveRun = { readonly status: "running" }
 
 export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly id: string
@@ -48,6 +49,7 @@ export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly nextRunAt?: string
   readonly lastRunAt?: string
   readonly lastStatus?: ScheduledTaskStatus
+  readonly activeRun?: ScheduledTaskActiveRun
   readonly runCount: number
 }
 

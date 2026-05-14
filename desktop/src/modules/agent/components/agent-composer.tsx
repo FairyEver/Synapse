@@ -50,7 +50,7 @@ const permissionModeDescriptions: Record<SynapseAgentPermissionMode, string> = {
   bypassPermissions: "跳过所有权限确认。",
 }
 const providerAvailabilityNotes: Partial<Record<SynapseAgentPermissionMode, string>> = {
-  auto: "可用性：仅 Anthropic API；Bedrock、Vertex、Foundry 不支持。",
+  auto: "部分服务不可用，切换失败时请换其他模式。",
 }
 
 function requiresModeConfirmation(mode: SynapseAgentPermissionMode): boolean {
@@ -210,7 +210,7 @@ function AgentComposer({
                       <div className="font-medium">{mode}</div>
                       <p className="mt-1 text-sm text-muted-foreground">{permissionModeDescriptions[mode]}</p>
                       {providerAvailabilityNotes[mode] ? (
-                        <p className="mt-2 text-sm text-muted-foreground">{providerAvailabilityNotes[mode]}</p>
+                        <p className="mt-2 text-xs text-muted-foreground/70">{providerAvailabilityNotes[mode]}</p>
                       ) : null}
                     </HoverCardContent>
                   </HoverCard>

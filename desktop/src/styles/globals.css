@@ -163,6 +163,14 @@
     @apply bg-background text-foreground;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   #root,
   #root * {
     @apply select-none;
@@ -202,7 +210,7 @@
   }
 
   #root {
-    min-height: 100vh;
+    min-height: 0;
   }
 
 }

@@ -49,6 +49,26 @@ describe("TaskSchedulerService", () => {
     await runPromise
   })
 
+  it("marks listed tasks that are currently running", async () => {
+    const harness = createHarness({ action: longRunningAction() })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+
+    const runPromise = harness.service.runNow("task:1")
+    await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
+
+    expect(await harness.service.schedulerTaskList()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "task:1",
+        activeRun: { status: "running" },
+      }),
+    ]))
+
+    const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+    await harness.service.stopRun(running!.id)
+    await runPromise
+  })
+
   it("stops running task by run id", async () => {
     const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))

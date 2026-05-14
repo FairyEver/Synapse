@@ -45,12 +45,14 @@ export class TaskSchedulerService {
     this.started = false
   }
 
-  schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
-    return this.deps.tasks.list()
+  async schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
+    const tasks = await this.deps.tasks.list()
+    return tasks.map((task) => this.withRuntimeState(task))
   }
 
-  schedulerTaskGet(id: string): Promise<ScheduledTaskEntry | null> {
-    return this.deps.tasks.get(id)
+  async schedulerTaskGet(id: string): Promise<ScheduledTaskEntry | null> {
+    const task = await this.deps.tasks.get(id)
+    return task ? this.withRuntimeState(task) : null
   }
 
   async schedulerTaskCreate(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
@@ -239,6 +241,14 @@ export class TaskSchedulerService {
 
   private now(): Date {
     return this.deps.now?.() ?? new Date()
+  }
+
+  private withRuntimeState(task: ScheduledTaskEntry): ScheduledTaskEntry {
+    if (!this.runningTaskIds.has(task.id)) return task
+    return {
+      ...task,
+      activeRun: { status: "running" },
+    }
   }
 }
 

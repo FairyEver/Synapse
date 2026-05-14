@@ -115,6 +115,22 @@ function formatTaskTrigger(task: Pick<ScheduledTask, "trigger">): string {
     : `每 ${task.trigger.config.everyMinutes} 分钟`
 }
 
+function formatTaskNextRun(
+  task: Pick<ScheduledTask, "activeRun" | "enabled" | "nextRunAt" | "trigger">,
+  now = new Date(),
+): string {
+  if (!task.enabled) return "停用中"
+  if (isCompletionAnchoredInterval(task) && task.activeRun?.status === "running") {
+    return "未知"
+  }
+  if (!task.nextRunAt) return "未知"
+  const nextRunAt = new Date(task.nextRunAt)
+  const nextRunAtTime = nextRunAt.getTime()
+  if (!Number.isFinite(nextRunAtTime)) return "未知"
+  if (nextRunAtTime <= now.getTime()) return "未知"
+  return formatTaskDate(task.nextRunAt, "未知")
+}
+
 function formatTaskAction(task: ScheduledTask): string {
   try {
     return rendererActionRegistry.summarize(task.action.type, task.action.config)
@@ -129,6 +145,13 @@ function formatTaskAction(task: ScheduledTask): string {
     })
     return task.action.type
   }
+}
+
+function isCompletionAnchoredInterval(
+  task: Pick<ScheduledTask, "trigger">,
+): boolean {
+  return task.trigger.type === "builtin.interval" &&
+    task.trigger.config.anchor === "last_completed_at"
 }
 
 function formatTaskDate(value: string | undefined, fallback: string): string {
@@ -232,6 +255,7 @@ export {
   buildTaskCreateInput,
   buildTaskUpdateInput,
   createTaskFormState,
+  formatTaskNextRun,
   formatRunStatus,
   formatTaskAction,
   formatTaskDate,

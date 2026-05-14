@@ -16,6 +16,7 @@ export type ScheduledTaskActionRef = {
 export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
+export type ScheduledTaskActiveRun = { status: "running" }
 
 export type ScheduledTask = {
   id: string
@@ -34,6 +35,7 @@ export type ScheduledTask = {
   nextRunAt?: string
   lastRunAt?: string
   lastStatus?: ScheduledTaskStatus
+  activeRun?: ScheduledTaskActiveRun
   runCount: number
 }
 
