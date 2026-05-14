@@ -1461,7 +1461,7 @@ git commit -m "feat: add provider preset picker"
 **Files:**
 - Verify only. No planned source edits.
 
-- [ ] **Step 1: Run focused provider tests**
+- [x] **Step 1: Run focused provider tests**
 
 Run:
 
@@ -1471,7 +1471,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: PASS.
 
-- [ ] **Step 2: Run hard constraints**
+- [x] **Step 2: Run hard constraints**
 
 Run:
 
@@ -1491,7 +1491,7 @@ pnpm --filter @synapse/desktop run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 4: Inspect diff scope**
+- [x] **Step 4: Inspect diff scope**
 
 Run:
 
@@ -1501,7 +1501,7 @@ git diff --stat HEAD~5..HEAD
 
 Expected: diff is limited to provider service, agent IPC, bridge types, provider settings panel, generated IPC files, and tests.
 
-- [ ] **Step 5: Commit fixes only if verification required changes**
+- [x] **Step 5: Commit fixes only if verification required changes**
 
 If verification required fixes, commit them:
 
