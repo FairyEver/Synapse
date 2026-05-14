@@ -38,6 +38,12 @@ The TypeScript SDK exposes these permission modes:
 
 Runtime switching should use `query.setPermissionMode(mode)` when a live streaming SDK query exists.
 
+References:
+
+- Claude Code permission modes: https://code.claude.com/docs/en/permission-modes
+- Agent SDK permissions: https://code.claude.com/docs/en/agent-sdk/permissions
+- TypeScript SDK `PermissionMode` and `setPermissionMode`: https://code.claude.com/docs/en/agent-sdk/typescript
+
 ## Product Behavior
 
 Each conversation has one current permission mode. New conversations default to `default`.
@@ -121,9 +127,8 @@ Renderer flow:
 1. User selects a mode.
 2. If mode is `auto` or `bypassPermissions`, show confirmation.
 3. On confirm, call `bridge.agent.setPermissionMode`.
-4. On success, update selected session mode from returned conversation or refresh the session list.
-5. On success, use the returned session summary as the selected session state.
-6. On failure, keep the old mode and show `切换失败`.
+4. On success, use the returned session summary as the selected session state.
+5. On failure, keep the old mode and show `切换失败`.
 
 The UI should use existing shadcn primitives: `DropdownMenu` for the selector and `Dialog` for confirmation. Styling must stay on the current Radix Nova baseline and use theme tokens only.
 
